@@ -22,7 +22,6 @@ object SearchProviderRegistry {
 
     fun init(context: Context) {
         appContext = context.applicationContext
-        ensureLocalFile()
         loadFromFilesDir()
     }
 
@@ -54,20 +53,44 @@ object SearchProviderRegistry {
                     false
                 }
             } catch (e: Exception) {
-                Logger.log("Remote search definitions fetch failed: ${e.message}. Using cached.", TAG)
+                Logger.log("Remote search definitions fetch failed: ${e.message}. Falling back to assets.", TAG)
+                ensureLocalFile()
+                loadFromFilesDir()
                 cachedSchema != null
             }
         }
 
+    /**
+     * Copies search_definitions.json from assets to filesDir if local is missing
+     * or assets has a newer schema_version. Called as fallback when repo download fails.
+     */
     private fun ensureLocalFile() {
         val ctx = appContext ?: return
         val localFile = java.io.File(ctx.filesDir, LOCAL_FILE_NAME)
-        if (!localFile.exists()) {
+
+        val assetText = try {
+            ctx.assets.open(LOCAL_FILE_NAME).use { it.readBytes().decodeToString() }
+        } catch (e: Exception) {
+            Logger.log("Failed to read search_definitions.json from assets: ${e.message}", TAG)
+            return
+        }
+
+        val localVersion = if (localFile.exists()) {
             try {
-                ctx.assets.open(LOCAL_FILE_NAME).use { input ->
-                    localFile.outputStream().use { output -> input.copyTo(output) }
-                }
-                Logger.log("Copied search_definitions.json from assets to filesDir", TAG)
+                val localSchema = gson.fromJson(localFile.readText(), SearchDefinitionsSchema::class.java)
+                localSchema?.categories?.sumOf { it.providers.size } ?: 0
+            } catch (e: Exception) { 0 }
+        } else 0
+
+        val assetVersion = try {
+            val assetSchema = gson.fromJson(assetText, SearchDefinitionsSchema::class.java)
+            assetSchema?.categories?.sumOf { it.providers.size } ?: 0
+        } catch (e: Exception) { 0 }
+
+        if (!localFile.exists() || assetVersion > localVersion) {
+            try {
+                localFile.writeText(assetText)
+                Logger.log("Copied search_definitions.json from assets to filesDir (asset v$assetVersion > local v$localVersion)", TAG)
             } catch (e: Exception) {
                 Logger.log("Failed to copy search_definitions.json from assets: ${e.message}", TAG)
             }

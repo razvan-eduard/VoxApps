@@ -104,23 +104,20 @@ object RemoteModelRegistry {
     suspend fun fetchJson(repo: SettingsRepository, force: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         Logger.log("fetchJson called (force=$force)", TAG)
 
-        // 1. Ensure local file exists (copy from assets on first run)
-        ensureLocalFile()
-
-        // 2. Parse local file into memory (immediate availability)
+        // 1. Load from filesDir if available (immediate availability, preserves hot-reloaded data)
         if (cachedSchema == null) {
             loadFromFilesDir()
         }
 
-        _loadStatus.value = LoadStatus.LOADING
-
-        // 3. If not force and we have data, return early
+        // 2. If not force and we have data, return early
         if (!force && cachedSchema != null) {
             _loadStatus.value = LoadStatus.LOADED_FROM_CACHE
             return@withContext true
         }
 
-        // 4. Try remote fetch to update local file
+        _loadStatus.value = LoadStatus.LOADING
+
+        // 3. Try remote fetch (repo → filesDir)
         val baseUrl = repo.getSettingsSnapshot().modelRepoBaseUrl
         val rawUrlBase = if (baseUrl.contains("github.com") && !baseUrl.contains("raw.githubusercontent.com")) {
             baseUrl.replace("github.com", "raw.githubusercontent.com").removeSuffix("/") + "/main/models.json"
@@ -136,7 +133,6 @@ object RemoteModelRegistry {
             Logger.log("Network fetch success. Size: ${jsonText.length} chars", TAG)
             val schema = gson.fromJson(jsonText, RemoteModelSchema::class.java)
             if (schema != null) {
-                // Overwrite local file with remote version
                 saveLocalFile(jsonText)
                 cachedSchema = schema
                 Logger.log("Remote JSON parsed and saved locally. Engines found: ${schema.engines.keys}", TAG)
@@ -151,26 +147,44 @@ object RemoteModelRegistry {
                 cachedSchema != null
             }
         } catch (e: Exception) {
-            Logger.log("Network fetch failed: ${e.message}. Using cached local file.", TAG)
+            Logger.log("Network fetch failed: ${e.message}. Falling back to assets.", TAG)
+            // 4. No net — copy from assets if newer (assets → filesDir), then reload
+            ensureLocalFile()
+            loadFromFilesDir()
             _loadStatus.value = if (cachedSchema != null) LoadStatus.LOADED_FROM_CACHE else LoadStatus.NO_NETWORK
             cachedSchema != null
         }
     }
 
     /**
-     * Ensures models.json exists in filesDir. On first run, copies from bundled assets.
+     * Copies models.json from bundled assets to filesDir if local is missing
+     * or assets has a newer schema_version. Called as fallback when repo download fails.
      */
     private fun ensureLocalFile() {
         val ctx = appContext ?: return
         val localFile = java.io.File(ctx.filesDir, LOCAL_FILE_NAME)
-        if (!localFile.exists()) {
+
+        val assetText = try {
+            ctx.assets.open(LOCAL_FILE_NAME).use { it.readBytes().decodeToString() }
+        } catch (e: Exception) {
+            Logger.log("Failed to read models.json from assets: ${e.message}", TAG)
+            return
+        }
+
+        val assetVersion = try {
+            gson.fromJson(assetText, RemoteModelSchema::class.java)?.schema_version ?: 0
+        } catch (e: Exception) { 0 }
+
+        val localVersion = if (localFile.exists()) {
             try {
-                ctx.assets.open(LOCAL_FILE_NAME).use { input ->
-                    localFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                Logger.log("Copied models.json from assets to filesDir (first run)", TAG)
+                gson.fromJson(localFile.readText(), RemoteModelSchema::class.java)?.schema_version ?: 0
+            } catch (e: Exception) { 0 }
+        } else 0
+
+        if (!localFile.exists() || assetVersion > localVersion) {
+            try {
+                localFile.writeText(assetText)
+                Logger.log("Copied models.json from assets to filesDir (asset v$assetVersion > local v$localVersion)", TAG)
             } catch (e: Exception) {
                 Logger.log("Failed to copy models.json from assets: ${e.message}", TAG)
             }
