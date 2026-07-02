@@ -109,6 +109,12 @@ object RemoteModelRegistry {
             loadFromFilesDir()
         }
 
+        // 1b. If still no data, copy from assets (bundled APK may be newer than CDN cache)
+        if (cachedSchema == null) {
+            ensureLocalFile()
+            loadFromFilesDir()
+        }
+
         // 2. If not force and we have data, return early
         if (!force && cachedSchema != null) {
             _loadStatus.value = LoadStatus.LOADED_FROM_CACHE
@@ -133,6 +139,13 @@ object RemoteModelRegistry {
             Logger.log("Network fetch success. Size: ${jsonText.length} chars", TAG)
             val schema = gson.fromJson(jsonText, RemoteModelSchema::class.java)
             if (schema != null) {
+                // Don't overwrite local if local schema_version is higher (e.g. newer assets than CDN cache)
+                val localSchema = cachedSchema
+                if (localSchema != null && localSchema.schema_version > schema.schema_version) {
+                    Logger.log("Local schema v${localSchema.schema_version} > remote v${schema.schema_version}, keeping local", TAG)
+                    _loadStatus.value = LoadStatus.LOADED_FROM_CACHE
+                    return@withContext true
+                }
                 saveLocalFile(jsonText)
                 cachedSchema = schema
                 Logger.log("Remote JSON parsed and saved locally. Engines found: ${schema.engines.keys}", TAG)
