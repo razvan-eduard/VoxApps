@@ -120,6 +120,7 @@ class DynamicSearchProvider(
     val endpoint: String get() = def.endpoint
 
     private var apiKey: String? = null
+    private var currentLang: String = "en"
 
     fun setApiKey(key: String?) { apiKey = key }
 
@@ -145,9 +146,9 @@ class DynamicSearchProvider(
         }
     }
 
-    suspend fun search(query: String, lat: Double? = null, lon: Double? = null): List<SearchResult> =
+    suspend fun search(query: String, lat: Double? = null, lon: Double? = null, lang: String = "en"): List<SearchResult> =
         withContext(Dispatchers.IO) {
-            Logger.log("$name search: query='$query', category='$categoryName'", tag)
+            Logger.log("$name search: query='$query', category='$categoryName', lang='$lang'", tag)
 
             if (requiresLocation && lat == null) {
                 Logger.log("$name requires location but none provided", tag)
@@ -155,7 +156,8 @@ class DynamicSearchProvider(
             }
 
             try {
-                val url = buildUrl(query, lat, lon)
+                currentLang = lang
+                val url = buildUrl(query, lat, lon, lang)
                 val request = buildRequest(url, query, lat, lon)
                 val response = client.newCall(request).execute()
 
@@ -187,7 +189,7 @@ class DynamicSearchProvider(
             }
         }
 
-    private fun buildUrl(query: String, lat: Double?, lon: Double?): String {
+    private fun buildUrl(query: String, lat: Double?, lon: Double?, lang: String = "en"): String {
         val encodedQuery = URLEncoder.encode(query, "UTF-8")
         val template = def.queryTemplate ?: ""
         return def.endpoint + template
@@ -195,6 +197,7 @@ class DynamicSearchProvider(
             .replace("{lat}", lat?.toString() ?: "0.0")
             .replace("{lon}", lon?.toString() ?: "0.0")
             .replace("{apiKey}", apiKey ?: "")
+            .replace("{lang}", lang)
     }
 
     private fun buildRequest(url: String, query: String, lat: Double?, lon: Double?): Request {
@@ -329,14 +332,14 @@ class DynamicSearchProvider(
             val urlField = getJsonField(item, def.jsonFields["url"] ?: "pageid")
 
             val url = if (def.urlTemplate != null) {
-                def.urlTemplate.replace("{url}", urlField)
+                def.urlTemplate.replace("{url}", urlField).replace("{lang}", currentLang)
             } else urlField
 
             var content = if (def.stripHtml) stripTags(contentRaw) else contentRaw
 
             // Follow-up extract (Wikipedia intros)
             if (def.followUpExtract && def.extractEndpoint != null && title.isNotBlank()) {
-                val extract = fetchExtract(title)
+                val extract = fetchExtract(title, currentLang)
                 if (extract.isNotBlank()) {
                     content = extract.take(def.extractMaxChars)
                 }
@@ -348,10 +351,10 @@ class DynamicSearchProvider(
         return results
     }
 
-    private fun fetchExtract(title: String): String {
+    private fun fetchExtract(title: String, lang: String = "en"): String {
         return try {
             val encodedTitle = URLEncoder.encode(title, "UTF-8")
-            val url = def.extractEndpoint!!.replace("{title}", encodedTitle)
+            val url = def.extractEndpoint!!.replace("{title}", encodedTitle).replace("{lang}", lang)
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", def.userAgent ?: "VoxCommander/1.0 (Android Voice Assistant)")

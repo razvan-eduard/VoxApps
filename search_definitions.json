@@ -60,7 +60,7 @@
         },
         {
           "name": "Wikipedia",
-          "endpoint": "https://en.wikipedia.org/w/api.php",
+          "endpoint": "https://{lang}.wikipedia.org/w/api.php",
           "method": "GET",
           "requiresLocation": false,
           "userAgent": "VoxCommander/1.0 (Android; contact@voxcommander.app)",
@@ -72,10 +72,10 @@
             "content": "snippet",
             "url": "pageid"
           },
-          "urlTemplate": "https://en.wikipedia.org/?curid={url}",
+          "urlTemplate": "https://{lang}.wikipedia.org/?curid={url}",
           "stripHtml": true,
           "followUpExtract": true,
-          "extractEndpoint": "https://en.wikipedia.org/w/api.php?action=query&titles={title}&prop=extracts&exintro=true&explaintext=true&format=json",
+          "extractEndpoint": "https://{lang}.wikipedia.org/w/api.php?action=query&titles={title}&prop=extracts&exintro=true&explaintext=true&format=json",
           "extractPath": "query.pages",
           "extractField": "extract",
           "extractMaxChars": 500
@@ -159,7 +159,7 @@
       "providers": [
         {
           "name": "Wikipedia",
-          "endpoint": "https://en.wikipedia.org/w/api.php",
+          "endpoint": "https://{lang}.wikipedia.org/w/api.php",
           "method": "GET",
           "requiresLocation": false,
           "userAgent": "VoxCommander/1.0 (Android; contact@voxcommander.app)",
@@ -171,10 +171,10 @@
             "content": "snippet",
             "url": "pageid"
           },
-          "urlTemplate": "https://en.wikipedia.org/?curid={url}",
+          "urlTemplate": "https://{lang}.wikipedia.org/?curid={url}",
           "stripHtml": true,
           "followUpExtract": true,
-          "extractEndpoint": "https://en.wikipedia.org/w/api.php?action=query&titles={title}&prop=extracts&exintro=true&explaintext=true&format=json",
+          "extractEndpoint": "https://{lang}.wikipedia.org/w/api.php?action=query&titles={title}&prop=extracts&exintro=true&explaintext=true&format=json",
           "extractPath": "query.pages",
           "extractField": "extract",
           "extractMaxChars": 500

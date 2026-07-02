@@ -24,7 +24,7 @@ class IntentRouter(
 ) {
 
     private val handlers: List<IntentHandler> = listOf(
-        SearchIntentHandler(),
+        SearchIntentHandler(settingsRepository),
         AudioIntentHandler(),
         NavigationIntentHandler(),
         SystemIntentHandler(),

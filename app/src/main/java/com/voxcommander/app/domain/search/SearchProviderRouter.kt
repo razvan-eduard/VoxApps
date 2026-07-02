@@ -25,7 +25,8 @@ object SearchProviderRouter {
         query: String,
         category: String = "general",
         lat: Double? = null,
-        lon: Double? = null
+        lon: Double? = null,
+        lang: String = "en"
     ): List<SearchResult> {
         val provider = SearchProviderRegistry.getProvider(category)
         if (provider == null) {
@@ -33,14 +34,14 @@ object SearchProviderRouter {
             return emptyList()
         }
 
-        Logger.log("Routing search '$query' to ${provider.name} (category=$category)", TAG)
+        Logger.log("Routing search '$query' to ${provider.name} (category=$category, lang=$lang)", TAG)
 
         if (provider.requiresLocation && lat == null) {
             Logger.log("${provider.name} requires location but none provided", TAG)
             return emptyList()
         }
 
-        return provider.search(query, lat, lon)
+        return provider.search(query, lat, lon, lang)
     }
 
     /**

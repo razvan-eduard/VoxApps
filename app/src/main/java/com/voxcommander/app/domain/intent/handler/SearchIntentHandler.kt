@@ -1,6 +1,7 @@
 package com.voxcommander.app.domain.intent.handler
 
 import android.content.Context
+import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.intent.model.NluIntent
 import com.voxcommander.app.domain.intent.registry.AppRegistry
 import com.voxcommander.app.domain.intent.taxonomy.IntentTaxonomy
@@ -21,7 +22,9 @@ import kotlinx.coroutines.launch
  * Executes the search asynchronously, stores results, and speaks them via TTS
  * with barge-in support (user can interrupt with wake word).
  */
-class SearchIntentHandler : IntentHandler {
+class SearchIntentHandler(
+    private val settingsRepository: SettingsRepository? = null
+) : IntentHandler {
 
     companion object {
         private const val TAG = "SearchIntentHandler"
@@ -54,7 +57,9 @@ class SearchIntentHandler : IntentHandler {
                 }
             }
 
-            val results = SearchProviderRouter.search(query, category, lat, lon)
+            val lang = settingsRepository?.getSettingsSnapshot()?.voiceLanguage ?: "en"
+
+            val results = SearchProviderRouter.search(query, category, lat, lon, lang)
             val summary = SearchProviderRouter.formatResultsForSummary(query, results)
             val ttsText = SearchProviderRouter.formatResultsForTTS(query, results)
 
