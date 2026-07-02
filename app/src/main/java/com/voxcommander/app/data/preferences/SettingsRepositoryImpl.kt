@@ -45,6 +45,7 @@ class SettingsRepositoryImpl(
         // Language
         val LANGUAGE = stringPreferencesKey("language")
         val VOICE_LANGUAGE = stringPreferencesKey("voice_language")
+        val MODEL_FILTER_LANG = stringPreferencesKey("model_filter_lang")
 
         // Voice engine
         val VOICE_PROCESSOR = stringPreferencesKey("voice_processor")
@@ -259,6 +260,7 @@ class SettingsRepositoryImpl(
 
             language = prefs[Keys.LANGUAGE] ?: Strings.Preferences.DEFAULT_LANGUAGE,
             voiceLanguage = prefs[Keys.VOICE_LANGUAGE] ?: Strings.Preferences.DEFAULT_LANGUAGE,
+            modelFilterLang = prefs[Keys.MODEL_FILTER_LANG] ?: Strings.Preferences.DEFAULT_LANGUAGE,
 
             voiceProcessor = prefs[Keys.VOICE_PROCESSOR] ?: com.voxcommander.app.data.remote.RemoteModelRegistry.getDefaultVoiceEngineKey() ?: "",
             activeVoiceModelId = prefs[Keys.ACTIVE_VOICE_MODEL_ID],
@@ -365,6 +367,10 @@ class SettingsRepositoryImpl(
 
     override suspend fun setVoiceLanguage(lang: String) {
         dataStore.edit { it[Keys.VOICE_LANGUAGE] = lang }
+    }
+
+    override suspend fun setModelFilterLang(lang: String) {
+        dataStore.edit { it[Keys.MODEL_FILTER_LANG] = lang }
     }
 
     // --- VOICE ENGINE ---

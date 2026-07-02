@@ -165,7 +165,7 @@ fun SettingsContent(
                                     hasApiKey = uiState.apiKey != null,
                                     googleSttAvailable = googleSttAvailable,
                                     onVoiceLanguageSelected = {
-                                        appStateManager.setVoiceLanguage(it)
+                                        appStateManager.setModelFilterLang(it)
                                         updateVoiceEngine(); onRefreshMain()
                                     },
                                     onModelSelected = { model: AppModel, isDownloaded: Boolean, langCode: String ->
@@ -204,12 +204,6 @@ fun SettingsContent(
                                         downloadingItem = vmDownloadingItem,
                                         onImportCustomModel = { onImportOpenWakeWordModel() },
                                         refreshTrigger = uiState.refreshTrigger
-                                    )
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                                    DefaultAppsTab(
-                                        languageManager = languageManager,
-                                        settingsRepo = settingsRepo,
-                                        appStateManager = appStateManager
                                     )
                                 }
                                 3 -> {

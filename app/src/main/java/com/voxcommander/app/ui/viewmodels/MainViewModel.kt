@@ -40,9 +40,9 @@ class MainViewModel(
     private val commandQueue = mutableListOf<Pair<String, String>>()
     private val queueLock = Any()
 
-    fun processVoiceCommand(voiceLanguage: String, userPreference: String) {
+    fun processVoiceCommand(modelFilterLang: String, userPreference: String) {
         _isProcessing.value = true
-        VoiceManager.startListening(voiceLanguage, userPreference) { text ->
+        VoiceManager.startListening(modelFilterLang, userPreference) { text ->
             val cleanText = text.trim()
             _transcription.value = cleanText
             
@@ -56,33 +56,33 @@ class MainViewModel(
             viewModelScope.launch {
                 try {
                     appStateManager.setVoiceState(VoiceState.PROCESSING)
-                    val result = assistantEngine.processCommand(cleanText, voiceLanguage)
+                    val result = assistantEngine.processCommand(cleanText, modelFilterLang)
                     _currentIntent.value = result
                     result?.let { withContext(Dispatchers.IO) { intentRouter.route(it) } }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 } finally {
-                    drainQueueOrIdle(voiceLanguage)
+                    drainQueueOrIdle(modelFilterLang)
                 }
             }
         }
     }
 
-    fun enqueueVoiceCommand(voiceLanguage: String, userPreference: String) {
+    fun enqueueVoiceCommand(modelFilterLang: String, userPreference: String) {
         Logger.log("Queuing voice command — recording while processing", TAG)
-        VoiceManager.startListening(voiceLanguage, userPreference) { text ->
+        VoiceManager.startListening(modelFilterLang, userPreference) { text ->
             val cleanText = text.trim()
             val errorPrefix = languageManager.getString("error_prefix")
             if (cleanText.isNotBlank() && !cleanText.startsWith(errorPrefix)) {
                 synchronized(queueLock) {
-                    commandQueue.add(Pair(cleanText, voiceLanguage))
+                    commandQueue.add(Pair(cleanText, modelFilterLang))
                     Logger.log("Command queued: '$cleanText' (queue size: ${commandQueue.size})", TAG)
                 }
             }
         }
     }
 
-    private fun drainQueueOrIdle(voiceLanguage: String) {
+    private fun drainQueueOrIdle(modelFilterLang: String) {
         val next = synchronized(queueLock) {
             if (commandQueue.isEmpty()) null else commandQueue.removeAt(0)
         }

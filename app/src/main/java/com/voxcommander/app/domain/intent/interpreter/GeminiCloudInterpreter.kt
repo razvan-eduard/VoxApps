@@ -19,7 +19,7 @@ class GeminiCloudInterpreter(
 ) : AssistantEngine {
 
     private val TAG = Strings.Tags.GEMINI_NANO_INTERPRETER
-    override suspend fun processCommand(spokenText: String, voiceLanguage: String?): NluIntent? = withContext(Dispatchers.IO) {
+    override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? = withContext(Dispatchers.IO) {
         val apiKey = settingsRepo.getSettingsSnapshot().geminiApiKey
         if (apiKey.isNullOrBlank()) {
             Logger.log("Gemini API key not set — cannot use Gemini Cloud", TAG)
@@ -31,7 +31,7 @@ class GeminiCloudInterpreter(
             apiKey = apiKey
         )
 
-        val systemPrompt = PromptProvider.getNluSystemPrompt(settingsRepo.getSettingsSnapshot(), voiceLanguage, settingsRepo)
+        val systemPrompt = PromptProvider.getNluSystemPrompt(settingsRepo.getSettingsSnapshot(), modelFilterLang, settingsRepo)
 
         try {
             val response = model.generateContent(

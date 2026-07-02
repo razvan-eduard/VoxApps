@@ -202,6 +202,10 @@ class AppStateManager private constructor(
         scope.launch { repo.setVoiceLanguage(language) }
     }
 
+    fun setModelFilterLang(lang: String) {
+        scope.launch { repo.setModelFilterLang(lang) }
+    }
+
     fun setActiveVoiceModelId(modelId: String) {
         scope.launch { repo.setActiveVoiceModelId(modelId) }
     }

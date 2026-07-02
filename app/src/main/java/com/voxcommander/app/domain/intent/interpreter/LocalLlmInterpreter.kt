@@ -81,12 +81,12 @@ class LocalLlmInterpreter(
         loadedEngineKey = engineKey
     }
 
-    override suspend fun processCommand(spokenText: String, voiceLanguage: String?): NluIntent? = withContext(Dispatchers.IO) {
+    override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? = withContext(Dispatchers.IO) {
         setupLlm()
         val engine = llmInference ?: return@withContext null
 
         val settings = settingsRepo.getSettingsSnapshot()
-        val systemPrompt = PromptProvider.getNluSystemPrompt(settings, voiceLanguage, settingsRepo)
+        val systemPrompt = PromptProvider.getNluSystemPrompt(settings, modelFilterLang, settingsRepo)
         val userInput = PromptProvider.formatUserInput(spokenText)
         val promptHash = sha256(systemPrompt)
 

@@ -217,7 +217,7 @@ class MainActivity : ComponentActivity() {
                             onClearCustomModel = {
                                 val engineKey = appContainer.appStateManager.uiState.value.voiceProcessor
                                 val isZipEngine = com.voxcommander.app.data.remote.RemoteModelRegistry.isZipEngine(engineKey)
-                                val lang = if (isZipEngine) appContainer.appStateManager.uiState.value.voiceLanguage else null
+                                val lang = if (isZipEngine) appContainer.appStateManager.uiState.value.modelFilterLang else null
                                 appContainer.modelManagementViewModel.clearCustomModel(engineKey, lang)
                             },
                             onImportOpenWakeWordModel = {

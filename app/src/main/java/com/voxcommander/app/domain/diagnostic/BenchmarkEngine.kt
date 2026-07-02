@@ -123,7 +123,7 @@ class BenchmarkEngine(
             diagInfo.append("Backend: Kaldi-based (libvosk.so)\n\n")
 
             for (model in downloadedVoskModels) {
-                val langCode = model.langCode ?: snapshot.voiceLanguage
+                val langCode = model.langCode ?: snapshot.modelFilterLang
                 runVoskBenchmark(model.id, model.label, langCode, dummyAudio)
             }
         }

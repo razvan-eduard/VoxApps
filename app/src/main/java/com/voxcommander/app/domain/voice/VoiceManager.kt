@@ -116,7 +116,7 @@ object VoiceManager {
         stateObservationJob = scope.launch {
             hub.uiState
                 .map {
-                    Triple(it.voiceProcessor, it.voiceLanguage, it.activeVoiceModelId) to
+                    Triple(it.voiceProcessor, it.modelFilterLang, it.activeVoiceModelId) to
                     Pair(it.activeVoiceModelId, it.customWhisperModelPath)
                 }
                 .distinctUntilChanged()
@@ -142,7 +142,7 @@ object VoiceManager {
         // 3. RE-INITIALIZE based on new selection
         val snapshot = settings.getSettingsSnapshot()
         val apiKey = snapshot.apiKey
-        val voiceLang = snapshot.voiceLanguage
+        val voiceLang = snapshot.modelFilterLang
         
         whisperCppEngine = WhisperCppSttEngine(
             ctx, 

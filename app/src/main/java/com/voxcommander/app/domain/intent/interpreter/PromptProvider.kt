@@ -24,9 +24,9 @@ object PromptProvider {
      * Returns only the system instructions (without the input line).
      * Used by all engines (OpenAI, Gemini Cloud, Local LLM) — they add user input separately.
      */
-    fun getNluSystemPrompt(settings: AppSettings? = null, voiceLanguage: String? = null, settingsRepo: SettingsRepository? = null): String {
+    fun getNluSystemPrompt(settings: AppSettings? = null, modelFilterLang: String? = null, settingsRepo: SettingsRepository? = null): String {
         val template = RemoteModelRegistry.getPrompt(ID_STANDARD_NLU) ?: return ""
-        val langHint = voiceLanguage?.let { "\nInput language: $it." } ?: ""
+        val langHint = modelFilterLang?.let { "\nInput language: $it." } ?: ""
         // Strip the Input/JSON suffix — engines add their own user message
         val inputIndex = template.indexOf("Input:")
         val systemPart = if (inputIndex > 0) {

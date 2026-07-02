@@ -126,10 +126,10 @@ fun RulesManagerContent(
     }
 
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
-    val voiceLanguage = uiState.voiceLanguage
+    val modelFilterLang = uiState.modelFilterLang
     val voiceProcessor = uiState.voiceProcessor
 
-    val isDefaultModelOnDevice = remember(voiceProcessor, voiceLanguage) {
+    val isDefaultModelOnDevice = remember(voiceProcessor, modelFilterLang) {
         when (voiceProcessor) {
             Strings.Processors.WHISPER_VULKAN -> {
                 val modelId = uiState.activeVoiceModelId
@@ -138,12 +138,12 @@ fun RulesManagerContent(
             Strings.Processors.GOOGLE, Strings.Processors.WHISPER_API -> true
             else -> {
                 if (com.voxcommander.app.data.remote.RemoteModelRegistry.isZipEngine(voiceProcessor)) {
-                    val customPath = uiState.customVoskModelPaths[voiceLanguage]
+                    val customPath = uiState.customVoskModelPaths[modelFilterLang]
                     if (!customPath.isNullOrBlank()) {
                         File(customPath).exists()
                     } else {
                         val rootDir = context.getExternalFilesDir(null)
-                        val modelDir = rootDir?.listFiles()?.find { it.isDirectory && it.name.startsWith("vosk-model-") && it.name.contains(voiceLanguage, ignoreCase = true) }
+                        val modelDir = rootDir?.listFiles()?.find { it.isDirectory && it.name.startsWith("vosk-model-") && it.name.contains(modelFilterLang, ignoreCase = true) }
                         modelDir != null && modelDir.exists()
                     }
                 } else {
@@ -273,7 +273,7 @@ fun RulesManagerContent(
                             },
                             label = { Text(languageManager.getString("voice_input_label")) },
                             languageManager = languageManager,
-                            voiceLanguage = voiceLanguage,
+                            modelFilterLang = modelFilterLang,
                             voiceProcessor = voiceProcessor,
                             isModelOnDevice = isDefaultModelOnDevice,
                             onVoiceResult = onVoiceResult

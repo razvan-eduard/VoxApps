@@ -24,13 +24,13 @@ class IntentDecisionMap(
 
     private val TAG = Strings.Tags.INTENT_DECISION_MAP
 
-    override suspend fun processCommand(spokenText: String, voiceLanguage: String?): NluIntent? {
+    override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? {
         if (spokenText.isBlank()) return null
         
         Logger.log("🧠 Triple AI Brain: Processing '$spokenText'", TAG)
 
         // --- LEVEL 1: Fast Trigger Map (Local Regex) ---
-        val l1Result = l1Engine.processCommand(spokenText, voiceLanguage)
+        val l1Result = l1Engine.processCommand(spokenText, modelFilterLang)
         if (l1Result != null) {
             Logger.log("✅ L1 MATCH: $l1Result", TAG)
             return l1Result
@@ -46,18 +46,18 @@ class IntentDecisionMap(
         val l2Result = try {
             when (primaryProcessor) {
                 Strings.AiProcessors.OPENAI -> {
-                    if (isCloudIntelligenceEnabled) l2CloudEngine.processCommand(spokenText, voiceLanguage) else null
+                    if (isCloudIntelligenceEnabled) l2CloudEngine.processCommand(spokenText, modelFilterLang) else null
                 }
                 Strings.AiProcessors.GEMINI_NATIVE -> {
-                    geminiNanoEngine.processCommand(spokenText, voiceLanguage)
+                    geminiNanoEngine.processCommand(spokenText, modelFilterLang)
                 }
                 Strings.AiProcessors.GEMINI_CLOUD -> {
-                    if (isCloudIntelligenceEnabled) geminiCloudEngine.processCommand(spokenText, voiceLanguage) else null
+                    if (isCloudIntelligenceEnabled) geminiCloudEngine.processCommand(spokenText, modelFilterLang) else null
                 }
                 else -> {
                     // JSON-defined LLM engines
                     if (com.voxcommander.app.data.remote.RemoteModelRegistry.isLlmEngine(primaryProcessor)) {
-                        l3LocalEngine.processCommand(spokenText, voiceLanguage)
+                        l3LocalEngine.processCommand(spokenText, modelFilterLang)
                     } else null
                 }
             }
@@ -83,12 +83,12 @@ class IntentDecisionMap(
             } else {
                 Logger.log("🏠 L2 Miss/Failure. Triggering L3 Offline Fallback ($fallbackProcessor)...", TAG)
                 val l3Result = when (fallbackProcessor) {
-                    Strings.AiProcessors.OPENAI -> l2CloudEngine.processCommand(spokenText, voiceLanguage)
-                    Strings.AiProcessors.GEMINI_CLOUD -> geminiCloudEngine.processCommand(spokenText, voiceLanguage)
-                    Strings.AiProcessors.GEMINI_NATIVE -> geminiNanoEngine.processCommand(spokenText, voiceLanguage)
+                    Strings.AiProcessors.OPENAI -> l2CloudEngine.processCommand(spokenText, modelFilterLang)
+                    Strings.AiProcessors.GEMINI_CLOUD -> geminiCloudEngine.processCommand(spokenText, modelFilterLang)
+                    Strings.AiProcessors.GEMINI_NATIVE -> geminiNanoEngine.processCommand(spokenText, modelFilterLang)
                     else -> {
                         if (com.voxcommander.app.data.remote.RemoteModelRegistry.isLlmEngine(fallbackProcessor)) {
-                            l3LocalEngine.processCommand(spokenText, voiceLanguage)
+                            l3LocalEngine.processCommand(spokenText, modelFilterLang)
                         } else null
                     }
                 }

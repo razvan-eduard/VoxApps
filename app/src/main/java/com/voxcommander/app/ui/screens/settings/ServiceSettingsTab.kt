@@ -33,6 +33,7 @@ import com.voxcommander.app.ui.components.EngineModelSection
 import com.voxcommander.app.ui.components.GroupedDropdownMenu
 import com.voxcommander.app.ui.components.VoiceInputTextField
 import com.voxcommander.app.ui.screens.main.ListeningScreen
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import com.voxcommander.app.utils.Strings
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,6 +105,36 @@ fun ServiceSettingsTab(
 
     Text(text = languageManager.getString("service_settings_section"), style = MaterialTheme.typography.titleMedium)
 
+    // --- SUB-TABS: Wake Word + TTS ---
+    var selectedSubTab by remember { mutableIntStateOf(0) }
+
+    TabRow(
+        selectedTabIndex = selectedSubTab,
+        containerColor = Color.Transparent,
+        divider = {},
+        indicator = { tabPositions ->
+            if (selectedSubTab < tabPositions.size) {
+                TabRowDefaults.SecondaryIndicator(
+                    Modifier.tabIndicatorOffset(tabPositions[selectedSubTab])
+                )
+            }
+        }
+    ) {
+        Tab(
+            selected = selectedSubTab == 0,
+            onClick = { selectedSubTab = 0 },
+            text = { Text(languageManager.getString("tab_wake_word") ?: "Wake Word", style = MaterialTheme.typography.labelLarge) }
+        )
+        Tab(
+            selected = selectedSubTab == 1,
+            onClick = { selectedSubTab = 1 },
+            text = { Text(languageManager.getString("tab_tts") ?: "TTS", style = MaterialTheme.typography.labelLarge) }
+        )
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    if (selectedSubTab == 0) {
     // --- COMMON: Wake Word Enable Switch ---
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -237,48 +268,6 @@ fun ServiceSettingsTab(
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // --- ENGINE-SPECIFIC: Vosk Voice Language Selection ---
-        if (isVosk && !isVoskMultilingual && availableVoskLanguages.isNotEmpty()) {
-            val languages = availableVoskLanguages.map { lang ->
-                lang to lang.uppercase()
-            }
-
-            var showLanguageSheet by remember { mutableStateOf(false) }
-            val languageSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-            val languageGroups = listOf(DropdownGroup("AVAILABLE LANGUAGES", languages))
-            val selectedLangPair = languages.find { it.first == uiState.voiceLanguage }
-
-            Text(text = languageManager.getString("voice_language"), style = MaterialTheme.typography.labelLarge)
-
-            GroupedDropdownMenu(
-                selectedItem = selectedLangPair,
-                groups = languageGroups,
-                itemLabel = { it.second },
-                isDownloaded = { true },
-                onDeviceLabel = "",
-                onItemSelected = { pair, _ -> appStateManager.setVoiceLanguage(pair.first) },
-                onExpandedChange = { showLanguageSheet = it },
-                languageManager = languageManager
-            )
-
-            if (showLanguageSheet) {
-                ModalBottomSheet(onDismissRequest = { showLanguageSheet = false }, sheetState = languageSheetState) {
-                    GroupedDropdownContent(
-                        title = languageManager.getString("voice_language"),
-                        groups = languageGroups,
-                        itemLabel = { it.second },
-                        isDownloaded = { true },
-                        onDeviceLabel = "",
-                        onItemSelected = { pair, _ -> appStateManager.setVoiceLanguage(pair.first); showLanguageSheet = false },
-                        languageManager = languageManager
-                    )
-                }
-            }
-
-            HorizontalDivider()
         }
 
         // --- ENGINE-SPECIFIC: Vosk Calibration ---
@@ -478,8 +467,8 @@ fun ServiceSettingsTab(
             RemoteModelRegistry.getModels(currentEngineKey)
         }
 
-        val displayModels = remember(engineModels, uiState.voiceLanguage, isVosk) {
-            if (isVosk && !isVoskMultilingual) engineModels.filter { it.langCode == uiState.voiceLanguage }
+        val displayModels = remember(engineModels, uiState.modelFilterLang, isVosk) {
+            if (isVosk && !isVoskMultilingual) engineModels.filter { it.langCode == uiState.modelFilterLang }
             else engineModels
         }
 
@@ -543,7 +532,7 @@ fun ServiceSettingsTab(
             label = { Text(languageManager.getString("wake_word_label")) },
             placeholder = { Text(if (hasProfile) languageManager.getString("ww_profile_used") else languageManager.getString("wake_word_hint")) },
             languageManager = languageManager,
-            voiceLanguage = uiState.voiceLanguage,
+            modelFilterLang = uiState.modelFilterLang,
             voiceProcessor = uiState.voiceProcessor,
             isModelOnDevice = isWakeWordModelOnDevice,
             readOnly = hasProfile,
@@ -560,8 +549,49 @@ fun ServiceSettingsTab(
             )
         }
 
-        // --- TTS SETTINGS ---
+        // --- COMMON: Service Status + Start/Stop ---
+        Text(text = languageManager.getString("service_status"), style = MaterialTheme.typography.labelLarge)
+        Text(
+            text = if (uiState.isWakeWordServiceListening) languageManager.getString("service_running") else languageManager.getString("service_stopped"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (uiState.isWakeWordServiceListening) downloadedColor else MaterialTheme.colorScheme.secondary
+        )
+
+        val isModelOnDevice = if (isPorcupine || isOpenWakeWord) true
+            else remember(selectedModel, uiState, refreshTrigger) {
+                selectedModel != null && uiState.isModelDownloaded(selectedModel.id)
+            }
+
+        Button(
+            onClick = if (uiState.isWakeWordServiceListening) onStopService else onStartService,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = uiState.isWakeWordServiceListening || isModelOnDevice,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (uiState.isWakeWordServiceListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+        ) {
+            Text(if (uiState.isWakeWordServiceListening) languageManager.getString("stop_service") else languageManager.getString("start_service"))
+        }
+
+        // Show warning if model not on device (Vosk only)
+        if (isVosk && !isModelOnDevice && !uiState.isWakeWordServiceListening) {
+            Text(
+                text = "Selected model not on device. Please download the model first.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        DefaultAppsTab(
+            languageManager = languageManager,
+            settingsRepo = settingsRepo,
+            appStateManager = appStateManager
+        )
+    } // end if (uiState.wakeWordEnabled)
+    } // end if (selectedSubTab == 0)
+    else {
+        // --- TTS SUB-TAB ---
         Text(
             text = languageManager.getString("tts_settings_title") ?: "Text-to-Speech",
             style = MaterialTheme.typography.titleMedium
@@ -610,40 +640,7 @@ fun ServiceSettingsTab(
                 steps = 14
             )
         }
-
-        // --- COMMON: Service Status + Start/Stop ---
-        Text(text = languageManager.getString("service_status"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            text = if (uiState.isWakeWordServiceListening) languageManager.getString("service_running") else languageManager.getString("service_stopped"),
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (uiState.isWakeWordServiceListening) downloadedColor else MaterialTheme.colorScheme.secondary
-        )
-
-        val isModelOnDevice = if (isPorcupine || isOpenWakeWord) true
-            else remember(selectedModel, uiState, refreshTrigger) {
-                selectedModel != null && uiState.isModelDownloaded(selectedModel.id)
-            }
-
-        Button(
-            onClick = if (uiState.isWakeWordServiceListening) onStopService else onStartService,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = uiState.isWakeWordServiceListening || isModelOnDevice,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (uiState.isWakeWordServiceListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-            )
-        ) {
-            Text(if (uiState.isWakeWordServiceListening) languageManager.getString("stop_service") else languageManager.getString("start_service"))
-        }
-
-        // Show warning if model not on device (Vosk only)
-        if (isVosk && !isModelOnDevice && !uiState.isWakeWordServiceListening) {
-            Text(
-                text = "Selected model not on device. Please download the model first.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
-        }
-    }
+    } // end else (TTS sub-tab)
 }
 
 @Composable

@@ -17,6 +17,7 @@ import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.data.remote.RemoteModelRegistry
 import com.voxcommander.app.domain.localization.LanguageManager
 import com.voxcommander.app.state.AppStateManager
+import com.voxcommander.app.utils.Strings
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -32,7 +33,7 @@ fun GeneralSettingsTab(
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
     var modelRepoUrl by remember { mutableStateOf(settingsRepo.getSettingsSnapshot().modelRepoBaseUrl) }
-    var selectedLanguage by remember(uiState.voiceLanguage) { mutableStateOf(uiState.voiceLanguage) }
+    var selectedLanguage by remember(uiState.language) { mutableStateOf(uiState.language) }
     var expanded by remember { mutableStateOf(false) }
     val languages = languageManager.getAvailableLanguages()
 
@@ -93,6 +94,35 @@ fun GeneralSettingsTab(
                             languageManager.loadLanguage(lang)
                             appStateManager.setAppLanguage(lang)
                             expanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+        // Voice Language (used by STT, LLM interpretation, TTS)
+        Text(text = languageManager.getString("voice_language"), style = MaterialTheme.typography.labelLarge)
+        Text(
+            text = languageManager.getString("voice_language_desc") ?: "Language used for voice recognition, AI interpretation, and text-to-speech",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        val voiceLanguages = Strings.VoiceLanguages.ALL
+        var voiceLangExpanded by remember { mutableStateOf(false) }
+        Box {
+            OutlinedButton(onClick = { voiceLangExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(uiState.voiceLanguage.uppercase())
+            }
+            DropdownMenu(expanded = voiceLangExpanded, onDismissRequest = { voiceLangExpanded = false }, modifier = Modifier.fillMaxWidth()) {
+                voiceLanguages.forEach { lang ->
+                    DropdownMenuItem(
+                        text = { Text(lang.uppercase()) },
+                        onClick = {
+                            appStateManager.setVoiceLanguage(lang)
+                            voiceLangExpanded = false
                         }
                     )
                 }

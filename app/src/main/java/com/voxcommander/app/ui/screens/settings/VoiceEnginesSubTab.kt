@@ -115,7 +115,19 @@ fun VoiceEnginesSubTab(
 
     HorizontalDivider()
 
-    // 2. Global Voice Language Selection (only for non-multilingual engines)
+    // 2. Model Language Filter (only for non-multilingual engines — filters model list by language)
+    val models = uiState.availableModels[engineKey] ?: emptyList()
+
+    var modelFilterLang by remember(engineKey, availableLanguages, uiState.modelFilterLang) {
+        mutableStateOf(
+            if (!isCurrentProcessorMultilingual && availableLanguages.isNotEmpty()) {
+                if (uiState.modelFilterLang in availableLanguages) uiState.modelFilterLang
+                else if ("en" in availableLanguages) "en"
+                else availableLanguages.first()
+            } else uiState.modelFilterLang
+        )
+    }
+
     if (!isCurrentProcessorMultilingual && availableLanguages.isNotEmpty()) {
         val languages = availableLanguages.map { lang ->
             lang to lang.uppercase()
@@ -125,9 +137,9 @@ fun VoiceEnginesSubTab(
         val languageSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
         val languageGroups = listOf(DropdownGroup(languageManager.getString("available_languages_header") ?: "AVAILABLE LANGUAGES", languages))
-        val selectedLangPair = languages.find { it.first == uiState.voiceLanguage }
+        val selectedLangPair = languages.find { it.first == modelFilterLang }
 
-        Text(text = languageManager.getString("voice_language"), style = MaterialTheme.typography.labelLarge)
+        Text(text = languageManager.getString("model_language_filter") ?: "Model Language Filter", style = MaterialTheme.typography.labelLarge)
 
         GroupedDropdownMenu(
             selectedItem = selectedLangPair,
@@ -135,7 +147,7 @@ fun VoiceEnginesSubTab(
             itemLabel = { it.second },
             isDownloaded = { true },
             onDeviceLabel = "",
-            onItemSelected = { pair, _ -> onVoiceLanguageSelected(pair.first) },
+            onItemSelected = { pair, _ -> modelFilterLang = pair.first; appStateManager.setModelFilterLang(pair.first) },
             onExpandedChange = { showSheet -> showLanguageSheet = showSheet },
             languageManager = languageManager
         )
@@ -143,12 +155,12 @@ fun VoiceEnginesSubTab(
         if (showLanguageSheet) {
             ModalBottomSheet(onDismissRequest = { showLanguageSheet = false }, sheetState = languageSheetState) {
                 GroupedDropdownContent(
-                    title = languageManager.getString("voice_language"),
+                    title = languageManager.getString("model_language_filter") ?: "Model Language Filter",
                     groups = languageGroups,
                     itemLabel = { it.second },
                     isDownloaded = { true },
                     onDeviceLabel = "",
-                    onItemSelected = { pair, _ -> onVoiceLanguageSelected(pair.first); showLanguageSheet = false },
+                    onItemSelected = { pair, _ -> modelFilterLang = pair.first; appStateManager.setModelFilterLang(pair.first); showLanguageSheet = false },
                     languageManager = languageManager
                 )
             }
@@ -199,18 +211,16 @@ fun VoiceEnginesSubTab(
     }
 
     // 4. Engine Specific Sections
-    val models = uiState.availableModels[engineKey] ?: emptyList()
-
     // Agnostic model filtering by language
-    val filteredModels = remember(models, uiState.voiceLanguage, isCurrentProcessorMultilingual) {
+    val filteredModels = remember(models, modelFilterLang, isCurrentProcessorMultilingual) {
         if (isCurrentProcessorMultilingual) models 
-        else models.filter { it.langCode == uiState.voiceLanguage }
+        else models.filter { it.langCode == modelFilterLang }
     }
 
     // --- CUSTOM MODEL IMPORT ---
     val isZipEngine = RemoteModelRegistry.isZipEngine(engineKey)
     val customModelPath = if (isZipEngine) {
-        uiState.customVoskModelPaths[uiState.voiceLanguage]
+        uiState.customVoskModelPaths[modelFilterLang]
     } else {
         uiState.customWhisperModelPath
     }
@@ -246,7 +256,7 @@ fun VoiceEnginesSubTab(
         }
     } else {
         OutlinedButton(
-            onClick = { onImportCustomModel(if (isZipEngine) uiState.voiceLanguage else null) },
+            onClick = { onImportCustomModel(if (isZipEngine) modelFilterLang else null) },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(languageManager.getString("import_custom_model"))
@@ -275,11 +285,11 @@ fun VoiceEnginesSubTab(
             itemLabel = { "${it.label} (${it.sizeDescription})" },
             modelIdProvider = { it.id },
             onItemSelected = { model, isDownloaded ->
-                val code = model.langCode ?: uiState.voiceLanguage
+                val code = model.langCode ?: uiState.modelFilterLang
                 onModelSelected(model, isDownloaded, code)
             },
             onDownloadRequest = { model ->
-                val code = model.langCode ?: uiState.voiceLanguage
+                val code = model.langCode ?: uiState.modelFilterLang
                 val downloadAction = {
                     appStateManager.saveVoiceModelSelection(engineKey, model.id)
                     onDownloadModel(model.id, engineKey, code)

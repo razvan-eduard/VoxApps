@@ -32,9 +32,9 @@ class VoxApplication : Application() {
         Logger.setLoggingFlags(LoggingFlags.fromLogLevel(level))
         Logger.setVerboseLoggingEnabled(snapshot.verboseLoggingEnabled)
 
-        // Initialize default voice language if not set
-        if (snapshot.voiceLanguage.isEmpty()) {
-            kotlinx.coroutines.runBlocking { container.settingsRepository.setVoiceLanguage(Strings.Preferences.DEFAULT_LANGUAGE) }
+        // Initialize default model filter language if not set
+        if (snapshot.modelFilterLang.isEmpty()) {
+            kotlinx.coroutines.runBlocking { container.settingsRepository.setModelFilterLang(Strings.Preferences.DEFAULT_LANGUAGE) }
         }
         
         // Initialize RemoteModelRegistry with app context (for assets/filesDir access)

@@ -11,7 +11,7 @@ class FastMapEngine(
     private val fastMapDao: FastMapDao
 ) : AssistantEngine {
 
-    override suspend fun processCommand(spokenText: String, voiceLanguage: String?): NluIntent? {
+    override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? {
         val rules = fastMapDao.getAllRules().first().filter { it.isActive }
 
         for (rule in rules) {

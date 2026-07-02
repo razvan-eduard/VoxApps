@@ -131,4 +131,14 @@ object Strings {
         const val VOICE = "voice"
         const val INTENT = "intent"
     }
+
+    object VoiceLanguages {
+        val ALL: List<String> = listOf(
+            "ar", "be", "bg", "ca", "cs", "da", "de", "el", "en", "es",
+            "et", "fa", "fi", "fr", "gl", "gu", "he", "hi", "hr", "hu",
+            "id", "it", "ja", "ka", "ko", "ky", "kz", "nl", "no", "pl",
+            "pt", "ro", "ru", "sk", "sv", "tg", "tl", "tr", "uk", "uz",
+            "vn", "zh"
+        )
+    }
 }

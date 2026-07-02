@@ -41,6 +41,7 @@ object TtsManager {
     private var ttsEnabled = true
     private var speechRate: Float = 1.0f
     private var pitch: Float = 1.0f
+    private var currentTtsLanguage: String = ""
 
     // --- REACTIVE SPEAKING STATE (for overlay UI) ---
     private val _isSpeakingFlow = MutableStateFlow(false)
@@ -112,7 +113,17 @@ object TtsManager {
             engine?.initialize(ctx, language)
             engine?.setSpeechRate(speechRate)
             engine?.setPitch(pitch)
+            currentTtsLanguage = language
             Logger.log("TTS engine created for language '$language'", TAG)
+        } else if (language != currentTtsLanguage) {
+            Logger.log("TTS language changed '$currentTtsLanguage' -> '$language', re-initializing", TAG)
+            engine?.stop()
+            engine?.release()
+            engine = AndroidTtsEngine()
+            engine?.initialize(ctx, language)
+            engine?.setSpeechRate(speechRate)
+            engine?.setPitch(pitch)
+            currentTtsLanguage = language
         }
     }
 
@@ -172,6 +183,7 @@ object TtsManager {
         engine = null
         _isSpeakingFlow.value = false
         _currentTextFlow.value = ""
+        currentTtsLanguage = ""
         initialized = false
         Logger.log("TtsManager released", TAG)
     }

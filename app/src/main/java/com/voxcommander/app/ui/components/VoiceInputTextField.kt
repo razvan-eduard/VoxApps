@@ -26,7 +26,7 @@ fun VoiceInputTextField(
     label: @Composable () -> Unit,
     placeholder: @Composable (() -> Unit)? = null,
     languageManager: LanguageManager,
-    voiceLanguage: String,
+    modelFilterLang: String,
     voiceProcessor: String,
     isModelOnDevice: Boolean = true,
     modifier: Modifier = Modifier,
@@ -83,7 +83,7 @@ fun VoiceInputTextField(
                         VoiceManager.stopListening()
                     } else {
                         startedRecordingHere = true
-                        VoiceManager.startListening(voiceLanguage, voiceProcessor) { transcription ->
+                        VoiceManager.startListening(modelFilterLang, voiceProcessor) { transcription ->
                             // IMPORTANT: transcription could be an error message
                             if (transcription.isNotEmpty() && !transcription.startsWith("Error:")) {
                                 onValueChange(transcription)

@@ -74,6 +74,7 @@ class WakeWordService : Service() {
                 com.voxcommander.app.domain.voice.TtsManager.isSpeakingFlow
             ) { isListening, isSpeaking -> isListening || isSpeaking }
                 .collectLatest { showOverlay ->
+                    Logger.log("Overlay visibility: showOverlay=$showOverlay, isListening=${VoiceManager.isListeningFlow.value}, isSpeaking=${com.voxcommander.app.domain.voice.TtsManager.isSpeakingFlow.value}", TAG)
                     val canDraw = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         android.provider.Settings.canDrawOverlays(this@WakeWordService)
                     } else true
@@ -98,7 +99,7 @@ class WakeWordService : Service() {
                         // AI is busy and queue is enabled — queue the new command
                         Logger.log("AI busy (PROCESSING) — enqueuing voice command", TAG)
                         container.mainViewModel.enqueueVoiceCommand(
-                            uiState.voiceLanguage,
+                            uiState.modelFilterLang,
                             uiState.voiceProcessor
                         )
                     } else if (uiState.voiceState == VoiceState.PROCESSING) {
@@ -106,7 +107,7 @@ class WakeWordService : Service() {
                         Logger.log("AI busy but queue disabled — ignoring wake word", TAG)
                     } else {
                         container.mainViewModel.processVoiceCommand(
-                            uiState.voiceLanguage,
+                            uiState.modelFilterLang,
                             uiState.voiceProcessor
                         )
                     }
@@ -200,7 +201,7 @@ class WakeWordService : Service() {
             } else {
                 Logger.log("Using Vosk wake word engine", TAG)
                 val wakeWordModelName = snapshot.wakeWordModelPath
-                val voiceLanguage = snapshot.voiceLanguage
+                val modelFilterLang = snapshot.modelFilterLang
 
                 val rootDir = getExternalFilesDir(null)
                 val modelPath = if (!wakeWordModelName.isNullOrBlank()) {
@@ -214,7 +215,7 @@ class WakeWordService : Service() {
                     }
                 } else {
                     rootDir?.listFiles()?.find {
-                        it.isDirectory && it.name.startsWith("vosk-model-") && it.name.contains(voiceLanguage, ignoreCase = true)
+                        it.isDirectory && it.name.startsWith("vosk-model-") && it.name.contains(modelFilterLang, ignoreCase = true)
                     }?.absolutePath
                 }
 

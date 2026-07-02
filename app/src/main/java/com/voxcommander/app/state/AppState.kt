@@ -11,9 +11,13 @@ import com.voxcommander.app.utils.Strings
  * This is the reactive Single Source of Truth (SSOT).
  */
 data class AppState(
+    // --- UI LANGUAGE ---
+    val language: String,
+
     // --- VOICE SETTINGS ---
     val voiceProcessor: String,
     val voiceLanguage: String,
+    val modelFilterLang: String,
     val activeVoiceModelId: String?,
     val customWhisperModelPath: String?,
     val customVoskModelPaths: Map<String, String>,
@@ -87,7 +91,7 @@ data class AppState(
             refreshTrigger: Int = 0
         ): AppState {
             val voiceProcessor = settings.voiceProcessor
-            val voiceLanguage = settings.voiceLanguage
+            val modelFilterLang = settings.modelFilterLang
             val activeVoiceModelId = settings.activeVoiceModelId
             val whisperKey = com.voxcommander.app.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".bin")
             val voskKey = com.voxcommander.app.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".zip")
@@ -109,7 +113,7 @@ data class AppState(
                         isDownloaded || !customWhisperModelPath.isNullOrBlank()
                     } else {
                         // Vosk-like (.zip) engine
-                        val customPath = voskKey?.let { settings.getCustomModelPath(it, voiceLanguage) }
+                        val customPath = voskKey?.let { settings.getCustomModelPath(it, modelFilterLang) }
                         if (!customPath.isNullOrBlank()) {
                             java.io.File(customPath).exists()
                         } else {
@@ -148,8 +152,10 @@ data class AppState(
             }
 
             return AppState(
+                language = settings.language,
                 voiceProcessor = voiceProcessor,
-                voiceLanguage = voiceLanguage,
+                voiceLanguage = settings.voiceLanguage,
+                modelFilterLang = modelFilterLang,
                 activeVoiceModelId = activeVoiceModelId,
                 customWhisperModelPath = customWhisperModelPath,
                 customVoskModelPaths = customVoskModelPaths,
@@ -192,8 +198,10 @@ data class AppState(
         }
 
         fun initial(): AppState = AppState(
+            language = Strings.Preferences.DEFAULT_LANGUAGE,
             voiceProcessor = "",
-            voiceLanguage = "",
+            voiceLanguage = Strings.Preferences.DEFAULT_LANGUAGE,
+            modelFilterLang = Strings.Preferences.DEFAULT_LANGUAGE,
             activeVoiceModelId = null,
             customWhisperModelPath = null,
             customVoskModelPaths = emptyMap(),

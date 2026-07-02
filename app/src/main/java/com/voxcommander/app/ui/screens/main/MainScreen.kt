@@ -140,7 +140,7 @@ fun MainScreen(
                             if (isProcessing) {
                                 viewModel.stopVoiceCommand()
                             } else {
-                                viewModel.processVoiceCommand(uiState.voiceLanguage, uiState.voiceProcessor)
+                                viewModel.processVoiceCommand(uiState.modelFilterLang, uiState.voiceProcessor)
                             }
                         }
                     )
@@ -276,6 +276,11 @@ fun MainScreen(
         AppScanModal(
             scanState = appStateManager.appScanState.collectAsStateWithLifecycle().value,
             onDismiss = { appStateManager.dismissAppScanResult() },
+            languageManager = languageManager
+        )
+
+        // --- IN-APP SPEAKING OVERLAY (when WakeWordService is not running) ---
+        SpeakingOverlay(
             languageManager = languageManager
         )
     }

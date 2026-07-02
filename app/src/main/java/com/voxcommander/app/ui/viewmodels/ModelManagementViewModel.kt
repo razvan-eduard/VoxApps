@@ -209,7 +209,7 @@ class ModelManagementViewModel(
     }
 
     fun selectVoiceModel(modelId: String, engineKey: String, langCode: String? = null) {
-        if (langCode != null) appStateManager.setVoiceLanguage(langCode)
+        if (langCode != null) appStateManager.setModelFilterLang(langCode)
 
         // Set active immediately — model can be active even if not on device
         appStateManager.setActiveVoiceModelId(modelId)

@@ -15,6 +15,7 @@ data class AppSettings(
     // --- LANGUAGE ---
     val language: String = Strings.Preferences.DEFAULT_LANGUAGE,
     val voiceLanguage: String = Strings.Preferences.DEFAULT_LANGUAGE,
+    val modelFilterLang: String = Strings.Preferences.DEFAULT_LANGUAGE,
 
     // --- VOICE ENGINE ---
     val voiceProcessor: String = Strings.Preferences.DEFAULT_PROCESSOR,
