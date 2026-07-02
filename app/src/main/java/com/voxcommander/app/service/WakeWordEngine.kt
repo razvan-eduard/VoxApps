@@ -60,7 +60,7 @@ class WakeWordEngine(
 
     // --- Template matching (language-agnostic KWS) ---
     private var storedTemplate: Array<FloatArray>? = null
-    private var templateThreshold = 0.55f
+    private var templateThreshold = 0.45f
     private var useTemplateMode = false
     private val voiceSegmentBuffer = ArrayDeque<Short>()
     private val SEGMENT_MAX_SAMPLES = 16000 * 3 // Max 3s segment for DTW
@@ -149,15 +149,21 @@ class WakeWordEngine(
             storedVoicePrint = VoiceFeatureExtractor.decodeVector(profile.voicePrint)
             similarityThreshold = profile.similarityThreshold
             storedTemplate = VoiceFeatureExtractor.decodeSequence(profile.wakeWordTemplate)
-            templateThreshold = profile.templateThreshold
+            val sensitivity = settingsRepo.getSettingsSnapshot().wakeWordSensitivity
+            val sensitivityThreshold = when (sensitivity) {
+                "high" -> 0.35f
+                "low" -> 0.55f
+                else -> 0.45f // medium
+            }
+            templateThreshold = profile.templateThreshold.coerceAtMost(sensitivityThreshold)
             useTemplateMode = storedTemplate != null
-            Logger.log("Calibrated: threshold=$voiceRmsThreshold, voicePrint=${if (storedVoicePrint != null) "yes" else "no"}, templateMode=$useTemplateMode", TAG)
+            Logger.log("Calibrated: threshold=$voiceRmsThreshold, voicePrint=${if (storedVoicePrint != null) "yes" else "no"}, templateMode=$useTemplateMode, templateThreshold=$templateThreshold", TAG)
         } else {
             voiceRmsThreshold = DEFAULT_VOICE_RMS_THRESHOLD
             storedVoicePrint = null
             similarityThreshold = 0.65f
             storedTemplate = null
-            templateThreshold = 0.55f
+            templateThreshold = 0.45f
             useTemplateMode = false
             Logger.log("Using default VAD threshold: $voiceRmsThreshold (Vosk mode)", TAG)
         }

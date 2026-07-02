@@ -135,6 +135,7 @@
   "record_wake_word": "Enregistrer",
   "start_service": "Démarrer le service",
   "stop_service": "Arrêter le service",
+  "stop_speaking": "Arrêter",
   "service_status": "Statut du service",
   "service_running": "En cours",
   "service_stopped": "Arrêté",

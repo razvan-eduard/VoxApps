@@ -26,9 +26,11 @@ data class RemoteModelSchema(
 
 data class RemoteEngineConfig(
     val engine_label: String? = null,
-    val type: List<String> = emptyList(), // e.g. ["voice", "wake_word"] or ["llm"]
+    val type: List<String> = emptyList(),
     val is_multilingual: Boolean,
     val extension: String = "",
+    val is_default_wake_word: Boolean = false,
+    val capabilities: List<String> = emptyList(),
     val models: List<RemoteModelItem>
 )
 
@@ -328,6 +330,20 @@ object RemoteModelRegistry {
     }
 
     fun isMultilingual(engineKey: String): Boolean = cachedSchema?.engines?.get(engineKey)?.is_multilingual ?: false
+
+    fun hasCapability(engineKey: String, capability: String): Boolean {
+        // Virtual engines with hardcoded capabilities
+        if (engineKey == "wake_porcupine") {
+            return capability in listOf("builtin_keywords", "requires_api_key", "wake_word_text")
+        }
+        return capability in (cachedSchema?.engines?.get(engineKey)?.capabilities ?: emptyList())
+    }
+
+    fun getDefaultWakeWordEngineKey(): String {
+        return cachedSchema?.engines?.entries
+            ?.firstOrNull { it.value.is_default_wake_word }?.key
+            ?: "wake_vosk"
+    }
 
     fun getLanguages(engineKey: String): List<String> {
         if (isMultilingual(engineKey)) return emptyList()

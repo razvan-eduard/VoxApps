@@ -37,6 +37,7 @@ data class AppSettings(
     val wakeWordProfileJson: String? = null,
     val wakeWordEngineType: String = "vosk",
     val picovoiceAccessKey: String? = null,
+    val wakeWordSensitivity: String = "medium", // "low", "medium", "high"
 
     // --- OFFLINE FALLBACK ---
     val offlineFallbackTimeout: Int = 10,
@@ -104,6 +105,7 @@ data class AppSettings(
     val ttsEnabled: Boolean = true,
     val ttsSpeechRate: Float = 1.0f,
     val ttsPitch: Float = 1.0f,
+    val ttsAudioFocusMode: String = "duck", // "none", "duck", "pause"
 
 ) {
     /**

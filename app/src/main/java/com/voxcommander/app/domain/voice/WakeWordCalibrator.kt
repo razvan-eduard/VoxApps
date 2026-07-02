@@ -183,7 +183,7 @@ class WakeWordCalibrator(
                     voicePrint = voicePrintStr,
                     similarityThreshold = 0.65f,
                     wakeWordTemplate = templateStr,
-                    templateThreshold = 0.55f,
+                    templateThreshold = 0.45f,
                     noiseFloorRms = measuredNoiseRms
                 )
 

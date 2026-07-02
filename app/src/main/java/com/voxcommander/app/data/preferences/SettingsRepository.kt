@@ -56,6 +56,7 @@ interface SettingsRepository {
     suspend fun setWakeWordEngineType(engineType: String)
     fun getPicovoiceAccessKeySync(): String?
     suspend fun setPicovoiceAccessKey(key: String?)
+    suspend fun setWakeWordSensitivity(sensitivity: String)
 
     // --- OFFLINE FALLBACK ---
     suspend fun setOfflineFallbackTimeout(seconds: Int)
@@ -134,4 +135,5 @@ interface SettingsRepository {
     suspend fun setTtsEnabled(enabled: Boolean)
     suspend fun setTtsSpeechRate(rate: Float)
     suspend fun setTtsPitch(pitch: Float)
+    suspend fun setTtsAudioFocusMode(mode: String)
 }

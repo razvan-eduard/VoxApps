@@ -1,6 +1,10 @@
 package com.voxcommander.app.domain.voice
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.os.Build
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.engine.AndroidTtsEngine
 import com.voxcommander.app.domain.engine.ITtsEngine
@@ -42,6 +46,10 @@ object TtsManager {
     private var speechRate: Float = 1.0f
     private var pitch: Float = 1.0f
     private var currentTtsLanguage: String = ""
+    private var audioFocusMode: String = "duck"
+
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
 
     // --- REACTIVE SPEAKING STATE (for overlay UI) ---
     private val _isSpeakingFlow = MutableStateFlow(false)
@@ -74,6 +82,8 @@ object TtsManager {
         ttsEnabled = snapshot.ttsEnabled
         speechRate = snapshot.ttsSpeechRate
         pitch = snapshot.ttsPitch
+        audioFocusMode = snapshot.ttsAudioFocusMode
+        audioManager = context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
         ensureEngine(snapshot.voiceLanguage)
 
@@ -86,14 +96,15 @@ object TtsManager {
 
         settingsObservationJob = scope.launch {
             hub.uiState
-                .map { Triple(it.voiceLanguage, it.ttsEnabled, it.ttsSpeechRate to it.ttsPitch) }
+                .map { Triple(it.voiceLanguage, it.ttsEnabled, Triple(it.ttsSpeechRate, it.ttsPitch, it.ttsAudioFocusMode)) }
                 .distinctUntilChanged()
-                .collectLatest { (language, enabled, rateAndPitch) ->
-                    val (rate, p) = rateAndPitch
+                .collectLatest { (language, enabled, ratePitchFocus) ->
+                    val (rate, p, focusMode) = ratePitchFocus
                     val changed = ttsEnabled != enabled || speechRate != rate || pitch != p
                     ttsEnabled = enabled
                     speechRate = rate
                     pitch = p
+                    audioFocusMode = focusMode
 
                     if (changed) {
                         engine?.setSpeechRate(rate)
@@ -149,7 +160,9 @@ object TtsManager {
         Logger.log("Speaking: ${text.take(80)}...", TAG)
         _currentTextFlow.value = text
         _isSpeakingFlow.value = true
+        requestAudioFocus()
         eng.speak(text, onDone = {
+            abandonAudioFocus()
             _isSpeakingFlow.value = false
             _currentTextFlow.value = ""
             onComplete?.invoke()
@@ -162,6 +175,7 @@ object TtsManager {
      */
     fun stop() {
         engine?.stop()
+        abandonAudioFocus()
         _isSpeakingFlow.value = false
         _currentTextFlow.value = ""
         Logger.log("TTS stopped", TAG)
@@ -179,6 +193,7 @@ object TtsManager {
         settingsObservationJob?.cancel()
         settingsObservationJob = null
         engine?.stop()
+        abandonAudioFocus()
         engine?.release()
         engine = null
         _isSpeakingFlow.value = false
@@ -186,5 +201,49 @@ object TtsManager {
         currentTtsLanguage = ""
         initialized = false
         Logger.log("TtsManager released", TAG)
+    }
+
+    // --- AUDIO FOCUS ---
+
+    private fun requestAudioFocus() {
+        val am = audioManager ?: return
+        if (audioFocusMode == "none") return
+
+        val focusType = if (audioFocusMode == "pause") {
+            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+        } else {
+            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest = AudioFocusRequest.Builder(focusType)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .setAcceptsDelayedFocusGain(true)
+                .build()
+            am.requestAudioFocus(audioFocusRequest!!)
+        } else {
+            @Suppress("DEPRECATION")
+            am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, focusType)
+        }
+        Logger.log("Audio focus requested (mode=$audioFocusMode)", TAG)
+    }
+
+    private fun abandonAudioFocus() {
+        val am = audioManager ?: return
+        if (audioFocusMode == "none") return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { am.abandonAudioFocusRequest(it) }
+            audioFocusRequest = null
+        } else {
+            @Suppress("DEPRECATION")
+            am.abandonAudioFocus(null)
+        }
+        Logger.log("Audio focus abandoned", TAG)
     }
 }

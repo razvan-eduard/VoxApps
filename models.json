@@ -39,9 +39,16 @@
       "is_multilingual": false,
       "engine_label": "Vosk",
       "extension": ".zip",
+      "is_default_wake_word": true,
       "type": [
         "voice",
         "wake_word"
+      ],
+      "capabilities": [
+        "calibration",
+        "model_download",
+        "custom_model_import",
+        "wake_word_text"
       ],
       "models": [
         {
@@ -772,6 +779,10 @@
       "extension": ".onnx",
       "type": [
         "wake_word"
+      ],
+      "capabilities": [
+        "custom_model_import",
+        "builtin_models"
       ],
       "models": [
         {

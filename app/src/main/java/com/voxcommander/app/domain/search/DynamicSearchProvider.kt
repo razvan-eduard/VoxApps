@@ -192,7 +192,8 @@ class DynamicSearchProvider(
     private fun buildUrl(query: String, lat: Double?, lon: Double?, lang: String = "en"): String {
         val encodedQuery = URLEncoder.encode(query, "UTF-8")
         val template = def.queryTemplate ?: ""
-        return def.endpoint + template
+        val resolvedEndpoint = def.endpoint.replace("{lang}", lang)
+        return resolvedEndpoint + template
             .replace("{query}", encodedQuery)
             .replace("{lat}", lat?.toString() ?: "0.0")
             .replace("{lon}", lon?.toString() ?: "0.0")

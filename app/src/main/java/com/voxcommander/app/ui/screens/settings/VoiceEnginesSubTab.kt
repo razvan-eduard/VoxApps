@@ -219,6 +219,7 @@ fun VoiceEnginesSubTab(
 
     // --- CUSTOM MODEL IMPORT ---
     val isZipEngine = RemoteModelRegistry.isZipEngine(engineKey)
+    val supportsCustomModel = RemoteModelRegistry.getExtension(engineKey).isNotEmpty()
     val customModelPath = if (isZipEngine) {
         uiState.customVoskModelPaths[modelFilterLang]
     } else {
@@ -226,7 +227,8 @@ fun VoiceEnginesSubTab(
     }
     val hasCustomModel = !customModelPath.isNullOrBlank() && java.io.File(customModelPath).exists()
 
-    if (hasCustomModel) {
+    if (supportsCustomModel) {
+        if (hasCustomModel) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
@@ -267,6 +269,7 @@ fun VoiceEnginesSubTab(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+    } // end if (supportsCustomModel)
 
     Spacer(modifier = Modifier.height(12.dp))
 

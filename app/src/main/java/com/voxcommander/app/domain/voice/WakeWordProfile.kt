@@ -14,7 +14,7 @@ data class WakeWordProfile(
     val voicePrint: String? = null,
     val similarityThreshold: Float = 0.65f,
     val wakeWordTemplate: String? = null,
-    val templateThreshold: Float = 0.55f,
+    val templateThreshold: Float = 0.45f,
     val profileName: String? = null,
     val noiseFloorRms: Float = 0f
 ) {
@@ -34,7 +34,7 @@ data class WakeWordProfile(
                     voicePrint = if (json.has("voicePrint")) json.getString("voicePrint") else null,
                     similarityThreshold = if (json.has("similarityThreshold")) json.getDouble("similarityThreshold").toFloat() else 0.65f,
                     wakeWordTemplate = if (json.has("wakeWordTemplate")) json.getString("wakeWordTemplate") else null,
-                    templateThreshold = if (json.has("templateThreshold")) json.getDouble("templateThreshold").toFloat() else 0.55f,
+                    templateThreshold = if (json.has("templateThreshold")) json.getDouble("templateThreshold").toFloat() else 0.45f,
                     profileName = if (json.has("profileName")) json.getString("profileName") else null,
                     noiseFloorRms = if (json.has("noiseFloorRms")) json.getDouble("noiseFloorRms").toFloat() else 0f
                 )

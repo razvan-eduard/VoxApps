@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
+import com.voxcommander.app.data.remote.RemoteModelRegistry
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
 import kotlinx.coroutines.flow.Flow
@@ -64,6 +65,7 @@ class SettingsRepositoryImpl(
         val WAKE_WORD_PROFILE = stringPreferencesKey("wake_word_profile")
         val WAKE_WORD_ENGINE_TYPE = stringPreferencesKey("wake_word_engine_type")
         val PICOVOICE_ACCESS_KEY = stringPreferencesKey("picovoice_access_key")
+        val WAKE_WORD_SENSITIVITY = stringPreferencesKey("wake_word_sensitivity")
 
         // Offline fallback
         val OFFLINE_FALLBACK_TIMEOUT = intPreferencesKey("offline_fallback_timeout")
@@ -130,6 +132,7 @@ class SettingsRepositoryImpl(
         val TTS_ENABLED = booleanPreferencesKey("tts_enabled")
         val TTS_SPEECH_RATE = floatPreferencesKey("tts_speech_rate")
         val TTS_PITCH = floatPreferencesKey("tts_pitch")
+        val TTS_AUDIO_FOCUS_MODE = stringPreferencesKey("tts_audio_focus_mode")
     }
 
     private val TAG = "SettingsRepository"
@@ -276,8 +279,9 @@ class SettingsRepositoryImpl(
             wakeWordModelPath = prefs[Keys.WAKE_WORD_MODEL_PATH],
             commandQueueEnabled = prefs[Keys.COMMAND_QUEUE_ENABLED] ?: true,
             wakeWordProfileJson = prefs[Keys.WAKE_WORD_PROFILE],
-            wakeWordEngineType = prefs[Keys.WAKE_WORD_ENGINE_TYPE] ?: "vosk",
+            wakeWordEngineType = normalizeEngineKey(prefs[Keys.WAKE_WORD_ENGINE_TYPE] ?: RemoteModelRegistry.getDefaultWakeWordEngineKey()),
             picovoiceAccessKey = prefs[Keys.PICOVOICE_ACCESS_KEY],
+            wakeWordSensitivity = prefs[Keys.WAKE_WORD_SENSITIVITY] ?: "medium",
 
             offlineFallbackTimeout = prefs[Keys.OFFLINE_FALLBACK_TIMEOUT] ?: 10,
             defaultOfflineModel = prefs[Keys.DEFAULT_OFFLINE_MODEL] ?: "tiny",
@@ -323,7 +327,8 @@ class SettingsRepositoryImpl(
 
             ttsEnabled = prefs[Keys.TTS_ENABLED] ?: true,
             ttsSpeechRate = prefs[Keys.TTS_SPEECH_RATE] ?: 1.0f,
-            ttsPitch = prefs[Keys.TTS_PITCH] ?: 1.0f
+            ttsPitch = prefs[Keys.TTS_PITCH] ?: 1.0f,
+            ttsAudioFocusMode = prefs[Keys.TTS_AUDIO_FOCUS_MODE] ?: "duck"
         )
     }
 
@@ -453,6 +458,10 @@ class SettingsRepositoryImpl(
             if (key != null) prefs[Keys.PICOVOICE_ACCESS_KEY] = key
             else prefs.remove(Keys.PICOVOICE_ACCESS_KEY)
         }
+    }
+
+    override suspend fun setWakeWordSensitivity(sensitivity: String) {
+        dataStore.edit { it[Keys.WAKE_WORD_SENSITIVITY] = sensitivity }
     }
 
     // --- OFFLINE FALLBACK ---
@@ -734,8 +743,19 @@ class SettingsRepositoryImpl(
         dataStore.edit { it[Keys.TTS_PITCH] = pitch }
     }
 
+    override suspend fun setTtsAudioFocusMode(mode: String) {
+        dataStore.edit { it[Keys.TTS_AUDIO_FOCUS_MODE] = mode }
+    }
+
     // --- HELPERS ---
     private fun parseCustomModelPaths(json: String?): Map<String, String> = parseStringMap(json)
+
+    private fun normalizeEngineKey(raw: String): String = when (raw) {
+        "vosk" -> "wake_vosk"
+        "porcupine" -> "wake_porcupine"
+        "openwakeword" -> "wake_openwakeword"
+        else -> raw
+    }
 
     private fun parseStringMap(json: String?): Map<String, String> {
         if (json.isNullOrBlank()) return emptyMap()

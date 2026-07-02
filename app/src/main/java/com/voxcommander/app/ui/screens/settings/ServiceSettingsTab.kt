@@ -55,18 +55,17 @@ fun ServiceSettingsTab(
 ) {
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var showDeleteProfileDialog by remember { mutableStateOf(false) }
 
-    // Normalize old engine type values to new keys (backward compat for existing users)
-    val currentEngineKey = when (uiState.wakeWordEngineType) {
-        "vosk" -> "wake_vosk"
-        "porcupine" -> "wake_porcupine"
-        "openwakeword" -> "wake_openwakeword"
-        else -> uiState.wakeWordEngineType ?: "wake_vosk"
-    }
+    val currentEngineKey = uiState.wakeWordEngineType ?: RemoteModelRegistry.getDefaultWakeWordEngineKey()
 
-    val isPorcupine = currentEngineKey == "wake_porcupine"
-    val isOpenWakeWord = currentEngineKey == "wake_openwakeword"
-    val isVosk = currentEngineKey == "wake_vosk"
+    // Engine capabilities (driven by models.json, not hardcoded)
+    val supportsCalibration = RemoteModelRegistry.hasCapability(currentEngineKey, "calibration")
+    val supportsModelDownload = RemoteModelRegistry.hasCapability(currentEngineKey, "model_download")
+    val supportsBuiltinKeywords = RemoteModelRegistry.hasCapability(currentEngineKey, "builtin_keywords")
+    val requiresApiKey = RemoteModelRegistry.hasCapability(currentEngineKey, "requires_api_key")
+    val hasBuiltinModels = RemoteModelRegistry.hasCapability(currentEngineKey, "builtin_models")
+    val supportsWakeWordText = RemoteModelRegistry.hasCapability(currentEngineKey, "wake_word_text")
 
     // Vosk language metadata (only used for language picker when Vosk is selected)
     val isVoskMultilingual = RemoteModelRegistry.isMultilingual("wake_vosk")
@@ -212,8 +211,8 @@ fun ServiceSettingsTab(
             )
         }
 
-        // Picovoice AccessKey input (only for Porcupine)
-        if (isPorcupine) {
+        // Picovoice AccessKey input (only for engines that require it)
+        if (requiresApiKey) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = languageManager.getString("ww_porcupine_accesskey"),
@@ -270,8 +269,8 @@ fun ServiceSettingsTab(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        // --- ENGINE-SPECIFIC: Vosk Calibration ---
-        if (isVosk) {
+        // --- ENGINE-SPECIFIC: Calibration ---
+        if (supportsCalibration) {
             val hasProfile = uiState.wakeWordProfileJson != null
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         Text(
@@ -384,7 +383,7 @@ fun ServiceSettingsTab(
 
             if (hasProfile) {
                 OutlinedButton(
-                    onClick = { appStateManager.clearWakeWordProfile() },
+                    onClick = { showDeleteProfileDialog = true },
                     enabled = !isCalibrating,
                     modifier = Modifier.weight(1f)
                 ) {
@@ -460,15 +459,65 @@ fun ServiceSettingsTab(
             )
         }
 
-        } // end if (isVosk) — calibration section
+        // Delete Profile Confirmation Dialog
+        if (showDeleteProfileDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteProfileDialog = false },
+                title = { Text(languageManager.getString("ww_delete_profile_title") ?: "Delete Voice Profile") },
+                text = { Text(languageManager.getString("ww_delete_profile_msg") ?: "This will remove your voice calibration profile. Wake word detection will fall back to basic mode. Are you sure?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        appStateManager.clearWakeWordProfile()
+                        showDeleteProfileDialog = false
+                    }) { Text(languageManager.getString("ww_calibrate_delete")) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteProfileDialog = false }) {
+                        Text(languageManager.getString("cancel_button") ?: "Cancel")
+                    }
+                }
+            )
+        }
+
+        } // end if (supportsCalibration) — calibration section
+
+        // --- WAKE WORD SENSITIVITY ---
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        Text(
+            text = languageManager.getString("ww_sensitivity_label") ?: "Wake Word Sensitivity",
+            style = MaterialTheme.typography.labelLarge
+        )
+        Text(
+            text = languageManager.getString("ww_sensitivity_desc") ?: "Adjust how easily the wake word triggers",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val levels = listOf("low", "medium", "high")
+            val labels = listOf(
+                languageManager.getString("ww_sensitivity_low") ?: "Low",
+                languageManager.getString("ww_sensitivity_medium") ?: "Medium",
+                languageManager.getString("ww_sensitivity_high") ?: "High"
+            )
+            levels.forEachIndexed { idx, level ->
+                FilterChip(
+                    selected = uiState.wakeWordSensitivity == level,
+                    onClick = { appStateManager.setWakeWordSensitivity(level) },
+                    label = { Text(labels[idx]) }
+                )
+            }
+        }
 
         // --- ENGINE-SPECIFIC: Model Selection via EngineModelSection ---
         val engineModels = remember(currentEngineKey, refreshTrigger) {
             RemoteModelRegistry.getModels(currentEngineKey)
         }
 
-        val displayModels = remember(engineModels, uiState.modelFilterLang, isVosk) {
-            if (isVosk && !isVoskMultilingual) engineModels.filter { it.langCode == uiState.modelFilterLang }
+        val displayModels = remember(engineModels, uiState.modelFilterLang, supportsModelDownload) {
+            if (supportsModelDownload && !isVoskMultilingual) engineModels.filter { it.langCode == uiState.modelFilterLang }
             else engineModels
         }
 
@@ -487,11 +536,11 @@ fun ServiceSettingsTab(
                     listOf(DropdownGroup(languageManager.getString("available_models_header") ?: "AVAILABLE MODELS", displayModels))
                 },
                 selectedItem = selectedModel,
-                itemLabel = { if (isVosk) "${it.label} (${it.sizeDescription})" else it.label },
+                itemLabel = { if (supportsModelDownload) "${it.label} (${it.sizeDescription})" else it.label },
                 modelIdProvider = { it.id },
                 onItemSelected = { model, _ ->
                     appStateManager.setWakeWordModelPath(model.id)
-                    if (isPorcupine) {
+                    if (supportsBuiltinKeywords) {
                         appStateManager.setWakeWord(model.label)
                     }
                 },
@@ -509,7 +558,7 @@ fun ServiceSettingsTab(
         // --- COMMON: Wake Word Text Field ---
         val hasProfile = uiState.wakeWordProfileJson != null
 
-        val isWakeWordModelOnDevice = if (isPorcupine || isOpenWakeWord) true
+        val isWakeWordModelOnDevice = if (supportsBuiltinKeywords || hasBuiltinModels) true
             else remember(selectedModel, refreshTrigger) {
                 selectedModel != null && uiState.isModelDownloaded(selectedModel.id)
             }
@@ -539,8 +588,8 @@ fun ServiceSettingsTab(
             enabled = !hasProfile
         )
 
-        // Porcupine built-in keywords hint
-        if (isPorcupine) {
+        // Built-in keywords hint
+        if (supportsBuiltinKeywords) {
             Text(
                 text = languageManager.getString("ww_porcupine_keywords_hint"),
                 style = MaterialTheme.typography.bodySmall,
@@ -557,7 +606,7 @@ fun ServiceSettingsTab(
             color = if (uiState.isWakeWordServiceListening) downloadedColor else MaterialTheme.colorScheme.secondary
         )
 
-        val isModelOnDevice = if (isPorcupine || isOpenWakeWord) true
+        val isModelOnDevice = if (supportsBuiltinKeywords || hasBuiltinModels) true
             else remember(selectedModel, uiState, refreshTrigger) {
                 selectedModel != null && uiState.isModelDownloaded(selectedModel.id)
             }
@@ -573,8 +622,8 @@ fun ServiceSettingsTab(
             Text(if (uiState.isWakeWordServiceListening) languageManager.getString("stop_service") else languageManager.getString("start_service"))
         }
 
-        // Show warning if model not on device (Vosk only)
-        if (isVosk && !isModelOnDevice && !uiState.isWakeWordServiceListening) {
+        // Show warning if model not on device (engines that require download)
+        if (supportsModelDownload && !isModelOnDevice && !uiState.isWakeWordServiceListening) {
             Text(
                 text = "Selected model not on device. Please download the model first.",
                 style = MaterialTheme.typography.bodySmall,
@@ -639,6 +688,31 @@ fun ServiceSettingsTab(
                 valueRange = 0.5f..2.0f,
                 steps = 14
             )
+
+            // Audio Focus Mode
+            Text(
+                text = languageManager.getString("tts_audio_focus_label") ?: "Media during TTS",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val modes = listOf("none", "duck", "pause")
+                val labels = listOf(
+                    languageManager.getString("tts_audio_focus_none") ?: "Ignore",
+                    languageManager.getString("tts_audio_focus_duck") ?: "Lower volume",
+                    languageManager.getString("tts_audio_focus_pause") ?: "Pause"
+                )
+                modes.forEachIndexed { idx, mode ->
+                    FilterChip(
+                        selected = uiState.ttsAudioFocusMode == mode,
+                        onClick = { appStateManager.setTtsAudioFocusMode(mode) },
+                        label = { Text(labels[idx]) }
+                    )
+                }
+            }
         }
     } // end else (TTS sub-tab)
 }

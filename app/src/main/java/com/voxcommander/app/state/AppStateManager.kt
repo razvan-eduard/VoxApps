@@ -280,6 +280,10 @@ class AppStateManager private constructor(
         scope.launch { repo.setPicovoiceAccessKey(key) }
     }
 
+    fun setWakeWordSensitivity(sensitivity: String) {
+        scope.launch { repo.setWakeWordSensitivity(sensitivity) }
+    }
+
     fun setCloudIntelligenceEnabled(enabled: Boolean) {
         scope.launch { repo.setCloudIntelligenceEnabled(enabled) }
     }
@@ -311,6 +315,10 @@ class AppStateManager private constructor(
 
     fun setTtsPitch(pitch: Float) {
         scope.launch { repo.setTtsPitch(pitch) }
+    }
+
+    fun setTtsAudioFocusMode(mode: String) {
+        scope.launch { repo.setTtsAudioFocusMode(mode) }
     }
 
     fun setAiProcessor(processor: String) {
