@@ -18,7 +18,10 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.voxcommander.app.domain.localization.LanguageManager
+import com.voxcommander.app.domain.voice.TtsManager
+import com.voxcommander.app.domain.voice.VoiceManager
 import com.voxcommander.app.state.AppStateManager
+import com.voxcommander.app.state.VoiceState
 import com.voxcommander.app.ui.screens.main.ListeningScreen
 import com.voxcommander.app.ui.screens.main.SpeakingOverlay
 import com.voxcommander.app.ui.theme.VoxCommanderTheme
@@ -71,14 +74,21 @@ class VoiceOverlayManager(
         val view = ComposeView(context).apply {
             setContent {
                 VoxCommanderTheme {
+                    val stopAll = {
+                        VoiceManager.stopListening()
+                        TtsManager.stop()
+                        appStateManager.setVoiceState(VoiceState.IDLE)
+                    }
                     // Listening overlay (shown when VoiceManager is listening)
                     ListeningScreen(
                         languageManager = languageManager,
-                        appStateManager = appStateManager
+                        appStateManager = appStateManager,
+                        onStop = stopAll
                     )
                     // Speaking overlay (shown when TtsManager is speaking)
                     SpeakingOverlay(
-                        languageManager = languageManager
+                        languageManager = languageManager,
+                        onStop = stopAll
                     )
                 }
             }

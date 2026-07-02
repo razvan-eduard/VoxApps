@@ -281,7 +281,12 @@ fun MainScreen(
 
         // --- IN-APP SPEAKING OVERLAY (when WakeWordService is not running) ---
         SpeakingOverlay(
-            languageManager = languageManager
+            languageManager = languageManager,
+            onStop = {
+                com.voxcommander.app.domain.voice.TtsManager.stop()
+                com.voxcommander.app.domain.voice.VoiceManager.stopListening()
+                appStateManager.setVoiceState(com.voxcommander.app.state.VoiceState.IDLE)
+            }
         )
     }
 }

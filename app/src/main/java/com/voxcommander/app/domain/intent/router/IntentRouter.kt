@@ -37,7 +37,7 @@ class IntentRouter(
      * @return true if a handler was found and execution succeeded, false otherwise.
      */
     fun route(intent: NluIntent): Boolean {
-        Logger.log("Routing intent: domain=${intent.domain}, action=${intent.action}, targetApp=${intent.targetApp}", TAG)
+        Logger.log("Routing intent: domain=${intent.domain}, action=${intent.action}, verb=${intent.actionVerb}, subject=${intent.logicalSubject}, targetApp=${intent.targetApp}", TAG)
 
         val settings = settingsRepository.getSettingsSnapshot()
         val resolvedApp = AppResolver.resolve(intent, settings)

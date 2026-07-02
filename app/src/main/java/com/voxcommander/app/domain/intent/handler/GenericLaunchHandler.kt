@@ -31,7 +31,7 @@ class GenericLaunchHandler : IntentHandler {
             return false
         }
 
-        val query = intent.param(NluIntent.PARAM_QUERY)
+        val query = intent.logicalSubject
         val action = intent.intentAction
 
         if (action.isNullOrBlank()) {

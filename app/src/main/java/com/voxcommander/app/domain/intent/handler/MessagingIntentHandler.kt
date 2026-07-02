@@ -26,8 +26,8 @@ class MessagingIntentHandler : IntentHandler {
         }
 
         val pkg = resolvedApp?.packageName
-        val contact = intent.param(NluIntent.PARAM_CONTACT)
-        val messageBody = intent.param(NluIntent.PARAM_MESSAGE)
+        val contact = intent.logicalSubject
+        val messageBody = intent.extras[NluIntent.EXTRA_MESSAGE_BODY]
 
         // Use URI template: intent.uriTemplate first, then resolvedApp.uriTemplates
         val sendTemplate = intent.uriTemplate ?: resolvedApp?.uriTemplates?.get(AppRegistry.TemplateActions.SEND)

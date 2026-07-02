@@ -2,7 +2,6 @@ package com.voxcommander.app.domain.intent.interpreter
 
 import com.voxcommander.app.data.local.dao.FastMapDao
 import com.voxcommander.app.domain.intent.model.NluIntent
-import com.voxcommander.app.domain.intent.taxonomy.IntentTaxonomy
 import com.voxcommander.app.utils.RegexGenerator
 
 import kotlinx.coroutines.flow.first
@@ -61,27 +60,16 @@ class FastMapEngine(
                     rule.queryWords.joinToString(" ").ifBlank { null }
                 }
 
-                val params = mutableMapOf<String, String>()
-                query?.let {
-                    params[NluIntent.PARAM_QUERY] = it
-                    // Map query to domain-specific parameter names
-                    when (rule.domain) {
-                        IntentTaxonomy.Domains.MAPS -> params[NluIntent.PARAM_DESTINATION] = it
-                        IntentTaxonomy.Domains.MESSAGING -> params[NluIntent.PARAM_CONTACT] = it
-                    }
-                }
-                if (rule.mediaControlType.isNotBlank()) {
-                    params["mediaControlType"] = rule.mediaControlType
-                }
-
                 return NluIntent(
+                    actionVerb = rule.action,
+                    logicalSubject = query,
                     domain = rule.domain,
                     action = rule.action,
                     targetApp = rule.targetPackage.ifBlank { null },
-                    parameters = params,
                     confidence = 1.0f,
                     intentAction = rule.intentAction.ifBlank { null },
-                    uriTemplate = rule.uriTemplate
+                    uriTemplate = rule.uriTemplate,
+                    mediaControlType = rule.mediaControlType.ifBlank { null }
                 )
             }
         }

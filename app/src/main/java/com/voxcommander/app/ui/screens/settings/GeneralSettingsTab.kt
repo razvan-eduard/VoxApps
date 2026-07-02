@@ -122,6 +122,7 @@ fun GeneralSettingsTab(
                         text = { Text(lang.uppercase()) },
                         onClick = {
                             appStateManager.setVoiceLanguage(lang)
+                            appStateManager.setModelFilterLang(lang)
                             voiceLangExpanded = false
                         }
                     )

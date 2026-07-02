@@ -14,21 +14,33 @@ object TestDataFactory {
     // --- NLU INTENTS ---
 
     fun createNluIntent(
+        actionVerb: String = IntentTaxonomy.Actions.PLAY,
+        logicalSubject: String? = null,
+        modifiers: List<String> = emptyList(),
+        contextWords: List<String> = emptyList(),
         domain: String = IntentTaxonomy.Domains.AUDIO,
         action: String = IntentTaxonomy.Actions.PLAY,
         targetApp: String? = null,
-        parameters: Map<String, String> = emptyMap(),
+        category: String? = null,
         confidence: Float = 1.0f,
+        extras: Map<String, String> = emptyMap(),
         intentAction: String? = null,
-        uriTemplate: String? = null
+        uriTemplate: String? = null,
+        mediaControlType: String? = null
     ) = NluIntent(
+        actionVerb = actionVerb,
+        logicalSubject = logicalSubject,
+        modifiers = modifiers,
+        contextWords = contextWords,
         domain = domain,
         action = action,
         targetApp = targetApp,
-        parameters = parameters,
+        category = category,
         confidence = confidence,
+        extras = extras,
         intentAction = intentAction,
-        uriTemplate = uriTemplate
+        uriTemplate = uriTemplate,
+        mediaControlType = mediaControlType
     )
 
     fun createPlayMusicIntent(
@@ -36,14 +48,13 @@ object TestDataFactory {
         track: String? = "Perfect",
         targetApp: String? = null
     ): NluIntent {
-        val params = mutableMapOf<String, String>()
-        artist?.let { params[NluIntent.PARAM_ARTIST] = it }
-        track?.let { params[NluIntent.PARAM_TRACK] = it }
+        val subject = listOfNotNull(artist, track).filter { it.isNotBlank() }.joinToString(" ")
         return createNluIntent(
+            actionVerb = IntentTaxonomy.Actions.PLAY,
+            logicalSubject = subject.ifBlank { null },
             domain = IntentTaxonomy.Domains.AUDIO,
             action = IntentTaxonomy.Actions.PLAY,
-            targetApp = targetApp,
-            parameters = params
+            targetApp = targetApp
         )
     }
 
@@ -51,12 +62,12 @@ object TestDataFactory {
         destination: String = "Brasov",
         targetApp: String? = null
     ): NluIntent {
-        val params = mapOf(NluIntent.PARAM_DESTINATION to destination)
         return createNluIntent(
+            actionVerb = IntentTaxonomy.Actions.NAVIGATE,
+            logicalSubject = destination,
             domain = IntentTaxonomy.Domains.MAPS,
             action = IntentTaxonomy.Actions.NAVIGATE,
-            targetApp = targetApp,
-            parameters = params
+            targetApp = targetApp
         )
     }
 

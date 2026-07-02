@@ -25,7 +25,6 @@ class SearchIntentHandler : IntentHandler {
 
     companion object {
         private const val TAG = "SearchIntentHandler"
-        private const val PARAM_CATEGORY = "category"
         private val searchScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     }
 
@@ -34,8 +33,8 @@ class SearchIntentHandler : IntentHandler {
     }
 
     override fun execute(context: Context, intent: NluIntent, resolvedApp: AppRegistry.AppEntry?): Boolean {
-        val query = intent.param(NluIntent.PARAM_QUERY) ?: return false
-        val category = intent.param(PARAM_CATEGORY) ?: "general"
+        val query = intent.logicalSubject ?: return false
+        val category = intent.category ?: "general"
 
         Logger.log("SearchIntentHandler: query='$query', category='$category'", TAG)
 

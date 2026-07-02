@@ -9,9 +9,11 @@ import com.voxcommander.app.domain.intent.taxonomy.IntentTaxonomy
 import com.voxcommander.app.utils.Logger
 
 /**
- * Parses LLM JSON output into NluIntent.
- * Supports both the new schema (domain, action, targetApp, parameters, confidence)
- * and the legacy schema (category, actionType, artist, track, album, destination).
+ * Parses LLM JSON output into NluIntent using the anatomy-based schema.
+ *
+ * New schema: {action_verb, logical_subject, modifiers, context_words, domain, action, targetApp, category, confidence, extras}
+ * Legacy schema: {domain, action, targetApp, parameters, confidence} — mapped to anatomy fields.
+ * Old legacy: {category, actionType, artist, track, album, destination} — mapped via IntentTaxonomy.LegacyMapper.
  */
 object NluIntentParser {
 
@@ -22,13 +24,14 @@ object NluIntentParser {
         return try {
             val cleaned = extractJsonBlock(json)
             val obj = JsonParser.parseString(cleaned).asJsonObject
-            if (obj.has("domain")) {
-                parseNewSchema(obj)
-            } else if (obj.has("category")) {
-                parseLegacySchema(obj)
-            } else {
-                Logger.log("Unknown JSON schema — no 'domain' or 'category' key", TAG)
-                null
+            when {
+                obj.has("action_verb") -> parseAnatomySchema(obj)
+                obj.has("domain") -> parseLegacyDomainSchema(obj)
+                obj.has("category") -> parseOldLegacySchema(obj)
+                else -> {
+                    Logger.log("Unknown JSON schema — no 'action_verb', 'domain', or 'category' key", TAG)
+                    null
+                }
             }
         } catch (e: Exception) {
             Logger.log("Failed to parse NluIntent JSON: ${e.message}", TAG)
@@ -45,9 +48,7 @@ object NluIntentParser {
 
         // Strip markdown code fences
         if (text.startsWith("```")) {
-            // Remove opening fence (```json or ```)
             text = text.replace(Regex("^```[a-zA-Z]*\\s*"), "")
-            // Remove all closing fences
             text = text.replace(Regex("```"), "")
         }
 
@@ -83,32 +84,114 @@ object NluIntentParser {
         return try { el.asString } catch (e: Exception) { "" }
     }
 
-    private fun parseNewSchema(obj: JsonObject): NluIntent? {
-        val domain = obj.getSafeString("domain")
-        val action = obj.getSafeString("action")
+    private fun JsonObject.getSafeStringList(key: String): List<String> {
+        val el = get(key) ?: return emptyList()
+        if (el.isJsonNull) return emptyList()
+        return try {
+            val arr = el.asJsonArray
+            arr.map { it.asString }
+        } catch (e: Exception) {
+            // Maybe it's a single string
+            try { listOf(el.asString) } catch (_: Exception) { emptyList() }
+        }
+    }
+
+    private fun JsonObject.getSafeMap(key: String): Map<String, String> {
+        val el = get(key) ?: return emptyMap()
+        if (el.isJsonNull) return emptyMap()
+        return try {
+            val type = TypeToken.getParameterized(
+                Map::class.java, String::class.java, String::class.java
+            ).type
+            gson.fromJson(el, type) ?: emptyMap()
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
+
+    /**
+     * Parses the new anatomy-based schema:
+     * {action_verb, logical_subject, modifiers, context_words, domain, action, targetApp, category, confidence, extras}
+     */
+    private fun parseAnatomySchema(obj: JsonObject): NluIntent? {
+        val actionVerb = obj.getSafeString("action_verb")
+        val logicalSubject = obj.getSafeString("logical_subject").ifBlank { null }
+        val modifiers = obj.getSafeStringList("modifiers")
+        val contextWords = obj.getSafeStringList("context_words")
+        val domain = normalizeDomain(obj.getSafeString("domain"))
+        val action = normalizeAction(obj.getSafeString("action"))
+        val targetApp = if (obj.has("targetApp") && !obj.get("targetApp").isJsonNull) {
+            obj.get("targetApp")?.asString
+        } else null
+        val category = obj.getSafeString("category").ifBlank { null }
+        val confidence = if (obj.has("confidence") && !obj.get("confidence").isJsonNull) {
+            obj.get("confidence").asFloat
+        } else 1.0f
+        val extras = obj.getSafeMap("extras")
 
         if (domain.isBlank() && action.isBlank()) {
             Logger.log("LLM returned null domain and action — treating as no intent", TAG)
             return null
         }
+
+        return NluIntent(
+            actionVerb = actionVerb,
+            logicalSubject = logicalSubject,
+            modifiers = modifiers,
+            contextWords = contextWords,
+            domain = domain,
+            action = action,
+            targetApp = targetApp,
+            category = category,
+            confidence = confidence,
+            extras = extras
+        )
+    }
+
+    /**
+     * Legacy domain-based schema: {domain, action, targetApp, parameters, confidence}
+     * Maps parameters.query → logicalSubject, parameters.category → category, etc.
+     */
+    private fun parseLegacyDomainSchema(obj: JsonObject): NluIntent? {
+        val domain = normalizeDomain(obj.getSafeString("domain"))
+        val action = normalizeAction(obj.getSafeString("action"))
+
+        if (domain.isBlank() && action.isBlank()) {
+            Logger.log("LLM returned null domain and action — treating as no intent", TAG)
+            return null
+        }
+
         val targetApp = if (obj.has("targetApp") && !obj.get("targetApp").isJsonNull) {
             obj.get("targetApp")?.asString
         } else null
 
-        val parameters: Map<String, String> = if (obj.has("parameters") && !obj.get("parameters").isJsonNull) {
-            val type = TypeToken.getParameterized(
-                Map::class.java, String::class.java, String::class.java
-            ).type
-            gson.fromJson(obj.get("parameters"), type) ?: emptyMap()
-        } else emptyMap()
-
+        val parameters: Map<String, String> = obj.getSafeMap("parameters")
         val confidence = if (obj.has("confidence") && !obj.get("confidence").isJsonNull) {
             obj.get("confidence").asFloat
         } else 1.0f
 
-        val normalizedDomain = normalizeDomain(domain)
-        val normalizedAction = normalizeAction(action)
-        return NluIntent(normalizedDomain, normalizedAction, targetApp, parameters, confidence)
+        // Map parameters to anatomy fields
+        val logicalSubject = parameters["query"]
+            ?: parameters["artist"]
+            ?: parameters["track"]
+            ?: parameters["destination"]
+            ?: parameters["contact"]
+            ?: parameters["album"]
+        val category = parameters["category"]
+        val mediaControlType = parameters["mediaControlType"]
+        val extras = parameters.filterKeys { it != "query" && it != "artist" && it != "track" && it != "album" && it != "destination" && it != "contact" && it != "category" && it != "mediaControlType" }
+
+        return NluIntent(
+            actionVerb = action,
+            logicalSubject = logicalSubject,
+            domain = domain,
+            action = action,
+            targetApp = targetApp,
+            category = category,
+            confidence = confidence,
+            extras = extras,
+            mediaControlType = mediaControlType
+        )
     }
 
     private val domainSynonyms = mapOf(
@@ -145,10 +228,10 @@ object NluIntentParser {
     }
 
     /**
-     * Legacy schema: {category, actionType, artist, track, album, destination}
+     * Old legacy schema: {category, actionType, artist, track, album, destination}
      * Maps to NluIntent using IntentTaxonomy.LegacyMapper.
      */
-    private fun parseLegacySchema(obj: JsonObject): NluIntent? {
+    private fun parseOldLegacySchema(obj: JsonObject): NluIntent? {
         val category = obj.get("category")?.asString ?: ""
         val actionType = obj.get("actionType")?.asString ?: ""
 
@@ -157,12 +240,18 @@ object NluIntentParser {
         val action = mapped?.action ?: actionType
         val targetApp = mapped?.targetApp
 
-        val params = mutableMapOf<String, String>()
-        obj.get("artist")?.takeIf { !it.isJsonNull }?.asString?.let { params[NluIntent.PARAM_ARTIST] = it }
-        obj.get("track")?.takeIf { !it.isJsonNull }?.asString?.let { params[NluIntent.PARAM_TRACK] = it }
-        obj.get("album")?.takeIf { !it.isJsonNull }?.asString?.let { params[NluIntent.PARAM_ALBUM] = it }
-        obj.get("destination")?.takeIf { !it.isJsonNull }?.asString?.let { params[NluIntent.PARAM_DESTINATION] = it }
+        val logicalSubject = obj.get("artist")?.takeIf { !it.isJsonNull }?.asString
+            ?: obj.get("track")?.takeIf { !it.isJsonNull }?.asString
+            ?: obj.get("album")?.takeIf { !it.isJsonNull }?.asString
+            ?: obj.get("destination")?.takeIf { !it.isJsonNull }?.asString
 
-        return NluIntent(domain, action, targetApp, params, 1.0f)
+        return NluIntent(
+            actionVerb = action,
+            logicalSubject = logicalSubject,
+            domain = domain,
+            action = action,
+            targetApp = targetApp,
+            confidence = 1.0f
+        )
     }
 }

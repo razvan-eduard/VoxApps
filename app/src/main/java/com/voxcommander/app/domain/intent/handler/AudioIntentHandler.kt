@@ -39,16 +39,9 @@ class AudioIntentHandler : IntentHandler {
     }
 
     private fun play(context: Context, intent: NluIntent, resolvedApp: AppRegistry.AppEntry?): Boolean {
-        val artist = intent.param(NluIntent.PARAM_ARTIST)
-        val track = intent.param(NluIntent.PARAM_TRACK)
-        val query = intent.param(NluIntent.PARAM_QUERY)
+        val searchQuery = intent.logicalSubject
 
-        // Build search query from available parameters
-        val searchQuery = listOfNotNull(artist, track, query)
-            .filter { it.isNotBlank() }
-            .joinToString(" ")
-
-        if (searchQuery.isNotBlank()) {
+        if (!searchQuery.isNullOrBlank()) {
             return playSearch(context, intent, resolvedApp, searchQuery)
         }
 
@@ -167,7 +160,7 @@ class AudioIntentHandler : IntentHandler {
             else -> return false
         }
 
-        val mediaControlType = intent.parameters["mediaControlType"] ?: "active_session"
+        val mediaControlType = intent.mediaControlType ?: "active_session"
         val explicitPkg = intent.targetApp?.takeIf { it.isNotBlank() }
 
         // audio_button: skip all session logic, go straight to AudioManager

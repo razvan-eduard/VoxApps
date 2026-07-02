@@ -3,7 +3,6 @@ package com.voxcommander.app.domain.engine
 import android.util.Log
 import com.voxcommander.app.data.local.dao.FastMapDao
 import com.voxcommander.app.domain.intent.interpreter.FastMapEngine
-import com.voxcommander.app.domain.intent.model.NluIntent
 import com.voxcommander.app.domain.intent.taxonomy.IntentTaxonomy
 import com.voxcommander.app.testutil.TestDataFactory
 import io.mockk.every
@@ -88,7 +87,7 @@ class FastMapEngineTest {
         val result = engine.processCommand("pune muzica de la smiley", null)
 
         assertNotNull(result)
-        val query = result?.parameters?.get(NluIntent.PARAM_QUERY)
+        val query = result?.logicalSubject
         assertNotNull(query)
         assertTrue(query!!.contains("smiley"))
     }
@@ -105,7 +104,7 @@ class FastMapEngineTest {
         assertNotNull(result)
         assertEquals(IntentTaxonomy.Domains.MAPS, result?.domain)
         assertEquals(IntentTaxonomy.Actions.NAVIGATE, result?.action)
-        val destination = result?.parameters?.get(NluIntent.PARAM_DESTINATION)
+        val destination = result?.logicalSubject
         assertNotNull(destination)
         assertTrue(destination!!.contains("magazin"))
     }
@@ -178,7 +177,7 @@ class FastMapEngineTest {
 
         assertNotNull(result)
         assertEquals(IntentTaxonomy.Domains.SYSTEM, result?.domain)
-        val query = result?.parameters?.get(NluIntent.PARAM_QUERY)
+        val query = result?.logicalSubject
         assertNotNull(query)
         assertTrue(query!!.contains("ceasul"))
     }
@@ -195,7 +194,7 @@ class FastMapEngineTest {
         assertNotNull(result)
         assertEquals(IntentTaxonomy.Domains.MESSAGING, result?.domain)
         assertEquals(IntentTaxonomy.Actions.SEND, result?.action)
-        val contact = result?.parameters?.get(NluIntent.PARAM_CONTACT)
+        val contact = result?.logicalSubject
         assertNotNull(contact)
         assertTrue(contact!!.contains("maria"))
     }
@@ -227,7 +226,7 @@ class FastMapEngineTest {
         val result = engine.processCommand("next", null)
 
         assertNotNull(result)
-        assertEquals("audio_button", result?.parameters?.get("mediaControlType"))
+        assertEquals("audio_button", result?.mediaControlType)
     }
 
     @Test

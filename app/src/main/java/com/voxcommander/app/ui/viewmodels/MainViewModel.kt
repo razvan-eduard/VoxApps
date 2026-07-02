@@ -111,6 +111,9 @@ class MainViewModel(
 
     fun stopVoiceCommand() {
         VoiceManager.stopListening()
+        com.voxcommander.app.domain.voice.TtsManager.stop()
+        _isProcessing.value = false
+        appStateManager.setVoiceState(VoiceState.IDLE)
     }
 
     fun processTextCommand(text: String) {

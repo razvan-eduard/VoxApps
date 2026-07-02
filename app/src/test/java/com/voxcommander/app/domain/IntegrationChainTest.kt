@@ -7,7 +7,6 @@ import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.intent.IntentDecisionMap
 import com.voxcommander.app.domain.intent.interpreter.AssistantEngine
 import com.voxcommander.app.domain.intent.interpreter.FastMapEngine
-import com.voxcommander.app.domain.intent.model.NluIntent
 import com.voxcommander.app.domain.intent.taxonomy.IntentTaxonomy
 import com.voxcommander.app.testutil.TestDataFactory
 import com.voxcommander.app.utils.Strings
@@ -85,7 +84,7 @@ class IntegrationChainTest {
         assertNotNull("Intent should not be null for a match", finalIntent)
         assertEquals(IntentTaxonomy.Domains.MAPS, finalIntent?.domain)
         assertEquals(IntentTaxonomy.Actions.NAVIGATE, finalIntent?.action)
-        val destination = finalIntent?.parameters?.get(NluIntent.PARAM_DESTINATION)
+        val destination = finalIntent?.logicalSubject
         assertNotNull(destination)
         assertEquals("bucuresti", destination)
     }

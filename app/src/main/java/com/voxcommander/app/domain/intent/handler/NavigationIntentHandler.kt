@@ -26,7 +26,7 @@ class NavigationIntentHandler : IntentHandler {
             return false
         }
 
-        val destination = intent.param(NluIntent.PARAM_DESTINATION)
+        val destination = intent.logicalSubject
         if (destination.isNullOrBlank()) {
             Logger.log("Navigation intent missing destination parameter", TAG)
             return false
