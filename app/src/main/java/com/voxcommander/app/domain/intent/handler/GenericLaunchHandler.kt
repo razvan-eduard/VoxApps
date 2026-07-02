@@ -43,25 +43,16 @@ class GenericLaunchHandler : IntentHandler {
         return when (action) {
             MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH -> playFromSearch(context, pkg, query)
             Intent.ACTION_VIEW -> {
-                // For LibreTube, try "play direct" via Piped API first
-                if (pkg == "com.github.libretube" && !query.isNullOrBlank()) {
-                    if (libretubePlayDirect(context, query)) return true
-                }
+                if (!query.isNullOrBlank() && pipedPlayDirect(context, pkg, query)) return true
                 viewSearch(context, pkg, resolvedApp, query, intent.uriTemplate)
             }
             Intent.ACTION_WEB_SEARCH -> webSearch(context, pkg, query)
             Intent.ACTION_SEARCH -> {
-                // For LibreTube, try "play direct" via Piped API first
-                if (pkg == "com.github.libretube" && !query.isNullOrBlank()) {
-                    if (libretubePlayDirect(context, query)) return true
-                }
+                if (!query.isNullOrBlank() && pipedPlayDirect(context, pkg, query)) return true
                 browserSearch(context, pkg, resolvedApp, query)
             }
             else -> {
-                // For LibreTube, try "play direct" via Piped API first
-                if (pkg == "com.github.libretube" && !query.isNullOrBlank()) {
-                    if (libretubePlayDirect(context, query)) return true
-                }
+                if (!query.isNullOrBlank() && pipedPlayDirect(context, pkg, query)) return true
                 // Generic: try to fire the action with query as SearchManager.QUERY extra
                 fireGenericAction(context, pkg, action, query)
             }
@@ -80,10 +71,8 @@ class GenericLaunchHandler : IntentHandler {
             return launchApp(context, pkg)
         }
 
-        // 0. For LibreTube, try "play direct" via Piped API first
-        if (pkg == "com.github.libretube") {
-            if (libretubePlayDirect(context, query)) return true
-        }
+        // 0. Try Piped API direct play first (works for any app that handles youtu.be URLs)
+        if (pipedPlayDirect(context, pkg, query)) return true
 
         // 1. For Spotify, try Web API first (uses PKCE token)
         if (pkg == "com.spotify.music") {
@@ -127,17 +116,17 @@ class GenericLaunchHandler : IntentHandler {
     }
 
     /**
-     * LibreTube "play direct": searches via Piped API, gets first video,
-     * opens it as youtu.be URL that LibreTube intercepts and plays.
+     * Piped "play direct": searches via Piped API, gets first video,
+     * opens it as youtu.be URL that the target app intercepts and plays.
      */
-    private fun libretubePlayDirect(context: Context, query: String): Boolean {
-        Logger.log("LibreTube play direct: searching for '$query'", TAG)
+    private fun pipedPlayDirect(context: Context, pkg: String?, query: String): Boolean {
+        Logger.log("Piped play direct: searching for '$query' on $pkg", TAG)
         return try {
             kotlinx.coroutines.runBlocking {
-                PipedSearchHelper.searchAndPlay(context, query)
+                PipedSearchHelper.searchAndPlay(context, query, pkg)
             }
         } catch (e: Exception) {
-            Logger.log("LibreTube play direct failed: ${e.message}", TAG)
+            Logger.log("Piped play direct failed: ${e.message}", TAG)
             false
         }
     }

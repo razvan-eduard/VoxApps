@@ -47,6 +47,8 @@ data class AppState(
     val ttsSpeechRate: Float,
     val ttsPitch: Float,
     val ttsAudioFocusMode: String,
+    val overlayTextSize: Float,
+    val appAliasRules: List<com.voxcommander.app.data.preferences.AppAliasRule> = emptyList(),
     
     // --- API SETTINGS ---
     val apiKey: String?,
@@ -181,6 +183,8 @@ data class AppState(
                 ttsSpeechRate = settings.ttsSpeechRate,
                 ttsPitch = settings.ttsPitch,
                 ttsAudioFocusMode = settings.ttsAudioFocusMode,
+                overlayTextSize = settings.overlayTextSize,
+                appAliasRules = settings.appAliasRules,
                 apiKey = settings.apiKey,
                 geminiApiKey = settings.geminiApiKey,
                 voiceState = voiceState,
@@ -229,6 +233,8 @@ data class AppState(
             ttsSpeechRate = 1.0f,
             ttsPitch = 1.0f,
             ttsAudioFocusMode = "duck",
+            overlayTextSize = 1.0f,
+            appAliasRules = emptyList(),
             apiKey = null,
             geminiApiKey = null,
             voiceState = VoiceState.IDLE,

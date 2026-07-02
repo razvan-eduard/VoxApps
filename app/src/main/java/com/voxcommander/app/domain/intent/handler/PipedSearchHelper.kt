@@ -134,7 +134,7 @@ object PipedSearchHelper {
      *
      * Returns true if a video was found and the intent was launched.
      */
-    suspend fun searchAndPlay(context: Context, query: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun searchAndPlay(context: Context, query: String, targetPackage: String? = null): Boolean = withContext(Dispatchers.IO) {
         if (!NetworkMonitor.isOnline) {
             Logger.log("Piped search: no internet connection, skipping", TAG)
             return@withContext false
@@ -147,18 +147,18 @@ object PipedSearchHelper {
 
         Logger.log("Piped search found video: $videoId for query: $query", TAG)
 
-        // Open as youtu.be URL — LibreTube intercepts this and plays directly
+        // Open as youtu.be URL — target app intercepts this and plays directly
         val intent = Intent(Intent.ACTION_VIEW).apply {
             data = Uri.parse("https://youtu.be/$videoId")
-            setPackage("com.github.libretube")
+            if (targetPackage != null) setPackage(targetPackage)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         return@withContext try {
             context.startActivity(intent)
-            Logger.log("Launched LibreTube with video: $videoId", TAG)
+            Logger.log("Launched ${targetPackage ?: "default"} with video: $videoId", TAG)
             true
         } catch (e: Exception) {
-            Logger.log("Failed to launch LibreTube: ${e.message}", TAG)
+            Logger.log("Failed to launch ${targetPackage ?: "default"}: ${e.message}", TAG)
             false
         }
     }

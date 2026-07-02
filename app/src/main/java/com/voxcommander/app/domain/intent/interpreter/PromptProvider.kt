@@ -53,7 +53,13 @@ object PromptProvider {
      */
     private fun buildAppsSection(settings: AppSettings?): String {
         val sb = StringBuilder()
-        sb.appendLine("Available installed apps:")
+        sb.appendLine("Available installed apps (use the exact name as targetApp):")
+
+        // Build alias map: packageName -> list of aliases
+        val aliasMap = settings?.appAliasRules
+            ?.filter { it.enabled }
+            ?.flatMap { rule -> rule.aliases.map { alias -> alias to rule.packageName } }
+            ?.toMap() ?: emptyMap()
 
         for (domain in IntentTaxonomy.Domains.ALL) {
             val apps = AppRegistry.getInstalledAppsForDomain(domain)
@@ -66,7 +72,9 @@ object PromptProvider {
             for (app in apps) {
                 val isDefault = defaultApp != null && app.packageName == defaultApp.packageName
                 val marker = if (isDefault) " [USER DEFAULT]" else ""
-                sb.appendLine("    - ${app.displayName} (package: ${app.packageName})$marker")
+                val aliases = aliasMap.entries.filter { it.value == app.packageName }.map { it.key }
+                val aliasStr = if (aliases.isNotEmpty()) " (also: ${aliases.joinToString(", ")})" else ""
+                sb.appendLine("    - ${app.displayName}$marker$aliasStr")
             }
         }
 

@@ -45,7 +45,8 @@ fun AppSelectorDropdown(
     label: String = "Select app",
     allowNone: Boolean = true,
     extraPackages: List<String> = emptyList(),
-    languageManager: LanguageManager? = null
+    languageManager: LanguageManager? = null,
+    maxDropdownHeight: androidx.compose.ui.unit.Dp = 300.dp
 ) {
     val lm = languageManager
     val context = LocalContext.current
@@ -136,7 +137,8 @@ fun AppSelectorDropdown(
                             expanded = false
                         }
                     },
-                    languageManager = lm
+                    languageManager = lm,
+                    maxHeight = maxDropdownHeight
                 )
             }
         }
@@ -293,7 +295,8 @@ private fun AppPickerList(
     selectedPackage: String?,
     allowNone: Boolean,
     onSelect: (AppRegistry.AppEntry?) -> Unit,
-    languageManager: LanguageManager? = null
+    languageManager: LanguageManager? = null,
+    maxHeight: androidx.compose.ui.unit.Dp = 300.dp
 ) {
     val lm = languageManager
     var searchQuery by remember { mutableStateOf("") }
@@ -333,7 +336,7 @@ private fun AppPickerList(
         )
 
         Column(
-            modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp).verticalScroll(rememberScrollState())
+            modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState())
         ) {
             if (allowNone) {
                 Row(

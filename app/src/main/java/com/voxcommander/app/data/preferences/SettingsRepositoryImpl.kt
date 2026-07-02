@@ -133,6 +133,10 @@ class SettingsRepositoryImpl(
         val TTS_SPEECH_RATE = floatPreferencesKey("tts_speech_rate")
         val TTS_PITCH = floatPreferencesKey("tts_pitch")
         val TTS_AUDIO_FOCUS_MODE = stringPreferencesKey("tts_audio_focus_mode")
+        val OVERLAY_TEXT_SIZE = floatPreferencesKey("overlay_text_size")
+
+        // App Aliases
+        val APP_ALIAS_RULES_JSON = stringPreferencesKey("app_alias_rules_json")
     }
 
     private val TAG = "SettingsRepository"
@@ -328,7 +332,9 @@ class SettingsRepositoryImpl(
             ttsEnabled = prefs[Keys.TTS_ENABLED] ?: true,
             ttsSpeechRate = prefs[Keys.TTS_SPEECH_RATE] ?: 1.0f,
             ttsPitch = prefs[Keys.TTS_PITCH] ?: 1.0f,
-            ttsAudioFocusMode = prefs[Keys.TTS_AUDIO_FOCUS_MODE] ?: "duck"
+            ttsAudioFocusMode = prefs[Keys.TTS_AUDIO_FOCUS_MODE] ?: "duck",
+            overlayTextSize = prefs[Keys.OVERLAY_TEXT_SIZE] ?: 1.0f,
+            appAliasRules = parseAppAliasRules(prefs[Keys.APP_ALIAS_RULES_JSON])
         )
     }
 
@@ -747,6 +753,10 @@ class SettingsRepositoryImpl(
         dataStore.edit { it[Keys.TTS_AUDIO_FOCUS_MODE] = mode }
     }
 
+    override suspend fun setOverlayTextSize(size: Float) {
+        dataStore.edit { it[Keys.OVERLAY_TEXT_SIZE] = size }
+    }
+
     // --- HELPERS ---
     private fun parseCustomModelPaths(json: String?): Map<String, String> = parseStringMap(json)
 
@@ -794,6 +804,25 @@ class SettingsRepositoryImpl(
         } catch (e: Exception) {
             Logger.log("Failed to parse string list: ${e.message}", TAG)
             emptyList()
+        }
+    }
+
+    private fun parseAppAliasRules(json: String?): List<AppAliasRule> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            val type = com.google.gson.reflect.TypeToken.getParameterized(
+                List::class.java, AppAliasRule::class.java
+            ).type
+            gson.fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            Logger.log("Failed to parse app alias rules: ${e.message}", TAG)
+            emptyList()
+        }
+    }
+
+    override suspend fun setAppAliasRules(rules: List<AppAliasRule>) {
+        dataStore.edit { prefs ->
+            prefs[Keys.APP_ALIAS_RULES_JSON] = gson.toJson(rules)
         }
     }
 }

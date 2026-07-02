@@ -321,6 +321,14 @@ class AppStateManager private constructor(
         scope.launch { repo.setTtsAudioFocusMode(mode) }
     }
 
+    fun setOverlayTextSize(size: Float) {
+        scope.launch { repo.setOverlayTextSize(size) }
+    }
+
+    fun setAppAliasRules(rules: List<com.voxcommander.app.data.preferences.AppAliasRule>) {
+        scope.launch { repo.setAppAliasRules(rules) }
+    }
+
     fun setAiProcessor(processor: String) {
         scope.launch {
             repo.setAiProcessor(processor)
@@ -515,5 +523,7 @@ class AppStateManager private constructor(
                 instance ?: AppStateManager(repo, context).also { instance = it }
             }
         }
+
+        fun get(): AppStateManager? = instance
     }
 }

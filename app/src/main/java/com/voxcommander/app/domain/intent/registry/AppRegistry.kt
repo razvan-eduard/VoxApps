@@ -104,6 +104,48 @@ object AppRegistry {
         return scannedApps.firstOrNull { it.packageName == packageName && isInstalled(it.packageName) }
     }
 
+    /**
+     * Resolves an app by human-readable display name (case-insensitive).
+     * Also matches common aliases (e.g. "youtube" matches "YouTube").
+     */
+    fun resolveByName(name: String?): AppEntry? {
+        if (name.isNullOrBlank()) return null
+        val lower = name.trim().lowercase()
+        Logger.log("resolveByName: looking for '$lower' in ${scannedApps.size} apps", TAG)
+
+        // Exact match on displayName (case-insensitive)
+        val exact = scannedApps.firstOrNull {
+            it.displayName.lowercase() == lower && isInstalled(it.packageName)
+        }
+        if (exact != null) {
+            Logger.log("resolveByName: exact match -> ${exact.packageName}", TAG)
+            return exact
+        }
+
+        // Partial match on displayName
+        val partial = scannedApps.firstOrNull {
+            it.displayName.lowercase().contains(lower) && isInstalled(it.packageName)
+        }
+        if (partial != null) {
+            Logger.log("resolveByName: partial match -> ${partial.packageName} (displayName='${partial.displayName}')", TAG)
+            return partial
+        }
+
+        // Match by package name suffix (e.g. "youtube" -> "com.google.android.youtube")
+        val suffix = scannedApps.firstOrNull {
+            it.packageName.lowercase().endsWith(".$lower") && isInstalled(it.packageName)
+        }
+        if (suffix != null) {
+            Logger.log("resolveByName: package suffix match -> ${suffix.packageName}", TAG)
+            return suffix
+        }
+
+        // Debug: log first 10 app names to see what's available
+        val sample = scannedApps.take(10).joinToString(", ") { "'${it.displayName}'" }
+        Logger.log("resolveByName: no match for '$lower'. Sample apps: $sample", TAG)
+        return null
+    }
+
     fun getInstalledAppsForDomain(domain: String): List<AppEntry> {
         return scannedApps.filter { it.domains.contains(domain) }
     }

@@ -630,13 +630,6 @@ fun ServiceSettingsTab(
                 color = MaterialTheme.colorScheme.error
             )
         }
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-        DefaultAppsTab(
-            languageManager = languageManager,
-            settingsRepo = settingsRepo,
-            appStateManager = appStateManager
-        )
     } // end if (uiState.wakeWordEnabled)
     } // end if (selectedSubTab == 0)
     else {
@@ -712,6 +705,37 @@ fun ServiceSettingsTab(
                         label = { Text(labels[idx]) }
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Overlay Text Size
+            Text(
+                text = (languageManager.getString("overlay_text_size_label") ?: "Overlay text size") + ": ${"%.1f".format(uiState.overlayTextSize)}x",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Slider(
+                value = uiState.overlayTextSize,
+                onValueChange = { appStateManager.setOverlayTextSize(it) },
+                valueRange = 0.7f..2.0f,
+                steps = 12
+            )
+            // Preview of overlay text size
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            ) {
+                Text(
+                    text = languageManager.getString("overlay_text_preview") ?: "This is how the speaking overlay text will look.",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize * uiState.overlayTextSize
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(12.dp),
+                    maxLines = 3
+                )
             }
         }
     } // end else (TTS sub-tab)

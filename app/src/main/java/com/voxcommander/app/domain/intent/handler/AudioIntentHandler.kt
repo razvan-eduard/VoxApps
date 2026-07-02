@@ -56,7 +56,7 @@ class AudioIntentHandler : IntentHandler {
     private fun playSearch(context: Context, intent: NluIntent, resolvedApp: AppRegistry.AppEntry?, query: String): Boolean {
         val pkg = resolvedApp?.packageName
 
-        // 0. For Spotify, try Web API first (uses PKCE token for direct playback)
+        // 1. For Spotify, try Web API first (uses PKCE token for direct playback)
         if (pkg == "com.spotify.music" && SpotifyPkceManager.isAuthorized) {
             val clientId = SpotifyRemoteManager.getClientId()
             if (clientId != null) {
@@ -98,7 +98,23 @@ class AudioIntentHandler : IntentHandler {
             if (tryLaunch(context, intent)) return true
         }
 
-        // No template or template failed — try launching the app directly
+        // No template or template failed — try Piped API search (works for any app that handles youtu.be URLs)
+        if (pkg != null) {
+            try {
+                val played = kotlinx.coroutines.runBlocking {
+                    PipedSearchHelper.searchAndPlay(context, query, pkg)
+                }
+                if (played) {
+                    Logger.log("playSearch via Piped API succeeded for $pkg", TAG)
+                    return true
+                }
+                Logger.log("Piped API failed for $pkg, trying direct launch", TAG)
+            } catch (e: Exception) {
+                Logger.log("Piped search failed: ${e.message}", TAG)
+            }
+        }
+
+        // Last resort: try launching the app directly
         if (pkg != null) {
             val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
             if (launchIntent != null) {

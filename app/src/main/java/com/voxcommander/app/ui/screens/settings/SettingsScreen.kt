@@ -60,7 +60,7 @@ fun SettingsContent(
     // REALTIME STATE - observe AppStateManager uiState for reactive updates
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     
-    val pagerState = rememberPagerState(pageCount = { 6 })
+    val pagerState = rememberPagerState(pageCount = { 7 })
 
     val isVoskLoading by modelManagementViewModel.isVoskLoading.collectAsStateWithLifecycle()
     val isVoskOffline by modelManagementViewModel.isVoskOffline.collectAsStateWithLifecycle()
@@ -109,7 +109,7 @@ fun SettingsContent(
                             },
                             modifier = Modifier.padding(bottom = 12.dp)
                         ) {
-                            val tabs = listOf("tab_general", "tab_ai_models", "tab_service", "tab_integrations", "tab_permissions", "tab_advanced")
+                            val tabs = listOf("tab_general", "tab_ai_models", "tab_service", "tab_app_manager", "tab_integrations", "tab_permissions", "tab_advanced")
                             
                             tabs.forEachIndexed { index, tabKey ->
                                 val selected = pagerState.currentPage == index
@@ -131,7 +131,7 @@ fun SettingsContent(
                     modifier = Modifier.fillMaxSize(), 
                     beyondViewportPageCount = 1
                 ) { page ->
-                    if (page == 5) { // Advanced (uses LazyColumn, no scroll wrapper)
+                    if (page == 6) { // Advanced (uses LazyColumn, no scroll wrapper)
                         AdvancedSettingsTab(
                             languageManager = languageManager,
                             settingsRepo = settingsRepo,
@@ -206,7 +206,12 @@ fun SettingsContent(
                                         refreshTrigger = uiState.refreshTrigger
                                     )
                                 }
-                                3 -> {
+                                3 -> AppManagerTab(
+                                    languageManager = languageManager,
+                                    settingsRepo = settingsRepo,
+                                    appStateManager = appStateManager
+                                )
+                                4 -> {
                                     IntegrationsTab(
                                         languageManager = languageManager,
                                         settingsRepo = settingsRepo
@@ -222,7 +227,7 @@ fun SettingsContent(
                                         settingsRepo = settingsRepo
                                     )
                                 }
-                                4 -> PermissionsSettingsTab(
+                                5 -> PermissionsSettingsTab(
                                     languageManager = languageManager,
                                     appStateManager = appStateManager,
                                     onRequestMicrophone = onRequestMicrophonePermission,

@@ -27,11 +27,27 @@ object AppResolver {
      * @return AppEntry if resolved, null for system default / implicit intent.
      */
     fun resolve(intent: NluIntent, settings: AppSettings? = null): AppRegistry.AppEntry? {
-        // 1. Try explicit targetApp (package name lookup)
+        // 1. Try explicit targetApp — first by package name, then by display name
         val explicit = AppRegistry.resolveByPackage(intent.targetApp)
+            ?: AppRegistry.resolveByName(intent.targetApp)
         if (explicit != null) {
             Logger.log("Resolved '${intent.targetApp}' -> ${explicit.packageName} (EXPLICIT)", TAG)
             return explicit
+        }
+
+        // 1b. Try app alias rules (user-defined aliases, e.g. "youtube" -> LibreTube)
+        if (settings != null && !intent.targetApp.isNullOrBlank()) {
+            val lowerTarget = intent.targetApp.trim().lowercase()
+            val aliasRule = settings.appAliasRules.firstOrNull { rule ->
+                rule.enabled && lowerTarget in rule.aliases.map { it.lowercase() }
+            }
+            if (aliasRule != null) {
+                val aliasApp = AppRegistry.resolveByPackage(aliasRule.packageName)
+                if (aliasApp != null) {
+                    Logger.log("Resolved '${intent.targetApp}' -> ${aliasApp.packageName} (ALIAS rule '${aliasRule.displayName}')", TAG)
+                    return aliasApp
+                }
+            }
         }
 
         // 2. Try user's default app for this domain (from DataStore preferences)

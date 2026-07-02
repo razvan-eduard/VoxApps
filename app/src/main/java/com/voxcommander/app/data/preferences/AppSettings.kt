@@ -106,6 +106,10 @@ data class AppSettings(
     val ttsSpeechRate: Float = 1.0f,
     val ttsPitch: Float = 1.0f,
     val ttsAudioFocusMode: String = "duck", // "none", "duck", "pause"
+    val overlayTextSize: Float = 1.0f, // multiplier for overlay text size
+
+    // --- APP ALIASES ---
+    val appAliasRules: List<AppAliasRule> = emptyList(),
 
 ) {
     /**

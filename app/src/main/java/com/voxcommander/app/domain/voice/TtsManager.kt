@@ -58,6 +58,9 @@ object TtsManager {
     private val _currentTextFlow = MutableStateFlow("")
     val currentTextFlow = _currentTextFlow.asStateFlow()
 
+    private val _speechRateFlow = MutableStateFlow(1.0f)
+    val speechRateFlow = _speechRateFlow.asStateFlow()
+
     /**
      * Initializes the TTS engine and starts reactive observation of settings.
      */
@@ -81,6 +84,7 @@ object TtsManager {
         val snapshot = settingsRepo.getSettingsSnapshot()
         ttsEnabled = snapshot.ttsEnabled
         speechRate = snapshot.ttsSpeechRate
+        _speechRateFlow.value = speechRate
         pitch = snapshot.ttsPitch
         audioFocusMode = snapshot.ttsAudioFocusMode
         audioManager = context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -103,6 +107,7 @@ object TtsManager {
                     val changed = ttsEnabled != enabled || speechRate != rate || pitch != p
                     ttsEnabled = enabled
                     speechRate = rate
+                    _speechRateFlow.value = rate
                     pitch = p
                     audioFocusMode = focusMode
 
@@ -158,13 +163,14 @@ object TtsManager {
         }
 
         Logger.log("Speaking: ${text.take(80)}...", TAG)
-        _currentTextFlow.value = text
         _isSpeakingFlow.value = true
+        _currentTextFlow.value = text
         requestAudioFocus()
         eng.speak(text, onDone = {
             abandonAudioFocus()
             _isSpeakingFlow.value = false
             _currentTextFlow.value = ""
+            resetRuntimeSpeechRate()
             onComplete?.invoke()
         })
     }
@@ -178,7 +184,29 @@ object TtsManager {
         abandonAudioFocus()
         _isSpeakingFlow.value = false
         _currentTextFlow.value = ""
+        resetRuntimeSpeechRate()
         Logger.log("TTS stopped", TAG)
+    }
+
+    /**
+     * Dynamically changes TTS speech rate during playback (e.g. from overlay speed control).
+     * Does NOT persist to settings — only affects current playback session.
+     * When TTS stops, the next speak() will use the settings-based rate.
+     */
+    fun setRuntimeSpeechRate(multiplier: Float) {
+        val newRate = (speechRate * multiplier)
+        engine?.setSpeechRate(newRate)
+        _speechRateFlow.value = newRate
+        Logger.log("Runtime speech rate set to $newRate (base=$speechRate, mult=$multiplier)", TAG)
+    }
+
+    /**
+     * Resets speech rate back to the settings-based value.
+     * Called when TTS playback ends or is stopped.
+     */
+    private fun resetRuntimeSpeechRate() {
+        engine?.setSpeechRate(speechRate)
+        _speechRateFlow.value = speechRate
     }
 
     /**
@@ -223,6 +251,9 @@ object TtsManager {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 )
+                .setOnAudioFocusChangeListener { focusChange ->
+                    Logger.log("Audio focus changed: $focusChange", TAG)
+                }
                 .setAcceptsDelayedFocusGain(true)
                 .build()
             am.requestAudioFocus(audioFocusRequest!!)

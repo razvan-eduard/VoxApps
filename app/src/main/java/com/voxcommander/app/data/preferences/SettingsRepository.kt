@@ -136,4 +136,8 @@ interface SettingsRepository {
     suspend fun setTtsSpeechRate(rate: Float)
     suspend fun setTtsPitch(pitch: Float)
     suspend fun setTtsAudioFocusMode(mode: String)
+    suspend fun setOverlayTextSize(size: Float)
+
+    // --- APP ALIASES ---
+    suspend fun setAppAliasRules(rules: List<AppAliasRule>)
 }
