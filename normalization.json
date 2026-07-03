@@ -249,9 +249,9 @@
           "replacement": "minus $1"
         },
         {
-          "description": "[Sweeper] Decimal number (3.14 -> 3 point 14)",
+          "description": "[Sweeper] Decimal number (3.14 -> 3.14, TTS handles pronunciation)",
           "pattern": "(?<!\\d)(\\d+)\\.(\\d+)\\b",
-          "replacement": "$1 point $2"
+          "replacement": "$1.$2"
         },
         {
           "description": "[Interceptor] Thousand separator (1,000 -> 1000)",
@@ -544,19 +544,19 @@
           "replacement": "$1 la sută"
         },
         {
-          "description": "[Interceptor] Zecimal negativ cu virgulă (-3,14)",
+          "description": "[Interceptor] Zecimal negativ cu virgulă (-3,14 -> -3,14)",
           "pattern": "(?<!\\d)-(\\d+),(\\d+)\\b",
-          "replacement": "minus $1 virgulă $2"
+          "replacement": "minus $1,$2"
         },
         {
-          "description": "[Sweeper] Zecimal cu virgulă (3,14 -> 3 virgulă 14)",
+          "description": "[Sweeper] Zecimal cu virgulă (3,14 -> 3,14, TTS pronunță natural)",
           "pattern": "(?<!\\d)(\\d+),(\\d+)\\b",
-          "replacement": "$1 virgulă $2"
+          "replacement": "$1,$2"
         },
         {
-          "description": "[Sweeper] Zecimal cu punct (3.14 -> 3 virgulă 14)",
+          "description": "[Sweeper] Zecimal cu punct (3.14 -> 3,14 pentru ro)",
           "pattern": "(?<!\\d)(\\d+)\\.(\\d+)\\b",
-          "replacement": "$1 virgulă $2"
+          "replacement": "$1,$2"
         },
         {
           "description": "[Interceptor] Separator miimi (1.000 -> 1000)",
@@ -820,19 +820,19 @@
           "replacement": "$1 Prozent"
         },
         {
-          "description": "[Interceptor] Negativer Dezimalwert (-3,14)",
+          "description": "[Interceptor] Negativer Dezimalwert (-3,14 -> -3,14)",
           "pattern": "(?<!\\d)-(\\d+),(\\d+)\\b",
-          "replacement": "minus $1 Komma $2"
+          "replacement": "minus $1,$2"
         },
         {
-          "description": "[Sweeper] Dezimal mit Komma (3,14 -> 3 Komma 14)",
+          "description": "[Sweeper] Dezimal mit Komma (3,14 -> 3,14, TTS spricht natürlich)",
           "pattern": "(?<!\\d)(\\d+),(\\d+)\\b",
-          "replacement": "$1 Komma $2"
+          "replacement": "$1,$2"
         },
         {
-          "description": "[Sweeper] Dezimal mit Punkt (3.14 -> 3 Komma 14)",
+          "description": "[Sweeper] Dezimal mit Punkt (3.14 -> 3,14 für de)",
           "pattern": "(?<!\\d)(\\d+)\\.(\\d+)\\b",
-          "replacement": "$1 Komma $2"
+          "replacement": "$1,$2"
         },
         {
           "description": "[Interceptor] Tausendertrennzeichen (1.000 -> 1000)",
@@ -1090,19 +1090,19 @@
           "replacement": "$1 pour cent"
         },
         {
-          "description": "[Intercepteur] Décimal négatif (-3,14)",
+          "description": "[Intercepteur] Décimal négatif (-3,14 -> -3,14)",
           "pattern": "(?<!\\d)-(\\d+),(\\d+)\\b",
-          "replacement": "moins $1 virgule $2"
+          "replacement": "moins $1,$2"
         },
         {
-          "description": "[Balayeur] Décimal avec virgule (3,14 -> 3 virgule 14)",
+          "description": "[Balayeur] Décimal avec virgule (3,14 -> 3,14, TTS prononce naturellement)",
           "pattern": "(?<!\\d)(\\d+),(\\d+)\\b",
-          "replacement": "$1 virgule $2"
+          "replacement": "$1,$2"
         },
         {
-          "description": "[Balayeur] Décimal avec point (3.14 -> 3 virgule 14)",
+          "description": "[Balayeur] Décimal avec point (3.14 -> 3,14 pour fr)",
           "pattern": "(?<!\\d)(\\d+)\\.(\\d+)\\b",
-          "replacement": "$1 virgule $2"
+          "replacement": "$1,$2"
         },
         {
           "description": "[Intercepteur] Séparateur milliers (1 000 -> 1000)",
