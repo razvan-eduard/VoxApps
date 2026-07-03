@@ -131,7 +131,7 @@ fun ServiceSettingsTab(
         )
     }
 
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
     if (selectedSubTab == 0) {
     // --- COMMON: Wake Word Enable Switch ---
@@ -163,8 +163,6 @@ fun ServiceSettingsTab(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(4.dp))
-
         val wakeEngines = remember(uiState.availableModels) {
             RemoteModelRegistry.getEngineKeysByType("wake_word")
         }
@@ -194,8 +192,6 @@ fun ServiceSettingsTab(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
         // --- COMMON: Command Queue Toggle ---
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -213,7 +209,7 @@ fun ServiceSettingsTab(
 
         // Picovoice AccessKey input (only for engines that require it)
         if (requiresApiKey) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = languageManager.getString("ww_porcupine_accesskey"),
                 style = MaterialTheme.typography.labelLarge
@@ -266,13 +262,12 @@ fun ServiceSettingsTab(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
-            Spacer(modifier = Modifier.height(8.dp))
         }
 
         // --- ENGINE-SPECIFIC: Calibration ---
         if (supportsCalibration) {
             val hasProfile = uiState.wakeWordProfileJson != null
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
         Text(
             text = languageManager.getString("ww_calibrate_title"),
             style = MaterialTheme.typography.labelLarge
@@ -482,7 +477,7 @@ fun ServiceSettingsTab(
         } // end if (supportsCalibration) — calibration section
 
         // --- WAKE WORD SENSITIVITY ---
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
         Text(
             text = languageManager.getString("ww_sensitivity_label") ?: "Wake Word Sensitivity",
             style = MaterialTheme.typography.labelLarge
@@ -492,7 +487,6 @@ fun ServiceSettingsTab(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(4.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -641,7 +635,7 @@ fun ServiceSettingsTab(
 
         // TTS Enable Toggle
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -707,11 +701,11 @@ fun ServiceSettingsTab(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Overlay Text Size
             Text(
-                text = (languageManager.getString("overlay_text_size_label") ?: "Overlay text size") + ": ${"%.1f".format(uiState.overlayTextSize)}x",
+                text = languageManager.getString("overlay_text_size_label") + ": ${"%.1f".format(uiState.overlayTextSize)}x",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -728,7 +722,7 @@ fun ServiceSettingsTab(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
             ) {
                 Text(
-                    text = languageManager.getString("overlay_text_preview") ?: "This is how the speaking overlay text will look.",
+                    text = languageManager.getString("overlay_text_preview"),
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = MaterialTheme.typography.bodyMedium.fontSize * uiState.overlayTextSize
                     ),

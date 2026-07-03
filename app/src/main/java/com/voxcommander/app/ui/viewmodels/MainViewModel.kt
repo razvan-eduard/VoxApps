@@ -116,13 +116,13 @@ class MainViewModel(
         appStateManager.setVoiceState(VoiceState.IDLE)
     }
 
-    fun processTextCommand(text: String) {
+    fun processTextCommand(text: String, modelFilterLang: String? = null) {
         _transcription.value = text
         viewModelScope.launch {
             _isProcessing.value = true
             appStateManager.setVoiceState(VoiceState.PROCESSING)
             try {
-                val result = assistantEngine.processCommand(text)
+                val result = assistantEngine.processCommand(text, modelFilterLang)
                 _currentIntent.value = result
                 result?.let { withContext(Dispatchers.IO) { intentRouter.route(it) } }
             } catch (e: Exception) {

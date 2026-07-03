@@ -17,6 +17,7 @@ data class AppState(
     // --- VOICE SETTINGS ---
     val voiceProcessor: String,
     val voiceLanguage: String,
+    val voiceLanguageAutoDetect: Boolean,
     val modelFilterLang: String,
     val activeVoiceModelId: String?,
     val customWhisperModelPath: String?,
@@ -159,6 +160,7 @@ data class AppState(
                 language = settings.language,
                 voiceProcessor = voiceProcessor,
                 voiceLanguage = settings.voiceLanguage,
+                voiceLanguageAutoDetect = settings.voiceLanguageAutoDetect,
                 modelFilterLang = modelFilterLang,
                 activeVoiceModelId = activeVoiceModelId,
                 customWhisperModelPath = customWhisperModelPath,
@@ -209,6 +211,7 @@ data class AppState(
             language = Strings.Preferences.DEFAULT_LANGUAGE,
             voiceProcessor = "",
             voiceLanguage = Strings.Preferences.DEFAULT_LANGUAGE,
+            voiceLanguageAutoDetect = false,
             modelFilterLang = Strings.Preferences.DEFAULT_LANGUAGE,
             activeVoiceModelId = null,
             customWhisperModelPath = null,

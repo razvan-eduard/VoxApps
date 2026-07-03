@@ -1,10 +1,7 @@
 package com.voxcommander.app.service
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
@@ -36,9 +33,6 @@ class WakeWordEngine(
     private var recognizer: Recognizer? = null
     private var audioRecord: AudioRecord? = null
     private var isListening = false
-
-   private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private var audioFocusRequest: AudioFocusRequest? = null
 
     private val sampleRate = 16000
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) * 2
@@ -104,41 +98,6 @@ class WakeWordEngine(
         }
     }
 
-    private fun requestAudioFocus(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                )
-                .setAcceptsDelayedFocusGain(true)
-                .setOnAudioFocusChangeListener { focusChange ->
-                    if (focusChange == AudioManager.AUDIOFOCUS_LOSS || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-                        Logger.log("Audio focus lost. Pausing listening.", TAG)
-                        stopListening()
-                    }
-                }.build()
-
-            audioManager.requestAudioFocus(audioFocusRequest!!) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.requestAudioFocus(
-                null, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE
-            ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        }
-    }
-
-    private fun abandonAudioFocus() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.abandonAudioFocus(null)
-        }
-    }
-
     override fun startListening(): Boolean {
         // Load calibrated threshold if available
         val profileJson = settingsRepo.getWakeWordProfileJson()
@@ -176,21 +135,40 @@ class WakeWordEngine(
         consecutiveSilentFrames = 0
 
         if (isListening) return true
+
+        // Ensure any previous AudioRecord is fully released before creating a new one
+        try {
+            audioRecord?.release()
+            audioRecord = null
+        } catch (e: Exception) {
+            Logger.log("Error releasing previous AudioRecord: ${e.message}", TAG)
+        }
+
+        // Verify recognizer is still valid
+        if (recognizer == null || model == null) {
+            Logger.log("Cannot start listening: recognizer or model is null", TAG)
+            return false
+        }
+
         try {
             if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                Logger.log("RECORD_AUDIO permission not granted", TAG)
                 return false
             }
 
-            if (!requestAudioFocus()) {
-                Logger.log("Could not gain audio focus. Cannot start listening.", TAG)
-                return false
+            // Reset recognizer state to clear any buffered audio from previous session
+            try {
+                recognizer?.reset()
+            } catch (e: Exception) {
+                Logger.log("Error resetting recognizer before listen: ${e.message}", TAG)
             }
 
-            audioRecord?.release()
             audioRecord = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                abandonAudioFocus()
+                Logger.log("AudioRecord failed to initialize (state=${audioRecord?.state})", TAG)
+                audioRecord?.release()
+                audioRecord = null
                 return false
             }
 
@@ -200,11 +178,13 @@ class WakeWordEngine(
             audioRecord?.startRecording()
 
             CoroutineScope(Dispatchers.IO).launch { listenLoop() }
+            Logger.log("WakeWordEngine started listening successfully", TAG)
             return true
         } catch (e: Exception) {
             Logger.log("Exception starting AudioRecord: ${e.message}", TAG)
             isListening = false
-            abandonAudioFocus()
+            audioRecord?.release()
+            audioRecord = null
             return false
         }
     }
@@ -418,7 +398,7 @@ class WakeWordEngine(
             Logger.log("Error stopping AudioRecord: ${e.message}", TAG)
         } finally {
             audioRecord = null
-            abandonAudioFocus()
+            // Keep audio focus — only abandon on stopService to avoid media resuming
         }
     }
 

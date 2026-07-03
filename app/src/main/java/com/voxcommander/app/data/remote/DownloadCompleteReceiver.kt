@@ -48,19 +48,27 @@ class DownloadCompleteReceiver : BroadcastReceiver() {
                     Logger.log("Matched engine: $matchedEngineKey, modelId: $modelId", TAG)
 
                     if (ext.equals(".zip", ignoreCase = true)) {
-                        // ZIP-based engines (e.g. wake_vosk) need unzip before signaling
-                        val downloader = ModelDownloader(context)
-                        downloader.unzipVoskModel(modelId, matchedEngineKey) { success ->
-                            Logger.log("Unzip ${if (success) "success" else "failed"} for $modelId", TAG)
-                            val localIntent = Intent(ACTION_DOWNLOAD_COMPLETE_LOCAL).apply {
-                                putExtra(EXTRA_DOWNLOAD_ID, id)
-                                putExtra(EXTRA_FILE_PATH, filePath)
-                                putExtra("directory_name", modelId)
-                                putExtra("model_type", matchedEngineKey)
+                        // ZIP-based engines need unzip before signaling — run on daemon thread
+                        // to avoid blocking onReceive(). No goAsync() since it has a ~10s ANR timeout
+                        // which is too short for large models (2GB+).
+                        Thread {
+                            try {
+                                val downloader = ModelDownloader(context)
+                                downloader.unzipModel(modelId, matchedEngineKey) { success ->
+                                    Logger.log("Unzip ${if (success) "success" else "failed"} for $modelId", TAG)
+                                    val localIntent = Intent(ACTION_DOWNLOAD_COMPLETE_LOCAL).apply {
+                                        putExtra(EXTRA_DOWNLOAD_ID, id)
+                                        putExtra(EXTRA_FILE_PATH, filePath)
+                                        putExtra("directory_name", modelId)
+                                        putExtra("model_type", matchedEngineKey)
+                                    }
+                                    Logger.log("Sending local broadcast for $matchedEngineKey: action=$ACTION_DOWNLOAD_COMPLETE_LOCAL, id=$id, dir=$modelId", TAG)
+                                    context.sendBroadcast(localIntent)
+                                }
+                            } catch (e: Exception) {
+                                Logger.log("Unzip thread error: ${e.message}", TAG)
                             }
-                            Logger.log("Sending local broadcast for $matchedEngineKey: action=$ACTION_DOWNLOAD_COMPLETE_LOCAL, id=$id, dir=$modelId", TAG)
-                            context.sendBroadcast(localIntent)
-                        }
+                        }.apply { isDaemon = true; start() }
                     } else {
                         // File-based engines (e.g. stt_whisper, nlu_llm) are ready as-is
                         val localIntent = Intent(ACTION_DOWNLOAD_COMPLETE_LOCAL).apply {

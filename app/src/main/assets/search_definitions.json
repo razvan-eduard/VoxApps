@@ -47,7 +47,8 @@
           "endpoint": "https://api.duckduckgo.com/",
           "method": "GET",
           "requiresLocation": false,
-          "queryTemplate": "?q={query}&format=json&no_html=1&skip_disambig=1",
+          "queryTemplate": "?q={query}&format=json&no_html=1&skip_disambig=1&kl={lang}",
+          "langFormat": "region-lang",
           "responseType": "json",
           "resultPath": "RelatedTopics",
           "jsonFields": {

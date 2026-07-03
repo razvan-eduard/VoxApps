@@ -99,7 +99,7 @@ class WakeWordService : Service() {
                         // AI is busy and queue is enabled — queue the new command
                         Logger.log("AI busy (PROCESSING) — enqueuing voice command", TAG)
                         container.mainViewModel.enqueueVoiceCommand(
-                            uiState.modelFilterLang,
+                            uiState.voiceLanguage,
                             uiState.voiceProcessor
                         )
                     } else if (uiState.voiceState == VoiceState.PROCESSING) {
@@ -107,7 +107,7 @@ class WakeWordService : Service() {
                         Logger.log("AI busy but queue disabled — ignoring wake word", TAG)
                     } else {
                         container.mainViewModel.processVoiceCommand(
-                            uiState.modelFilterLang,
+                            uiState.voiceLanguage,
                             uiState.voiceProcessor
                         )
                     }
@@ -225,6 +225,18 @@ class WakeWordService : Service() {
                     return@launch
                 }
 
+                // Validate model integrity before initializing
+                val modelDir = File(modelPath)
+                val modelId = modelDir.name
+                val downloader = com.voxcommander.app.data.remote.ModelDownloader(this@WakeWordService)
+                if (!downloader.validateModel(modelId, engineType)) {
+                    Logger.log("Vosk model $modelId is corrupt/incomplete — cleaning up and marking for re-download", TAG)
+                    // Mark model as not downloaded so UI offers re-download
+                    settingsRepo.setModelDownloaded(modelId, false)
+                    stopSelf()
+                    return@launch
+                }
+
                 wakeWordEngine = WakeWordEngine(this@WakeWordService, settingsRepo, appStateManager) {
                     onWakeWordDetected()
                 }
@@ -289,8 +301,22 @@ class WakeWordService : Service() {
                         delay(1500) // Cooldown: let Vosk buffer flush before restarting
                         if (appStateManager.uiState.value.voiceState == VoiceState.IDLE &&
                             appStateManager.uiState.value.isWakeWordServiceListening) {
-                            wakeWordEngine?.startListening()
-                            updateNotification()
+                            val started = wakeWordEngine?.startListening() ?: false
+                            if (started) {
+                                updateNotification()
+                            } else {
+                                Logger.log("startListening failed on IDLE retry — retrying in 2s", TAG)
+                                delay(2000)
+                                if (appStateManager.uiState.value.voiceState == VoiceState.IDLE &&
+                                    appStateManager.uiState.value.isWakeWordServiceListening) {
+                                    val retried = wakeWordEngine?.startListening() ?: false
+                                    if (retried) {
+                                        updateNotification()
+                                    } else {
+                                        Logger.log("startListening failed after retry — giving up", TAG)
+                                    }
+                                }
+                            }
                         }
                     }
                 }

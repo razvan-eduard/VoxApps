@@ -122,7 +122,7 @@ fun MainScreen(
                     label = { Text(languageManager.getString("manual_command")) },
                     modifier = Modifier.fillMaxWidth(),
                     trailingIcon = {
-                        Button(onClick = { viewModel.processTextCommand(manualText) }) {
+                        Button(onClick = { viewModel.processTextCommand(manualText, uiState.modelFilterLang) }) {
                             Text(languageManager.getString("test_button"))
                         }
                     }

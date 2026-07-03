@@ -41,7 +41,11 @@ class VoiceOverlayManager(
     private var composeView: ComposeView? = null
 
     fun show() {
-        if (composeView != null) return
+        if (composeView != null) {
+            Logger.log("Overlay already shown, skipping", "VoiceOverlayManager")
+            return
+        }
+        Logger.log("Overlay show() called", "VoiceOverlayManager")
 
         val windowType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -126,6 +130,7 @@ class VoiceOverlayManager(
         try {
             windowManager.addView(view, params)
             composeView = view
+            Logger.log("Overlay view added to WindowManager successfully", "VoiceOverlayManager")
         } catch (e: Exception) {
             Logger.log("Failed to add overlay view: ${e.message}", "VoiceOverlayManager")
         }

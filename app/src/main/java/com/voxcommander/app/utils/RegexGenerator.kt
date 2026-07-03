@@ -22,6 +22,22 @@ object RegexGenerator {
     }
 
     /**
+     * Creates a pattern that matches ANY of the provided word groups (OR logic).
+     * Each group uses AND logic internally (words must appear in order within a group).
+     * Groups are combined with | (OR).
+     *
+     * Input: [["aprinde", "bucătărie"], ["lumina", "bucătărie"]]
+     * Output: "(\\baprinde\\b.*?\\bbuc[aăâ]t[aăâ]rie\\b|\\blumina\\b.*?\\bbuc[aăâ]t[aăâ]rie\\b)"
+     */
+    fun fromWordGroups(groups: List<List<String>>): String {
+        val validGroups = groups.filter { it.isNotEmpty() }
+        if (validGroups.isEmpty()) return ""
+        return validGroups.joinToString("|") { group ->
+            fromWords(group)
+        }
+    }
+
+    /**
      * Splits a raw sentence into individual words/tokens for UI selection.
      */
     fun splitIntoTokens(sentence: String): List<String> {

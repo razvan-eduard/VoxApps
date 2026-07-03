@@ -30,9 +30,7 @@ fun ListeningScreen(
     val volume by VoiceManager.volumeFlow.collectAsStateWithLifecycle()
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
-    // GOOGLE VOICE EXCLUSION: Google provides its own native overlay.
-    // We hide our custom overlay to avoid UI clutter.
-    if (isListening && uiState.voiceProcessor != Strings.Processors.GOOGLE) {
+    if (isListening) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -59,7 +57,7 @@ fun ListeningScreen(
                         // Pulsing Volume indicator ring
                         Surface(
                             modifier = Modifier.size(
-                                (100 + (volume * 100)).dp
+                                (80 + (volume * 60)).dp
                             ),
                             color = MaterialTheme.colorScheme.primary.copy(
                                 alpha = (0.1f + (volume * 0.4f)).coerceIn(0.1f, 0.5f)

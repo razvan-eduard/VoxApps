@@ -14,8 +14,16 @@ class FastMapEngine(
         val rules = fastMapDao.getAllRules().first().filter { it.isActive }
 
         for (rule in rules) {
-            // Build trigger regex from triggerWords (if any)
-            val triggerRegexStr = RegexGenerator.fromWords(rule.triggerWords)
+            // Build trigger regex from triggerWords + triggerGroups (if any)
+            val allTriggerGroups = buildList {
+                if (rule.triggerWords.isNotEmpty()) add(rule.triggerWords)
+                addAll(rule.triggerGroups.filter { it.isNotEmpty() })
+            }
+            val triggerRegexStr = if (allTriggerGroups.size <= 1) {
+                RegexGenerator.fromWords(rule.triggerWords)
+            } else {
+                RegexGenerator.fromWordGroups(allTriggerGroups)
+            }
             val hasTrigger = triggerRegexStr.isNotBlank()
             val hasQuery = rule.queryWords.isNotEmpty()
 

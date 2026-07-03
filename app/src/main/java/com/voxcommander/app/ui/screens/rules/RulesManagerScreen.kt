@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
@@ -26,8 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.voxcommander.app.data.local.dao.FastMapDao
 import com.voxcommander.app.domain.intent.model.FastMapRule
@@ -86,6 +89,9 @@ fun RulesManagerContent(
     var allTokens by remember { mutableStateOf<List<String>>(emptyList()) }
     val triggerSelectedIndices = remember { mutableStateListOf<Int>() }
     val querySelectedIndices = remember { mutableStateListOf<Int>() }
+    
+    // Additional trigger groups (OR logic). Each group is a mutableStateListOf<Int> of token indices.
+    val triggerGroupIndicesList = remember { mutableStateListOf<MutableList<Int>>() }
 
     // App + Intent selection
     var selectedTargetPackage by remember { mutableStateOf<String?>(null) }
@@ -122,6 +128,7 @@ fun RulesManagerContent(
             allTokens = RegexGenerator.splitIntoTokens(spokenText)
             triggerSelectedIndices.clear()
             querySelectedIndices.clear()
+            triggerGroupIndicesList.clear()
         }
     }
 
@@ -170,6 +177,7 @@ fun RulesManagerContent(
         allTokens = emptyList()
         triggerSelectedIndices.clear()
         querySelectedIndices.clear()
+        triggerGroupIndicesList.clear()
         selectedTargetPackage = null
         selectedIntentIndex = -1
         availableIntents = emptyList()
@@ -211,9 +219,23 @@ fun RulesManagerContent(
         ) {
             // --- ADD/EDIT RULE FORM (Collapsible) ---
             item {
+                val isEditing = editingRuleId != null
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (isEditing) Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            else Modifier
+                        ),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isEditing)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    ),
+                    border = if (isEditing)
+                        androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                    else null
                 ) {
                     // Bordered title header — acts as toggle button
                     Surface(
@@ -221,23 +243,47 @@ fun RulesManagerContent(
                             .fillMaxWidth()
                             .clickable { isFormExpanded = !isFormExpanded },
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        color = if (isEditing)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = if (editingRuleId == null) languageManager.getString("add_new_fast_trigger") else languageManager.getString("edit_fast_trigger"),
-                                style = MaterialTheme.typography.titleSmall,
-                                color = if (editingRuleId == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
-                            )
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (editingRuleId != null) {
-                                    TextButton(onClick = { resetForm() }) {
+                                if (isEditing) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = "EDIT",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = if (editingRuleId == null) languageManager.getString("add_new_fast_trigger") else "#${editingRuleId}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = if (editingRuleId == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isEditing) {
+                                    OutlinedButton(
+                                        onClick = { resetForm() },
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                    ) {
                                         Text(languageManager.getString("cancel_edit"), style = MaterialTheme.typography.labelSmall)
                                     }
+                                    Spacer(modifier = Modifier.width(4.dp))
                                 }
                                 Icon(
                                     imageVector = if (isFormExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
@@ -265,10 +311,12 @@ fun RulesManagerContent(
                                     allTokens = RegexGenerator.splitIntoTokens(newValue)
                                     triggerSelectedIndices.clear()
                                     querySelectedIndices.clear()
+                                    triggerGroupIndicesList.clear()
                                 } else {
                                     allTokens = emptyList()
                                     triggerSelectedIndices.clear()
                                     querySelectedIndices.clear()
+                                    triggerGroupIndicesList.clear()
                                 }
                             },
                             label = { Text(languageManager.getString("voice_input_label")) },
@@ -281,7 +329,7 @@ fun RulesManagerContent(
 
                         // --- DUAL TOKEN SELECTOR ---
                         if (allTokens.isNotEmpty()) {
-                            // Trigger tokens
+                            // Primary trigger tokens
                             TokenSelectorSection(
                                 title = languageManager.getString("trigger_section_title"),
                                 tokens = allTokens,
@@ -297,11 +345,88 @@ fun RulesManagerContent(
                                 languageManager = languageManager
                             )
 
+                            // Additional trigger groups (OR)
+                            triggerGroupIndicesList.forEachIndexed { groupIdx, groupIndices ->
+                                Spacer(modifier = Modifier.height(4.dp))
+                                
+                                // OR separator
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                                        modifier = Modifier.padding(vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "OR",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                // Trigger group with delete button
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    TokenSelectorSection(
+                                        title = "${languageManager.getString("trigger_section_title")} ${groupIdx + 2}",
+                                        tokens = allTokens,
+                                        selectedIndices = groupIndices,
+                                        greyedIndices = querySelectedIndices,
+                                        onToggle = { index ->
+                                            if (groupIndices.contains(index)) {
+                                                groupIndices.remove(index)
+                                            } else {
+                                                groupIndices.add(index)
+                                            }
+                                        },
+                                        languageManager = languageManager,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    IconButton(
+                                        onClick = { triggerGroupIndicesList.removeAt(groupIdx) },
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Clear,
+                                            contentDescription = "Remove trigger",
+                                            tint = Color.Red.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Add trigger button
+                            OutlinedButton(
+                                onClick = { triggerGroupIndicesList.add(mutableStateListOf()) },
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Add Alternative Trigger", style = MaterialTheme.typography.labelSmall)
+                            }
+
                             Spacer(modifier = Modifier.height(8.dp))
 
                             // Lazy query toggle
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        lazyQuery = !lazyQuery
+                                        if (!lazyQuery) querySelectedIndices.clear()
+                                    },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Checkbox(
@@ -496,13 +621,16 @@ fun RulesManagerContent(
                         }
 
                         // --- SAVE BUTTON ---
-                        val canSave = (triggerSelectedIndices.isNotEmpty() || querySelectedIndices.isNotEmpty() || lazyQuery) &&
+                        val canSave = (triggerSelectedIndices.isNotEmpty() || triggerGroupIndicesList.any { it.isNotEmpty() } || querySelectedIndices.isNotEmpty() || lazyQuery) &&
                                       (isSystemCommand || selectedTargetPackage != null)
 
                         Button(
                             onClick = {
                                 scope.launch {
                                     val triggerWords = triggerSelectedIndices.sorted().map { allTokens[it] }
+                                    val triggerGroups = triggerGroupIndicesList.map { group ->
+                                        group.sorted().map { idx -> allTokens[idx] }
+                                    }.filter { it.isNotEmpty() }
                                     val queryWords = querySelectedIndices.sorted().map { allTokens[it] }
                                     val selectedOption = availableIntents.getOrNull(selectedIntentIndex)
                                     val existingRule = rules.find { it.id == editingRuleId }
@@ -511,6 +639,7 @@ fun RulesManagerContent(
                                         id = editingRuleId ?: 0,
                                         allWords = allTokens,
                                         triggerWords = triggerWords,
+                                        triggerGroups = triggerGroups,
                                         queryWords = queryWords,
                                         targetPackage = if (isSystemCommand) "" else (selectedTargetPackage ?: ""),
                                         intentAction = if (isSystemCommand) "" else (selectedOption?.action ?: ""),
@@ -567,6 +696,7 @@ fun RulesManagerContent(
                     val matchesSearch = searchQuery.isBlank() || run {
                         val q = searchQuery.lowercase()
                         rule.triggerWords.any { it.lowercase().contains(q) } ||
+                        rule.triggerGroups.any { group -> group.any { it.lowercase().contains(q) } } ||
                         rule.queryWords.any { it.lowercase().contains(q) } ||
                         rule.allWords.any { it.lowercase().contains(q) } ||
                         rule.targetPackage.lowercase().contains(q) ||
@@ -702,10 +832,20 @@ fun RulesManagerContent(
                             allTokens = rule.allWords
                             triggerSelectedIndices.clear()
                             querySelectedIndices.clear()
+                            triggerGroupIndicesList.clear()
                             // Reconstruct selected indices from words
                             rule.triggerWords.forEach { word ->
                                 val idx = allTokens.indexOf(word)
                                 if (idx >= 0) triggerSelectedIndices.add(idx)
+                            }
+                            // Reconstruct trigger groups
+                            rule.triggerGroups.forEach { group ->
+                                val groupIndices = mutableStateListOf<Int>()
+                                group.forEach { word ->
+                                    val idx = allTokens.indexOf(word)
+                                    if (idx >= 0) groupIndices.add(idx)
+                                }
+                                if (groupIndices.isNotEmpty()) triggerGroupIndicesList.add(groupIndices)
                             }
                             rule.queryWords.forEach { word ->
                                 val idx = allTokens.indexOf(word)
@@ -783,7 +923,7 @@ fun RulesManagerContent(
         AlertDialog(
             onDismissRequest = { ruleToDelete = null },
             title = { Text("Delete Rule") },
-            text = { Text("Are you sure you want to delete this rule?\n\nTrigger: ${rule.triggerWords.joinToString(" ")}") },
+            text = { Text("Are you sure you want to delete this rule?\n\nTrigger: ${rule.triggerWords.joinToString(" ")}${if (rule.triggerGroups.isNotEmpty()) " OR " + rule.triggerGroups.filter { it.isNotEmpty() }.joinToString(" OR ") { it.joinToString(" ") } else ""}") },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
@@ -827,10 +967,11 @@ fun TokenSelectorSection(
     selectedIndices: List<Int>,
     greyedIndices: List<Int>,
     onToggle: (Int) -> Unit,
-    languageManager: LanguageManager
+    languageManager: LanguageManager,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
     ) {
@@ -857,6 +998,8 @@ fun TokenSelectorSection(
                         shape = RoundedCornerShape(16.dp),
                         enabled = !isGreyed,
                         colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF4CAF50),
+                            selectedLabelColor = Color.White,
                             disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                             disabledLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                         )
@@ -916,8 +1059,18 @@ fun RuleItem(
 
             Column(modifier = Modifier.weight(1f)) {
                 val triggerText = if (rule.triggerWords.isNotEmpty()) rule.triggerWords.joinToString(" ") else languageManager.getString("no_trigger")
+                val hasGroups = rule.triggerGroups.isNotEmpty()
+                val fullTriggerText = if (hasGroups) {
+                    val allGroups = buildList {
+                        if (rule.triggerWords.isNotEmpty()) add(rule.triggerWords.joinToString(" "))
+                        rule.triggerGroups.filter { it.isNotEmpty() }.forEach { add(it.joinToString(" ")) }
+                    }
+                    allGroups.joinToString(" OR ")
+                } else {
+                    triggerText
+                }
                 Text(
-                    text = languageManager.getString("trigger_prefix").format(triggerText),
+                    text = languageManager.getString("trigger_prefix").format(fullTriggerText),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (rule.isActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)

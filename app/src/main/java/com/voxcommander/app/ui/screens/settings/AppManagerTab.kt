@@ -1,17 +1,18 @@
 package com.voxcommander.app.ui.screens.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -353,6 +354,7 @@ private fun AppAliasManagerSection(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AppAliasRuleCard(
     rule: AppAliasRule,
@@ -361,13 +363,14 @@ private fun AppAliasRuleCard(
     onToggle: (Boolean) -> Unit
 ) {
     OutlinedCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onEdit() },
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -386,43 +389,33 @@ private fun AppAliasRuleCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Switch(checked = rule.enabled, onCheckedChange = onToggle)
-            }
 
-            Spacer(Modifier.height(8.dp))
-
-            // Alias chips
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                rule.aliases.forEach { alias ->
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(alias, style = MaterialTheme.typography.labelSmall) }
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Edit", style = MaterialTheme.typography.labelSmall)
-                }
-                Spacer(Modifier.width(4.dp))
-                TextButton(
-                    onClick = onDelete,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                // Alias chips
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Delete", style = MaterialTheme.typography.labelSmall)
+                    rule.aliases.forEach { alias ->
+                        AssistChip(
+                            onClick = {},
+                            label = { Text(alias, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+
+                Switch(
+                    checked = rule.enabled,
+                    onCheckedChange = onToggle,
+                    modifier = Modifier.scale(0.8f)
+                )
+
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }

@@ -1,13 +1,19 @@
 package com.voxcommander.app.domain.voice
 
 import android.content.Context
+import android.content.Intent
 import android.media.*
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.engine.SttEngine
 import com.voxcommander.app.domain.engine.whisper.WhisperCppSttEngine
 import com.voxcommander.app.domain.engine.google.GoogleSttEngine
 import com.voxcommander.app.domain.engine.vosk.VoskSttEngine
 import com.voxcommander.app.domain.engine.whisper.WhisperSttEngine
+import com.voxcommander.app.domain.voice.WakeWordProfile
 import com.voxcommander.app.state.AppStateManager
 import com.voxcommander.app.state.VoiceState
 import com.voxcommander.app.utils.Logger
@@ -44,6 +50,10 @@ object VoiceManager {
     private var settingsRepo: SettingsRepository? = null
     private var appStateManager: AppStateManager? = null
 
+    // Calibration values from WakeWordProfile for volume normalization
+    private var calibratedNoiseFloor = 0f
+    private var calibratedMaxRms = 0f
+
     private val _volumeFlow = MutableStateFlow(0f)
     val volumeFlow: StateFlow<Float> = _volumeFlow.asStateFlow()
 
@@ -51,6 +61,7 @@ object VoiceManager {
     val partialTranscriptionFlow: StateFlow<String> = _partialTranscriptionFlow.asStateFlow()
 
     private var launchGoogleIntentCallback: ((String) -> Unit)? = null
+    private var speechRecognizer: SpeechRecognizer? = null
 
     fun setCalibrationListening(active: Boolean) {
         _isListeningFlow.value = active
@@ -86,7 +97,7 @@ object VoiceManager {
         whisperApi: WhisperSttEngine?,
         google: GoogleSttEngine?,
         vosk: VoskSttEngine?,
-        launchGoogleIntent: (String) -> Unit,
+        @Suppress("UNUSED_PARAMETER") launchGoogleIntent: (String) -> Unit,
         settingsRepo: SettingsRepository,
         appStateManager: AppStateManager
     ) {
@@ -95,7 +106,6 @@ object VoiceManager {
         this.whisperApiEngine = whisperApi
         this.googleSttEngine = google
         this.voskSttEngine = vosk
-        this.launchGoogleIntentCallback = launchGoogleIntent
         this.settingsRepo = settingsRepo
         this.appStateManager = appStateManager
         
@@ -142,7 +152,7 @@ object VoiceManager {
         // 3. RE-INITIALIZE based on new selection
         val snapshot = settings.getSettingsSnapshot()
         val apiKey = snapshot.apiKey
-        val voiceLang = snapshot.modelFilterLang
+        val voiceLang = snapshot.voiceLanguage
         
         whisperCppEngine = WhisperCppSttEngine(
             ctx, 
@@ -160,10 +170,72 @@ object VoiceManager {
     }
 
     fun handleIntentResult(text: String) {
-        _isListeningFlow.value = false // Clear listening state for UI
+        _isListeningFlow.value = false
         googleResultCallback?.invoke(text)
         googleResultCallback = null
         appStateManager?.setVoiceState(VoiceState.IDLE)
+    }
+
+    private fun startGoogleSpeechRecognizer(languageCode: String?) {
+        val ctx = context ?: return
+        try {
+            speechRecognizer?.destroy()
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ctx)
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                if (languageCode != null) {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageCode)
+                }
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            }
+            speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {
+                    // SpeechRecognizer returns dB (typically 0-10)
+                    // Use calibrated noise floor if available, otherwise default threshold
+                    val silenceThreshold = if (calibratedNoiseFloor > 0f) calibratedNoiseFloor * 20f else 2f
+                    val normalized = if (rmsdB < silenceThreshold) 0f
+                        else ((rmsdB - silenceThreshold) / (10f - silenceThreshold)).coerceIn(0f, 1f)
+                    _volumeFlow.value = normalized
+                }
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onError(error: Int) {
+                    Logger.log("Google SpeechRecognizer error: $error", TAG)
+                    _isListeningFlow.value = false
+                    googleResultCallback?.invoke("")
+                    googleResultCallback = null
+                    appStateManager?.setVoiceState(VoiceState.IDLE)
+                    speechRecognizer?.destroy()
+                    speechRecognizer = null
+                }
+                override fun onResults(results: Bundle?) {
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val text = matches?.firstOrNull() ?: ""
+                    Logger.log("Heard via SpeechRecognizer: $text", TAG)
+                    _isListeningFlow.value = false
+                    googleResultCallback?.invoke(text)
+                    googleResultCallback = null
+                    appStateManager?.setVoiceState(VoiceState.IDLE)
+                    speechRecognizer?.destroy()
+                    speechRecognizer = null
+                }
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                    if (!partial.isNullOrBlank()) _partialTranscriptionFlow.value = partial
+                }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            speechRecognizer?.startListening(intent)
+            Logger.log("Google SpeechRecognizer started for language: ${languageCode ?: "auto-detect"}", TAG)
+        } catch (e: Exception) {
+            Logger.log("Failed to start Google SpeechRecognizer: ${e.message}", TAG)
+            _isListeningFlow.value = false
+            googleResultCallback?.invoke("")
+            googleResultCallback = null
+            appStateManager?.setVoiceState(VoiceState.IDLE)
+        }
     }
 
     fun setOfflineFallbackSettings(timeout: Int, model: String) {
@@ -172,6 +244,8 @@ object VoiceManager {
 
     fun release() {
         stopListening()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
         
         // Use the new common release interface for all engines
         whisperCppEngine?.release()
@@ -217,12 +291,21 @@ object VoiceManager {
 
     fun startListening(languageCode: String, processor: String, onResult: (String) -> Unit) {
         if (isListening) return
-        
+
+        // If auto-detect is enabled AND engine is multilingual, pass null for auto-detection
+        val autoDetect = appStateManager?.uiState?.value?.voiceLanguageAutoDetect == true
+        val processorKey = processor
+        val isMultilingual = com.voxcommander.app.data.remote.RemoteModelRegistry.isMultilingual(processorKey)
+        val effectiveLangCode = if (autoDetect && isMultilingual) null else languageCode
+
         if (processor == Strings.Processors.GOOGLE) {
             googleResultCallback = onResult
-            _isListeningFlow.value = true // Show listening state for UI
+            _isListeningFlow.value = true
+            _partialTranscriptionFlow.value = ""
             appStateManager?.setVoiceState(VoiceState.LISTENING_COMMAND)
-            launchGoogleIntentCallback?.invoke(languageCode)
+            loadCalibrationProfile()
+            Logger.log("Google STT: isListeningFlow=${_isListeningFlow.value}, voiceState=LISTENING_COMMAND, autoDetect=$autoDetect, starting SpeechRecognizer", TAG)
+            startGoogleSpeechRecognizer(effectiveLangCode)
             return
         }
 
@@ -243,6 +326,7 @@ object VoiceManager {
         _isListeningFlow.value = true
         _partialTranscriptionFlow.value = ""
         appStateManager?.setVoiceState(VoiceState.LISTENING_COMMAND)
+        loadCalibrationProfile()
 
         scope.launch(Dispatchers.IO) {
             try {
@@ -282,7 +366,13 @@ object VoiceManager {
                         totalShorts += read
                         
                         val rms = calculateRms(buffer, read)
-                        _volumeFlow.value = rms
+                        // Normalize using calibrated profile: noise floor -> 0, max rms -> 1
+                        val normalizedVolume = if (calibratedMaxRms > calibratedNoiseFloor && calibratedMaxRms > 0f) {
+                            ((rms - calibratedNoiseFloor) / (calibratedMaxRms - calibratedNoiseFloor)).coerceIn(0f, 1f)
+                        } else {
+                            rms
+                        }
+                        _volumeFlow.value = normalizedVolume
                         if (rms > maxRmsDetected) maxRmsDetected = rms
                         
                         if (rms > SILENCE_THRESHOLD) {
@@ -325,9 +415,9 @@ object VoiceManager {
                     val result = appStateManager?.executeSecureVoiceAction {
                         // Pass language code to engine if it supports it
                         val rawResult = if (engine is WhisperSttEngine) {
-                            engine.transcribeWithLanguage(byteArray, languageCode)
+                            engine.transcribeWithLanguage(byteArray, effectiveLangCode)
                         } else if (engine is WhisperCppSttEngine) {
-                            engine.transcribeWithLanguage(byteArray, languageCode)
+                            engine.transcribeWithLanguage(byteArray, effectiveLangCode)
                         } else {
                             engine.transcribe(byteArray)
                         }
@@ -376,6 +466,25 @@ object VoiceManager {
         Logger.log("Manual stop requested", TAG)
         // Setting isListening to false will break the loop gracefully 
         isListening = false
+        // Stop Google SpeechRecognizer if active
+        speechRecognizer?.let {
+            it.stopListening()
+            it.destroy()
+        }
+        speechRecognizer = null
+    }
+
+    private fun loadCalibrationProfile() {
+        val profileJson = settingsRepo?.getWakeWordProfileJson()
+        val profile = profileJson?.let { WakeWordProfile.fromJson(it) }
+        if (profile != null && profile.noiseFloorRms > 0f) {
+            calibratedNoiseFloor = profile.noiseFloorRms
+            calibratedMaxRms = if (profile.maxRms > profile.noiseFloorRms) profile.maxRms else profile.avgRms * 2f
+            Logger.log("Calibration loaded: noiseFloor=${calibratedNoiseFloor}, maxRms=${calibratedMaxRms}", TAG)
+        } else {
+            calibratedNoiseFloor = 0f
+            calibratedMaxRms = 0f
+        }
     }
 
     private fun calculateRms(buffer: ShortArray, length: Int): Float {

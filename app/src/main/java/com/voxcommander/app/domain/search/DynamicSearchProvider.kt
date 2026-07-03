@@ -66,7 +66,9 @@ data class ProviderDefinition(
     // Value transforms
     val valueTransforms: Map<String, String>? = null,
     // Custom User-Agent (some APIs like Wikipedia require a descriptive UA)
-    val userAgent: String? = null
+    val userAgent: String? = null,
+    // Language format: "short" (default, e.g. "ro"), "region-lang" (e.g. "ro-ro")
+    val langFormat: String? = null
 )
 
 data class FieldMapping(
@@ -189,16 +191,24 @@ class DynamicSearchProvider(
             }
         }
 
+    private fun formatLang(lang: String): String {
+        return when (def.langFormat) {
+            "region-lang" -> "${lang}-${lang}"
+            else -> lang
+        }
+    }
+
     private fun buildUrl(query: String, lat: Double?, lon: Double?, lang: String = "en"): String {
+        val formattedLang = formatLang(lang)
         val encodedQuery = URLEncoder.encode(query, "UTF-8")
         val template = def.queryTemplate ?: ""
-        val resolvedEndpoint = def.endpoint.replace("{lang}", lang)
+        val resolvedEndpoint = def.endpoint.replace("{lang}", formattedLang)
         return resolvedEndpoint + template
             .replace("{query}", encodedQuery)
             .replace("{lat}", lat?.toString() ?: "0.0")
             .replace("{lon}", lon?.toString() ?: "0.0")
             .replace("{apiKey}", apiKey ?: "")
-            .replace("{lang}", lang)
+            .replace("{lang}", formattedLang)
     }
 
     private fun buildRequest(url: String, query: String, lat: Double?, lon: Double?): Request {
@@ -354,8 +364,9 @@ class DynamicSearchProvider(
 
     private fun fetchExtract(title: String, lang: String = "en"): String {
         return try {
+            val formattedLang = formatLang(lang)
             val encodedTitle = URLEncoder.encode(title, "UTF-8")
-            val url = def.extractEndpoint!!.replace("{title}", encodedTitle).replace("{lang}", lang)
+            val url = def.extractEndpoint!!.replace("{title}", encodedTitle).replace("{lang}", formattedLang)
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", def.userAgent ?: "VoxCommander/1.0 (Android Voice Assistant)")

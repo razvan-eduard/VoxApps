@@ -32,6 +32,7 @@ interface SettingsRepository {
     // --- LANGUAGE ---
     suspend fun setLanguage(lang: String)
     suspend fun setVoiceLanguage(lang: String)
+    suspend fun setVoiceLanguageAutoDetect(enabled: Boolean)
     suspend fun setModelFilterLang(lang: String)
 
     // --- VOICE ENGINE ---

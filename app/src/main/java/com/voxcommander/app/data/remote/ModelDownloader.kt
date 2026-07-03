@@ -107,7 +107,7 @@ class ModelDownloader(private val context: Context) {
      * @param modelId Model identifier (without extension)
      * @param engineKey Engine key from models.json
      */
-    fun unzipVoskModel(modelId: String, engineKey: String, onComplete: (Boolean) -> Unit) {
+    fun unzipModel(modelId: String, engineKey: String, onComplete: (Boolean) -> Unit) {
         val extension = RemoteModelRegistry.getExtension(engineKey)
         val zipFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "$modelId$extension")
         val targetDir = resolveLocalFile(modelId, engineKey) ?: return onComplete(false)
@@ -118,9 +118,12 @@ class ModelDownloader(private val context: Context) {
             return
         }
 
+        // Write a .downloading marker so we can detect incomplete extractions after a crash
+        val marker = File(targetDir.parentFile, "$modelId.downloading")
         try {
             if (targetDir.exists()) targetDir.deleteRecursively()
             targetDir.mkdirs()
+            marker.writeText("extracting")
 
             ZipInputStream(FileInputStream(zipFile)).use { zis ->
                 var entry = zis.nextEntry
@@ -137,13 +140,46 @@ class ModelDownloader(private val context: Context) {
                     entry = zis.nextEntry
                 }
             }
+            marker.delete()
             zipFile.delete()
             Logger.log("Unzip successful: $modelId", TAG)
             onComplete(true)
         } catch (e: Exception) {
             Logger.log("Unzip failed for $modelId: ${e.message}", TAG)
+            // Leave the marker — cleanup will detect it on next startup
             onComplete(false)
         }
+    }
+
+    /**
+     * Checks if a model directory is complete and valid.
+     * Deletes incomplete/corrupt directories (e.g. if app crashed during unzip).
+     * Returns true if the model is valid and ready to use.
+     */
+    fun validateModel(modelId: String, engineKey: String): Boolean {
+        val targetDir = resolveLocalFile(modelId, engineKey) ?: return false
+        val marker = File(targetDir.parentFile, "$modelId.downloading")
+
+        // If marker exists, the extraction was interrupted — clean up
+        if (marker.exists()) {
+            Logger.log("Model $modelId has incomplete extraction marker — deleting corrupt directory", TAG)
+            targetDir.deleteRecursively()
+            marker.delete()
+            return false
+        }
+
+        if (!targetDir.exists() || !targetDir.isDirectory) return false
+
+        // Check for 'am' subdirectory — may be directly in model dir or in a nested subdirectory
+        val hasAmDir = File(targetDir, "am").exists() ||
+            targetDir.listFiles()?.any { File(it, "am").exists() } == true
+        if (!hasAmDir) {
+            Logger.log("Model $modelId missing 'am' directory — deleting incomplete model", TAG)
+            targetDir.deleteRecursively()
+            return false
+        }
+
+        return true
     }
 
     /**

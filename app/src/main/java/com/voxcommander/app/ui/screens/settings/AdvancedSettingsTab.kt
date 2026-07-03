@@ -1,5 +1,6 @@
 package com.voxcommander.app.ui.screens.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -133,7 +134,15 @@ fun AdvancedSettingsTab(
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        val enabled = !loggingFlags.toastEnabled
+                        loggingFlags = loggingFlags.copy(toastEnabled = enabled)
+                        val newLogLevel = LoggingFlags.toLogLevel(loggingFlags)
+                        kotlinx.coroutines.runBlocking { settingsRepo.setLogLevel(newLogLevel.name) }
+                        Logger.setLoggingFlags(loggingFlags)
+                    },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -152,7 +161,15 @@ fun AdvancedSettingsTab(
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        val enabled = !loggingFlags.logcatEnabled
+                        loggingFlags = loggingFlags.copy(logcatEnabled = enabled)
+                        val newLogLevel = LoggingFlags.toLogLevel(loggingFlags)
+                        kotlinx.coroutines.runBlocking { settingsRepo.setLogLevel(newLogLevel.name) }
+                        Logger.setLoggingFlags(loggingFlags)
+                    },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {

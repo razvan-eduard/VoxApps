@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey
  *
  * @param allWords      All tokens from the voice input (for re-editing).
  * @param triggerWords  Subset of words selected for trigger matching (can be empty if query is set).
+ * @param triggerGroups Additional trigger word groups, each group is an alternative (OR). Each group uses AND logic internally.
  * @param queryWords    Subset of words selected as query argument for the intent (can be empty if trigger is set).
  * @param targetPackage Target app package name.
  * @param intentAction  Android intent action to fire (e.g. MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).
@@ -23,6 +24,7 @@ data class FastMapRule(
     val id: Long = 0,
     val allWords: List<String> = emptyList(),
     val triggerWords: List<String> = emptyList(),
+    val triggerGroups: List<List<String>> = emptyList(),
     val queryWords: List<String> = emptyList(),
     val targetPackage: String = "",
     val intentAction: String = "",

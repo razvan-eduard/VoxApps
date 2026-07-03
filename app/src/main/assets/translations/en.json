@@ -103,6 +103,8 @@
   "tts_audio_focus_none": "Ignore",
   "tts_audio_focus_duck": "Lower volume",
   "tts_audio_focus_pause": "Pause",
+  "overlay_text_size_label": "Overlay text size",
+  "overlay_text_preview": "This is how the speaking overlay text will look.",
   "tab_wake_word": "Wake Word",
   "tab_tts": "TTS",
   "tab_general": "General",

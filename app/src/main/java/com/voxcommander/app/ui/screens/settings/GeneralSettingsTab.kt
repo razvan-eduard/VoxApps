@@ -1,6 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -40,7 +41,11 @@ fun GeneralSettingsTab(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .clickable(onClick = { focusManager.clearFocus() }),
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { focusManager.clearFocus() }
+            ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(text = languageManager.getString("app_settings_section"), style = MaterialTheme.typography.titleMedium)
@@ -112,8 +117,12 @@ fun GeneralSettingsTab(
 
         val voiceLanguages = Strings.VoiceLanguages.ALL
         var voiceLangExpanded by remember { mutableStateOf(false) }
-        Box {
-            OutlinedButton(onClick = { voiceLangExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+        val autoDetect = uiState.voiceLanguageAutoDetect
+        Column {
+            OutlinedButton(
+                onClick = { voiceLangExpanded = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(uiState.voiceLanguage.uppercase())
             }
             DropdownMenu(expanded = voiceLangExpanded, onDismissRequest = { voiceLangExpanded = false }, modifier = Modifier.fillMaxWidth()) {
@@ -127,6 +136,23 @@ fun GeneralSettingsTab(
                         }
                     )
                 }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { appStateManager.setVoiceLanguageAutoDetect(!autoDetect) }
+            ) {
+                Checkbox(
+                    checked = autoDetect,
+                    onCheckedChange = { appStateManager.setVoiceLanguageAutoDetect(it) }
+                )
+                Text(
+                    text = "AutoDetect (Only for supported models)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (autoDetect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Application class for Vox Commander.
@@ -48,6 +49,19 @@ class VoxApplication : Application() {
 
         // Initialize network monitor for realtime connectivity tracking
         NetworkMonitor.init(this)
+
+        // Clean up stale .downloading markers from interrupted model extractions
+        val rootDir = getExternalFilesDir(null)
+        rootDir?.listFiles()?.forEach { file ->
+            if (file.name.endsWith(".downloading")) {
+                val modelId = file.name.removeSuffix(".downloading")
+                val modelDir = File(rootDir, modelId)
+                Logger.log("Found stale .downloading marker for $modelId — cleaning up incomplete model", "VoxApplication")
+                modelDir.deleteRecursively()
+                file.delete()
+                kotlinx.coroutines.runBlocking { container.settingsRepository.setModelDownloaded(modelId, false) }
+            }
+        }
 
         // Initialize Spotify PKCE manager and load persisted tokens
         SpotifyPkceManager.init(container.settingsRepository)

@@ -346,7 +346,9 @@ class ModelManagementViewModel(
             Logger.log("File/Dir verified on disk: ${localFile.absolutePath}", TAG)
             viewModelScope.launch {
                 settingsRepo.setModelDownloaded(modelId, true)
+                Logger.log("setModelDownloaded(true) completed for $modelId", TAG)
                 appStateManager.refreshAll()
+                rebuildUiLists()
             }
         } else {
             Logger.log("Verification failed: $modelId ($engineKey) not found at expected location", TAG)
