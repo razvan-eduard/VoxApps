@@ -22,6 +22,7 @@ object IntentTaxonomy {
         // Audio
         const val PLAY = "play"
         const val PAUSE = "pause"
+        const val STOP = "stop"
         const val NEXT = "next"
         const val PREV = "prev"
 
@@ -41,7 +42,7 @@ object IntentTaxonomy {
         // Search
         const val QUERY = "query"
 
-        val ALL = listOf(PLAY, PAUSE, NEXT, PREV, VOLUME_UP, VOLUME_DOWN,
+        val ALL = listOf(PLAY, PAUSE, STOP, NEXT, PREV, VOLUME_UP, VOLUME_DOWN,
             WIFI_TOGGLE, BLUETOOTH_TOGGLE, GPS_TOGGLE, NAVIGATE, SEND, QUERY)
     }
 
@@ -50,7 +51,7 @@ object IntentTaxonomy {
      * Custom domains get a generic "launch" action.
      */
     fun getActionsForDomain(domain: String): List<String> = when (domain) {
-        Domains.AUDIO -> listOf(Actions.PLAY, Actions.PAUSE, Actions.NEXT, Actions.PREV)
+        Domains.AUDIO -> listOf(Actions.PLAY, Actions.PAUSE, Actions.STOP, Actions.NEXT, Actions.PREV)
         Domains.SETTINGS -> listOf(Actions.VOLUME_UP, Actions.VOLUME_DOWN, Actions.WIFI_TOGGLE, Actions.BLUETOOTH_TOGGLE, Actions.GPS_TOGGLE)
         Domains.MAPS -> listOf(Actions.NAVIGATE)
         Domains.MESSAGING -> listOf(Actions.SEND)
@@ -70,6 +71,7 @@ object IntentTaxonomy {
             "audio_youtube" -> Mapped(Domains.AUDIO, Actions.PLAY, "com.google.android.youtube")
             "audio_spotify" -> Mapped(Domains.AUDIO, Actions.PLAY, "com.spotify.music")
             "media_pause" -> Mapped(Domains.AUDIO, Actions.PAUSE, null)
+            "media_stop" -> Mapped(Domains.AUDIO, Actions.STOP, null)
             "media_play" -> Mapped(Domains.AUDIO, Actions.PLAY, null)
             "media_next" -> Mapped(Domains.AUDIO, Actions.NEXT, null)
             "media_prev" -> Mapped(Domains.AUDIO, Actions.PREV, null)

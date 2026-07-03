@@ -83,8 +83,12 @@ class IntentDecisionMap(
             } else {
                 Logger.log("🏠 L2 Miss/Failure. Triggering L3 Offline Fallback ($fallbackProcessor)...", TAG)
                 val l3Result = when (fallbackProcessor) {
-                    Strings.AiProcessors.OPENAI -> l2CloudEngine.processCommand(spokenText, modelFilterLang)
-                    Strings.AiProcessors.GEMINI_CLOUD -> geminiCloudEngine.processCommand(spokenText, modelFilterLang)
+                    Strings.AiProcessors.OPENAI -> {
+                        if (isCloudIntelligenceEnabled) l2CloudEngine.processCommand(spokenText, modelFilterLang) else null
+                    }
+                    Strings.AiProcessors.GEMINI_CLOUD -> {
+                        if (isCloudIntelligenceEnabled) geminiCloudEngine.processCommand(spokenText, modelFilterLang) else null
+                    }
                     Strings.AiProcessors.GEMINI_NATIVE -> geminiNanoEngine.processCommand(spokenText, modelFilterLang)
                     else -> {
                         if (com.voxcommander.app.data.remote.RemoteModelRegistry.isLlmEngine(fallbackProcessor)) {

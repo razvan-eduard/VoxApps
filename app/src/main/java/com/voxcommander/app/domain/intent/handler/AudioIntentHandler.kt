@@ -29,6 +29,7 @@ class AudioIntentHandler : IntentHandler {
         return when (intent.action) {
             IntentTaxonomy.Actions.PLAY -> play(context, intent, resolvedApp)
             IntentTaxonomy.Actions.PAUSE -> sendMediaKey(context, intent, "pause")
+            IntentTaxonomy.Actions.STOP -> sendMediaKey(context, intent, "stop")
             IntentTaxonomy.Actions.NEXT -> sendMediaKey(context, intent, "next")
             IntentTaxonomy.Actions.PREV -> sendMediaKey(context, intent, "prev")
             else -> {
@@ -171,6 +172,7 @@ class AudioIntentHandler : IntentHandler {
         val keyCode = when (action) {
             "play" -> KeyEvent.KEYCODE_MEDIA_PLAY
             "pause" -> KeyEvent.KEYCODE_MEDIA_PAUSE
+            "stop" -> KeyEvent.KEYCODE_MEDIA_STOP
             "next" -> KeyEvent.KEYCODE_MEDIA_NEXT
             "prev" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
             else -> return false
@@ -215,6 +217,7 @@ class AudioIntentHandler : IntentHandler {
         return when (action) {
             "play" -> { transportControls.play(); true }
             "pause" -> { transportControls.pause(); true }
+            "stop" -> { transportControls.stop(); true }
             "next" -> { transportControls.skipToNext(); true }
             "prev" -> { transportControls.skipToPrevious(); true }
             else -> false
@@ -223,15 +226,19 @@ class AudioIntentHandler : IntentHandler {
 
     private fun sendMediaBroadcast(context: Context, pkg: String, keyCode: Int, action: String): Boolean {
         return try {
+            // For pause/stop, only send ACTION_DOWN — ACTION_UP can be interpreted as resume by some apps (Spotify)
+            val needsKeyUp = action != "pause" && action != "stop"
             val intent = Intent("com.android.intent.action.MEDIA_BUTTON").apply {
                 setPackage(pkg)
                 putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.sendBroadcast(intent)
-            intent.putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, keyCode))
-            context.sendBroadcast(intent)
-            Logger.log("Sent media key $action to $pkg via broadcast", TAG)
+            if (needsKeyUp) {
+                intent.putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, keyCode))
+                context.sendBroadcast(intent)
+            }
+            Logger.log("Sent media key $action to $pkg via broadcast (keyUp=$needsKeyUp)", TAG)
             true
         } catch (e: Exception) {
             Logger.log("Failed to send media key to $pkg: ${e.message}", TAG)
@@ -242,9 +249,13 @@ class AudioIntentHandler : IntentHandler {
     private fun dispatchAudioKey(context: Context, keyCode: Int, action: String): Boolean {
         return try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            // For pause/stop, only send ACTION_DOWN — ACTION_UP can be interpreted as resume by some apps (Spotify)
+            val needsKeyUp = action != "pause" && action != "stop"
             audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
-            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
-            Logger.log("Sent media key $action via AudioManager (global)", TAG)
+            if (needsKeyUp) {
+                audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+            }
+            Logger.log("Sent media key $action via AudioManager (global, keyUp=$needsKeyUp)", TAG)
             true
         } catch (e: Exception) {
             Logger.log("Failed to dispatch media key: ${e.message}", TAG)

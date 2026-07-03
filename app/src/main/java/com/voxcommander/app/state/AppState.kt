@@ -59,7 +59,6 @@ data class AppState(
     
     // --- RUNTIME STATE ---
     val voiceState: VoiceState,
-    val wakeWordDetected: Boolean,
     
     // --- FALLBACK MODEL SETTINGS ---
     val defaultVoiceFallbackProcessor: String?,
@@ -93,7 +92,6 @@ data class AppState(
             context: Context,
             availableModels: Map<String, List<AppModel>>,
             voiceState: VoiceState = VoiceState.IDLE,
-            wakeWordDetected: Boolean = false,
             isWakeWordServiceListening: Boolean = false,
             refreshTrigger: Int = 0
         ): AppState {
@@ -194,7 +192,6 @@ data class AppState(
                 apiKey = settings.apiKey,
                 geminiApiKey = settings.geminiApiKey,
                 voiceState = voiceState,
-                wakeWordDetected = wakeWordDetected,
                 defaultVoiceFallbackProcessor = settings.defaultVoiceFallbackProcessor,
                 defaultVoiceFallbackModel = settings.defaultVoiceFallbackModel,
                 defaultIntentFallbackProcessor = settings.defaultIntentFallbackProcessor,
@@ -247,7 +244,6 @@ data class AppState(
             apiKey = null,
             geminiApiKey = null,
             voiceState = VoiceState.IDLE,
-            wakeWordDetected = false,
             defaultVoiceFallbackProcessor = null,
             defaultVoiceFallbackModel = null,
             defaultIntentFallbackProcessor = null,

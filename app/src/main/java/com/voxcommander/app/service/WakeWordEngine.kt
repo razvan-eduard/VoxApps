@@ -33,6 +33,7 @@ class WakeWordEngine(
     private var recognizer: Recognizer? = null
     private var audioRecord: AudioRecord? = null
     private var isListening = false
+    @Volatile private var cachedWakeWord: String = ""
 
     private val sampleRate = 16000
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) * 2
@@ -108,7 +109,7 @@ class WakeWordEngine(
             storedVoicePrint = VoiceFeatureExtractor.decodeVector(profile.voicePrint)
             similarityThreshold = profile.similarityThreshold
             storedTemplate = VoiceFeatureExtractor.decodeSequence(profile.wakeWordTemplate)
-            val sensitivity = settingsRepo.getSettingsSnapshot().wakeWordSensitivity
+            val sensitivity = appStateManager.uiState.value.wakeWordSensitivity
             val sensitivityThreshold = when (sensitivity) {
                 "high" -> 0.35f
                 "low" -> 0.55f
@@ -126,6 +127,9 @@ class WakeWordEngine(
             useTemplateMode = false
             Logger.log("Using default VAD threshold: $voiceRmsThreshold (Vosk mode)", TAG)
         }
+
+        // Cache wake word from uiState (avoids runBlocking per partial result)
+        cachedWakeWord = appStateManager.uiState.value.wakeWord
 
         // Reset filter state and buffers to avoid stale data from previous session
         vadFilter.reset()
@@ -315,7 +319,7 @@ class WakeWordEngine(
     }
 
     private fun isValidWakeWordMatch(heardText: String): Boolean {
-        val target = settingsRepo.getSettingsSnapshot().wakeWord.lowercase().trim()
+        val target = cachedWakeWord.lowercase().trim()
         val cleanHeard = heardText.lowercase()
             .replace("[unknown]", "")
             .replace(Regex("\\s+"), " ")

@@ -3,6 +3,7 @@ package com.voxcommander.app.domain.voice
 import android.content.Context
 import android.content.Intent
 import android.media.*
+import android.os.Build
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -42,8 +43,7 @@ object VoiceManager {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var stateObservationJob: Job? = null
 
-    @Volatile
-    private var isListening = false
+    private val isListeningFlag = java.util.concurrent.atomic.AtomicBoolean(false)
     private val _isListeningFlow = MutableStateFlow(false)
     val isListeningFlow = _isListeningFlow.asStateFlow()
 
@@ -53,6 +53,14 @@ object VoiceManager {
     // Calibration values from WakeWordProfile for volume normalization
     private var calibratedNoiseFloor = 0f
     private var calibratedMaxRms = 0f
+
+    // Audio focus for pausing music during command listening
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    // Cached settings to avoid runBlocking on hot paths (updated in startListening)
+    @Volatile private var cachedSttSensitivity: String = "medium"
+    @Volatile private var cachedWakeWordProfileJson: String? = null
 
     private val _volumeFlow = MutableStateFlow(0f)
     val volumeFlow: StateFlow<Float> = _volumeFlow.asStateFlow()
@@ -89,12 +97,57 @@ object VoiceManager {
     private const val SILENCE_TIMEOUT_MS = 2000L
 
     private fun getSilenceThreshold(): Float {
-        val sensitivity = settingsRepo?.getSettingsSnapshot()?.sttSensitivity ?: "medium"
-        return when (sensitivity) {
+        return when (cachedSttSensitivity) {
             "low" -> 0.06f    // less sensitive — ignores background noise, tapping
             "high" -> 0.01f   // very sensitive — picks up quiet speech
             else -> 0.03f     // medium
         }
+    }
+
+    /**
+     * Requests transient audio focus to pause music while listening for a command.
+     * This ensures the STT engine can hear the user clearly without music interference.
+     */
+    private fun requestListeningAudioFocus() {
+        val ctx = context ?: return
+        if (audioManager == null) {
+            audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        }
+        val am = audioManager ?: return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .setOnAudioFocusChangeListener { }
+                .build()
+            am.requestAudioFocus(audioFocusRequest!!)
+        } else {
+            @Suppress("DEPRECATION")
+            am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+        }
+        Logger.log("Listening audio focus requested (pausing music)", TAG)
+    }
+
+    /**
+     * Abandons audio focus after command listening is done.
+     * If the command was "stop/pause", the handler already sent the media key,
+     * so music won't resume even after focus is abandoned.
+     */
+    private fun abandonListeningAudioFocus() {
+        val am = audioManager ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { am.abandonAudioFocusRequest(it) }
+            audioFocusRequest = null
+        } else {
+            @Suppress("DEPRECATION")
+            am.abandonAudioFocus(null)
+        }
+        Logger.log("Listening audio focus abandoned", TAG)
     }
 
     private var googleResultCallback: ((String) -> Unit)? = null
@@ -178,7 +231,9 @@ object VoiceManager {
     }
 
     fun handleIntentResult(text: String) {
+        isListeningFlag.set(false)
         _isListeningFlow.value = false
+        abandonListeningAudioFocus()
         googleResultCallback?.invoke(text)
         googleResultCallback = null
         appStateManager?.setVoiceState(VoiceState.IDLE)
@@ -196,7 +251,7 @@ object VoiceManager {
                 }
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 // Adjust silence timeouts based on STT sensitivity
-                val (completeSilence, possiblyCompleteSilence, minLength) = when (settingsRepo?.getSettingsSnapshot()?.sttSensitivity ?: "medium") {
+                val (completeSilence, possiblyCompleteSilence, minLength) = when (cachedSttSensitivity) {
                     "low" -> Triple(1500L, 1500L, 3000L)   // cuts off faster — less sensitive
                     "high" -> Triple(5000L, 5000L, 8000L)  // waits longer — more sensitive
                     else -> Triple(3000L, 3000L, 5000L)    // medium
@@ -211,7 +266,7 @@ object VoiceManager {
                 override fun onRmsChanged(rmsdB: Float) {
                     // SpeechRecognizer returns dB (typically 0-10)
                     // Use calibrated noise floor if available, otherwise default based on sensitivity
-                    val baseThreshold = when (settingsRepo?.getSettingsSnapshot()?.sttSensitivity ?: "medium") {
+                    val baseThreshold = when (cachedSttSensitivity) {
                         "low" -> 3f
                         "high" -> 1f
                         else -> 2f
@@ -225,7 +280,9 @@ object VoiceManager {
                 override fun onEndOfSpeech() {}
                 override fun onError(error: Int) {
                     Logger.log("Google SpeechRecognizer error: $error", TAG)
+                    isListeningFlag.set(false)
                     _isListeningFlow.value = false
+                    abandonListeningAudioFocus()
                     googleResultCallback?.invoke("")
                     googleResultCallback = null
                     appStateManager?.setVoiceState(VoiceState.IDLE)
@@ -236,7 +293,9 @@ object VoiceManager {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val text = matches?.firstOrNull() ?: ""
                     Logger.log("Heard via SpeechRecognizer: $text", TAG)
+                    isListeningFlag.set(false)
                     _isListeningFlow.value = false
+                    abandonListeningAudioFocus()
                     googleResultCallback?.invoke(text)
                     googleResultCallback = null
                     appStateManager?.setVoiceState(VoiceState.IDLE)
@@ -253,7 +312,9 @@ object VoiceManager {
             Logger.log("Google SpeechRecognizer started for language: ${languageCode ?: "auto-detect"}", TAG)
         } catch (e: Exception) {
             Logger.log("Failed to start Google SpeechRecognizer: ${e.message}", TAG)
+            isListeningFlag.set(false)
             _isListeningFlow.value = false
+            abandonListeningAudioFocus()
             googleResultCallback?.invoke("")
             googleResultCallback = null
             appStateManager?.setVoiceState(VoiceState.IDLE)
@@ -312,7 +373,10 @@ object VoiceManager {
     }
 
     fun startListening(languageCode: String, processor: String, onResult: (String) -> Unit) {
-        if (isListening) return
+        if (!isListeningFlag.compareAndSet(false, true)) {
+            Logger.log("Already listening — ignoring duplicate startListening call", TAG)
+            return
+        }
 
         // If auto-detect is enabled AND engine is multilingual, pass null for auto-detection
         val autoDetect = appStateManager?.uiState?.value?.voiceLanguageAutoDetect == true
@@ -326,6 +390,7 @@ object VoiceManager {
             _partialTranscriptionFlow.value = ""
             appStateManager?.setVoiceState(VoiceState.LISTENING_COMMAND)
             loadCalibrationProfile()
+            requestListeningAudioFocus()
             Logger.log("Google STT: isListeningFlow=${_isListeningFlow.value}, voiceState=LISTENING_COMMAND, autoDetect=$autoDetect, starting SpeechRecognizer", TAG)
             startGoogleSpeechRecognizer(effectiveLangCode)
             return
@@ -334,21 +399,23 @@ object VoiceManager {
         val engine = selectEngine(processor)
         if (engine == null) {
             Logger.log("No STT engine available", TAG)
+            isListeningFlag.set(false)
             onResult("Error: No STT engine")
             return
         }
 
         if (context?.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             Logger.log("RECORD_AUDIO permission not granted", TAG)
+            isListeningFlag.set(false)
             onResult("Permission Error")
             return
         }
 
-        isListening = true
         _isListeningFlow.value = true
         _partialTranscriptionFlow.value = ""
         appStateManager?.setVoiceState(VoiceState.LISTENING_COMMAND)
         loadCalibrationProfile()
+        requestListeningAudioFocus()
 
         scope.launch(Dispatchers.IO) {
             try {
@@ -379,8 +446,8 @@ object VoiceManager {
                 var lastVoiceTime = System.currentTimeMillis()
                 var maxRmsDetected = 0f
 
-                // Loop continues as long as isListening is true
-                while (isListening) {
+                // Loop continues as long as isListeningFlag is true
+                while (isListeningFlag.get()) {
                     val read = audioRecord.read(buffer, 0, buffer.size)
                     if (read > 0) {
                         val chunk = buffer.copyOfRange(0, read)
@@ -401,7 +468,7 @@ object VoiceManager {
                             lastVoiceTime = System.currentTimeMillis()
                         } else if (System.currentTimeMillis() - lastVoiceTime > SILENCE_TIMEOUT_MS) {
                             Logger.log("Silence detected, stopping recording", TAG)
-                            isListening = false 
+                            isListeningFlag.set(false) 
                         }
                     } else if (read < 0) {
                         Logger.log("AudioRecord error: $read", TAG)
@@ -417,6 +484,7 @@ object VoiceManager {
                     withContext(Dispatchers.Main) { 
                         _partialTranscriptionFlow.value = "Transcribing..." 
                         _isListeningFlow.value = false 
+                        abandonListeningAudioFocus()
                         appStateManager?.setVoiceState(VoiceState.PROCESSING)
                     }
                     
@@ -452,6 +520,7 @@ object VoiceManager {
                         onResult(result) 
                     }
                 } else {
+                    abandonListeningAudioFocus()
                     withContext(Dispatchers.Main) { onResult("") }
                 }
 
@@ -464,7 +533,7 @@ object VoiceManager {
                 withContext(Dispatchers.Main) { 
                     if (appStateManager?.uiState?.value?.voiceState == VoiceState.PROCESSING) {
                         // Callback already set PROCESSING — don't override with IDLE
-                        isListening = false
+                        isListeningFlag.set(false)
                         _isListeningFlow.value = false
                         _volumeFlow.value = 0f
                     } else {
@@ -476,7 +545,7 @@ object VoiceManager {
     }
 
     private fun updateListeningState(listening: Boolean) {
-        isListening = listening
+        isListeningFlag.set(listening)
         _isListeningFlow.value = listening
         if (!listening) {
             appStateManager?.setVoiceState(VoiceState.IDLE)
@@ -486,18 +555,25 @@ object VoiceManager {
 
     fun stopListening() {
         Logger.log("Manual stop requested", TAG)
-        // Setting isListening to false will break the loop gracefully 
-        isListening = false
+        // Setting isListeningFlag to false will break the loop gracefully 
+        isListeningFlag.set(false)
         // Stop Google SpeechRecognizer if active
         speechRecognizer?.let {
             it.stopListening()
             it.destroy()
         }
         speechRecognizer = null
+        abandonListeningAudioFocus()
     }
 
     private fun loadCalibrationProfile() {
-        val profileJson = settingsRepo?.getWakeWordProfileJson()
+        // Refresh cached settings from uiState (no runBlocking)
+        val ui = appStateManager?.uiState?.value
+        if (ui != null) {
+            cachedSttSensitivity = ui.sttSensitivity
+            cachedWakeWordProfileJson = ui.wakeWordProfileJson
+        }
+        val profileJson = cachedWakeWordProfileJson
         val profile = profileJson?.let { WakeWordProfile.fromJson(it) }
         if (profile != null && profile.noiseFloorRms > 0f) {
             calibratedNoiseFloor = profile.noiseFloorRms

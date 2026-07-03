@@ -96,7 +96,7 @@ object ConversationHandler {
         TtsManager.stop()
         stateMachine.transitionTo(ConversationState.IDLE)
         // Don't set voiceState here — the background trigger in WakeWordService
-        // checks wakeWordDetected and will call processVoiceCommand.
+        // collects wakeWordEvents and will call processVoiceCommand.
         // Setting voiceState=IDLE would trigger handleVoiceStateChange(IDLE)
         // which restarts wake word engine and can cause false detections → loops.
         // We need voiceState to NOT be PROCESSING so the trigger calls processVoiceCommand

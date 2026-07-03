@@ -63,7 +63,6 @@ class AppStateManager private constructor(
     // --- RUNTIME EPHEMERAL STATE (not persisted) ---
     private data class RuntimeState(
         val voiceState: VoiceState = VoiceState.IDLE,
-        val wakeWordDetected: Boolean = false,
         val isWakeWordServiceListening: Boolean = false,
         val refreshTrigger: Int = 0,
         val canDrawOverlays: Boolean = false,
@@ -71,6 +70,10 @@ class AppStateManager private constructor(
         val hasNotificationPermission: Boolean = false,
         val hasLocationPermission: Boolean = false
     )
+
+    // --- WAKE WORD EVENT (one-shot event, not state) ---
+    private val _wakeWordEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val wakeWordEvents: SharedFlow<Unit> = _wakeWordEvents.asSharedFlow()
     private val _runtimeState = MutableStateFlow(RuntimeState(
         canDrawOverlays = com.voxcommander.app.utils.PermissionUtils.canDrawOverlays(context),
         hasMicrophonePermission = com.voxcommander.app.utils.PermissionUtils.hasMicrophonePermission(context),
@@ -118,7 +121,6 @@ class AppStateManager private constructor(
                 context = context,
                 availableModels = modelMap,
                 voiceState = runtime.voiceState,
-                wakeWordDetected = runtime.wakeWordDetected,
                 isWakeWordServiceListening = runtime.isWakeWordServiceListening,
                 refreshTrigger = runtime.refreshTrigger
             ).copy(
@@ -169,11 +171,7 @@ class AppStateManager private constructor(
     }
 
     fun onWakeWordDetected() {
-        updateRuntime { copy(wakeWordDetected = true) }
-    }
-
-    fun resetWakeWordDetection() {
-        updateRuntime { copy(wakeWordDetected = false) }
+        _wakeWordEvents.tryEmit(Unit)
     }
 
     // --- SETTINGS WRITES (delegate to SettingsRepository, flow updates _uiState reactively) ---
@@ -371,7 +369,9 @@ class AppStateManager private constructor(
         val currentState = _uiState.value
         val voiceProcessor = currentState.voiceProcessor
         val aiProcessor = currentState.aiProcessor
-        val s = repo.getSettingsSnapshot()
+        // Derive compatibility from intentModelReady/voiceModelReady instead of getSettingsSnapshot()
+        val geminiIncompatible = aiProcessor == Strings.AiProcessors.GEMINI_NATIVE && !currentState.intentModelReady
+        val vulkanIncompatible = voiceProcessor == Strings.Processors.WHISPER_VULKAN && !currentState.voiceModelReady
         
         // (libName, description, engineCategory) — engineCategory: "whisper", "vosk", "llm", "gemini"
         val soFiles = listOf(
@@ -391,14 +391,14 @@ class AppStateManager private constructor(
             val isIncompatible: Boolean
 
             if (name == "Google AICore") {
-                isIncompatible = s.geminiIncompatible
+                isIncompatible = geminiIncompatible
                 exists = !isIncompatible
             } else {
                 // Check system nativeLibraryDir first, then downloaded whisper_libs
                 val systemFile = java.io.File(context.applicationInfo.nativeLibraryDir, name)
                 val downloadedFile = java.io.File(context.filesDir, "whisper_libs/$name")
                 exists = systemFile.exists() || downloadedFile.exists()
-                isIncompatible = name.contains("ggml-vulkan") && s.vulkanIncompatible
+                isIncompatible = name.contains("ggml-vulkan") && vulkanIncompatible
             }
 
             val isActive: Boolean

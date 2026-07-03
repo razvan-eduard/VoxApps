@@ -19,6 +19,7 @@ import com.voxcommander.app.utils.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -87,33 +88,28 @@ class WakeWordService : Service() {
                 }
         }
 
-        // --- BACKGROUND TRIGGER (MOVED FROM MAINACTIVITY) ---
+        // --- BACKGROUND TRIGGER (event-based, no boolean state) ---
         serviceScope.launch {
-            appStateManager.uiState.map { it.wakeWordDetected }.distinctUntilChanged().collectLatest { detected ->
-                if (detected) {
-                    Logger.log("WakeWordService: Background trigger activated!", TAG)
-                    val uiState = appStateManager.uiState.value
-                    
-                    val container = (application as com.voxcommander.app.VoxApplication).container
-                    if (uiState.voiceState == VoiceState.PROCESSING && uiState.commandQueueEnabled) {
-                        // AI is busy and queue is enabled — queue the new command
-                        Logger.log("AI busy (PROCESSING) — enqueuing voice command", TAG)
-                        container.mainViewModel.enqueueVoiceCommand(
-                            uiState.voiceLanguage,
-                            uiState.voiceProcessor
-                        )
-                    } else if (uiState.voiceState == VoiceState.PROCESSING) {
-                        // Queue disabled — ignore second trigger while busy
-                        Logger.log("AI busy but queue disabled — ignoring wake word", TAG)
-                    } else {
-                        container.mainViewModel.processVoiceCommand(
-                            uiState.voiceLanguage,
-                            uiState.voiceProcessor
-                        )
-                    }
-                    
-                    delay(500)
-                    appStateManager.resetWakeWordDetection()
+            appStateManager.wakeWordEvents.collect {
+                Logger.log("WakeWordService: Background trigger activated!", TAG)
+                val uiState = appStateManager.uiState.value
+                
+                val container = (application as com.voxcommander.app.VoxApplication).container
+                if (uiState.voiceState == VoiceState.PROCESSING && uiState.commandQueueEnabled) {
+                    // AI is busy and queue is enabled — queue the new command
+                    Logger.log("AI busy (PROCESSING) — enqueuing voice command", TAG)
+                    container.mainViewModel.enqueueVoiceCommand(
+                        uiState.voiceLanguage,
+                        uiState.voiceProcessor
+                    )
+                } else if (uiState.voiceState == VoiceState.PROCESSING) {
+                    // Queue disabled — ignore second trigger while busy
+                    Logger.log("AI busy but queue disabled — ignoring wake word", TAG)
+                } else {
+                    container.mainViewModel.processVoiceCommand(
+                        uiState.voiceLanguage,
+                        uiState.voiceProcessor
+                    )
                 }
             }
         }
@@ -147,6 +143,7 @@ class WakeWordService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Logger.log("WakeWordService destroyed", TAG)
+        serviceScope.cancel()
         stopWakeWordDetection()
         appStateManager.setVoiceState(VoiceState.IDLE)
     }
@@ -290,31 +287,29 @@ class WakeWordService : Service() {
         playHapticFeedback()
     }
 
-    private fun handleVoiceStateChange(state: VoiceState) {
+    private suspend fun handleVoiceStateChange(state: VoiceState) {
         val currentUiState = appStateManager.uiState.value
         val isServiceActive = wakeWordEngine != null
 
         when (state) {
             VoiceState.IDLE -> {
                 if (isServiceActive && currentUiState.isWakeWordServiceListening) {
-                    serviceScope.launch {
-                        delay(1500) // Cooldown: let Vosk buffer flush before restarting
-                        if (appStateManager.uiState.value.voiceState == VoiceState.IDLE &&
-                            appStateManager.uiState.value.isWakeWordServiceListening) {
-                            val started = wakeWordEngine?.startListening() ?: false
-                            if (started) {
-                                updateNotification()
-                            } else {
-                                Logger.log("startListening failed on IDLE retry — retrying in 2s", TAG)
-                                delay(2000)
-                                if (appStateManager.uiState.value.voiceState == VoiceState.IDLE &&
-                                    appStateManager.uiState.value.isWakeWordServiceListening) {
-                                    val retried = wakeWordEngine?.startListening() ?: false
-                                    if (retried) {
-                                        updateNotification()
-                                    } else {
-                                        Logger.log("startListening failed after retry — giving up", TAG)
-                                    }
+                    delay(1500) // Cooldown: let Vosk buffer flush before restarting
+                    if (appStateManager.uiState.value.voiceState == VoiceState.IDLE &&
+                        appStateManager.uiState.value.isWakeWordServiceListening) {
+                        val started = wakeWordEngine?.startListening() ?: false
+                        if (started) {
+                            updateNotification()
+                        } else {
+                            Logger.log("startListening failed on IDLE retry — retrying in 2s", TAG)
+                            delay(2000)
+                            if (appStateManager.uiState.value.voiceState == VoiceState.IDLE &&
+                                appStateManager.uiState.value.isWakeWordServiceListening) {
+                                val retried = wakeWordEngine?.startListening() ?: false
+                                if (retried) {
+                                    updateNotification()
+                                } else {
+                                    Logger.log("startListening failed after retry — giving up", TAG)
                                 }
                             }
                         }
