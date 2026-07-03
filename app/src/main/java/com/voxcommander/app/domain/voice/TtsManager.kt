@@ -81,6 +81,8 @@ object TtsManager {
 
         Logger.log("TtsManager initialized", TAG)
 
+        TextNormalizer.load(context.applicationContext)
+
         val snapshot = settingsRepo.getSettingsSnapshot()
         ttsEnabled = snapshot.ttsEnabled
         speechRate = snapshot.ttsSpeechRate
@@ -162,11 +164,12 @@ object TtsManager {
             return
         }
 
-        Logger.log("Speaking: ${text.take(80)}...", TAG)
+        val normalizedText = TextNormalizer.normalize(text, currentTtsLanguage)
+        Logger.log("Speaking (normalized): ${normalizedText.take(80)}...", TAG)
         _isSpeakingFlow.value = true
-        _currentTextFlow.value = text
+        _currentTextFlow.value = normalizedText
         requestAudioFocus()
-        eng.speak(text, onDone = {
+        eng.speak(normalizedText, onDone = {
             abandonAudioFocus()
             _isSpeakingFlow.value = false
             _currentTextFlow.value = ""

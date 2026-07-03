@@ -1,0 +1,1186 @@
+{
+  "schema_version": 1,
+  "en": {
+    "layer_1_replacements": {
+      "description": "Static exact-match replacements for abbreviations and symbols",
+      "rules": {
+        "\\bDr\\.\\b": "Doctor",
+        "\\bMr\\.\\b": "Mister",
+        "\\bMrs\\.\\b": "Missus",
+        "\\bMs\\.\\b": "Miss",
+        "\\bProf\\.\\b": "Professor",
+        "\\bSr\\.\\b": "Senior",
+        "\\bJr\\.\\b": "Junior",
+        "\\bSt\\.\\b": "Street",
+        "\\bAve\\.\\b": "Avenue",
+        "\\bBlvd\\.\\b": "Boulevard",
+        "\\bRd\\.\\b": "Road",
+        "\\bLn\\.\\b": "Lane",
+        "\\bSq\\.\\b": "Square",
+        "\\bPl\\.\\b": "Place",
+        "\\bCt\\.\\b": "Court",
+        "\\bCir\\.\\b": "Circle",
+        "\\bTer\\.\\b": "Terrace",
+        "\\bPkwy\\.\\b": "Parkway",
+        "\\bHwy\\.\\b": "Highway",
+        "\\bFwy\\.\\b": "Freeway",
+        "\\betc\\.\\b": "et cetera",
+        "\\be\\.g\\.\\b": "for example",
+        "\\bi\\.e\\.\\b": "that is",
+        "\\bvs\\.\\b": "versus",
+        "\\bcf\\.\\b": "compare",
+        "\\bca\\.\\b": "approximately",
+        "\\bapprox\\.\\b": "approximately",
+        "\\bNo\\.\\b": "Number",
+        "\\bVol\\.\\b": "Volume",
+        "\\bCh\\.\\b": "Chapter",
+        "\\bPg\\.\\b": "Page",
+        "\\bpp\\.\\b": "pages",
+        "\\bSec\\.\\b": "Section",
+        "\\bFig\\.\\b": "Figure",
+        "\\bEq\\.\\b": "Equation",
+        "\\bRef\\.\\b": "Reference",
+        "\\bmax\\.\\b": "maximum",
+        "\\bmin\\.\\b": "minimum",
+        "\\bavg\\.\\b": "average",
+        "\\btemp\\.\\b": "temperature",
+        "\\bInc\\.\\b": "Incorporated",
+        "\\bLtd\\.\\b": "Limited",
+        "\\bCo\\.\\b": "Company",
+        "\\bCorp\\.\\b": "Corporation",
+        "\\bDept\\.\\b": "Department",
+        "\\bEst\\.\\b": "Established",
+        "\\bRep\\.\\b": "Representative",
+        "\\bSen\\.\\b": "Senator",
+        "\\bCpt\\.\\b": "Captain",
+        "\\bLt\\.\\b": "Lieutenant",
+        "\\bCol\\.\\b": "Colonel",
+        "\\bGen\\.\\b": "General",
+        "\\bMaj\\.\\b": "Major",
+        "\\bJan\\.\\b": "January",
+        "\\bFeb\\.\\b": "February",
+        "\\bApr\\.\\b": "April",
+        "\\bJun\\.\\b": "June",
+        "\\bJul\\.\\b": "July",
+        "\\bAug\\.\\b": "August",
+        "\\bSep\\.\\b": "September",
+        "\\bSept\\.\\b": "September",
+        "\\bOct\\.\\b": "October",
+        "\\bNov\\.\\b": "November",
+        "\\bDec\\.\\b": "December",
+        "\\bMon\\.\\b": "Monday",
+        "\\bTue\\.\\b": "Tuesday",
+        "\\bWed\\.\\b": "Wednesday",
+        "\\bThu\\.\\b": "Thursday",
+        "\\bFri\\.\\b": "Friday",
+        "\\bSat\\.\\b": "Saturday",
+        "\\bSun\\.\\b": "Sunday",
+        "\\bU\\.S\\.\\b": "United States",
+        "\\bU\\.K\\.\\b": "United Kingdom",
+        "\\bE\\.U\\.\\b": "European Union",
+        "\\bU\\.N\\.\\b": "United Nations",
+        "&": "and",
+        "%": "percent",
+        "@": "at",
+        "#": "hashtag",
+        "\\$": " dollars ",
+        "€": " euros ",
+        "£": " pounds ",
+        "¥": " yen ",
+        "°": " degrees ",
+        "±": "plus or minus",
+        "×": "times",
+        "÷": "divided by",
+        "→": "to",
+        "←": "from",
+        "≥": "greater than or equal to",
+        "≤": "less than or equal to",
+        "≠": "not equal to",
+        "≈": "approximately",
+        "∞": "infinity",
+        "√": "square root of",
+        "\\bkg\\.\\b": "kilograms",
+        "\\bkm\\.\\b": "kilometers",
+        "\\bcm\\.\\b": "centimeters",
+        "\\bmm\\.\\b": "millimeters",
+        "\\bg\\.\\b": "grams",
+        "\\bmg\\.\\b": "milligrams",
+        "\\bL\\.\\b": "liters",
+        "\\bml\\.\\b": "milliliters",
+        "\\bft\\.\\b": "feet",
+        "\\bin\\.\\b": "inches",
+        "\\blb\\.\\b": "pounds",
+        "\\boz\\.\\b": "ounces",
+        "\\bmph\\.\\b": "miles per hour",
+        "\\bkph\\.\\b": "kilometers per hour",
+        "\\bhp\\.\\b": "horsepower",
+        "\\bW\\.\\b": "watts",
+        "\\bkW\\.\\b": "kilowatts",
+        "\\bMW\\.\\b": "megawatts",
+        "\\bHz\\.\\b": "hertz",
+        "\\bkHz\\.\\b": "kilohertz",
+        "\\bMHz\\.\\b": "megahertz",
+        "\\bGHz\\.\\b": "gigahertz",
+        "\\bV\\.\\b": "volts",
+        "\\bA\\.\\b": "amperes"
+      }
+    },
+    "layer_2_regex": {
+      "description": "Regex pipeline ordered from most specific (interceptors) to least specific (sweepers)",
+      "rules": [
+        {
+          "description": "[Interceptor] Negative one degree celsius (singular exception)",
+          "pattern": "(?<!\\d)(-1)\\s*°?\\s*[cC]\\b",
+          "replacement": "$1 degree celsius"
+        },
+        {
+          "description": "[Interceptor] One degree celsius (singular exception, isolated digit)",
+          "pattern": "(?<!\\d)(1)\\s*°?\\s*[cC]\\b",
+          "replacement": "$1 degree celsius"
+        },
+        {
+          "description": "[Interceptor] One degree fahrenheit (singular exception)",
+          "pattern": "(?<!\\d)(1)\\s*°?\\s*[fF]\\b",
+          "replacement": "$1 degree fahrenheit"
+        },
+        {
+          "description": "[Sweeper] Plural degrees celsius (any remaining number)",
+          "pattern": "(-?\\d+(?:\\.\\d+)?)\\s*°?\\s*[cC]\\b",
+          "replacement": "$1 degrees celsius"
+        },
+        {
+          "description": "[Sweeper] Plural degrees fahrenheit",
+          "pattern": "(-?\\d+(?:\\.\\d+)?)\\s*°?\\s*[fF]\\b",
+          "replacement": "$1 degrees fahrenheit"
+        },
+        {
+          "description": "[Sweeper] Plural degrees kelvin",
+          "pattern": "(-?\\d+(?:\\.\\d+)?)\\s*°?\\s*[kK]\\b",
+          "replacement": "$1 degrees kelvin"
+        },
+        {
+          "description": "[Interceptor] First ordinal (1st -> first)",
+          "pattern": "(?<!\\d)1st\\b",
+          "replacement": "first"
+        },
+        {
+          "description": "[Interceptor] Second ordinal (2nd -> second)",
+          "pattern": "(?<!\\d)2nd\\b",
+          "replacement": "second"
+        },
+        {
+          "description": "[Interceptor] Third ordinal (3rd -> third)",
+          "pattern": "(?<!\\d)3rd\\b",
+          "replacement": "third"
+        },
+        {
+          "description": "[Interceptor] Time with AM",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\s*[Aa]\\.[Mm]\\.",
+          "replacement": "$1 $2 AM"
+        },
+        {
+          "description": "[Interceptor] Time with PM",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\s*[Pp]\\.[Mm]\\.",
+          "replacement": "$1 $2 PM"
+        },
+        {
+          "description": "[Interceptor] Time with o'clock",
+          "pattern": "\\b(\\d{1,2})\\s*o'?clock\\b",
+          "replacement": "$1 o'clock"
+        },
+        {
+          "description": "[Sweeper] General time format HH:MM",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\b",
+          "replacement": "$1 $2"
+        },
+        {
+          "description": "[Interceptor] US date MM/DD/YYYY",
+          "pattern": "\\b(\\d{1,2})/(\\d{1,2})/(\\d{4})\\b",
+          "replacement": "$1 $2 $3"
+        },
+        {
+          "description": "[Interceptor] ISO date YYYY-MM-DD",
+          "pattern": "\\b(\\d{4})-(\\d{2})-(\\d{2})\\b",
+          "replacement": "$1 $2 $3"
+        },
+        {
+          "description": "[Interceptor] Dollar amount with cents ($5.99)",
+          "pattern": "\\$(\\d+)\\.(\\d{2})\\b",
+          "replacement": "$1 dollars and $2 cents"
+        },
+        {
+          "description": "[Sweeper] General dollar amount ($100)",
+          "pattern": "\\$(\\d+(?:,\\d{3})*)\\b",
+          "replacement": "$1 dollars"
+        },
+        {
+          "description": "[Interceptor] Euro amount with cents (€5.99)",
+          "pattern": "€(\\d+)\\.(\\d{2})\\b",
+          "replacement": "$1 euros and $2 cents"
+        },
+        {
+          "description": "[Sweeper] General euro amount (€100)",
+          "pattern": "€(\\d+(?:,\\d{3})*)\\b",
+          "replacement": "$1 euros"
+        },
+        {
+          "description": "[Interceptor] Pound amount with cents (£5.99)",
+          "pattern": "£(\\d+)\\.(\\d{2})\\b",
+          "replacement": "$1 pounds and $2 pence"
+        },
+        {
+          "description": "[Sweeper] General pound amount (£100)",
+          "pattern": "£(\\d+(?:,\\d{3})*)\\b",
+          "replacement": "$1 pounds"
+        },
+        {
+          "description": "[Interceptor] Percentage with decimal (50.5%)",
+          "pattern": "(?<!\\d)(\\d+\\.\\d+)\\s*%",
+          "replacement": "$1 percent"
+        },
+        {
+          "description": "[Sweeper] General percentage (50%)",
+          "pattern": "(?<!\\d)(\\d+)\\s*%",
+          "replacement": "$1 percent"
+        },
+        {
+          "description": "[Interceptor] Negative decimal (-3.14)",
+          "pattern": "(?<!\\d)-(\\d+\\.\\d+)\\b",
+          "replacement": "minus $1"
+        },
+        {
+          "description": "[Sweeper] Decimal number (3.14 -> 3 point 14)",
+          "pattern": "(?<!\\d)(\\d+)\\.(\\d+)\\b",
+          "replacement": "$1 point $2"
+        },
+        {
+          "description": "[Interceptor] Thousand separator (1,000 -> 1000)",
+          "pattern": "(?<!\\d)(\\d{1,3}),(\\d{3})\\b",
+          "replacement": "$1$2"
+        },
+        {
+          "description": "[Interceptor] Million separator (1,000,000)",
+          "pattern": "(?<!\\d)(\\d{1,3}),(\\d{3}),(\\d{3})\\b",
+          "replacement": "$1$2$3"
+        },
+        {
+          "description": "[Interceptor] Speed km/h",
+          "pattern": "(?<!\\d)(\\d+(?:\\.\\d+)?)\\s*km/h\\b",
+          "replacement": "$1 kilometers per hour"
+        },
+        {
+          "description": "[Interceptor] Speed mph",
+          "pattern": "(?<!\\d)(\\d+(?:\\.\\d+)?)\\s*mph\\b",
+          "replacement": "$1 miles per hour"
+        },
+        {
+          "description": "[Sweeper] Kilometers with number",
+          "pattern": "(?<!\\d)(\\d+(?:\\.\\d+)?)\\s*km\\b",
+          "replacement": "$1 kilometers"
+        },
+        {
+          "description": "[Sweeper] Meters with number",
+          "pattern": "(?<!\\d)(\\d+(?:\\.\\d+)?)\\s*\\bm\\b",
+          "replacement": "$1 meters"
+        },
+        {
+          "description": "[Sweeper] Kilograms with number",
+          "pattern": "(?<!\\d)(\\d+(?:\\.\\d+)?)\\s*kg\\b",
+          "replacement": "$1 kilograms"
+        },
+        {
+          "description": "[Sweeper] Watts with number",
+          "pattern": "(?<!\\d)(\\d+(?:\\.\\d+)?)\\s*W\\b",
+          "replacement": "$1 watts"
+        },
+        {
+          "description": "[Interceptor] URL with protocol",
+          "pattern": "\\bhttps?://[^\\s]+",
+          "replacement": "URL"
+        },
+        {
+          "description": "[Interceptor] Email address",
+          "pattern": "\\b[\\w.+-]+@[\\w.-]+\\.\\w+\\b",
+          "replacement": "email address"
+        },
+        {
+          "description": "[Interceptor] Phone number US format",
+          "pattern": "\\+?1?\\s*\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b",
+          "replacement": "phone number"
+        },
+        {
+          "description": "[Interceptor] International phone number",
+          "pattern": "\\+\\d{1,3}[\\s-]?\\d{1,}[\\s-]?\\d{1,}",
+          "replacement": "phone number"
+        },
+        {
+          "description": "[Sweeper] Remaining standalone negative numbers",
+          "pattern": "(?<!\\w)-(\\d+)\\b",
+          "replacement": "minus $1"
+        },
+        {
+          "description": "[Interceptor] Year range (2020-2025)",
+          "pattern": "\\b(\\d{4})-(\\d{4})\\b",
+          "replacement": "$1 to $2"
+        },
+        {
+          "description": "[Interceptor] Number range (5-10)",
+          "pattern": "(?<!\\d)(\\d+)-(\\d+)\\b",
+          "replacement": "$1 to $2"
+        }
+      ]
+    },
+    "layer_3_cleanup": {
+      "description": "Sanitizer: clean up artifacts from Layer 1 and 2 mutations",
+      "rules": {
+        "\\s{2,}": " ",
+        "\\s+\\.": ".",
+        "\\s+,": ",",
+        "\\s+;": ";",
+        "\\s+:": ":",
+        "\\s+\\?": "?",
+        "\\s+!": "!",
+        "^\\s+": "",
+        "\\s+$": "",
+        "\\(\\s+": "(",
+        "\\s+\\)": ")"
+      }
+    }
+  },
+  "ro": {
+    "layer_1_replacements": {
+      "description": "Înlocuiri statice exacte pentru abrevieri și simboluri",
+      "rules": {
+        "\\bDr\\.\\b": "doctor",
+        "\\bDl\\.\\b": "domnul",
+        "\\bDna\\.\\b": "doamna",
+        "\\bProf\\.\\b": "profesor",
+        "\\bConf\\.\\b": "conferențiar",
+        "\\bIng\\.\\b": "inginer",
+        "\\bAv\\.\\b": "avocat",
+        "\\bArh\\.\\b": "arhitect",
+        "\\bStr\\.\\b": "strada",
+        "\\bSos\\.\\b": "șoseaua",
+        "\\bBd\\.\\b": "bulevardul",
+        "\\bNr\\.\\b": "numărul",
+        "\\bAp\\.\\b": "apartament",
+        "\\bBl\\.\\b": "bloc",
+        "\\bSc\\.\\b": "scară",
+        "\\bEt\\.\\b": "etaj",
+        "\\bTel\\.\\b": "telefon",
+        "\\bPag\\.\\b": "pagină",
+        "\\bCap\\.\\b": "capitol",
+        "\\bVol\\.\\b": "volum",
+        "\\bEd\\.\\b": "ediție",
+        "\\bAprox\\.\\b": "aproximativ",
+        "\\bMax\\.\\b": "maxim",
+        "\\bMin\\.\\b": "minim",
+        "\\bDir\\.\\b": "director",
+        "\\betc\\.\\b": "et caetera",
+        "\\bex\\.\\b": "exemplu",
+        "\\bviz\\.\\b": "anume",
+        "\\bcf\\.\\b": "compară",
+        "\\bcca\\.\\b": "aproximativ",
+        "\\bS\\.A\\.\\b": "societate pe acțiuni",
+        "\\bS\\.R\\.L\\.\\b": "societate cu răspundere limitată",
+        "\\bIan\\.\\b": "ianuarie",
+        "\\bFeb\\.\\b": "februarie",
+        "\\bApr\\.\\b": "aprilie",
+        "\\bIun\\.\\b": "iunie",
+        "\\bIul\\.\\b": "iulie",
+        "\\bAug\\.\\b": "august",
+        "\\bSep\\.\\b": "septembrie",
+        "\\bOct\\.\\b": "octombrie",
+        "\\bNoi\\.\\b": "noiembrie",
+        "\\bDec\\.\\b": "decembrie",
+        "\\bLun\\.\\b": "luni",
+        "\\bMie\\.\\b": "miercuri",
+        "\\bVin\\.\\b": "vineri",
+        "\\bSâm\\.\\b": "sâmbătă",
+        "\\bDum\\.\\b": "duminică",
+        "\\bU\\.E\\.\\b": "Uniunea Europeană",
+        "\\bS\\.U\\.A\\.\\b": "Statele Unite",
+        "\\bO\\.N\\.U\\.\\b": "Organizația Națiunilor Unite",
+        "&": "și",
+        "%": "la sută",
+        "@": "la",
+        "#": "hashtag",
+        "€": " euro ",
+        "\\$": " dolari ",
+        "£": " lire ",
+        "¥": " yeni ",
+        "°": " grade ",
+        "±": "plus sau minus",
+        "×": "ori",
+        "÷": "împărțit la",
+        "→": "către",
+        "←": "de la",
+        "≥": "mai mare sau egal cu",
+        "≤": "mai mic sau egal cu",
+        "≠": "diferit de",
+        "≈": "aproximativ egal",
+        "∞": "infinit",
+        "√": "rădăcină pătrată din",
+        "\\bkg\\.\\b": "kilograme",
+        "\\bkm\\.\\b": "kilometri",
+        "\\bcm\\.\\b": "centimetri",
+        "\\bmm\\.\\b": "milimetri",
+        "\\bm\\.\\b": "metri",
+        "\\bg\\.\\b": "grame",
+        "\\bmg\\.\\b": "miligrame",
+        "\\bL\\.\\b": "litri",
+        "\\bml\\.\\b": "mililitri",
+        "\\bW\\.\\b": "wați",
+        "\\bkW\\.\\b": "kilowați",
+        "\\bMW\\.\\b": "megawați",
+        "\\bV\\.\\b": "volți",
+        "\\bA\\.\\b": "amperi",
+        "\\bHz\\.\\b": "herți",
+        "\\bMHz\\.\\b": "megaherți",
+        "\\bGHz\\.\\b": "gigaherți"
+      }
+    },
+    "layer_2_regex": {
+      "description": "Pipeline regex ordonat de la cel mai specific (interceptori) la cel mai general (mături)",
+      "rules": [
+        {
+          "description": "[Interceptor] Un grad celsius (singular, izolat: 1 sau -1)",
+          "pattern": "(?<!\\d)(-?1)\\s*°?\\s*[cC]\\b",
+          "replacement": "$1 grad celsius"
+        },
+        {
+          "description": "[Interceptor] Un grad fahrenheit (singular, izolat)",
+          "pattern": "(?<!\\d)(-?1)\\s*°?\\s*[fF]\\b",
+          "replacement": "$1 grad fahrenheit"
+        },
+        {
+          "description": "[Sweeper] Grade celsius plural (orice număr rămas)",
+          "pattern": "(-?\\d+(?:[.,]\\d+)?)\\s*°?\\s*[cC]\\b",
+          "replacement": "$1 grade celsius"
+        },
+        {
+          "description": "[Sweeper] Grade fahrenheit plural",
+          "pattern": "(-?\\d+(?:[.,]\\d+)?)\\s*°?\\s*[fF]\\b",
+          "replacement": "$1 grade fahrenheit"
+        },
+        {
+          "description": "[Sweeper] Grade kelvin plural",
+          "pattern": "(-?\\d+(?:[.,]\\d+)?)\\s*°?\\s*[kK]\\b",
+          "replacement": "$1 grade kelvin"
+        },
+        {
+          "description": "[Interceptor] Ora exactă (15:00 -> 15 fix)",
+          "pattern": "\\b(\\d{1,2}):(00)\\b",
+          "replacement": "$1 fix"
+        },
+        {
+          "description": "[Interceptor] Ora dimineața (9:30 AM)",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\s*[Aa]\\.[Mm]\\.",
+          "replacement": "$1 și $2 dimineața"
+        },
+        {
+          "description": "[Interceptor] Ora după-amiaza (9:30 PM)",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\s*[Pp]\\.[Mm]\\.",
+          "replacement": "$1 și $2 după-amiaza"
+        },
+        {
+          "description": "[Sweeper] Format general oră HH:MM",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\b",
+          "replacement": "$1 și $2 minute"
+        },
+        {
+          "description": "[Interceptor] Data ISO (YYYY-MM-DD)",
+          "pattern": "\\b(\\d{4})-(\\d{2})-(\\d{2})\\b",
+          "replacement": "$1 $2 $3"
+        },
+        {
+          "description": "[Interceptor] Data format DD.MM.YYYY",
+          "pattern": "\\b(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})\\b",
+          "replacement": "$1 $2 $3"
+        },
+        {
+          "description": "[Sweeper] Data format DD/MM/YYYY",
+          "pattern": "\\b(\\d{1,2})/(\\d{1,2})/(\\d{4})\\b",
+          "replacement": "$1 $2 $3"
+        },
+        {
+          "description": "[Interceptor] Euro cu cenți (€5,99)",
+          "pattern": "€(\\d+),(\\d{2})\\b",
+          "replacement": "$1 euro și $2 cenți"
+        },
+        {
+          "description": "[Sweeper] Euro general (€100)",
+          "pattern": "€(\\d+(?:\\.\\d{3})*)\\b",
+          "replacement": "$1 euro"
+        },
+        {
+          "description": "[Interceptor] Dolari cu cenți ($5,99)",
+          "pattern": "\\$(\\d+),(\\d{2})\\b",
+          "replacement": "$1 dolari și $2 cenți"
+        },
+        {
+          "description": "[Sweeper] Dolari general ($100)",
+          "pattern": "\\$(\\d+(?:\\.\\d{3})*)\\b",
+          "replacement": "$1 dolari"
+        },
+        {
+          "description": "[Interceptor] Lei cu bani (5,99 lei)",
+          "pattern": "(?<!\\d)(\\d+),(\\d{2})\\s*lei\\b",
+          "replacement": "$1 lei și $2 bani"
+        },
+        {
+          "description": "[Sweeper] Lei general (100 lei)",
+          "pattern": "(?<!\\d)(\\d+(?:\\.\\d{3})*)\\s*lei\\b",
+          "replacement": "$1 lei"
+        },
+        {
+          "description": "[Interceptor] Procentaj zecimal (50,5%)",
+          "pattern": "(?<!\\d)(\\d+[.,]\\d+)\\s*%",
+          "replacement": "$1 la sută"
+        },
+        {
+          "description": "[Sweeper] Procentaj general (50%)",
+          "pattern": "(?<!\\d)(\\d+)\\s*%",
+          "replacement": "$1 la sută"
+        },
+        {
+          "description": "[Interceptor] Zecimal negativ cu virgulă (-3,14)",
+          "pattern": "(?<!\\d)-(\\d+),(\\d+)\\b",
+          "replacement": "minus $1 virgulă $2"
+        },
+        {
+          "description": "[Sweeper] Zecimal cu virgulă (3,14 -> 3 virgulă 14)",
+          "pattern": "(?<!\\d)(\\d+),(\\d+)\\b",
+          "replacement": "$1 virgulă $2"
+        },
+        {
+          "description": "[Sweeper] Zecimal cu punct (3.14 -> 3 virgulă 14)",
+          "pattern": "(?<!\\d)(\\d+)\\.(\\d+)\\b",
+          "replacement": "$1 virgulă $2"
+        },
+        {
+          "description": "[Interceptor] Separator miimi (1.000 -> 1000)",
+          "pattern": "(?<!\\d)(\\d{1,3})\\.(\\d{3})\\b",
+          "replacement": "$1$2"
+        },
+        {
+          "description": "[Interceptor] Separator milioane (1.000.000)",
+          "pattern": "(?<!\\d)(\\d{1,3})\\.(\\d{3})\\.(\\d{3})\\b",
+          "replacement": "$1$2$3"
+        },
+        {
+          "description": "[Interceptor] Viteză km/h",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*km/h\\b",
+          "replacement": "$1 kilometri pe oră"
+        },
+        {
+          "description": "[Sweeper] Kilometri cu număr",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*km\\b",
+          "replacement": "$1 kilometri"
+        },
+        {
+          "description": "[Sweeper] Metri cu număr",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*\\bm\\b",
+          "replacement": "$1 metri"
+        },
+        {
+          "description": "[Sweeper] Kilograme cu număr",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*kg\\b",
+          "replacement": "$1 kilograme"
+        },
+        {
+          "description": "[Sweeper] Wați cu număr",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*W\\b",
+          "replacement": "$1 wați"
+        },
+        {
+          "description": "[Interceptor] URL cu protocol",
+          "pattern": "\\bhttps?://[^\\s]+",
+          "replacement": "link"
+        },
+        {
+          "description": "[Interceptor] Adresă de email",
+          "pattern": "\\b[\\w.+-]+@[\\w.-]+\\.\\w+\\b",
+          "replacement": "adresă de email"
+        },
+        {
+          "description": "[Interceptor] Telefon românesc (+40...)",
+          "pattern": "\\+40[\\s-]?\\d{3}[\\s-]?\\d{3}[\\s-]?\\d{3}\\b",
+          "replacement": "număr de telefon"
+        },
+        {
+          "description": "[Interceptor] Telefon internațional (+XX...)",
+          "pattern": "\\+\\d{1,3}[\\s-]?\\d{1,}[\\s-]?\\d{1,}",
+          "replacement": "număr de telefon"
+        },
+        {
+          "description": "[Sweeper] Numere negative rămase",
+          "pattern": "(?<!\\w)-(\\d+)\\b",
+          "replacement": "minus $1"
+        },
+        {
+          "description": "[Interceptor] Interval de ani (2020-2025)",
+          "pattern": "\\b(\\d{4})-(\\d{4})\\b",
+          "replacement": "$1 până în $2"
+        },
+        {
+          "description": "[Interceptor] Interval numeric (5-10)",
+          "pattern": "(?<!\\d)(\\d+)-(\\d+)\\b",
+          "replacement": "$1 până la $2"
+        }
+      ]
+    },
+    "layer_3_cleanup": {
+      "description": "Sanitizer: curățenie după mutațiile din Layer 1 și 2",
+      "rules": {
+        "\\s{2,}": " ",
+        "\\s+\\.": ".",
+        "\\s+,": ",",
+        "\\s+;": ";",
+        "\\s+:": ":",
+        "\\s+\\?": "?",
+        "\\s+!": "!",
+        "^\\s+": "",
+        "\\s+$": "",
+        "\\(\\s+": "(",
+        "\\s+\\)": ")"
+      }
+    }
+  },
+  "de": {
+    "layer_1_replacements": {
+      "description": "Statische Ersetzungen für Abkürzungen und Symbole",
+      "rules": {
+        "\\bDr\\.\\b": "Doktor",
+        "\\bHr\\.\\b": "Herr",
+        "\\bFr\\.\\b": "Frau",
+        "\\bProf\\.\\b": "Professor",
+        "\\bDipl\\.\\b": "Diplom",
+        "\\bIng\\.\\b": "Ingenieur",
+        "\\bStr\\.\\b": "Straße",
+        "\\bBd\\.\\b": "Boulevard",
+        "\\bPl\\.\\b": "Platz",
+        "\\bNr\\.\\b": "Nummer",
+        "\\bTel\\.\\b": "Telefon",
+        "\\bS\\.\\b": "Seite",
+        "\\bBd\\.\\b": "Band",
+        "\\bKap\\.\\b": "Kapitel",
+        "\\bAbs\\.\\b": "Absatz",
+        "\\bAbb\\.\\b": "Abbildung",
+        "\\bTab\\.\\b": "Tabelle",
+        "\\busw\\.\\b": "und so weiter",
+        "\\bz\\.B\\.\\b": "zum Beispiel",
+        "\\bu\\.a\\.\\b": "unter anderem",
+        "\\bvgl\\.\\b": "vergleiche",
+        "\\binkl\\.\\b": "inklusive",
+        "\\bevtl\\.\\b": "eventuell",
+        "\\bca\\.\\b": "circa",
+        "\\bmax\\.\\b": "Maximum",
+        "\\bmin\\.\\b": "Minimum",
+        "\\bAG\\b": "Aktiengesellschaft",
+        "\\bGmbH\\b": "Gesellschaft mit beschränkter Haftung",
+        "\\be\\.V\\.\\b": "eingetragener Verein",
+        "\\bJan\\.\\b": "Januar",
+        "\\bFeb\\.\\b": "Februar",
+        "\\bMärz\\.\\b": "März",
+        "\\bApr\\.\\b": "April",
+        "\\bJun\\.\\b": "Juni",
+        "\\bJul\\.\\b": "Juli",
+        "\\bSep\\.\\b": "September",
+        "\\bOkt\\.\\b": "Oktober",
+        "\\bNov\\.\\b": "November",
+        "\\bDez\\.\\b": "Dezember",
+        "\\bMo\\.\\b": "Montag",
+        "\\bDi\\.\\b": "Dienstag",
+        "\\bMi\\.\\b": "Mittwoch",
+        "\\bDo\\.\\b": "Donnerstag",
+        "\\bFr\\.\\b": "Freitag",
+        "\\bSa\\.\\b": "Samstag",
+        "\\bSo\\.\\b": "Sonntag",
+        "&": "und",
+        "%": "Prozent",
+        "@": "at",
+        "#": "Hashtag",
+        "€": " Euro ",
+        "\\$": " Dollar ",
+        "£": " Pfund ",
+        "¥": " Yen ",
+        "°": " Grad ",
+        "±": "plus oder minus",
+        "×": "mal",
+        "÷": "geteilt durch",
+        "→": "nach",
+        "←": "von",
+        "≥": "größer oder gleich",
+        "≤": "kleiner oder gleich",
+        "≠": "ungleich",
+        "≈": "ungefähr",
+        "∞": "unendlich",
+        "√": "Quadratwurzel von",
+        "\\bkg\\.\\b": "Kilogramm",
+        "\\bkm\\.\\b": "Kilometer",
+        "\\bcm\\.\\b": "Zentimeter",
+        "\\bmm\\.\\b": "Millimeter",
+        "\\bm\\.\\b": "Meter",
+        "\\bg\\.\\b": "Gramm",
+        "\\bmg\\.\\b": "Milligramm",
+        "\\bL\\.\\b": "Liter",
+        "\\bml\\.\\b": "Milliliter",
+        "\\bW\\.\\b": "Watt",
+        "\\bkW\\.\\b": "Kilowatt",
+        "\\bMW\\.\\b": "Megawatt",
+        "\\bV\\.\\b": "Volt",
+        "\\bA\\.\\b": "Ampere",
+        "\\bHz\\.\\b": "Hertz",
+        "\\bMHz\\.\\b": "Megahertz",
+        "\\bGHz\\.\\b": "Gigahertz"
+      }
+    },
+    "layer_2_regex": {
+      "description": "Regex-Pipeline von spezifisch (Interceptoren) zu allgemein (Sweeper)",
+      "rules": [
+        {
+          "description": "[Interceptor] Ein Grad Celsius (Singular: 1 oder -1)",
+          "pattern": "(?<!\\d)(-?1)\\s*°?\\s*[cC]\\b",
+          "replacement": "$1 Grad Celsius"
+        },
+        {
+          "description": "[Interceptor] Ein Grad Fahrenheit (Singular)",
+          "pattern": "(?<!\\d)(-?1)\\s*°?\\s*[fF]\\b",
+          "replacement": "$1 Grad Fahrenheit"
+        },
+        {
+          "description": "[Sweeper] Plural Grad Celsius",
+          "pattern": "(-?\\d+(?:[.,]\\d+)?)\\s*°?\\s*[cC]\\b",
+          "replacement": "$1 Grad Celsius"
+        },
+        {
+          "description": "[Sweeper] Plural Grad Fahrenheit",
+          "pattern": "(-?\\d+(?:[.,]\\d+)?)\\s*°?\\s*[fF]\\b",
+          "replacement": "$1 Grad Fahrenheit"
+        },
+        {
+          "description": "[Interceptor] Uhrzeit genau (15:00 -> 15 Uhr)",
+          "pattern": "\\b(\\d{1,2}):(00)\\b",
+          "replacement": "$1 Uhr"
+        },
+        {
+          "description": "[Interceptor] Uhrzeit mit AM",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\s*[Aa]\\.[Mm]\\.",
+          "replacement": "$1 Uhr $2 morgens"
+        },
+        {
+          "description": "[Interceptor] Uhrzeit mit PM",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\s*[Pp]\\.[Mm]\\.",
+          "replacement": "$1 Uhr $2 nachmittags"
+        },
+        {
+          "description": "[Sweeper] Allgemeine Uhrzeit HH:MM",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\b",
+          "replacement": "$1 Uhr $2"
+        },
+        {
+          "description": "[Interceptor] ISO-Datum (YYYY-MM-DD)",
+          "pattern": "\\b(\\d{4})-(\\d{2})-(\\d{2})\\b",
+          "replacement": "$1 $2 $3"
+        },
+        {
+          "description": "[Interceptor] Datum DD.MM.YYYY",
+          "pattern": "\\b(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})\\b",
+          "replacement": "$1 $2 $3"
+        },
+        {
+          "description": "[Interceptor] Euro mit Cent (€5,99)",
+          "pattern": "€(\\d+),(\\d{2})\\b",
+          "replacement": "$1 Euro und $2 Cent"
+        },
+        {
+          "description": "[Sweeper] Euro allgemein (€100)",
+          "pattern": "€(\\d+(?:\\.\\d{3})*)\\b",
+          "replacement": "$1 Euro"
+        },
+        {
+          "description": "[Interceptor] Dollar mit Cent ($5,99)",
+          "pattern": "\\$(\\d+),(\\d{2})\\b",
+          "replacement": "$1 Dollar und $2 Cent"
+        },
+        {
+          "description": "[Sweeper] Dollar allgemein ($100)",
+          "pattern": "\\$(\\d+(?:\\.\\d{3})*)\\b",
+          "replacement": "$1 Dollar"
+        },
+        {
+          "description": "[Interceptor] Prozent mit Dezimal (50,5%)",
+          "pattern": "(?<!\\d)(\\d+[.,]\\d+)\\s*%",
+          "replacement": "$1 Prozent"
+        },
+        {
+          "description": "[Sweeper] Prozent allgemein (50%)",
+          "pattern": "(?<!\\d)(\\d+)\\s*%",
+          "replacement": "$1 Prozent"
+        },
+        {
+          "description": "[Interceptor] Negativer Dezimalwert (-3,14)",
+          "pattern": "(?<!\\d)-(\\d+),(\\d+)\\b",
+          "replacement": "minus $1 Komma $2"
+        },
+        {
+          "description": "[Sweeper] Dezimal mit Komma (3,14 -> 3 Komma 14)",
+          "pattern": "(?<!\\d)(\\d+),(\\d+)\\b",
+          "replacement": "$1 Komma $2"
+        },
+        {
+          "description": "[Sweeper] Dezimal mit Punkt (3.14 -> 3 Komma 14)",
+          "pattern": "(?<!\\d)(\\d+)\\.(\\d+)\\b",
+          "replacement": "$1 Komma $2"
+        },
+        {
+          "description": "[Interceptor] Tausendertrennzeichen (1.000 -> 1000)",
+          "pattern": "(?<!\\d)(\\d{1,3})\\.(\\d{3})\\b",
+          "replacement": "$1$2"
+        },
+        {
+          "description": "[Interceptor] Millionen (1.000.000)",
+          "pattern": "(?<!\\d)(\\d{1,3})\\.(\\d{3})\\.(\\d{3})\\b",
+          "replacement": "$1$2$3"
+        },
+        {
+          "description": "[Interceptor] Geschwindigkeit km/h",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*km/h\\b",
+          "replacement": "$1 Kilometer pro Stunde"
+        },
+        {
+          "description": "[Sweeper] Kilometer mit Zahl",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*km\\b",
+          "replacement": "$1 Kilometer"
+        },
+        {
+          "description": "[Sweeper] Meter mit Zahl",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*\\bm\\b",
+          "replacement": "$1 Meter"
+        },
+        {
+          "description": "[Sweeper] Kilogramm mit Zahl",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*kg\\b",
+          "replacement": "$1 Kilogramm"
+        },
+        {
+          "description": "[Interceptor] URL mit Protokoll",
+          "pattern": "\\bhttps?://[^\\s]+",
+          "replacement": "Link"
+        },
+        {
+          "description": "[Interceptor] E-Mail-Adresse",
+          "pattern": "\\b[\\w.+-]+@[\\w.-]+\\.\\w+\\b",
+          "replacement": "E-Mail-Adresse"
+        },
+        {
+          "description": "[Interceptor] Telefonnummer international (+XX...)",
+          "pattern": "\\+\\d{1,3}[\\s-]?\\d{1,}[\\s-]?\\d{1,}",
+          "replacement": "Telefonnummer"
+        },
+        {
+          "description": "[Sweeper] Verbleibende negative Zahlen",
+          "pattern": "(?<!\\w)-(\\d+)\\b",
+          "replacement": "minus $1"
+        },
+        {
+          "description": "[Interceptor] Jahresbereich (2020-2025)",
+          "pattern": "\\b(\\d{4})-(\\d{4})\\b",
+          "replacement": "$1 bis $2"
+        },
+        {
+          "description": "[Interceptor] Zahlenbereich (5-10)",
+          "pattern": "(?<!\\d)(\\d+)-(\\d+)\\b",
+          "replacement": "$1 bis $2"
+        }
+      ]
+    },
+    "layer_3_cleanup": {
+      "description": "Sanitizer: Bereinigung von Artefakten aus Layer 1 und 2",
+      "rules": {
+        "\\s{2,}": " ",
+        "\\s+\\.": ".",
+        "\\s+,": ",",
+        "\\s+;": ";",
+        "\\s+:": ":",
+        "\\s+\\?": "?",
+        "\\s+!": "!",
+        "^\\s+": "",
+        "\\s+$": "",
+        "\\(\\s+": "(",
+        "\\s+\\)": ")"
+      }
+    }
+  },
+  "fr": {
+    "layer_1_replacements": {
+      "description": "Remplacements statiques pour abréviations et symboles",
+      "rules": {
+        "\\bDr\\.\\b": "docteur",
+        "\\bM\\.\\b": "monsieur",
+        "\\bMme\\.\\b": "madame",
+        "\\bMlle\\.\\b": "mademoiselle",
+        "\\bProf\\.\\b": "professeur",
+        "\\bIng\\.\\b": "ingénieur",
+        "\\bAv\\.\\b": "avenue",
+        "\\bBd\\.\\b": "boulevard",
+        "\\bRue\\b": "rue",
+        "\\bPl\\.\\b": "place",
+        "\\bSq\\.\\b": "square",
+        "\\bNo\\.\\b": "numéro",
+        "\\bTél\\.\\b": "téléphone",
+        "\\bP\\.\\b": "page",
+        "\\bpp\\.\\b": "pages",
+        "\\bCh\\.\\b": "chapitre",
+        "\\bVol\\.\\b": "volume",
+        "\\bFig\\.\\b": "figure",
+        "\\bTab\\.\\b": "tableau",
+        "\\bArt\\.\\b": "article",
+        "\\betc\\.\\b": "et cetera",
+        "\\bp\\.ex\\.\\b": "par exemple",
+        "\\bc\\.à.d\\.\\b": "c'est-à-dire",
+        "\\bcf\\.\\b": "comparer",
+        "\\benv\\.\\b": "environ",
+        "\\bmax\\.\\b": "maximum",
+        "\\bmin\\.\\b": "minimum",
+        "\\bSA\\b": "société anonyme",
+        "\\bSARL\\b": "société à responsabilité limitée",
+        "\\bEURL\\b": "entreprise unipersonnelle à responsabilité limitée",
+        "\\bjanv\\.\\b": "janvier",
+        "\\bfévr\\.\\b": "février",
+        "\\bmars\\.\\b": "mars",
+        "\\bavr\\.\\b": "avril",
+        "\\bjuin\\.\\b": "juin",
+        "\\bjuil\\.\\b": "juillet",
+        "\\bsept\\.\\b": "septembre",
+        "\\boct\\.\\b": "octobre",
+        "\\bnov\\.\\b": "novembre",
+        "\\bdéc\\.\\b": "décembre",
+        "\\blun\\.\\b": "lundi",
+        "\\bmar\\.\\b": "mardi",
+        "\\bmer\\.\\b": "mercredi",
+        "\\bjeu\\.\\b": "jeudi",
+        "\\bven\\.\\b": "vendredi",
+        "\\bsam\\.\\b": "samedi",
+        "\\bdim\\.\\b": "dimanche",
+        "\\bU\\.E\\.\\b": "Union européenne",
+        "\\bÉ\\.U\\.\\b": "États-Unis",
+        "\\bO\\.N\\.U\\.\\b": "Organisation des Nations Unies",
+        "&": "et",
+        "%": "pour cent",
+        "@": "at",
+        "#": "hashtag",
+        "€": " euros ",
+        "\\$": " dollars ",
+        "£": " livres ",
+        "¥": " yens ",
+        "°": " degrés ",
+        "±": "plus ou moins",
+        "×": "fois",
+        "÷": "divisé par",
+        "→": "vers",
+        "←": "de",
+        "≥": "supérieur ou égal à",
+        "≤": "inférieur ou égal à",
+        "≠": "différent de",
+        "≈": "approximativement",
+        "∞": "infini",
+        "√": "racine carrée de",
+        "\\bkg\\.\\b": "kilogrammes",
+        "\\bkm\\.\\b": "kilomètres",
+        "\\bcm\\.\\b": "centimètres",
+        "\\bmm\\.\\b": "millimètres",
+        "\\bm\\.\\b": "mètres",
+        "\\bg\\.\\b": "grammes",
+        "\\bmg\\.\\b": "milligrammes",
+        "\\bL\\.\\b": "litres",
+        "\\bml\\.\\b": "millilitres",
+        "\\bW\\.\\b": "watts",
+        "\\bkW\\.\\b": "kilowatts",
+        "\\bMW\\.\\b": "mégawatts",
+        "\\bV\\.\\b": "volts",
+        "\\bA\\.\\b": "ampères",
+        "\\bHz\\.\\b": "hertz",
+        "\\bMHz\\.\\b": "mégahertz",
+        "\\bGHz\\.\\b": "gigahertz"
+      }
+    },
+    "layer_2_regex": {
+      "description": "Pipeline regex du plus spécifique (intercepteurs) au moins spécifique (balayeurs)",
+      "rules": [
+        {
+          "description": "[Intercepteur] Un degré celsius (singulier: 1 ou -1)",
+          "pattern": "(?<!\\d)(-?1)\\s*°?\\s*[cC]\\b",
+          "replacement": "$1 degré celsius"
+        },
+        {
+          "description": "[Intercepteur] Un degré fahrenheit (singulier)",
+          "pattern": "(?<!\\d)(-?1)\\s*°?\\s*[fF]\\b",
+          "replacement": "$1 degré fahrenheit"
+        },
+        {
+          "description": "[Balayeur] Degrés celsius pluriel",
+          "pattern": "(-?\\d+(?:[.,]\\d+)?)\\s*°?\\s*[cC]\\b",
+          "replacement": "$1 degrés celsius"
+        },
+        {
+          "description": "[Balayeur] Degrés fahrenheit pluriel",
+          "pattern": "(-?\\d+(?:[.,]\\d+)?)\\s*°?\\s*[fF]\\b",
+          "replacement": "$1 degrés fahrenheit"
+        },
+        {
+          "description": "[Intercepteur] Heure pile (15:00 -> 15 heures)",
+          "pattern": "\\b(\\d{1,2}):(00)\\b",
+          "replacement": "$1 heures"
+        },
+        {
+          "description": "[Intercepteur] Heure du matin (9:30 AM)",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\s*[Aa]\\.[Mm]\\.",
+          "replacement": "$1 heure $2 du matin"
+        },
+        {
+          "description": "[Intercepteur] Heure de l'après-midi (9:30 PM)",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\s*[Pp]\\.[Mm]\\.",
+          "replacement": "$1 heure $2 de l'après-midi"
+        },
+        {
+          "description": "[Balayeur] Format général HH:MM",
+          "pattern": "\\b(\\d{1,2}):(\\d{2})\\b",
+          "replacement": "$1 heure $2"
+        },
+        {
+          "description": "[Intercepteur] Date ISO (YYYY-MM-DD)",
+          "pattern": "\\b(\\d{4})-(\\d{2})-(\\d{2})\\b",
+          "replacement": "$1 $2 $3"
+        },
+        {
+          "description": "[Intercepteur] Date DD/MM/YYYY",
+          "pattern": "\\b(\\d{1,2})/(\\d{1,2})/(\\d{4})\\b",
+          "replacement": "$1 $2 $3"
+        },
+        {
+          "description": "[Intercepteur] Euro avec centimes (€5,99)",
+          "pattern": "€(\\d+),(\\d{2})\\b",
+          "replacement": "$1 euros et $2 centimes"
+        },
+        {
+          "description": "[Balayeur] Euro général (€100)",
+          "pattern": "€(\\d+(?:\\.\\d{3})*)\\b",
+          "replacement": "$1 euros"
+        },
+        {
+          "description": "[Intercepteur] Dollar avec centimes ($5,99)",
+          "pattern": "\\$(\\d+),(\\d{2})\\b",
+          "replacement": "$1 dollars et $2 centimes"
+        },
+        {
+          "description": "[Balayeur] Dollar général ($100)",
+          "pattern": "\\$(\\d+(?:\\.\\d{3})*)\\b",
+          "replacement": "$1 dollars"
+        },
+        {
+          "description": "[Intercepteur] Pourcentage décimal (50,5%)",
+          "pattern": "(?<!\\d)(\\d+[.,]\\d+)\\s*%",
+          "replacement": "$1 pour cent"
+        },
+        {
+          "description": "[Balayeur] Pourcentage général (50%)",
+          "pattern": "(?<!\\d)(\\d+)\\s*%",
+          "replacement": "$1 pour cent"
+        },
+        {
+          "description": "[Intercepteur] Décimal négatif (-3,14)",
+          "pattern": "(?<!\\d)-(\\d+),(\\d+)\\b",
+          "replacement": "moins $1 virgule $2"
+        },
+        {
+          "description": "[Balayeur] Décimal avec virgule (3,14 -> 3 virgule 14)",
+          "pattern": "(?<!\\d)(\\d+),(\\d+)\\b",
+          "replacement": "$1 virgule $2"
+        },
+        {
+          "description": "[Balayeur] Décimal avec point (3.14 -> 3 virgule 14)",
+          "pattern": "(?<!\\d)(\\d+)\\.(\\d+)\\b",
+          "replacement": "$1 virgule $2"
+        },
+        {
+          "description": "[Intercepteur] Séparateur milliers (1 000 -> 1000)",
+          "pattern": "(?<!\\d)(\\d{1,3})\\s(\\d{3})\\b",
+          "replacement": "$1$2"
+        },
+        {
+          "description": "[Intercepteur] Séparateur millions (1 000 000)",
+          "pattern": "(?<!\\d)(\\d{1,3})\\s(\\d{3})\\s(\\d{3})\\b",
+          "replacement": "$1$2$3"
+        },
+        {
+          "description": "[Intercepteur] Vitesse km/h",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*km/h\\b",
+          "replacement": "$1 kilomètres par heure"
+        },
+        {
+          "description": "[Balayeur] Kilomètres avec nombre",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*km\\b",
+          "replacement": "$1 kilomètres"
+        },
+        {
+          "description": "[Balayeur] Mètres avec nombre",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*\\bm\\b",
+          "replacement": "$1 mètres"
+        },
+        {
+          "description": "[Balayeur] Kilogrammes avec nombre",
+          "pattern": "(?<!\\d)(\\d+(?:[.,]\\d+)?)\\s*kg\\b",
+          "replacement": "$1 kilogrammes"
+        },
+        {
+          "description": "[Intercepteur] URL avec protocole",
+          "pattern": "\\bhttps?://[^\\s]+",
+          "replacement": "lien"
+        },
+        {
+          "description": "[Intercepteur] Adresse e-mail",
+          "pattern": "\\b[\\w.+-]+@[\\w.-]+\\.\\w+\\b",
+          "replacement": "adresse e-mail"
+        },
+        {
+          "description": "[Intercepteur] Numéro de téléphone international (+XX...)",
+          "pattern": "\\+\\d{1,3}[\\s-]?\\d{1,}[\\s-]?\\d{1,}",
+          "replacement": "numéro de téléphone"
+        },
+        {
+          "description": "[Balayeur] Nombres négatifs restants",
+          "pattern": "(?<!\\w)-(\\d+)\\b",
+          "replacement": "moins $1"
+        },
+        {
+          "description": "[Intercepteur] Plage d'années (2020-2025)",
+          "pattern": "\\b(\\d{4})-(\\d{4})\\b",
+          "replacement": "$1 à $2"
+        },
+        {
+          "description": "[Intercepteur] Plage numérique (5-10)",
+          "pattern": "(?<!\\d)(\\d+)-(\\d+)\\b",
+          "replacement": "$1 à $2"
+        }
+      ]
+    },
+    "layer_3_cleanup": {
+      "description": "Sanitizer: nettoyage des artefacts des Layers 1 et 2",
+      "rules": {
+        "\\s{2,}": " ",
+        "\\s+\\.": ".",
+        "\\s+,": ",",
+        "\\s+;": ";",
+        "\\s+:": ":",
+        "\\s+\\?": "?",
+        "\\s+!": "!",
+        "^\\s+": "",
+        "\\s+$": "",
+        "\\(\\s+": "(",
+        "\\s+\\)": ")"
+      }
+    }
+  }
+}
