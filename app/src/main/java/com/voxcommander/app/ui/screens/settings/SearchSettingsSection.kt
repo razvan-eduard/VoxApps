@@ -146,14 +146,15 @@ private fun CategoryNode(
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context
 ) {
-    val providerNames = remember(categoryName) {
+    var apiKeyRefreshKey by remember { mutableStateOf(0) }
+    val providerNames = remember(categoryName, apiKeyRefreshKey) {
         SearchProviderRegistry.getAvailableProviderNames(categoryName, settingsRepo)
     }
     val defaultProvider = remember(categoryName) {
         SearchProviderRegistry.getProvider(categoryName)
     }
     var expanded by remember { mutableStateOf(false) }
-    var selectedProvider by remember(categoryName) {
+    var selectedProvider by remember(categoryName, apiKeyRefreshKey) {
         mutableStateOf(defaultProvider?.name ?: providerNames.firstOrNull() ?: "")
     }
 
@@ -235,13 +236,14 @@ private fun CategoryNode(
                                 settingsRepo = settingsRepo,
                                 scope = scope,
                                 context = context,
-                                onSelect = { selectedProvider = it }
+                                onSelect = { selectedProvider = it },
+                                onApiKeyChanged = { apiKeyRefreshKey++ }
                             )
                         }
                     }
 
                     // Locked providers (require API key)
-                    val lockedProviders = remember(categoryName) {
+                    val lockedProviders = remember(categoryName, apiKeyRefreshKey) {
                         val all = SearchProviderRegistry.getProviderNames(categoryName)
                         all.filter { name ->
                             val provider = SearchProviderRegistry.getProvider(categoryName, name)
@@ -264,7 +266,8 @@ private fun CategoryNode(
                                 settingsRepo = settingsRepo,
                                 scope = scope,
                                 context = context,
-                                onSelect = { selectedProvider = it }
+                                onSelect = { selectedProvider = it },
+                                onApiKeyChanged = { apiKeyRefreshKey++ }
                             )
                         }
                     }
@@ -293,7 +296,8 @@ private fun ProviderRow(
     settingsRepo: com.voxcommander.app.data.preferences.SettingsRepository,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    onApiKeyChanged: () -> Unit = {}
 ) {
     val provider = remember(categoryName, providerName) {
         SearchProviderRegistry.getProvider(categoryName, providerName)
@@ -342,8 +346,11 @@ private fun ProviderRow(
                 value = apiKey,
                 onValueChange = {
                     apiKey = it
-                    scope.launch { settingsRepo.setSearchProviderApiKey(providerName, it.ifBlank { null }) }
+                    scope.launch {
+                    settingsRepo.setSearchProviderApiKey(providerName, it.ifBlank { null })
                     provider.setApiKey(it.ifBlank { null })
+                    onApiKeyChanged()
+                }
                 },
                 label = { Text("API Key") },
                 modifier = Modifier

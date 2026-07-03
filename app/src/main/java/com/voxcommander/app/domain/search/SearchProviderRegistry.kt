@@ -43,10 +43,18 @@ object SearchProviderRegistry {
                 val jsonText = URL(rawUrl).readText()
                 val schema = gson.fromJson(jsonText, SearchDefinitionsSchema::class.java)
                 if (schema != null && schema.categories.isNotEmpty()) {
-                    saveLocalFile(jsonText)
-                    cachedSchema = schema
-                    rebuildProviders()
-                    Logger.log("Remote search definitions parsed. Categories: ${schema.categories.map { "${it.category}(${it.providers.size})" }}", TAG)
+                    // Never downgrade — if assets has higher schema_version, use assets
+                    val assetVersion = getAssetSchemaVersion()
+                    if (assetVersion > schema.schema_version) {
+                        Logger.log("Remote schema_version=${schema.schema_version} < assets=$assetVersion — skipping remote (no downgrade)", TAG)
+                        ensureLocalFile()
+                        loadFromFilesDir()
+                    } else {
+                        saveLocalFile(jsonText)
+                        cachedSchema = schema
+                        rebuildProviders()
+                        Logger.log("Remote search definitions parsed. Categories: ${schema.categories.map { "${it.category}(${it.providers.size})" }}", TAG)
+                    }
                     true
                 } else {
                     Logger.log("Failed to parse remote search definitions", TAG)
@@ -59,6 +67,16 @@ object SearchProviderRegistry {
                 cachedSchema != null
             }
         }
+
+    private fun getAssetSchemaVersion(): Int {
+        val ctx = appContext ?: return 0
+        return try {
+            ctx.assets.open(LOCAL_FILE_NAME).use { input ->
+                val text = input.readBytes().decodeToString()
+                gson.fromJson(text, SearchDefinitionsSchema::class.java)?.schema_version ?: 0
+            }
+        } catch (e: Exception) { 0 }
+    }
 
     /**
      * Copies search_definitions.json from assets to filesDir if local is missing
@@ -78,13 +96,13 @@ object SearchProviderRegistry {
         val localVersion = if (localFile.exists()) {
             try {
                 val localSchema = gson.fromJson(localFile.readText(), SearchDefinitionsSchema::class.java)
-                localSchema?.categories?.sumOf { it.providers.size } ?: 0
+                localSchema?.schema_version ?: 0
             } catch (e: Exception) { 0 }
         } else 0
 
         val assetVersion = try {
             val assetSchema = gson.fromJson(assetText, SearchDefinitionsSchema::class.java)
-            assetSchema?.categories?.sumOf { it.providers.size } ?: 0
+            assetSchema?.schema_version ?: 0
         } catch (e: Exception) { 0 }
 
         if (!localFile.exists() || assetVersion > localVersion) {
@@ -100,7 +118,11 @@ object SearchProviderRegistry {
     private fun loadFromFilesDir() {
         val ctx = appContext ?: return
         val localFile = java.io.File(ctx.filesDir, LOCAL_FILE_NAME)
-        if (!localFile.exists()) return
+        if (!localFile.exists()) {
+            // No local file — copy from assets before loading
+            ensureLocalFile()
+            if (!localFile.exists()) return
+        }
 
         try {
             val jsonText = localFile.readText()

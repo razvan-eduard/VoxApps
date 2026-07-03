@@ -139,12 +139,14 @@ object RemoteModelRegistry {
             Logger.log("Network fetch success. Size: ${jsonText.length} chars", TAG)
             val schema = gson.fromJson(jsonText, RemoteModelSchema::class.java)
             if (schema != null) {
-                // Don't overwrite local if local schema_version is higher (e.g. newer assets than CDN cache)
-                val localSchema = cachedSchema
-                if (localSchema != null && localSchema.schema_version > schema.schema_version) {
-                    Logger.log("Local schema v${localSchema.schema_version} > remote v${schema.schema_version}, keeping local", TAG)
-                    _loadStatus.value = LoadStatus.LOADED_FROM_CACHE
-                    return@withContext true
+                // Don't downgrade — compare remote with assets (bundled in APK, always newest)
+                val assetVersion = getAssetSchemaVersion()
+                if (assetVersion > schema.schema_version) {
+                    Logger.log("Remote schema v${schema.schema_version} < assets v$assetVersion, using assets (no downgrade)", TAG)
+                    ensureLocalFile()
+                    loadFromFilesDir()
+                    _loadStatus.value = if (cachedSchema != null) LoadStatus.LOADED_FROM_CACHE else LoadStatus.NO_NETWORK
+                    return@withContext cachedSchema != null
                 }
                 saveLocalFile(jsonText)
                 cachedSchema = schema
@@ -167,6 +169,16 @@ object RemoteModelRegistry {
             _loadStatus.value = if (cachedSchema != null) LoadStatus.LOADED_FROM_CACHE else LoadStatus.NO_NETWORK
             cachedSchema != null
         }
+    }
+
+    private fun getAssetSchemaVersion(): Int {
+        val ctx = appContext ?: return 0
+        return try {
+            ctx.assets.open(LOCAL_FILE_NAME).use { input ->
+                val text = input.readBytes().decodeToString()
+                gson.fromJson(text, RemoteModelSchema::class.java)?.schema_version ?: 0
+            }
+        } catch (e: Exception) { 0 }
     }
 
     /**
@@ -210,7 +222,10 @@ object RemoteModelRegistry {
     private fun loadFromFilesDir() {
         val ctx = appContext ?: return
         val localFile = java.io.File(ctx.filesDir, LOCAL_FILE_NAME)
-        if (!localFile.exists()) return
+        if (!localFile.exists()) {
+            ensureLocalFile()
+            if (!localFile.exists()) return
+        }
         try {
             val jsonText = localFile.readText()
             cachedSchema = gson.fromJson(jsonText, RemoteModelSchema::class.java)
