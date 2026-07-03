@@ -86,8 +86,16 @@ object VoiceManager {
 
     private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
     private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
-    private const val SILENCE_THRESHOLD = 0.02f
     private const val SILENCE_TIMEOUT_MS = 2000L
+
+    private fun getSilenceThreshold(): Float {
+        val sensitivity = settingsRepo?.getSettingsSnapshot()?.sttSensitivity ?: "medium"
+        return when (sensitivity) {
+            "low" -> 0.06f    // less sensitive — ignores background noise, tapping
+            "high" -> 0.01f   // very sensitive — picks up quiet speech
+            else -> 0.03f     // medium
+        }
+    }
 
     private var googleResultCallback: ((String) -> Unit)? = null
 
@@ -187,14 +195,28 @@ object VoiceManager {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageCode)
                 }
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                // Adjust silence timeouts based on STT sensitivity
+                val (completeSilence, possiblyCompleteSilence, minLength) = when (settingsRepo?.getSettingsSnapshot()?.sttSensitivity ?: "medium") {
+                    "low" -> Triple(1500L, 1500L, 3000L)   // cuts off faster — less sensitive
+                    "high" -> Triple(5000L, 5000L, 8000L)  // waits longer — more sensitive
+                    else -> Triple(3000L, 3000L, 5000L)    // medium
+                }
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, completeSilence)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, possiblyCompleteSilence)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, minLength)
             }
             speechRecognizer?.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {}
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {
                     // SpeechRecognizer returns dB (typically 0-10)
-                    // Use calibrated noise floor if available, otherwise default threshold
-                    val silenceThreshold = if (calibratedNoiseFloor > 0f) calibratedNoiseFloor * 20f else 2f
+                    // Use calibrated noise floor if available, otherwise default based on sensitivity
+                    val baseThreshold = when (settingsRepo?.getSettingsSnapshot()?.sttSensitivity ?: "medium") {
+                        "low" -> 3f
+                        "high" -> 1f
+                        else -> 2f
+                    }
+                    val silenceThreshold = if (calibratedNoiseFloor > 0f) calibratedNoiseFloor * 20f else baseThreshold
                     val normalized = if (rmsdB < silenceThreshold) 0f
                         else ((rmsdB - silenceThreshold) / (10f - silenceThreshold)).coerceIn(0f, 1f)
                     _volumeFlow.value = normalized
@@ -375,7 +397,7 @@ object VoiceManager {
                         _volumeFlow.value = normalizedVolume
                         if (rms > maxRmsDetected) maxRmsDetected = rms
                         
-                        if (rms > SILENCE_THRESHOLD) {
+                        if (rms > getSilenceThreshold()) {
                             lastVoiceTime = System.currentTimeMillis()
                         } else if (System.currentTimeMillis() - lastVoiceTime > SILENCE_TIMEOUT_MS) {
                             Logger.log("Silence detected, stopping recording", TAG)
@@ -391,7 +413,7 @@ object VoiceManager {
                 audioRecord.release()
 
                 // Finalize STT - ONLY if we actually heard something
-                if (audioChunks.isNotEmpty() && maxRmsDetected > SILENCE_THRESHOLD) {
+                if (audioChunks.isNotEmpty() && maxRmsDetected > getSilenceThreshold()) {
                     withContext(Dispatchers.Main) { 
                         _partialTranscriptionFlow.value = "Transcribing..." 
                         _isListeningFlow.value = false 

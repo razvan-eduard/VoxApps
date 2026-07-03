@@ -68,6 +68,7 @@ class SettingsRepositoryImpl(
         val PICOVOICE_ACCESS_KEY = stringPreferencesKey("picovoice_access_key")
         val WAKE_WORD_SENSITIVITY = stringPreferencesKey("wake_word_sensitivity")
         val WAKE_WORD_AEC_ENABLED = booleanPreferencesKey("wake_word_aec_enabled")
+        val STT_SENSITIVITY = stringPreferencesKey("stt_sensitivity")
 
         // Offline fallback
         val OFFLINE_FALLBACK_TIMEOUT = intPreferencesKey("offline_fallback_timeout")
@@ -294,6 +295,7 @@ class SettingsRepositoryImpl(
             picovoiceAccessKey = prefs[Keys.PICOVOICE_ACCESS_KEY],
             wakeWordSensitivity = prefs[Keys.WAKE_WORD_SENSITIVITY] ?: "medium",
             wakeWordAecEnabled = prefs[Keys.WAKE_WORD_AEC_ENABLED] ?: false,
+            sttSensitivity = prefs[Keys.STT_SENSITIVITY] ?: "medium",
 
             offlineFallbackTimeout = prefs[Keys.OFFLINE_FALLBACK_TIMEOUT] ?: 10,
             defaultOfflineModel = prefs[Keys.DEFAULT_OFFLINE_MODEL] ?: "tiny",
@@ -486,6 +488,10 @@ class SettingsRepositoryImpl(
 
     override suspend fun setWakeWordAecEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.WAKE_WORD_AEC_ENABLED] = enabled }
+    }
+
+    override suspend fun setSttSensitivity(sensitivity: String) {
+        dataStore.edit { it[Keys.STT_SENSITIVITY] = sensitivity }
     }
 
     // --- OFFLINE FALLBACK ---

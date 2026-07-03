@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 5,
   "categories": [
     {
       "category": "weather",
@@ -15,18 +15,42 @@
           "responseType": "json",
           "fieldMappings": [
             {
-              "title": "Current Weather",
-              "content": "{condition.text}, {temp_c}C (feels like {feelslike_c}C). Humidity: {humidity}%. Wind: {wind_kph} km/h.",
+              "title": {
+                "en": "Current Weather",
+                "ro": "Vremea acum",
+                "de": "Aktuelles Wetter"
+              },
+              "content": {
+                "en": "{condition.text}, {temp_c}C (feels like {feelslike_c}C). Humidity: {humidity}%. Wind: {wind_kph} km/h.",
+                "ro": "{condition.text}, {temp_c}°C (se simte ca {feelslike_c}°C). Umiditate: {humidity}%. Vânt: {wind_kph} km/h.",
+                "de": "{condition.text}, {temp_c}°C (gefühlt wie {feelslike_c}°C). Luftfeuchtigkeit: {humidity}%. Wind: {wind_kph} km/h."
+              },
               "source": "current"
             },
             {
-              "title": "Today Forecast",
-              "content": "{condition.text}. Max: {maxtemp_c}C, Min: {mintemp_c}C. Rain chance: {daily_chance_of_rain}%.",
+              "title": {
+                "en": "Today Forecast",
+                "ro": "Prognoza azi",
+                "de": "Vorhersage heute"
+              },
+              "content": {
+                "en": "{condition.text}. Max: {maxtemp_c}C, Min: {mintemp_c}C. Rain chance: {daily_chance_of_rain}%.",
+                "ro": "{condition.text}. Max: {maxtemp_c}°C, Min: {mintemp_c}°C. Șanse de ploaie: {daily_chance_of_rain}%.",
+                "de": "{condition.text}. Max: {maxtemp_c}°C, Min: {mintemp_c}°C. Regenwahrscheinlichkeit: {daily_chance_of_rain}%."
+              },
               "source": "forecast.forecastday[0].day"
             },
             {
-              "title": "Tomorrow Forecast",
-              "content": "{condition.text}. Max: {maxtemp_c}C, Min: {mintemp_c}C. Rain chance: {daily_chance_of_rain}%.",
+              "title": {
+                "en": "Tomorrow Forecast",
+                "ro": "Prognoza mâine",
+                "de": "Vorhersage morgen"
+              },
+              "content": {
+                "en": "{condition.text}. Max: {maxtemp_c}C, Min: {mintemp_c}C. Rain chance: {daily_chance_of_rain}%.",
+                "ro": "{condition.text}. Max: {maxtemp_c}°C, Min: {mintemp_c}°C. Șanse de ploaie: {daily_chance_of_rain}%.",
+                "de": "{condition.text}. Max: {maxtemp_c}°C, Min: {mintemp_c}°C. Regenwahrscheinlichkeit: {daily_chance_of_rain}%."
+              },
               "source": "forecast.forecastday[1].day"
             }
           ]
@@ -41,25 +65,87 @@
           "resultPath": "current",
           "fieldMappings": [
             {
-              "title": "Current Weather",
-              "content": "Currently: {weather_code_text}, {temperature_2m}C (feels like {apparent_temperature}C). Humidity: {relative_humidity_2m}%. Wind: {wind_speed_10m} km/h.",
+              "title": {
+                "en": "Current Weather",
+                "ro": "Vremea acum",
+                "de": "Aktuelles Wetter"
+              },
+              "content": {
+                "en": "Currently: {weather_code_text}, {temperature_2m}C (feels like {apparent_temperature}C). Humidity: {relative_humidity_2m}%. Wind: {wind_speed_10m} km/h.",
+                "ro": "Acum: {weather_code_text}, {temperature_2m}°C (se simte ca {apparent_temperature}°C). Umiditate: {relative_humidity_2m}%. Vânt: {wind_speed_10m} km/h.",
+                "de": "Aktuell: {weather_code_text}, {temperature_2m}°C (gefühlt wie {apparent_temperature}°C). Luftfeuchtigkeit: {relative_humidity_2m}%. Wind: {wind_speed_10m} km/h."
+              },
               "source": "current"
             },
             {
-              "title": "Today Forecast",
-              "content": "Today: {weather_code_text}. High: {temperature_2m_max}C, Low: {temperature_2m_min}C. Rain chance: {precipitation_probability_max}%.",
+              "title": {
+                "en": "Today Forecast",
+                "ro": "Prognoza azi",
+                "de": "Vorhersage heute"
+              },
+              "content": {
+                "en": "Today: {weather_code_text}. High: {temperature_2m_max}C, Low: {temperature_2m_min}C. Rain chance: {precipitation_probability_max}%.",
+                "ro": "Astăzi: {weather_code_text}. Max: {temperature_2m_max}°C, Min: {temperature_2m_min}°C. Șanse de ploaie: {precipitation_probability_max}%.",
+                "de": "Heute: {weather_code_text}. Max: {temperature_2m_max}°C, Min: {temperature_2m_min}°C. Regenwahrscheinlichkeit: {precipitation_probability_max}%."
+              },
               "source": "daily",
               "index": 0
             },
             {
-              "title": "Tomorrow Forecast",
-              "content": "Tomorrow: {weather_code_text}. High: {temperature_2m_max}C, Low: {temperature_2m_min}C. Rain chance: {precipitation_probability_max}%.",
+              "title": {
+                "en": "Tomorrow Forecast",
+                "ro": "Prognoza mâine",
+                "de": "Vorhersage morgen"
+              },
+              "content": {
+                "en": "Tomorrow: {weather_code_text}. High: {temperature_2m_max}C, Low: {temperature_2m_min}C. Rain chance: {precipitation_probability_max}%.",
+                "ro": "Mâine: {weather_code_text}. Max: {temperature_2m_max}°C, Min: {temperature_2m_min}°C. Șanse de ploaie: {precipitation_probability_max}%.",
+                "de": "Morgen: {weather_code_text}. Max: {temperature_2m_max}°C, Min: {temperature_2m_min}°C. Regenwahrscheinlichkeit: {precipitation_probability_max}%."
+              },
               "source": "daily",
               "index": 1
             }
           ],
           "valueTransforms": {
             "weather_code": "weather_code_text"
+          },
+          "weatherCodeMap": {
+            "en": {
+              "0": "Clear sky", "1": "Partly cloudy", "2": "Partly cloudy", "3": "Partly cloudy",
+              "45": "Foggy", "48": "Foggy",
+              "51": "Drizzle", "53": "Drizzle", "55": "Drizzle",
+              "56": "Freezing drizzle", "57": "Freezing drizzle",
+              "61": "Rain", "63": "Rain", "65": "Rain",
+              "66": "Freezing rain", "67": "Freezing rain",
+              "71": "Snow", "73": "Snow", "75": "Snow", "77": "Snow grains",
+              "80": "Rain showers", "81": "Rain showers", "82": "Rain showers",
+              "85": "Snow showers", "86": "Snow showers",
+              "95": "Thunderstorm", "96": "Thunderstorm with hail", "99": "Thunderstorm with hail"
+            },
+            "ro": {
+              "0": "Cer senin", "1": "Parțial noros", "2": "Parțial noros", "3": "Parțial noros",
+              "45": "Ceață", "48": "Ceață",
+              "51": "Burniță", "53": "Burniță", "55": "Burniță",
+              "56": "Burniță cu gheață", "57": "Burniță cu gheață",
+              "61": "Ploaie", "63": "Ploaie", "65": "Ploaie",
+              "66": "Ploaie cu gheață", "67": "Ploaie cu gheață",
+              "71": "Zăpadă", "73": "Zăpadă", "75": "Zăpadă", "77": "Grăunți de zăpadă",
+              "80": "Averse de ploaie", "81": "Averse de ploaie", "82": "Averse de ploaie",
+              "85": "Averse de zăpadă", "86": "Averse de zăpadă",
+              "95": "Furtună", "96": "Furtună cu grindină", "99": "Furtună cu grindină"
+            },
+            "de": {
+              "0": "Klarer Himmel", "1": "Teilweise bewölkt", "2": "Teilweise bewölkt", "3": "Teilweise bewölkt",
+              "45": "Nebelig", "48": "Nebelig",
+              "51": "Nieselregen", "53": "Nieselregen", "55": "Nieselregen",
+              "56": "Gefrierender Nieselregen", "57": "Gefrierender Nieselregen",
+              "61": "Regen", "63": "Regen", "65": "Regen",
+              "66": "Gefrierender Regen", "67": "Gefrierender Regen",
+              "71": "Schnee", "73": "Schnee", "75": "Schnee", "77": "Schneegriesel",
+              "80": "Regenschauer", "81": "Regenschauer", "82": "Regenschauer",
+              "85": "Schneeschauer", "86": "Schneeschauer",
+              "95": "Gewitter", "96": "Gewitter mit Hagel", "99": "Gewitter mit Hagel"
+            }
           }
         }
       ]

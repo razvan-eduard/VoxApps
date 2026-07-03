@@ -40,6 +40,7 @@ data class AppSettings(
     val picovoiceAccessKey: String? = null,
     val wakeWordSensitivity: String = "medium", // "low", "medium", "high"
     val wakeWordAecEnabled: Boolean = false, // AEC for wake word during media/TTS playback
+    val sttSensitivity: String = "medium", // "low", "medium", "high" — microphone sensitivity for STT listening
 
     // --- OFFLINE FALLBACK ---
     val offlineFallbackTimeout: Int = 10,

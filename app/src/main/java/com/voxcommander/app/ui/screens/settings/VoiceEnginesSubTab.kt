@@ -322,6 +322,35 @@ fun VoiceEnginesSubTab(
         )
     }
 
+    // --- MICROPHONE SENSITIVITY ---
+    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+    Text(
+        text = languageManager.getString("stt_sensitivity_label") ?: "Microphone Sensitivity",
+        style = MaterialTheme.typography.labelLarge
+    )
+    Text(
+        text = languageManager.getString("stt_sensitivity_desc") ?: "Adjust how sensitive the microphone is when listening for commands",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        val sttLevels = listOf("low", "medium", "high")
+        val sttLabels = listOf(
+            languageManager.getString("stt_sensitivity_low") ?: "Low",
+            languageManager.getString("stt_sensitivity_medium") ?: "Medium",
+            languageManager.getString("stt_sensitivity_high") ?: "High"
+        )
+        sttLevels.forEachIndexed { idx, level ->
+            FilterChip(
+                selected = uiState.sttSensitivity == level,
+                onClick = { appStateManager.setSttSensitivity(level) },
+                label = { Text(sttLabels[idx]) }
+            )
+        }
+    }
+
     // --- DOWNLOAD GUARD DIALOGS ---
     if (showMeteredWarning) {
         AlertDialog(

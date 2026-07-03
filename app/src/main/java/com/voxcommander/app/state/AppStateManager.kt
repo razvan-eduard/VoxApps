@@ -292,6 +292,10 @@ class AppStateManager private constructor(
         scope.launch { repo.setWakeWordAecEnabled(enabled) }
     }
 
+    fun setSttSensitivity(sensitivity: String) {
+        scope.launch { repo.setSttSensitivity(sensitivity) }
+    }
+
     fun setCloudIntelligenceEnabled(enabled: Boolean) {
         scope.launch { repo.setCloudIntelligenceEnabled(enabled) }
     }

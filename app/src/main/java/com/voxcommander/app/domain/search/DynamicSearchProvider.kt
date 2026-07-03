@@ -68,15 +68,32 @@ data class ProviderDefinition(
     // Custom User-Agent (some APIs like Wikipedia require a descriptive UA)
     val userAgent: String? = null,
     // Language format: "short" (default, e.g. "ro"), "region-lang" (e.g. "ro-ro")
-    val langFormat: String? = null
+    val langFormat: String? = null,
+    // Weather code map for Open-Meteo style numeric codes: Map<lang, Map<code, text>>
+    val weatherCodeMap: Map<String, Map<String, String>>? = null
 )
 
 data class FieldMapping(
-    val title: String,
-    val content: String,
+    val title: Any? = null,
+    val content: Any? = null,
     val source: String = "",
     val index: Int = -1
-)
+) {
+    fun resolveTitle(lang: String): String = resolveLocalized(title, lang)
+    fun resolveContent(lang: String): String = resolveLocalized(content, lang)
+
+    private fun resolveLocalized(value: Any?, lang: String): String {
+        return when (value) {
+            is String -> value
+            is Map<*, *> -> {
+                @Suppress("UNCHECKED_CAST")
+                val map = value as Map<String, String>
+                map[lang] ?: map["en"] ?: map.values.firstOrNull() ?: ""
+            }
+            else -> ""
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // DynamicSearchProvider — one class handles all providers from JSON
@@ -100,19 +117,6 @@ class DynamicSearchProvider(
                 .followRedirects(true)
                 .build()
         }
-
-        private val WEATHER_CODES = mapOf(
-            0 to "Clear sky", 1 to "Partly cloudy", 2 to "Partly cloudy", 3 to "Partly cloudy",
-            45 to "Foggy", 48 to "Foggy",
-            51 to "Drizzle", 53 to "Drizzle", 55 to "Drizzle",
-            56 to "Freezing drizzle", 57 to "Freezing drizzle",
-            61 to "Rain", 63 to "Rain", 65 to "Rain",
-            66 to "Freezing rain", 67 to "Freezing rain",
-            71 to "Snow", 73 to "Snow", 75 to "Snow", 77 to "Snow grains",
-            80 to "Rain showers", 81 to "Rain showers", 82 to "Rain showers",
-            85 to "Snow showers", 86 to "Snow showers",
-            95 to "Thunderstorm", 96 to "Thunderstorm with hail", 99 to "Thunderstorm with hail"
-        )
     }
 
     val category: String get() = categoryName
@@ -125,11 +129,13 @@ class DynamicSearchProvider(
     private var currentLang: String = "en"
 
     fun setApiKey(key: String?) { apiKey = key }
+    fun hasApiKey(): Boolean = !apiKey.isNullOrBlank()
 
     suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {
         try {
             val url = if (def.method == "GET" && def.queryTemplate != null) {
-                buildUrl("test", null, null)
+                if (def.requiresLocation) buildUrl("test", 44.43, 26.10)
+                else buildUrl("test", null, null)
             } else {
                 def.endpoint
             }
@@ -297,8 +303,8 @@ class DynamicSearchProvider(
                 JsonObjectWrapper(sourceObj.asJsonObject)
             } else continue
 
-            val title = mapping.title
-            val content = applyTemplate(mapping.content, fieldSource)
+            val title = mapping.resolveTitle(currentLang)
+            val content = applyTemplate(mapping.resolveContent(currentLang), fieldSource)
             results.add(SearchResult(title, "", content, def.name.lowercase().replace(" ", "_")))
         }
 
@@ -475,7 +481,9 @@ class DynamicSearchProvider(
             val value = source.get(sourceField) ?: ""
             // Apply transform if one was defined for this field
             if (transformReverse.containsKey(placeholder) && sourceField == "weather_code") {
-                WEATHER_CODES[value.toIntOrNull() ?: 0] ?: value
+                val codeMap = def.weatherCodeMap
+                val langMap = codeMap?.get(currentLang) ?: codeMap?.get("en")
+                langMap?.get(value) ?: value
             } else {
                 value
             }
