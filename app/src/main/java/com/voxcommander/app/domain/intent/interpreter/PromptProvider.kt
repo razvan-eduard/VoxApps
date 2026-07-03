@@ -19,6 +19,8 @@ object PromptProvider {
     private const val PLACEHOLDER_TEXT = "\${spokenText}"
     private const val PLACEHOLDER_APPS = "\${installedApps}"
     private const val PLACEHOLDER_SEARCH = "\${searchProviders}"
+    private const val PLACEHOLDER_DOMAINS = "\${domains}"
+    private const val PLACEHOLDER_ACTIONS = "\${actions}"
 
     /**
      * Returns only the system instructions (without the input line).
@@ -35,6 +37,8 @@ object PromptProvider {
             template.replace(PLACEHOLDER_TEXT, "")
         }
         return systemPart
+            .replace(PLACEHOLDER_DOMAINS, IntentTaxonomy.Domains.ALL.joinToString(", ") { "\"$it\"" })
+            .replace(PLACEHOLDER_ACTIONS, IntentTaxonomy.Actions.ALL.joinToString(", ") { "\"$it\"" })
             .replace(PLACEHOLDER_APPS, buildAppsSection(settings))
             .replace(PLACEHOLDER_SEARCH, buildSearchSection(settingsRepo))
             .plus(langHint)

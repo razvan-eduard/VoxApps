@@ -67,6 +67,7 @@ class SettingsRepositoryImpl(
         val WAKE_WORD_ENGINE_TYPE = stringPreferencesKey("wake_word_engine_type")
         val PICOVOICE_ACCESS_KEY = stringPreferencesKey("picovoice_access_key")
         val WAKE_WORD_SENSITIVITY = stringPreferencesKey("wake_word_sensitivity")
+        val WAKE_WORD_AEC_ENABLED = booleanPreferencesKey("wake_word_aec_enabled")
 
         // Offline fallback
         val OFFLINE_FALLBACK_TIMEOUT = intPreferencesKey("offline_fallback_timeout")
@@ -138,6 +139,10 @@ class SettingsRepositoryImpl(
 
         // App Aliases
         val APP_ALIAS_RULES_JSON = stringPreferencesKey("app_alias_rules_json")
+
+        // Manual location fallback (stored as strings since DataStore has no doublePreferencesKey)
+        val MANUAL_LOCATION_LAT = stringPreferencesKey("manual_location_lat")
+        val MANUAL_LOCATION_LON = stringPreferencesKey("manual_location_lon")
     }
 
     private val TAG = "SettingsRepository"
@@ -288,6 +293,7 @@ class SettingsRepositoryImpl(
             wakeWordEngineType = normalizeEngineKey(prefs[Keys.WAKE_WORD_ENGINE_TYPE] ?: RemoteModelRegistry.getDefaultWakeWordEngineKey()),
             picovoiceAccessKey = prefs[Keys.PICOVOICE_ACCESS_KEY],
             wakeWordSensitivity = prefs[Keys.WAKE_WORD_SENSITIVITY] ?: "medium",
+            wakeWordAecEnabled = prefs[Keys.WAKE_WORD_AEC_ENABLED] ?: false,
 
             offlineFallbackTimeout = prefs[Keys.OFFLINE_FALLBACK_TIMEOUT] ?: 10,
             defaultOfflineModel = prefs[Keys.DEFAULT_OFFLINE_MODEL] ?: "tiny",
@@ -336,7 +342,9 @@ class SettingsRepositoryImpl(
             ttsPitch = prefs[Keys.TTS_PITCH] ?: 1.0f,
             ttsAudioFocusMode = prefs[Keys.TTS_AUDIO_FOCUS_MODE] ?: "duck",
             overlayTextSize = prefs[Keys.OVERLAY_TEXT_SIZE] ?: 1.0f,
-            appAliasRules = parseAppAliasRules(prefs[Keys.APP_ALIAS_RULES_JSON])
+            appAliasRules = parseAppAliasRules(prefs[Keys.APP_ALIAS_RULES_JSON]),
+            manualLocationLat = prefs[Keys.MANUAL_LOCATION_LAT]?.toDoubleOrNull(),
+            manualLocationLon = prefs[Keys.MANUAL_LOCATION_LON]?.toDoubleOrNull()
         )
     }
 
@@ -474,6 +482,10 @@ class SettingsRepositoryImpl(
 
     override suspend fun setWakeWordSensitivity(sensitivity: String) {
         dataStore.edit { it[Keys.WAKE_WORD_SENSITIVITY] = sensitivity }
+    }
+
+    override suspend fun setWakeWordAecEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.WAKE_WORD_AEC_ENABLED] = enabled }
     }
 
     // --- OFFLINE FALLBACK ---
@@ -829,6 +841,19 @@ class SettingsRepositoryImpl(
     override suspend fun setAppAliasRules(rules: List<AppAliasRule>) {
         dataStore.edit { prefs ->
             prefs[Keys.APP_ALIAS_RULES_JSON] = gson.toJson(rules)
+        }
+    }
+
+    // --- MANUAL LOCATION ---
+    override fun getManualLocationLatSync(): Double? = runBlocking { dataStore.data.first()[Keys.MANUAL_LOCATION_LAT]?.toDoubleOrNull() }
+    override fun getManualLocationLonSync(): Double? = runBlocking { dataStore.data.first()[Keys.MANUAL_LOCATION_LON]?.toDoubleOrNull() }
+
+    override suspend fun setManualLocation(lat: Double?, lon: Double?) {
+        dataStore.edit { prefs ->
+            if (lat != null) prefs[Keys.MANUAL_LOCATION_LAT] = lat.toString()
+            else prefs.remove(Keys.MANUAL_LOCATION_LAT)
+            if (lon != null) prefs[Keys.MANUAL_LOCATION_LON] = lon.toString()
+            else prefs.remove(Keys.MANUAL_LOCATION_LON)
         }
     }
 }

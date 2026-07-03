@@ -39,6 +39,7 @@ data class AppSettings(
     val wakeWordEngineType: String = "vosk",
     val picovoiceAccessKey: String? = null,
     val wakeWordSensitivity: String = "medium", // "low", "medium", "high"
+    val wakeWordAecEnabled: Boolean = false, // AEC for wake word during media/TTS playback
 
     // --- OFFLINE FALLBACK ---
     val offlineFallbackTimeout: Int = 10,
@@ -111,6 +112,10 @@ data class AppSettings(
 
     // --- APP ALIASES ---
     val appAliasRules: List<AppAliasRule> = emptyList(),
+
+    // --- MANUAL LOCATION (fallback when GPS/network unavailable) ---
+    val manualLocationLat: Double? = null,
+    val manualLocationLon: Double? = null,
 
 ) {
     /**

@@ -137,6 +137,8 @@
   "service_settings_section": "Service Settings",
   "wake_word_enabled": "Enable Wake Word",
   "command_queue_enabled": "Command Queue (chain commands)",
+  "ww_aec_label": "Echo Cancellation (AEC)",
+  "ww_aec_desc": "Allows wake word during TTS/music playback",
   "ww_calibrate_title": "Voice Calibration",
   "ww_sensitivity_label": "Wake Word Sensitivity",
   "ww_sensitivity_desc": "Adjust how easily the wake word triggers",

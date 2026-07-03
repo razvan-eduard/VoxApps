@@ -53,8 +53,8 @@ fun SpeakingOverlay(
         val effectiveRate = speechRate * speedMultiplier
         val words = if (text.isNotEmpty()) text.split(" ").size else 1
         val estimatedDurationMs = (words * 400f / effectiveRate).toInt().coerceAtLeast(500)
-        // ~40 chars per line at bodyMedium in a 0.7-width overlay
-        val charsPerLine = 40
+        // Chars per line scales inversely with overlayTextSize (bigger text = fewer chars per line)
+        val charsPerLine = (40 / overlayTextSize).toInt().coerceAtLeast(10)
         val compactMaxLines = 5
         val expandAtLine = 4
         val totalLines = if (text.isNotEmpty()) (text.length + charsPerLine - 1) / charsPerLine else 1
@@ -64,9 +64,14 @@ fun SpeakingOverlay(
         var currentLine by remember { mutableFloatStateOf(0f) }
         var isExpanded by remember { mutableStateOf(false) }
 
-        LaunchedEffect(text, speedMultiplier) {
+        // Reset state only when text changes (not on speed change)
+        LaunchedEffect(text) {
             currentLine = 0f
             isExpanded = false
+        }
+
+        // Timer + speed control — restarts on text OR speed change, but keeps isExpanded
+        LaunchedEffect(text, speedMultiplier) {
             if (text.isNotEmpty() && needsExpand) {
                 val startTime = System.currentTimeMillis()
                 while (System.currentTimeMillis() - startTime < estimatedDurationMs) {
@@ -83,9 +88,14 @@ fun SpeakingOverlay(
             }
         }
 
-        // Apply speed multiplier to TTS engine
+        // Apply speed multiplier to TTS engine (handles stop/re-speak internally)
+        // Skip initial value to avoid setting rate when overlay first appears
+        var hasSpeedChanged by remember { mutableStateOf(false) }
         LaunchedEffect(speedMultiplier) {
-            TtsManager.setRuntimeSpeechRate(speedMultiplier)
+            if (hasSpeedChanged) {
+                TtsManager.setRuntimeSpeechRate(speedMultiplier)
+            }
+            hasSpeedChanged = true
         }
 
         val cornerRadius by animateDpAsState(
@@ -129,6 +139,7 @@ fun SpeakingOverlay(
                                 currentLine = currentLine,
                                 isExpanded = true,
                                 textStyle = dynamicTextStyle,
+                                overlayTextSize = overlayTextSize,
                                 modifier = Modifier.weight(1f)
                             )
                         } else {
@@ -137,6 +148,7 @@ fun SpeakingOverlay(
                                 currentLine = currentLine,
                                 isExpanded = false,
                                 textStyle = dynamicTextStyle,
+                                overlayTextSize = overlayTextSize,
                                 modifier = Modifier
                             )
                         }
@@ -248,21 +260,22 @@ private fun TeleprompterText(
     currentLine: Float,
     isExpanded: Boolean,
     textStyle: TextStyle,
+    overlayTextSize: Float = 1.0f,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
 
+    // Line height scales with overlayTextSize
+    val lineHeightDp = 18f * overlayTextSize
+    val visibleLines = 4f
+
     // Scroll follows the current TTS line position when expanded
     // Keep the current line visible but don't scroll past it — subtract lines already visible
     LaunchedEffect(currentLine, isExpanded) {
         if (isExpanded && currentLine > 0) {
-            // Only scroll when we're past the first visible screenful (~4 lines)
-            // and scroll just enough to keep current line near top, not past it
-            val visibleLines = 4f
             val scrollLine = (currentLine - visibleLines).coerceAtLeast(0f)
-            // ~18dp per line at bodyMedium
-            val targetPx = with(density) { (scrollLine * 18).dp.toPx() }.toInt()
+            val targetPx = with(density) { (scrollLine * lineHeightDp).dp.toPx() }.toInt()
             val maxScroll = scrollState.maxValue
             scrollState.animateScrollTo(
                 value = targetPx.coerceAtMost(maxScroll),
@@ -282,13 +295,14 @@ private fun TeleprompterText(
             overflow = TextOverflow.Visible
         )
     } else {
+        val compactMaxLines = (5 / overlayTextSize).toInt().coerceIn(2, 5)
         Text(
             text = text,
             style = textStyle,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = modifier
                 .padding(horizontal = 6.dp),
-            maxLines = 5,
+            maxLines = compactMaxLines,
             overflow = TextOverflow.Ellipsis
         )
     }

@@ -191,7 +191,7 @@ object TtsManager {
     /**
      * Dynamically changes TTS speech rate during playback (e.g. from overlay speed control).
      * Does NOT persist to settings — only affects current playback session.
-     * When TTS stops, the next speak() will use the settings-based rate.
+     * Sentences are queued one at a time, so the new rate takes effect at the next sentence boundary.
      */
     fun setRuntimeSpeechRate(multiplier: Float) {
         val newRate = (speechRate * multiplier)

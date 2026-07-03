@@ -58,6 +58,7 @@ interface SettingsRepository {
     fun getPicovoiceAccessKeySync(): String?
     suspend fun setPicovoiceAccessKey(key: String?)
     suspend fun setWakeWordSensitivity(sensitivity: String)
+    suspend fun setWakeWordAecEnabled(enabled: Boolean)
 
     // --- OFFLINE FALLBACK ---
     suspend fun setOfflineFallbackTimeout(seconds: Int)
@@ -141,4 +142,9 @@ interface SettingsRepository {
 
     // --- APP ALIASES ---
     suspend fun setAppAliasRules(rules: List<AppAliasRule>)
+
+    // --- MANUAL LOCATION ---
+    fun getManualLocationLatSync(): Double?
+    fun getManualLocationLonSync(): Double?
+    suspend fun setManualLocation(lat: Double?, lon: Double?)
 }

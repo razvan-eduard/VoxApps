@@ -3,8 +3,34 @@
   "categories": [
     {
       "category": "weather",
-      "defaultProvider": "Open-Meteo",
+      "defaultProvider": "WeatherAPI",
       "providers": [
+        {
+          "name": "WeatherAPI",
+          "endpoint": "https://api.weatherapi.com/v1/forecast.json",
+          "method": "GET",
+          "requiresLocation": true,
+          "requiresApiKey": true,
+          "queryTemplate": "?key={apiKey}&q={lat},{lon}&days=2&lang={lang}",
+          "responseType": "json",
+          "fieldMappings": [
+            {
+              "title": "Current Weather",
+              "content": "{condition.text}, {temp_c}C (feels like {feelslike_c}C). Humidity: {humidity}%. Wind: {wind_kph} km/h.",
+              "source": "current"
+            },
+            {
+              "title": "Today Forecast",
+              "content": "{condition.text}. Max: {maxtemp_c}C, Min: {mintemp_c}C. Rain chance: {daily_chance_of_rain}%.",
+              "source": "forecast.forecastday[0].day"
+            },
+            {
+              "title": "Tomorrow Forecast",
+              "content": "{condition.text}. Max: {maxtemp_c}C, Min: {mintemp_c}C. Rain chance: {daily_chance_of_rain}%.",
+              "source": "forecast.forecastday[1].day"
+            }
+          ]
+        },
         {
           "name": "Open-Meteo",
           "endpoint": "https://api.open-meteo.com/v1/forecast",
@@ -79,7 +105,7 @@
           "extractEndpoint": "https://{lang}.wikipedia.org/w/api.php?action=query&titles={title}&prop=extracts&exintro=true&explaintext=true&format=json",
           "extractPath": "query.pages",
           "extractField": "extract",
-          "extractMaxChars": 500
+          "extractMaxChars": 10000
         }
       ]
     },
@@ -178,7 +204,7 @@
           "extractEndpoint": "https://{lang}.wikipedia.org/w/api.php?action=query&titles={title}&prop=extracts&exintro=true&explaintext=true&format=json",
           "extractPath": "query.pages",
           "extractField": "extract",
-          "extractMaxChars": 500
+          "extractMaxChars": 10000
         }
       ]
     }

@@ -165,8 +165,10 @@ class PorcupineWakeWordEngine(
             }
 
             audioRecord?.release()
+            val aecEnabled = appStateManager.uiState.value.wakeWordAecEnabled
+            val audioSource = if (aecEnabled) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION
             audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                audioSource,
                 sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,

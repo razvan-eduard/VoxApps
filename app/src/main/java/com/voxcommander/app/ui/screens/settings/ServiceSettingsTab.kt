@@ -207,6 +207,26 @@ fun ServiceSettingsTab(
             )
         }
 
+        // --- COMMON: AEC Toggle ---
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(languageManager.getString("ww_aec_label") ?: "Echo Cancellation (AEC)")
+                Text(
+                    text = languageManager.getString("ww_aec_desc") ?: "Allows wake word during TTS/music playback",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = uiState.wakeWordAecEnabled,
+                onCheckedChange = { appStateManager.setWakeWordAecEnabled(it) }
+            )
+        }
+
         // Picovoice AccessKey input (only for engines that require it)
         if (requiresApiKey) {
             Spacer(modifier = Modifier.height(4.dp))

@@ -27,6 +27,13 @@ class AndroidTtsEngine : ITtsEngine {
 
     private val utteranceCallbacks = mutableMapOf<String, (() -> Unit)>()
 
+    // Sentence-by-sentence queue: only the current sentence is in the TTS queue,
+    // so setSpeechRate() applies to the next sentence before it's queued.
+    private var pendingSentences: List<String> = emptyList()
+    private var currentSentenceIdx: Int = 0
+    private var currentBaseId: String = ""
+    private var currentOnDone: (() -> Unit)? = null
+
     override fun initialize(context: Context, language: String): Boolean {
         currentLanguage = language
         ready = false
@@ -54,6 +61,7 @@ class AndroidTtsEngine : ITtsEngine {
                         utteranceId?.let { id ->
                             utteranceCallbacks.remove(id)?.invoke()
                         }
+                        queueNextSentence()
                     }
 
                     @Deprecated("Deprecated in Java")
@@ -62,6 +70,7 @@ class AndroidTtsEngine : ITtsEngine {
                         utteranceId?.let { id ->
                             utteranceCallbacks.remove(id)?.invoke()
                         }
+                        queueNextSentence()
                     }
                 })
 
@@ -92,19 +101,57 @@ class AndroidTtsEngine : ITtsEngine {
             return
         }
 
-        val id = utteranceId ?: "tts_${System.currentTimeMillis()}"
-        if (onDone != null) {
-            utteranceCallbacks[id] = onDone
+        val baseId = utteranceId ?: "tts_${System.currentTimeMillis()}"
+
+        // Split text into sentences — we queue them one at a time so that
+        // setSpeechRate() called mid-playback applies to the next sentence.
+        val sentences = text.split("(?<=[.!?])\\s+".toRegex()).filter { it.isNotBlank() }
+        if (sentences.isEmpty()) {
+            // Fallback: single utterance with QUEUE_FLUSH
+            if (onDone != null) utteranceCallbacks[baseId] = onDone
+            tts?.setSpeechRate(speechRate)
+            tts?.setPitch(pitch)
+            val result = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, baseId)
+            if (result != TextToSpeech.SUCCESS) {
+                Logger.log("TTS speak failed with result=$result", TAG)
+                utteranceCallbacks.remove(baseId)?.invoke()
+            }
+            return
         }
 
+        pendingSentences = sentences
+        currentSentenceIdx = 0
+        currentBaseId = baseId
+        currentOnDone = onDone
+        queueNextSentence()
+    }
+
+    private fun queueNextSentence() {
+        if (currentSentenceIdx >= pendingSentences.size) {
+            currentOnDone = null
+            return
+        }
+        val idx = currentSentenceIdx
+        val sentence = pendingSentences[idx].trim()
+        val chunkId = "${currentBaseId}_$idx"
+        val isLast = idx == pendingSentences.lastIndex
+
+        // Apply current speechRate before each sentence — this is the key:
+        // if setSpeechRate() was called mid-playback, the new rate takes effect now.
         tts?.setSpeechRate(speechRate)
         tts?.setPitch(pitch)
 
-        val result = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
-        if (result != TextToSpeech.SUCCESS) {
-            Logger.log("TTS speak failed with result=$result", TAG)
-            utteranceCallbacks.remove(id)?.invoke()
+        if (isLast) {
+            currentOnDone?.let { utteranceCallbacks[chunkId] = it }
         }
+
+        val mode = if (idx == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+        val result = tts?.speak(sentence, mode, null, chunkId)
+        if (result != TextToSpeech.SUCCESS) {
+            Logger.log("TTS speak chunk $idx failed with result=$result", TAG)
+            utteranceCallbacks.remove(chunkId)?.invoke()
+        }
+        currentSentenceIdx++
     }
 
     override fun stop() {
@@ -112,6 +159,9 @@ class AndroidTtsEngine : ITtsEngine {
         utteranceCallbacks.clear()
         pendingText = null
         pendingOnDone = null
+        pendingSentences = emptyList()
+        currentSentenceIdx = 0
+        currentOnDone = null
     }
 
     override fun isSpeaking(): Boolean {

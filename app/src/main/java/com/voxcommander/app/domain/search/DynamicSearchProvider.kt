@@ -288,19 +288,14 @@ class DynamicSearchProvider(
         val results = mutableListOf<SearchResult>()
 
         for (mapping in def.fieldMappings!!) {
-            val sourceObj = if (mapping.source == "current") {
-                root.getAsJsonObject("current")
-            } else if (mapping.source == "daily") {
-                root.getAsJsonObject("daily")
-            } else null ?: continue
+            val sourceObj = resolveJsonPath(root, mapping.source) ?: continue
 
-            // For array sources (daily), pick the element at index
-            val fieldSource = if (mapping.index >= 0) {
-                // It's an array — we need to get element at index from each field
-                DailyElementWrapper(sourceObj, mapping.index)
-            } else {
-                JsonObjectWrapper(sourceObj)
-            }
+            // If index >= 0, each field in sourceObj is an array — pick element at index (Open-Meteo daily style)
+            val fieldSource: FieldSource = if (mapping.index >= 0 && sourceObj.isJsonObject) {
+                DailyElementWrapper(sourceObj.asJsonObject, mapping.index)
+            } else if (sourceObj.isJsonObject) {
+                JsonObjectWrapper(sourceObj.asJsonObject)
+            } else continue
 
             val title = mapping.title
             val content = applyTemplate(mapping.content, fieldSource)
@@ -308,6 +303,31 @@ class DynamicSearchProvider(
         }
 
         return results
+    }
+
+    /**
+     * Resolves a JSON path like "forecast.forecastday[0].day" from a root object.
+     * Supports dot notation and array indexing.
+     */
+    private fun resolveJsonPath(root: com.google.gson.JsonElement, path: String): com.google.gson.JsonElement? {
+        var current: com.google.gson.JsonElement = root
+        val parts = path.split('.')
+        for (part in parts) {
+            // Extract array index if present (e.g. "forecastday[0]")
+            val arrayMatch = Regex("^(\\w+)\\[(\\d+)]$").matchEntire(part)
+            if (arrayMatch != null) {
+                val key = arrayMatch.groupValues[1]
+                val idx = arrayMatch.groupValues[2].toInt()
+                if (!current.isJsonObject) return null
+                val arr = current.asJsonObject.get(key) ?: return null
+                if (!arr.isJsonArray || idx >= arr.asJsonArray.size()) return null
+                current = arr.asJsonArray[idx]
+            } else {
+                if (!current.isJsonObject) return null
+                current = current.asJsonObject.get(part) ?: return null
+            }
+        }
+        return current
     }
 
     private fun parseJsonWithSimpleFields(
@@ -352,7 +372,7 @@ class DynamicSearchProvider(
             if (def.followUpExtract && def.extractEndpoint != null && title.isNotBlank()) {
                 val extract = fetchExtract(title, currentLang)
                 if (extract.isNotBlank()) {
-                    content = extract.take(def.extractMaxChars)
+                    content = truncateAtBoundary(extract, def.extractMaxChars)
                 }
             }
 
@@ -384,13 +404,33 @@ class DynamicSearchProvider(
             if (pages.size() == 0) return ""
 
             val firstPage = pages.getAsJsonObject(pages.keySet().first())
-            firstPage.get(def.extractField ?: "extract")?.asString?.take(def.extractMaxChars) ?: ""
+            firstPage.get(def.extractField ?: "extract")?.asString?.let { truncateAtBoundary(it, def.extractMaxChars) } ?: ""
         } catch (e: Exception) {
             ""
         }
     }
 
     // --- Helpers ---
+
+    /**
+     * Truncates text to maxChars, breaking at the last sentence boundary (. ! ?)
+     * within the limit. Falls back to last word boundary, or hard cut if no space found.
+     */
+    private fun truncateAtBoundary(text: String, maxChars: Int): String {
+        if (text.length <= maxChars) return text
+        val sub = text.substring(0, maxChars)
+        // Try last sentence boundary
+        val sentenceEnd = sub.lastIndexOfAny(charArrayOf('.', '!', '?'))
+        if (sentenceEnd > maxChars * 0.5) {
+            return sub.substring(0, sentenceEnd + 1).trim()
+        }
+        // Fall back to last word boundary
+        val wordEnd = sub.lastIndexOf(' ')
+        if (wordEnd > 0) {
+            return sub.substring(0, wordEnd).trim() + "…"
+        }
+        return sub.trim()
+    }
 
     private fun safeGroup(matcher: java.util.regex.Matcher, group: Int): String {
         return try { matcher.group(group) ?: "" } catch (e: Exception) { "" }
@@ -450,7 +490,20 @@ class DynamicSearchProvider(
     }
 
     private class JsonObjectWrapper(private val obj: com.google.gson.JsonObject) : FieldSource {
-        override fun get(field: String): String? = obj.get(field)?.asString
+        override fun get(field: String): String? {
+            // Support dot notation for nested fields (e.g. condition.text)
+            if (field.contains('.')) {
+                val parts = field.split('.')
+                var current: com.google.gson.JsonElement = obj
+                for (part in parts) {
+                    if (current.isJsonObject) {
+                        current = current.asJsonObject.get(part) ?: return null
+                    } else return null
+                }
+                return current.asString
+            }
+            return obj.get(field)?.asString
+        }
     }
 
     private class DailyElementWrapper(

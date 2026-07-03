@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.main
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +30,11 @@ fun ListeningScreen(
     val isListening by VoiceManager.isListeningFlow.collectAsStateWithLifecycle()
     val partialTranscription by VoiceManager.partialTranscriptionFlow.collectAsStateWithLifecycle()
     val volume by VoiceManager.volumeFlow.collectAsStateWithLifecycle()
+    val animatedVolume by animateFloatAsState(
+        targetValue = volume,
+        animationSpec = tween(durationMillis = 100),
+        label = "volume"
+    )
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
     if (isListening) {
@@ -57,10 +64,10 @@ fun ListeningScreen(
                         // Pulsing Volume indicator ring
                         Surface(
                             modifier = Modifier.size(
-                                (80 + (volume * 60)).dp
+                                (80 + (animatedVolume * 60)).dp
                             ),
                             color = MaterialTheme.colorScheme.primary.copy(
-                                alpha = (0.1f + (volume * 0.4f)).coerceIn(0.1f, 0.5f)
+                                alpha = (0.1f + (animatedVolume * 0.4f)).coerceIn(0.1f, 0.5f)
                             ),
                             shape = RoundedCornerShape(100.dp)
                         ) {}

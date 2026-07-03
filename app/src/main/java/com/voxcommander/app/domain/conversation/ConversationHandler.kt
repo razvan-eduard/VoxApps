@@ -94,7 +94,14 @@ object ConversationHandler {
 
         Logger.log("Barge-in! Stopping TTS playback", TAG)
         TtsManager.stop()
-        stateMachine.transitionTo(ConversationState.BARGE_IN)
+        stateMachine.transitionTo(ConversationState.IDLE)
+        // Don't set voiceState here — the background trigger in WakeWordService
+        // checks wakeWordDetected and will call processVoiceCommand.
+        // Setting voiceState=IDLE would trigger handleVoiceStateChange(IDLE)
+        // which restarts wake word engine and can cause false detections → loops.
+        // We need voiceState to NOT be PROCESSING so the trigger calls processVoiceCommand
+        // instead of enqueuing. Use LISTENING_COMMAND as a transient state.
+        appStateManager?.setVoiceState(VoiceState.LISTENING_COMMAND)
         return true
     }
 

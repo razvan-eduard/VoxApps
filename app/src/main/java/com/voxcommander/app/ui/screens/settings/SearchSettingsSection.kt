@@ -39,6 +39,12 @@ fun SearchSettingsSection(
     Text(text = languageManager.getString("search_section"), style = MaterialTheme.typography.titleMedium)
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Manual location fallback
+        ManualLocationSetting(
+            settingsRepo = settingsRepo,
+            scope = scope
+        )
+
         categories.forEach { category ->
             CategoryNode(
                 categoryName = category,
@@ -47,6 +53,87 @@ fun SearchSettingsSection(
                 scope = scope,
                 context = context
             )
+        }
+    }
+}
+
+@Composable
+private fun ManualLocationSetting(
+    settingsRepo: com.voxcommander.app.data.preferences.SettingsRepository,
+    scope: kotlinx.coroutines.CoroutineScope
+) {
+    var latText by remember {
+        mutableStateOf(settingsRepo.getManualLocationLatSync()?.toString() ?: "")
+    }
+    var lonText by remember {
+        mutableStateOf(settingsRepo.getManualLocationLonSync()?.toString() ?: "")
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Manual Location (Fallback)",
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = "Used when GPS is unavailable and no cached location exists. Useful for weather search.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = latText,
+                    onValueChange = { latText = it },
+                    label = { Text("Latitude") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = lonText,
+                    onValueChange = { lonText = it },
+                    label = { Text("Longitude") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        val lat = latText.toDoubleOrNull()
+                        val lon = lonText.toDoubleOrNull()
+                        scope.launch { settingsRepo.setManualLocation(lat, lon) }
+                    },
+                    enabled = latText.isNotBlank() && lonText.isNotBlank()
+                ) {
+                    Text("Save")
+                }
+                if (settingsRepo.getManualLocationLatSync() != null) {
+                    TextButton(
+                        onClick = {
+                            latText = ""
+                            lonText = ""
+                            scope.launch { settingsRepo.setManualLocation(null, null) }
+                        }
+                    ) {
+                        Text("Clear")
+                    }
+                }
+            }
         }
     }
 }

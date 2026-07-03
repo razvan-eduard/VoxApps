@@ -163,7 +163,9 @@ class WakeWordEngine(
                 Logger.log("Error resetting recognizer before listen: ${e.message}", TAG)
             }
 
-            audioRecord = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
+            val aecEnabled = appStateManager.uiState.value.wakeWordAecEnabled
+            val audioSource = if (aecEnabled) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION
+            audioRecord = AudioRecord(audioSource, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
                 Logger.log("AudioRecord failed to initialize (state=${audioRecord?.state})", TAG)
