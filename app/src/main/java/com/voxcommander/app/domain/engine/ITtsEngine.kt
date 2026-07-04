@@ -49,7 +49,8 @@ interface ITtsEngine {
  * Supported TTS engine types.
  */
 enum class TtsEngineType(val key: String) {
-    ANDROID("android");
+    ANDROID("android"),
+    PIPER("piper");
 
     companion object {
         fun fromKey(key: String?): TtsEngineType? = entries.find { it.key == key }

@@ -47,6 +47,7 @@ data class AppState(
 
     // --- TTS SETTINGS ---
     val ttsEnabled: Boolean,
+    val ttsEngineType: String = "android",
     val ttsSpeechRate: Float,
     val ttsPitch: Float,
     val ttsAudioFocusMode: String,
@@ -184,6 +185,7 @@ data class AppState(
                 isWhisperSystemEnabled = settings.isWhisperSystemEnabled,
                 downloadPreference = settings.downloadPreference,
                 ttsEnabled = settings.ttsEnabled,
+                ttsEngineType = settings.ttsEngineType,
                 ttsSpeechRate = settings.ttsSpeechRate,
                 ttsPitch = settings.ttsPitch,
                 ttsAudioFocusMode = settings.ttsAudioFocusMode,
@@ -236,6 +238,7 @@ data class AppState(
             isWhisperSystemEnabled = false,
             downloadPreference = "wifi_and_metered",
             ttsEnabled = true,
+            ttsEngineType = "android",
             ttsSpeechRate = 1.0f,
             ttsPitch = 1.0f,
             ttsAudioFocusMode = "duck",

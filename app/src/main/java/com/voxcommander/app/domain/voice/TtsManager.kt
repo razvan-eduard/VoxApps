@@ -8,6 +8,7 @@ import android.os.Build
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.engine.AndroidTtsEngine
 import com.voxcommander.app.domain.engine.ITtsEngine
+import com.voxcommander.app.domain.engine.PiperTtsEngine
 import com.voxcommander.app.domain.engine.TtsEngineType
 import com.voxcommander.app.state.AppStateManager
 import com.voxcommander.app.utils.Logger
@@ -43,6 +44,7 @@ object TtsManager {
     private var settingsObservationJob: kotlinx.coroutines.Job? = null
 
     private var ttsEnabled = true
+    private var ttsEngineType: String = "android"
     private var speechRate: Float = 1.0f
     private var pitch: Float = 1.0f
     private var currentTtsLanguage: String = ""
@@ -85,6 +87,7 @@ object TtsManager {
 
         val snapshot = settingsRepo.getSettingsSnapshot()
         ttsEnabled = snapshot.ttsEnabled
+        ttsEngineType = snapshot.ttsEngineType
         speechRate = snapshot.ttsSpeechRate
         _speechRateFlow.value = speechRate
         pitch = snapshot.ttsPitch
@@ -102,46 +105,76 @@ object TtsManager {
 
         settingsObservationJob = scope.launch {
             hub.uiState
-                .map { Triple(it.voiceLanguage, it.ttsEnabled, Triple(it.ttsSpeechRate, it.ttsPitch, it.ttsAudioFocusMode)) }
+                .map { Pair(it.voiceLanguage, TtsSettingsSnapshot(it.ttsEnabled, it.ttsEngineType, it.ttsSpeechRate, it.ttsPitch, it.ttsAudioFocusMode)) }
                 .distinctUntilChanged()
-                .collectLatest { (language, enabled, ratePitchFocus) ->
-                    val (rate, p, focusMode) = ratePitchFocus
-                    val changed = ttsEnabled != enabled || speechRate != rate || pitch != p
-                    ttsEnabled = enabled
-                    speechRate = rate
-                    _speechRateFlow.value = rate
-                    pitch = p
-                    audioFocusMode = focusMode
+                .collectLatest { (language, s) ->
+                    val changed = ttsEnabled != s.enabled || speechRate != s.rate || pitch != s.pitch
+                    val engineChanged = ttsEngineType != s.engineType
+                    ttsEnabled = s.enabled
+                    ttsEngineType = s.engineType
+                    speechRate = s.rate
+                    _speechRateFlow.value = s.rate
+                    pitch = s.pitch
+                    audioFocusMode = s.focusMode
 
                     if (changed) {
-                        engine?.setSpeechRate(rate)
-                        engine?.setPitch(p)
+                        engine?.setSpeechRate(s.rate)
+                        engine?.setPitch(s.pitch)
                     }
 
-                    // Re-initialize engine if language changed
-                    ensureEngine(language)
+                    // Re-initialize engine if language or engine type changed
+                    if (language != currentTtsLanguage || engineChanged) {
+                        ensureEngine(language)
+                    }
                 }
         }
     }
 
     private fun ensureEngine(language: String) {
         val ctx = context ?: return
+        val desiredType = TtsEngineType.fromKey(ttsEngineType) ?: TtsEngineType.ANDROID
+
         if (engine == null) {
-            engine = AndroidTtsEngine()
-            engine?.initialize(ctx, language)
+            engine = createEngine(desiredType)
+            val ok = engine?.initialize(ctx, language) ?: false
+            if (!ok && desiredType == TtsEngineType.PIPER) {
+                Logger.log("Piper TTS init failed, falling back to Android TTS", TAG)
+                engine?.release()
+                engine = AndroidTtsEngine()
+                engine?.initialize(ctx, language)
+            }
             engine?.setSpeechRate(speechRate)
             engine?.setPitch(pitch)
             currentTtsLanguage = language
-            Logger.log("TTS engine created for language '$language'", TAG)
-        } else if (language != currentTtsLanguage) {
-            Logger.log("TTS language changed '$currentTtsLanguage' -> '$language', re-initializing", TAG)
+            Logger.log("TTS engine created (${desiredType.key}) for language '$language'", TAG)
+        } else if (language != currentTtsLanguage || !isCurrentEngineType(desiredType)) {
+            Logger.log("TTS re-init: lang '$currentTtsLanguage'->'$language', engine ${if (!isCurrentEngineType(desiredType)) "changed " else ""}to ${desiredType.key}", TAG)
             engine?.stop()
             engine?.release()
-            engine = AndroidTtsEngine()
-            engine?.initialize(ctx, language)
+            engine = createEngine(desiredType)
+            val ok = engine?.initialize(ctx, language) ?: false
+            if (!ok && desiredType == TtsEngineType.PIPER) {
+                Logger.log("Piper TTS init failed, falling back to Android TTS", TAG)
+                engine?.release()
+                engine = AndroidTtsEngine()
+                engine?.initialize(ctx, language)
+            }
             engine?.setSpeechRate(speechRate)
             engine?.setPitch(pitch)
             currentTtsLanguage = language
+        }
+    }
+
+    private fun createEngine(type: TtsEngineType): ITtsEngine = when (type) {
+        TtsEngineType.ANDROID -> AndroidTtsEngine()
+        TtsEngineType.PIPER -> PiperTtsEngine()
+    }
+
+    private fun isCurrentEngineType(type: TtsEngineType): Boolean {
+        val eng = engine ?: return false
+        return when (type) {
+            TtsEngineType.ANDROID -> eng is AndroidTtsEngine
+            TtsEngineType.PIPER -> eng is PiperTtsEngine
         }
     }
 
@@ -281,3 +314,11 @@ object TtsManager {
         Logger.log("Audio focus abandoned", TAG)
     }
 }
+
+private data class TtsSettingsSnapshot(
+    val enabled: Boolean,
+    val engineType: String,
+    val rate: Float,
+    val pitch: Float,
+    val focusMode: String,
+)

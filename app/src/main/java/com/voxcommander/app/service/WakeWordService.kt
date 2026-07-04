@@ -140,6 +140,21 @@ class WakeWordService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        Logger.log("onTrimMemory: level=$level", TAG)
+        when (level) {
+            TRIM_MEMORY_BACKGROUND, TRIM_MEMORY_MODERATE,
+            TRIM_MEMORY_RUNNING_LOW, TRIM_MEMORY_RUNNING_CRITICAL,
+            TRIM_MEMORY_UI_HIDDEN -> {
+                // Release the Vosk model (can be 1.8GB+) to prevent LOW_MEMORY kill.
+                // The model will be re-loaded on the next startListening() call.
+                Logger.log("Memory pressure detected ($level) — releasing wake word model", TAG)
+                wakeWordEngine?.releaseModelForMemoryPressure()
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         Logger.log("WakeWordService destroyed", TAG)

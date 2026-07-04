@@ -133,6 +133,7 @@ class SettingsRepositoryImpl(
 
         // TTS
         val TTS_ENABLED = booleanPreferencesKey("tts_enabled")
+        val TTS_ENGINE_TYPE = stringPreferencesKey("tts_engine_type")
         val TTS_SPEECH_RATE = floatPreferencesKey("tts_speech_rate")
         val TTS_PITCH = floatPreferencesKey("tts_pitch")
         val TTS_AUDIO_FOCUS_MODE = stringPreferencesKey("tts_audio_focus_mode")
@@ -340,6 +341,7 @@ class SettingsRepositoryImpl(
             downloadPreference = prefs[Keys.DOWNLOAD_PREFERENCE] ?: "wifi_and_metered",
 
             ttsEnabled = prefs[Keys.TTS_ENABLED] ?: true,
+            ttsEngineType = prefs[Keys.TTS_ENGINE_TYPE] ?: "android",
             ttsSpeechRate = prefs[Keys.TTS_SPEECH_RATE] ?: 1.0f,
             ttsPitch = prefs[Keys.TTS_PITCH] ?: 1.0f,
             ttsAudioFocusMode = prefs[Keys.TTS_AUDIO_FOCUS_MODE] ?: "duck",
@@ -763,6 +765,10 @@ class SettingsRepositoryImpl(
     // --- TTS ---
     override suspend fun setTtsEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.TTS_ENABLED] = enabled }
+    }
+
+    override suspend fun setTtsEngineType(engineType: String) {
+        dataStore.edit { it[Keys.TTS_ENGINE_TYPE] = engineType }
     }
 
     override suspend fun setTtsSpeechRate(rate: Float) {

@@ -848,6 +848,59 @@
           "is_remote": true
         }
       ]
+    },
+    "piper_tts": {
+      "is_multilingual": false,
+      "engine_label": "Piper TTS (Neural Offline)",
+      "extension": ".tar.bz2",
+      "type": [
+        "tts"
+      ],
+      "capabilities": [
+        "model_download"
+      ],
+      "models": [
+        {
+          "id": "vits-piper-en_US-amy-low",
+          "label": "English (US) — Amy (Low)",
+          "path": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-low.tar.bz2",
+          "size_mb": 30,
+          "lang_code": "en",
+          "is_remote": true
+        },
+        {
+          "id": "vits-piper-en_GB-ryan-low",
+          "label": "English (UK) — Ryan (Low)",
+          "path": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_GB-ryan-low.tar.bz2",
+          "size_mb": 30,
+          "lang_code": "en",
+          "is_remote": true
+        },
+        {
+          "id": "vits-piper-ro_RO-mihai-low",
+          "label": "Romanian — Mihai (Low)",
+          "path": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ro_RO-mihai-low.tar.bz2",
+          "size_mb": 30,
+          "lang_code": "ro",
+          "is_remote": true
+        },
+        {
+          "id": "vits-piper-de_DE-thorsten-low",
+          "label": "German — Thorsten (Low)",
+          "path": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-de_DE-thorsten-low.tar.bz2",
+          "size_mb": 30,
+          "lang_code": "de",
+          "is_remote": true
+        },
+        {
+          "id": "vits-piper-fr_FR-siwis-low",
+          "label": "French — Siwis (Low)",
+          "path": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fr_FR-siwis-low.tar.bz2",
+          "size_mb": 30,
+          "lang_code": "fr",
+          "is_remote": true
+        }
+      ]
     }
   }
 }

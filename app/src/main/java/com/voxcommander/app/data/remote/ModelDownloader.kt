@@ -8,6 +8,10 @@ import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.state.AppStateManager
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -34,8 +38,8 @@ class ModelDownloader(private val context: Context) {
         val rootDir = context.getExternalFilesDir(null) ?: return null
         val extension = RemoteModelRegistry.getExtension(engineKey)
 
-        return if (RemoteModelRegistry.isZipEngine(engineKey)) {
-            // ZIP engines: downloaded as .zip, unzipped to a directory named just modelId (no extension)
+        return if (RemoteModelRegistry.isZipEngine(engineKey) || extension.equals(".tar.bz2", ignoreCase = true)) {
+            // Archive engines: downloaded as .zip/.tar.bz2, extracted to a directory named just modelId (no extension)
             File(rootDir, modelId)
         } else {
             // File-based engines: model stored as modelId + extension
@@ -58,7 +62,9 @@ class ModelDownloader(private val context: Context) {
         }
 
         // Clean up leftover download files to prevent DownloadManager adding -N suffix
-        val downloadDir = if (RemoteModelRegistry.isZipEngine(engineKey)) {
+        val isArchiveEngine = RemoteModelRegistry.isZipEngine(engineKey) ||
+            RemoteModelRegistry.getExtension(engineKey).equals(".tar.bz2", ignoreCase = true)
+        val downloadDir = if (isArchiveEngine) {
             context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
         } else {
             context.getExternalFilesDir(null)
@@ -74,8 +80,8 @@ class ModelDownloader(private val context: Context) {
             .setDescription("Preparing offline engine: $engineKey")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
 
-        // ZIP-based engines go to temporary Downloads dir for unzip, others directly to root
-        val destination = if (RemoteModelRegistry.isZipEngine(engineKey)) Environment.DIRECTORY_DOWNLOADS else null
+        // Archive-based engines go to temporary Downloads dir for extraction, others directly to root
+        val destination = if (isArchiveEngine) Environment.DIRECTORY_DOWNLOADS else null
         request.setDestinationInExternalFilesDir(context, destination, fileName)
 
         // LLM-specific flags
@@ -103,17 +109,17 @@ class ModelDownloader(private val context: Context) {
     }
 
     /**
-     * Unzips ZIP-based models from temporary downloads to app root.
+     * Extracts archive-based models (.zip or .tar.bz2) from temporary downloads to app root.
      * @param modelId Model identifier (without extension)
      * @param engineKey Engine key from models.json
      */
     fun unzipModel(modelId: String, engineKey: String, onComplete: (Boolean) -> Unit) {
         val extension = RemoteModelRegistry.getExtension(engineKey)
-        val zipFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "$modelId$extension")
+        val archiveFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "$modelId$extension")
         val targetDir = resolveLocalFile(modelId, engineKey) ?: return onComplete(false)
 
-        if (!zipFile.exists()) {
-            Logger.log("Unzip failed: ZIP file not found: ${zipFile.absolutePath}", TAG)
+        if (!archiveFile.exists()) {
+            Logger.log("Extraction failed: archive file not found: ${archiveFile.absolutePath}", TAG)
             onComplete(false)
             return
         }
@@ -125,29 +131,80 @@ class ModelDownloader(private val context: Context) {
             targetDir.mkdirs()
             marker.writeText("extracting")
 
-            ZipInputStream(FileInputStream(zipFile)).use { zis ->
-                var entry = zis.nextEntry
-                while (entry != null) {
-                    val newFile = File(targetDir, entry.name)
-                    if (entry.isDirectory) {
-                        newFile.mkdirs()
-                    } else {
-                        newFile.parentFile?.mkdirs()
-                        FileOutputStream(newFile).use { fos ->
-                            zis.copyTo(fos)
+            if (extension.equals(".tar.bz2", ignoreCase = true)) {
+                extractTarBz2(archiveFile, targetDir)
+            } else {
+                ZipInputStream(FileInputStream(archiveFile)).use { zis ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        val newFile = File(targetDir, entry.name)
+                        if (entry.isDirectory) {
+                            newFile.mkdirs()
+                        } else {
+                            newFile.parentFile?.mkdirs()
+                            FileOutputStream(newFile).use { fos ->
+                                zis.copyTo(fos)
+                            }
                         }
+                        entry = zis.nextEntry
                     }
-                    entry = zis.nextEntry
                 }
             }
+
+            // Flatten nested top-level directory (e.g. vits-piper-en_US-amy-low/ contains model.onnx etc.)
+            flattenNestedDir(targetDir)
+
             marker.delete()
-            zipFile.delete()
-            Logger.log("Unzip successful: $modelId", TAG)
+            archiveFile.delete()
+            Logger.log("Extraction successful: $modelId", TAG)
             onComplete(true)
         } catch (e: Exception) {
-            Logger.log("Unzip failed for $modelId: ${e.message}", TAG)
+            Logger.log("Extraction failed for $modelId: ${e.message}", TAG)
             // Leave the marker — cleanup will detect it on next startup
             onComplete(false)
+        }
+    }
+
+    /**
+     * Extracts a .tar.bz2 archive to the target directory.
+     */
+    private fun extractTarBz2(archiveFile: File, targetDir: File) {
+        FileInputStream(archiveFile).use { fis ->
+            BufferedInputStream(fis).use { bis ->
+                BZip2CompressorInputStream(bis).use { bzis ->
+                    TarArchiveInputStream(bzis).use { tis ->
+                        var entry: TarArchiveEntry? = tis.nextEntry as? TarArchiveEntry
+                        while (entry != null) {
+                            val newFile = File(targetDir, entry.name)
+                            if (entry.isDirectory) {
+                                newFile.mkdirs()
+                            } else {
+                                newFile.parentFile?.mkdirs()
+                                FileOutputStream(newFile).use { fos ->
+                                    tis.copyTo(fos)
+                                }
+                            }
+                            entry = tis.nextEntry as? TarArchiveEntry
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * If the extracted directory contains a single subdirectory with the same name as the model,
+     * move its contents up one level. Piper tar.bz2 archives extract to vits-piper-xxx-low/...
+     */
+    private fun flattenNestedDir(targetDir: File) {
+        val children = targetDir.listFiles() ?: return
+        if (children.size == 1 && children[0].isDirectory) {
+            val nested = children[0]
+            Logger.log("Flattening nested directory: ${nested.name}", TAG)
+            nested.listFiles()?.forEach { file ->
+                file.copyTo(File(targetDir, file.name), overwrite = true)
+            }
+            nested.deleteRecursively()
         }
     }
 
@@ -170,7 +227,20 @@ class ModelDownloader(private val context: Context) {
 
         if (!targetDir.exists() || !targetDir.isDirectory) return false
 
-        // Check for 'am' subdirectory — may be directly in model dir or in a nested subdirectory
+        val extension = RemoteModelRegistry.getExtension(engineKey)
+
+        // Piper TTS models: check for model.onnx
+        if (extension.equals(".tar.bz2", ignoreCase = true)) {
+            val hasModel = File(targetDir, "model.onnx").exists()
+            if (!hasModel) {
+                Logger.log("Piper model $modelId missing 'model.onnx' — deleting incomplete model", TAG)
+                targetDir.deleteRecursively()
+                return false
+            }
+            return true
+        }
+
+        // Vosk/ZIP models: check for 'am' subdirectory — may be directly in model dir or in a nested subdirectory
         val hasAmDir = File(targetDir, "am").exists() ||
             targetDir.listFiles()?.any { File(it, "am").exists() } == true
         if (!hasAmDir) {

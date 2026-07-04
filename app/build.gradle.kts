@@ -65,7 +65,16 @@ android {
         }
         jniLibs {
             useLegacyPackaging = true
+            pickFirsts += setOf(
+                "lib/arm64-v8a/libonnxruntime.so",
+                "lib/armeabi-v7a/libonnxruntime.so",
+                "lib/x86/libonnxruntime.so",
+                "lib/x86_64/libonnxruntime.so",
+            )
         }
+    }
+    androidResources {
+        noCompress += ".onnx"
     }
 }
 
@@ -115,6 +124,10 @@ dependencies {
     implementation("xyz.rementia:openwakeword:0.1.5")
     // Force ONNX Runtime 1.20.1+ for 16KB page size alignment (required for Android 15+)
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
+    // Piper TTS via sherpa-onnx (on-device neural TTS)
+    implementation("com.github.k2-fsa:sherpa-onnx:v1.13.3")
+    // Apache Commons Compress for .tar.bz2 extraction (Piper voice models)
+    implementation("org.apache.commons:commons-compress:1.26.1")
     // ProcessPhoenix — reliable app restart (handles process kill + relaunch)
     implementation("com.jakewharton:process-phoenix:2.1.2")
     // STT Engines (Whisper.cpp integration)

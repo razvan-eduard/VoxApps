@@ -151,4 +151,8 @@ class OpenWakeWordEngine(
         }
         engine = null
     }
+
+    override fun releaseModelForMemoryPressure() {
+        // OpenWakeWord ONNX models are small (~10MB), no need to release on memory pressure
+    }
 }

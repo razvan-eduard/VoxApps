@@ -136,6 +136,7 @@ interface SettingsRepository {
 
     // --- TTS ---
     suspend fun setTtsEnabled(enabled: Boolean)
+    suspend fun setTtsEngineType(engineType: String)
     suspend fun setTtsSpeechRate(rate: Float)
     suspend fun setTtsPitch(pitch: Float)
     suspend fun setTtsAudioFocusMode(mode: String)

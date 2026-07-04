@@ -6,4 +6,11 @@ interface IWakeWordEngine {
     fun stopListening()
     fun stopService()
     fun release()
+
+    /**
+     * Releases the native model (e.g. Vosk Model) to free memory while keeping
+     * the engine alive. The model will be re-loaded on the next startListening().
+     * Called by the service on memory pressure (onTrimMemory).
+     */
+    fun releaseModelForMemoryPressure()
 }

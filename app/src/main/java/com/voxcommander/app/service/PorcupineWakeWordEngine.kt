@@ -272,4 +272,8 @@ class PorcupineWakeWordEngine(
         }
         porcupine = null
     }
+
+    override fun releaseModelForMemoryPressure() {
+        // Porcupine model is small (~2MB), no need to release on memory pressure
+    }
 }

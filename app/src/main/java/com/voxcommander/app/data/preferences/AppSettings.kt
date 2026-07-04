@@ -106,6 +106,7 @@ data class AppSettings(
 
     // --- TTS ---
     val ttsEnabled: Boolean = true,
+    val ttsEngineType: String = "android", // "android" or "piper"
     val ttsSpeechRate: Float = 1.0f,
     val ttsPitch: Float = 1.0f,
     val ttsAudioFocusMode: String = "duck", // "none", "duck", "pause"

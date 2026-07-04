@@ -35,6 +35,10 @@ class WakeWordEngine(
     private var isListening = false
     @Volatile private var cachedWakeWord: String = ""
 
+    // Stored for re-initialization after memory pressure release
+    private var storedModelPath: String? = null
+    private var storedWakeWord: String? = null
+
     private val sampleRate = 16000
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) * 2
 
@@ -65,6 +69,9 @@ class WakeWordEngine(
     override suspend fun initialize(modelPath: String, wakeWord: String): Boolean = withContext(Dispatchers.IO) {
         try {
             Logger.log("Init model: $modelPath", TAG)
+
+            storedModelPath = modelPath
+            storedWakeWord = wakeWord
 
             appStateManager.executeSecureVoiceAction {
                 recognizer?.close()
@@ -148,10 +155,21 @@ class WakeWordEngine(
             Logger.log("Error releasing previous AudioRecord: ${e.message}", TAG)
         }
 
-        // Verify recognizer is still valid
+        // If model was released due to memory pressure, re-initialize before listening
         if (recognizer == null || model == null) {
-            Logger.log("Cannot start listening: recognizer or model is null", TAG)
-            return false
+            val path = storedModelPath
+            val word = storedWakeWord
+            if (path != null && word != null) {
+                Logger.log("Model was released (memory pressure) — re-initializing before listen", TAG)
+                val initialized = kotlinx.coroutines.runBlocking { initialize(path, word) }
+                if (!initialized) {
+                    Logger.log("Failed to re-initialize model after memory pressure release", TAG)
+                    return false
+                }
+            } else {
+                Logger.log("Cannot start listening: recognizer or model is null and no stored path for re-init", TAG)
+                return false
+            }
         }
 
         try {
@@ -425,6 +443,22 @@ class WakeWordEngine(
                 recognizer = null
                 model = null
             }
+        }
+    }
+
+    override fun releaseModelForMemoryPressure() {
+        if (!isListening) {
+            Logger.log("Releasing Vosk model for memory pressure (model=${storedModelPath})", TAG)
+            CoroutineScope(Dispatchers.IO).launch {
+                appStateManager.executeSecureVoiceAction {
+                    try { recognizer?.close() } catch (_: Exception) {}
+                    try { model?.close() } catch (_: Exception) {}
+                    recognizer = null
+                    model = null
+                }
+            }
+        } else {
+            Logger.log("Skipping memory pressure release — engine is actively listening", TAG)
         }
     }
 
