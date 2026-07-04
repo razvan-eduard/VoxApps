@@ -119,6 +119,8 @@ interface SettingsRepository {
     suspend fun setYoutubeUrlEngine(engine: String)
     fun getReturnAfterActionAppsSync(): List<String>
     suspend fun setReturnAfterActionApps(apps: List<String>)
+    fun getExternalTriggerEnabledSync(): Boolean
+    suspend fun setExternalTriggerEnabled(enabled: Boolean)
 
     // --- SEARCH PROVIDER API KEYS ---
     fun getSearchProviderApiKeySync(providerName: String): String?

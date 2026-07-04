@@ -126,6 +126,16 @@ class WakeWordService : Service() {
             ACTION_START -> startWakeWordDetection()
             ACTION_PAUSE -> pauseWakeWordDetection()
             ACTION_RESUME -> resumeWakeWordDetection()
+            ACTION_EXTERNAL_TRIGGER -> {
+                // Started by external automation app (MacroDroid, Tasker, etc.)
+                // Start foreground service first, then trigger listening
+                startForeground(NOTIFICATION_ID, createNotification())
+                if (wakeWordEngine == null) {
+                    Logger.log("External trigger: service not initialized — starting wake word detection first", TAG)
+                    startWakeWordDetection()
+                }
+                onWakeWordDetected()
+            }
             ACTION_STOP, ACTION_EXIT -> {
                 stopWakeWordDetection()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -476,6 +486,7 @@ class WakeWordService : Service() {
         const val ACTION_PAUSE = Strings.Actions.PAUSE_WAKE_WORD
         const val ACTION_RESUME = Strings.Actions.RESUME_WAKE_WORD
         const val ACTION_EXIT = Strings.Actions.EXIT_SERVICE
+        const val ACTION_EXTERNAL_TRIGGER = "com.voxcommander.app.EXTERNAL_TRIGGER"
 
         fun startService(context: Context) {
             val intent = Intent(context, WakeWordService::class.java).apply { action = ACTION_START }

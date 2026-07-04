@@ -9,6 +9,7 @@
 ## Features
 
 - **Wake Word Detection** — Always-on listening with Vosk (template mode + voice print), Picovoice Porcupine, or OpenWakeWord
+- **External Trigger** — Automation apps (MacroDroid, Tasker) can trigger voice assistant via broadcast intent
 - **Speech-to-Text** — Whisper.cpp (on-device, GGML models) with multilingual support
 - **Natural Language Understanding** — Triple AI Brain: FastMap regex (L1) → Primary LLM (L2) → Offline fallback (L3)
 - **Intent Routing** — Unified `NluIntent` → `IntentHandler` pipeline with per-domain app resolution
@@ -180,6 +181,30 @@ app/src/main/java/com/voxcommander/app/
 |--------|------|-------------|
 | Piped API | Cloud | Uses Piped instances for YouTube search |
 | NewPipe Extractor | On-device | Parses YouTube directly, no external API |
+
+### External Voice Trigger
+
+Automation apps like MacroDroid or Tasker can trigger the voice assistant without a wake word by sending a broadcast intent:
+
+```bash
+adb shell am broadcast -a com.voxcommander.app.TRIGGER_VOICE
+```
+
+**MacroDroid setup:**
+1. Create a new macro
+2. Add trigger (e.g., button press, NFC tag, schedule)
+3. Add action → **Intent Action**
+4. Set action: `com.voxcommander.app.TRIGGER_VOICE`
+5. Target: Broadcast
+
+**Tasker setup:**
+1. Create a new task
+2. Add action → **System** → **Send Intent**
+3. Action: `com.voxcommander.app.TRIGGER_VOICE`
+4. Type: Broadcast
+5. Target package: `com.voxcommander.app`
+
+Enable/disable in Settings → App Manager → External voice trigger toggle.
 
 ## License
 

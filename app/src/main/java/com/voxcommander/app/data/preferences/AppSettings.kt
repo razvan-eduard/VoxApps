@@ -104,6 +104,9 @@ data class AppSettings(
     /** Packages that trigger return-to-previous-app after intent execution. */
     val returnAfterActionApps: List<String> = emptyList(),
 
+    /** Allow external automation apps (MacroDroid, Tasker) to trigger voice assistant via broadcast. */
+    val externalTriggerEnabled: Boolean = true,
+
     // --- SEARCH PROVIDER API KEYS ---
     /** Map of provider name -> API key (stored encrypted) */
     val searchProviderApiKeys: Map<String, String> = emptyMap(),

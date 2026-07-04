@@ -129,6 +129,7 @@ class SettingsRepositoryImpl(
         val PIPED_REGION = stringPreferencesKey("piped_region")
         val YOUTUBE_URL_ENGINE = stringPreferencesKey("youtube_url_engine")
         val RETURN_AFTER_ACTION_APPS_JSON = stringPreferencesKey("return_after_action_apps_json")
+        val EXTERNAL_TRIGGER_ENABLED = booleanPreferencesKey("external_trigger_enabled")
 
         // Download preference
         val DOWNLOAD_PREFERENCE = stringPreferencesKey("download_preference")
@@ -341,6 +342,7 @@ class SettingsRepositoryImpl(
             pipedRegion = prefs[Keys.PIPED_REGION],
             youtubeUrlEngine = prefs[Keys.YOUTUBE_URL_ENGINE] ?: "piped",
             returnAfterActionApps = parseStringList(prefs[Keys.RETURN_AFTER_ACTION_APPS_JSON]),
+            externalTriggerEnabled = prefs[Keys.EXTERNAL_TRIGGER_ENABLED] ?: true,
 
             downloadPreference = prefs[Keys.DOWNLOAD_PREFERENCE] ?: "wifi_and_metered",
 
@@ -366,6 +368,7 @@ class SettingsRepositoryImpl(
     override fun getPipedRegionSync(): String? = runBlocking { dataStore.data.first()[Keys.PIPED_REGION] }
     override fun getYoutubeUrlEngineSync(): String = runBlocking { dataStore.data.first()[Keys.YOUTUBE_URL_ENGINE] ?: "piped" }
     override fun getReturnAfterActionAppsSync(): List<String> = runBlocking { parseStringList(dataStore.data.first()[Keys.RETURN_AFTER_ACTION_APPS_JSON]) }
+    override fun getExternalTriggerEnabledSync(): Boolean = runBlocking { dataStore.data.first()[Keys.EXTERNAL_TRIGGER_ENABLED] ?: true }
 
     // --- SYNCHRONOUS WRITE (crash cookie) ---
     override fun setVulkanRuntimeAttemptSync(active: Boolean) {
@@ -731,6 +734,10 @@ class SettingsRepositoryImpl(
             if (apps.isEmpty()) prefs.remove(Keys.RETURN_AFTER_ACTION_APPS_JSON)
             else prefs[Keys.RETURN_AFTER_ACTION_APPS_JSON] = gson.toJson(apps)
         }
+    }
+
+    override suspend fun setExternalTriggerEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.EXTERNAL_TRIGGER_ENABLED] = enabled }
     }
 
     // --- DOWNLOAD PREFERENCE ---

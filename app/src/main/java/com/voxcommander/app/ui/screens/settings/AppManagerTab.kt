@@ -144,6 +144,36 @@ fun AppManagerTab(
             label = "Apps (${returnApps.size} selected)",
             languageManager = languageManager
         )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+        // --- SECTION 5: External Voice Trigger (MacroDroid, Tasker, etc.) ---
+        var externalTriggerEnabled by remember { mutableStateOf(settingsRepo.getExternalTriggerEnabledSync()) }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "External voice trigger",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "Allow automation apps (MacroDroid, Tasker) to trigger voice assistant via broadcast intent: com.voxcommander.app.TRIGGER_VOICE",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Switch(
+                checked = externalTriggerEnabled,
+                onCheckedChange = {
+                    externalTriggerEnabled = it
+                    scope.launch { settingsRepo.setExternalTriggerEnabled(it) }
+                }
+            )
+        }
     }
 }
 

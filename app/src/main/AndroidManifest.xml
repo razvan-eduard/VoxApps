@@ -16,6 +16,12 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Custom permission for external voice trigger (MacroDroid, Tasker, etc.) -->
+    <permission
+        android:name="com.voxcommander.app.permission.TRIGGER_VOICE"
+        android:protectionLevel="normal"
+        android:label="Trigger VoxCommander Voice Assistant" />
+
     <application
         android:name=".VoxApplication"
         android:allowBackup="true"
@@ -84,6 +90,17 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- BroadcastReceiver for external voice trigger (MacroDroid, Tasker, etc.) -->
+        <receiver
+            android:name=".service.VoiceTriggerReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="com.voxcommander.app.permission.TRIGGER_VOICE">
+            <intent-filter>
+                <action android:name="com.voxcommander.app.TRIGGER_VOICE" />
             </intent-filter>
         </receiver>
     </application>

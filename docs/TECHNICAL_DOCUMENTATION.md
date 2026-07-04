@@ -17,7 +17,8 @@
 13. [Model Management](#13-model-management)
 14. [Memory Management](#14-memory-management)
 15. [Return-to-Previous-App](#15-return-to-previous-app)
-16. [Dependency Graph](#16-dependency-graph)
+16. [External Voice Trigger](#16-external-voice-trigger)
+17. [Dependency Graph](#17-dependency-graph)
 
 ---
 
@@ -684,7 +685,111 @@ fun route(intent: NluIntent): Boolean {
 
 ---
 
-## 16. Dependency Graph
+## 16. External Voice Trigger
+
+### Concept
+
+External automation apps (MacroDroid, Tasker, Automate, etc.) can trigger the voice assistant without a wake word by sending a broadcast intent. This enables integration with hardware buttons, NFC tags, schedules, or any automation trigger.
+
+### Implementation
+
+#### VoiceTriggerReceiver (`service/VoiceTriggerReceiver.kt`)
+
+A `BroadcastReceiver` registered in `AndroidManifest.xml` that listens for the action `com.voxcommander.app.TRIGGER_VOICE`.
+
+```kotlin
+class VoiceTriggerReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != ACTION_TRIGGER_VOICE) return
+
+        val repo = SettingsRepositoryImpl(context)
+        if (!repo.getExternalTriggerEnabledSync()) return  // disabled in settings
+
+        val appStateManager = AppStateManager.getInstance(repo, context)
+        val isServiceRunning = appStateManager.uiState.value.isWakeWordServiceListening
+
+        if (isServiceRunning) {
+            // Service active — emit wake word event (same as real detection)
+            appStateManager.onWakeWordDetected()
+        } else {
+            // Service not running — start with ACTION_EXTERNAL_TRIGGER
+            val serviceIntent = Intent(context, WakeWordService::class.java).apply {
+                action = WakeWordService.ACTION_EXTERNAL_TRIGGER
+            }
+            context.startForegroundService(serviceIntent)
+        }
+    }
+}
+```
+
+#### WakeWordService Handling
+
+When `ACTION_EXTERNAL_TRIGGER` is received by `WakeWordService.onStartCommand()`:
+1. Calls `startForeground()` with notification (required for foreground service)
+2. If `wakeWordEngine` is null (service wasn't initialized), starts wake word detection first
+3. Calls `onWakeWordDetected()` — same path as real wake word detection
+
+This triggers the normal pipeline:
+```
+onWakeWordDetected() → stopListening() → appStateManager.onWakeWordDetected()
+  → wakeWordEvents.emit(Unit) → VoiceManager.startListening() → STT → NLU → IntentRouter
+```
+
+### Security
+
+- **Custom permission**: `com.voxcommander.app.permission.TRIGGER_VOICE` (protectionLevel: `normal`)
+- Receiver is `exported=true` but requires the custom permission
+- **Setting toggle**: `externalTriggerEnabled` (default: true) — user can disable in Settings → App Manager
+
+### Manifest Registration
+
+```xml
+<permission
+    android:name="com.voxcommander.app.permission.TRIGGER_VOICE"
+    android:protectionLevel="normal"
+    android:label="Trigger VoxCommander Voice Assistant" />
+
+<receiver
+    android:name=".service.VoiceTriggerReceiver"
+    android:enabled="true"
+    android:exported="true"
+    android:permission="com.voxcommander.app.permission.TRIGGER_VOICE">
+    <intent-filter>
+        <action android:name="com.voxcommander.app.TRIGGER_VOICE" />
+    </intent-filter>
+</receiver>
+```
+
+### Usage
+
+#### ADB
+```bash
+adb shell am broadcast -a com.voxcommander.app.TRIGGER_VOICE
+```
+
+#### MacroDroid
+1. Create macro → add trigger (button, NFC, schedule, etc.)
+2. Add action → **Intent Action**
+3. Action: `com.voxcommander.app.TRIGGER_VOICE`
+4. Target: Broadcast
+
+#### Tasker
+1. Create task → add action → **System** → **Send Intent**
+2. Action: `com.voxcommander.app.TRIGGER_VOICE`
+3. Type: Broadcast
+4. Target package: `com.voxcommander.app`
+
+### Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `externalTriggerEnabled` | Boolean | `true` | Enable/disable external broadcast trigger |
+
+UI: Settings → App Manager → External voice trigger toggle
+
+---
+
+## 17. Dependency Graph
 
 ### Core Dependencies
 
