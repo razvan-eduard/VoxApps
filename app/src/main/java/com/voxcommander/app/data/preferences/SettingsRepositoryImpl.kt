@@ -128,6 +128,7 @@ class SettingsRepositoryImpl(
         val PIPED_API_URL = stringPreferencesKey("piped_api_url")
         val PIPED_REGION = stringPreferencesKey("piped_region")
         val YOUTUBE_URL_ENGINE = stringPreferencesKey("youtube_url_engine")
+        val RETURN_AFTER_ACTION_APPS_JSON = stringPreferencesKey("return_after_action_apps_json")
 
         // Download preference
         val DOWNLOAD_PREFERENCE = stringPreferencesKey("download_preference")
@@ -339,6 +340,7 @@ class SettingsRepositoryImpl(
             pipedApiUrl = prefs[Keys.PIPED_API_URL],
             pipedRegion = prefs[Keys.PIPED_REGION],
             youtubeUrlEngine = prefs[Keys.YOUTUBE_URL_ENGINE] ?: "piped",
+            returnAfterActionApps = parseStringList(prefs[Keys.RETURN_AFTER_ACTION_APPS_JSON]),
 
             downloadPreference = prefs[Keys.DOWNLOAD_PREFERENCE] ?: "wifi_and_metered",
 
@@ -363,6 +365,7 @@ class SettingsRepositoryImpl(
     override fun getPipedApiUrlSync(): String? = runBlocking { dataStore.data.first()[Keys.PIPED_API_URL] }
     override fun getPipedRegionSync(): String? = runBlocking { dataStore.data.first()[Keys.PIPED_REGION] }
     override fun getYoutubeUrlEngineSync(): String = runBlocking { dataStore.data.first()[Keys.YOUTUBE_URL_ENGINE] ?: "piped" }
+    override fun getReturnAfterActionAppsSync(): List<String> = runBlocking { parseStringList(dataStore.data.first()[Keys.RETURN_AFTER_ACTION_APPS_JSON]) }
 
     // --- SYNCHRONOUS WRITE (crash cookie) ---
     override fun setVulkanRuntimeAttemptSync(active: Boolean) {
@@ -720,6 +723,13 @@ class SettingsRepositoryImpl(
     override suspend fun setYoutubeUrlEngine(engine: String) {
         dataStore.edit { prefs ->
             prefs[Keys.YOUTUBE_URL_ENGINE] = engine
+        }
+    }
+
+    override suspend fun setReturnAfterActionApps(apps: List<String>) {
+        dataStore.edit { prefs ->
+            if (apps.isEmpty()) prefs.remove(Keys.RETURN_AFTER_ACTION_APPS_JSON)
+            else prefs[Keys.RETURN_AFTER_ACTION_APPS_JSON] = gson.toJson(apps)
         }
     }
 

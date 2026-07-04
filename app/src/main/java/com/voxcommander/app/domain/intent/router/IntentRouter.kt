@@ -1,5 +1,6 @@
 package com.voxcommander.app.domain.intent.router
 
+import android.app.ActivityManager
 import android.content.Context
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.intent.handler.AudioIntentHandler
@@ -12,6 +13,10 @@ import com.voxcommander.app.domain.intent.handler.SystemIntentHandler
 import com.voxcommander.app.domain.intent.model.NluIntent
 import com.voxcommander.app.domain.intent.resolver.AppResolver
 import com.voxcommander.app.utils.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Central dispatcher for NluIntent execution.
@@ -45,14 +50,52 @@ class IntentRouter(
         for (handler in handlers) {
             if (handler.canHandle(intent)) {
                 Logger.log("Handler ${handler::class.simpleName} accepted intent, resolvedApp=${resolvedApp?.packageName}", TAG)
+
+                val targetPkg = resolvedApp?.packageName
+                val shouldReturnAfter = targetPkg != null && targetPkg in settings.returnAfterActionApps
+                val previousApp = if (shouldReturnAfter) getForegroundPackage() else null
+
                 val success = handler.execute(context, intent, resolvedApp)
                 Logger.log("Handler ${handler::class.simpleName} result: $success", TAG)
+
+                if (shouldReturnAfter && previousApp != null && previousApp != targetPkg) {
+                    Logger.log("Return-to-previous enabled for $targetPkg, will return to $previousApp after delay", TAG)
+                    CoroutineScope(Dispatchers.Main).launch {
+                        delay(1500)
+                        returnToApp(previousApp)
+                    }
+                }
+
                 return success
             }
         }
 
         Logger.log("No handler found for domain=${intent.domain}", TAG)
         return false
+    }
+
+    private fun getForegroundPackage(): String? {
+        return try {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val info = am.runningAppProcesses
+            info?.firstOrNull { it.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND }?.processName
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun returnToApp(packageName: String) {
+        try {
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+            if (launchIntent != null) {
+                launchIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                    android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+                context.startActivity(launchIntent)
+                Logger.log("Returned to previous app: $packageName", TAG)
+            }
+        } catch (e: Exception) {
+            Logger.log("Failed to return to $packageName: ${e.message}", TAG)
+        }
     }
 
     companion object {

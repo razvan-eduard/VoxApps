@@ -101,6 +101,9 @@ data class AppSettings(
     val pipedRegion: String? = null,
     val youtubeUrlEngine: String = "piped", // "piped" or "newpipe"
 
+    /** Packages that trigger return-to-previous-app after intent execution. */
+    val returnAfterActionApps: List<String> = emptyList(),
+
     // --- SEARCH PROVIDER API KEYS ---
     /** Map of provider name -> API key (stored encrypted) */
     val searchProviderApiKeys: Map<String, String> = emptyMap(),

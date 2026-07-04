@@ -116,6 +116,34 @@ fun AppManagerTab(
                 onCheckedChange = { MediaSessionListenerService.requestPermission(context) }
             )
         }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+        // --- SECTION 4: Return to previous app after action ---
+        var returnApps by remember { mutableStateOf(settingsRepo.getReturnAfterActionAppsSync()) }
+
+        Text(
+            text = "Return to previous app after action",
+            style = MaterialTheme.typography.titleMedium
+        )
+        Text(
+            text = "Select apps that should automatically return you to the previous app after executing a command.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        AppSelectorDropdown(
+            selectedPackages = returnApps,
+            defaultPackage = null,
+            onToggleApp = { pkg ->
+                val updated = if (pkg in returnApps) returnApps - pkg else returnApps + pkg
+                returnApps = updated
+                scope.launch { settingsRepo.setReturnAfterActionApps(updated) }
+            },
+            onSetDefault = {},
+            label = "Apps (${returnApps.size} selected)",
+            languageManager = languageManager
+        )
     }
 }
 

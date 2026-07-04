@@ -129,7 +129,7 @@ fun AppSelectorDropdown(
                     selectedPackage = selectedPackage,
                     allowNone = allowNone,
                     onSelect = { app ->
-                        if (app?.packageName == com.voxcommander.app.utils.PackageNames.SPOTIFY && !SpotifyRemoteManager.isConnected) {
+                        if (app?.packageName == com.voxcommander.app.utils.PackageNames.SPOTIFY && !com.voxcommander.app.service.SpotifyPkceManager.isAuthorized) {
                             spotifyOAuthAction = { onAppSelected(app); expanded = false }
                             showSpotifyOAuthDialog = true
                         } else {
@@ -255,7 +255,7 @@ fun AppSelectorDropdown(
                     defaultPackage = defaultPackage,
                     filterMode = filterMode,
                     onToggleApp = { pkg ->
-                        if (pkg == com.voxcommander.app.utils.PackageNames.SPOTIFY && pkg !in selectedPackages && !SpotifyRemoteManager.isConnected) {
+                        if (pkg == com.voxcommander.app.utils.PackageNames.SPOTIFY && pkg !in selectedPackages && !com.voxcommander.app.service.SpotifyPkceManager.isAuthorized) {
                             spotifyOAuthAction = { onToggleApp(pkg) }
                             showSpotifyOAuthDialog = true
                         } else {
@@ -312,8 +312,8 @@ private fun AppPickerList(
 
     val filteredApps = apps.filter { app ->
         val matchesSearch = searchQuery.isBlank() ||
-            app.displayName.contains(searchQuery, ignoreCase = true) ||
-            app.packageName.contains(searchQuery, ignoreCase = true)
+            app.displayName.contains(searchQuery.trim(), ignoreCase = true) ||
+            app.packageName.contains(searchQuery.trim(), ignoreCase = true)
         val matchesFilter = when (filterMode) {
             "user" -> !app.isSystemApp
             "system" -> app.isSystemApp
@@ -396,8 +396,8 @@ private fun AppPickerListMulti(
     val filteredApps = apps.filter { app ->
         val isSelected = app.packageName in selectedPackages
         val matchesSearch = searchQuery.isBlank() ||
-            app.displayName.contains(searchQuery, ignoreCase = true) ||
-            app.packageName.contains(searchQuery, ignoreCase = true)
+            app.displayName.contains(searchQuery.trim(), ignoreCase = true) ||
+            app.packageName.contains(searchQuery.trim(), ignoreCase = true)
         val matchesFilter = when (currentFilter) {
             "user" -> !app.isSystemApp
             "system" -> app.isSystemApp

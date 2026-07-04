@@ -117,6 +117,8 @@ interface SettingsRepository {
     suspend fun setPipedApiUrl(url: String?)
     suspend fun setPipedRegion(region: String?)
     suspend fun setYoutubeUrlEngine(engine: String)
+    fun getReturnAfterActionAppsSync(): List<String>
+    suspend fun setReturnAfterActionApps(apps: List<String>)
 
     // --- SEARCH PROVIDER API KEYS ---
     fun getSearchProviderApiKeySync(providerName: String): String?
