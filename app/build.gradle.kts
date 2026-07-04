@@ -113,7 +113,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.reorderable)
     // Chrome Custom Tabs for Spotify dashboard setup
-    implementation("androidx.browser:browser:1.8.0")
+    implementation("androidx.browser:browser:1.10.0")
     // Spotify App Remote SDK (local AAR)
     implementation(files("libs/spotify-app-remote.aar"))
     // Gemini Nano (Google AI Edge) - System LLM SDK
