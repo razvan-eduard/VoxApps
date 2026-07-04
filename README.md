@@ -4,6 +4,15 @@
   <strong>On-device voice assistant for Android — wake word, STT, NLU, and intent routing, all running locally.</strong>
 </p>
 
+<p align="center">
+  <a href="https://github.com/razvan-eduard/VoxCommander/actions/workflows/build-release.yml">
+    <img src="https://github.com/razvan-eduard/VoxCommander/actions/workflows/build-release.yml/badge.svg" alt="Build APK" />
+  </a>
+  <a href="https://github.com/razvan-eduard/VoxCommander/releases">
+    <img src="https://img.shields.io/github/v/release/razvan-eduard/VoxCommander?display_name=tag" alt="Latest Release" />
+  </a>
+</p>
+
 ---
 
 ## Features
@@ -48,6 +57,19 @@ cd VoxCommander
 # Launch
 adb shell am start -n com.voxcommander.app/.MainActivity
 ```
+
+## Download APK
+
+Pre-built APKs are available on the [Releases page](https://github.com/razvan-eduard/VoxCommander/releases). Each release is built automatically via GitHub Actions.
+
+To create a new release:
+```bash
+git tag v1.1
+git push origin v1.1
+```
+GitHub Actions will build the APK and publish it as a release automatically.
+
+> **Note**: Release APKs are unsigned. Install via `adb install VoxCommander-v*.apk` or enable "Install unknown apps" on your device.
 
 ### First Run Setup
 
