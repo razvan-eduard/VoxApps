@@ -283,7 +283,7 @@ fun VoiceEnginesSubTab(
                 listOf(DropdownGroup(languageManager.getString("available_models_header"), filteredModels))
             },
             selectedItem = remember(uiState.activeVoiceModelId, filteredModels) {
-                filteredModels.find { it.id == uiState.activeVoiceModelId } ?: filteredModels.firstOrNull()
+                filteredModels.find { it.id == uiState.activeVoiceModelId }
             },
             itemLabel = { "${it.label} (${it.sizeDescription})" },
             modelIdProvider = { it.id },

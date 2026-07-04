@@ -102,7 +102,7 @@ object PipedSearchHelper {
     }
 
     private val pipedInstances: List<String>
-        get() = listOf(selectedInstance)
+        get() = listOf(selectedInstance) + PIPED_INSTANCES.filter { it != selectedInstance }
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)

@@ -42,12 +42,15 @@ fun <T> EngineModelSection(
     fallbackCategory: String = Strings.FallbackCategories.VOICE,
     onFallbackChanged: () -> Unit = {},
     refreshTrigger: Int = 0,
-    onShowInfo: (() -> Unit)? = null
+    onShowInfo: (() -> Unit)? = null,
+    showFallback: Boolean = true
 ) {
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var showSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val effectiveSelectedItem = selectedItem ?: groups.firstNotNullOfOrNull { it.items.firstOrNull() }
 
     // 1. Header
     Row(
@@ -80,12 +83,12 @@ fun <T> EngineModelSection(
 
     // 2. Main Dropdown
     GroupedDropdownMenu(
-        selectedItem = selectedItem,
+        selectedItem = effectiveSelectedItem,
         groups = groups,
         itemLabel = itemLabel,
         isDownloaded = { item -> uiState.isModelDownloaded(modelIdProvider(item)) },
         isDefault = { item ->
-            item == selectedItem
+            item == effectiveSelectedItem
         },
         isBuiltIn = { item ->
             (item as? AppModel)?.isBuiltIn == true
@@ -122,7 +125,7 @@ fun <T> EngineModelSection(
                 itemLabel = itemLabel,
                 isDownloaded = { item -> uiState.isModelDownloaded(modelIdProvider(item)) },
                 isDefault = { item ->
-                    item == selectedItem
+                    item == effectiveSelectedItem
                 },
                 isBuiltIn = { item ->
                     (item as? AppModel)?.isBuiltIn == true
@@ -150,9 +153,9 @@ fun <T> EngineModelSection(
     }
 
     // 4. Categorized Fallback Logic
-    if (selectedItem != null) {
-        val modelId = modelIdProvider(selectedItem)
-        val isBuiltIn = (selectedItem as? AppModel)?.isBuiltIn == true
+    if (showFallback && effectiveSelectedItem != null) {
+        val modelId = modelIdProvider(effectiveSelectedItem)
+        val isBuiltIn = (effectiveSelectedItem as? AppModel)?.isBuiltIn == true
         val isDownloaded = isBuiltIn || uiState.isModelDownloaded(modelId)
         
         val defaultProcessor = if (fallbackCategory == Strings.FallbackCategories.VOICE) uiState.defaultVoiceFallbackProcessor else uiState.defaultIntentFallbackProcessor

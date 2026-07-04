@@ -147,7 +147,7 @@ fun IntentEnginesSubTab(
         
         if (uiState.cloudIntelligenceEnabled && nluModels.isNotEmpty()) {
             val selectedModel = remember(uiState.activeIntentModelId, nluModels) {
-                nluModels.find { it.id == uiState.activeIntentModelId } ?: nluModels.firstOrNull()
+                nluModels.find { it.id == uiState.activeIntentModelId }
             }
 
             val nluGroups = remember(nluModels) {

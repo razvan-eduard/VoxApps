@@ -71,7 +71,13 @@ class AudioIntentHandler : IntentHandler {
             if (IntentUtils.tryLaunch(context, playIntent)) return true
         }
 
-        // 2. Use URI template: intent.uriTemplate first, then resolvedApp.uriTemplates
+        // 2. Try Piped API search first (resolves query to videoId for YouTube/LibreTube)
+        if (pkg != null && SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) {
+            Logger.log("playSearch via Piped API succeeded for $pkg", TAG)
+            return true
+        }
+
+        // 3. Use URI template: intent.uriTemplate first, then resolvedApp.uriTemplates
         val searchTemplate = intent.uriTemplate ?: resolvedApp?.uriTemplates?.get(AppRegistry.TemplateActions.SEARCH)
         if (searchTemplate != null) {
             val uri = searchTemplate.replace(AppRegistry.TemplateParams.QUERY, Uri.encode(query))
@@ -81,12 +87,6 @@ class AudioIntentHandler : IntentHandler {
                 putExtra(Intent.EXTRA_REFERRER, "android-app://com.voxcommander.app")
             }
             if (IntentUtils.tryLaunch(context, intent)) return true
-        }
-
-        // No template or template failed — try Piped API search (works for any app that handles youtu.be URLs)
-        if (pkg != null && SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) {
-            Logger.log("playSearch via Piped API succeeded for $pkg", TAG)
-            return true
         }
 
         // Last resort: try launching the app directly

@@ -13,6 +13,7 @@ import com.voxcommander.app.data.preferences.SettingsRepositoryImpl
 import com.voxcommander.app.domain.voice.VoiceManager
 import com.voxcommander.app.domain.voice.WakeWordProfile
 import com.voxcommander.app.state.AppStateManager
+import com.voxcommander.app.state.ServiceLoadingState
 import com.voxcommander.app.state.VoiceState
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
@@ -38,6 +39,8 @@ class WakeWordService : Service() {
     private lateinit var voiceOverlayManager: com.voxcommander.app.ui.components.VoiceOverlayManager
     private var wakeWordEngine: IWakeWordEngine? = null
     private var notificationManager: NotificationManager? = null
+    private var currentEngineDisplayName: String = "Vosk"
+    private var currentModelDisplayName: String = ""
 
     private val CHANNEL_ID = "wake_word_service_channel"
     private val NOTIFICATION_ID = 101
@@ -178,6 +181,23 @@ class WakeWordService : Service() {
             val wakeWord = snapshot.wakeWord
             val engineType = snapshot.wakeWordEngineType
 
+            val engineDisplayName = when (engineType) {
+                "wake_porcupine", "porcupine" -> "Porcupine"
+                "wake_openwakeword", "openwakeword" -> "OpenWakeWord"
+                else -> "Vosk"
+            }
+            val modelDisplayName = snapshot.wakeWordModelPath ?: snapshot.modelFilterLang.uppercase()
+
+            currentEngineDisplayName = engineDisplayName
+            currentModelDisplayName = modelDisplayName
+
+            appStateManager.setServiceLoading(ServiceLoadingState(
+                isActive = true,
+                serviceName = "Wake Word",
+                engineName = engineDisplayName,
+                modelName = modelDisplayName
+            ))
+
             wakeWordEngine?.release()
             wakeWordEngine = null
 
@@ -191,8 +211,10 @@ class WakeWordService : Service() {
                     wakeWordEngine?.startListening()
                     delay(100)
                     updateNotification()
+                    appStateManager.clearServiceLoading()
                 } else {
                     Logger.log("Failed to initialize Porcupine engine", TAG)
+                    appStateManager.clearServiceLoading()
                     stopSelf()
                 }
             } else if (engineType == "wake_openwakeword" || engineType == "openwakeword") {
@@ -206,8 +228,10 @@ class WakeWordService : Service() {
                     wakeWordEngine?.startListening()
                     delay(100)
                     updateNotification()
+                    appStateManager.clearServiceLoading()
                 } else {
                     Logger.log("Failed to initialize OpenWakeWord engine", TAG)
+                    appStateManager.clearServiceLoading()
                     stopSelf()
                 }
             } else {
@@ -233,6 +257,7 @@ class WakeWordService : Service() {
 
                 if (modelPath == null) {
                     Logger.log("No Vosk model available", TAG)
+                    appStateManager.clearServiceLoading()
                     stopSelf()
                     return@launch
                 }
@@ -243,8 +268,8 @@ class WakeWordService : Service() {
                 val downloader = com.voxcommander.app.data.remote.ModelDownloader(this@WakeWordService)
                 if (!downloader.validateModel(modelId, engineType)) {
                     Logger.log("Vosk model $modelId is corrupt/incomplete — cleaning up and marking for re-download", TAG)
-                    // Mark model as not downloaded so UI offers re-download
                     settingsRepo.setModelDownloaded(modelId, false)
+                    appStateManager.clearServiceLoading()
                     stopSelf()
                     return@launch
                 }
@@ -258,8 +283,10 @@ class WakeWordService : Service() {
                     wakeWordEngine?.startListening()
                     delay(100)
                     updateNotification()
+                    appStateManager.clearServiceLoading()
                 } else {
                     Logger.log("Failed to initialize Vosk engine", TAG)
+                    appStateManager.clearServiceLoading()
                     stopSelf()
                 }
             }
@@ -268,8 +295,20 @@ class WakeWordService : Service() {
 
     private fun stopWakeWordDetection() {
         Logger.log("Stopping wake word detection and releasing", TAG)
+        val engineDisplayName = when (settingsRepo.getSettingsSnapshot().wakeWordEngineType) {
+            "wake_porcupine", "porcupine" -> "Porcupine"
+            "wake_openwakeword", "openwakeword" -> "OpenWakeWord"
+            else -> "Vosk"
+        }
+        appStateManager.setServiceLoading(ServiceLoadingState(
+            isActive = true,
+            serviceName = "Wake Word",
+            engineName = engineDisplayName,
+            isStopping = true
+        ))
         wakeWordEngine?.release()
         wakeWordEngine = null
+        appStateManager.clearServiceLoading()
     }
 
     private fun pauseWakeWordDetection() {
@@ -399,6 +438,8 @@ class WakeWordService : Service() {
             else -> languageManager.getString("ww_paused")
         }
 
+        val engineSubtext = if (isListening && !hasVoiceProfile) "$currentEngineDisplayName · $currentModelDisplayName" else null
+
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Vox Commander")
             .setContentText(finalContentText)
@@ -406,6 +447,8 @@ class WakeWordService : Service() {
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setStyle(MediaNotificationCompat.MediaStyle().setShowActionsInCompactView(0, 1))
+
+        if (engineSubtext != null) builder.setSubText(engineSubtext)
 
         // 1. Action: Pause/Resume Toggle
         if (isListening) {

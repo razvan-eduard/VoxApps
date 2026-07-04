@@ -47,6 +47,14 @@ enum class VulkanTestState {
     RESULT
 }
 
+data class ServiceLoadingState(
+    val isActive: Boolean = false,
+    val serviceName: String = "",
+    val engineName: String = "",
+    val modelName: String = "",
+    val isStopping: Boolean = false
+)
+
 sealed class AppScanState {
     object Idle : AppScanState()
     data class Scanning(val current: Int, val total: Int, val appName: String) : AppScanState()
@@ -105,6 +113,18 @@ class AppStateManager private constructor(
     // --- APP SCAN STATE ---
     private val _appScanState = MutableStateFlow<AppScanState>(AppScanState.Idle)
     val appScanState: StateFlow<AppScanState> = _appScanState.asStateFlow()
+
+    // --- SERVICE LOADING STATE ---
+    private val _serviceLoadingState = MutableStateFlow(ServiceLoadingState())
+    val serviceLoadingState: StateFlow<ServiceLoadingState> = _serviceLoadingState.asStateFlow()
+
+    fun setServiceLoading(state: ServiceLoadingState) {
+        _serviceLoadingState.value = state
+    }
+
+    fun clearServiceLoading() {
+        _serviceLoadingState.value = ServiceLoadingState()
+    }
 
     private val _systemInfo = MutableStateFlow<String>("")
     val systemInfo: StateFlow<String> = _systemInfo.asStateFlow()

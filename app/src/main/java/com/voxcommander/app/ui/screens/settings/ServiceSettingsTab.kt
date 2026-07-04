@@ -31,6 +31,7 @@ import com.voxcommander.app.ui.components.DropdownGroup
 import com.voxcommander.app.ui.components.GroupedDropdownContent
 import com.voxcommander.app.ui.components.EngineModelSection
 import com.voxcommander.app.ui.components.GroupedDropdownMenu
+import com.voxcommander.app.ui.components.ServiceLoadingDialog
 import com.voxcommander.app.ui.components.VoiceInputTextField
 import com.voxcommander.app.ui.screens.main.ListeningScreen
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -54,8 +55,11 @@ fun ServiceSettingsTab(
     refreshTrigger: Int = 0
 ) {
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
+    val serviceLoadingState by appStateManager.serviceLoadingState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showDeleteProfileDialog by remember { mutableStateOf(false) }
+
+    ServiceLoadingDialog(state = serviceLoadingState)
 
     val currentEngineKey = uiState.wakeWordEngineType ?: RemoteModelRegistry.getDefaultWakeWordEngineKey()
 
@@ -537,7 +541,7 @@ fun ServiceSettingsTab(
 
         val selectedModel = remember(displayModels, uiState.wakeWordModelPath) {
             val path = uiState.wakeWordModelPath
-            if (path != null) displayModels.find { it.id == path } else displayModels.firstOrNull()
+            if (path != null) displayModels.find { it.id == path } else null
         }
 
         if (displayModels.isNotEmpty()) {
@@ -565,7 +569,8 @@ fun ServiceSettingsTab(
                 downloadingItem = downloadingItem,
                 currentProcessor = currentEngineKey,
                 fallbackCategory = Strings.FallbackCategories.VOICE,
-                refreshTrigger = refreshTrigger
+                refreshTrigger = refreshTrigger,
+                showFallback = false
             )
         }
 
@@ -574,7 +579,8 @@ fun ServiceSettingsTab(
 
         val isWakeWordModelOnDevice = if (supportsBuiltinKeywords || hasBuiltinModels) true
             else remember(selectedModel, refreshTrigger) {
-                selectedModel != null && uiState.isModelDownloaded(selectedModel.id)
+                val model = selectedModel ?: displayModels.firstOrNull()
+                model != null && uiState.isModelDownloaded(model.id)
             }
 
         var localWakeWord by remember { mutableStateOf(uiState.wakeWord ?: "") }
@@ -622,7 +628,8 @@ fun ServiceSettingsTab(
 
         val isModelOnDevice = if (supportsBuiltinKeywords || hasBuiltinModels) true
             else remember(selectedModel, uiState, refreshTrigger) {
-                selectedModel != null && uiState.isModelDownloaded(selectedModel.id)
+                val model = selectedModel ?: displayModels.firstOrNull()
+                model != null && uiState.isModelDownloaded(model.id)
             }
 
         Button(
