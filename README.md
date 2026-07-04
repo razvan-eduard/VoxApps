@@ -14,7 +14,7 @@
 - **Natural Language Understanding** — Triple AI Brain: FastMap regex (L1) → Primary LLM (L2) → Offline fallback (L3)
 - **Intent Routing** — Unified `NluIntent` → `IntentHandler` pipeline with per-domain app resolution
 - **App Management** — Default apps per domain, app aliases, custom domains, return-to-previous-app
-- **Media Control** — Spotify (Web API + App Remote), LibreTube/YouTube (Piped API or NewPipe Extractor), media session control
+- **Media Control** — Spotify (Web API + App Remote), YouTube search via Piped API or NewPipe Extractor, playback on any selected app (LibreTube, NewPipe, etc.), media session control
 - **Text-to-Speech** — Android TTS or Piper TTS (on-device neural voices via sherpa-onnx)
 - **Search** — Web search via DuckDuckGo, Wikipedia, Google News, GNews, WeatherAPI, Open-Meteo
 - **Navigation** — Waze, Google Maps deep linking
@@ -175,12 +175,14 @@ app/src/main/java/com/voxcommander/app/
 | Porcupine | On-device | Picovoice models (requires access key) |
 | OpenWakeWord | On-device | ONNX models (open-source) |
 
-### YouTube URL Engines
+### YouTube Search Engines
 
 | Engine | Type | Description |
 |--------|------|-------------|
-| Piped API | Cloud | Uses Piped instances for YouTube search |
-| NewPipe Extractor | On-device | Parses YouTube directly, no external API |
+| Piped API | Cloud | Uses Piped instances to search for video IDs |
+| NewPipe Extractor | On-device | Parses YouTube directly to find video IDs |
+
+Both engines resolve a search query to a YouTube video ID, then launch `youtu.be/{id}` as an intent to whichever app the user has selected as default for audio (LibreTube, NewPipe, YouTube, etc.).
 
 ### External Voice Trigger
 
