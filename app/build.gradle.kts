@@ -131,7 +131,7 @@ dependencies {
     // NewPipe Extractor — YouTube search & video URL parsing (replaces Piped API dependency)
     implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.8")
     // ProcessPhoenix — reliable app restart (handles process kill + relaunch)
-    implementation("com.jakewharton:process-phoenix:2.1.2")
+    implementation("com.jakewharton:process-phoenix:3.0.0")
     // STT Engines (Whisper.cpp integration)
 
     testImplementation(libs.junit)
