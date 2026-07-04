@@ -54,7 +54,7 @@ retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = 
 retrofit-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
-androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version = "1.0.1" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version = "1.2.0" }
 
 # Testing
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
