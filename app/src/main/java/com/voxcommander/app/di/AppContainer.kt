@@ -84,6 +84,10 @@ class AppContainer(context: Context) {
             com.voxcommander.app.service.SpotifyRemoteManager.setClientId(snapshot.spotifyClientId)
             com.voxcommander.app.domain.intent.handler.PipedSearchHelper.setPipedApiUrl(snapshot.pipedApiUrl)
             com.voxcommander.app.domain.intent.handler.PipedSearchHelper.setPipedRegion(snapshot.pipedRegion)
+            com.voxcommander.app.domain.intent.handler.PipedSearchHelper.useNewPipe = snapshot.youtubeUrlEngine == "newpipe"
+            if (snapshot.youtubeUrlEngine == "newpipe") {
+                com.voxcommander.app.domain.intent.handler.NewPipeExtractorHelper.warmUp()
+            }
             com.voxcommander.app.domain.search.LocationHelper.settingsRepo = settingsRepository
         }
         Logger.log("AppContainer init - starting compatibility checks", "AppContainer")

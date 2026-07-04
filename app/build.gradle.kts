@@ -128,6 +128,8 @@ dependencies {
     implementation("com.github.k2-fsa:sherpa-onnx:v1.13.3")
     // Apache Commons Compress for .tar.bz2 extraction (Piper voice models)
     implementation("org.apache.commons:commons-compress:1.26.1")
+    // NewPipe Extractor — YouTube search & video URL parsing (replaces Piped API dependency)
+    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.8")
     // ProcessPhoenix — reliable app restart (handles process kill + relaunch)
     implementation("com.jakewharton:process-phoenix:2.1.2")
     // STT Engines (Whisper.cpp integration)

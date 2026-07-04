@@ -71,10 +71,23 @@ class AudioIntentHandler : IntentHandler {
             if (IntentUtils.tryLaunch(context, playIntent)) return true
         }
 
-        // 2. Try Piped API search first (resolves query to videoId for YouTube/LibreTube)
-        if (pkg != null && SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) {
-            Logger.log("playSearch via Piped API succeeded for $pkg", TAG)
-            return true
+        // 2. Try YouTube search (NewPipe Extractor or Piped API) — resolves query to videoId
+        if (pkg != null) {
+            if (PipedSearchHelper.useNewPipe) {
+                try {
+                    if (kotlinx.coroutines.runBlocking { NewPipeExtractorHelper.searchAndPlay(context, query, pkg) }) {
+                        Logger.log("playSearch via NewPipe Extractor succeeded for $pkg", TAG)
+                        return true
+                    }
+                } catch (e: Exception) {
+                    Logger.log("NewPipe search failed: ${e.message}", TAG)
+                }
+            } else {
+                if (SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) {
+                    Logger.log("playSearch via Piped API succeeded for $pkg", TAG)
+                    return true
+                }
+            }
         }
 
         // 3. Use URI template: intent.uriTemplate first, then resolvedApp.uriTemplates

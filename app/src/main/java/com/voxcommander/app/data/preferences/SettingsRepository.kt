@@ -112,9 +112,11 @@ interface SettingsRepository {
     fun getSpotifyClientIdSync(): String?
     fun getPipedApiUrlSync(): String?
     fun getPipedRegionSync(): String?
+    fun getYoutubeUrlEngineSync(): String
     suspend fun setSpotifyClientId(clientId: String?)
     suspend fun setPipedApiUrl(url: String?)
     suspend fun setPipedRegion(region: String?)
+    suspend fun setYoutubeUrlEngine(engine: String)
 
     // --- SEARCH PROVIDER API KEYS ---
     fun getSearchProviderApiKeySync(providerName: String): String?

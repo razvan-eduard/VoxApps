@@ -99,6 +99,7 @@ data class AppSettings(
     val spotifyClientId: String? = null,
     val pipedApiUrl: String? = null,
     val pipedRegion: String? = null,
+    val youtubeUrlEngine: String = "piped", // "piped" or "newpipe"
 
     // --- SEARCH PROVIDER API KEYS ---
     /** Map of provider name -> API key (stored encrypted) */

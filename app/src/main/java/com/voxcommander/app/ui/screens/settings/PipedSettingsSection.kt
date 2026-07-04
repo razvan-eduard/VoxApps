@@ -11,6 +11,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.voxcommander.app.data.preferences.SettingsRepository
+import com.voxcommander.app.domain.intent.handler.NewPipeExtractorHelper
 import com.voxcommander.app.domain.intent.handler.PipedSearchHelper
 import com.voxcommander.app.domain.localization.LanguageManager
 import com.voxcommander.app.ui.components.ConnectionTestAuto
@@ -24,10 +25,64 @@ fun PipedSettingsSection(
 ) {
     val scope = rememberCoroutineScope()
 
+    var youtubeUrlEngine by remember { mutableStateOf(settingsRepo.getYoutubeUrlEngineSync()) }
     var pipedApiUrl by remember { mutableStateOf(settingsRepo.getPipedApiUrlSync() ?: "") }
     var pipedRegion by remember { mutableStateOf(settingsRepo.getPipedRegionSync() ?: "") }
 
     Text(text = languageManager.getString("media_services_section"), style = MaterialTheme.typography.titleMedium)
+
+    // YouTube URL Engine selector: Piped API or NewPipe Extractor
+    val youtubeEngineOptions = listOf("piped" to "Piped API", "newpipe" to "NewPipe Extractor")
+    var youtubeEngineExpanded by remember { mutableStateOf(false) }
+    val youtubeEngineLabel = youtubeEngineOptions.find { it.first == youtubeUrlEngine }?.second ?: "Piped API"
+
+    ExposedDropdownMenuBox(
+        expanded = youtubeEngineExpanded,
+        onExpandedChange = { youtubeEngineExpanded = !youtubeEngineExpanded },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        OutlinedTextField(
+            value = youtubeEngineLabel,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("YouTube URL Engine") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = youtubeEngineExpanded) },
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+        )
+        ExposedDropdownMenu(expanded = youtubeEngineExpanded, onDismissRequest = { youtubeEngineExpanded = false }) {
+            youtubeEngineOptions.forEach { (key, label) ->
+                DropdownMenuItem(
+                    text = { Text(if (key == "piped") "$label (Default)" else label) },
+                    onClick = {
+                        youtubeUrlEngine = key
+                        scope.launch { settingsRepo.setYoutubeUrlEngine(key) }
+                        PipedSearchHelper.useNewPipe = key == "newpipe"
+                        if (key == "newpipe") {
+                            NewPipeExtractorHelper.warmUp()
+                        }
+                        youtubeEngineExpanded = false
+                    }
+                )
+            }
+        }
+    }
+
+    if (youtubeUrlEngine == "newpipe") {
+        Text(
+            text = "NewPipe Extractor uses on-device parsing (no external API). First query is slower — warming up now.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 4.dp)
+        )
+        ConnectionTestAuto(
+            testKey = "newpipe",
+            testFn = { NewPipeExtractorHelper.testConnection() },
+            testingLabel = "Testing YouTube search…",
+            onlineLabel = "Connection OK",
+            offlineLabel = "Connection failed"
+        )
+        return
+    }
 
     val pipedInstances = PipedSearchHelper.PIPED_INSTANCES
     var pipedInstanceExpanded by remember { mutableStateOf(false) }

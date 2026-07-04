@@ -93,6 +93,9 @@ object PipedSearchHelper {
     private var selectedInstance: String = PIPED_INSTANCES[0]
     private var pipedRegion: String? = null
 
+    @Volatile
+    var useNewPipe: Boolean = false
+
     fun setPipedApiUrl(url: String?) {
         selectedInstance = url?.takeIf { it.isNotBlank() } ?: PIPED_INSTANCES[0]
     }

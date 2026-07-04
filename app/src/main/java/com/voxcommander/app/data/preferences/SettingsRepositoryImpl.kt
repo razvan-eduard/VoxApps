@@ -127,6 +127,7 @@ class SettingsRepositoryImpl(
         val SPOTIFY_CLIENT_ID = stringPreferencesKey("spotify_client_id")
         val PIPED_API_URL = stringPreferencesKey("piped_api_url")
         val PIPED_REGION = stringPreferencesKey("piped_region")
+        val YOUTUBE_URL_ENGINE = stringPreferencesKey("youtube_url_engine")
 
         // Download preference
         val DOWNLOAD_PREFERENCE = stringPreferencesKey("download_preference")
@@ -337,6 +338,7 @@ class SettingsRepositoryImpl(
             spotifyClientId = prefs[Keys.SPOTIFY_CLIENT_ID],
             pipedApiUrl = prefs[Keys.PIPED_API_URL],
             pipedRegion = prefs[Keys.PIPED_REGION],
+            youtubeUrlEngine = prefs[Keys.YOUTUBE_URL_ENGINE] ?: "piped",
 
             downloadPreference = prefs[Keys.DOWNLOAD_PREFERENCE] ?: "wifi_and_metered",
 
@@ -360,6 +362,7 @@ class SettingsRepositoryImpl(
     override fun getSpotifyClientIdSync(): String? = runBlocking { dataStore.data.first()[Keys.SPOTIFY_CLIENT_ID] }
     override fun getPipedApiUrlSync(): String? = runBlocking { dataStore.data.first()[Keys.PIPED_API_URL] }
     override fun getPipedRegionSync(): String? = runBlocking { dataStore.data.first()[Keys.PIPED_REGION] }
+    override fun getYoutubeUrlEngineSync(): String = runBlocking { dataStore.data.first()[Keys.YOUTUBE_URL_ENGINE] ?: "piped" }
 
     // --- SYNCHRONOUS WRITE (crash cookie) ---
     override fun setVulkanRuntimeAttemptSync(active: Boolean) {
@@ -711,6 +714,12 @@ class SettingsRepositoryImpl(
         dataStore.edit { prefs ->
             if (region != null) prefs[Keys.PIPED_REGION] = region
             else prefs.remove(Keys.PIPED_REGION)
+        }
+    }
+
+    override suspend fun setYoutubeUrlEngine(engine: String) {
+        dataStore.edit { prefs ->
+            prefs[Keys.YOUTUBE_URL_ENGINE] = engine
         }
     }
 
