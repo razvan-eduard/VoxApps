@@ -6,7 +6,9 @@ import androidx.browser.customtabs.CustomTabsIntent
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.NetworkMonitor
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URL
@@ -85,7 +87,7 @@ object SpotifyPkceManager {
 
     private fun persistTokens() {
         val repo = settingsRepo ?: return
-        kotlinx.coroutines.runBlocking {
+        CoroutineScope(Dispatchers.IO).launch {
             repo.setSpotifyTokens(accessToken, refreshToken, tokenExpiry)
         }
     }
@@ -109,7 +111,8 @@ object SpotifyPkceManager {
 
         // Generate PKCE code verifier and challenge
         codeVerifier = generateCodeVerifier()
-        val codeChallenge = generateCodeChallenge(codeVerifier!!)
+        val verifier = codeVerifier ?: return
+        val codeChallenge = generateCodeChallenge(verifier)
 
         Logger.log("Starting PKCE auth flow, clientId=${clientId.take(8)}...", TAG)
 
@@ -283,7 +286,7 @@ object SpotifyPkceManager {
         cachedDeviceId = deviceId
         val repo = settingsRepo
         if (repo != null && deviceId != null) {
-            kotlinx.coroutines.runBlocking { repo.setSpotifyDeviceId(deviceId) }
+            CoroutineScope(Dispatchers.IO).launch { repo.setSpotifyDeviceId(deviceId) }
             Logger.log("PKCE device ID cached: ${deviceId.take(8)}...", TAG)
         }
     }
@@ -299,7 +302,7 @@ object SpotifyPkceManager {
         authCallback = null
         persistTokens()
         settingsRepo?.let { repo ->
-            kotlinx.coroutines.runBlocking { repo.setSpotifyDeviceId(null) }
+            CoroutineScope(Dispatchers.IO).launch { repo.setSpotifyDeviceId(null) }
         }
         Logger.log("PKCE logout", TAG)
     }

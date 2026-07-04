@@ -75,7 +75,7 @@ object NetworkMonitor {
         }
 
         try {
-            connectivityManager?.registerNetworkCallback(networkRequest, callback!!)
+            connectivityManager?.registerNetworkCallback(networkRequest, callback ?: return)
         } catch (e: Exception) {
             Logger.log("Failed to register network callback: ${e.message}", TAG)
         }

@@ -1,10 +1,8 @@
 package com.voxcommander.app.domain.voice
 
 import android.content.Context
-import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.os.Build
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.engine.AndroidTtsEngine
 import com.voxcommander.app.domain.engine.ITtsEngine
@@ -288,24 +286,11 @@ object TtsManager {
             AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest = AudioFocusRequest.Builder(focusType)
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                )
-                .setOnAudioFocusChangeListener { focusChange ->
-                    Logger.log("Audio focus changed: $focusChange", TAG)
-                }
-                .setAcceptsDelayedFocusGain(true)
-                .build()
-            am.requestAudioFocus(audioFocusRequest!!)
-        } else {
-            @Suppress("DEPRECATION")
-            am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, focusType)
-        }
+        audioFocusRequest = com.voxcommander.app.utils.AudioFocusHelper.requestFocus(
+            am, focusType, onFocusChange = { focusChange ->
+                Logger.log("Audio focus changed: $focusChange", TAG)
+            }
+        )
         Logger.log("Audio focus requested (mode=$audioFocusMode)", TAG)
     }
 
@@ -313,13 +298,8 @@ object TtsManager {
         val am = audioManager ?: return
         if (audioFocusMode == "none") return
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest?.let { am.abandonAudioFocusRequest(it) }
-            audioFocusRequest = null
-        } else {
-            @Suppress("DEPRECATION")
-            am.abandonAudioFocus(null)
-        }
+        com.voxcommander.app.utils.AudioFocusHelper.abandonFocus(am, audioFocusRequest)
+        audioFocusRequest = null
         Logger.log("Audio focus abandoned", TAG)
     }
 }

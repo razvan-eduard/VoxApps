@@ -129,7 +129,7 @@ fun AppSelectorDropdown(
                     selectedPackage = selectedPackage,
                     allowNone = allowNone,
                     onSelect = { app ->
-                        if (app?.packageName == "com.spotify.music" && !SpotifyRemoteManager.isConnected) {
+                        if (app?.packageName == com.voxcommander.app.utils.PackageNames.SPOTIFY && !SpotifyRemoteManager.isConnected) {
                             spotifyOAuthAction = { onAppSelected(app); expanded = false }
                             showSpotifyOAuthDialog = true
                         } else {
@@ -255,7 +255,7 @@ fun AppSelectorDropdown(
                     defaultPackage = defaultPackage,
                     filterMode = filterMode,
                     onToggleApp = { pkg ->
-                        if (pkg == "com.spotify.music" && pkg !in selectedPackages && !SpotifyRemoteManager.isConnected) {
+                        if (pkg == com.voxcommander.app.utils.PackageNames.SPOTIFY && pkg !in selectedPackages && !SpotifyRemoteManager.isConnected) {
                             spotifyOAuthAction = { onToggleApp(pkg) }
                             showSpotifyOAuthDialog = true
                         } else {

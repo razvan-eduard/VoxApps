@@ -151,20 +151,7 @@ object AppRegistry {
     }
 
     fun getDefaultAppForDomain(domain: String): AppEntry? {
-        val candidates = scannedApps.filter { it.domains.contains(domain) }
-        if (candidates.isEmpty()) return null
-
-        // Prioritize known canonical apps for each domain
-        val preferredPackages = when (domain) {
-            IntentTaxonomy.Domains.MAPS -> listOf("com.waze", "com.google.android.apps.maps")
-            IntentTaxonomy.Domains.AUDIO -> listOf("com.spotify.music", "com.google.android.youtube", "com.github.libretube")
-            IntentTaxonomy.Domains.MESSAGING -> listOf("com.whatsapp", "org.telegram.messenger", "com.zadroweb.whatsdirect")
-            else -> emptyList()
-        }
-        for (pkg in preferredPackages) {
-            candidates.firstOrNull { it.packageName == pkg }?.let { return it }
-        }
-        return candidates.firstOrNull()
+        return scannedApps.firstOrNull { it.domains.contains(domain) }
     }
 
     fun getAllRegisteredApps(): List<AppEntry> = scannedApps

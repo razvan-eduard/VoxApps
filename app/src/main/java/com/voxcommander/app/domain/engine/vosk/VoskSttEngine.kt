@@ -4,6 +4,7 @@ import android.content.Context
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.engine.SttEngine
 import com.voxcommander.app.utils.AudioConvert
+import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -58,7 +59,7 @@ class VoskSttEngine(
                     model = Model(actualPath)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Logger.log("Vosk model load failed: ${e.message}", TAG)
             }
         }
     }
@@ -108,7 +109,7 @@ class VoskSttEngine(
             val resultJson = recognizer.finalResult
             JSONObject(resultJson).optString(JSON_KEY_TEXT, "")
         } catch (e: Exception) {
-            e.printStackTrace()
+            Logger.log("Vosk transcription failed: ${e.message}", TAG)
             "Error: Transcription failed - ${e.message}"
         } finally {
             activeRecognizer?.close()
@@ -123,7 +124,7 @@ class VoskSttEngine(
             activeRecognizer?.close()
             model?.close()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Logger.log("Vosk releaseHardware failed: ${e.message}", TAG)
         }
     }
 
@@ -144,13 +145,14 @@ class VoskSttEngine(
             activeRecognizer?.close()
             model?.close()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Logger.log("Vosk releaseForMemoryPressure failed: ${e.message}", TAG)
         }
         activeRecognizer = null
         model = null
     }
 
     companion object {
+        private const val TAG = "VoskSttEngine"
         private const val DEFAULT_LANG = Strings.Vosk.DEFAULT_LANG
         private const val MODEL_DIR_PREFIX = "vosk-model-"
         private const val AM_FILE = Strings.Vosk.AM_FILE

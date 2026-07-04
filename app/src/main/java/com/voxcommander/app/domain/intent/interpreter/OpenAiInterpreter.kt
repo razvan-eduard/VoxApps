@@ -31,11 +31,12 @@ class OpenAiInterpreter(
             return@withContext null
         }
 
-        val systemPrompt = PromptProvider.getNluSystemPrompt(settingsRepo.getSettingsSnapshot(), modelFilterLang, settingsRepo)
+        val snapshot = settingsRepo.getSettingsSnapshot()
+        val systemPrompt = PromptProvider.getNluSystemPrompt(snapshot, modelFilterLang, settingsRepo)
         val userPrompt = PromptProvider.formatUserInput(spokenText)
 
         val jsonBody = JSONObject().apply {
-            put("model", "gpt-4o-mini")
+            put("model", Strings.Models.GPT_4O_MINI)
             put("temperature", 0.0) // Match precision
             put("messages", JSONArray().apply {
                 put(JSONObject().apply { put("role", "system"); put("content", systemPrompt) })
@@ -45,7 +46,7 @@ class OpenAiInterpreter(
         }
 
         val request = Request.Builder()
-            .url("https://api.openai.com/v1/chat/completions")
+            .url(Strings.Urls.OPENAI_CHAT_COMPLETIONS)
             .header("Authorization", "Bearer $apiKey")
             .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
             .build()

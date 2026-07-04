@@ -15,6 +15,7 @@ import com.voxcommander.app.domain.localization.LanguageManager
 import com.voxcommander.app.domain.model.AppModel
 import com.voxcommander.app.state.AppStateManager
 import com.voxcommander.app.utils.Strings
+import kotlinx.coroutines.launch
 
 /**
  * Universal component for managing ANY engine model (Whisper, Vosk, NLU).
@@ -44,6 +45,7 @@ fun <T> EngineModelSection(
     onShowInfo: (() -> Unit)? = null
 ) {
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     var showSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -166,13 +168,13 @@ fun <T> EngineModelSection(
                         if (defaultProcessor != null && defaultModelId != null && defaultModelId != modelId) {
                             showChangeDialog = true
                         } else {
-                            if (fallbackCategory == Strings.FallbackCategories.VOICE) kotlinx.coroutines.runBlocking { settingsRepo.setDefaultVoiceFallback(currentProcessor, modelId) }
-                            else kotlinx.coroutines.runBlocking { settingsRepo.setDefaultIntentFallback(currentProcessor, modelId) }
+                            if (fallbackCategory == Strings.FallbackCategories.VOICE) scope.launch { settingsRepo.setDefaultVoiceFallback(currentProcessor, modelId) }
+                            else scope.launch { settingsRepo.setDefaultIntentFallback(currentProcessor, modelId) }
                             onFallbackChanged()
                         }
                     } else {
-                        if (fallbackCategory == Strings.FallbackCategories.VOICE) kotlinx.coroutines.runBlocking { settingsRepo.clearDefaultVoiceFallback() }
-                        else kotlinx.coroutines.runBlocking { settingsRepo.clearDefaultIntentFallback() }
+                        if (fallbackCategory == Strings.FallbackCategories.VOICE) scope.launch { settingsRepo.clearDefaultVoiceFallback() }
+                        else scope.launch { settingsRepo.clearDefaultIntentFallback() }
                         onFallbackChanged()
                     }
                 }
@@ -208,8 +210,8 @@ fun <T> EngineModelSection(
                 text = { Text(languageManager.getString("change_default_model_message").format(defaultModelId, modelId)) },
                 confirmButton = {
                     Button(onClick = {
-                        if (fallbackCategory == "voice") kotlinx.coroutines.runBlocking { settingsRepo.setDefaultVoiceFallback(currentProcessor, modelId) }
-                        else kotlinx.coroutines.runBlocking { settingsRepo.setDefaultIntentFallback(currentProcessor, modelId) }
+                        if (fallbackCategory == "voice") scope.launch { settingsRepo.setDefaultVoiceFallback(currentProcessor, modelId) }
+                        else scope.launch { settingsRepo.setDefaultIntentFallback(currentProcessor, modelId) }
                         onFallbackChanged()
                         showChangeDialog = false
                     }) { Text(languageManager.getString("change")) }

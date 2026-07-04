@@ -113,38 +113,24 @@ class PorcupineWakeWordEngine(
     }
 
     private fun requestAudioFocus(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                )
-                .setAcceptsDelayedFocusGain(true)
-                .setOnAudioFocusChangeListener { focusChange ->
-                    if (focusChange == AudioManager.AUDIOFOCUS_LOSS || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-                        Logger.log("Audio focus lost. Pausing Porcupine listening.", TAG)
-                        stopListening()
-                    }
-                }.build()
-
-            audioManager.requestAudioFocus(audioFocusRequest!!) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.requestAudioFocus(
-                null, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE
-            ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        }
+        val request = com.voxcommander.app.utils.AudioFocusHelper.requestFocus(
+            audioManager,
+            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE,
+            usage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
+            onFocusChange = { focusChange ->
+                if (focusChange == AudioManager.AUDIOFOCUS_LOSS || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                    Logger.log("Audio focus lost. Pausing Porcupine listening.", TAG)
+                    stopListening()
+                }
+            }
+        )
+        audioFocusRequest = request
+        return request != null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O
     }
 
     private fun abandonAudioFocus() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.abandonAudioFocus(null)
-        }
+        com.voxcommander.app.utils.AudioFocusHelper.abandonFocus(audioManager, audioFocusRequest)
+        audioFocusRequest = null
     }
 
     override fun startListening(): Boolean {

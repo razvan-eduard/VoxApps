@@ -289,7 +289,7 @@ class BenchmarkEngine(
             val validation = validateIntentPayload(result)
             appStateManager.updateBenchmarkResult(BenchmarkResult(
                 engine = "OpenAI Intent",
-                model = "gpt-4o-mini",
+                model = Strings.Models.GPT_4O_MINI,
                 inferenceTimeMs = elapsed,
                 rtf = 0f,
                 isSuccess = validation.isSuccess,
@@ -298,7 +298,7 @@ class BenchmarkEngine(
         } catch (e: Exception) {
             appStateManager.updateBenchmarkResult(BenchmarkResult(
                 engine = "OpenAI Intent",
-                model = "gpt-4o-mini",
+                model = Strings.Models.GPT_4O_MINI,
                 inferenceTimeMs = 0,
                 rtf = 0f,
                 isSuccess = false,
@@ -356,7 +356,7 @@ class BenchmarkEngine(
             val validation = validateIntentPayload(result)
             appStateManager.updateBenchmarkResult(BenchmarkResult(
                 engine = "Gemini Cloud",
-                model = "gemini-1.5-flash",
+                model = Strings.Models.GEMINI_1_5_FLASH,
                 inferenceTimeMs = elapsed,
                 rtf = 0f,
                 isSuccess = validation.isSuccess,
@@ -365,7 +365,7 @@ class BenchmarkEngine(
         } catch (e: Exception) {
             appStateManager.updateBenchmarkResult(BenchmarkResult(
                 engine = "Gemini Cloud",
-                model = "gemini-1.5-flash",
+                model = Strings.Models.GEMINI_1_5_FLASH,
                 inferenceTimeMs = 0,
                 rtf = 0f,
                 isSuccess = false,

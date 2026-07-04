@@ -125,6 +125,13 @@ object Strings {
         const val DEFAULT_MODEL_REPO = "https://github.com/razvan-eduard/VoxCommander"
         const val VOSK_MODELS = "https://alphacephei.com/vosk/models"
         const val OPENAI_API = "https://api.openai.com/"
+        const val OPENAI_CHAT_COMPLETIONS = "https://api.openai.com/v1/chat/completions"
+    }
+
+    object Models {
+        const val GPT_4O_MINI = "gpt-4o-mini"
+        const val GEMINI_1_5_FLASH = "gemini-1.5-flash"
+        const val WHISPER_1 = "whisper-1"
     }
 
     object FallbackCategories {

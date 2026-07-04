@@ -3,6 +3,7 @@ package com.voxcommander.app.domain.localization
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
 import java.io.InputStreamReader
 
@@ -19,7 +20,7 @@ class LanguageManager(private val context: Context) {
             translations = gson.fromJson(reader, type)
             reader.close()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Logger.log("Language load failed for '$langCode': ${e.message}", "LanguageManager")
             // Fallback to default English if loading fails
             if (langCode != Strings.Languages.DEFAULT) {
                 loadLanguage(Strings.Languages.DEFAULT)

@@ -19,4 +19,21 @@ object AudioConvert {
         ByteBuffer.wrap(audio).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts)
         return shorts
     }
+
+    fun calculateFilteredRms(filtered: FloatArray, length: Int): Float {
+        var sum = 0.0
+        for (i in 0 until length) {
+            sum += filtered[i].toDouble() * filtered[i]
+        }
+        return kotlin.math.sqrt(sum / length).toFloat()
+    }
+
+    fun calculateRms(buffer: ShortArray, length: Int): Float {
+        var sum = 0.0
+        for (i in 0 until length) {
+            val sample = buffer[i]
+            sum += sample.toDouble() * sample
+        }
+        return kotlin.math.sqrt(sum / length).toFloat() / 32768.0f
+    }
 }

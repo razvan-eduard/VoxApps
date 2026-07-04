@@ -125,7 +125,7 @@ class LocalLlmInterpreter(
             try {
                 val fullPrompt = "$systemPrompt\n$userInput"
                 val response = engine.generateResponse(fullPrompt)
-                return@withContext parseResponse(response)
+                return@withContext NluIntentParser.parse(response)
             } catch (e: Exception) {
                 Logger.log("LLM generation failed (fallback): ${e.message}", TAG)
                 return@withContext null
@@ -139,7 +139,7 @@ class LocalLlmInterpreter(
             querySession.addQueryChunk(userInput)
             val response = querySession.generateResponse()
             Logger.log("LLM response: $response", TAG)
-            return@withContext parseResponse(response)
+            return@withContext NluIntentParser.parse(response)
         } catch (e: Exception) {
             Logger.log("LLM generation failed: ${e.message}", TAG)
             // If clone failed, the base session might be corrupted — invalidate it
@@ -174,10 +174,6 @@ class LocalLlmInterpreter(
         cachedSystemPromptHash = null
         loadedModelId = null
         loadedEngineKey = null
-    }
-
-    private fun parseResponse(response: String): NluIntent? {
-        return NluIntentParser.parse(response)
     }
 
     private fun sha256(text: String): String {

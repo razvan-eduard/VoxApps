@@ -256,7 +256,7 @@ class ModelDownloader(private val context: Context) {
      * Agnostic cleanup of unused models.
      * Protects only active voice + intent models. Everything else is purged.
      */
-    fun deleteUnusedModels(
+    suspend fun deleteUnusedModels(
         settingsRepo: SettingsRepository,
         activeVoiceModelId: String?,
         activeIntentModelId: String?,
@@ -314,22 +314,22 @@ class ModelDownloader(private val context: Context) {
                 }
             }
             
-            kotlinx.coroutines.runBlocking { settingsRepo.setModelDownloaded(modelId, false) }
+            settingsRepo.setModelDownloaded(modelId, false)
             val snapshot = settingsRepo.getSettingsSnapshot()
             if (snapshot.defaultVoiceFallbackModel == modelId) {
                 val activeVoice = snapshot.activeVoiceModelId
                 if (activeVoice != null && activeVoice != modelId && snapshot.isModelDownloaded(activeVoice)) {
-                    kotlinx.coroutines.runBlocking { settingsRepo.setDefaultVoiceFallback(snapshot.voiceProcessor, activeVoice) }
+                    settingsRepo.setDefaultVoiceFallback(snapshot.voiceProcessor, activeVoice)
                 } else {
-                    kotlinx.coroutines.runBlocking { settingsRepo.clearDefaultVoiceFallback() }
+                    settingsRepo.clearDefaultVoiceFallback()
                 }
             }
             if (snapshot.defaultIntentFallbackModel == modelId) {
                 val activeIntent = snapshot.activeIntentModelId
                 if (activeIntent != null && activeIntent != modelId && snapshot.isModelDownloaded(activeIntent)) {
-                    kotlinx.coroutines.runBlocking { settingsRepo.setDefaultIntentFallback(snapshot.aiProcessor, activeIntent) }
+                    settingsRepo.setDefaultIntentFallback(snapshot.aiProcessor, activeIntent)
                 } else {
-                    kotlinx.coroutines.runBlocking { settingsRepo.clearDefaultIntentFallback() }
+                    settingsRepo.clearDefaultIntentFallback()
                 }
             }
         }

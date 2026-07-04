@@ -8,7 +8,6 @@ import com.voxcommander.app.domain.intent.taxonomy.IntentTaxonomy
 import com.voxcommander.app.domain.search.LocationHelper
 import com.voxcommander.app.domain.search.SearchProviderRouter
 import com.voxcommander.app.domain.conversation.ConversationHandler
-import com.voxcommander.app.domain.voice.TtsManager
 import com.voxcommander.app.utils.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,8 +27,9 @@ class SearchIntentHandler(
 
     companion object {
         private const val TAG = "SearchIntentHandler"
-        private val searchScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     }
+
+    private val searchScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun canHandle(intent: NluIntent): Boolean {
         return intent.domain == IntentTaxonomy.Domains.SEARCH

@@ -3,7 +3,6 @@ package com.voxcommander.app.domain.voice
 import android.content.Context
 import android.content.Intent
 import android.media.*
-import android.os.Build
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -23,7 +22,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.sqrt
 
 /**
  * Singleton VoiceManager to handle real audio capture and STT lifecycle.
@@ -68,7 +66,6 @@ object VoiceManager {
     private val _partialTranscriptionFlow = MutableStateFlow("")
     val partialTranscriptionFlow: StateFlow<String> = _partialTranscriptionFlow.asStateFlow()
 
-    private var launchGoogleIntentCallback: ((String) -> Unit)? = null
     private var speechRecognizer: SpeechRecognizer? = null
 
     fun setCalibrationListening(active: Boolean) {
@@ -115,21 +112,9 @@ object VoiceManager {
         }
         val am = audioManager ?: return
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                )
-                .setOnAudioFocusChangeListener { }
-                .build()
-            am.requestAudioFocus(audioFocusRequest!!)
-        } else {
-            @Suppress("DEPRECATION")
-            am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-        }
+        audioFocusRequest = com.voxcommander.app.utils.AudioFocusHelper.requestFocus(
+            am, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+        )
         Logger.log("Listening audio focus requested (pausing music)", TAG)
     }
 
@@ -140,13 +125,8 @@ object VoiceManager {
      */
     private fun abandonListeningAudioFocus() {
         val am = audioManager ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest?.let { am.abandonAudioFocusRequest(it) }
-            audioFocusRequest = null
-        } else {
-            @Suppress("DEPRECATION")
-            am.abandonAudioFocus(null)
-        }
+        com.voxcommander.app.utils.AudioFocusHelper.abandonFocus(am, audioFocusRequest)
+        audioFocusRequest = null
         Logger.log("Listening audio focus abandoned", TAG)
     }
 
@@ -158,7 +138,6 @@ object VoiceManager {
         whisperApi: WhisperSttEngine?,
         google: GoogleSttEngine?,
         vosk: VoskSttEngine?,
-        @Suppress("UNUSED_PARAMETER") launchGoogleIntent: (String) -> Unit,
         settingsRepo: SettingsRepository,
         appStateManager: AppStateManager
     ) {
@@ -596,12 +575,6 @@ object VoiceManager {
         }
     }
 
-    private fun calculateRms(buffer: ShortArray, length: Int): Float {
-        var sum = 0.0
-        for (i in 0 until length) {
-            val sample = buffer[i]
-            sum += sample.toDouble() * sample
-        }
-        return sqrt(sum / length).toFloat() / 32768.0f
-    }
+    private fun calculateRms(buffer: ShortArray, length: Int): Float =
+        com.voxcommander.app.utils.AudioConvert.calculateRms(buffer, length)
 }

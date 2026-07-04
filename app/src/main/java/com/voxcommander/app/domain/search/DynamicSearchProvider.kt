@@ -293,7 +293,7 @@ class DynamicSearchProvider(
     private fun parseJsonWithFieldMappings(root: com.google.gson.JsonObject): List<SearchResult> {
         val results = mutableListOf<SearchResult>()
 
-        for (mapping in def.fieldMappings!!) {
+        for (mapping in def.fieldMappings ?: return emptyList()) {
             val sourceObj = resolveJsonPath(root, mapping.source) ?: continue
 
             // If index >= 0, each field in sourceObj is an array — pick element at index (Open-Meteo daily style)
@@ -341,7 +341,7 @@ class DynamicSearchProvider(
         rawBody: String
     ): List<SearchResult> {
         val results = mutableListOf<SearchResult>()
-        val array = navigatePath(root, def.resultPath!!)
+        val array = navigatePath(root, def.resultPath ?: return emptyList())
         if (array == null || !array.isJsonArray) return emptyList()
 
         // Flatten nested topic groups (DuckDuckGo RelatedTopics has mixed entries:
@@ -364,9 +364,10 @@ class DynamicSearchProvider(
         val effectiveMaxResults = if (def.maxResults > 0) def.maxResults else 5
         for (i in 0 until minOf(flatItems.size, effectiveMaxResults)) {
             val item = flatItems[i]
-            val title = getJsonField(item, def.jsonFields!!["title"] ?: "title")
-            val contentRaw = getJsonField(item, def.jsonFields["content"] ?: "content")
-            val urlField = getJsonField(item, def.jsonFields["url"] ?: "pageid")
+            val fields = def.jsonFields ?: emptyMap()
+            val title = getJsonField(item, fields["title"] ?: "title")
+            val contentRaw = getJsonField(item, fields["content"] ?: "content")
+            val urlField = getJsonField(item, fields["url"] ?: "pageid")
 
             val url = if (def.urlTemplate != null) {
                 def.urlTemplate.replace("{url}", urlField).replace("{lang}", currentLang)
@@ -392,7 +393,8 @@ class DynamicSearchProvider(
         return try {
             val formattedLang = formatLang(lang)
             val encodedTitle = URLEncoder.encode(title, "UTF-8")
-            val url = def.extractEndpoint!!.replace("{title}", encodedTitle).replace("{lang}", formattedLang)
+            val endpoint = def.extractEndpoint ?: return ""
+            val url = endpoint.replace("{title}", encodedTitle).replace("{lang}", formattedLang)
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", def.userAgent ?: "VoxCommander/1.0 (Android Voice Assistant)")

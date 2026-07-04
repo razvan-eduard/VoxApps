@@ -136,7 +136,6 @@ class AppContainer(context: Context) {
             null,
             null,
             null,
-            { langCode -> voiceIntentLauncher.launch(langCode) },
             settingsRepository,
             appStateManager
         )

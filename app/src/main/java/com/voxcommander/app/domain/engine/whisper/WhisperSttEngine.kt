@@ -1,6 +1,7 @@
 package com.voxcommander.app.domain.engine.whisper
 
 import com.voxcommander.app.domain.engine.SttEngine
+import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
 import com.voxcommander.app.utils.WavUtils
 import okhttp3.MediaType.Companion.toMediaType
@@ -54,7 +55,7 @@ class WhisperSttEngine(
             val response = api.transcribe(AUTH_PREFIX + apiKey, filePart, modelPart, langPart)
             response.text
         } catch (e: Exception) {
-            e.printStackTrace()
+            Logger.log("Whisper API transcription failed: ${e.message}", "WhisperSttEngine")
             "Error: ${e.message}"
         }
     }
@@ -74,6 +75,6 @@ class WhisperSttEngine(
         private const val FILENAME_WAV = "audio.wav"
         private const val PART_FILE = Strings.Api.PART_FILE
         const val PART_MODEL = Strings.Api.PART_MODEL
-        const val MODEL_NAME = "whisper-1"
+        const val MODEL_NAME = Strings.Models.WHISPER_1
     }
 }

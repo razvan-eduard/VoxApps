@@ -60,7 +60,7 @@ class MainViewModel(
                     _currentIntent.value = result
                     result?.let { withContext(Dispatchers.IO) { intentRouter.route(it) } }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Logger.log("Voice command processing failed: ${e.message}", TAG)
                 } finally {
                     drainQueueOrIdle(modelFilterLang)
                 }
@@ -98,7 +98,7 @@ class MainViewModel(
                     _currentIntent.value = result
                     result?.let { withContext(Dispatchers.IO) { intentRouter.route(it) } }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Logger.log("Queued command processing failed: ${e.message}", TAG)
                 } finally {
                     drainQueueOrIdle(queuedLang)
                 }
@@ -126,7 +126,7 @@ class MainViewModel(
                 _currentIntent.value = result
                 result?.let { withContext(Dispatchers.IO) { intentRouter.route(it) } }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Logger.log("Text command processing failed: ${e.message}", TAG)
             } finally {
                 _isProcessing.value = false
                 appStateManager.setVoiceState(VoiceState.IDLE)
@@ -148,7 +148,6 @@ class MainViewModel(
                 }
             } catch (e: Exception) {
                 Logger.log("Manual intent parse error: ${e.message}", TAG)
-                e.printStackTrace()
             } finally {
                 _isProcessing.value = false
                 appStateManager.setVoiceState(VoiceState.IDLE)

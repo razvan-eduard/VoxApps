@@ -29,7 +29,7 @@ object FileHelper {
             outputStream.close()
             file.absolutePath
         } catch (e: Exception) {
-            e.printStackTrace()
+            Logger.log("copyUriToInternal failed: ${e.message}", Strings.Tags.FILE_HELPER)
             null
         }
     }

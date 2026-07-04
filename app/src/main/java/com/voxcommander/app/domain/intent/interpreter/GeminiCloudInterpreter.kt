@@ -20,18 +20,19 @@ class GeminiCloudInterpreter(
 
     private val TAG = Strings.Tags.GEMINI_NANO_INTERPRETER
     override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? = withContext(Dispatchers.IO) {
-        val apiKey = settingsRepo.getSettingsSnapshot().geminiApiKey
+        val snapshot = settingsRepo.getSettingsSnapshot()
+        val apiKey = snapshot.geminiApiKey
         if (apiKey.isNullOrBlank()) {
             Logger.log("Gemini API key not set — cannot use Gemini Cloud", TAG)
             return@withContext null
         }
 
         val model = GenerativeModel(
-            modelName = "gemini-1.5-flash",
+            modelName = Strings.Models.GEMINI_1_5_FLASH,
             apiKey = apiKey
         )
 
-        val systemPrompt = PromptProvider.getNluSystemPrompt(settingsRepo.getSettingsSnapshot(), modelFilterLang, settingsRepo)
+        val systemPrompt = PromptProvider.getNluSystemPrompt(snapshot, modelFilterLang, settingsRepo)
 
         try {
             val response = model.generateContent(

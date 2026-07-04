@@ -11,7 +11,7 @@ object SpotifyPlaybackHelper {
     private const val TAG = "SpotifyPlaybackHelper"
 
     fun tryPlaySearch(context: Context, pkg: String, query: String, waitMs: Long = 0): Boolean {
-        if (pkg != "com.spotify.music" || !SpotifyPkceManager.isAuthorized) return false
+        if (pkg != com.voxcommander.app.utils.PackageNames.SPOTIFY || !SpotifyPkceManager.isAuthorized) return false
 
         val clientId = SpotifyRemoteManager.getClientId() ?: return false
 

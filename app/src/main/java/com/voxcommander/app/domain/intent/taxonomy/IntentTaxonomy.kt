@@ -68,8 +68,8 @@ object IntentTaxonomy {
         data class Mapped(val domain: String, val action: String, val targetApp: String?)
 
         fun fromActionType(actionType: String): Mapped? = when (actionType) {
-            "audio_youtube" -> Mapped(Domains.AUDIO, Actions.PLAY, "com.google.android.youtube")
-            "audio_spotify" -> Mapped(Domains.AUDIO, Actions.PLAY, "com.spotify.music")
+            "audio_youtube" -> Mapped(Domains.AUDIO, Actions.PLAY, com.voxcommander.app.utils.PackageNames.YOUTUBE)
+            "audio_spotify" -> Mapped(Domains.AUDIO, Actions.PLAY, com.voxcommander.app.utils.PackageNames.SPOTIFY)
             "media_pause" -> Mapped(Domains.AUDIO, Actions.PAUSE, null)
             "media_stop" -> Mapped(Domains.AUDIO, Actions.STOP, null)
             "media_play" -> Mapped(Domains.AUDIO, Actions.PLAY, null)
@@ -79,8 +79,8 @@ object IntentTaxonomy {
             "vol_down" -> Mapped(Domains.SETTINGS, Actions.VOLUME_DOWN, null)
             "wifi_toggle" -> Mapped(Domains.SETTINGS, Actions.WIFI_TOGGLE, null)
             "bluetooth_toggle" -> Mapped(Domains.SETTINGS, Actions.BLUETOOTH_TOGGLE, null)
-            "waze_nav" -> Mapped(Domains.MAPS, Actions.NAVIGATE, "com.waze")
-            "maps_nav" -> Mapped(Domains.MAPS, Actions.NAVIGATE, "com.google.android.apps.maps")
+            "waze_nav" -> Mapped(Domains.MAPS, Actions.NAVIGATE, com.voxcommander.app.utils.PackageNames.WAZE)
+            "maps_nav" -> Mapped(Domains.MAPS, Actions.NAVIGATE, com.voxcommander.app.utils.PackageNames.GOOGLE_MAPS)
             else -> null
         }
     }
