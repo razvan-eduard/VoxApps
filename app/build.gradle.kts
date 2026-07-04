@@ -123,7 +123,7 @@ dependencies {
     // OpenWakeWord (fully open-source, ONNX-based wake word detection)
     implementation("xyz.rementia:openwakeword:0.1.5")
     // Force ONNX Runtime 1.20.1+ for 16KB page size alignment (required for Android 15+)
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
     // Piper TTS via sherpa-onnx (on-device neural TTS)
     implementation("com.github.k2-fsa:sherpa-onnx:v1.13.3")
     // Apache Commons Compress for .tar.bz2 extraction (Piper voice models)
