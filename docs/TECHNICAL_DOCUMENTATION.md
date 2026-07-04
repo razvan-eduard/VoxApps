@@ -18,7 +18,8 @@
 14. [Memory Management](#14-memory-management)
 15. [Return-to-Previous-App](#15-return-to-previous-app)
 16. [External Voice Trigger](#16-external-voice-trigger)
-17. [Dependency Graph](#17-dependency-graph)
+17. [Dynamic JSON Configuration](#17-dynamic-json-configuration)
+18. [Dependency Graph](#18-dependency-graph)
 
 ---
 
@@ -789,7 +790,114 @@ UI: Settings → App Manager → External voice trigger toggle
 
 ---
 
-## 17. Dependency Graph
+## 17. Dynamic JSON Configuration
+
+VoxCommander uses three external JSON files for extensible, hot-reloadable configuration. All ship in `app/src/main/assets/` and can be updated from a remote GitHub repo at runtime — no app update required.
+
+### models.json
+
+**Location**: Repo root → copied to assets by `copyModelsJson` Gradle task (`preBuild` dependency)
+
+**Parsed by**: `RemoteModelRegistry` (`data/remote/RemoteModelRegistry.kt`)
+
+**Contents**:
+- `schema_version` — Integer, used to detect newer versions for hot-reload
+- `prompts.standard_nlu` — The NLU system prompt sent to LLM interpreters (OpenAI, Gemini, Local LLM). Contains sentence anatomy rules, domain/action taxonomy, and JSON output format
+- `engines` — Map of engine key → engine definition:
+  - `stt_whisper` — Whisper.cpp models (tiny, base, small) with download URLs and sizes
+  - `wake_vosk` — Vosk wake word models
+  - `piper_tts` — Piper TTS voice models (language, speaker, download URL)
+  - `stt_vosk` — Vosk STT models (for offline speech recognition)
+
+**Hot-reload**: At startup, `RemoteModelRegistry` checks `modelRepoBaseUrl` setting for a newer `models.json`. If the remote schema version is higher, it downloads and caches it.
+
+### search_definitions.json
+
+**Location**: Repo root → copied to assets by `copySearchDefinitions` Gradle task (`preBuild` dependency)
+
+**Parsed by**: `SearchProviderRegistry` (`domain/search/SearchProviderRegistry.kt`)
+
+**Contents**:
+- `schema_version` — Integer, for hot-reload detection
+- `categories` — Array of category definitions:
+  - `category` — "general", "news", "knowledge", "weather"
+  - `providers` — Array of provider definitions:
+    - `name` — Provider display name
+    - `endpoint` — API URL template
+    - `requires_api_key` — Boolean
+    - `parser` — Response parser type ("json", "rss", "html")
+    - `parser_config` — Parser-specific configuration (JSON paths, CSS selectors, etc.)
+
+**Hot-reload**: `SearchProviderRegistry.loadFromRemote()` fetches `search_definitions.json` from the remote repo URL (converted from GitHub URL to `raw.githubusercontent.com`). Falls back to assets copy if remote is unavailable. Local copy stored in `filesDir/search_definitions.json`.
+
+**Adding a new search provider**: Just add a new entry to `search_definitions.json` — no code changes needed. `DynamicSearchProvider` (`domain/search/DynamicSearchProvider.kt`) creates providers from JSON definitions at runtime.
+
+### normalization.json
+
+**Location**: `app/src/main/assets/normalization.json` (not copied from repo root — ships directly in assets)
+
+**Parsed by**: `TextNormalizer` (`domain/voice/TextNormalizer.kt`)
+
+**Purpose**: Corrects STT (Whisper) transcription errors before NLU processing. For example, if Whisper transcribes "Spotify" as "spotif" or "pe spotify" as "pespotify", the normalizer fixes it before the text reaches the intent interpreter.
+
+**Contents** — 3-layer priority-based rule pipeline per language:
+
+```json
+{
+  "schema_version": 1,
+  "en": {
+    "layer_1_replacements": {
+      "rules": {
+        "\\bspotif\\b": "spotify",
+        "\\bwaze\\b": "waze"
+      }
+    },
+    "layer_2_regex": {
+      "rules": [
+        { "pattern": "\\bpe\\s+(spotify|youtube)", "replacement": "pe $1" }
+      ]
+    },
+    "layer_3_cleanup": {
+      "rules": {
+        "\\s+": " "
+      }
+    }
+  },
+  "ro": { ... }
+}
+```
+
+- **Layer 1 — Static replacements**: Exact-match word substitutions (abbreviations, common misrecognitions). Applied first.
+- **Layer 2 — Ordered regex**: Interceptors and sweepers with word boundary locking. Applied in order (array order matters).
+- **Layer 3 — Cleanup**: Final regex pass for whitespace normalization and residual fixes.
+
+**Loading**: `TextNormalizer.load(context)` reads from assets at startup. Supports `reload()` for testing. Rules are compiled into `Pattern` objects and cached per language.
+
+### Build Integration
+
+```kotlin
+// app/build.gradle.kts
+val copyModelsJson = tasks.register<Copy>("copyModelsJson") {
+    from("${project.rootDir}/models.json")
+    into("${projectDir}/src/main/assets")
+}
+
+val copySearchDefinitions = tasks.register<Copy>("copySearchDefinitions") {
+    from("${project.rootDir}/search_definitions.json")
+    into("${projectDir}/src/main/assets")
+}
+
+tasks.named("preBuild") {
+    dependsOn(copyModelsJson)
+    dependsOn(copySearchDefinitions)
+}
+```
+
+`normalization.json` is not copied from repo root — it lives directly in `app/src/main/assets/` since it's not hot-reloaded from remote.
+
+---
+
+## 18. Dependency Graph
 
 ### Core Dependencies
 

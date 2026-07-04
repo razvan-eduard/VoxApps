@@ -184,6 +184,21 @@ app/src/main/java/com/voxcommander/app/
 
 Both engines resolve a search query to a YouTube video ID, then launch `youtu.be/{id}` as an intent to whichever app the user has selected as default for audio (LibreTube, NewPipe, YouTube, etc.).
 
+### Dynamic JSON Configuration
+
+VoxCommander uses external JSON files for extensible configuration. These ship in `app/src/main/assets/` and can be hot-reloaded from a remote GitHub repo at runtime — no app update needed to add models, search providers, or normalization rules.
+
+| File | Purpose | Location |
+|------|---------|----------|
+| `models.json` | AI/ML model definitions (Whisper, Vosk, Piper TTS, wake word), NLU prompt template, engine metadata | Repo root → copied to assets at build time |
+| `search_definitions.json` | Search provider definitions (DuckDuckGo, Wikipedia, Google News, GNews, WeatherAPI, Open-Meteo) — categories, endpoints, API key requirements, response parsers | Repo root → copied to assets at build time |
+| `normalization.json` | 3-layer text normalization rules per language (abbreviations, regex interceptors, cleanup) — corrects STT output before NLU processing | `app/src/main/assets/normalization.json` |
+
+**How it works:**
+- At build time, `copyModelsJson` and `copySearchDefinitions` Gradle tasks copy the JSON from repo root into `assets/`
+- At runtime, the app checks the remote repo (`modelRepoBaseUrl` setting) for newer versions and downloads them if the schema version is higher
+- Adding a new search provider or model = just update the JSON, no code changes required
+
 ### External Voice Trigger
 
 Automation apps like MacroDroid or Tasker can trigger the voice assistant without a wake word by sending a broadcast intent:
