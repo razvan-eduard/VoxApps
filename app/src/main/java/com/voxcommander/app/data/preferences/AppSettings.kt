@@ -126,7 +126,11 @@ data class AppSettings(
     val manualLocationLat: Double? = null,
     val manualLocationLon: Double? = null,
 
-) {
+    // --- FIRST LAUNCH / TUTORIAL ---
+    val firstLaunchCompleted: Boolean = false,
+    val tutorialCompleted: Boolean = false,
+
+    ) {
     /**
      * Key for custom model path: "engineKey" or "engineKey_langCode"
      */

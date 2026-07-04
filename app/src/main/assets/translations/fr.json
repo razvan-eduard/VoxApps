@@ -375,5 +375,8 @@
   "search_section": "Fournisseurs de Recherche",
   "search_category": "Catégorie de Recherche",
   "search_test_query": "Recherche de test",
-  "search_test_placeholder": "Saisir une recherche..."
+  "search_test_placeholder": "Saisir une recherche...",
+  "tutorial_section": "Tutoriel",
+  "replay_tutorial": "Revoir le tutoriel",
+  "tutorial_description": "Redémarre l'application et affiche à nouveau le tutoriel. Vous pouvez le passer à tout moment."
 }

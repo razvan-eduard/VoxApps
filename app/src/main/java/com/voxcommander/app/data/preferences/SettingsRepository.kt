@@ -155,4 +155,10 @@ interface SettingsRepository {
     fun getManualLocationLatSync(): Double?
     fun getManualLocationLonSync(): Double?
     suspend fun setManualLocation(lat: Double?, lon: Double?)
+
+    // --- FIRST LAUNCH / TUTORIAL ---
+    fun getFirstLaunchCompletedSync(): Boolean
+    suspend fun setFirstLaunchCompleted(completed: Boolean)
+    fun getTutorialCompletedSync(): Boolean
+    suspend fun setTutorialCompleted(completed: Boolean)
 }

@@ -375,5 +375,8 @@
   "search_section": "Suchanbieter",
   "search_category": "Suchkategorie",
   "search_test_query": "Suche testen",
-  "search_test_placeholder": "Suchanfrage eingeben..."
+  "search_test_placeholder": "Suchanfrage eingeben...",
+  "tutorial_section": "Tutorial",
+  "replay_tutorial": "Tutorial wiederholen",
+  "tutorial_description": "Startet die App neu und zeigt das Tutorial erneut an. Sie können es jederzeit überspringen."
 }

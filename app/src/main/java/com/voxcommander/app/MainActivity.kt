@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxcommander.app.data.remote.RemoteModelRegistry
 import androidx.core.content.ContextCompat
@@ -21,9 +22,12 @@ import androidx.navigation.compose.rememberNavController
 import com.voxcommander.app.di.AppContainer
 import com.voxcommander.app.domain.voice.VoiceManager
 import com.voxcommander.app.ui.screens.main.MainScreen
+import com.voxcommander.app.ui.screens.onboarding.LanguageSelectionScreen
+import com.voxcommander.app.ui.screens.onboarding.TutorialScreen
 import com.voxcommander.app.ui.screens.splash.SplashLoadingScreen
 import com.voxcommander.app.ui.theme.VoxCommanderTheme
 import com.voxcommander.app.service.SpotifyPkceManager
+import com.voxcommander.app.domain.localization.TutorialManager
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
 import com.voxcommander.app.utils.VoiceIntentLauncher
@@ -99,6 +103,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         Logger.log("MainActivity: onCreate called")
 
@@ -136,11 +141,57 @@ class MainActivity : ComponentActivity() {
                 // Show splash screen while loading assets on startup
                 var showSplash by remember { mutableStateOf(true) }
 
+                // First-launch onboarding states
+                val settingsSnapshot = appContainer.settingsRepository.getSettingsSnapshot()
+                var showLanguageSelection by remember { mutableStateOf(false) }
+                var showTutorial by remember { mutableStateOf(false) }
+                val tutorialManager = remember { TutorialManager(this@MainActivity) }
+
                 if (showSplash) {
                     SplashLoadingScreen(
                         languageManager = appContainer.languageManager,
                         settingsRepo = appContainer.settingsRepository,
-                        onFinished = { showSplash = false }
+                        onFinished = {
+                            showSplash = false
+                            if (!settingsSnapshot.firstLaunchCompleted) {
+                                showLanguageSelection = true
+                            } else if (!settingsSnapshot.tutorialCompleted) {
+                                tutorialManager.load(settingsSnapshot.language)
+                                showTutorial = true
+                            }
+                        }
+                    )
+                    return@VoxCommanderTheme
+                }
+
+                if (showLanguageSelection) {
+                    LanguageSelectionScreen(
+                        languageManager = appContainer.languageManager,
+                        onLanguageSelected = { langCode ->
+                            appContainer.languageManager.loadLanguage(langCode)
+                            appContainer.appStateManager.setAppLanguage(langCode)
+                            tutorialManager.load(langCode)
+                            showLanguageSelection = false
+                            showTutorial = true
+                        }
+                    )
+                    return@VoxCommanderTheme
+                }
+
+                if (showTutorial) {
+                    TutorialScreen(
+                        tutorialManager = tutorialManager,
+                        langCode = appContainer.settingsRepository.getSettingsSnapshot().language,
+                        onSkip = {
+                            showTutorial = false
+                            appContainer.appStateManager.setFirstLaunchCompleted(true)
+                            appContainer.appStateManager.setTutorialCompleted(true)
+                        },
+                        onFinish = {
+                            showTutorial = false
+                            appContainer.appStateManager.setFirstLaunchCompleted(true)
+                            appContainer.appStateManager.setTutorialCompleted(true)
+                        }
                     )
                     return@VoxCommanderTheme
                 }

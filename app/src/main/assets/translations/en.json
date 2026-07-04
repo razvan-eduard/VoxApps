@@ -423,5 +423,8 @@
   "search_section": "Search Providers",
   "search_category": "Search Category",
   "search_test_query": "Test Search",
-  "search_test_placeholder": "Enter a search query..."
+  "search_test_placeholder": "Enter a search query...",
+  "tutorial_section": "Tutorial",
+  "replay_tutorial": "Replay Tutorial",
+  "tutorial_description": "Restart the app and show the onboarding tutorial again. You can skip it at any time."
 }

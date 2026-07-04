@@ -69,8 +69,8 @@ fun SplashLoadingScreen(
                 painter = painterResource(id = R.drawable.splash_logo),
                 contentDescription = null,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp),
+                    .fillMaxWidth(0.85f)
+                    .padding(horizontal = 4.dp),
                 contentScale = ContentScale.Fit
             )
 

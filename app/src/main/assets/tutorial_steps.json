@@ -1,0 +1,746 @@
+{
+  "en": {
+    "welcome": {
+      "title": "Welcome to VoxCommander",
+      "paragraphs": [
+        "VoxCommander is a voice assistant that lets you control your phone with natural language commands.",
+        "This quick tutorial will guide you through the main features. You can skip it at any time."
+      ]
+    },
+    "main_screen": {
+      "title": "Main Screen",
+      "steps": [
+        {
+          "element": "manual_command",
+          "title": "Manual Command Input",
+          "description": "Type a command directly instead of using voice. Enter your text and press Test to process it."
+        },
+        {
+          "element": "microphone_button",
+          "title": "Microphone Button",
+          "description": "Tap to start voice recognition. Speak your command, then tap again to stop and process it."
+        },
+        {
+          "element": "last_intent",
+          "title": "Last Intent",
+          "description": "Shows the parsed intent from your last command. Tap to manually edit and resend the intent JSON."
+        },
+        {
+          "element": "search_results",
+          "title": "Search Results",
+          "description": "Displays search results when your command triggers a web or media search."
+        },
+        {
+          "element": "rules_button",
+          "title": "Rules Button",
+          "description": "Open the Rules Manager to create custom regex-based command mappings for quick actions."
+        },
+        {
+          "element": "settings_button",
+          "title": "Settings Button",
+          "description": "Open Settings to configure voice engines, AI models, app preferences, integrations, and more."
+        }
+      ]
+    },
+    "settings_general": {
+      "title": "Settings: General",
+      "steps": [
+        {
+          "element": "language_selector",
+          "title": "App Language",
+          "description": "Change the interface language of VoxCommander."
+        },
+        {
+          "element": "voice_language",
+          "title": "Voice Language",
+          "description": "Set the language for speech recognition. This affects how the STT engine interprets your voice."
+        },
+        {
+          "element": "tts_settings",
+          "title": "Text-to-Speech",
+          "description": "Enable or disable spoken responses, and configure TTS engine, speed, and pitch."
+        }
+      ]
+    },
+    "settings_models": {
+      "title": "Settings: AI Models",
+      "steps": [
+        {
+          "element": "voice_processor",
+          "title": "Voice Processor",
+          "description": "Choose your speech-to-text engine: Google (cloud), Whisper (local), Vosk (local), or Whisper API."
+        },
+        {
+          "element": "intent_engine",
+          "title": "Intent Engine",
+          "description": "Select how commands are interpreted: OpenAI, Gemini, local LLM, or FastMap (offline regex)."
+        },
+        {
+          "element": "model_download",
+          "title": "Model Management",
+          "description": "Download, select, or delete voice and intent models. Models can be large — use Wi-Fi for downloads."
+        }
+      ]
+    },
+    "settings_service": {
+      "title": "Settings: Service",
+      "steps": [
+        {
+          "element": "wake_word",
+          "title": "Wake Word",
+          "description": "Enable hands-free activation. Say your wake word to trigger the assistant without touching your phone."
+        },
+        {
+          "element": "external_trigger",
+          "title": "External Trigger",
+          "description": "Allow automation apps like Tasker or MacroDroid to trigger the voice assistant via broadcast intent."
+        },
+        {
+          "element": "return_after_action",
+          "title": "Return to Previous App",
+          "description": "Automatically return to the app you were using after a command is executed (e.g. return to Spotify after playing a song)."
+        }
+      ]
+    },
+    "settings_app_manager": {
+      "title": "Settings: App Manager",
+      "steps": [
+        {
+          "element": "default_apps",
+          "title": "Default Apps",
+          "description": "Set which app opens for each domain: music, navigation, messaging, etc."
+        },
+        {
+          "element": "app_aliases",
+          "title": "App Aliases",
+          "description": "Create custom names for apps. Say 'play on my music app' instead of naming Spotify explicitly."
+        }
+      ]
+    },
+    "settings_integrations": {
+      "title": "Settings: Integrations",
+      "steps": [
+        {
+          "element": "spotify_integration",
+          "title": "Spotify Integration",
+          "description": "Connect your Spotify account for direct playback control. Requires OAuth authorization."
+        },
+        {
+          "element": "youtube_engine",
+          "title": "YouTube URL Engine",
+          "description": "Choose between Piped or NewPipe as the search engine for YouTube URLs."
+        },
+        {
+          "element": "search_provider",
+          "title": "Search Provider",
+          "description": "Configure web search providers with API keys for custom search results."
+        }
+      ]
+    },
+    "settings_permissions": {
+      "title": "Settings: Permissions",
+      "steps": [
+        {
+          "element": "overlay_permission",
+          "title": "Overlay Permission",
+          "description": "Required to show the voice overlay on top of other apps."
+        },
+        {
+          "element": "microphone_permission",
+          "title": "Microphone Permission",
+          "description": "Required for voice recognition."
+        },
+        {
+          "element": "notification_permission",
+          "title": "Notification Permission",
+          "description": "Required for the foreground service notification."
+        },
+        {
+          "element": "location_permission",
+          "title": "Location Permission",
+          "description": "Optional — used for location-based commands like 'navigate home'."
+        }
+      ]
+    },
+    "rules_screen": {
+      "title": "Rules Manager",
+      "steps": [
+        {
+          "element": "add_rule",
+          "title": "Add Rule",
+          "description": "Create a new FastMap rule. Define a regex trigger pattern, target app, and action."
+        },
+        {
+          "element": "rule_list",
+          "title": "Rule List",
+          "description": "View, edit, or delete your custom rules. Rules are matched before AI processing for faster responses."
+        }
+      ]
+    },
+    "final": {
+      "title": "You're All Set!",
+      "paragraphs": [
+        "You now know the basics of VoxCommander. Tap the microphone and try saying 'play Bohemian Rhapsody on Spotify' or 'navigate to the nearest gas station'.",
+        "You can revisit this tutorial anytime from Settings → Advanced."
+      ]
+    }
+  },
+  "de": {
+    "welcome": {
+      "title": "Willkommen bei VoxCommander",
+      "paragraphs": [
+        "VoxCommander ist ein Sprachassistent, mit dem Sie Ihr Telefon mit natürlichen Sprachbefehlen steuern können.",
+        "Dieses kurze Tutorial führt Sie durch die Hauptfunktionen. Sie können es jederzeit überspringen."
+      ]
+    },
+    "main_screen": {
+      "title": "Hauptbildschirm",
+      "steps": [
+        {
+          "element": "manual_command",
+          "title": "Manuelle Befehlseingabe",
+          "description": "Geben Sie einen Befehl direkt per Text ein. Drücken Sie Testen, um ihn zu verarbeiten."
+        },
+        {
+          "element": "microphone_button",
+          "title": "Mikrofon-Taste",
+          "description": "Tippen Sie, um die Spracherkennung zu starten. Sprechen Sie Ihren Befehl und tippen Sie erneut, um zu stoppen."
+        },
+        {
+          "element": "last_intent",
+          "title": "Letzter Intent",
+          "description": "Zeigt den analysierten Intent Ihres letzten Befehls. Tippen Sie, um den JSON-Intent manuell zu bearbeiten."
+        },
+        {
+          "element": "search_results",
+          "title": "Suchergebnisse",
+          "description": "Zeigt Suchergebnisse an, wenn Ihr Befehl eine Web- oder Mediensuche auslöst."
+        },
+        {
+          "element": "rules_button",
+          "title": "Regeln-Taste",
+          "description": "Öffnet den Regeln-Manager, um benutzerdefinierte Regex-Befehlszuordnungen zu erstellen."
+        },
+        {
+          "element": "settings_button",
+          "title": "Einstellungen-Taste",
+          "description": "Öffnet die Einstellungen für Sprach-Engines, KI-Modelle, App-Präferenzen und mehr."
+        }
+      ]
+    },
+    "settings_general": {
+      "title": "Einstellungen: Allgemein",
+      "steps": [
+        {
+          "element": "language_selector",
+          "title": "App-Sprache",
+          "description": "Ändern Sie die Sprache der VoxCommander-Oberfläche."
+        },
+        {
+          "element": "voice_language",
+          "title": "Spracherkennungssprache",
+          "description": "Legt die Sprache für die Spracherkennung fest."
+        },
+        {
+          "element": "tts_settings",
+          "title": "Text-to-Speech",
+          "description": "Aktivieren Sie gesprochene Antworten und konfigurieren Sie TTS-Engine, Geschwindigkeit und Tonhöhe."
+        }
+      ]
+    },
+    "settings_models": {
+      "title": "Einstellungen: KI-Modelle",
+      "steps": [
+        {
+          "element": "voice_processor",
+          "title": "Sprachprozessor",
+          "description": "Wählen Sie Ihre STT-Engine: Google (Cloud), Whisper (lokal), Vosk (lokal) oder Whisper API."
+        },
+        {
+          "element": "intent_engine",
+          "title": "Intent-Engine",
+          "description": "Wählen Sie, wie Befehle interpretiert werden: OpenAI, Gemini, lokales LLM oder FastMap (Offline)."
+        },
+        {
+          "element": "model_download",
+          "title": "Modellverwaltung",
+          "description": "Laden Sie Sprach- und Intent-Modelle herunter, wählen Sie aus oder löschen Sie diese."
+        }
+      ]
+    },
+    "settings_service": {
+      "title": "Einstellungen: Dienst",
+      "steps": [
+        {
+          "element": "wake_word",
+          "title": "Wachwort",
+          "description": "Aktivieren Sie die freihändige Bedienung. Sagen Sie Ihr Wachwort, um den Assistenten zu starten."
+        },
+        {
+          "element": "external_trigger",
+          "title": "Externer Trigger",
+          "description": "Erlauben Sie Automatisierungs-Apps wie Tasker, den Sprachassistenten per Broadcast auszulösen."
+        },
+        {
+          "element": "return_after_action",
+          "title": "Zurück zur vorherigen App",
+          "description": "Kehren Sie nach der Befehlsausführung automatisch zur vorherigen App zurück."
+        }
+      ]
+    },
+    "settings_app_manager": {
+      "title": "Einstellungen: App-Manager",
+      "steps": [
+        {
+          "element": "default_apps",
+          "title": "Standard-Apps",
+          "description": "Legen Sie fest, welche App für jede Domain geöffnet wird: Musik, Navigation, Messaging usw."
+        },
+        {
+          "element": "app_aliases",
+          "title": "App-Aliase",
+          "description": "Erstellen Sie benutzerdefinierte Namen für Apps."
+        }
+      ]
+    },
+    "settings_integrations": {
+      "title": "Einstellungen: Integrationen",
+      "steps": [
+        {
+          "element": "spotify_integration",
+          "title": "Spotify-Integration",
+          "description": "Verbinden Sie Ihr Spotify-Konto für direkte Wiedergabesteuerung. Erfordert OAuth-Autorisierung."
+        },
+        {
+          "element": "youtube_engine",
+          "title": "YouTube-URL-Engine",
+          "description": "Wählen Sie zwischen Piped oder NewPipe als Suchmaschine für YouTube-URLs."
+        },
+        {
+          "element": "search_provider",
+          "title": "Suchanbieter",
+          "description": "Konfigurieren Sie Websuchanbieter mit API-Schlüsseln."
+        }
+      ]
+    },
+    "settings_permissions": {
+      "title": "Einstellungen: Berechtigungen",
+      "steps": [
+        {
+          "element": "overlay_permission",
+          "title": "Overlay-Berechtigung",
+          "description": "Erforderlich, um das Voice-Overlay über anderen Apps anzuzeigen."
+        },
+        {
+          "element": "microphone_permission",
+          "title": "Mikrofon-Berechtigung",
+          "description": "Erforderlich für die Spracherkennung."
+        },
+        {
+          "element": "notification_permission",
+          "title": "Benachrichtigungsberechtigung",
+          "description": "Erforderlich für die Foreground-Service-Benachrichtigung."
+        },
+        {
+          "element": "location_permission",
+          "title": "Standort-Berechtigung",
+          "description": "Optional — für standortbasierte Befehle wie 'nach Hause navigieren'."
+        }
+      ]
+    },
+    "rules_screen": {
+      "title": "Regeln-Manager",
+      "steps": [
+        {
+          "element": "add_rule",
+          "title": "Regel hinzufügen",
+          "description": "Erstellen Sie eine neue FastMap-Regel mit Regex-Trigger, Ziel-App und Aktion."
+        },
+        {
+          "element": "rule_list",
+          "title": "Regelliste",
+          "description": "Anzeigen, Bearbeiten oder Löschen Ihrer benutzerdefinierten Regeln."
+        }
+      ]
+    },
+    "final": {
+      "title": "Alles bereit!",
+      "paragraphs": [
+        "Sie kennen nun die Grundlagen von VoxCommander. Tippen Sie auf das Mikrofon und sagen Sie 'Spiele Bohemian Rhapsody auf Spotify' oder 'Navigiere zur nächsten Tankstelle'.",
+        "Sie können dieses Tutorial jederzeit über Einstellungen → Erweitert erneut aufrufen."
+      ]
+    }
+  },
+  "fr": {
+    "welcome": {
+      "title": "Bienvenue sur VoxCommander",
+      "paragraphs": [
+        "VoxCommander est un assistant vocal qui vous permet de contrôler votre téléphone avec des commandes en langage naturel.",
+        "Ce tutoriel rapide vous guidera à travers les principales fonctionnalités. Vous pouvez le passer à tout moment."
+      ]
+    },
+    "main_screen": {
+      "title": "Écran principal",
+      "steps": [
+        {
+          "element": "manual_command",
+          "title": "Saisie manuelle",
+          "description": "Tapez une commande directement. Appuyez sur Tester pour la traiter."
+        },
+        {
+          "element": "microphone_button",
+          "title": "Bouton Microphone",
+          "description": "Appuyez pour démarrer la reconnaissance vocale. Parlez, puis appuyez à nouveau pour arrêter."
+        },
+        {
+          "element": "last_intent",
+          "title": "Dernier Intent",
+          "description": "Affiche l'intent analysé de votre dernière commande. Appuyez pour modifier le JSON manuellement."
+        },
+        {
+          "element": "search_results",
+          "title": "Résultats de recherche",
+          "description": "Affiche les résultats lorsqu'une commande déclenche une recherche web ou média."
+        },
+        {
+          "element": "rules_button",
+          "title": "Bouton Règles",
+          "description": "Ouvre le gestionnaire de règles pour créer des correspondances de commandes regex personnalisées."
+        },
+        {
+          "element": "settings_button",
+          "title": "Bouton Paramètres",
+          "description": "Ouvre les paramètres pour configurer les moteurs vocaux, modèles IA, préférences d'application, etc."
+        }
+      ]
+    },
+    "settings_general": {
+      "title": "Paramètres : Général",
+      "steps": [
+        {
+          "element": "language_selector",
+          "title": "Langue de l'application",
+          "description": "Changez la langue de l'interface de VoxCommander."
+        },
+        {
+          "element": "voice_language",
+          "title": "Langue vocale",
+          "description": "Définissez la langue pour la reconnaissance vocale."
+        },
+        {
+          "element": "tts_settings",
+          "title": "Synthèse vocale",
+          "description": "Activez les réponses parlées et configurez le moteur TTS, la vitesse et la tonalité."
+        }
+      ]
+    },
+    "settings_models": {
+      "title": "Paramètres : Modèles IA",
+      "steps": [
+        {
+          "element": "voice_processor",
+          "title": "Processeur vocal",
+          "description": "Choisissez votre moteur STT : Google (cloud), Whisper (local), Vosk (local) ou Whisper API."
+        },
+        {
+          "element": "intent_engine",
+          "title": "Moteur d'Intent",
+          "description": "Sélectionnez comment les commandes sont interprétées : OpenAI, Gemini, LLM local ou FastMap (hors ligne)."
+        },
+        {
+          "element": "model_download",
+          "title": "Gestion des modèles",
+          "description": "Téléchargez, sélectionnez ou supprimez des modèles vocaux et d'intent."
+        }
+      ]
+    },
+    "settings_service": {
+      "title": "Paramètres : Service",
+      "steps": [
+        {
+          "element": "wake_word",
+          "title": "Mot de réveil",
+          "description": "Activez l'activation mains libres. Dites votre mot de réveil pour déclencher l'assistant."
+        },
+        {
+          "element": "external_trigger",
+          "title": "Déclencheur externe",
+          "description": "Autorisez les applications d'automatisation comme Tasker à déclencher l'assistant par broadcast."
+        },
+        {
+          "element": "return_after_action",
+          "title": "Retour à l'app précédente",
+          "description": "Revenez automatiquement à l'application utilisée après l'exécution d'une commande."
+        }
+      ]
+    },
+    "settings_app_manager": {
+      "title": "Paramètres : Gestionnaire d'apps",
+      "steps": [
+        {
+          "element": "default_apps",
+          "title": "Applications par défaut",
+          "description": "Définissez quelle application s'ouvre pour chaque domaine : musique, navigation, messagerie, etc."
+        },
+        {
+          "element": "app_aliases",
+          "title": "Alias d'applications",
+          "description": "Créez des noms personnalisés pour vos applications."
+        }
+      ]
+    },
+    "settings_integrations": {
+      "title": "Paramètres : Intégrations",
+      "steps": [
+        {
+          "element": "spotify_integration",
+          "title": "Intégration Spotify",
+          "description": "Connectez votre compte Spotify pour le contrôle direct de la lecture. Nécessite une autorisation OAuth."
+        },
+        {
+          "element": "youtube_engine",
+          "title": "Moteur d'URL YouTube",
+          "description": "Choisissez entre Piped ou NewPipe comme moteur de recherche pour les URL YouTube."
+        },
+        {
+          "element": "search_provider",
+          "title": "Fournisseur de recherche",
+          "description": "Configurez les fournisseurs de recherche web avec des clés API."
+        }
+      ]
+    },
+    "settings_permissions": {
+      "title": "Paramètres : Autorisations",
+      "steps": [
+        {
+          "element": "overlay_permission",
+          "title": "Autorisation de superposition",
+          "description": "Requise pour afficher l'overlay vocal par-dessus d'autres applications."
+        },
+        {
+          "element": "microphone_permission",
+          "title": "Autorisation du microphone",
+          "description": "Requise pour la reconnaissance vocale."
+        },
+        {
+          "element": "notification_permission",
+          "title": "Autorisation de notification",
+          "description": "Requise pour la notification du service au premier plan."
+        },
+        {
+          "element": "location_permission",
+          "title": "Autorisation de localisation",
+          "description": "Optionnelle — utilisée pour les commandes basées sur la localisation."
+        }
+      ]
+    },
+    "rules_screen": {
+      "title": "Gestionnaire de règles",
+      "steps": [
+        {
+          "element": "add_rule",
+          "title": "Ajouter une règle",
+          "description": "Créez une nouvelle règle FastMap avec un déclencheur regex, une app cible et une action."
+        },
+        {
+          "element": "rule_list",
+          "title": "Liste des règles",
+          "description": "Affichez, modifiez ou supprimez vos règles personnalisées."
+        }
+      ]
+    },
+    "final": {
+      "title": "Tout est prêt !",
+      "paragraphs": [
+        "Vous connaissez maintenant les bases de VoxCommander. Appuyez sur le microphone et essayez de dire « Joue Bohemian Rhapsody sur Spotify » ou « Navigue vers la station-service la plus proche ».",
+        "Vous pouvez revoir ce tutoriel à tout moment via Paramètres → Avancé."
+      ]
+    }
+  },
+  "ro": {
+    "welcome": {
+      "title": "Bun venit la VoxCommander",
+      "paragraphs": [
+        "VoxCommander este un asistent vocal care îți permite să îți controlezi telefonul cu comenzi în limbaj natural.",
+        "Acest tutorial scurt te va ghida prin principalele funcții. Poți renunța oricând."
+      ]
+    },
+    "main_screen": {
+      "title": "Ecranul principal",
+      "steps": [
+        {
+          "element": "manual_command",
+          "title": "Introducere manuală",
+          "description": "Scrie o comandă direct în text. Apasă Testează pentru a o procesa."
+        },
+        {
+          "element": "microphone_button",
+          "title": "Butonul Microfon",
+          "description": "Atinge pentru a porni recunoașterea vocală. Spune comanda, apoi atinge din nou pentru a opri."
+        },
+        {
+          "element": "last_intent",
+          "title": "Ultimul Intent",
+          "description": "Afișează intentul parsat din ultima comandă. Atinge pentru a edita manual JSON-ul."
+        },
+        {
+          "element": "search_results",
+          "title": "Rezultate căutare",
+          "description": "Afișează rezultatele când comanda declanșează o căutare web sau media."
+        },
+        {
+          "element": "rules_button",
+          "title": "Buton Reguli",
+          "description": "Deschide Managerul de Reguli pentru a crea comenzi regex personalizate."
+        },
+        {
+          "element": "settings_button",
+          "title": "Buton Setări",
+          "description": "Deschide Setările pentru a configura motoarele vocale, modelele AI, preferințele aplicațiilor și altele."
+        }
+      ]
+    },
+    "settings_general": {
+      "title": "Setări: General",
+      "steps": [
+        {
+          "element": "language_selector",
+          "title": "Limba aplicației",
+          "description": "Schimbă limba interfeței VoxCommander."
+        },
+        {
+          "element": "voice_language",
+          "title": "Limba vocală",
+          "description": "Setează limba pentru recunoașterea vocală."
+        },
+        {
+          "element": "tts_settings",
+          "title": "Text-to-Speech",
+          "description": "Activează răspunsurile vorbite și configurează motorul TTS, viteza și tonul."
+        }
+      ]
+    },
+    "settings_models": {
+      "title": "Setări: Modele AI",
+      "steps": [
+        {
+          "element": "voice_processor",
+          "title": "Procesor vocal",
+          "description": "Alege motorul STT: Google (cloud), Whisper (local), Vosk (local) sau Whisper API."
+        },
+        {
+          "element": "intent_engine",
+          "title": "Motor de Intent",
+          "description": "Selectează cum sunt interpretate comenzile: OpenAI, Gemini, LLM local sau FastMap (offline)."
+        },
+        {
+          "element": "model_download",
+          "title": "Gestionare modele",
+          "description": "Descarcă, selectează sau șterge modele vocale și de intent."
+        }
+      ]
+    },
+    "settings_service": {
+      "title": "Setări: Serviciu",
+      "steps": [
+        {
+          "element": "wake_word",
+          "title": "Cuvânt de activare",
+          "description": "Activează activarea mâini-libere. Spune cuvântul de activare pentru a porni asistentul."
+        },
+        {
+          "element": "external_trigger",
+          "title": "Declanșator extern",
+          "description": "Permite aplicațiilor de automatizare precum Tasker să declanșeze asistentul vocal prin broadcast."
+        },
+        {
+          "element": "return_after_action",
+          "title": "Întoarcere la aplicația anterioară",
+          "description": "Revino automat la aplicația folosită după executarea unei comenzi."
+        }
+      ]
+    },
+    "settings_app_manager": {
+      "title": "Setări: Manager aplicații",
+      "steps": [
+        {
+          "element": "default_apps",
+          "title": "Aplicații implicite",
+          "description": "Setează ce aplicație se deschide pentru fiecare domeniu: muzică, navigație, mesagerie etc."
+        },
+        {
+          "element": "app_aliases",
+          "title": "Alias-uri aplicații",
+          "description": "Creează nume personalizate pentru aplicații."
+        }
+      ]
+    },
+    "settings_integrations": {
+      "title": "Setări: Integrări",
+      "steps": [
+        {
+          "element": "spotify_integration",
+          "title": "Integrare Spotify",
+          "description": "Conectează contul Spotify pentru control direct al redării. Necesită autorizare OAuth."
+        },
+        {
+          "element": "youtube_engine",
+          "title": "Motor URL YouTube",
+          "description": "Alege între Piped sau NewPipe ca motor de căutare pentru URL-uri YouTube."
+        },
+        {
+          "element": "search_provider",
+          "title": "Furnizor de căutare",
+          "description": "Configurează furnizorii de căutare web cu chei API."
+        }
+      ]
+    },
+    "settings_permissions": {
+      "title": "Setări: Permisiuni",
+      "steps": [
+        {
+          "element": "overlay_permission",
+          "title": "Permisiune overlay",
+          "description": "Necesară pentru a afișa overlay-ul vocal peste alte aplicații."
+        },
+        {
+          "element": "microphone_permission",
+          "title": "Permisiune microfon",
+          "description": "Necesară pentru recunoașterea vocală."
+        },
+        {
+          "element": "notification_permission",
+          "title": "Permisiune notificări",
+          "description": "Necesară pentru notificarea serviciului foreground."
+        },
+        {
+          "element": "location_permission",
+          "title": "Permisiune locație",
+          "description": "Opțională — folosită pentru comenzi bazate pe locație."
+        }
+      ]
+    },
+    "rules_screen": {
+      "title": "Manager de reguli",
+      "steps": [
+        {
+          "element": "add_rule",
+          "title": "Adaugă regulă",
+          "description": "Creează o regulă FastMap nouă cu trigger regex, aplicație țintă și acțiune."
+        },
+        {
+          "element": "rule_list",
+          "title": "Lista de reguli",
+          "description": "Vizualizează, editează sau șterge regulile personalizate."
+        }
+      ]
+    },
+    "final": {
+      "title": "Gata!",
+      "paragraphs": [
+        "Acum cunoști bazele VoxCommander. Atinge microfonul și încearcă să spui „Redă Bohemian Rhapsody pe Spotify” sau „Navighează spre cea mai apropiată benzinărie”.",
+        "Poți revisualiza acest tutorial oricând din Setări → Avansat."
+      ]
+    }
+  }
+}

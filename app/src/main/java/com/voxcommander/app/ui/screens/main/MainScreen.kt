@@ -180,11 +180,20 @@ fun MainScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                        Text(
-                            text = lastIntent?.let { gson.toJson(it) } ?: languageManager.getString("no_intent"),
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.align(Alignment.TopStart)
-                        )
+                        if (lastIntent != null) {
+                            Text(
+                                text = gson.toJson(lastIntent),
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.align(Alignment.TopStart)
+                            )
+                        } else {
+                            Text(
+                                text = languageManager.getString("no_intent"),
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.align(Alignment.Center)
+                            )
+                        }
                     }
                 }
 

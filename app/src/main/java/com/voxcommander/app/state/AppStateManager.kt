@@ -262,6 +262,14 @@ class AppStateManager private constructor(
         scope.launch { repo.setLanguage(lang) }
     }
 
+    fun setFirstLaunchCompleted(completed: Boolean) {
+        scope.launch { repo.setFirstLaunchCompleted(completed) }
+    }
+
+    fun setTutorialCompleted(completed: Boolean) {
+        scope.launch { repo.setTutorialCompleted(completed) }
+    }
+
     fun setOfflineFallbackTimeout(seconds: Int) {
         scope.launch { repo.setOfflineFallbackTimeout(seconds) }
     }

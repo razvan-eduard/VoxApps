@@ -148,6 +148,10 @@ class SettingsRepositoryImpl(
         // Manual location fallback (stored as strings since DataStore has no doublePreferencesKey)
         val MANUAL_LOCATION_LAT = stringPreferencesKey("manual_location_lat")
         val MANUAL_LOCATION_LON = stringPreferencesKey("manual_location_lon")
+
+        // First launch / tutorial
+        val FIRST_LAUNCH_COMPLETED = booleanPreferencesKey("first_launch_completed")
+        val TUTORIAL_COMPLETED = booleanPreferencesKey("tutorial_completed")
     }
 
     private val TAG = "SettingsRepository"
@@ -354,7 +358,9 @@ class SettingsRepositoryImpl(
             overlayTextSize = prefs[Keys.OVERLAY_TEXT_SIZE] ?: 1.0f,
             appAliasRules = parseAppAliasRules(prefs[Keys.APP_ALIAS_RULES_JSON]),
             manualLocationLat = prefs[Keys.MANUAL_LOCATION_LAT]?.toDoubleOrNull(),
-            manualLocationLon = prefs[Keys.MANUAL_LOCATION_LON]?.toDoubleOrNull()
+            manualLocationLon = prefs[Keys.MANUAL_LOCATION_LON]?.toDoubleOrNull(),
+            firstLaunchCompleted = prefs[Keys.FIRST_LAUNCH_COMPLETED] ?: false,
+            tutorialCompleted = prefs[Keys.TUTORIAL_COMPLETED] ?: false
         )
     }
 
@@ -893,5 +899,16 @@ class SettingsRepositoryImpl(
             if (lon != null) prefs[Keys.MANUAL_LOCATION_LON] = lon.toString()
             else prefs.remove(Keys.MANUAL_LOCATION_LON)
         }
+    }
+
+    // --- FIRST LAUNCH / TUTORIAL ---
+    override fun getFirstLaunchCompletedSync(): Boolean = runBlocking { dataStore.data.first()[Keys.FIRST_LAUNCH_COMPLETED] ?: false }
+    override suspend fun setFirstLaunchCompleted(completed: Boolean) {
+        dataStore.edit { it[Keys.FIRST_LAUNCH_COMPLETED] = completed }
+    }
+
+    override fun getTutorialCompletedSync(): Boolean = runBlocking { dataStore.data.first()[Keys.TUTORIAL_COMPLETED] ?: false }
+    override suspend fun setTutorialCompleted(completed: Boolean) {
+        dataStore.edit { it[Keys.TUTORIAL_COMPLETED] = completed }
     }
 }

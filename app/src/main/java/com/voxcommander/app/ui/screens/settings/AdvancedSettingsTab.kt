@@ -512,6 +512,32 @@ fun AdvancedSettingsTab(
                 }
             }
         }
+
+        // --- TUTORIAL SECTION ---
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = languageManager.getString("tutorial_section"), style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = {
+                            appStateManager.setTutorialCompleted(false)
+                            appStateManager.setFirstLaunchCompleted(false)
+                            restartApp(context)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(languageManager.getString("replay_tutorial"))
+                    }
+                    Text(
+                        text = languageManager.getString("tutorial_description"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 
     // --- RESTART DIALOG ---
