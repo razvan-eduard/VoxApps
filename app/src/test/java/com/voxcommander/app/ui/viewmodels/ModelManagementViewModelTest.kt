@@ -170,7 +170,7 @@ class ModelManagementViewModelTest {
 
         viewModel.selectVoiceModel("base", "stt_whisper", "en")
 
-        verify { appStateManager.setVoiceLanguage("en") }
+        verify { appStateManager.setModelFilterLang("en") }
         verify { appStateManager.setActiveVoiceModelId("base") }
         coVerify { settingsRepo.setEngineModelSelection("stt_whisper", "base") }
         verify { appStateManager.refreshAll() }

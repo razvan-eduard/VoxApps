@@ -58,6 +58,18 @@ cd VoxCommander
 adb shell am start -n com.voxcommander.app/.MainActivity
 ```
 
+### Run Tests
+
+```bash
+# Unit tests (JVM — no device needed)
+./gradlew testDebugUnitTest
+
+# Instrumented tests (requires connected device/emulator)
+./gradlew connectedAndroidTest
+```
+
+212 unit tests covering: intent taxonomy, NLU decision map, AppState/AppStateManager, AppSettings (external trigger, return-to-previous-app), model management, search providers, FastMap engine, and more.
+
 ## Download APK
 
 Pre-built APKs are available on the [Releases page](https://github.com/razvan-eduard/VoxCommander/releases). Each release is built automatically via GitHub Actions.

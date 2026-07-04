@@ -48,6 +48,9 @@ class AppStateManagerTest {
         every { PermissionUtils.hasMicrophonePermission(any()) } returns true
         every { PermissionUtils.hasNotificationPermission(any()) } returns true
 
+        mockkObject(com.voxcommander.app.domain.search.LocationHelper)
+        every { com.voxcommander.app.domain.search.LocationHelper.hasLocationPermission(any()) } returns false
+
         mockkObject(RemoteModelRegistry)
         every { RemoteModelRegistry.getEngineKeyByExtension(".bin") } returns "stt_whisper"
         every { RemoteModelRegistry.getEngineKeyByExtension(".zip") } returns "wake_vosk"
@@ -252,29 +255,21 @@ class AppStateManagerTest {
     }
 
     @Test
-    fun `onWakeWordDetected sets wakeWordDetected to true`() = runTest {
-        stateManager.uiState.test {
-            val initial = awaitItem()
-            assertFalse(initial.wakeWordDetected)
-
+    fun `onWakeWordDetected emits wake word event`() = runTest {
+        stateManager.wakeWordEvents.test {
             stateManager.onWakeWordDetected()
-            val updated = awaitItem()
-            assertTrue(updated.wakeWordDetected)
+            awaitItem()
+            // SharedFlow with extraBufferCapacity=1 — event is emitted once
         }
     }
 
     @Test
-    fun `resetWakeWordDetection sets wakeWordDetected to false`() = runTest {
-        stateManager.uiState.test {
-            val initial = awaitItem()
-            assertFalse(initial.wakeWordDetected)
-
+    fun `onWakeWordDetected can be called multiple times`() = runTest {
+        stateManager.wakeWordEvents.test {
             stateManager.onWakeWordDetected()
             awaitItem()
-
-            stateManager.resetWakeWordDetection()
-            val updated = awaitItem()
-            assertFalse(updated.wakeWordDetected)
+            stateManager.onWakeWordDetected()
+            awaitItem()
         }
     }
 

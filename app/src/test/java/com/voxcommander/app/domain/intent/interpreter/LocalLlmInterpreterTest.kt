@@ -22,6 +22,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
+import org.junit.Ignore
 import org.junit.Test
 import java.io.File
 
@@ -42,6 +43,7 @@ import java.io.File
  *    If generateResponse() throws, the base session should be invalidated
  *    to prevent using a corrupted session object.
  */
+@Ignore("Requires MediaPipe GenAI native libs — run as instrumented test on device")
 class LocalLlmInterpreterTest {
 
     private lateinit var context: Context

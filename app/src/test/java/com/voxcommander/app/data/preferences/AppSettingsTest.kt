@@ -78,4 +78,29 @@ class AppSettingsTest {
         val settings = AppSettings()
         assertEquals(10, settings.offlineFallbackTimeout)
     }
+
+    @Test
+    fun `default externalTriggerEnabled is true`() {
+        val settings = AppSettings()
+        assertTrue(settings.externalTriggerEnabled)
+    }
+
+    @Test
+    fun `externalTriggerEnabled can be set to false`() {
+        val settings = AppSettings(externalTriggerEnabled = false)
+        assertFalse(settings.externalTriggerEnabled)
+    }
+
+    @Test
+    fun `default returnAfterActionApps is empty`() {
+        val settings = AppSettings()
+        assertTrue(settings.returnAfterActionApps.isEmpty())
+    }
+
+    @Test
+    fun `returnAfterActionApps can contain package names`() {
+        val settings = AppSettings(returnAfterActionApps = listOf("com.spotify.music", "org.libretube"))
+        assertEquals(2, settings.returnAfterActionApps.size)
+        assertTrue(settings.returnAfterActionApps.contains("com.spotify.music"))
+    }
 }

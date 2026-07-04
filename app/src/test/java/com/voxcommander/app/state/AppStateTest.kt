@@ -40,6 +40,9 @@ class AppStateTest {
         every { PermissionUtils.hasMicrophonePermission(any()) } returns false
         every { PermissionUtils.hasNotificationPermission(any()) } returns false
 
+        mockkObject(com.voxcommander.app.domain.search.LocationHelper)
+        every { com.voxcommander.app.domain.search.LocationHelper.hasLocationPermission(any()) } returns false
+
         context = mockk(relaxed = true)
     }
 

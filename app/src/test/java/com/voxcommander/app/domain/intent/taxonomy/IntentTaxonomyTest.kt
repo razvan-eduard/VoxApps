@@ -10,26 +10,28 @@ class IntentTaxonomyTest {
 
     @Test
     fun `Domains ALL contains all known domains`() {
-        assertEquals(6, IntentTaxonomy.Domains.ALL.size)
+        assertEquals(7, IntentTaxonomy.Domains.ALL.size)
         assertTrue(IntentTaxonomy.Domains.ALL.contains(IntentTaxonomy.Domains.AUDIO))
         assertTrue(IntentTaxonomy.Domains.ALL.contains(IntentTaxonomy.Domains.SETTINGS))
         assertTrue(IntentTaxonomy.Domains.ALL.contains(IntentTaxonomy.Domains.MAPS))
         assertTrue(IntentTaxonomy.Domains.ALL.contains(IntentTaxonomy.Domains.MESSAGING))
         assertTrue(IntentTaxonomy.Domains.ALL.contains(IntentTaxonomy.Domains.SYSTEM))
         assertTrue(IntentTaxonomy.Domains.ALL.contains(IntentTaxonomy.Domains.HOME))
+        assertTrue(IntentTaxonomy.Domains.ALL.contains(IntentTaxonomy.Domains.SEARCH))
     }
 
     @Test
     fun `Actions ALL contains all known actions`() {
-        assertEquals(11, IntentTaxonomy.Actions.ALL.size)
+        assertEquals(13, IntentTaxonomy.Actions.ALL.size)
     }
 
     @Test
     fun `getActionsForDomain returns correct actions for audio`() {
         val actions = IntentTaxonomy.getActionsForDomain(IntentTaxonomy.Domains.AUDIO)
-        assertEquals(4, actions.size)
+        assertEquals(5, actions.size)
         assertTrue(actions.contains(IntentTaxonomy.Actions.PLAY))
         assertTrue(actions.contains(IntentTaxonomy.Actions.PAUSE))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.STOP))
         assertTrue(actions.contains(IntentTaxonomy.Actions.NEXT))
         assertTrue(actions.contains(IntentTaxonomy.Actions.PREV))
     }
@@ -57,6 +59,13 @@ class IntentTaxonomyTest {
         val actions = IntentTaxonomy.getActionsForDomain(IntentTaxonomy.Domains.MESSAGING)
         assertEquals(1, actions.size)
         assertEquals(IntentTaxonomy.Actions.SEND, actions.first())
+    }
+
+    @Test
+    fun `getActionsForDomain returns query for search`() {
+        val actions = IntentTaxonomy.getActionsForDomain(IntentTaxonomy.Domains.SEARCH)
+        assertEquals(1, actions.size)
+        assertEquals(IntentTaxonomy.Actions.QUERY, actions.first())
     }
 
     @Test
