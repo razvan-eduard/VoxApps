@@ -1,6 +1,6 @@
 package com.voxcommander.app.domain.engine
 
-interface SttEngine {
+interface SttEngine : MemoryManagedComponent {
     /**
      * Transcribes audio data to text.
      */

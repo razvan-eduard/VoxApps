@@ -4,6 +4,7 @@ import android.content.Context
 import android.speech.tts.TextToSpeech
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
+import com.voxcommander.app.utils.TextUtils
 import java.util.Locale
 
 /**
@@ -103,9 +104,7 @@ class AndroidTtsEngine : ITtsEngine {
 
         val baseId = utteranceId ?: "tts_${System.currentTimeMillis()}"
 
-        // Split text into sentences — we queue them one at a time so that
-        // setSpeechRate() called mid-playback applies to the next sentence.
-        val sentences = text.split("(?<=[.!?])\\s+".toRegex()).filter { it.isNotBlank() }
+        val sentences = TextUtils.splitSentences(text)
         if (sentences.isEmpty()) {
             // Fallback: single utterance with QUEUE_FLUSH
             if (onDone != null) utteranceCallbacks[baseId] = onDone

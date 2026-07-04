@@ -1,16 +1,12 @@
 package com.voxcommander.app.domain.intent.handler
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
 import com.voxcommander.app.domain.intent.model.NluIntent
 import com.voxcommander.app.domain.intent.registry.AppRegistry
-import com.voxcommander.app.service.MediaSessionListenerService
-import com.voxcommander.app.service.SpotifyPkceManager
-import com.voxcommander.app.service.SpotifyRemoteManager
-import com.voxcommander.app.service.SpotifyWebApi
+import com.voxcommander.app.utils.IntentUtils
 import com.voxcommander.app.utils.Logger
 
 /**
@@ -43,16 +39,16 @@ class GenericLaunchHandler : IntentHandler {
         return when (action) {
             MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH -> playFromSearch(context, pkg, query)
             Intent.ACTION_VIEW -> {
-                if (!query.isNullOrBlank() && pipedPlayDirect(context, pkg, query)) return true
+                if (!query.isNullOrBlank() && SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) return true
                 viewSearch(context, pkg, resolvedApp, query, intent.uriTemplate)
             }
             Intent.ACTION_WEB_SEARCH -> webSearch(context, pkg, query)
             Intent.ACTION_SEARCH -> {
-                if (!query.isNullOrBlank() && pipedPlayDirect(context, pkg, query)) return true
+                if (!query.isNullOrBlank() && SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) return true
                 browserSearch(context, pkg, resolvedApp, query)
             }
             else -> {
-                if (!query.isNullOrBlank() && pipedPlayDirect(context, pkg, query)) return true
+                if (!query.isNullOrBlank() && SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) return true
                 // Generic: try to fire the action with query as SearchManager.QUERY extra
                 fireGenericAction(context, pkg, action, query)
             }
@@ -72,21 +68,10 @@ class GenericLaunchHandler : IntentHandler {
         }
 
         // 0. Try Piped API direct play first (works for any app that handles youtu.be URLs)
-        if (pipedPlayDirect(context, pkg, query)) return true
+        if (SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) return true
 
         // 1. For Spotify, try Web API first (uses PKCE token)
-        if (pkg == "com.spotify.music") {
-            if (SpotifyPkceManager.isAuthorized) {
-                val clientId = SpotifyRemoteManager.getClientId()
-                if (clientId != null && SpotifyWebApi.playSearch(clientId, query)) {
-                    Logger.log("playFromSearch via Spotify Web API succeeded", TAG)
-                    return true
-                }
-                Logger.log("Spotify Web API failed, falling back to intent", TAG)
-            } else {
-                Logger.log("Spotify not authorized (PKCE), falling back to intent", TAG)
-            }
-        }
+        if (SpotifyPlaybackHelper.tryPlaySearch(context, pkg, query)) return true
 
         // 2. Try intent with EXTRA_MEDIA_FOCUS (artist)
         val playIntent = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
@@ -97,7 +82,7 @@ class GenericLaunchHandler : IntentHandler {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         Logger.log("Sending playFromSearch intent with EXTRA_MEDIA_FOCUS=artist for $pkg, query=$query", TAG)
-        if (tryLaunch(context, playIntent)) {
+        if (IntentUtils.tryLaunch(context, playIntent, TAG)) {
             Logger.log("playFromSearch intent sent for $pkg", TAG)
             return true
         }
@@ -109,26 +94,10 @@ class GenericLaunchHandler : IntentHandler {
             putExtra(android.app.SearchManager.QUERY, query)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        if (tryLaunch(context, plainIntent)) return true
+        if (IntentUtils.tryLaunch(context, plainIntent, TAG)) return true
 
         // 4. Last resort: just launch the app
         return launchApp(context, pkg)
-    }
-
-    /**
-     * Piped "play direct": searches via Piped API, gets first video,
-     * opens it as youtu.be URL that the target app intercepts and plays.
-     */
-    private fun pipedPlayDirect(context: Context, pkg: String?, query: String): Boolean {
-        Logger.log("Piped play direct: searching for '$query' on $pkg", TAG)
-        return try {
-            kotlinx.coroutines.runBlocking {
-                PipedSearchHelper.searchAndPlay(context, query, pkg)
-            }
-        } catch (e: Exception) {
-            Logger.log("Piped play direct failed: ${e.message}", TAG)
-            false
-        }
     }
 
     /**
@@ -151,7 +120,7 @@ class GenericLaunchHandler : IntentHandler {
                 putExtra(Intent.EXTRA_REFERRER, "android-app://com.voxcommander.app")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-            if (tryLaunch(context, intent)) return true
+            if (IntentUtils.tryLaunch(context, intent, TAG)) return true
         }
 
         // 2. Try ACTION_WEB_SEARCH with the target package
@@ -160,7 +129,7 @@ class GenericLaunchHandler : IntentHandler {
             putExtra(android.app.SearchManager.QUERY, query)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        if (tryLaunch(context, webSearchIntent)) return true
+        if (IntentUtils.tryLaunch(context, webSearchIntent, TAG)) return true
 
         // 3. Fallback: Google search URL via ACTION_VIEW with target package
         val googleUrl = "https://www.google.com/search?q=${Uri.encode(query)}"
@@ -169,14 +138,14 @@ class GenericLaunchHandler : IntentHandler {
             setPackage(pkg)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        if (tryLaunch(context, viewIntent)) return true
+        if (IntentUtils.tryLaunch(context, viewIntent, TAG)) return true
 
         // 4. Fallback: Google search URL without package (system default browser)
         val implicitIntent = Intent(Intent.ACTION_VIEW).apply {
             data = Uri.parse(googleUrl)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        if (tryLaunch(context, implicitIntent)) return true
+        if (IntentUtils.tryLaunch(context, implicitIntent, TAG)) return true
 
         // 5. Last resort: just launch the app
         return launchApp(context, pkg)
@@ -193,7 +162,7 @@ class GenericLaunchHandler : IntentHandler {
                 putExtra(Intent.EXTRA_REFERRER, "android-app://com.voxcommander.app")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-            if (tryLaunch(context, intent)) return true
+            if (IntentUtils.tryLaunch(context, intent, TAG)) return true
         }
         return launchApp(context, pkg)
     }
@@ -215,7 +184,7 @@ class GenericLaunchHandler : IntentHandler {
             putExtra(android.app.SearchManager.QUERY, query)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        if (tryLaunch(context, searchIntent)) return true
+        if (IntentUtils.tryLaunch(context, searchIntent, TAG)) return true
 
         // 2. Fallback: launch the target app with query as extra
         return fireGenericAction(context, pkg, Intent.ACTION_WEB_SEARCH, query)
@@ -229,27 +198,17 @@ class GenericLaunchHandler : IntentHandler {
             }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        return tryLaunch(context, intent)
+        return IntentUtils.tryLaunch(context, intent, TAG)
     }
 
     private fun launchApp(context: Context, pkg: String): Boolean {
         val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
         if (launchIntent != null) {
             launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            return tryLaunch(context, launchIntent)
+            return IntentUtils.tryLaunch(context, launchIntent, TAG)
         }
         Logger.log("GenericLaunchHandler: no launch intent for $pkg", TAG)
         return false
-    }
-
-    private fun tryLaunch(context: Context, intent: Intent): Boolean {
-        return try {
-            context.startActivity(intent)
-            true
-        } catch (e: Exception) {
-            Logger.log("GenericLaunchHandler: failed to launch: ${e.message}", TAG)
-            false
-        }
     }
 
     companion object {

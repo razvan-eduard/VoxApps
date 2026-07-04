@@ -11,6 +11,7 @@ import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
+import com.voxcommander.app.utils.TextUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,7 +45,12 @@ class PiperTtsEngine : ITtsEngine {
     private var speakJob: Job? = null
     private var stopped = false
 
+    // Retained for lazy reload after releaseForMemoryPressure()
+    private var storedContext: Context? = null
+    @Volatile private var isSpeakingNow = false
+
     override fun initialize(context: Context, language: String): Boolean {
+        storedContext = context.applicationContext
         currentLanguage = language
         ready = false
 
@@ -107,9 +113,17 @@ class PiperTtsEngine : ITtsEngine {
 
     override fun speak(text: String, utteranceId: String?, onDone: (() -> Unit)?) {
         if (!ready) {
-            Logger.log("Piper TTS not ready, cannot speak", TAG)
-            onDone?.invoke()
-            return
+            // Lazily reload if the model was released for memory pressure
+            val ctx = storedContext
+            if (ctx != null && !initialize(ctx, currentLanguage)) {
+                Logger.log("Piper TTS not ready, cannot speak", TAG)
+                onDone?.invoke()
+                return
+            } else if (ctx == null) {
+                Logger.log("Piper TTS not ready, cannot speak", TAG)
+                onDone?.invoke()
+                return
+            }
         }
 
         val engine = tts ?: run {
@@ -118,11 +132,10 @@ class PiperTtsEngine : ITtsEngine {
         }
 
         stopped = false
+        isSpeakingNow = true
         speakJob = CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Split into sentences for responsive playback
-                val sentences = text.split("(?<=[.!?])\\s+".toRegex()).filter { it.isNotBlank() }
-                val chunks = if (sentences.isEmpty()) listOf(text) else sentences
+                val chunks = TextUtils.splitSentences(text)
 
                 for (chunk in chunks) {
                     if (stopped) {
@@ -145,6 +158,7 @@ class PiperTtsEngine : ITtsEngine {
                 Logger.log("Piper TTS generation error: ${e.message}", TAG)
             } finally {
                 stopAudioTrack()
+                isSpeakingNow = false
                 if (!stopped) {
                     onDone?.invoke()
                 } else {
@@ -154,7 +168,7 @@ class PiperTtsEngine : ITtsEngine {
         }
     }
 
-    private fun playSamples(samples: FloatArray, sampleRate: Int) {
+    private suspend fun playSamples(samples: FloatArray, sampleRate: Int) {
         if (samples.isEmpty()) return
 
         val minBufSize = AudioTrack.getMinBufferSize(
@@ -188,7 +202,7 @@ class PiperTtsEngine : ITtsEngine {
 
         // Wait for playback to complete
         val durationMs = (samples.size.toFloat() / sampleRate * 1000).toInt()
-        Thread.sleep(durationMs.toLong())
+        kotlinx.coroutines.delay(durationMs.toLong())
 
         track.stop()
         track.release()
@@ -233,7 +247,25 @@ class PiperTtsEngine : ITtsEngine {
         try { tts?.release() } catch (_: Exception) {}
         tts = null
         ready = false
+        storedContext = null
         Logger.log("Piper TTS released", TAG)
+    }
+
+    /**
+     * Releases the sherpa-onnx model on system memory pressure while keeping the
+     * engine usable — speak() will transparently reload it on the next call.
+     * Skipped if currently speaking.
+     */
+    override fun releaseForMemoryPressure() {
+        if (isSpeakingNow) {
+            Logger.log("Skipping Piper release — actively speaking", TAG)
+            return
+        }
+        if (tts == null) return
+        Logger.log("Releasing Piper TTS model for memory pressure", TAG)
+        try { tts?.release() } catch (_: Exception) {}
+        tts = null
+        ready = false
     }
 
     /**

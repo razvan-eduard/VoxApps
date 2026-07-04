@@ -12,9 +12,13 @@ import com.voxcommander.app.state.AppStateManager
 import com.voxcommander.app.state.VoiceState
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -38,6 +42,18 @@ class WakeWordEngine(
     // Stored for re-initialization after memory pressure release
     private var storedModelPath: String? = null
     private var storedWakeWord: String? = null
+    @Volatile private var isReinitializing = false
+
+    // Guards check-then-act sections in startListening() against concurrent calls
+    private val startStopLock = Any()
+
+    // Managed scope for listenLoop — isolates exceptions so a native/JSON error
+    // doesn't propagate as an uncaught exception and crash the process.
+    private val exceptionHandler = CoroutineExceptionHandler { _, e ->
+        Logger.log("Uncaught exception in listen loop: ${e.message}", TAG)
+        isListening = false
+    }
+    private var engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
 
     private val sampleRate = 16000
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) * 2
@@ -145,6 +161,7 @@ class WakeWordEngine(
         isCollectingVoice = false
         consecutiveSilentFrames = 0
 
+        synchronized(startStopLock) {
         if (isListening) return true
 
         // Ensure any previous AudioRecord is fully released before creating a new one
@@ -155,17 +172,26 @@ class WakeWordEngine(
             Logger.log("Error releasing previous AudioRecord: ${e.message}", TAG)
         }
 
-        // If model was released due to memory pressure, re-initialize before listening
+        // If model was released due to memory pressure, re-initialize before listening.
+        // IMPORTANT: startListening() is called synchronously from WakeWordService's
+        // Dispatchers.Main serviceScope. A runBlocking{} here would freeze the Main
+        // thread for the duration of the (potentially multi-second) model load —
+        // an ANR risk for large models. Instead, kick off the reinit in the background
+        // and return false immediately; WakeWordService already retries startListening()
+        // after a delay, which will succeed once the background reinit completes.
         if (recognizer == null || model == null) {
             val path = storedModelPath
             val word = storedWakeWord
             if (path != null && word != null) {
-                Logger.log("Model was released (memory pressure) — re-initializing before listen", TAG)
-                val initialized = kotlinx.coroutines.runBlocking { initialize(path, word) }
-                if (!initialized) {
-                    Logger.log("Failed to re-initialize model after memory pressure release", TAG)
-                    return false
+                if (!isReinitializing) {
+                    isReinitializing = true
+                    Logger.log("Model was released (memory pressure) — reinitializing in background", TAG)
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val ok = try { initialize(path, word) } finally { isReinitializing = false }
+                        Logger.log("Background model reinit ${if (ok) "succeeded" else "failed"}", TAG)
+                    }
                 }
+                return false
             } else {
                 Logger.log("Cannot start listening: recognizer or model is null and no stored path for re-init", TAG)
                 return false
@@ -201,7 +227,8 @@ class WakeWordEngine(
             appStateManager.setVoiceState(VoiceState.LISTENING_WAKEWORD)
             audioRecord?.startRecording()
 
-            CoroutineScope(Dispatchers.IO).launch { listenLoop() }
+            if (!engineScope.isActive) engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
+            engineScope.launch { listenLoop() }
             Logger.log("WakeWordEngine started listening successfully", TAG)
             return true
         } catch (e: Exception) {
@@ -210,6 +237,7 @@ class WakeWordEngine(
             audioRecord?.release()
             audioRecord = null
             return false
+        }
         }
     }
 
@@ -395,8 +423,8 @@ class WakeWordEngine(
         }
     }
 
-    override fun stopListening() {
-        if (!isListening) return
+    override fun stopListening(): Unit = synchronized(startStopLock) {
+        if (!isListening) return@synchronized
         Logger.log("Pausing WakeWordEngine listening", TAG)
 
         isListening = false
@@ -434,6 +462,7 @@ class WakeWordEngine(
 
     override fun release() {
         stopService()
+        engineScope.cancel()
 
         CoroutineScope(Dispatchers.IO).launch {
             appStateManager.executeSecureVoiceAction {
@@ -446,7 +475,7 @@ class WakeWordEngine(
         }
     }
 
-    override fun releaseModelForMemoryPressure() {
+    override fun releaseForMemoryPressure() {
         if (!isListening) {
             Logger.log("Releasing Vosk model for memory pressure (model=${storedModelPath})", TAG)
             CoroutineScope(Dispatchers.IO).launch {

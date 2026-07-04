@@ -4,7 +4,7 @@ package com.voxcommander.app.domain.engine
  * Pluggable Text-to-Speech engine interface.
  * Mirrors the SttEngine pattern: init → use → release.
  */
-interface ITtsEngine {
+interface ITtsEngine : MemoryManagedComponent {
 
     /**
      * Initializes the engine with the given context and language.

@@ -3,6 +3,7 @@ package com.voxcommander.app.domain.engine.vosk
 import android.content.Context
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.engine.SttEngine
+import com.voxcommander.app.utils.AudioConvert
 import com.voxcommander.app.utils.Strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,8 +11,6 @@ import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * A real implementation of the local offline STT engine using Vosk.
@@ -23,6 +22,7 @@ class VoskSttEngine(
 ) : SttEngine {
     private var model: Model? = null
     private var activeRecognizer: Recognizer? = null
+    @Volatile private var isTranscribing = false
 
     private suspend fun ensureModelLoaded() = withContext(Dispatchers.IO) {
         if (model == null) {
@@ -76,27 +76,33 @@ class VoskSttEngine(
             activeRecognizer = Recognizer(currentModel, SAMPLE_RATE)
         }
         
-        activeRecognizer?.let {
-            val shorts = byteArrayToShorts(audio)
-            it.acceptWaveForm(shorts, shorts.size)
-            val partialJson = it.partialResult
-            return@withContext try {
-                JSONObject(partialJson).optString(JSON_KEY_PARTIAL, "")
-            } catch (e: Exception) {
-                ""
+        isTranscribing = true
+        try {
+            activeRecognizer?.let {
+                val shorts = AudioConvert.byteArrayToShorts(audio)
+                it.acceptWaveForm(shorts, shorts.size)
+                val partialJson = it.partialResult
+                return@withContext try {
+                    JSONObject(partialJson).optString(JSON_KEY_PARTIAL, "")
+                } catch (e: Exception) {
+                    ""
+                }
             }
+            return@withContext null
+        } finally {
+            isTranscribing = false
         }
-        return@withContext null
     }
 
     override suspend fun transcribe(audio: ByteArray): String = withContext(Dispatchers.IO) {
         ensureModelLoaded()
         val currentModel = model ?: return@withContext "Error: Vosk Model ($langCode) not found."
         
+        isTranscribing = true
         val result = try {
             // Reuse the active recognizer if available, otherwise create a fresh one
             val recognizer = activeRecognizer ?: Recognizer(currentModel, SAMPLE_RATE)
-            val shorts = byteArrayToShorts(audio)
+            val shorts = AudioConvert.byteArrayToShorts(audio)
             recognizer.acceptWaveForm(shorts, shorts.size)
 
             val resultJson = recognizer.finalResult
@@ -107,14 +113,9 @@ class VoskSttEngine(
         } finally {
             activeRecognizer?.close()
             activeRecognizer = null
+            isTranscribing = false
         }
         return@withContext result
-    }
-
-    private fun byteArrayToShorts(audio: ByteArray): ShortArray {
-        val shorts = ShortArray(audio.size / 2)
-        ByteBuffer.wrap(audio).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts)
-        return shorts
     }
 
     override fun releaseHardware() {
@@ -127,6 +128,24 @@ class VoskSttEngine(
     }
 
     override fun releaseResources() {
+        activeRecognizer = null
+        model = null
+    }
+
+    /**
+     * Releases the Vosk model on system memory pressure while keeping the engine
+     * alive. ensureModelLoaded() will transparently reload it on the next use.
+     * Skipped if a transcription is currently in progress.
+     */
+    override fun releaseForMemoryPressure() {
+        if (isTranscribing) return
+        if (model == null) return
+        try {
+            activeRecognizer?.close()
+            model?.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         activeRecognizer = null
         model = null
     }

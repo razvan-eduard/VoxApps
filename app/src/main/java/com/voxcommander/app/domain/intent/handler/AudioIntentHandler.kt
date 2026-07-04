@@ -9,9 +9,7 @@ import com.voxcommander.app.domain.intent.model.NluIntent
 import com.voxcommander.app.domain.intent.registry.AppRegistry
 import com.voxcommander.app.domain.intent.taxonomy.IntentTaxonomy
 import com.voxcommander.app.service.MediaSessionListenerService
-import com.voxcommander.app.service.SpotifyPkceManager
-import com.voxcommander.app.service.SpotifyRemoteManager
-import com.voxcommander.app.service.SpotifyWebApi
+import com.voxcommander.app.utils.IntentUtils
 import com.voxcommander.app.utils.Logger
 
 /**
@@ -58,22 +56,8 @@ class AudioIntentHandler : IntentHandler {
         val pkg = resolvedApp?.packageName
 
         // 1. For Spotify, try Web API first (uses PKCE token for direct playback)
-        if (pkg == "com.spotify.music" && SpotifyPkceManager.isAuthorized) {
-            val clientId = SpotifyRemoteManager.getClientId()
-            if (clientId != null) {
-                // Launch Spotify app first so the phone registers as an available device
-                val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
-                if (launchIntent != null) {
-                    launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    try { context.startActivity(launchIntent) } catch (_: Exception) {}
-                    Thread.sleep(3000) // Wait for Spotify to connect and register as a device
-                }
-                if (SpotifyWebApi.playSearch(clientId, query)) {
-                    Logger.log("playSearch via Spotify Web API succeeded", TAG)
-                    return true
-                }
-            }
-            Logger.log("Spotify Web API failed, falling back to intent", TAG)
+        if (SpotifyPlaybackHelper.tryPlaySearch(context, pkg ?: "", query, waitMs = 3000)) {
+            return true
         }
 
         // 1. Try MEDIA_PLAY_FROM_SEARCH (standard Android, plays directly)
@@ -84,7 +68,7 @@ class AudioIntentHandler : IntentHandler {
                 putExtra(android.app.SearchManager.QUERY, query)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-            if (tryLaunch(context, playIntent)) return true
+            if (IntentUtils.tryLaunch(context, playIntent)) return true
         }
 
         // 2. Use URI template: intent.uriTemplate first, then resolvedApp.uriTemplates
@@ -96,23 +80,13 @@ class AudioIntentHandler : IntentHandler {
                 if (pkg != null) setPackage(pkg)
                 putExtra(Intent.EXTRA_REFERRER, "android-app://com.voxcommander.app")
             }
-            if (tryLaunch(context, intent)) return true
+            if (IntentUtils.tryLaunch(context, intent)) return true
         }
 
         // No template or template failed — try Piped API search (works for any app that handles youtu.be URLs)
-        if (pkg != null) {
-            try {
-                val played = kotlinx.coroutines.runBlocking {
-                    PipedSearchHelper.searchAndPlay(context, query, pkg)
-                }
-                if (played) {
-                    Logger.log("playSearch via Piped API succeeded for $pkg", TAG)
-                    return true
-                }
-                Logger.log("Piped API failed for $pkg, trying direct launch", TAG)
-            } catch (e: Exception) {
-                Logger.log("Piped search failed: ${e.message}", TAG)
-            }
+        if (pkg != null && SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) {
+            Logger.log("playSearch via Piped API succeeded for $pkg", TAG)
+            return true
         }
 
         // Last resort: try launching the app directly
@@ -120,12 +94,12 @@ class AudioIntentHandler : IntentHandler {
             val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
             if (launchIntent != null) {
                 launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                if (tryLaunch(context, launchIntent)) return true
+                if (IntentUtils.tryLaunch(context, launchIntent)) return true
             }
         }
 
         // Fallback: open market search
-        return tryLaunch(context, Intent(Intent.ACTION_VIEW).apply {
+        return IntentUtils.tryLaunch(context, Intent(Intent.ACTION_VIEW).apply {
             data = Uri.parse("market://search?q=${Uri.encode(query)}")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         })
@@ -153,7 +127,7 @@ class AudioIntentHandler : IntentHandler {
             if (launchIntent != null) {
                 launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 Logger.log("No active session — launching $pkg directly", TAG)
-                return tryLaunch(context, launchIntent)
+                return IntentUtils.tryLaunch(context, launchIntent)
             }
         }
 
@@ -259,17 +233,6 @@ class AudioIntentHandler : IntentHandler {
             true
         } catch (e: Exception) {
             Logger.log("Failed to dispatch media key: ${e.message}", TAG)
-            false
-        }
-    }
-
-    private fun tryLaunch(context: Context, intent: Intent): Boolean {
-        return try {
-            intent.flags = intent.flags or Intent.FLAG_ACTIVITY_NEW_TASK
-            context.startActivity(intent)
-            true
-        } catch (e: Exception) {
-            Logger.log("Failed to launch intent: ${e.message}", TAG)
             false
         }
     }

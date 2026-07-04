@@ -6,6 +6,7 @@ import android.net.Uri
 import com.voxcommander.app.domain.intent.model.NluIntent
 import com.voxcommander.app.domain.intent.registry.AppRegistry
 import com.voxcommander.app.domain.intent.taxonomy.IntentTaxonomy
+import com.voxcommander.app.utils.IntentUtils
 import com.voxcommander.app.utils.Logger
 
 /**
@@ -40,7 +41,7 @@ class MessagingIntentHandler : IntentHandler {
                 if (!messageBody.isNullOrBlank()) putExtra(Intent.EXTRA_TEXT, messageBody)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-            if (tryLaunch(context, sendIntent)) return true
+            if (IntentUtils.tryLaunch(context, sendIntent, TAG)) return true
         }
 
         // No template — try ACTION_SEND with the target package
@@ -52,7 +53,7 @@ class MessagingIntentHandler : IntentHandler {
                 if (!messageBody.isNullOrBlank()) putExtra(Intent.EXTRA_TEXT, messageBody)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-            if (tryLaunch(context, sendIntent)) return true
+            if (IntentUtils.tryLaunch(context, sendIntent, TAG)) return true
         }
 
         // Fallback: generic share intent
@@ -62,18 +63,7 @@ class MessagingIntentHandler : IntentHandler {
             if (!messageBody.isNullOrBlank()) putExtra(Intent.EXTRA_TEXT, messageBody)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        return tryLaunch(context, shareIntent)
-    }
-
-    private fun tryLaunch(context: Context, intent: Intent): Boolean {
-        return try {
-            intent.flags = intent.flags or Intent.FLAG_ACTIVITY_NEW_TASK
-            context.startActivity(intent)
-            true
-        } catch (e: Exception) {
-            Logger.log("Failed to launch messaging intent: ${e.message}", TAG)
-            false
-        }
+        return IntentUtils.tryLaunch(context, shareIntent, TAG)
     }
 
     companion object {

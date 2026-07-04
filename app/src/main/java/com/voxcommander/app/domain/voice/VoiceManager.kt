@@ -344,6 +344,17 @@ object VoiceManager {
         voskSttEngine = null
     }
 
+    /**
+     * Releases heavy native models (Whisper context, Vosk model, etc.) on system
+     * memory pressure across all currently instantiated STT engines. Each engine
+     * transparently reloads its resources on next use; guarded internally against
+     * releasing mid-transcription.
+     */
+    fun releaseForMemoryPressure() {
+        listOfNotNull(whisperCppEngine, whisperApiEngine, googleSttEngine, voskSttEngine)
+            .forEach { it.releaseForMemoryPressure() }
+    }
+
     private fun selectEngine(userPreference: String): SttEngine? {
         Logger.log("Selecting engine for preference: $userPreference", TAG)
         

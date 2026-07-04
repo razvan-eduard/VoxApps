@@ -30,6 +30,7 @@ class LocalLlmInterpreter(
     private var cachedSystemPromptHash: String? = null
     private var loadedModelId: String? = null
     private var loadedEngineKey: String? = null
+    @Volatile private var isProcessing = false
 
     private fun setupLlm() {
         val snapshot = settingsRepo.getSettingsSnapshot()
@@ -82,6 +83,8 @@ class LocalLlmInterpreter(
     }
 
     override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? = withContext(Dispatchers.IO) {
+        isProcessing = true
+        try {
         setupLlm()
         val engine = llmInference ?: return@withContext null
 
@@ -147,6 +150,30 @@ class LocalLlmInterpreter(
         } finally {
             try { querySession?.close() } catch (_: Exception) {}
         }
+        } finally {
+            isProcessing = false
+        }
+    }
+
+    /**
+     * Releases the LLM engine (~500MB+) on system memory pressure while keeping
+     * the interpreter alive. setupLlm() will transparently reload it on the next
+     * processCommand() call. Skipped if a command is currently being processed.
+     */
+    override fun releaseForMemoryPressure() {
+        if (isProcessing) {
+            Logger.log("Skipping LLM release — actively processing", TAG)
+            return
+        }
+        if (llmInference == null) return
+        Logger.log("Releasing LLM engine for memory pressure", TAG)
+        try { baseSession?.close() } catch (_: Exception) {}
+        try { llmInference?.close() } catch (_: Exception) {}
+        baseSession = null
+        llmInference = null
+        cachedSystemPromptHash = null
+        loadedModelId = null
+        loadedEngineKey = null
     }
 
     private fun parseResponse(response: String): NluIntent? {

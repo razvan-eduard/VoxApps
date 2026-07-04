@@ -80,4 +80,18 @@ class VoxApplication : Application() {
             )
         }
     }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        when (level) {
+            TRIM_MEMORY_BACKGROUND, TRIM_MEMORY_MODERATE,
+            TRIM_MEMORY_RUNNING_LOW, TRIM_MEMORY_RUNNING_CRITICAL,
+            TRIM_MEMORY_UI_HIDDEN -> {
+                Logger.log("App-level memory pressure ($level) — releasing heavy native models", "VoxApplication")
+                com.voxcommander.app.domain.voice.VoiceManager.releaseForMemoryPressure()
+                com.voxcommander.app.domain.voice.TtsManager.releaseForMemoryPressure()
+                container.localLlmInterpreter.releaseForMemoryPressure()
+            }
+        }
+    }
 }

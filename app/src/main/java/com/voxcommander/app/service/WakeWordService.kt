@@ -150,7 +150,7 @@ class WakeWordService : Service() {
                 // Release the Vosk model (can be 1.8GB+) to prevent LOW_MEMORY kill.
                 // The model will be re-loaded on the next startListening() call.
                 Logger.log("Memory pressure detected ($level) — releasing wake word model", TAG)
-                wakeWordEngine?.releaseModelForMemoryPressure()
+                wakeWordEngine?.releaseForMemoryPressure()
             }
         }
     }

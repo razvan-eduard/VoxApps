@@ -267,6 +267,15 @@ object TtsManager {
         Logger.log("TtsManager released", TAG)
     }
 
+    /**
+     * Releases the active TTS engine's heavy native model (e.g. Piper's sherpa-onnx
+     * model) on system memory pressure. Transparently reloaded on next speak(); no-op
+     * for lightweight engines (Android TTS) or if currently speaking.
+     */
+    fun releaseForMemoryPressure() {
+        engine?.releaseForMemoryPressure()
+    }
+
     // --- AUDIO FOCUS ---
 
     private fun requestAudioFocus() {

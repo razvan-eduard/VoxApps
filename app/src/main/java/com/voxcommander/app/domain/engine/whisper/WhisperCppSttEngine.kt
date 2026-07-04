@@ -1,6 +1,7 @@
 package com.voxcommander.app.domain.engine.whisper
 
 import android.content.Context
+import com.voxcommander.app.utils.AudioConvert
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.engine.SttEngine
@@ -12,8 +13,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * Hybrid STT Engine: Supports Vulkan with automatic fallback to NEON (CPU).
@@ -29,11 +28,7 @@ class WhisperCppSttEngine(
     private var whisperContext: WhisperContext? = null
     private var isUsingGpu = false
     private val loadMutex = Mutex()
-
-    init {
-        val libDir = File(context.filesDir, "whisper_libs").absolutePath
-        WhisperLib.load(libDir)
-    }
+    @Volatile private var isTranscribing = false
 
     /**
      * Public method to trigger initialization and test compatibility.
@@ -47,6 +42,11 @@ class WhisperCppSttEngine(
     private suspend fun ensureModelLoaded() = withContext(Dispatchers.IO) {
         loadMutex.withLock {
             if (whisperContext != null) return@withContext
+
+            // Lazy-load native .so files only when Whisper is actually used for
+            // transcription, avoiding unnecessary ~60MB RSS when another STT engine is active.
+            val libDir = File(context.filesDir, "whisper_libs").absolutePath
+            WhisperLib.load(libDir)
 
             // Check for custom model path first
             val snapshot = settingsRepo.getSettingsSnapshot()
@@ -103,14 +103,15 @@ class WhisperCppSttEngine(
     override suspend fun transcribe(audio: ByteArray): String = transcribeWithLanguage(audio, null)
 
     suspend fun transcribeWithLanguage(audio: ByteArray, langCode: String?): String = withContext(Dispatchers.IO) {
+        ensureModelLoaded()
         if (!WhisperLib.isReady()) return@withContext "Error: Native library failed to load"
 
-        ensureModelLoaded()
         val currentContext =
             whisperContext ?: return@withContext "Error: Whisper engine not initialized"
 
+        isTranscribing = true
         try {
-            val floatAudio = pcm16ToFloat(audio)
+            val floatAudio = AudioConvert.pcm16ToFloat(audio)
 
             // Use 4 threads on CPU for faster inference on modern multi-core devices
             val threads = if (isUsingGpu) 1 else 4
@@ -141,17 +142,9 @@ class WhisperCppSttEngine(
             Logger.log("Transcription failed: ${e.message}", TAG)
             if (isUsingGpu) settingsRepo.setVulkanRuntimeAttemptSync(false)
             "Error: ${e.message}"
+        } finally {
+            isTranscribing = false
         }
-    }
-
-    private fun pcm16ToFloat(audio: ByteArray): FloatArray {
-        val shorts = ShortArray(audio.size / 2)
-        ByteBuffer.wrap(audio).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts)
-        val floats = FloatArray(shorts.size)
-        for (i in shorts.indices) {
-            floats[i] = shorts[i] / 32768.0f
-        }
-        return floats
     }
 
     override fun releaseHardware() {
@@ -160,6 +153,22 @@ class WhisperCppSttEngine(
     }
 
     override fun releaseResources() {
+        whisperContext = null
+    }
+
+    /**
+     * Releases the Whisper context (~150MB+) on system memory pressure while keeping
+     * the engine alive. ensureModelLoaded() will transparently reload it on the next
+     * transcribe() call. Skipped if a transcription is currently in progress.
+     */
+    override fun releaseForMemoryPressure() {
+        if (isTranscribing) {
+            Logger.log("Skipping Whisper release — actively transcribing", TAG)
+            return
+        }
+        if (whisperContext == null) return
+        Logger.log("Releasing Whisper context for memory pressure", TAG)
+        try { whisperContext?.release() } catch (_: Exception) {}
         whisperContext = null
     }
 }
