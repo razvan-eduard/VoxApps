@@ -8,16 +8,6 @@ on:
       - main
     paths:
       - 'app/build.gradle.kts'
-  workflow_dispatch:
-    inputs:
-      version_tag:
-        description: 'Version tag (e.g. v0.1-beta, v0.1-rc1, v1.0)'
-        required: true
-        default: 'v0.1-beta'
-      prerelease:
-        description: 'Mark as prerelease?'
-        type: boolean
-        default: true
 
 jobs:
   build:
@@ -108,13 +98,9 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.version_tag }}"
-            IS_PRERELEASE="${{ github.event.inputs.prerelease }}"
-          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
             # Auto-build from versionCode bump: read versionName from gradle
             VERSION_NAME=$(grep 'versionName' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
-            VERSION_CODE=$(grep 'versionCode' app/build.gradle.kts | grep -oE '[0-9]+')
             TAG="v${VERSION_NAME}"
             if echo "$VERSION_NAME" | grep -qiE '-beta|-rc|-alpha'; then
               IS_PRERELEASE="true"
