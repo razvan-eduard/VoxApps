@@ -321,7 +321,11 @@ fun VoiceEnginesSubTab(
             currentProcessor = uiState.voiceProcessor,
             fallbackCategory = Strings.FallbackCategories.VOICE,
             onFallbackChanged = onFallbackChanged,
-            refreshTrigger = refreshTrigger
+            refreshTrigger = refreshTrigger,
+            onAutoPreselect = { model ->
+                appStateManager.setActiveVoiceModelId(model.id)
+                appStateManager.saveVoiceModelSelection(engineKey, model.id)
+            }
         )
     }
 

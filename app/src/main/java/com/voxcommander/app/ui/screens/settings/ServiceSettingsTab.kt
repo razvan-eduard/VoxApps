@@ -575,7 +575,11 @@ fun ServiceSettingsTab(
                 currentProcessor = currentEngineKey,
                 fallbackCategory = Strings.FallbackCategories.VOICE,
                 refreshTrigger = refreshTrigger,
-                showFallback = false
+                showFallback = false,
+                onAutoPreselect = { model ->
+                    appStateManager.setWakeWordModelPath(model.id)
+                    if (supportsBuiltinKeywords) appStateManager.setWakeWord(model.label)
+                }
             )
         }
 
