@@ -43,7 +43,8 @@ class PorcupineWakeWordEngine(
         Logger.log("Uncaught exception in Porcupine listen loop: ${e.message}", TAG)
         isListening = false
     }
-    private var engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
+    private var engineJob = SupervisorJob()
+    private var engineScope = CoroutineScope(engineJob + Dispatchers.IO + exceptionHandler)
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -184,7 +185,10 @@ class PorcupineWakeWordEngine(
             appStateManager.setVoiceState(VoiceState.LISTENING_WAKEWORD)
             audioRecord?.startRecording()
 
-            if (!engineScope.isActive) engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
+            if (!engineJob.isActive) {
+                engineJob = SupervisorJob()
+                engineScope = CoroutineScope(engineJob + Dispatchers.IO + exceptionHandler)
+            }
             engineScope.launch { listenLoop() }
             Logger.log("Porcupine started listening", TAG)
             return true
@@ -265,7 +269,7 @@ class PorcupineWakeWordEngine(
 
     override fun release() {
         stopService()
-        engineScope.cancel()
+        engineJob.cancel()
         try {
             porcupine?.delete()
         } catch (e: Exception) {
