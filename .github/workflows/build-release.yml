@@ -42,6 +42,11 @@ jobs:
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
 
+      - name: Symlink SDK for whisper build script
+        run: |
+          mkdir -p ~/Library/Android/sdk
+          ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
