@@ -126,19 +126,55 @@ jobs:
              VoxCommander-${{ steps.version.outputs.tag }}.apk
           echo "apk_path=VoxCommander-${{ steps.version.outputs.tag }}.apk" >> $GITHUB_OUTPUT
 
+      - name: Generate CHANGELOG.md
+        if: steps.check_bump.outputs.changed != 'false'
+        id: changelog
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          # Find previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          # Generate changelog
+          {
+            echo "# VoxCommander ${TAG}"
+            echo ""
+            echo "## Changes"
+            echo ""
+            git log ${RANGE} --pretty=format:"- %s (%h)" --no-merges
+            echo ""
+            echo ""
+            echo "## Full Changelog"
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              echo "https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
+            else
+              echo "https://github.com/${{ github.repository }}/commits/${TAG}"
+            fi
+          } > CHANGELOG.md
+          cat CHANGELOG.md
+
       - name: Upload artifact
         if: steps.check_bump.outputs.changed != 'false'
         uses: actions/upload-artifact@v4
         with:
           name: VoxCommander-${{ steps.version.outputs.tag }}
-          path: VoxCommander-*.apk
+          path: |
+            VoxCommander-*.apk
+            CHANGELOG.md
 
       - name: Create GitHub Release
         if: steps.check_bump.outputs.changed != 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          files: VoxCommander-*.apk
+          files: |
+            VoxCommander-*.apk
+            CHANGELOG.md
+          body_path: CHANGELOG.md
           generate_release_notes: true
           draft: false
           prerelease: ${{ steps.version.outputs.is_prerelease }}
