@@ -201,8 +201,8 @@ object SearchProviderRegistry {
         val providers = providersByCategory[category]
         if (providers != null) {
             val defaultName = defaultProviderNames[category]
-            if (defaultName != null && providers.containsKey(defaultName)) {
-                val default = providers[defaultName]!!
+            val default = defaultName?.let { providers[it] }
+            if (default != null) {
                 // If default requires API key but has none, fall back to a provider without API key requirement
                 if (default.requiresApiKey && !default.hasApiKey()) {
                     val fallback = providers.values.firstOrNull { !it.requiresApiKey }

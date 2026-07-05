@@ -224,9 +224,10 @@ fun MainScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                        if (searchResults != null) {
+                        val results = searchResults
+                        if (results != null) {
                             Text(
-                                text = searchResults!!,
+                                text = results,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 12.sp,
                                 modifier = Modifier
