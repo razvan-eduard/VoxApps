@@ -1,5 +1,7 @@
 package com.voxcommander.app.data.remote
 
+import androidx.compose.runtime.Immutable
+
 import com.google.gson.Gson
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.localization.LanguageManager
@@ -37,6 +39,7 @@ data class RemoteEngineConfig(
 /**
  * The Unified Model Item. Implements AppModel directly.
  */
+@Immutable
 data class RemoteModelItem(
     override val id: String,
     override val label: String,

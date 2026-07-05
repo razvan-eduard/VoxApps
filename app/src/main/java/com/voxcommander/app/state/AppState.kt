@@ -1,5 +1,7 @@
 package com.voxcommander.app.state
 
+import androidx.compose.runtime.Immutable
+
 import android.content.Context
 import com.voxcommander.app.data.preferences.AppSettings
 import com.voxcommander.app.domain.model.AppModel
@@ -10,6 +12,7 @@ import com.voxcommander.app.utils.Strings
  * Contains all UI-relevant state in a single immutable object.
  * This is the reactive Single Source of Truth (SSOT).
  */
+@Immutable
 data class AppState(
     // --- UI LANGUAGE ---
     val language: String,

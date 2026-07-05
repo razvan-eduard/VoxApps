@@ -1,5 +1,7 @@
 package com.voxcommander.app.data.preferences
 
+import androidx.compose.runtime.Immutable
+
 import com.voxcommander.app.utils.Strings
 
 /**
@@ -7,6 +9,7 @@ import com.voxcommander.app.utils.Strings
  * This is the reactive payload emitted by SettingsRepository.
  * AppStateManager combines this with runtime state to produce AppState.
  */
+@Immutable
 data class AppSettings(
     // --- API / CLOUD ---
     val apiKey: String? = null,

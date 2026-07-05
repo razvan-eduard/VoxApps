@@ -1,5 +1,7 @@
 package com.voxcommander.app.domain.search
 
+import androidx.compose.runtime.Immutable
+
 import com.google.gson.JsonParser
 import com.voxcommander.app.utils.Logger
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +15,7 @@ import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 /** A single search result from any provider. */
+@Immutable
 data class SearchResult(
     val title: String,
     val url: String,

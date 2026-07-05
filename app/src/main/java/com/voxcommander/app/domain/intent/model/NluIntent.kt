@@ -1,5 +1,7 @@
 package com.voxcommander.app.domain.intent.model
 
+import androidx.compose.runtime.Immutable
+
 /**
  * Anatomy-based NLU intent produced by all interpreters (LLM + FastMap).
  *
@@ -23,6 +25,7 @@ package com.voxcommander.app.domain.intent.model
  * @param uriTemplate     URI template for ACTION_VIEW intents (from FastMap rule or probe).
  * @param mediaControlType How media keys are sent: "active_session" (default), "default_app", "audio_button".
  */
+@Immutable
 data class NluIntent(
     val actionVerb: String,
     val logicalSubject: String? = null,

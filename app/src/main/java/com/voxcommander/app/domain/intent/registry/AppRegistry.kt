@@ -1,5 +1,7 @@
 package com.voxcommander.app.domain.intent.registry
 
+import androidx.compose.runtime.Immutable
+
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -36,6 +38,7 @@ object AppRegistry {
         const val SEND = "send"
     }
 
+    @Immutable
     data class AppEntry(
         val packageName: String,
         val displayName: String,
