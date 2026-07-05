@@ -15,11 +15,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout (with submodules)
+      - name: Checkout PR branch (with submodules)
         uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -63,18 +64,22 @@ jobs:
         id: tests
         run: ./gradlew testDebugUnitTest --no-daemon
 
-      - name: Enable auto-merge for Dependabot PR
+      - name: Compile debug (verify build, no APK)
+        id: compile
+        run: ./gradlew compileDebugKotlin assembleDebug --no-daemon
+
+      - name: Squash merge PR to main
         if: success()
         run: |
-          gh pr merge "$PR_URL" --auto --squash --delete-branch
+          gh pr merge "$PR_URL" --squash --delete-branch
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Notify on test failure
+      - name: Notify on failure
         if: failure()
         run: |
-          gh pr comment "$PR_URL" --body "❌ Unit tests failed. Auto-merge skipped. Please fix the issues before merging."
+          gh pr comment "$PR_URL" --body "❌ Tests or compilation failed on the PR branch. Auto-merge skipped. Please fix the issues before merging."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
