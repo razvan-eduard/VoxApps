@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -22,9 +24,10 @@ import java.util.*
 
 @Composable
 fun VerboseLoggingTab(
-    languageManager: LanguageManager,
+
     verboseLoggingEnabled: Boolean // HOISTED STATE
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val logs by Logger.verboseLogs.collectAsStateWithLifecycle()
     val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())

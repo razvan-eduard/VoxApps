@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.rules
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -51,13 +53,14 @@ import java.io.File
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun RulesManagerContent(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     fastMapDao: FastMapDao,
     onSaveAndClose: () -> Unit,
     onChangesDetected: (Boolean) -> Unit = {}
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val hapticFeedback = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -321,7 +324,7 @@ fun RulesManagerContent(
                                 }
                             },
                             label = { Text(languageManager.getString("voice_input_label")) },
-                            languageManager = languageManager,
+
                             modelFilterLang = modelFilterLang,
                             voiceProcessor = voiceProcessor,
                             isModelOnDevice = isDefaultModelOnDevice,
@@ -342,8 +345,8 @@ fun RulesManagerContent(
                                     } else {
                                         triggerSelectedIndices.add(index)
                                     }
-                                },
-                                languageManager = languageManager
+                                }
+
                             )
 
                             // Additional trigger groups (OR)
@@ -390,7 +393,7 @@ fun RulesManagerContent(
                                                 groupIndices.add(index)
                                             }
                                         },
-                                        languageManager = languageManager,
+
                                         modifier = Modifier.weight(1f)
                                     )
                                     IconButton(
@@ -456,8 +459,8 @@ fun RulesManagerContent(
                                     } else {
                                         querySelectedIndices.add(index)
                                     }
-                                },
-                                languageManager = languageManager
+                                }
+
                             )
                         }
 
@@ -583,8 +586,8 @@ fun RulesManagerContent(
                             domain = null,
                             label = languageManager.getString("target_app_label"),
                             modifier = Modifier.fillMaxWidth(),
-                            allowNone = false,
-                            languageManager = languageManager
+                            allowNone = false
+
                         )
 
                         // --- INTENT DROPDOWN ---
@@ -901,8 +904,8 @@ fun RulesManagerContent(
                             scope.launch {
                                 fastMapDao.setRuleActive(rule.id, !rule.isActive)
                             }
-                        },
-                        languageManager = languageManager
+                        }
+
                     )
                     }
                 }
@@ -968,9 +971,10 @@ fun TokenSelectorSection(
     selectedIndices: List<Int>,
     greyedIndices: List<Int>,
     onToggle: (Int) -> Unit,
-    languageManager: LanguageManager,
+
     modifier: Modifier = Modifier
 ) {
+        val languageManager = LocalLanguageManager.current
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
@@ -1032,9 +1036,9 @@ fun RuleItem(
     onDelete: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveToTop: () -> Unit,
-    onToggleActive: () -> Unit,
-    languageManager: LanguageManager
+    onToggleActive: () -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     Card(
         modifier = modifier
             .fillMaxWidth()

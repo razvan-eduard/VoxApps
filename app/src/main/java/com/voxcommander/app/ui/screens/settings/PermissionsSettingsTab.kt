@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -14,13 +16,14 @@ import com.voxcommander.app.state.AppStateManager
 
 @Composable
 fun PermissionsSettingsTab(
-    languageManager: LanguageManager,
+
     appStateManager: AppStateManager,
     onRequestMicrophone: () -> Unit,
     onRequestNotification: () -> Unit,
     onRequestOverlay: () -> Unit,
     onRequestLocation: () -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -34,7 +37,7 @@ fun PermissionsSettingsTab(
             title = languageManager.getString("permission_mic_title") ?: "Microphone",
             desc = languageManager.getString("permission_mic_desc") ?: "Required to record your voice commands.",
             isGranted = uiState.hasMicrophonePermission,
-            languageManager = languageManager,
+
             onClick = onRequestMicrophone
         )
 
@@ -43,7 +46,7 @@ fun PermissionsSettingsTab(
             title = languageManager.getString("permission_notif_title") ?: "Notifications",
             desc = languageManager.getString("permission_notif_desc") ?: "Required for background service status.",
             isGranted = uiState.hasNotificationPermission,
-            languageManager = languageManager,
+
             onClick = onRequestNotification
         )
 
@@ -52,7 +55,7 @@ fun PermissionsSettingsTab(
             title = languageManager.getString("overlay_permission_title"),
             desc = languageManager.getString("overlay_permission_desc"),
             isGranted = uiState.canDrawOverlays,
-            languageManager = languageManager,
+
             onClick = onRequestOverlay
         )
 
@@ -61,7 +64,7 @@ fun PermissionsSettingsTab(
             title = "Location",
             desc = "Required for weather search provider to get local forecast.",
             isGranted = uiState.hasLocationPermission,
-            languageManager = languageManager,
+
             onClick = onRequestLocation
         )
 
@@ -70,7 +73,7 @@ fun PermissionsSettingsTab(
             title = languageManager.getString("permission_query_packages_title") ?: "Query All Packages",
             desc = languageManager.getString("permission_query_packages_desc") ?: "Required to list installed apps for the Default Apps picker. Granted automatically at install.",
             isGranted = true,
-            languageManager = languageManager,
+
             onClick = {}
         )
     }
@@ -81,9 +84,10 @@ private fun PermissionItem(
     title: String,
     desc: String,
     isGranted: Boolean,
-    languageManager: LanguageManager,
+
     onClick: () -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(

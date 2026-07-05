@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.*
@@ -40,7 +42,7 @@ import com.voxcommander.app.utils.Strings
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServiceSettingsTab(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     onStartService: () -> Unit,
@@ -54,6 +56,7 @@ fun ServiceSettingsTab(
     onImportCustomModel: ((String?) -> Unit)? = null,
     refreshTrigger: Int = 0
 ) {
+        val languageManager = LocalLanguageManager.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val serviceLoadingState by appStateManager.serviceLoadingState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -416,7 +419,7 @@ fun ServiceSettingsTab(
         if (showCalibrationDialog) {
             CalibrationDialog(
                 state = calibrationState,
-                languageManager = languageManager,
+
                 appStateManager = appStateManager,
                 onReady = { round -> calibrator.signalReady(round) },
                 onDismiss = {
@@ -549,7 +552,7 @@ fun ServiceSettingsTab(
         if (displayModels.isNotEmpty()) {
             EngineModelSection(
                 title = languageManager.getString("wake_word_model"),
-                languageManager = languageManager,
+
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,
                 groups = remember(displayModels, refreshTrigger) {
@@ -602,7 +605,7 @@ fun ServiceSettingsTab(
             },
             label = { Text(languageManager.getString("wake_word_label")) },
             placeholder = { Text(if (hasProfile) languageManager.getString("ww_profile_used") else languageManager.getString("wake_word_hint")) },
-            languageManager = languageManager,
+
             modelFilterLang = uiState.modelFilterLang,
             voiceProcessor = uiState.voiceProcessor,
             isModelOnDevice = isWakeWordModelOnDevice,
@@ -767,11 +770,12 @@ fun ServiceSettingsTab(
 @Composable
 private fun CalibrationDialog(
     state: WakeWordCalibrator.CalibrationState,
-    languageManager: LanguageManager,
+
     appStateManager: AppStateManager,
     onReady: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -842,7 +846,7 @@ private fun CalibrationDialog(
                         )
                         Spacer(Modifier.height(12.dp))
                         ListeningScreen(
-                            languageManager = languageManager,
+
                             appStateManager = appStateManager,
                             onStop = onDismiss
                         )
@@ -864,7 +868,7 @@ private fun CalibrationDialog(
                         )
                         Spacer(Modifier.height(12.dp))
                         ListeningScreen(
-                            languageManager = languageManager,
+
                             appStateManager = appStateManager,
                             onStop = onDismiss
                         )

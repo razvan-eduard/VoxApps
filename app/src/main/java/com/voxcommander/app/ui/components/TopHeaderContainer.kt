@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.components
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,7 +26,7 @@ enum class TopHeaderMode {
 @Composable
 fun TopHeaderContainer(
     mode: TopHeaderMode,
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     modelManagementViewModel: com.voxcommander.app.ui.viewmodels.ModelManagementViewModel,
@@ -47,6 +49,7 @@ fun TopHeaderContainer(
     onClearCustomModel: () -> Unit = {},
     onImportOpenWakeWordModel: () -> Unit = {}
 ) {
+        val languageManager = LocalLanguageManager.current
     if (mode == TopHeaderMode.NONE) return
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -63,7 +66,7 @@ fun TopHeaderContainer(
             when (mode) {
                 TopHeaderMode.SETTINGS -> {
                     SettingsContent(
-                        languageManager = languageManager,
+
                         settingsRepo = settingsRepo,
                         appStateManager = appStateManager,
                         modelManagementViewModel = modelManagementViewModel,
@@ -86,7 +89,7 @@ fun TopHeaderContainer(
                 }
                 TopHeaderMode.RULES -> {
                     RulesManagerContent(
-                        languageManager = languageManager,
+
                         settingsRepo = settingsRepo,
                         appStateManager = appStateManager,
                         fastMapDao = fastMapDao,

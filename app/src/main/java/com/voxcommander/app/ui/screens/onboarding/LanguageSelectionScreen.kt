@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.onboarding
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,9 +19,10 @@ import com.voxcommander.app.domain.localization.LanguageManager
 
 @Composable
 fun LanguageSelectionScreen(
-    languageManager: LanguageManager,
+
     onLanguageSelected: (String) -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     val availableLanguages = remember { languageManager.getAvailableLanguages() }
     val languageNames = mapOf(
         "en" to "English",

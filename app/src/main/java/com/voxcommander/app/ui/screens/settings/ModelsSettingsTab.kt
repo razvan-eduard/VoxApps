@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -25,7 +27,7 @@ import com.voxcommander.app.state.AppStateManager
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModelsSettingsTab(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     onProcessorSelected: (String) -> Unit,
@@ -45,6 +47,7 @@ fun ModelsSettingsTab(
     onClearCustomModel: () -> Unit = {},
     refreshTrigger: Int = 0
 ) {
+        val languageManager = LocalLanguageManager.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val nluModels = remember(uiState.availableModels) { uiState.availableModels["nlu_llm"] ?: emptyList() }
 
@@ -216,7 +219,7 @@ fun ModelsSettingsTab(
 
         if (selectedSubTab == 0) {
             VoiceEnginesSubTab(
-                languageManager = languageManager,
+
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,
                 onProcessorSelected = onProcessorSelected,
@@ -237,7 +240,7 @@ fun ModelsSettingsTab(
             )
         } else {
             IntentEnginesSubTab(
-                languageManager = languageManager,
+
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,
                 onDownloadModel = onDownloadModel,

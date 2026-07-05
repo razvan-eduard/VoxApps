@@ -43,7 +43,6 @@ fun <T> GroupedDropdownContent(
     onCancelDownload: (() -> Unit)? = null,
     downloadProgress: Float? = null,
     downloadingItem: Any? = null,
-    languageManager: LanguageManager
 ) {
     Column(
         modifier = Modifier
@@ -203,7 +202,6 @@ fun <T> GroupedDropdownMenu(
     downloadProgress: Float? = null,
     downloadingItem: Any? = null,
     modifier: Modifier = Modifier,
-    languageManager: LanguageManager,
     onExpandedChange: ((Boolean) -> Unit)? = null,
     placeholder: String? = null
 ) {

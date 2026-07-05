@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.domain.localization.LanguageManager
+import com.voxcommander.app.ui.LocalLanguageManager
 import com.voxcommander.app.domain.model.AppModel
 import com.voxcommander.app.state.AppStateManager
 import com.voxcommander.app.utils.Strings
@@ -25,7 +26,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun <T> EngineModelSection(
     title: String,
-    languageManager: LanguageManager,
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     groups: List<DropdownGroup<T>>,
@@ -45,6 +45,7 @@ fun <T> EngineModelSection(
     onShowInfo: (() -> Unit)? = null,
     showFallback: Boolean = true
 ) {
+    val languageManager = LocalLanguageManager.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var showSheet by remember { mutableStateOf(false) }
@@ -108,8 +109,8 @@ fun <T> EngineModelSection(
         onDeleteRequest = { onDeleteRequest(it) },
         onCancelDownload = onCancelDownload,
         downloadProgress = downloadProgress,
-        downloadingItem = downloadingItem,
-        languageManager = languageManager
+        downloadingItem = downloadingItem
+
     )
 
     // 3. Selection Sheet
@@ -146,8 +147,8 @@ fun <T> EngineModelSection(
                 onDeleteRequest = { onDeleteRequest(it) },
                 onCancelDownload = onCancelDownload,
                 downloadProgress = downloadProgress,
-                downloadingItem = downloadingItem,
-                languageManager = languageManager
+                downloadingItem = downloadingItem
+
             )
         }
     }

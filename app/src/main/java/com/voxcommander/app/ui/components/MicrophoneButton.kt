@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.components
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
@@ -24,12 +26,13 @@ import com.voxcommander.app.state.VoiceState
 
 @Composable
 fun MicrophoneButton(
-    languageManager: LanguageManager,
+
     appStateManager: AppStateManager,
     isProcessing: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+        val languageManager = LocalLanguageManager.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     
     val isCurrentlyProcessing = uiState.voiceState == VoiceState.PROCESSING || isProcessing
@@ -77,9 +80,10 @@ fun MicrophoneButton(
 
 @Composable
 fun ModelNotPresentMessage(
-    languageManager: LanguageManager,
+
     appStateManager: AppStateManager
 ) {
+        val languageManager = LocalLanguageManager.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {

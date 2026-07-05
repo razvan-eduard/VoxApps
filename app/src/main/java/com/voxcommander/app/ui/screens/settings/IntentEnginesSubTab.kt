@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,7 +24,7 @@ import com.voxcommander.app.utils.Strings
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IntentEnginesSubTab(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     onDownloadModel: (String, String, String?) -> Unit,
@@ -33,6 +35,7 @@ fun IntentEnginesSubTab(
     onFallbackChanged: () -> Unit = {},
     refreshTrigger: Int = 0
 ) {
+        val languageManager = LocalLanguageManager.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
     // Download guard state
@@ -156,7 +159,7 @@ fun IntentEnginesSubTab(
 
             EngineModelSection(
                 title = languageManager.getString("nlu_model_selection_title"),
-                languageManager = languageManager,
+
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,
                 groups = remember(nluGroups, uiState, refreshTrigger) { nluGroups },

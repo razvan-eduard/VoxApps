@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.components
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
@@ -25,7 +27,7 @@ fun VoiceInputTextField(
     onValueChange: (String) -> Unit,
     label: @Composable () -> Unit,
     placeholder: @Composable (() -> Unit)? = null,
-    languageManager: LanguageManager,
+
     modelFilterLang: String,
     voiceProcessor: String,
     isModelOnDevice: Boolean = true,
@@ -34,6 +36,7 @@ fun VoiceInputTextField(
     enabled: Boolean = true,
     onVoiceResult: ((String) -> Unit)? = null
 ) {
+        val languageManager = LocalLanguageManager.current
     // Collect the global listening state to keep UI in sync
     val isGloballyListening by VoiceManager.isListeningFlow.collectAsStateWithLifecycle()
     

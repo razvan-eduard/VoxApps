@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.splash
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.Image
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -25,10 +27,11 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SplashLoadingScreen(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     onFinished: () -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val loadStatus by RemoteModelRegistry.loadStatus.collectAsStateWithLifecycle()

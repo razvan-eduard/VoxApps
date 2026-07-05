@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,7 +26,7 @@ import com.voxcommander.app.utils.Strings
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoiceEnginesSubTab(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     onProcessorSelected: (String) -> Unit,
@@ -43,6 +45,7 @@ fun VoiceEnginesSubTab(
     onClearCustomModel: () -> Unit = {},
     refreshTrigger: Int = 0
 ) {
+        val languageManager = LocalLanguageManager.current
     // REALTIME STATE from AppStateManager
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
@@ -148,8 +151,8 @@ fun VoiceEnginesSubTab(
             isDownloaded = { true },
             onDeviceLabel = "",
             onItemSelected = { pair, _ -> modelFilterLang = pair.first; appStateManager.setModelFilterLang(pair.first) },
-            onExpandedChange = { showSheet -> showLanguageSheet = showSheet },
-            languageManager = languageManager
+            onExpandedChange = { showSheet -> showLanguageSheet = showSheet }
+
         )
 
         if (showLanguageSheet) {
@@ -160,8 +163,8 @@ fun VoiceEnginesSubTab(
                     itemLabel = { it.second },
                     isDownloaded = { true },
                     onDeviceLabel = "",
-                    onItemSelected = { pair, _ -> modelFilterLang = pair.first; appStateManager.setModelFilterLang(pair.first); showLanguageSheet = false },
-                    languageManager = languageManager
+                    onItemSelected = { pair, _ -> modelFilterLang = pair.first; appStateManager.setModelFilterLang(pair.first); showLanguageSheet = false }
+
                 )
             }
         }
@@ -276,7 +279,7 @@ fun VoiceEnginesSubTab(
     if (filteredModels.isNotEmpty()) {
         EngineModelSection(
             title = languageManager.getString("select_model"),
-            languageManager = languageManager,
+
             settingsRepo = settingsRepo,
             appStateManager = appStateManager,
             groups = remember(filteredModels, refreshTrigger) {

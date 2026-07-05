@@ -1,4 +1,6 @@
 package com.voxcommander.app.ui.screens.settings
+
+import com.voxcommander.app.ui.LocalLanguageManager
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -36,10 +38,11 @@ import java.util.Locale
 
 @Composable
 fun BenchmarkSettingsTab(
-    languageManager: LanguageManager,
+
     appStateManager: AppStateManager,
     refreshTrigger: Int = 0
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
@@ -120,7 +123,7 @@ fun BenchmarkSettingsTab(
                     }
                 }
             }
-            items(benchmarkResults) { result -> BenchmarkResultItem(result, languageManager) }
+            items(benchmarkResults) { result -> BenchmarkResultItem(result) }
         }
 
         item {
@@ -175,7 +178,8 @@ fun BenchmarkSettingsTab(
 }
 
 @Composable
-fun BenchmarkResultItem(result: BenchmarkResult, languageManager: LanguageManager) {
+fun BenchmarkResultItem(result: BenchmarkResult) {
+        val languageManager = LocalLanguageManager.current
     Card(modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, if (result.isSuccess) Color.Gray.copy(alpha = 0.3f) else Color.Red)) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {

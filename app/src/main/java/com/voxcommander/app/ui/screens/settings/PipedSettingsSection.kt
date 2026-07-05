@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -20,9 +22,10 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PipedSettingsSection(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository
 ) {
+        val languageManager = LocalLanguageManager.current
     val scope = rememberCoroutineScope()
 
     var youtubeUrlEngine by remember { mutableStateOf(settingsRepo.getYoutubeUrlEngineSync()) }

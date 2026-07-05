@@ -24,8 +24,8 @@ fun VulkanTestModal(
     vulkanTestState: VulkanTestState,
     vulkanTestPassed: Boolean?,
     onDismiss: () -> Unit,
-    languageManager: com.voxcommander.app.domain.localization.LanguageManager
 ) {
+    val languageManager = com.voxcommander.app.ui.LocalLanguageManager.current
     if (vulkanTestState == VulkanTestState.IDLE) return
 
     val isRunning = vulkanTestState == VulkanTestState.RUNNING

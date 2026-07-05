@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.main
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -23,10 +25,11 @@ import com.voxcommander.app.utils.Strings
 
 @Composable
 fun ListeningScreen(
-    languageManager: LanguageManager,
+
     appStateManager: AppStateManager,
     onStop: () -> Unit = { VoiceManager.stopListening() }
 ) {
+        val languageManager = LocalLanguageManager.current
     // TEST: Migrating to collectAsStateWithLifecycle to verify manual Lifecycle sync in WindowManager
     val isListening by VoiceManager.isListeningFlow.collectAsStateWithLifecycle()
     val partialTranscription by VoiceManager.partialTranscriptionFlow.collectAsStateWithLifecycle()

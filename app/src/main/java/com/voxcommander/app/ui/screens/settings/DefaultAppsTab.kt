@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -28,10 +30,11 @@ private data class DomainInfo(
 
 @Composable
 fun DefaultAppsTab(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: com.voxcommander.app.state.AppStateManager
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())
@@ -77,8 +80,8 @@ fun DefaultAppsTab(
                     domain = null,
                     label = domainInfo.name.replaceFirstChar { it.uppercase() } + if (domainInfo.isCustom) " (custom)" else "",
                     filterMode = settings.domainAppFilters[domainInfo.name] ?: "all",
-                    extraPackages = emptyList(),
-                    languageManager = languageManager
+                    extraPackages = emptyList()
+
                 )
                 if (domainInfo.isCustom) {
                     Row(
@@ -171,8 +174,8 @@ fun DefaultAppsTab(
                     settingsRepo.addCustomDomain(name)
                     showAddCategoryDialog = false
                 }
-            },
-            languageManager = languageManager
+            }
+
         )
     }
 }
@@ -180,9 +183,9 @@ fun DefaultAppsTab(
 @Composable
 private fun AddCustomCategoryDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-    languageManager: LanguageManager
+    onConfirm: (String) -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     var name by remember { mutableStateOf("") }
 
     AlertDialog(

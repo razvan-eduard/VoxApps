@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,10 +35,11 @@ import java.util.UUID
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppManagerTab(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
@@ -54,7 +57,7 @@ fun AppManagerTab(
         )
 
         DefaultAppsContent(
-            languageManager = languageManager,
+
             settingsRepo = settingsRepo,
             appStateManager = appStateManager
         )
@@ -85,8 +88,8 @@ fun AppManagerTab(
             onDeleteRule = { ruleId ->
                 val updated = settings.appAliasRules.filter { it.id != ruleId }
                 scope.launch { settingsRepo.setAppAliasRules(updated) }
-            },
-            languageManager = languageManager
+            }
+
         )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -141,8 +144,8 @@ fun AppManagerTab(
                 scope.launch { settingsRepo.setReturnAfterActionApps(updated) }
             },
             onSetDefault = {},
-            label = "Apps (${returnApps.size} selected)",
-            languageManager = languageManager
+            label = "Apps (${returnApps.size} selected)"
+
         )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -181,10 +184,11 @@ fun AppManagerTab(
 
 @Composable
 private fun DefaultAppsContent(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())
@@ -222,8 +226,8 @@ private fun DefaultAppsContent(
                     domain = null,
                     label = domainName.replaceFirstChar { it.uppercase() } + if (isCustom) " (custom)" else "",
                     filterMode = settings.domainAppFilters[domainName] ?: "all",
-                    extraPackages = emptyList(),
-                    languageManager = languageManager
+                    extraPackages = emptyList()
+
                 )
                 if (isCustom) {
                     Row(
@@ -321,9 +325,9 @@ private fun AppAliasManagerSection(
     aliasRules: List<AppAliasRule>,
     onAddRule: (AppAliasRule) -> Unit,
     onUpdateRule: (AppAliasRule) -> Unit,
-    onDeleteRule: (String) -> Unit,
-    languageManager: LanguageManager
+    onDeleteRule: (String) -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     var showAddDialog by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<AppAliasRule?>(null) }
     var pendingDeleteRule by remember { mutableStateOf<AppAliasRule?>(null) }
@@ -370,8 +374,8 @@ private fun AppAliasManagerSection(
             onSave = { newRule ->
                 onAddRule(newRule)
                 showAddDialog = false
-            },
-            languageManager = languageManager
+            }
+
         )
     }
 
@@ -382,8 +386,8 @@ private fun AppAliasManagerSection(
             onSave = { updated ->
                 onUpdateRule(updated)
                 editingRule = null
-            },
-            languageManager = languageManager
+            }
+
         )
     }
 
@@ -485,9 +489,9 @@ private fun AppAliasRuleCard(
 private fun AppAliasEditDialog(
     rule: AppAliasRule?,
     onDismiss: () -> Unit,
-    onSave: (AppAliasRule) -> Unit,
-    languageManager: LanguageManager
+    onSave: (AppAliasRule) -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     var selectedPackage by remember { mutableStateOf(rule?.packageName) }
     var aliases by remember { mutableStateOf(rule?.aliases?.joinToString(", ") ?: "") }
     var aliasList by remember { mutableStateOf(rule?.aliases ?: emptyList()) }
@@ -525,7 +529,7 @@ private fun AppAliasEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                     label = languageManager.getString("app_alias_select_app"),
                     allowNone = false,
-                    languageManager = languageManager,
+
                     maxDropdownHeight = 200.dp
                 )
 
