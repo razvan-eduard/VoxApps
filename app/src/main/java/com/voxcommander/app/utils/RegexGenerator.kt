@@ -7,35 +7,48 @@ package com.voxcommander.app.utils
 object RegexGenerator {
 
     /**
-     * Creates a pattern that matches words in the specified order, 
+     * Creates a pattern that matches words in the specified order,
      * allowing any characters between them and ignoring diacritics.
-     * 
+     *
      * Input: ["aprinde", "bucătărie"]
-     * Output: "\\baprinde\\b.*?\\bbuc[aăâ]t[aăâ]rie\\b"
+     * Output: "(?U:\\baprinde\\b.*?\\bbuc[aăâ][tțţ][aăâ]r[iî]e\\b)"
+     *
+     * The result is wrapped in a Unicode-aware group (see [wrapUnicode]) so that
+     * `\b` works for words starting/ending in a diacritic.
      */
     fun fromWords(selectedWords: List<String>): String {
         if (selectedWords.isEmpty()) return ""
-        
-        return selectedWords.joinToString(".*?") { word ->
-            "\\b" + makeDiacriticInsensitive(word.lowercase()) + "\\b"
-        }
+        return wrapUnicode(buildSequencePattern(selectedWords))
     }
 
     /**
      * Creates a pattern that matches ANY of the provided word groups (OR logic).
      * Each group uses AND logic internally (words must appear in order within a group).
-     * Groups are combined with | (OR).
+     * Groups are combined with | (OR), and the whole alternation shares one
+     * Unicode-aware boundary group.
      *
      * Input: [["aprinde", "bucătărie"], ["lumina", "bucătărie"]]
-     * Output: "(\\baprinde\\b.*?\\bbuc[aăâ]t[aăâ]rie\\b|\\blumina\\b.*?\\bbuc[aăâ]t[aăâ]rie\\b)"
+     * Output: "(?U:\\baprinde\\b.*?\\b…\\b|\\blumina\\b.*?\\b…\\b)"
      */
     fun fromWordGroups(groups: List<List<String>>): String {
         val validGroups = groups.filter { it.isNotEmpty() }
         if (validGroups.isEmpty()) return ""
-        return validGroups.joinToString("|") { group ->
-            fromWords(group)
-        }
+        return wrapUnicode(validGroups.joinToString("|") { buildSequencePattern(it) })
     }
+
+    /** Builds a single ordered "\b word \b.*?\b word \b" sequence (no boundary wrapper). */
+    private fun buildSequencePattern(words: List<String>): String =
+        words.joinToString(".*?") { word ->
+            "\\b" + makeDiacriticInsensitive(word.lowercase()) + "\\b"
+        }
+
+    /**
+     * Wraps [body] in a Unicode-aware group so `\b` treats diacritics (ă â î ș ț
+     * and their variants) as word characters. Without `(?U:…)`, `\b` uses ASCII
+     * `\w`, so a word starting or ending in a diacritic (e.g. "masă", "ăsta") has
+     * a broken word boundary and fails to match.
+     */
+    private fun wrapUnicode(body: String): String = "(?U:$body)"
 
     /**
      * Splits a raw sentence into individual words/tokens for UI selection.

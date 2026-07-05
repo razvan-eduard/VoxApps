@@ -23,10 +23,22 @@ class RegexGeneratorTest {
     @Test
     fun `fromWords is diacritic-insensitive`() {
         // ASCII query "maine" must also match the diacritic form "mâine" (a<->â, i<->î).
-        // Word ends in ASCII 'e', so the trailing \b (which uses ASCII \w) is well-defined.
-        val p = Regex(RegexGenerator.fromWords(listOf("maine")))
+        val p = Regex(RegexGenerator.fromWords(listOf("maine")), RegexOption.IGNORE_CASE)
         assertTrue(p.containsMatchIn("ne vedem maine"))
         assertTrue(p.containsMatchIn("ne vedem mâine"))
+    }
+
+    @Test
+    fun `fromWords matches words that start or end in a diacritic`() {
+        // Regression for the \b bug: with the Unicode-aware boundary, a word ending
+        // in a diacritic ("masă") matches both spellings...
+        val ending = Regex(RegexGenerator.fromWords(listOf("masă")), RegexOption.IGNORE_CASE)
+        assertTrue(ending.containsMatchIn("pune pe masă"))
+        assertTrue(ending.containsMatchIn("pune pe masa"))
+        // ...and a word starting with a diacritic ("ăsta") matches too.
+        val starting = Regex(RegexGenerator.fromWords(listOf("ăsta")), RegexOption.IGNORE_CASE)
+        assertTrue(starting.containsMatchIn("dă-mi ăsta"))
+        assertTrue(starting.containsMatchIn("da-mi asta"))
     }
 
     @Test
