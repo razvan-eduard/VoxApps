@@ -10,11 +10,10 @@ private const val LOG_TAG = "LibWhisper"
 /**
  * HIGH-LEVEL CONTEXT: Manages Whisper engine lifecycle and thread-safe transcription.
  */
-class WhisperContext private constructor(private var ptr: Long) {
+class WhisperContext private constructor(@Volatile private var ptr: Long) {
     // Meet Whisper C++ constraint: Don't access from more than one thread at a time.
-    private val scope: CoroutineScope = CoroutineScope(
-        Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-    )
+    private val executor = Executors.newSingleThreadExecutor()
+    private val scope: CoroutineScope = CoroutineScope(executor.asCoroutineDispatcher())
 
     suspend fun transcribeData(data: FloatArray, threads: Int, language: String? = null, printTimestamp: Boolean = true): String = withContext(scope.coroutineContext) {
         if (ptr == 0L) return@withContext "Error: Context released"
@@ -39,6 +38,9 @@ class WhisperContext private constructor(private var ptr: Long) {
     }
 
     fun release() {
+        // Idempotent: a second call (e.g. finalize() after an explicit release) must
+        // not submit to the already-shut-down executor (RejectedExecutionException).
+        if (ptr == 0L) return
         // Serialize with transcribeData through the single-thread executor:
         // freeContext must never run concurrently with fullTranscribe (native crash).
         runBlocking(scope.coroutineContext) {
@@ -47,6 +49,9 @@ class WhisperContext private constructor(private var ptr: Long) {
                 ptr = 0
             }
         }
+        // Shut down the executor so its worker thread doesn't leak once the native
+        // context is gone (the context is recreated on the next transcription).
+        executor.shutdown()
     }
 
     protected fun finalize() {
