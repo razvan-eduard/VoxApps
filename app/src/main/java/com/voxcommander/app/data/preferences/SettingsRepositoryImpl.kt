@@ -15,9 +15,12 @@ import com.google.gson.Gson
 import com.voxcommander.app.data.remote.RemoteModelRegistry
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
+import com.voxcommander.app.utils.AppScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 class SettingsRepositoryImpl(
@@ -365,16 +368,29 @@ class SettingsRepositoryImpl(
     }
 
     // --- SYNCHRONOUS READS ---
-    override fun getSettingsSnapshot(): AppSettings = runBlocking { settingsFlow.first() }
+    // Cache kept warm by collecting settingsFlow on a background scope, so the hot-path
+    // getters below (called from MainActivity/WakeWordService onCreate, IntentRouter.route)
+    // never block the calling thread. Only the very first read before the cache warms up
+    // falls back to a one-off runBlocking.
+    @Volatile private var cachedSnapshot: AppSettings? = null
+
+    init {
+        AppScope.io.launch {
+            settingsFlow.collect { cachedSnapshot = it }
+        }
+    }
+
+    override fun getSettingsSnapshot(): AppSettings =
+        cachedSnapshot ?: runBlocking { settingsFlow.first() }.also { cachedSnapshot = it }
 
     override fun getApiKeySync(): String? = encryptedPrefs.getString("api_key", null)
     override fun getGeminiApiKeySync(): String? = encryptedPrefs.getString("gemini_api_key", null)
-    override fun getSpotifyClientIdSync(): String? = runBlocking { dataStore.data.first()[Keys.SPOTIFY_CLIENT_ID] }
-    override fun getPipedApiUrlSync(): String? = runBlocking { dataStore.data.first()[Keys.PIPED_API_URL] }
-    override fun getPipedRegionSync(): String? = runBlocking { dataStore.data.first()[Keys.PIPED_REGION] }
-    override fun getYoutubeUrlEngineSync(): String = runBlocking { dataStore.data.first()[Keys.YOUTUBE_URL_ENGINE] ?: "piped" }
-    override fun getReturnAfterActionAppsSync(): List<String> = runBlocking { parseStringList(dataStore.data.first()[Keys.RETURN_AFTER_ACTION_APPS_JSON]) }
-    override fun getExternalTriggerEnabledSync(): Boolean = runBlocking { dataStore.data.first()[Keys.EXTERNAL_TRIGGER_ENABLED] ?: true }
+    override fun getSpotifyClientIdSync(): String? = getSettingsSnapshot().spotifyClientId
+    override fun getPipedApiUrlSync(): String? = getSettingsSnapshot().pipedApiUrl
+    override fun getPipedRegionSync(): String? = getSettingsSnapshot().pipedRegion
+    override fun getYoutubeUrlEngineSync(): String = getSettingsSnapshot().youtubeUrlEngine
+    override fun getReturnAfterActionAppsSync(): List<String> = getSettingsSnapshot().returnAfterActionApps
+    override fun getExternalTriggerEnabledSync(): Boolean = getSettingsSnapshot().externalTriggerEnabled
 
     // --- SYNCHRONOUS WRITE (crash cookie) ---
     override fun setVulkanRuntimeAttemptSync(active: Boolean) {
