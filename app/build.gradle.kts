@@ -139,6 +139,9 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("app.cash.turbine:turbine:1.1.0")
     testImplementation("androidx.test:core:1.7.0")
+    // Real org.json for JVM unit tests — the android.jar stub throws "Stub!",
+    // which blocks testing code that parses JSON via org.json (e.g. TextNormalizer, WakeWordProfile).
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
