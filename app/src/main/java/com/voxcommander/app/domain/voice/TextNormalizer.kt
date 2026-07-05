@@ -22,7 +22,9 @@ object TextNormalizer {
     private const val TAG = "TextNormalizer"
     private const val ASSET_FILE = "normalization.json"
 
-    private var loaded = false
+    // @Volatile: load() runs on the init thread while normalize() reads the pattern maps
+    // on the command thread — this guarantees the published maps are visible once loaded.
+    @Volatile private var loaded = false
     private var schemaVersion = 1
     private val languageRules = mutableMapOf<String, LanguageRules>()
 
