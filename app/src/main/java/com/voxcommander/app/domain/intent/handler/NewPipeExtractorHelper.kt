@@ -3,6 +3,7 @@ package com.voxcommander.app.domain.intent.handler
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.voxcommander.app.utils.AppScope
 import com.voxcommander.app.utils.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -86,7 +87,7 @@ object NewPipeExtractorHelper {
 
     fun warmUp() {
         if (warmedUp) return
-        CoroutineScope(Dispatchers.IO).launch {
+        AppScope.io.launch {
             try {
                 initIfNeeded()
                 Logger.log("NewPipe warmup started — fetching base.js (first query is slowest)", TAG)

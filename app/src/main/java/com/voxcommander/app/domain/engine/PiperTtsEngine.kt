@@ -9,6 +9,7 @@ import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
+import com.voxcommander.app.utils.AppScope
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
 import com.voxcommander.app.utils.TextUtils
@@ -132,7 +133,7 @@ class PiperTtsEngine : ITtsEngine {
 
         stopped = false
         isSpeakingNow = true
-        speakJob = CoroutineScope(Dispatchers.IO).launch {
+        speakJob = AppScope.io.launch {
             try {
                 val chunks = TextUtils.splitSentences(text)
 
