@@ -744,7 +744,7 @@ fun RulesManagerContent(
                                         label = { Text("All", style = MaterialTheme.typography.labelSmall) }
                                     )
                                 }
-                                items(categories) { (displayName, pkg) ->
+                                items(categories, key = { (_, pkg) -> pkg }) { (displayName, pkg) ->
                                     FilterChip(
                                         selected = selectedCategory == pkg,
                                         onClick = { selectedCategory = if (selectedCategory == pkg) null else pkg },

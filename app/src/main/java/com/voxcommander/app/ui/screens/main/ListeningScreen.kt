@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,12 +64,17 @@ fun ListeningScreen(
                     ) {
                         // Pulsing Volume indicator ring
                         Surface(
-                            modifier = Modifier.size(
-                                (80 + (animatedVolume * 60)).dp
-                            ),
-                            color = MaterialTheme.colorScheme.primary.copy(
-                                alpha = (0.1f + (animatedVolume * 0.4f)).coerceIn(0.1f, 0.5f)
-                            ),
+                            // Scale/alpha via graphicsLayer (draw phase) — the lambda defers the
+                            // animatedVolume read, avoiding recomposition/relayout every frame.
+                            modifier = Modifier
+                                .size(80.dp)
+                                .graphicsLayer {
+                                    val s = 1f + (animatedVolume * 0.75f)
+                                    scaleX = s
+                                    scaleY = s
+                                    alpha = (0.1f + (animatedVolume * 0.4f)).coerceIn(0.1f, 0.5f)
+                                },
+                            color = MaterialTheme.colorScheme.primary,
                             shape = RoundedCornerShape(100.dp)
                         ) {}
 
