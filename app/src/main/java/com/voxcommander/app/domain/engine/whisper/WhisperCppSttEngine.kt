@@ -106,10 +106,15 @@ class WhisperCppSttEngine(
         ensureModelLoaded()
         if (!WhisperLib.isReady()) return@withContext "Error: Native library failed to load"
 
-        val currentContext =
-            whisperContext ?: return@withContext "Error: Whisper engine not initialized"
-
+        // Set the flag BEFORE reading whisperContext so releaseForMemoryPressure()
+        // (which checks isTranscribing) cannot free the context in the window
+        // between the read and the start of native work.
         isTranscribing = true
+        val currentContext = whisperContext ?: run {
+            isTranscribing = false
+            return@withContext "Error: Whisper engine not initialized"
+        }
+
         try {
             val floatAudio = AudioConvert.pcm16ToFloat(audio)
 

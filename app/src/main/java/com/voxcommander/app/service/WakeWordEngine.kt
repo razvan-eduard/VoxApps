@@ -154,15 +154,17 @@ class WakeWordEngine(
         // Cache wake word from uiState (avoids runBlocking per partial result)
         cachedWakeWord = appStateManager.uiState.value.wakeWord
 
-        // Reset filter state and buffers to avoid stale data from previous session
+        synchronized(startStopLock) {
+        if (isListening) return true
+
+        // Reset filter state and buffers to avoid stale data from previous session.
+        // Inside the lock: listenLoop may still be draining these buffers — clearing
+        // them concurrently would corrupt the non-thread-safe ArrayDeques.
         vadFilter.reset()
         rollingAudioBuffer.clear()
         voiceSegmentBuffer.clear()
         isCollectingVoice = false
         consecutiveSilentFrames = 0
-
-        synchronized(startStopLock) {
-        if (isListening) return true
 
         // Ensure any previous AudioRecord is fully released before creating a new one
         try {

@@ -39,9 +39,13 @@ class WhisperContext private constructor(private var ptr: Long) {
     }
 
     fun release() {
-        if (ptr != 0L) {
-            WhisperLib.freeContext(ptr)
-            ptr = 0
+        // Serialize with transcribeData through the single-thread executor:
+        // freeContext must never run concurrently with fullTranscribe (native crash).
+        runBlocking(scope.coroutineContext) {
+            if (ptr != 0L) {
+                WhisperLib.freeContext(ptr)
+                ptr = 0
+            }
         }
     }
 

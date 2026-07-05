@@ -14,8 +14,11 @@ import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.state.AppStateManager
 import com.voxcommander.app.state.VoiceState
 import com.voxcommander.app.utils.Logger
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -30,7 +33,17 @@ class PorcupineWakeWordEngine(
     private val TAG = "PorcupineWWEngine"
     private var porcupine: Porcupine? = null
     private var audioRecord: AudioRecord? = null
-    private var isListening = false
+    @Volatile private var isListening = false
+
+    // Guards check-then-act sections in startListening() against concurrent calls
+    private val startStopLock = Any()
+
+    // Managed scope for listenLoop — isolates exceptions
+    private val exceptionHandler = CoroutineExceptionHandler { _, e ->
+        Logger.log("Uncaught exception in Porcupine listen loop: ${e.message}", TAG)
+        isListening = false
+    }
+    private var engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -133,7 +146,7 @@ class PorcupineWakeWordEngine(
         audioFocusRequest = null
     }
 
-    override fun startListening(): Boolean {
+    override fun startListening(): Boolean = synchronized(startStopLock) {
         if (isListening) return true
         val engine = porcupine ?: run {
             Logger.log("Porcupine not initialized", TAG)
@@ -171,7 +184,8 @@ class PorcupineWakeWordEngine(
             appStateManager.setVoiceState(VoiceState.LISTENING_WAKEWORD)
             audioRecord?.startRecording()
 
-            CoroutineScope(Dispatchers.IO).launch { listenLoop() }
+            if (!engineScope.isActive) engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
+            engineScope.launch { listenLoop() }
             Logger.log("Porcupine started listening", TAG)
             return true
         } catch (e: Exception) {
@@ -223,8 +237,8 @@ class PorcupineWakeWordEngine(
         Logger.log("Porcupine listen loop exited cleanly", TAG)
     }
 
-    override fun stopListening() {
-        if (!isListening) return
+    override fun stopListening() = synchronized(startStopLock) {
+        if (!isListening) return@synchronized
         Logger.log("Stopping Porcupine listening", TAG)
         isListening = false
 
@@ -251,6 +265,7 @@ class PorcupineWakeWordEngine(
 
     override fun release() {
         stopService()
+        engineScope.cancel()
         try {
             porcupine?.delete()
         } catch (e: Exception) {
