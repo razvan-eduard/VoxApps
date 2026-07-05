@@ -51,6 +51,27 @@ jobs:
           mkdir -p ~/Library/Android/sdk
           ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
 
+      - name: Install SPIRV-Headers and Shaderc for whisper Vulkan build
+        run: |
+          # Install glslc (shaderc) from apt
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq glslc libshaderc-dev
+
+          # Install SPIRV-Headers from source (apt package lacks CMake config files)
+          git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git /tmp/spirv-headers
+          cd /tmp/spirv-headers
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local
+          sudo cmake --install build
+
+          # Install Vulkan-Headers from source (for CMake config)
+          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vulkan-headers
+          cd /tmp/vulkan-headers
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local
+          sudo cmake --install build
+
+          # Symlink glslc to /usr/local/bin (script expects brew --prefix → /usr/local)
+          sudo ln -sf /usr/bin/glslc /usr/local/bin/glslc 2>/dev/null || true
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
