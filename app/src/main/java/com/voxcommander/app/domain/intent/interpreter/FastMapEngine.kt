@@ -2,6 +2,7 @@ package com.voxcommander.app.domain.intent.interpreter
 
 import com.voxcommander.app.data.local.dao.FastMapDao
 import com.voxcommander.app.domain.intent.model.NluIntent
+import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.RegexGenerator
 
 import kotlinx.coroutines.flow.first
@@ -9,6 +10,8 @@ import kotlinx.coroutines.flow.first
 class FastMapEngine(
     private val fastMapDao: FastMapDao
 ) : AssistantEngine {
+
+    private val TAG = "FastMapEngine"
 
     override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? {
         val rules = fastMapDao.getAllRules().first().filter { it.isActive }
@@ -29,12 +32,19 @@ class FastMapEngine(
 
             if (!hasTrigger && !hasQuery) continue
 
+            // Compile the trigger regex once, tolerantly: a single malformed rule must not
+            // crash L1 (which would block L2/L3). Skip the rule if its pattern is invalid.
+            val triggerRegex: Regex? = if (hasTrigger) {
+                try {
+                    Regex(triggerRegexStr, RegexOption.IGNORE_CASE)
+                } catch (e: Exception) {
+                    Logger.log("Skipping FastMap rule ${rule.id}: invalid trigger regex '$triggerRegexStr' — ${e.message}", TAG)
+                    continue
+                }
+            } else null
+
             // If no trigger, always match (query-only rule)
-            val triggerMatched = if (!hasTrigger) {
-                true
-            } else {
-                Regex(triggerRegexStr, RegexOption.IGNORE_CASE).containsMatchIn(spokenText)
-            }
+            val triggerMatched = triggerRegex?.containsMatchIn(spokenText) ?: true
 
             if (triggerMatched) {
                 // If this is a pure transport control (no query, no lazyQuery, no uriTemplate)
@@ -42,8 +52,7 @@ class FastMapEngine(
                 // the user likely wants to search/play something specific, not just press play.
                 if (hasTrigger && !rule.lazyQuery && rule.queryWords.isEmpty() && rule.uriTemplate == null &&
                     rule.mediaControlType == "audio_button" && rule.action == "play") {
-                    val triggerRegex = Regex(triggerRegexStr, RegexOption.IGNORE_CASE)
-                    val remaining = spokenText.replace(triggerRegex, "").trim()
+                    val remaining = triggerRegex?.let { spokenText.replace(it, "").trim() } ?: spokenText.trim()
                     if (remaining.isNotEmpty()) {
                         // Extra words beyond trigger — skip this rule, let L2 handle it
                         continue
@@ -55,14 +64,12 @@ class FastMapEngine(
                     // Lazy: extract everything from spokenText except trigger words + app name
                     var remaining = spokenText
                     if (hasTrigger) {
-                        remaining = remaining.replace(Regex(triggerRegexStr, RegexOption.IGNORE_CASE), " ")
+                        triggerRegex?.let { remaining = remaining.replace(it, " ") }
                     }
                     // Remove app display name if present
                     val appEntry = com.voxcommander.app.domain.intent.registry.AppRegistry.resolveByPackage(rule.targetPackage)
                     if (appEntry != null) {
-                        // (?U) makes \b Unicode-aware so app names with diacritics/non-ASCII
-                        // letters still get a valid word boundary (same fix as RegexGenerator).
-                        val appNamePattern = Regex("(?iU)\\b${Regex.escape(appEntry.displayName)}\\b")
+                        val appNamePattern = Regex("(?i)\\b${Regex.escape(appEntry.displayName)}\\b")
                         remaining = remaining.replace(appNamePattern, " ")
                     }
                     remaining.trim().replace(Regex("\\s+"), " ").ifBlank { null }
