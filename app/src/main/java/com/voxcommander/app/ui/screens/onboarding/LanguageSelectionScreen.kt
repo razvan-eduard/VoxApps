@@ -61,7 +61,7 @@ fun LanguageSelectionScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(availableLanguages) { langCode ->
+                items(availableLanguages, key = { it }) { langCode ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth(0.8f)

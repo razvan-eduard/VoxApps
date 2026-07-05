@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -217,8 +218,15 @@ private fun PulsingAiIcon() {
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            modifier = Modifier.size((56 * pulseScale).dp),
-            color = aiPurple.copy(alpha = pulseAlpha),
+            // Animate via graphicsLayer (draw phase) instead of Modifier.size (relayout every frame).
+            modifier = Modifier
+                .size(56.dp)
+                .graphicsLayer {
+                    scaleX = pulseScale
+                    scaleY = pulseScale
+                    alpha = pulseAlpha
+                },
+            color = aiPurple,
             shape = RoundedCornerShape(100.dp)
         ) {}
         Icon(
