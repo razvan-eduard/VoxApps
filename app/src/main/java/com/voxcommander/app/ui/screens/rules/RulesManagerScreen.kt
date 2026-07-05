@@ -163,8 +163,9 @@ fun RulesManagerContent(
 
     // Update available intents when app changes
     LaunchedEffect(selectedTargetPackage) {
-        if (selectedTargetPackage != null) {
-            availableIntents = AppRegistry.KnownIntents.probeSupported(context, selectedTargetPackage!!)
+        val pkg = selectedTargetPackage
+        if (pkg != null) {
+            availableIntents = AppRegistry.KnownIntents.probeSupported(context, pkg)
             selectedIntentIndex = if (availableIntents.isNotEmpty()) 0 else -1
         } else {
             availableIntents = emptyList()

@@ -59,9 +59,10 @@ object SpotifyPkceManager {
     fun init(repo: SettingsRepository) {
         settingsRepo = repo
         loadPersistedTokens()
-        cachedDeviceId = repo.getSpotifyDeviceIdSync()
-        if (cachedDeviceId != null) {
-            Logger.log("PKCE cached device ID loaded: ${cachedDeviceId!!.take(8)}...", TAG)
+        val deviceId = repo.getSpotifyDeviceIdSync()
+        cachedDeviceId = deviceId
+        if (deviceId != null) {
+            Logger.log("PKCE cached device ID loaded: ${deviceId.take(8)}...", TAG)
         }
     }
 

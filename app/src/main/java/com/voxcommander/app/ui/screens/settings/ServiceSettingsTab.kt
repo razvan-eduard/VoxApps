@@ -93,8 +93,9 @@ fun ServiceSettingsTab(
             text = { Text(languageManager.getString("ww_engine_switch_warning_msg")) },
             confirmButton = {
                 TextButton(onClick = {
+                    val engine = pendingEngineSwitch
                     onStopService()
-                    appStateManager.setWakeWordEngineType(pendingEngineSwitch!!)
+                    if (engine != null) appStateManager.setWakeWordEngineType(engine)
                     pendingEngineSwitch = null
                 }) { Text(languageManager.getString("ww_engine_switch_warning_confirm")) }
             },
@@ -427,12 +428,13 @@ fun ServiceSettingsTab(
         }
 
         // Profile Name Dialog — shown after calibration completes
-        if (showProfileNameDialog && pendingProfile != null) {
+        val profile = pendingProfile
+        if (showProfileNameDialog && profile != null) {
             var profileName by remember { mutableStateOf("") }
             AlertDialog(
                 onDismissRequest = {
                     // Save without name if dismissed
-                    appStateManager.setWakeWordProfile(WakeWordProfile.toJson(pendingProfile!!))
+                    appStateManager.setWakeWordProfile(WakeWordProfile.toJson(profile))
                     showProfileNameDialog = false
                     pendingProfile = null
                 },
@@ -457,7 +459,7 @@ fun ServiceSettingsTab(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            val namedProfile = pendingProfile!!.copy(
+                            val namedProfile = profile.copy(
                                 profileName = profileName.trim().ifBlank { null }
                             )
                             appStateManager.setWakeWordProfile(WakeWordProfile.toJson(namedProfile))
@@ -469,7 +471,7 @@ fun ServiceSettingsTab(
                 dismissButton = {
                     TextButton(
                         onClick = {
-                            appStateManager.setWakeWordProfile(WakeWordProfile.toJson(pendingProfile!!))
+                            appStateManager.setWakeWordProfile(WakeWordProfile.toJson(profile))
                             showProfileNameDialog = false
                             pendingProfile = null
                         }

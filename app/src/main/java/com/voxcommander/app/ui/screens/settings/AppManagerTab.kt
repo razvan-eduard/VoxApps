@@ -606,12 +606,13 @@ private fun AppAliasEditDialog(
                             if (trimmed.isNotBlank() && trimmed.lowercase() !in finalAliases) {
                                 finalAliases.add(trimmed.lowercase())
                             }
-                            if (selectedPackage != null && finalAliases.isNotEmpty()) {
-                                val displayName = selectedApp?.displayName ?: selectedPackage!!
+                            val pkg = selectedPackage
+                            if (pkg != null && finalAliases.isNotEmpty()) {
+                                val displayName = selectedApp?.displayName ?: pkg
                                 onSave(
                                     AppAliasRule(
                                         id = rule?.id ?: UUID.randomUUID().toString(),
-                                        packageName = selectedPackage!!,
+                                        packageName = pkg,
                                         displayName = displayName,
                                         aliases = finalAliases,
                                         enabled = rule?.enabled ?: true
