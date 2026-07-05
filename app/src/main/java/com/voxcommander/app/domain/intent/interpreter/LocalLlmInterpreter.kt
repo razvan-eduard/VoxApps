@@ -69,7 +69,11 @@ class LocalLlmInterpreter(
 
         val options = LlmInference.LlmInferenceOptions.builder()
             .setModelPath(modelPath)
-            .setMaxTokens(1024)
+            // Total context budget (input + output). Must exceed the NLU system prompt
+            // (~1100+ tokens) plus user input and the generated response. 1024 was too
+            // small — the prompt alone overflowed it, so every generation failed with
+            // OUT_OF_RANGE ("Input is too long ... was not less than maxTokens(1024)").
+            .setMaxTokens(2048)
             .build()
 
         val instance = LlmInference.createFromOptions(context, options)
