@@ -308,7 +308,18 @@ class AppStateManager private constructor(
     }
 
     fun setWakeWordEngineType(engineType: String) {
-        scope.launch { repo.setWakeWordEngineType(engineType) }
+        scope.launch {
+            val previous = repo.getSettingsSnapshot().wakeWordEngineType
+            repo.setWakeWordEngineType(engineType)
+            // wakeWordModelPath is a single field shared by all wake-word engines, so a
+            // model selected for the previous engine (e.g. a Vosk model) would otherwise be
+            // handed to the new engine (e.g. OpenWakeWord) and fail to load. On an actual
+            // engine change, clear it — each engine resolves its own default from a null
+            // model path. Kept engine/model-name agnostic: no per-engine branches here.
+            if (previous != engineType) {
+                repo.setWakeWordModelPath(null)
+            }
+        }
     }
 
     fun setPicovoiceAccessKey(key: String?) {
