@@ -12,6 +12,7 @@ import com.voxcommander.app.domain.intent.handler.SearchIntentHandler
 import com.voxcommander.app.domain.intent.handler.SystemIntentHandler
 import com.voxcommander.app.domain.intent.model.NluIntent
 import com.voxcommander.app.domain.intent.resolver.AppResolver
+import com.voxcommander.app.utils.AppScope
 import com.voxcommander.app.utils.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +61,7 @@ class IntentRouter(
 
                 if (shouldReturnAfter && previousApp != null && previousApp != targetPkg) {
                     Logger.log("Return-to-previous enabled for $targetPkg, will return to $previousApp after delay", TAG)
-                    CoroutineScope(Dispatchers.Main).launch {
+                    AppScope.main.launch {
                         delay(1500)
                         returnToApp(previousApp)
                     }

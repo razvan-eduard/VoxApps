@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import com.voxcommander.app.data.preferences.SettingsRepository
+import com.voxcommander.app.utils.AppScope
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.NetworkMonitor
 import kotlinx.coroutines.CoroutineScope
@@ -87,7 +88,7 @@ object SpotifyPkceManager {
 
     private fun persistTokens() {
         val repo = settingsRepo ?: return
-        CoroutineScope(Dispatchers.IO).launch {
+        AppScope.io.launch {
             repo.setSpotifyTokens(accessToken, refreshToken, tokenExpiry)
         }
     }
@@ -286,7 +287,7 @@ object SpotifyPkceManager {
         cachedDeviceId = deviceId
         val repo = settingsRepo
         if (repo != null && deviceId != null) {
-            CoroutineScope(Dispatchers.IO).launch { repo.setSpotifyDeviceId(deviceId) }
+            AppScope.io.launch { repo.setSpotifyDeviceId(deviceId) }
             Logger.log("PKCE device ID cached: ${deviceId.take(8)}...", TAG)
         }
     }
@@ -302,7 +303,7 @@ object SpotifyPkceManager {
         authCallback = null
         persistTokens()
         settingsRepo?.let { repo ->
-            CoroutineScope(Dispatchers.IO).launch { repo.setSpotifyDeviceId(null) }
+            AppScope.io.launch { repo.setSpotifyDeviceId(null) }
         }
         Logger.log("PKCE logout", TAG)
     }

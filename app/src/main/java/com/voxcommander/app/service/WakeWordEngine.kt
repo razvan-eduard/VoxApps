@@ -10,6 +10,7 @@ import com.voxcommander.app.domain.voice.VoiceFeatureExtractor
 import com.voxcommander.app.domain.voice.WakeWordProfile
 import com.voxcommander.app.state.AppStateManager
 import com.voxcommander.app.state.VoiceState
+import com.voxcommander.app.utils.AppScope
 import com.voxcommander.app.utils.Logger
 import com.voxcommander.app.utils.Strings
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -188,7 +189,7 @@ class WakeWordEngine(
                 if (!isReinitializing) {
                     isReinitializing = true
                     Logger.log("Model was released (memory pressure) — reinitializing in background", TAG)
-                    CoroutineScope(Dispatchers.IO).launch {
+                    AppScope.io.launch {
                         val ok = try { initialize(path, word) } finally { isReinitializing = false }
                         Logger.log("Background model reinit ${if (ok) "succeeded" else "failed"}", TAG)
                     }
@@ -466,7 +467,7 @@ class WakeWordEngine(
         stopService()
         engineScope.cancel()
 
-        CoroutineScope(Dispatchers.IO).launch {
+        AppScope.io.launch {
             appStateManager.executeSecureVoiceAction {
                 Logger.log("Releasing native resources...", TAG)
                 recognizer?.close()
@@ -480,7 +481,7 @@ class WakeWordEngine(
     override fun releaseForMemoryPressure() {
         if (!isListening) {
             Logger.log("Releasing Vosk model for memory pressure (model=${storedModelPath})", TAG)
-            CoroutineScope(Dispatchers.IO).launch {
+            AppScope.io.launch {
                 appStateManager.executeSecureVoiceAction {
                     try { recognizer?.close() } catch (_: Exception) {}
                     try { model?.close() } catch (_: Exception) {}
