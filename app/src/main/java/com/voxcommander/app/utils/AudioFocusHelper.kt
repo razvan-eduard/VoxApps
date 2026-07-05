@@ -29,9 +29,12 @@ object AudioFocusHelper {
                         .setContentType(contentType)
                         .build()
                 )
-                .setAcceptsDelayedFocusGain(true)
             if (onFocusChange != null) {
+                // setAcceptsDelayedFocusGain REQUIRES a listener — the delayed grant is
+                // delivered through it. Enabling it without a listener makes build() throw
+                // ("Can't use delayed focus or pause on duck without a listener").
                 builder.setOnAudioFocusChangeListener(onFocusChange)
+                builder.setAcceptsDelayedFocusGain(true)
             }
             val request = builder.build()
             audioManager.requestAudioFocus(request)
