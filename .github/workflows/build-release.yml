@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
+    paths:
+      - 'app/build.gradle.kts'
   workflow_dispatch:
     inputs:
       version_tag:
@@ -50,20 +54,50 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Detect versionCode bump (skip build if unchanged)
+        id: check_bump
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          PREV_CODE=$(git show HEAD~1:app/build.gradle.kts 2>/dev/null | grep 'versionCode' | grep -oE '[0-9]+' || echo "0")
+          CURR_CODE=$(grep 'versionCode' app/build.gradle.kts | grep -oE '[0-9]+')
+          echo "prev=$PREV_CODE curr=$CURR_CODE"
+          if [ "$PREV_CODE" = "$CURR_CODE" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Skip build (versionCode not bumped)
+        if: steps.check_bump.outputs.changed == 'false'
+        run: echo "versionCode unchanged — skipping build"
+
       - name: Run unit tests
+        if: steps.check_bump.outputs.changed != 'false'
         run: ./gradlew testDebugUnitTest --no-daemon
 
       - name: Build release APK
+        if: steps.check_bump.outputs.changed != 'false'
         run: ./gradlew assembleRelease --no-daemon
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine version tag
+        if: steps.check_bump.outputs.changed != 'false'
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ github.event.inputs.version_tag }}"
             IS_PRERELEASE="${{ github.event.inputs.prerelease }}"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            # Auto-build from versionCode bump: read versionName from gradle
+            VERSION_NAME=$(grep 'versionName' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
+            VERSION_CODE=$(grep 'versionCode' app/build.gradle.kts | grep -oE '[0-9]+')
+            TAG="v${VERSION_NAME}"
+            if echo "$VERSION_NAME" | grep -qiE '-beta|-rc|-alpha'; then
+              IS_PRERELEASE="true"
+            else
+              IS_PRERELEASE="false"
+            fi
           else
             TAG="${GITHUB_REF_NAME}"
             if echo "$TAG" | grep -qiE '-beta|-rc|-alpha'; then
@@ -76,6 +110,7 @@ jobs:
           echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
 
       - name: Rename APK with tag
+        if: steps.check_bump.outputs.changed != 'false'
         id: rename
         run: |
           cp app/build/outputs/apk/release/app-release-unsigned.apk \
@@ -83,12 +118,14 @@ jobs:
           echo "apk_path=VoxCommander-${{ steps.version.outputs.tag }}.apk" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
+        if: steps.check_bump.outputs.changed != 'false'
         uses: actions/upload-artifact@v4
         with:
           name: VoxCommander-${{ steps.version.outputs.tag }}
           path: VoxCommander-*.apk
 
       - name: Create GitHub Release
+        if: steps.check_bump.outputs.changed != 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
