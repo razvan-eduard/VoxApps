@@ -410,7 +410,13 @@ object VoiceManager {
         scope.launch(Dispatchers.IO) {
             try {
                 val bufferSize = AudioRecord.getMinBufferSize(currentQuality.sampleRate, CHANNEL_CONFIG, AUDIO_FORMAT) * 2
-                
+
+                // Declared before acquisition so they survive the recording block below
+                // (which now releases the AudioRecord in a finally) for transcription.
+                val audioChunks = mutableListOf<ShortArray>() // Use chunks to avoid boxing into Short objects
+                var totalShorts = 0
+                var maxRmsDetected = 0f
+
                 @Suppress("MissingPermission")
                 val audioRecord = AudioRecord(
                     MediaRecorder.AudioSource.VOICE_RECOGNITION, // Calibrated for STT, avoids aggressive MIC processing
@@ -420,54 +426,55 @@ object VoiceManager {
                     bufferSize
                 )
 
-                if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
-                    Logger.log("AudioRecord failed to initialize", TAG)
-                    withContext(Dispatchers.Main) {
-                        onResult("Mic Error")
-                        updateListeningState(false)
-                    }
-                    return@launch
-                }
-
-                audioRecord.startRecording()
-                val audioChunks = mutableListOf<ShortArray>() // Use chunks to avoid boxing into Short objects
-                val buffer = ShortArray(bufferSize / 2)
-                var totalShorts = 0
-                var lastVoiceTime = System.currentTimeMillis()
-                var maxRmsDetected = 0f
-
-                // Loop continues as long as isListeningFlag is true
-                while (isListeningFlag.get()) {
-                    val read = audioRecord.read(buffer, 0, buffer.size)
-                    if (read > 0) {
-                        val chunk = buffer.copyOfRange(0, read)
-                        audioChunks.add(chunk)
-                        totalShorts += read
-                        
-                        val rms = calculateRms(buffer, read)
-                        // Normalize using calibrated profile: noise floor -> 0, max rms -> 1
-                        val normalizedVolume = if (calibratedMaxRms > calibratedNoiseFloor && calibratedMaxRms > 0f) {
-                            ((rms - calibratedNoiseFloor) / (calibratedMaxRms - calibratedNoiseFloor)).coerceIn(0f, 1f)
-                        } else {
-                            rms
+                // Guarantee the AudioRecord (and mic handle) is released even if the loop
+                // throws or we return early — otherwise it leaks until GC.
+                try {
+                    if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
+                        Logger.log("AudioRecord failed to initialize", TAG)
+                        withContext(Dispatchers.Main) {
+                            onResult("Mic Error")
+                            updateListeningState(false)
                         }
-                        _volumeFlow.value = normalizedVolume
-                        if (rms > maxRmsDetected) maxRmsDetected = rms
-                        
-                        if (rms > getSilenceThreshold()) {
-                            lastVoiceTime = System.currentTimeMillis()
-                        } else if (System.currentTimeMillis() - lastVoiceTime > SILENCE_TIMEOUT_MS) {
-                            Logger.log("Silence detected, stopping recording", TAG)
-                            isListeningFlag.set(false) 
-                        }
-                    } else if (read < 0) {
-                        Logger.log("AudioRecord error: $read", TAG)
-                        break
+                        return@launch
                     }
-                }
 
-                audioRecord.stop()
-                audioRecord.release()
+                    audioRecord.startRecording()
+                    val buffer = ShortArray(bufferSize / 2)
+                    var lastVoiceTime = System.currentTimeMillis()
+
+                    // Loop continues as long as isListeningFlag is true
+                    while (isListeningFlag.get()) {
+                        val read = audioRecord.read(buffer, 0, buffer.size)
+                        if (read > 0) {
+                            val chunk = buffer.copyOfRange(0, read)
+                            audioChunks.add(chunk)
+                            totalShorts += read
+
+                            val rms = calculateRms(buffer, read)
+                            // Normalize using calibrated profile: noise floor -> 0, max rms -> 1
+                            val normalizedVolume = if (calibratedMaxRms > calibratedNoiseFloor && calibratedMaxRms > 0f) {
+                                ((rms - calibratedNoiseFloor) / (calibratedMaxRms - calibratedNoiseFloor)).coerceIn(0f, 1f)
+                            } else {
+                                rms
+                            }
+                            _volumeFlow.value = normalizedVolume
+                            if (rms > maxRmsDetected) maxRmsDetected = rms
+
+                            if (rms > getSilenceThreshold()) {
+                                lastVoiceTime = System.currentTimeMillis()
+                            } else if (System.currentTimeMillis() - lastVoiceTime > SILENCE_TIMEOUT_MS) {
+                                Logger.log("Silence detected, stopping recording", TAG)
+                                isListeningFlag.set(false)
+                            }
+                        } else if (read < 0) {
+                            Logger.log("AudioRecord error: $read", TAG)
+                            break
+                        }
+                    }
+                } finally {
+                    try { audioRecord.stop() } catch (_: Exception) {}
+                    audioRecord.release()
+                }
 
                 // Finalize STT - ONLY if we actually heard something
                 if (audioChunks.isNotEmpty() && maxRmsDetected > getSilenceThreshold()) {
