@@ -97,7 +97,8 @@ fun AdvancedSettingsTab(
     LaunchedEffect(loggingFlags.logcatEnabled) {
         if (!loggingFlags.logcatEnabled) {
             verboseLoggingEnabled = false
-            kotlinx.coroutines.runBlocking { settingsRepo.setVerboseLoggingEnabled(false) }
+            // Already inside a LaunchedEffect (suspend) — call directly, no runBlocking.
+            settingsRepo.setVerboseLoggingEnabled(false)
             Logger.setVerboseLoggingEnabled(false)
             onVerboseLoggingChange(false)
         } else {
@@ -140,7 +141,7 @@ fun AdvancedSettingsTab(
                         val enabled = !loggingFlags.toastEnabled
                         loggingFlags = loggingFlags.copy(toastEnabled = enabled)
                         val newLogLevel = LoggingFlags.toLogLevel(loggingFlags)
-                        kotlinx.coroutines.runBlocking { settingsRepo.setLogLevel(newLogLevel.name) }
+                        scope.launch { settingsRepo.setLogLevel(newLogLevel.name) }
                         Logger.setLoggingFlags(loggingFlags)
                     },
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -152,7 +153,7 @@ fun AdvancedSettingsTab(
                     onCheckedChange = { enabled ->
                         loggingFlags = loggingFlags.copy(toastEnabled = enabled)
                         val newLogLevel = LoggingFlags.toLogLevel(loggingFlags)
-                        kotlinx.coroutines.runBlocking { settingsRepo.setLogLevel(newLogLevel.name) }
+                        scope.launch { settingsRepo.setLogLevel(newLogLevel.name) }
                         Logger.setLoggingFlags(loggingFlags)
                     }
                 )
@@ -167,7 +168,7 @@ fun AdvancedSettingsTab(
                         val enabled = !loggingFlags.logcatEnabled
                         loggingFlags = loggingFlags.copy(logcatEnabled = enabled)
                         val newLogLevel = LoggingFlags.toLogLevel(loggingFlags)
-                        kotlinx.coroutines.runBlocking { settingsRepo.setLogLevel(newLogLevel.name) }
+                        scope.launch { settingsRepo.setLogLevel(newLogLevel.name) }
                         Logger.setLoggingFlags(loggingFlags)
                     },
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -179,7 +180,7 @@ fun AdvancedSettingsTab(
                     onCheckedChange = { enabled ->
                         loggingFlags = loggingFlags.copy(logcatEnabled = enabled)
                         val newLogLevel = LoggingFlags.toLogLevel(loggingFlags)
-                        kotlinx.coroutines.runBlocking { settingsRepo.setLogLevel(newLogLevel.name) }
+                        scope.launch { settingsRepo.setLogLevel(newLogLevel.name) }
                         Logger.setLoggingFlags(loggingFlags)
                     }
                 )
@@ -200,7 +201,7 @@ fun AdvancedSettingsTab(
                     checked = verboseLoggingEnabled,
                     onCheckedChange = { enabled ->
                         verboseLoggingEnabled = enabled
-                        kotlinx.coroutines.runBlocking { settingsRepo.setVerboseLoggingEnabled(enabled) }
+                        scope.launch { settingsRepo.setVerboseLoggingEnabled(enabled) }
                         Logger.setVerboseLoggingEnabled(enabled)
                     },
                     enabled = loggingFlags.logcatEnabled

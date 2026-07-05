@@ -56,7 +56,7 @@ fun GeneralSettingsTab(
             value = modelRepoUrl,
             onValueChange = {
                 modelRepoUrl = it
-                kotlinx.coroutines.runBlocking { settingsRepo.setModelRepoBaseUrl(it) }
+                scope.launch { settingsRepo.setModelRepoBaseUrl(it) }
             },
             label = { Text(languageManager.getString("model_repository_url")) },
             placeholder = { Text(languageManager.getString("repository_url_placeholder")) },
