@@ -1,5 +1,7 @@
 package com.voxcommander.app.domain.intent.model
 
+import androidx.compose.runtime.Immutable
+
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -19,6 +21,7 @@ import androidx.room.PrimaryKey
  * @param mediaControlType  For audio transport controls: "active_session" (default), "default_app", "audio_button".
  */
 @Entity(tableName = "fast_map_rules")
+@Immutable
 data class FastMapRule(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

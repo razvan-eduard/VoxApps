@@ -1,7 +1,10 @@
 package com.voxcommander.app.domain.voice
 
+import androidx.compose.runtime.Immutable
+
 import org.json.JSONObject
 
+@Immutable
 data class WakeWordProfile(
     val rmsThreshold: Float,
     val minRms: Float,

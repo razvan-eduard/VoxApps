@@ -1,5 +1,7 @@
 package com.voxcommander.app.state
 
+import androidx.compose.runtime.Immutable
+
 import android.content.Context
 import com.voxcommander.app.data.preferences.SettingsRepository
 import com.voxcommander.app.data.remote.RemoteModelRegistry
@@ -24,6 +26,7 @@ enum class VoiceState {
     BENCHMARKING        // Running diagnostics
 }
 
+@Immutable
 data class BenchmarkResult(
     val engine: String,
     val model: String,
@@ -33,6 +36,7 @@ data class BenchmarkResult(
     val error: String? = null
 )
 
+@Immutable
 data class NativeLibStatus(
     val name: String,
     val exists: Boolean,
@@ -47,6 +51,7 @@ enum class VulkanTestState {
     RESULT
 }
 
+@Immutable
 data class ServiceLoadingState(
     val isActive: Boolean = false,
     val serviceName: String = "",
