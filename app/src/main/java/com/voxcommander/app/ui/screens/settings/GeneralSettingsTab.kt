@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -24,10 +26,11 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeneralSettingsTab(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager
 ) {
+        val languageManager = LocalLanguageManager.current
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 

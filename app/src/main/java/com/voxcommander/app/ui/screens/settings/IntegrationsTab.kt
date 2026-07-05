@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -37,9 +39,10 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IntegrationsTab(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var spotifyConnected by remember { mutableStateOf(SpotifyPkceManager.isAuthorized) }
@@ -241,7 +244,7 @@ fun IntegrationsTab(
     // Spotify setup dialog with instructions + Client ID input
     if (showSetupDialog) {
         SpotifySetupDialog(
-            languageManager = languageManager,
+
             onDismiss = {
                 showSetupDialog = false
             },
@@ -274,11 +277,12 @@ fun IntegrationsTab(
 
 @Composable
 private fun SpotifySetupDialog(
-    languageManager: LanguageManager,
+
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
     initialClientId: String = ""
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var clientIdInput by remember { mutableStateOf(initialClientId) }

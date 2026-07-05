@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -34,7 +36,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsContent(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     modelManagementViewModel: com.voxcommander.app.ui.viewmodels.ModelManagementViewModel,
@@ -54,6 +56,7 @@ fun SettingsContent(
     onClearCustomModel: () -> Unit = {},
     onImportOpenWakeWordModel: () -> Unit = {}
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -133,7 +136,7 @@ fun SettingsContent(
                 ) { page ->
                     if (page == 6) { // Advanced (uses LazyColumn, no scroll wrapper)
                         AdvancedSettingsTab(
-                            languageManager = languageManager,
+
                             settingsRepo = settingsRepo,
                             appStateManager = appStateManager,
                             onCleanupRequest = { showCleanupDialog = true },
@@ -150,12 +153,12 @@ fun SettingsContent(
                     Column(modifier = Modifier.fillMaxSize().padding(top = 16.dp).verticalScroll(rememberScrollState()).clickable { focusManager.clearFocus() }, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             when (page) {
                                 0 -> GeneralSettingsTab(
-                                    languageManager = languageManager,
+
                                     settingsRepo = settingsRepo,
                                     appStateManager = appStateManager
                                 )
                                 1 -> ModelsSettingsTab(
-                                    languageManager = languageManager,
+
                                     settingsRepo = settingsRepo,
                                     appStateManager = appStateManager,
                                     onProcessorSelected = {
@@ -191,7 +194,7 @@ fun SettingsContent(
                                 )
                                 2 -> {
                                     ServiceSettingsTab(
-                                        languageManager = languageManager,
+
                                         settingsRepo = settingsRepo,
                                         appStateManager = appStateManager,
                                         onStartService = { WakeWordService.startService(context) },
@@ -207,28 +210,28 @@ fun SettingsContent(
                                     )
                                 }
                                 3 -> AppManagerTab(
-                                    languageManager = languageManager,
+
                                     settingsRepo = settingsRepo,
                                     appStateManager = appStateManager
                                 )
                                 4 -> {
                                     IntegrationsTab(
-                                        languageManager = languageManager,
+
                                         settingsRepo = settingsRepo
                                     )
                                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                                     PipedSettingsSection(
-                                        languageManager = languageManager,
+
                                         settingsRepo = settingsRepo
                                     )
                                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                                     SearchSettingsSection(
-                                        languageManager = languageManager,
+
                                         settingsRepo = settingsRepo
                                     )
                                 }
                                 5 -> PermissionsSettingsTab(
-                                    languageManager = languageManager,
+
                                     appStateManager = appStateManager,
                                     onRequestMicrophone = onRequestMicrophonePermission,
                                     onRequestNotification = onRequestNotificationPermission,
@@ -244,7 +247,7 @@ fun SettingsContent(
     }
 
     SettingsDialogs(
-        languageManager = languageManager,
+
         showCleanupDialog = showCleanupDialog,
         showDeleteConfirmDialog = showDeleteConfirmDialog,
         modelToDelete = modelToDelete,
@@ -264,7 +267,7 @@ fun SettingsContent(
 
 @Composable
 private fun SettingsDialogs(
-    languageManager: LanguageManager,
+
     showCleanupDialog: Boolean,
     showDeleteConfirmDialog: Boolean,
     modelToDelete: AppModel?,
@@ -273,6 +276,7 @@ private fun SettingsDialogs(
     onDismissDelete: () -> Unit,
     onConfirmDelete: () -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     if (showCleanupDialog) {
         AlertDialog(
             onDismissRequest = onDismissCleanup,

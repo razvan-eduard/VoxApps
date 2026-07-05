@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,7 +35,7 @@ import java.util.*
 
 @Composable
 fun AdvancedSettingsTab(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     onCleanupRequest: () -> Unit,
@@ -41,6 +43,7 @@ fun AdvancedSettingsTab(
     onVerboseLoggingChange: (Boolean) -> Unit,
     refreshTrigger: Int = 0
 ) {
+        val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -363,7 +366,7 @@ fun AdvancedSettingsTab(
                     }
                 }
             }
-            items(benchmarkResults) { result -> BenchmarkResultItem(result, languageManager) }
+            items(benchmarkResults) { result -> BenchmarkResultItem(result) }
         }
 
         // --- DOWNLOAD PREFERENCE ---

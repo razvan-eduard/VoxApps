@@ -26,6 +26,7 @@ import com.voxcommander.app.ui.screens.onboarding.LanguageSelectionScreen
 import com.voxcommander.app.ui.screens.onboarding.TutorialScreen
 import com.voxcommander.app.ui.screens.splash.SplashLoadingScreen
 import com.voxcommander.app.ui.theme.VoxCommanderTheme
+import com.voxcommander.app.ui.LocalLanguageManager
 import com.voxcommander.app.service.SpotifyPkceManager
 import com.voxcommander.app.domain.localization.TutorialManager
 import com.voxcommander.app.utils.Logger
@@ -131,6 +132,7 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
+            CompositionLocalProvider(LocalLanguageManager provides appContainer.languageManager) {
             VoxCommanderTheme {
                 val navController = rememberNavController()
                 val currentProgress by appContainer.modelManagementViewModel.downloadProgress.collectAsStateWithLifecycle()
@@ -149,7 +151,6 @@ class MainActivity : ComponentActivity() {
 
                 if (showSplash) {
                     SplashLoadingScreen(
-                        languageManager = appContainer.languageManager,
                         settingsRepo = appContainer.settingsRepository,
                         onFinished = {
                             showSplash = false
@@ -166,7 +167,6 @@ class MainActivity : ComponentActivity() {
 
                 if (showLanguageSelection) {
                     LanguageSelectionScreen(
-                        languageManager = appContainer.languageManager,
                         onLanguageSelected = { langCode ->
                             appContainer.languageManager.loadLanguage(langCode)
                             appContainer.appStateManager.setAppLanguage(langCode)
@@ -215,7 +215,6 @@ class MainActivity : ComponentActivity() {
                 NavHost(navController = navController, startDestination = Strings.Routes.MAIN) {
                     composable(Strings.Routes.MAIN) {
                         MainScreen(
-                            languageManager = appContainer.languageManager,
                             settingsRepo = appContainer.settingsRepository,
                             appStateManager = appContainer.appStateManager,
                             fastMapDao = appContainer.fastMapDao,
@@ -277,6 +276,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+            }
             }
         }
     }

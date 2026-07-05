@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.main
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -41,7 +43,7 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    languageManager: LanguageManager,
+
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     fastMapDao: FastMapDao,
@@ -63,6 +65,7 @@ fun MainScreen(
     onClearCustomModel: () -> Unit = {},
     onImportOpenWakeWordModel: () -> Unit = {}
 ) {
+        val languageManager = LocalLanguageManager.current
     val lastIntent by viewModel.currentIntent.collectAsStateWithLifecycle()
     val isProcessing by viewModel.isProcessing.collectAsStateWithLifecycle()
     val transcription by viewModel.transcription.collectAsStateWithLifecycle()
@@ -133,7 +136,7 @@ fun MainScreen(
                 // Microphone Button
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     MicrophoneButton(
-                        languageManager = languageManager,
+
                         appStateManager = appStateManager,
                         isProcessing = isProcessing,
                         onClick = {
@@ -146,7 +149,7 @@ fun MainScreen(
                     )
 
                     ModelNotPresentMessage(
-                        languageManager = languageManager,
+
                         appStateManager = appStateManager
                     )
                 }
@@ -250,7 +253,7 @@ fun MainScreen(
         // --- UNIFIED TOP HEADER CONTAINER ---
         TopHeaderContainer(
             mode = currentHeaderMode,
-            languageManager = languageManager,
+
             settingsRepo = settingsRepo,
             appStateManager = appStateManager,
             modelManagementViewModel = modelManagementViewModel,
@@ -278,20 +281,20 @@ fun MainScreen(
         VulkanTestModal(
             vulkanTestState = appStateManager.vulkanTestState.collectAsStateWithLifecycle().value,
             vulkanTestPassed = appStateManager.vulkanTestPassed.collectAsStateWithLifecycle().value,
-            onDismiss = { appStateManager.dismissVulkanTestResult() },
-            languageManager = languageManager
+            onDismiss = { appStateManager.dismissVulkanTestResult() }
+
         )
 
         // --- APP SCAN MODAL ---
         AppScanModal(
             scanState = appStateManager.appScanState.collectAsStateWithLifecycle().value,
-            onDismiss = { appStateManager.dismissAppScanResult() },
-            languageManager = languageManager
+            onDismiss = { appStateManager.dismissAppScanResult() }
+
         )
 
         // --- IN-APP SPEAKING OVERLAY (when WakeWordService is not running) ---
         SpeakingOverlay(
-            languageManager = languageManager,
+
             onStop = {
                 com.voxcommander.app.domain.voice.TtsManager.stop()
                 com.voxcommander.app.domain.voice.VoiceManager.stopListening()

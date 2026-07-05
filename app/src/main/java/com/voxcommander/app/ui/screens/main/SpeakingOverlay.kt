@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.main
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -32,9 +34,10 @@ import com.voxcommander.app.state.AppStateManager
  */
 @Composable
 fun SpeakingOverlay(
-    languageManager: LanguageManager,
+
     onStop: () -> Unit = { TtsManager.stop() }
 ) {
+        val languageManager = LocalLanguageManager.current
     val isSpeaking by TtsManager.isSpeakingFlow.collectAsStateWithLifecycle()
     val currentText by TtsManager.currentTextFlow.collectAsStateWithLifecycle()
     val speechRate by TtsManager.speechRateFlow.collectAsStateWithLifecycle()

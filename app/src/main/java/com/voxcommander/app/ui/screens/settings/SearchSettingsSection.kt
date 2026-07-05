@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.screens.settings
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -28,9 +30,10 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchSettingsSection(
-    languageManager: LanguageManager,
+
     settingsRepo: com.voxcommander.app.data.preferences.SettingsRepository
 ) {
+        val languageManager = LocalLanguageManager.current
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -48,7 +51,7 @@ fun SearchSettingsSection(
         categories.forEach { category ->
             CategoryNode(
                 categoryName = category,
-                languageManager = languageManager,
+
                 settingsRepo = settingsRepo,
                 scope = scope,
                 context = context
@@ -141,11 +144,12 @@ private fun ManualLocationSetting(
 @Composable
 private fun CategoryNode(
     categoryName: String,
-    languageManager: LanguageManager,
+
     settingsRepo: com.voxcommander.app.data.preferences.SettingsRepository,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context
 ) {
+        val languageManager = LocalLanguageManager.current
     var apiKeyRefreshKey by remember { mutableStateOf(0) }
     val providerNames = remember(categoryName, apiKeyRefreshKey) {
         SearchProviderRegistry.getAvailableProviderNames(categoryName, settingsRepo)
@@ -278,7 +282,7 @@ private fun CategoryNode(
                     ManualQueryTest(
                         categoryName = categoryName,
                         providerName = selectedProvider,
-                        languageManager = languageManager,
+
                         scope = scope,
                         context = context
                     )
@@ -372,10 +376,11 @@ private fun ProviderRow(
 private fun ManualQueryTest(
     categoryName: String,
     providerName: String,
-    languageManager: LanguageManager,
+
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context
 ) {
+        val languageManager = LocalLanguageManager.current
     var testQuery by remember { mutableStateOf("") }
     var testResults by remember { mutableStateOf("") }
     var isSearching by remember { mutableStateOf(false) }

@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.components
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -30,9 +32,9 @@ import com.voxcommander.app.state.AppScanState
 @Composable
 fun AppScanModal(
     scanState: AppScanState,
-    onDismiss: () -> Unit,
-    languageManager: LanguageManager
+    onDismiss: () -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     if (scanState is AppScanState.Idle) return
 
     val isScanning = scanState is AppScanState.Scanning
@@ -87,7 +89,7 @@ fun AppScanModal(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
+                                .clip(RoundedCornerShape(3.dp))
                         )
                         Spacer(modifier = Modifier.height(8.dp))
 

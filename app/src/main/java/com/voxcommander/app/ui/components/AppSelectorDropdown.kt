@@ -1,5 +1,7 @@
 package com.voxcommander.app.ui.components
 
+import com.voxcommander.app.ui.LocalLanguageManager
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -45,9 +47,10 @@ fun AppSelectorDropdown(
     label: String = "Select app",
     allowNone: Boolean = true,
     extraPackages: List<String> = emptyList(),
-    languageManager: LanguageManager? = null,
+
     maxDropdownHeight: androidx.compose.ui.unit.Dp = 300.dp
 ) {
+        val languageManager = LocalLanguageManager.current
     val lm = languageManager
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -137,7 +140,7 @@ fun AppSelectorDropdown(
                             expanded = false
                         }
                     },
-                    languageManager = lm,
+
                     maxHeight = maxDropdownHeight
                 )
             }
@@ -159,8 +162,8 @@ fun AppSelectorDropdown(
         onSkip = {
             showSpotifyOAuthDialog = false
             spotifyOAuthAction?.invoke()
-        },
-        languageManager = lm
+        }
+
     )
 }
 
@@ -178,9 +181,9 @@ fun AppSelectorDropdown(
     domain: String? = null,
     label: String = "Select apps",
     filterMode: String = "all",
-    extraPackages: List<String> = emptyList(),
-    languageManager: LanguageManager? = null
+    extraPackages: List<String> = emptyList()
 ) {
+        val languageManager = LocalLanguageManager.current
     val lm = languageManager
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -262,8 +265,8 @@ fun AppSelectorDropdown(
                             onToggleApp(pkg)
                         }
                     },
-                    onSetDefault = onSetDefault,
-                    languageManager = lm
+                    onSetDefault = onSetDefault
+
                 )
             }
         }
@@ -284,8 +287,8 @@ fun AppSelectorDropdown(
         onSkip = {
             showSpotifyOAuthDialog = false
             spotifyOAuthAction?.invoke()
-        },
-        languageManager = lm
+        }
+
     )
 }
 
@@ -295,9 +298,10 @@ private fun AppPickerList(
     selectedPackage: String?,
     allowNone: Boolean,
     onSelect: (AppRegistry.AppEntry?) -> Unit,
-    languageManager: LanguageManager? = null,
+
     maxHeight: androidx.compose.ui.unit.Dp = 300.dp
 ) {
+        val languageManager = LocalLanguageManager.current
     val lm = languageManager
     var searchQuery by remember { mutableStateOf("") }
     var filterMode by remember { mutableStateOf("all") }
@@ -331,8 +335,8 @@ private fun AppPickerList(
             filterExpanded = filterExpanded,
             onFilterExpandChange = { filterExpanded = it },
             filterOptions = filterOptions,
-            currentFilterLabel = currentFilterLabel,
-            languageManager = lm
+            currentFilterLabel = currentFilterLabel
+
         )
 
         Column(
@@ -378,9 +382,9 @@ private fun AppPickerListMulti(
     defaultPackage: String?,
     filterMode: String,
     onToggleApp: (String) -> Unit,
-    onSetDefault: (String) -> Unit,
-    languageManager: LanguageManager? = null
+    onSetDefault: (String) -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     val lm = languageManager
     var searchQuery by remember { mutableStateOf("") }
     var currentFilter by remember { mutableStateOf(filterMode) }
@@ -415,8 +419,8 @@ private fun AppPickerListMulti(
             filterExpanded = filterExpanded,
             onFilterExpandChange = { filterExpanded = it },
             filterOptions = filterOptions,
-            currentFilterLabel = currentFilterLabel,
-            languageManager = lm
+            currentFilterLabel = currentFilterLabel
+
         )
 
         Column(
@@ -462,9 +466,9 @@ private fun SearchFilterRow(
     filterExpanded: Boolean,
     onFilterExpandChange: (Boolean) -> Unit,
     filterOptions: List<Pair<String, String>>,
-    currentFilterLabel: String,
-    languageManager: LanguageManager? = null
+    currentFilterLabel: String
 ) {
+        val languageManager = LocalLanguageManager.current
     val lm = languageManager
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -515,9 +519,9 @@ private fun SpotifyOAuthDialog(
     show: Boolean,
     onDismiss: () -> Unit,
     onConnect: () -> Unit,
-    onSkip: () -> Unit,
-    languageManager: LanguageManager?
+    onSkip: () -> Unit
 ) {
+        val languageManager = LocalLanguageManager.current
     if (show) {
         AlertDialog(
             onDismissRequest = onDismiss,
