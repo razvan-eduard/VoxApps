@@ -60,7 +60,9 @@ class FastMapEngine(
                     // Remove app display name if present
                     val appEntry = com.voxcommander.app.domain.intent.registry.AppRegistry.resolveByPackage(rule.targetPackage)
                     if (appEntry != null) {
-                        val appNamePattern = Regex("(?i)\\b${Regex.escape(appEntry.displayName)}\\b")
+                        // (?U) makes \b Unicode-aware so app names with diacritics/non-ASCII
+                        // letters still get a valid word boundary (same fix as RegexGenerator).
+                        val appNamePattern = Regex("(?iU)\\b${Regex.escape(appEntry.displayName)}\\b")
                         remaining = remaining.replace(appNamePattern, " ")
                     }
                     remaining.trim().replace(Regex("\\s+"), " ").ifBlank { null }
