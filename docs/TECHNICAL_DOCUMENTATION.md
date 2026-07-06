@@ -1,5 +1,7 @@
 # VoxCommander — Technical Documentation
 
+> Part of the **VoxApps** monorepo (module `:vox-commander`, `com.voxapps.commander`, source under `vox-commander/`). Sibling apps (e.g. `:vox-notes`) are fully independent — the only cross-app link is the optional Vox native intent (`com.voxapps.action.HANDLE`). This document covers `:vox-commander`.
+
 ## Table of Contents
 
 1. [System Architecture](#1-system-architecture)
@@ -733,7 +735,7 @@ External automation apps (MacroDroid, Tasker, Automate, etc.) can trigger the vo
 
 #### VoiceTriggerReceiver (`service/VoiceTriggerReceiver.kt`)
 
-A `BroadcastReceiver` registered in `AndroidManifest.xml` that listens for the action `com.voxcommander.app.TRIGGER_VOICE`.
+A `BroadcastReceiver` registered in `AndroidManifest.xml` that listens for the action `com.voxapps.commander.TRIGGER_VOICE`.
 
 ```kotlin
 class VoiceTriggerReceiver : BroadcastReceiver() {
@@ -775,7 +777,7 @@ onWakeWordDetected() → stopListening() → appStateManager.onWakeWordDetected(
 
 ### Security
 
-- **Custom permission**: `com.voxcommander.app.permission.TRIGGER_VOICE` (protectionLevel: `normal`)
+- **Custom permission**: `com.voxapps.commander.permission.TRIGGER_VOICE` (protectionLevel: `normal`)
 - Receiver is `exported=true` but requires the custom permission
 - **Setting toggle**: `externalTriggerEnabled` (default: true) — user can disable in Settings → App Manager
 
@@ -783,7 +785,7 @@ onWakeWordDetected() → stopListening() → appStateManager.onWakeWordDetected(
 
 ```xml
 <permission
-    android:name="com.voxcommander.app.permission.TRIGGER_VOICE"
+    android:name="com.voxapps.commander.permission.TRIGGER_VOICE"
     android:protectionLevel="normal"
     android:label="Trigger VoxCommander Voice Assistant" />
 
@@ -791,9 +793,9 @@ onWakeWordDetected() → stopListening() → appStateManager.onWakeWordDetected(
     android:name=".service.VoiceTriggerReceiver"
     android:enabled="true"
     android:exported="true"
-    android:permission="com.voxcommander.app.permission.TRIGGER_VOICE">
+    android:permission="com.voxapps.commander.permission.TRIGGER_VOICE">
     <intent-filter>
-        <action android:name="com.voxcommander.app.TRIGGER_VOICE" />
+        <action android:name="com.voxapps.commander.TRIGGER_VOICE" />
     </intent-filter>
 </receiver>
 ```
@@ -802,20 +804,20 @@ onWakeWordDetected() → stopListening() → appStateManager.onWakeWordDetected(
 
 #### ADB
 ```bash
-adb shell am broadcast -a com.voxcommander.app.TRIGGER_VOICE
+adb shell am broadcast -a com.voxapps.commander.TRIGGER_VOICE
 ```
 
 #### MacroDroid
 1. Create macro → add trigger (button, NFC, schedule, etc.)
 2. Add action → **Intent Action**
-3. Action: `com.voxcommander.app.TRIGGER_VOICE`
+3. Action: `com.voxapps.commander.TRIGGER_VOICE`
 4. Target: Broadcast
 
 #### Tasker
 1. Create task → add action → **System** → **Send Intent**
-2. Action: `com.voxcommander.app.TRIGGER_VOICE`
+2. Action: `com.voxapps.commander.TRIGGER_VOICE`
 3. Type: Broadcast
-4. Target package: `com.voxcommander.app`
+4. Target package: `com.voxapps.commander`
 
 ### Settings
 
@@ -829,7 +831,7 @@ UI: Settings → App Manager → External voice trigger toggle
 
 ## 17. Dynamic JSON Configuration
 
-VoxCommander uses four external JSON files for extensible, hot-reloadable configuration. All ship in `app/src/main/assets/` and can be updated from a remote GitHub repo at runtime — no app update required. `models.json`, `search_definitions.json`, and `intents.json` are authored at the repo root and copied into assets by Gradle; `normalization.json` lives directly in assets.
+VoxCommander uses four external JSON files for extensible, hot-reloadable configuration. All ship in `vox-commander/src/main/assets/` and can be updated from a remote GitHub repo at runtime — no app update required. `models.json`, `search_definitions.json`, and `intents.json` are authored at the repo root and copied into assets by Gradle; `normalization.json` lives directly in assets.
 
 ### models.json
 
@@ -895,7 +897,7 @@ VoxCommander uses four external JSON files for extensible, hot-reloadable config
 
 ### normalization.json
 
-**Location**: `app/src/main/assets/normalization.json` (not copied from repo root — ships directly in assets)
+**Location**: `vox-commander/src/main/assets/normalization.json` (not copied from repo root — ships directly in assets)
 
 **Parsed by**: `TextNormalizer` (`domain/voice/TextNormalizer.kt`)
 
@@ -960,7 +962,7 @@ tasks.named("preBuild") {
 }
 ```
 
-`normalization.json` is not copied from repo root — it lives directly in `app/src/main/assets/` since it's not hot-reloaded from remote.
+`normalization.json` is not copied from repo root — it lives directly in `vox-commander/src/main/assets/` since it's not hot-reloaded from remote.
 
 ---
 

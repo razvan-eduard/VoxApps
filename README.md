@@ -5,15 +5,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/razvan-eduard/VoxCommander/actions/workflows/build-release.yml">
-    <img src="https://github.com/razvan-eduard/VoxCommander/actions/workflows/build-release.yml/badge.svg" alt="Build APK" />
+  <a href="https://github.com/razvan-eduard/VoxApps/actions/workflows/release-commander.yml">
+    <img src="https://github.com/razvan-eduard/VoxApps/actions/workflows/release-commander.yml/badge.svg" alt="Build APK" />
   </a>
-  <a href="https://github.com/razvan-eduard/VoxCommander/releases">
+  <a href="https://github.com/razvan-eduard/VoxApps/releases">
     <img src="https://img.shields.io/github/v/release/razvan-eduard/VoxCommander?display_name=tag" alt="Latest Release" />
   </a>
 </p>
 
 ---
+
+> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — no shared modules; the only (optional) link is a native Android Intent. Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`) and **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher). Each has its own applicationId, APK, and release workflow. The rest of this README covers `vox-commander`.
 
 ## Features
 
@@ -45,34 +47,34 @@
 
 ```bash
 # Clone
-git clone https://github.com/razvan-eduard/VoxCommander.git
+git clone https://github.com/razvan-eduard/VoxApps.git
 cd VoxCommander
 
 # Build (debug)
-./gradlew assembleDebug
+./gradlew :vox-commander:assembleDebug
 
 # Install on connected device
-./gradlew installDebug
+./gradlew :vox-commander:installDebug
 
 # Launch
-adb shell am start -n com.voxcommander.app/.MainActivity
+adb shell am start -n com.voxapps.commander/.MainActivity
 ```
 
 ### Run Tests
 
 ```bash
 # Unit tests (JVM — no device needed)
-./gradlew testDebugUnitTest
+./gradlew :vox-commander:testDebugUnitTest
 
 # Instrumented tests (requires connected device/emulator)
-./gradlew connectedAndroidTest
+./gradlew :vox-commander:connectedAndroidTest
 ```
 
 212 unit tests covering: intent taxonomy, NLU decision map, AppState/AppStateManager, AppSettings (external trigger, return-to-previous-app), model management, search providers, FastMap engine, and more.
 
 ## Download APK
 
-Pre-built APKs are available on the [Releases page](https://github.com/razvan-eduard/VoxCommander/releases). Each release is built automatically via GitHub Actions.
+Pre-built APKs are available on the [Releases page](https://github.com/razvan-eduard/VoxApps/releases). Each release is built automatically via GitHub Actions.
 
 To create a new release:
 ```bash
@@ -145,7 +147,7 @@ GitHub Actions will build the APK and publish it as a release automatically.
 ## Project Structure
 
 ```
-app/src/main/java/com/voxcommander/app/
+vox-commander/src/main/java/com/voxapps/commander/
 ├── MainActivity.kt              # Entry point, permission handling
 ├── VoxApplication.kt            # Application class, memory management
 ├── data/
@@ -222,14 +224,14 @@ Both engines resolve a search query to a YouTube video ID, then launch `youtu.be
 
 ### Dynamic JSON Configuration
 
-VoxCommander uses external JSON files for extensible configuration. These ship in `app/src/main/assets/` and can be hot-reloaded from a remote GitHub repo at runtime — no app update needed to add models, search providers, probeable intents, or normalization rules.
+VoxCommander uses external JSON files for extensible configuration. These ship in `vox-commander/src/main/assets/` and can be hot-reloaded from a remote GitHub repo at runtime — no app update needed to add models, search providers, probeable intents, or normalization rules.
 
 | File | Purpose | Location |
 |------|---------|----------|
 | `models.json` | AI/ML model definitions (Whisper, Vosk, Piper TTS, OpenWakeWord, Porcupine keywords, local LLM), NLU prompt template, engine metadata + capabilities | Repo root → copied to assets at build time |
 | `search_definitions.json` | Search provider definitions (DuckDuckGo, Wikipedia, Google News, GNews, WeatherAPI, Open-Meteo) — categories, endpoints, API key requirements, response parsers | Repo root → copied to assets at build time |
 | `intents.json` | Capability manifest: the NLU `taxonomy` (domains/actions vocabulary) + the catalog of Android intents probed per app (action, probe URI, URI template, domain mapping) — the data behind "arbitrary dynamic intent to any app" | Repo root → copied to assets at build time |
-| `normalization.json` | 3-layer text normalization rules per language (abbreviations, regex interceptors, cleanup) — corrects STT output before NLU processing | `app/src/main/assets/normalization.json` |
+| `normalization.json` | 3-layer text normalization rules per language (abbreviations, regex interceptors, cleanup) — corrects STT output before NLU processing | `vox-commander/src/main/assets/normalization.json` |
 
 **How it works:**
 - At build time, `copyModelsJson`, `copySearchDefinitions`, and `copyIntentsJson` Gradle tasks copy the JSON from repo root into `assets/`
@@ -241,22 +243,22 @@ VoxCommander uses external JSON files for extensible configuration. These ship i
 Automation apps like MacroDroid or Tasker can trigger the voice assistant without a wake word by sending a broadcast intent:
 
 ```bash
-adb shell am broadcast -a com.voxcommander.app.TRIGGER_VOICE
+adb shell am broadcast -a com.voxapps.commander.TRIGGER_VOICE
 ```
 
 **MacroDroid setup:**
 1. Create a new macro
 2. Add trigger (e.g., button press, NFC tag, schedule)
 3. Add action → **Intent Action**
-4. Set action: `com.voxcommander.app.TRIGGER_VOICE`
+4. Set action: `com.voxapps.commander.TRIGGER_VOICE`
 5. Target: Broadcast
 
 **Tasker setup:**
 1. Create a new task
 2. Add action → **System** → **Send Intent**
-3. Action: `com.voxcommander.app.TRIGGER_VOICE`
+3. Action: `com.voxapps.commander.TRIGGER_VOICE`
 4. Type: Broadcast
-5. Target package: `com.voxcommander.app`
+5. Target package: `com.voxapps.commander`
 
 Enable/disable in Settings → App Manager → External voice trigger toggle.
 
