@@ -173,7 +173,10 @@ class ModelManagementViewModelTest {
         verify { appStateManager.setModelFilterLang("en") }
         verify { appStateManager.setActiveVoiceModelId("base") }
         coVerify { settingsRepo.setEngineModelSelection("stt_whisper", "base") }
-        verify { appStateManager.refreshAll() }
+        // No refreshAll(): the STT engine reloads reactively via VoiceManager's observer on
+        // activeVoiceModelId, and the UI derives from uiState — bumping refreshTrigger here
+        // churned the model dropdown (a re-fire loop), so it was removed.
+        verify(exactly = 0) { appStateManager.refreshAll() }
     }
 
     @Test

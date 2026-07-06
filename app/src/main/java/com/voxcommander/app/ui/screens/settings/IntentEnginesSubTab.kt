@@ -197,11 +197,7 @@ fun IntentEnginesSubTab(
                 currentProcessor = uiState.aiProcessor,
                 fallbackCategory = Strings.FallbackCategories.INTENT,
                 onFallbackChanged = onFallbackChanged,
-                refreshTrigger = refreshTrigger,
-                onAutoPreselect = { model ->
-                    appStateManager.setActiveIntentModelId(model.id)
-                    appStateManager.saveIntentModelSelection(engineKey, model.id)
-                }
+                refreshTrigger = refreshTrigger
             )
             
             if (selectedModel != null) {

@@ -43,11 +43,7 @@ fun <T> EngineModelSection(
     onFallbackChanged: () -> Unit = {},
     refreshTrigger: Int = 0,
     onShowInfo: (() -> Unit)? = null,
-    showFallback: Boolean = true,
-    // Called once when the stored selection isn't a valid model in the current list and we
-    // auto-resolve to the first on-device model — so the caller can persist that id to its
-    // settings var. MUST be a pure persist (no engine reload / download).
-    onAutoPreselect: ((T) -> Unit)? = null
+    showFallback: Boolean = true
 ) {
     val languageManager = LocalLanguageManager.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
@@ -62,11 +58,13 @@ fun <T> EngineModelSection(
     val effectiveSelectedItem = selectedItem ?: firstOnDevice ?: allItems.firstOrNull()
 
     // Persist the resolved selection back to settings when the stored id is invalid and an
-    // on-device model exists. One-shot & convergent: after persist, the caller's selectedItem
-    // becomes non-null, so this won't re-fire. Never auto-persists a not-downloaded item.
+    // on-device model exists — reusing the caller's own onItemSelected (pure persist for all
+    // tabs; the STT reload happens reactively). One-shot & convergent: after persist,
+    // selectedItem becomes non-null so this won't re-fire. Never auto-persists a not-downloaded
+    // item. isDownloaded=true (it's on-device) so no download is triggered.
     LaunchedEffect(selectedItem, groups) {
         if (selectedItem == null && firstOnDevice != null) {
-            onAutoPreselect?.invoke(firstOnDevice)
+            onItemSelected(firstOnDevice, true)
         }
     }
 
