@@ -382,6 +382,7 @@
   "no_apps_found": "Nicio aplicație găsită",
   "selected": "Selectat",
   "set_as_default": "Setează ca implicit",
+  "remove_default": "Elimină implicit",
   "search_apps_placeholder": "Caută aplicații...",
   "clear": "Șterge",
   "default_apps_description": "Selectează ce aplicații poate folosi VoxCommander pentru fiecare categorie. Bifează aplicațiile dorite, apoi marchează una ca implicită.",

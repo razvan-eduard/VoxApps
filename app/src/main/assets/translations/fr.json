@@ -351,6 +351,7 @@
   "no_apps_found": "Aucune application trouvée",
   "selected": "Sélectionné",
   "set_as_default": "Définir par défaut",
+  "remove_default": "Retirer par défaut",
   "search_apps_placeholder": "Rechercher des apps...",
   "clear": "Effacer",
   "default_apps_description": "Sélectionnez les applications que VoxCommander peut utiliser pour chaque catégorie. Cochez les applications souhaitées, puis marquez-en une par défaut.",
