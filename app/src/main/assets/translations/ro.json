@@ -142,6 +142,7 @@
   "ww_sensitivity_confirm_title": "Schimbi sensibilitatea?",
   "ww_sensitivity_confirm_msg": "Setezi sensibilitatea wake word la „%s”? Motorul de wake word se va reîncărca pentru a aplica.",
   "apply_button": "Aplică",
+  "ww_api_key_required": "Acest motor necesită o cheie API. Introdu-o mai sus pentru a porni.",
   "stt_sensitivity_label": "Sensibilitate Microfon",
   "stt_sensitivity_desc": "Ajustează cât de sensibil este microfonul la ascultarea comenzilor",
   "stt_sensitivity_low": "Scăzută",

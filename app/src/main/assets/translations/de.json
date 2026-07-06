@@ -139,6 +139,7 @@
   "ww_sensitivity_confirm_title": "Empfindlichkeit ändern?",
   "ww_sensitivity_confirm_msg": "Wake-Word-Empfindlichkeit auf „%s“ setzen? Die Wake-Word-Engine wird neu geladen, um dies anzuwenden.",
   "apply_button": "Anwenden",
+  "ww_api_key_required": "Diese Engine benötigt einen API-Schlüssel. Geben Sie ihn oben ein, um zu starten.",
   "stt_sensitivity_label": "Mikrofonempfindlichkeit",
   "stt_sensitivity_desc": "Passen Sie an, wie empfindlich das Mikrofon beim Lauschen auf Befehle ist",
   "stt_sensitivity_low": "Niedrig",
