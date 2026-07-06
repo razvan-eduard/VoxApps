@@ -465,10 +465,13 @@ class WakeWordService : Service() {
         // the raw id then the cached display name if the registry isn't loaded.
         val modelLabel: String? = if (modelDeterminesWakeWord) {
             val modelId = snapshot.wakeWordModelPath
-            if (!modelId.isNullOrBlank()) {
+            val raw = if (!modelId.isNullOrBlank()) {
                 com.voxcommander.app.data.remote.RemoteModelRegistry.getModels(engineType)
                     .find { it.id == modelId }?.label ?: modelId
             } else currentModelDisplayName.ifBlank { null }
+            // Keep only the first block of ASCII letters — ignore everything from the first
+            // symbol/digit onward (e.g. "alexa_v0.1.onnx" -> "alexa", "hey-jarvis" -> "hey").
+            raw?.let { Regex("[A-Za-z]+").find(it)?.value ?: it }
         } else null
 
         val finalContentText = contentText ?: when {
