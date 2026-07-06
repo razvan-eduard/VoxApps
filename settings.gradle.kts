@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "VoxApps"
 include(":vox-commander")
+include(":vox-notes")
