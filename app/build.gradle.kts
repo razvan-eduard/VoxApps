@@ -182,11 +182,20 @@ val copySearchDefinitions = tasks.register<Copy>("copySearchDefinitions") {
     into("${projectDir}/src/main/assets")
 }
 
+// Copy intents.json from repo root into assets (single source of truth in root)
+val copyIntentsJson = tasks.register<Copy>("copyIntentsJson") {
+    group = "build"
+    description = "Copies intents.json from repo root into app/src/main/assets/"
+    from("${project.rootDir}/intents.json")
+    into("${projectDir}/src/main/assets")
+}
+
 // Forțează procesul de build al aplicației să ruleze aceste scripturi chiar la început
 tasks.named("preBuild") {
     dependsOn(autoCompileWhisper)
     dependsOn(autoCheckVosk)
     dependsOn(copyModelsJson)
     dependsOn(copySearchDefinitions)
+    dependsOn(copyIntentsJson)
 }
 
