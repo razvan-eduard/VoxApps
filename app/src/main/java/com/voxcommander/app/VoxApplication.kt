@@ -70,6 +70,15 @@ class VoxApplication : Application() {
         // Initialize Spotify PKCE manager and load persisted tokens
         SpotifyPkceManager.init(container.settingsRepository)
 
+        // Reconcile the persisted "downloaded" flags with disk truth. The green/on-device
+        // indicator is a DataStore set that never gets recomputed, so it drifts when files are
+        // deleted externally or an extraction was hollow. Runs in its OWN coroutine, decoupled
+        // from the network fetch below (whose readText() has no timeout and could otherwise
+        // block this from ever running); it loads the registry locally itself.
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            reconcileDownloadedModels()
+        }
+
         // Initial fetch of the remote model registry - Force update on start to bypass CDN caching
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             val success = RemoteModelRegistry.fetchJson(container.settingsRepository, force = true)
@@ -77,6 +86,7 @@ class VoxApplication : Application() {
                 // Force AppStateManager to rebuild its UI state with the fresh models
                 container.appStateManager.refreshAll()
             }
+
             // Also fetch search definitions from remote repo
             com.voxcommander.app.domain.search.SearchProviderRegistry.fetchRemote(container.settingsRepository, force = true)
             com.voxcommander.app.domain.search.SearchProviderRegistry.applyApiKeys(
@@ -84,6 +94,51 @@ class VoxApplication : Application() {
             )
             // Also fetch the intent catalog from the remote repo (hot-reload)
             com.voxcommander.app.domain.intent.registry.IntentCatalog.fetchRemote(container.settingsRepository, force = true)
+        }
+    }
+
+    /**
+     * Validates every model currently flagged as downloaded against what is actually on disk,
+     * clearing the flag for anything missing or corrupt. Runs at startup so the on-device
+     * indicator reflects reality (external deletions, hollow extractions) instead of a stale
+     * persisted flag. Conservative: only touches models known to the registry, so custom-imported
+     * or stale-schema ids are left alone rather than wrongly cleared.
+     */
+    private suspend fun reconcileDownloadedModels() {
+        try {
+            // RemoteModelRegistry.init() only stores the context — the schema is loaded lazily by
+            // fetchJson(). force=false loads from filesDir/assets and returns WITHOUT any network
+            // call, so this guarantees the registry is populated before we iterate it.
+            RemoteModelRegistry.fetchJson(container.settingsRepository, force = false)
+
+            val downloader = com.voxcommander.app.data.remote.ModelDownloader(this)
+            val downloaded = container.settingsRepository.getSettingsSnapshot().downloadedModelIds
+            if (downloaded.isEmpty()) return
+
+            var changed = false
+            for (engineKey in RemoteModelRegistry.getEngineTypes()) {
+                val isArchive = RemoteModelRegistry.isZipEngine(engineKey) ||
+                    RemoteModelRegistry.getExtension(engineKey).equals(".tar.bz2", ignoreCase = true)
+                for (model in RemoteModelRegistry.getModels(engineKey)) {
+                    if (model.id !in downloaded) continue
+                    // Archive (dir-based) models use the per-engine validator (which also purges a
+                    // corrupt dir); file-based models (Whisper/NLU) just need the file to exist —
+                    // validateModel requires a directory and would wrongly reject them.
+                    val ok = if (isArchive) {
+                        downloader.validateModel(model.id, engineKey)
+                    } else {
+                        downloader.resolveLocalFile(model.id, engineKey)?.exists() == true
+                    }
+                    if (!ok) {
+                        Logger.log("Reconcile: ${model.id} ($engineKey) not valid on disk — clearing downloaded flag", "VoxApplication")
+                        container.settingsRepository.setModelDownloaded(model.id, false)
+                        changed = true
+                    }
+                }
+            }
+            if (changed) container.appStateManager.refreshAll()
+        } catch (e: Exception) {
+            Logger.log("reconcileDownloadedModels failed: ${e.message}", "VoxApplication")
         }
     }
 
