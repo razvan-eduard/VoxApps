@@ -221,7 +221,9 @@ class ModelManagementViewModel(
         if (file?.exists() == true) {
             viewModelScope.launch { settingsRepo.setModelDownloaded(modelId, true) }
         }
-        appStateManager.refreshAll()
+        // No refreshAll(): UI updates flow from uiState, and the STT engine reloads
+        // reactively via VoiceManager's observer on activeVoiceModelId. Bumping
+        // refreshTrigger here churned the model dropdown's `groups` (a re-fire loop).
     }
 
     fun selectCustomModel(uri: Uri, engineKey: String, langCode: String? = null) {
