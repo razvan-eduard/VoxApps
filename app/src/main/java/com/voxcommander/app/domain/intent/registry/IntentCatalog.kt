@@ -38,7 +38,15 @@ object IntentCatalog {
     data class IntentsSchema(
         @SerializedName("schema_version") val schemaVersion: Int = 1,
         @SerializedName("template_action_domains") val templateActionDomains: Map<String, String> = emptyMap(),
+        val taxonomy: TaxonomyDef? = null,
         val intents: List<IntentDef> = emptyList()
+    )
+
+    /** The NLU vocabulary (domains + actions) fed to the prompt and the Rules UI. */
+    data class TaxonomyDef(
+        val domains: List<String> = emptyList(),
+        val actions: List<String> = emptyList(),
+        @SerializedName("actions_by_domain") val actionsByDomain: Map<String, List<String>> = emptyMap()
     )
 
     data class IntentDef(
@@ -206,6 +214,18 @@ object IntentCatalog {
     val isInitialized: Boolean
         get() = cachedSchema != null && cachedSchema!!.intents.isNotEmpty()
 
+    // ---- NLU taxonomy (domains/actions vocabulary) — JSON primary, compact seed fallback ----
+
+    fun taxonomyDomains(): List<String> =
+        cachedSchema?.taxonomy?.domains?.takeIf { it.isNotEmpty() } ?: FALLBACK_TAXONOMY.domains
+
+    fun taxonomyActions(): List<String> =
+        cachedSchema?.taxonomy?.actions?.takeIf { it.isNotEmpty() } ?: FALLBACK_TAXONOMY.actions
+
+    /** Actions for a domain, or null if neither the JSON nor the seed knows it (→ generic "launch"). */
+    fun taxonomyActionsForDomain(domain: String): List<String>? =
+        cachedSchema?.taxonomy?.actionsByDomain?.get(domain) ?: FALLBACK_TAXONOMY.actionsByDomain[domain]
+
     // ---- Last-resort fallback (only used if assets read fails — near-impossible) ----
     // Covers the core routing intents (those carrying a templateAction → domain/uriTemplate).
     // The extended catalog (settings toggles, camera, alarms) lives in intents.json.
@@ -214,6 +234,23 @@ object IntentCatalog {
         AppRegistry.TemplateActions.NAVIGATE to IntentTaxonomy.Domains.MAPS,
         AppRegistry.TemplateActions.SEARCH to IntentTaxonomy.Domains.AUDIO,
         AppRegistry.TemplateActions.SEND to IntentTaxonomy.Domains.MESSAGING
+    )
+
+    // NLU taxonomy seed — the single fallback for the domain/action vocabulary when intents.json
+    // isn't loaded. The live values come from intents.json `taxonomy`.
+    private val FALLBACK_TAXONOMY: TaxonomyDef = TaxonomyDef(
+        domains = listOf("audio", "settings", "maps", "messaging", "system", "home", "search"),
+        actions = listOf("play", "pause", "stop", "next", "prev", "volume_up", "volume_down",
+            "wifi_toggle", "bluetooth_toggle", "gps_toggle", "navigate", "send", "query"),
+        actionsByDomain = mapOf(
+            "audio" to listOf("play", "pause", "stop", "next", "prev"),
+            "settings" to listOf("volume_up", "volume_down", "wifi_toggle", "bluetooth_toggle", "gps_toggle"),
+            "maps" to listOf("navigate"),
+            "messaging" to listOf("send"),
+            "search" to listOf("query"),
+            "system" to listOf("toggle", "status"),
+            "home" to listOf("toggle", "status")
+        )
     )
 
     private val FALLBACK_SEED: List<IntentDef> = listOf(

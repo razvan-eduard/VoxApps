@@ -1,8 +1,16 @@
 package com.voxcommander.app.domain.intent.taxonomy
 
+import com.voxcommander.app.domain.intent.registry.IntentCatalog
+
 /**
  * Single source of truth for intent domains, actions, and their valid parameters.
  * Used by prompt generation, intent validation, and intent handlers.
+ *
+ * The domain/action string CONSTANTS are code contracts (handlers dispatch on them) and stay here.
+ * The LISTS (`Domains.ALL`, `Actions.ALL`, `getActionsForDomain`) are the NLU *vocabulary* — they
+ * read from `intents.json` via [IntentCatalog] (hot-reloadable), falling back to the code seed
+ * below when the JSON isn't loaded. This lets a new vertical enter the LLM's vocabulary + Rules UI
+ * by config; a domain with bespoke nucleus behavior still needs a handler.
  */
 object IntentTaxonomy {
 
@@ -15,7 +23,8 @@ object IntentTaxonomy {
         const val HOME = "home"
         const val SEARCH = "search"
 
-        val ALL = listOf(AUDIO, SETTINGS, MAPS, MESSAGING, SYSTEM, HOME, SEARCH)
+        /** JSON-backed (intents.json `taxonomy.domains`); IntentCatalog owns the seed fallback. */
+        val ALL: List<String> get() = IntentCatalog.taxonomyDomains()
     }
 
     object Actions {
@@ -42,23 +51,16 @@ object IntentTaxonomy {
         // Search
         const val QUERY = "query"
 
-        val ALL = listOf(PLAY, PAUSE, STOP, NEXT, PREV, VOLUME_UP, VOLUME_DOWN,
-            WIFI_TOGGLE, BLUETOOTH_TOGGLE, GPS_TOGGLE, NAVIGATE, SEND, QUERY)
+        /** JSON-backed (intents.json `taxonomy.actions`); IntentCatalog owns the seed fallback. */
+        val ALL: List<String> get() = IntentCatalog.taxonomyActions()
     }
 
     /**
-     * Returns valid actions for a given domain.
-     * Custom domains get a generic "launch" action.
+     * Valid actions for a domain, sourced from intents.json `taxonomy.actions_by_domain`
+     * (IntentCatalog owns the seed fallback). Custom/unknown domains get a generic "launch" action.
      */
-    fun getActionsForDomain(domain: String): List<String> = when (domain) {
-        Domains.AUDIO -> listOf(Actions.PLAY, Actions.PAUSE, Actions.STOP, Actions.NEXT, Actions.PREV)
-        Domains.SETTINGS -> listOf(Actions.VOLUME_UP, Actions.VOLUME_DOWN, Actions.WIFI_TOGGLE, Actions.BLUETOOTH_TOGGLE, Actions.GPS_TOGGLE)
-        Domains.MAPS -> listOf(Actions.NAVIGATE)
-        Domains.MESSAGING -> listOf(Actions.SEND)
-        Domains.SEARCH -> listOf(Actions.QUERY)
-        Domains.SYSTEM, Domains.HOME -> listOf("toggle", "status")
-        else -> listOf("launch")
-    }
+    fun getActionsForDomain(domain: String): List<String> =
+        IntentCatalog.taxonomyActionsForDomain(domain)?.takeIf { it.isNotEmpty() } ?: listOf("launch")
 
     /**
      * Maps legacy actionType values (from old IntentPayload / FastMapRule) to new domain+action pairs.
