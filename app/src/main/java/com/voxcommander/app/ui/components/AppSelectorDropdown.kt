@@ -176,7 +176,7 @@ fun AppSelectorDropdown(
     selectedPackages: List<String>,
     defaultPackage: String?,
     onToggleApp: (String) -> Unit,
-    onSetDefault: (String) -> Unit,
+    onSetDefault: (String?) -> Unit,
     modifier: Modifier = Modifier,
     domain: String? = null,
     label: String = "Select apps",
@@ -382,7 +382,7 @@ private fun AppPickerListMulti(
     defaultPackage: String?,
     filterMode: String,
     onToggleApp: (String) -> Unit,
-    onSetDefault: (String) -> Unit
+    onSetDefault: (String?) -> Unit
 ) {
         val languageManager = LocalLanguageManager.current
     val lm = languageManager
@@ -443,10 +443,10 @@ private fun AppPickerListMulti(
                         Text(app.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     if (isSelected) {
-                        IconButton(onClick = { onSetDefault(app.packageName) }, enabled = !isDefault) {
+                        IconButton(onClick = { onSetDefault(if (isDefault) null else app.packageName) }) {
                             Icon(
                                 imageVector = if (isDefault) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                                contentDescription = lm?.getString("set_as_default") ?: "Set as default",
+                                contentDescription = if (isDefault) (lm?.getString("remove_default") ?: "Remove default") else (lm?.getString("set_as_default") ?: "Set as default"),
                                 tint = if (isDefault) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
