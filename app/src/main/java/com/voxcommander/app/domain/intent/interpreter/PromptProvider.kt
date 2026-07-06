@@ -6,6 +6,7 @@ import com.voxcommander.app.domain.intent.registry.AppRegistry
 import com.voxcommander.app.domain.intent.taxonomy.IntentTaxonomy
 import com.voxcommander.app.domain.search.SearchProviderRegistry
 import com.voxcommander.app.data.preferences.SettingsRepository
+import com.voxcommander.app.utils.Logger
 
 /**
  * Provides hydrated prompt templates for AI agents.
@@ -15,6 +16,7 @@ import com.voxcommander.app.data.preferences.SettingsRepository
  */
 object PromptProvider {
 
+    private const val TAG = "PromptProvider"
     private const val ID_STANDARD_NLU = "standard_nlu"
     private const val PLACEHOLDER_TEXT = "\${spokenText}"
     private const val PLACEHOLDER_APPS = "\${installedApps}"
@@ -27,21 +29,34 @@ object PromptProvider {
      * Used by all engines (OpenAI, Gemini Cloud, Local LLM) — they add user input separately.
      */
     fun getNluSystemPrompt(settings: AppSettings? = null, modelFilterLang: String? = null, settingsRepo: SettingsRepository? = null): String {
-        val template = RemoteModelRegistry.getPrompt(ID_STANDARD_NLU) ?: return ""
-        val langHint = modelFilterLang?.let { "\nInput language: $it." } ?: ""
-        // Strip the Input/JSON suffix — engines add their own user message
-        val inputIndex = template.indexOf("Input:")
-        val systemPart = if (inputIndex > 0) {
-            template.substring(0, inputIndex).trim()
-        } else {
-            template.replace(PLACEHOLDER_TEXT, "")
+        val template = RemoteModelRegistry.getPrompt(ID_STANDARD_NLU)
+        if (template == null) {
+            Logger.log("NLU prompt template '$ID_STANDARD_NLU' not found (models.json not loaded?) — returning empty system prompt", TAG)
+            return ""
         }
+        val langHint = modelFilterLang?.let { "\nInput language: $it." } ?: ""
+        val systemPart = stripToRules(template)
         return systemPart
             .replace(PLACEHOLDER_DOMAINS, IntentTaxonomy.Domains.ALL.joinToString(", ") { "\"$it\"" })
             .replace(PLACEHOLDER_ACTIONS, IntentTaxonomy.Actions.ALL.joinToString(", ") { "\"$it\"" })
             .replace(PLACEHOLDER_APPS, buildAppsSection(settings))
             .replace(PLACEHOLDER_SEARCH, buildSearchSection(settingsRepo))
             .plus(langHint)
+    }
+
+    /**
+     * Returns the rules-only portion of the template: everything before the "Examples:" section
+     * (and its trailing `Input: "${spokenText}"` placeholder). The anatomy rules are
+     * self-describing, so few-shot examples are intentionally excluded. Cutting at the first
+     * "Input:" (old behaviour) left a dangling "Examples:" header — a malformed tail.
+     */
+    internal fun stripToRules(template: String): String {
+        val examplesCut = template.indexOf("Examples:")
+        if (examplesCut > 0) return template.substring(0, examplesCut).trim()
+        // Fallback (no Examples: section): drop only the trailing input placeholder line.
+        val inputCut = template.indexOf("Input: \"$PLACEHOLDER_TEXT\"")
+        return if (inputCut > 0) template.substring(0, inputCut).trim()
+               else template.replace(PLACEHOLDER_TEXT, "").trim()
     }
 
     /**
