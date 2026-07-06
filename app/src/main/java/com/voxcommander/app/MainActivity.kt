@@ -238,7 +238,6 @@ class MainActivity : ComponentActivity() {
                             downloadProgress = currentProgress,
                             selectionSuccessMessage = successMessage,
                             googleSttAvailable = googleSttAvailable,
-                            updateVoiceEngine = { /* Handled reactively by VoiceManager */ },
                             onRequestOverlayPermission = {
                                 overlayPermissionLauncher.launch(com.voxcommander.app.utils.PermissionUtils.getOverlayPermissionIntent(this@MainActivity))
                             },
