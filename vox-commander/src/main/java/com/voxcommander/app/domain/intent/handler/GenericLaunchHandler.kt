@@ -30,7 +30,10 @@ class GenericLaunchHandler : IntentHandler {
         val action = intent.intentAction
 
         if (action.isNullOrBlank()) {
-            // No specific action — just launch the app
+            // If the target app declares the Vox contract (e.g. Vox Notes), hand it the command via
+            // a fire-and-forget NATIVE intent so it receives the query — otherwise just launch it.
+            // Loose, opt-in coupling: constants are local (no shared library).
+            if (!query.isNullOrBlank() && fireVoxCommand(context, pkg, intent, query)) return true
             return launchApp(context, pkg)
         }
 
@@ -200,6 +203,25 @@ class GenericLaunchHandler : IntentHandler {
         return IntentUtils.tryLaunch(context, intent, TAG)
     }
 
+    /**
+     * If [pkg] declares the Vox intent contract, fire the HANDLE intent with the query (+domain/action).
+     * Returns false if the app is not Vox-capable, so the caller falls back to a plain launch.
+     */
+    private fun fireVoxCommand(context: Context, pkg: String, intent: NluIntent, query: String): Boolean {
+        val probe = Intent(VOX_ACTION).apply { setPackage(pkg) }
+        if (context.packageManager.queryIntentActivities(probe, 0).isEmpty()) return false
+        val voxIntent = Intent(VOX_ACTION).apply {
+            setPackage(pkg)
+            addCategory(VOX_CATEGORY)
+            putExtra(VOX_EXTRA_QUERY, query)
+            putExtra(VOX_EXTRA_DOMAIN, intent.domain)
+            putExtra(VOX_EXTRA_ACTION, intent.action)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        Logger.log("Firing Vox command to $pkg (domain=${intent.domain}, query=$query)", TAG)
+        return IntentUtils.tryLaunch(context, voxIntent, TAG)
+    }
+
     private fun launchApp(context: Context, pkg: String): Boolean {
         val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
         if (launchIntent != null) {
@@ -212,5 +234,13 @@ class GenericLaunchHandler : IntentHandler {
 
     companion object {
         private const val TAG = "GenericLaunchHandler"
+
+        // Vox intent contract — declared LOCALLY (no shared library); satellites define the same
+        // strings on their side. Any app that declares this filter can receive Vox commands.
+        private const val VOX_ACTION = "com.voxcommander.action.HANDLE"
+        private const val VOX_CATEGORY = "com.voxcommander.category.VOX"
+        private const val VOX_EXTRA_QUERY = "com.voxcommander.extra.QUERY"
+        private const val VOX_EXTRA_DOMAIN = "com.voxcommander.extra.DOMAIN"
+        private const val VOX_EXTRA_ACTION = "com.voxcommander.extra.ACTION"
     }
 }
