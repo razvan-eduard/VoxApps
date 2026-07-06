@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -143,7 +144,7 @@ fun SettingsContent(
                         )
                     } else {
                         val focusManager = LocalFocusManager.current
-                    Column(modifier = Modifier.fillMaxSize().padding(top = 16.dp).verticalScroll(rememberScrollState()).clickable { focusManager.clearFocus() }, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(modifier = Modifier.fillMaxSize().padding(top = 16.dp).verticalScroll(rememberScrollState()).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { focusManager.clearFocus() }), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             when (page) {
                                 0 -> GeneralSettingsTab(
 
