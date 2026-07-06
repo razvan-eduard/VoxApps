@@ -7,7 +7,6 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.voxcommander.app.domain.intent.taxonomy.IntentTaxonomy
 import com.voxcommander.app.utils.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -189,137 +188,58 @@ object AppRegistry {
 
         val LAUNCH_VARIANT = UriVariant(null, null, "Launch app", requiresQuery = false)
 
-        private val PROBE_MAP: Map<String, List<UriVariant>> = mapOf(
-            // ==========================================
-            // 🎵 MEDIA & ENTERTAINMENT
-            // ==========================================
-            android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH to listOf(
-                UriVariant(null, null, "Play from search (Media/Music)", TemplateActions.SEARCH)
-            ),
-            android.provider.MediaStore.ACTION_IMAGE_CAPTURE to listOf(
-                UriVariant(null, null, "Open Camera (Photo Mode)", requiresQuery = false)
-            ),
-            android.provider.MediaStore.ACTION_VIDEO_CAPTURE to listOf(
-                UriVariant(null, null, "Open Camera (Video Mode)", requiresQuery = false)
-            ),
-            android.content.Intent.ACTION_SEARCH to listOf(
-                UriVariant(null, null, "In-App Search (e.g., Netflix / Amazon)", TemplateActions.SEARCH)
-            ),
-
-            // ==========================================
-            // 🗺️ NAVIGATION & LOCATION (all ACTION_VIEW with different schemes)
-            // ==========================================
-            android.content.Intent.ACTION_VIEW to listOf(
-                UriVariant("geo:0,0?q=test", "geo:0,0?q={destination}", "View / Search Location (geo:)", TemplateActions.NAVIGATE),
-                UriVariant("google.navigation:q=test", "google.navigation:q={destination}", "Turn-by-Turn Google Maps", TemplateActions.NAVIGATE),
-                UriVariant("waze://?q=test&navigate=yes", "waze://?q={destination}&navigate=yes", "Turn-by-Turn Waze", TemplateActions.NAVIGATE),
-                UriVariant("google.streetview:cbll=44.4,26.1", "google.streetview:cbll={lat},{lng}", "Google Street View", null),
-                UriVariant("https://api.whatsapp.com/send?phone=40700000000", "https://api.whatsapp.com/send?phone={contact}", "WhatsApp Direct Message", TemplateActions.SEND),
-                UriVariant("https://example.com", "{query}", "Open URL in Browser (http/https)", TemplateActions.SEARCH),
-                UriVariant("market://details?id=com.spotify.music", "market://details?id={query}", "Open App in Play Store (market://)", null),
-                UriVariant("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "https://www.youtube.com/watch?v={query}", "Play YouTube Video (LibreTube)", TemplateActions.SEARCH),
-            ),
-
-            // ==========================================
-            // 💬 COMMUNICATION & SOCIAL
-            // ==========================================
-            android.content.Intent.ACTION_DIAL to listOf(
-                UriVariant("tel:0700000000", "tel:{contact}", "Open Dialer (tel:)", null)
-            ),
-            android.content.Intent.ACTION_SENDTO to listOf(
-                UriVariant("smsto:0700000000", "smsto:{contact}", "Compose SMS (smsto:)", null),
-                UriVariant("mailto:test@example.com", "mailto:{contact}", "Compose Email (mailto:)", null)
-            ),
-            android.content.Intent.ACTION_SEND to listOf(
-                UriVariant(null, null, "Share Text / Link (General Share Sheet)", TemplateActions.SEND, mimeType = "text/plain")
-            ),
-
-            // ==========================================
-            // 🌐 WEB & SEARCH
-            // ==========================================
-            android.content.Intent.ACTION_WEB_SEARCH to listOf(
-                UriVariant(null, null, "Web Search (Google Search)", TemplateActions.SEARCH)
-            ),
-            android.app.SearchManager.INTENT_ACTION_GLOBAL_SEARCH to listOf(
-                UriVariant(null, null, "Open System Global Search", null, requiresQuery = false)
-            ),
-
-            // ==========================================
-            // ⚙️ SYSTEM SETTINGS
-            // ==========================================
-            android.provider.Settings.ACTION_SETTINGS to listOf(
-                UriVariant(null, null, "Open General Settings", null, requiresQuery = false)
-            ),
-            android.provider.Settings.ACTION_WIFI_SETTINGS to listOf(
-                UriVariant(null, null, "Open Wi-Fi Settings", null, requiresQuery = false)
-            ),
-            android.provider.Settings.ACTION_BLUETOOTH_SETTINGS to listOf(
-                UriVariant(null, null, "Open Bluetooth Settings", null, requiresQuery = false)
-            ),
-            android.provider.Settings.ACTION_SOUND_SETTINGS to listOf(
-                UriVariant(null, null, "Open Sound & Volume Settings", null, requiresQuery = false)
-            ),
-            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS to listOf(
-                UriVariant("package:com.voxcommander.app", "package:{query}", "Open App Info Details (package:)", null)
-            ),
-            android.provider.Settings.ACTION_DISPLAY_SETTINGS to listOf(
-                UriVariant(null, null, "Open Display Settings", null, requiresQuery = false)
-            ),
-
-            // ==========================================
-            // ⏰ CLOCK, ALARMS & PRODUCTIVITY
-            // ==========================================
-            android.provider.AlarmClock.ACTION_SET_TIMER to listOf(
-                UriVariant(null, null, "Set a Timer", null)
-            ),
-            android.provider.AlarmClock.ACTION_SET_ALARM to listOf(
-                UriVariant(null, null, "Set an Alarm", null)
-            ),
-            android.provider.AlarmClock.ACTION_SHOW_ALARMS to listOf(
-                UriVariant(null, null, "Show Alarms List", null, requiresQuery = false)
-            ),
-            android.content.Intent.ACTION_INSERT to listOf(
-                UriVariant(null, null, "Insert Calendar Event", null)
-            ),
-            "com.google.android.gms.actions.CREATE_NOTE" to listOf(
-                UriVariant(null, null, "Create Note (Google Keep)", null)
-            )
-        )
-
-        val ALL_ACTIONS: List<String> = PROBE_MAP.keys.toList()
+        /**
+         * The probe catalog is now data-driven — the source of truth is `intents.json`
+         * (repo root → assets → filesDir → remote), served by [IntentCatalog]. See that
+         * object for the load/hot-reload plumbing and the last-resort fallback seed.
+         */
+        private fun catalogVariants(): List<IntentOption> =
+            IntentCatalog.getAll().map { def ->
+                IntentOption(
+                    def.action,
+                    UriVariant(
+                        probeUri = def.probeUri,
+                        uriTemplate = def.uriTemplate,
+                        label = def.label,
+                        templateAction = def.templateAction,
+                        requiresQuery = def.requiresQuery,
+                        mimeType = def.mimeType
+                    )
+                )
+            }
 
         /**
          * Probes which intent variants a package supports by querying PackageManager.
-         * For each action, probes each URI variant separately.
+         * For each catalog entry, probes its URI variant separately.
          * Returns only the variants that passed the probe, plus "Launch app" fallback.
          */
         fun probeSupported(context: Context, packageName: String): List<IntentOption> {
             val pm = context.packageManager
             val result = mutableListOf<IntentOption>()
 
-            for ((action, variants) in PROBE_MAP) {
-                for (variant in variants) {
-                    val supported = if (variant.probeUri != null) {
-                        val probe = android.content.Intent(action).apply {
-                            setPackage(packageName)
-                            data = android.net.Uri.parse(variant.probeUri)
-                        }
-                        pm.queryIntentActivities(probe, 0).isNotEmpty()
-                    } else if (variant.mimeType != null) {
-                        val probe = android.content.Intent(action).apply {
-                            setPackage(packageName)
-                            type = variant.mimeType
-                        }
-                        pm.queryIntentActivities(probe, 0).isNotEmpty()
-                    } else {
-                        val probe = android.content.Intent(action).apply {
-                            setPackage(packageName)
-                        }
-                        pm.queryIntentActivities(probe, 0).isNotEmpty()
+            for (option in catalogVariants()) {
+                val action = option.action
+                val variant = option.variant
+                val supported = if (variant.probeUri != null) {
+                    val probe = android.content.Intent(action).apply {
+                        setPackage(packageName)
+                        data = android.net.Uri.parse(variant.probeUri)
                     }
-                    if (supported) {
-                        result.add(IntentOption(action, variant))
+                    pm.queryIntentActivities(probe, 0).isNotEmpty()
+                } else if (variant.mimeType != null) {
+                    val probe = android.content.Intent(action).apply {
+                        setPackage(packageName)
+                        type = variant.mimeType
                     }
+                    pm.queryIntentActivities(probe, 0).isNotEmpty()
+                } else {
+                    val probe = android.content.Intent(action).apply {
+                        setPackage(packageName)
+                    }
+                    pm.queryIntentActivities(probe, 0).isNotEmpty()
+                }
+                if (supported) {
+                    result.add(IntentOption(action, variant))
                 }
             }
 
@@ -344,11 +264,7 @@ object AppRegistry {
                 val v = option.variant
                 if (v.templateAction != null && v.uriTemplate != null) {
                     uriTemplates[v.templateAction] = v.uriTemplate
-                    when (v.templateAction) {
-                        TemplateActions.NAVIGATE -> domains.add(IntentTaxonomy.Domains.MAPS)
-                        TemplateActions.SEARCH -> domains.add(IntentTaxonomy.Domains.AUDIO)
-                        TemplateActions.SEND -> domains.add(IntentTaxonomy.Domains.MESSAGING)
-                    }
+                    IntentCatalog.domainFor(v.templateAction)?.let { domains.add(it) }
                 }
             }
 

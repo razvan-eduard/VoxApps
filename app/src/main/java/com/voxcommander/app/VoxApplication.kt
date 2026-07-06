@@ -47,6 +47,10 @@ class VoxApplication : Application() {
             container.settingsRepository.getAllSearchProviderApiKeys()
         )
 
+        // Initialize IntentCatalog (data-driven intent probe catalog) — must be ready
+        // before the app scan in SplashLoadingScreen (AppRegistry.init probes against it).
+        com.voxcommander.app.domain.intent.registry.IntentCatalog.init(this)
+
         // Initialize network monitor for realtime connectivity tracking
         NetworkMonitor.init(this)
 
@@ -78,6 +82,8 @@ class VoxApplication : Application() {
             com.voxcommander.app.domain.search.SearchProviderRegistry.applyApiKeys(
                 container.settingsRepository.getAllSearchProviderApiKeys()
             )
+            // Also fetch the intent catalog from the remote repo (hot-reload)
+            com.voxcommander.app.domain.intent.registry.IntentCatalog.fetchRemote(container.settingsRepository, force = true)
         }
     }
 
