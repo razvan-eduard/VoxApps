@@ -15,7 +15,7 @@ log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
 
 # --- PATHS ---
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-JNI_DIR="$PROJECT_ROOT/app/src/main/jniLibs/arm64-v8a"
+JNI_DIR="$PROJECT_ROOT/vox-commander/src/main/jniLibs/arm64-v8a"
 TAG="whisper-libs"
 
 # --- LIBS TO UPLOAD (in load order) ---

@@ -15,8 +15,8 @@ log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
 
 # --- BASIC PATHS ---
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-WHISPER_DIR="$PROJECT_ROOT/app/src/main/cpp/whisper.cpp"
-PROJECT_JNI_DIR="$PROJECT_ROOT/app/src/main/jniLibs/arm64-v8a"
+WHISPER_DIR="$PROJECT_ROOT/vox-commander/src/main/cpp/whisper.cpp"
+PROJECT_JNI_DIR="$PROJECT_ROOT/vox-commander/src/main/jniLibs/arm64-v8a"
 BACKUP_DIR="$PROJECT_ROOT/scripts/.whisper_backup"
 BUILD_DIR="build-android-hybrid"
 
@@ -63,7 +63,7 @@ perform_rollback() {
 # --- 1. PRE-CHECK & SOURCE SNAPSHOT ---
 if [ ! -f "$WHISPER_DIR/CMakeLists.txt" ]; then
     log_blue "🔄 Missing Whisper sources. Initializing submodule..."
-    git submodule update --init --recursive "app/src/main/cpp/whisper.cpp"
+    git submodule update --init --recursive "vox-commander/src/main/cpp/whisper.cpp"
 fi
 
 cd "$WHISPER_DIR"
