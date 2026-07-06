@@ -47,7 +47,7 @@
     { "action": "android.settings.WIFI_SETTINGS", "label": "Open Wi-Fi Settings", "requires_query": false },
     { "action": "android.settings.BLUETOOTH_SETTINGS", "label": "Open Bluetooth Settings", "requires_query": false },
     { "action": "android.settings.SOUND_SETTINGS", "label": "Open Sound & Volume Settings", "requires_query": false },
-    { "action": "android.settings.APPLICATION_DETAILS_SETTINGS", "probe_uri": "package:com.voxcommander.app", "uri_template": "package:{query}", "label": "Open App Info Details (package:)", "requires_query": true },
+    { "action": "android.settings.APPLICATION_DETAILS_SETTINGS", "probe_uri": "package:com.voxapps.commander", "uri_template": "package:{query}", "label": "Open App Info Details (package:)", "requires_query": true },
     { "action": "android.settings.DISPLAY_SETTINGS", "label": "Open Display Settings", "requires_query": false },
 
     { "action": "android.intent.action.SET_TIMER", "label": "Set a Timer", "requires_query": true },

@@ -24,8 +24,8 @@
             <!-- OPTIONAL Vox integration: if VoxCommander is installed it can hand this app a
                  command via a native intent. Parsed with plain Android APIs (no shared library). -->
             <intent-filter>
-                <action android:name="com.voxcommander.action.HANDLE" />
-                <category android:name="com.voxcommander.category.VOX" />
+                <action android:name="com.voxapps.action.HANDLE" />
+                <category android:name="com.voxapps.category.VOX" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

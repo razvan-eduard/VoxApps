@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.voxcommander.app"
+    namespace = "com.voxapps.commander"
     compileSdk {
         version = release(37) {
             minorApiLevel = 1
@@ -13,7 +13,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.voxcommander.app"
+        applicationId = "com.voxapps.commander"
         minSdk = 29
         targetSdk = 36
         versionCode = 2

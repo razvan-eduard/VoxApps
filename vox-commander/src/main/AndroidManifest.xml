@@ -18,7 +18,7 @@
 
     <!-- Custom permission for external voice trigger (MacroDroid, Tasker, etc.) -->
     <permission
-        android:name="com.voxcommander.app.permission.TRIGGER_VOICE"
+        android:name="com.voxapps.commander.permission.TRIGGER_VOICE"
         android:protectionLevel="normal"
         android:label="Trigger VoxCommander Voice Assistant" />
 
@@ -98,9 +98,9 @@
             android:name=".service.VoiceTriggerReceiver"
             android:enabled="true"
             android:exported="true"
-            android:permission="com.voxcommander.app.permission.TRIGGER_VOICE">
+            android:permission="com.voxapps.commander.permission.TRIGGER_VOICE">
             <intent-filter>
-                <action android:name="com.voxcommander.app.TRIGGER_VOICE" />
+                <action android:name="com.voxapps.commander.TRIGGER_VOICE" />
             </intent-filter>
         </receiver>
     </application>

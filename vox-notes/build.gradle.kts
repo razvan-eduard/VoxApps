@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.voxcommander.notes"
+    namespace = "com.voxapps.notes"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.voxcommander.notes"
+        applicationId = "com.voxapps.notes"
         minSdk = 29
         targetSdk = 36
         versionCode = 1
