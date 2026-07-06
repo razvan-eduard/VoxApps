@@ -3,6 +3,7 @@ package com.voxcommander.app.ui.screens.settings
 import com.voxcommander.app.ui.LocalLanguageManager
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -65,7 +66,11 @@ fun ModelsSettingsTab(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .clickable(onClick = { focusManager.clearFocus() })
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { focusManager.clearFocus() }
+            )
     ) {
         // --- API KEYS SECTION ---
         Text(text = languageManager.getString("api_keys_section"), style = MaterialTheme.typography.titleMedium)
