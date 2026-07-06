@@ -44,10 +44,8 @@ fun SettingsContent(
     onDeleteUnusedModels: () -> Unit,
     onDeleteModel: (String, String) -> Unit,
     onCancelDownload: () -> Unit = {},
-    onRefreshMain: () -> Unit = {},
     downloadProgress: Float? = null,
     googleSttAvailable: Boolean = true,
-    updateVoiceEngine: () -> Unit = {},
     onRequestOverlayPermission: () -> Unit = {},
     onRequestMicrophonePermission: () -> Unit = {},
     onRequestNotificationPermission: () -> Unit = {},
@@ -71,11 +69,6 @@ fun SettingsContent(
     
     val vmDownloadingItem by modelManagementViewModel.downloadingItem.collectAsStateWithLifecycle()
 
-    LaunchedEffect(downloadProgress) {
-        if (downloadProgress == null || downloadProgress >= 1.0f) {
-            onRefreshMain()
-        }
-    }
 
     var modelToDelete by remember { mutableStateOf<AppModel?>(null) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -163,17 +156,14 @@ fun SettingsContent(
                                     appStateManager = appStateManager,
                                     onProcessorSelected = {
                                         appStateManager.setVoiceProcessor(it)
-                                        updateVoiceEngine(); onRefreshMain()
                                     },
                                     hasApiKey = uiState.apiKey != null,
                                     googleSttAvailable = googleSttAvailable,
                                     onVoiceLanguageSelected = {
                                         appStateManager.setModelFilterLang(it)
-                                        updateVoiceEngine(); onRefreshMain()
                                     },
                                     onModelSelected = { model: AppModel, isDownloaded: Boolean, langCode: String ->
                                         modelManagementViewModel.selectVoiceModel(model.id, model.engineType, langCode)
-                                        updateVoiceEngine(); onRefreshMain()
                                     },
                                     onDownloadModel = onDownloadModel,
                                     onDeleteModel = { modelId, engineKey -> 
@@ -257,7 +247,6 @@ fun SettingsContent(
         onConfirmDelete = {
             modelToDelete?.let { m ->
                 onDeleteModel(m.id, m.engineType)
-                onRefreshMain()
             }
             showDeleteConfirmDialog = false
             modelToDelete = null
