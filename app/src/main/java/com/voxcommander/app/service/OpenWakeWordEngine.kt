@@ -61,13 +61,18 @@ class OpenWakeWordEngine(
                 }
             }
 
-            Logger.log("Initializing OpenWakeWord with model: $modelId (resolvedPath=$resolvedPath)", TAG)
+            // Map the user's Wake Word Sensitivity setting to the detection threshold
+            // (lower threshold = easier trigger = more sensitive). Applied at model
+            // construction, so a sensitivity change only takes effect on the next initialize().
+            val sensitivity = appStateManager.uiState.value.wakeWordSensitivity
+            val threshold = WakeWordSensitivity.openWakeWordThreshold(sensitivity)
+            Logger.log("Initializing OpenWakeWord with model: $modelId (resolvedPath=$resolvedPath, sensitivity=$sensitivity, threshold=$threshold)", TAG)
 
             val models = listOf(
                 WakeWordModel(
                     name = modelName,
                     modelPath = resolvedPath,
-                    threshold = 0.5f
+                    threshold = threshold
                 )
             )
 

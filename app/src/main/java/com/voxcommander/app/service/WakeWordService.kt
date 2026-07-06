@@ -45,6 +45,12 @@ class WakeWordService : Service() {
     private val CHANNEL_ID = "wake_word_service_channel"
     private val NOTIFICATION_ID = 101
 
+    // App-level debounce: a wake word + its command flow always takes longer than this,
+    // so no legitimate trigger is lost, but rapid re-fires (e.g. residual audio right after
+    // an engine restart, or an over-eager OpenWakeWord threshold) are suppressed.
+    private val WAKE_DEBOUNCE_MS = 2500L
+    @Volatile private var lastWakeTriggerMs = 0L
+
     override fun onCreate() {
         super.onCreate()
         Logger.log("WakeWordService created", TAG)
@@ -336,6 +342,15 @@ class WakeWordService : Service() {
     }
 
     private fun onWakeWordDetected() {
+        // App-level debounce — drop triggers that arrive too soon after the last accepted one.
+        val now = SystemClock.elapsedRealtime()
+        val sinceLast = now - lastWakeTriggerMs
+        if (lastWakeTriggerMs != 0L && sinceLast < WAKE_DEBOUNCE_MS) {
+            Logger.log("Wake word debounced (${sinceLast}ms < ${WAKE_DEBOUNCE_MS}ms since last trigger)", TAG)
+            return
+        }
+        lastWakeTriggerMs = now
+
         Logger.log("Wake word detected!", TAG)
 
         // Barge-in: if TTS is speaking, stop it and let the normal flow

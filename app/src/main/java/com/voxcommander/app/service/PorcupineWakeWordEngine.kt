@@ -114,8 +114,15 @@ class PorcupineWakeWordEngine(
                 }
             }
 
+            // Map the user's Wake Word Sensitivity setting to Porcupine's sensitivity param
+            // (higher = more sensitive — inverse of the distance-threshold engines). One value
+            // per keyword; we always configure exactly one keyword above.
+            val sensitivitySetting = appStateManager.uiState.value.wakeWordSensitivity
+            val sensitivity = WakeWordSensitivity.porcupineSensitivity(sensitivitySetting)
+            builder.setSensitivities(floatArrayOf(sensitivity))
+
             porcupine = builder.build(context)
-            Logger.log("Porcupine engine initialized successfully (frameLength=${porcupine?.frameLength}, sampleRate=${porcupine?.sampleRate})", TAG)
+            Logger.log("Porcupine engine initialized successfully (sensitivity=$sensitivitySetting/$sensitivity, frameLength=${porcupine?.frameLength}, sampleRate=${porcupine?.sampleRate})", TAG)
             return@withContext true
         } catch (e: PorcupineException) {
             Logger.log("Porcupine init failed: ${e.message}", TAG)
