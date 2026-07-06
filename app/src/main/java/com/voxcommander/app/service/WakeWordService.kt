@@ -451,16 +451,38 @@ class WakeWordService : Service() {
         val isListening = uiState.isWakeWordServiceListening
 
         val voiceState = uiState.voiceState
+        val snapshot = settingsRepo.getSettingsSnapshot()
+        val engineType = snapshot.wakeWordEngineType
+        // For Porcupine / OpenWakeWord the *model* is the wake word — there is no free-text word
+        // and any (Vosk-only) voice profile is irrelevant. For Vosk the trigger is either a
+        // calibrated voice profile or the manually-typed wake word.
+        val modelDeterminesWakeWord = engineType.contains("porcupine") || engineType.contains("openwakeword")
         val profileJson = settingsRepo.getWakeWordProfileJson()
-        val hasVoiceProfile = profileJson != null
+        val hasVoiceProfile = profileJson != null && !modelDeterminesWakeWord
         val profileName = profileJson?.let { WakeWordProfile.fromJson(it)?.profileName }
+
+        // Clean label of the selected wake model (Porcupine keyword / OWW model), falling back to
+        // the raw id then the cached display name if the registry isn't loaded.
+        val modelLabel: String? = if (modelDeterminesWakeWord) {
+            val modelId = snapshot.wakeWordModelPath
+            if (!modelId.isNullOrBlank()) {
+                com.voxcommander.app.data.remote.RemoteModelRegistry.getModels(engineType)
+                    .find { it.id == modelId }?.label ?: modelId
+            } else currentModelDisplayName.ifBlank { null }
+        } else null
+
         val finalContentText = contentText ?: when {
             voiceState == VoiceState.LISTENING_COMMAND -> languageManager.getString("vox_listening")
             voiceState == VoiceState.PROCESSING -> languageManager.getString("ww_paused_ai_thinking")
-            isListening && hasVoiceProfile && profileName != null -> "${languageManager.getString("vox_listening")} $profileName"
-            isListening && hasVoiceProfile -> languageManager.getString("vox_listening")
-            isListening -> languageManager.getString("ww_listening_for").format(settingsRepo.getSettingsSnapshot().wakeWord)
-            else -> languageManager.getString("ww_paused")
+            !isListening -> languageManager.getString("ww_paused")
+            // Porcupine / OpenWakeWord: the selected model determines the wake word.
+            modelDeterminesWakeWord && !modelLabel.isNullOrBlank() ->
+                languageManager.getString("ww_listening_for").format(modelLabel)
+            // Vosk with a calibrated voice profile: show the profile name.
+            hasVoiceProfile && profileName != null -> "${languageManager.getString("vox_listening")} $profileName"
+            hasVoiceProfile -> languageManager.getString("vox_listening")
+            // Vosk with a manual wake word: show the word.
+            else -> languageManager.getString("ww_listening_for").format(snapshot.wakeWord)
         }
 
         val engineSubtext = if (isListening && !hasVoiceProfile) "$currentEngineDisplayName · $currentModelDisplayName" else null
