@@ -28,6 +28,33 @@ class ModelDownloader(private val context: Context) {
     companion object {
         private const val TAG = "ModelDownloader"
         private const val CLEANUP_TAG = "ModelCleanup"
+
+        /**
+         * If the extracted directory contains a single subdirectory (the archive's top-level
+         * wrapper, e.g. Vosk's `vosk-model-.../` or Piper's `vits-piper-.../`), move its
+         * contents up one level so the model files sit directly under [targetDir].
+         *
+         * IMPORTANT: uses renameTo (atomic same-fs move) and falls back to copyRecursively —
+         * NOT File.copyTo, which is non-recursive for directories and would leave subdirectories
+         * like `am/ conf/ graph/` empty (Vosk then fails with "Failed to create a model").
+         *
+         * Pure File logic (no Context) so it is unit-testable.
+         */
+        internal fun flattenNestedDir(targetDir: File) {
+            val children = targetDir.listFiles() ?: return
+            if (children.size == 1 && children[0].isDirectory) {
+                val nested = children[0]
+                Logger.log("Flattening nested directory: ${nested.name}", TAG)
+                nested.listFiles()?.forEach { file ->
+                    val dest = File(targetDir, file.name)
+                    if (!file.renameTo(dest)) {
+                        // Cross-filesystem or rename failure — recurse into subdirectories too.
+                        file.copyRecursively(dest, overwrite = true)
+                    }
+                }
+                nested.deleteRecursively()
+            }
+        }
     }
 
     /**
@@ -193,22 +220,6 @@ class ModelDownloader(private val context: Context) {
     }
 
     /**
-     * If the extracted directory contains a single subdirectory with the same name as the model,
-     * move its contents up one level. Piper tar.bz2 archives extract to vits-piper-xxx-low/...
-     */
-    private fun flattenNestedDir(targetDir: File) {
-        val children = targetDir.listFiles() ?: return
-        if (children.size == 1 && children[0].isDirectory) {
-            val nested = children[0]
-            Logger.log("Flattening nested directory: ${nested.name}", TAG)
-            nested.listFiles()?.forEach { file ->
-                file.copyTo(File(targetDir, file.name), overwrite = true)
-            }
-            nested.deleteRecursively()
-        }
-    }
-
-    /**
      * Checks if a model directory is complete and valid.
      * Deletes incomplete/corrupt directories (e.g. if app crashed during unzip).
      * Returns true if the model is valid and ready to use.
@@ -240,11 +251,17 @@ class ModelDownloader(private val context: Context) {
             return true
         }
 
-        // Vosk/ZIP models: check for 'am' subdirectory — may be directly in model dir or in a nested subdirectory
-        val hasAmDir = File(targetDir, "am").exists() ||
-            targetDir.listFiles()?.any { File(it, "am").exists() } == true
+        // Vosk/ZIP models: require a NON-EMPTY 'am' directory — an empty one means a broken
+        // extraction (e.g. the old non-recursive flatten left subdirs hollow). Check both the
+        // flat layout and a possible nested wrapper (older/interrupted extractions).
+        fun amPopulated(dir: File): Boolean {
+            val am = File(dir, "am")
+            return am.isDirectory && (am.listFiles()?.isNotEmpty() == true)
+        }
+        val hasAmDir = amPopulated(targetDir) ||
+            targetDir.listFiles()?.any { it.isDirectory && amPopulated(it) } == true
         if (!hasAmDir) {
-            Logger.log("Model $modelId missing 'am' directory — deleting incomplete model", TAG)
+            Logger.log("Model $modelId missing/empty 'am' directory — deleting incomplete model", TAG)
             targetDir.deleteRecursively()
             return false
         }
