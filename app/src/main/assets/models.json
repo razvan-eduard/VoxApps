@@ -863,7 +863,7 @@
       ]
     },
     "wake_openwakeword": {
-      "is_multilingual": true,
+      "is_multilingual": false,
       "engine_label": "openWakeWord",
       "extension": ".onnx",
       "type": [
