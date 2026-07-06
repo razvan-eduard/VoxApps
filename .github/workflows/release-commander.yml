@@ -1,4 +1,4 @@
-name: Build Release APK
+name: Build Commander Release APK
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches:
       - main
     paths:
-      - 'app/build.gradle.kts'
+      - 'vox-commander/build.gradle.kts'
 
 jobs:
   build:
@@ -71,8 +71,8 @@ jobs:
         id: check_bump
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          PREV_CODE=$(git show HEAD~1:app/build.gradle.kts 2>/dev/null | grep 'versionCode' | grep -oE '[0-9]+' || echo "0")
-          CURR_CODE=$(grep 'versionCode' app/build.gradle.kts | grep -oE '[0-9]+')
+          PREV_CODE=$(git show HEAD~1:vox-commander/build.gradle.kts 2>/dev/null | grep 'versionCode' | grep -oE '[0-9]+' || echo "0")
+          CURR_CODE=$(grep 'versionCode' vox-commander/build.gradle.kts | grep -oE '[0-9]+')
           echo "prev=$PREV_CODE curr=$CURR_CODE"
           if [ "$PREV_CODE" = "$CURR_CODE" ]; then
             echo "changed=false" >> $GITHUB_OUTPUT
@@ -86,11 +86,11 @@ jobs:
 
       - name: Run unit tests
         if: steps.check_bump.outputs.changed != 'false'
-        run: ./gradlew testDebugUnitTest --no-daemon
+        run: ./gradlew :vox-commander:testDebugUnitTest --no-daemon
 
       - name: Build release APK
         if: steps.check_bump.outputs.changed != 'false'
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew :vox-commander:assembleRelease --no-daemon
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -100,7 +100,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
             # Auto-build from versionCode bump: read versionName from gradle
-            VERSION_NAME=$(grep 'versionName' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
+            VERSION_NAME=$(grep 'versionName' vox-commander/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
             TAG="v${VERSION_NAME}"
             if echo "$VERSION_NAME" | grep -qiE '-beta|-rc|-alpha'; then
               IS_PRERELEASE="true"
@@ -122,7 +122,7 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         id: rename
         run: |
-          cp app/build/outputs/apk/release/app-release-unsigned.apk \
+          cp vox-commander/build/outputs/apk/release/vox-commander-release-unsigned.apk \
              VoxCommander-${{ steps.version.outputs.tag }}.apk
           echo "apk_path=VoxCommander-${{ steps.version.outputs.tag }}.apk" >> $GITHUB_OUTPUT
 

@@ -23,5 +23,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Vox Commander"
-include(":app")
+rootProject.name = "VoxApps"
+include(":vox-commander")
