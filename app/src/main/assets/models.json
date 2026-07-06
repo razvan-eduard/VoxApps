@@ -17,6 +17,9 @@
           "label": "Whisper Tiny (Extreme Speed)",
           "path": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
           "size_mb": 75,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -24,6 +27,9 @@
           "label": "Whisper Base (Balanced)",
           "path": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
           "size_mb": 145,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -31,6 +37,9 @@
           "label": "Whisper Small (High Precision)",
           "path": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
           "size_mb": 480,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
           "is_remote": true
         }
       ]
@@ -58,6 +67,7 @@
           "size_mb": 0,
           "size_label": "40M",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -67,6 +77,7 @@
           "size_mb": 0,
           "size_label": "1.8G",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -76,6 +87,7 @@
           "size_mb": 0,
           "size_label": "128M",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -85,6 +97,7 @@
           "size_mb": 0,
           "size_label": "2.3G",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -94,6 +107,7 @@
           "size_mb": 0,
           "size_label": "1.0G",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -103,6 +117,7 @@
           "size_mb": 0,
           "size_label": "129M",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -112,6 +127,7 @@
           "size_mb": 0,
           "size_label": "845M",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -121,6 +137,7 @@
           "size_mb": 0,
           "size_label": "49M",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -130,6 +147,7 @@
           "size_mb": 0,
           "size_label": "1.4G",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -139,6 +157,7 @@
           "size_mb": 0,
           "size_label": "1.6G",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -148,6 +167,7 @@
           "size_mb": 0,
           "size_label": "1G",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -157,6 +177,7 @@
           "size_mb": 0,
           "size_label": "36M",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -166,6 +187,7 @@
           "size_mb": 0,
           "size_label": "42M",
           "lang_code": "cn",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -175,6 +197,7 @@
           "size_mb": 0,
           "size_label": "1.3G",
           "lang_code": "cn",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -184,6 +207,7 @@
           "size_mb": 0,
           "size_label": "1.5G",
           "lang_code": "cn",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -193,6 +217,7 @@
           "size_mb": 0,
           "size_label": "1.8G",
           "lang_code": "ru",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -202,6 +227,7 @@
           "size_mb": 0,
           "size_label": "45M",
           "lang_code": "ru",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -211,6 +237,7 @@
           "size_mb": 0,
           "size_label": "1.5G",
           "lang_code": "ru",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -220,6 +247,7 @@
           "size_mb": 0,
           "size_label": "2.5G",
           "lang_code": "ru",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -229,6 +257,7 @@
           "size_mb": 0,
           "size_label": "41M",
           "lang_code": "fr",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -238,6 +267,7 @@
           "size_mb": 0,
           "size_label": "1.4G",
           "lang_code": "fr",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -247,6 +277,7 @@
           "size_mb": 0,
           "size_label": "39M",
           "lang_code": "fr",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -256,6 +287,7 @@
           "size_mb": 0,
           "size_label": "1.5G",
           "lang_code": "fr",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -265,6 +297,7 @@
           "size_mb": 0,
           "size_label": "1.9G",
           "lang_code": "de",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -274,6 +307,7 @@
           "size_mb": 0,
           "size_label": "4.4G",
           "lang_code": "de",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -283,6 +317,7 @@
           "size_mb": 0,
           "size_label": "49M",
           "lang_code": "de",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -292,6 +327,7 @@
           "size_mb": 0,
           "size_label": "45M",
           "lang_code": "de",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -301,6 +337,7 @@
           "size_mb": 0,
           "size_label": "39M",
           "lang_code": "es",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -310,6 +347,7 @@
           "size_mb": 0,
           "size_label": "1.4G",
           "lang_code": "es",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -319,6 +357,7 @@
           "size_mb": 0,
           "size_label": "31M",
           "lang_code": "pt",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -328,6 +367,7 @@
           "size_mb": 0,
           "size_label": "1.6G",
           "lang_code": "pt",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -337,6 +377,7 @@
           "size_mb": 0,
           "size_label": "1.1G",
           "lang_code": "el",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -346,6 +387,7 @@
           "size_mb": 0,
           "size_label": "35M",
           "lang_code": "tr",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -355,6 +397,7 @@
           "size_mb": 0,
           "size_label": "32M",
           "lang_code": "vn",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -364,6 +407,7 @@
           "size_mb": 0,
           "size_label": "78M",
           "lang_code": "vn",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -373,6 +417,7 @@
           "size_mb": 0,
           "size_label": "48M",
           "lang_code": "it",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -382,6 +427,7 @@
           "size_mb": 0,
           "size_label": "1.2G",
           "lang_code": "it",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -391,6 +437,7 @@
           "size_mb": 0,
           "size_label": "39M",
           "lang_code": "nl",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -400,6 +447,7 @@
           "size_mb": 0,
           "size_label": "860M",
           "lang_code": "nl",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -409,6 +457,7 @@
           "size_mb": 0,
           "size_label": "100M",
           "lang_code": "nl",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -418,6 +467,7 @@
           "size_mb": 0,
           "size_label": "42M",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -427,6 +477,7 @@
           "size_mb": 0,
           "size_label": "318M",
           "lang_code": "ar",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -436,6 +487,7 @@
           "size_mb": 0,
           "size_label": "1.3G",
           "lang_code": "ar",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -445,6 +497,7 @@
           "size_mb": 0,
           "size_label": "158M",
           "lang_code": "ar",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -454,6 +507,7 @@
           "size_mb": 0,
           "size_label": "517M",
           "lang_code": "ar",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -463,6 +517,7 @@
           "size_mb": 0,
           "size_label": "1.6G",
           "lang_code": "fa",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -472,6 +527,7 @@
           "size_mb": 0,
           "size_label": "53M",
           "lang_code": "fa",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -481,6 +537,7 @@
           "size_mb": 0,
           "size_label": "1G",
           "lang_code": "fa",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -490,6 +547,7 @@
           "size_mb": 0,
           "size_label": "60M",
           "lang_code": "fa",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -499,6 +557,7 @@
           "size_mb": 0,
           "size_label": "320M",
           "lang_code": "tl",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -508,6 +567,7 @@
           "size_mb": 0,
           "size_label": "73M",
           "lang_code": "uk",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -517,6 +577,7 @@
           "size_mb": 0,
           "size_label": "133M",
           "lang_code": "uk",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -526,6 +587,7 @@
           "size_mb": 0,
           "size_label": "343M",
           "lang_code": "uk",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -535,6 +597,7 @@
           "size_mb": 0,
           "size_label": "325M",
           "lang_code": "uk",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -544,6 +607,7 @@
           "size_mb": 0,
           "size_label": "58M",
           "lang_code": "kz",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -553,6 +617,7 @@
           "size_mb": 0,
           "size_label": "1.3G",
           "lang_code": "kz",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -562,6 +627,7 @@
           "size_mb": 0,
           "size_label": "289M",
           "lang_code": "sv",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -571,6 +637,7 @@
           "size_mb": 0,
           "size_label": "48M",
           "lang_code": "ja",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -580,6 +647,7 @@
           "size_mb": 0,
           "size_label": "1Gb",
           "lang_code": "ja",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -589,6 +657,7 @@
           "size_mb": 0,
           "size_label": "42M",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -598,6 +667,7 @@
           "size_mb": 0,
           "size_label": "42M",
           "lang_code": "hi",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -607,6 +677,7 @@
           "size_mb": 0,
           "size_label": "1.5Gb",
           "lang_code": "hi",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -616,6 +687,7 @@
           "size_mb": 0,
           "size_label": "44M",
           "lang_code": "cs",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -625,6 +697,7 @@
           "size_mb": 0,
           "size_label": "50M",
           "lang_code": "pl",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -634,6 +707,7 @@
           "size_mb": 0,
           "size_label": "49M",
           "lang_code": "uz",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -643,6 +717,7 @@
           "size_mb": 0,
           "size_label": "82M",
           "lang_code": "ko",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -652,6 +727,7 @@
           "size_mb": 0,
           "size_label": "70M",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -661,6 +737,7 @@
           "size_mb": 0,
           "size_label": "700M",
           "lang_code": "gu",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -670,6 +747,7 @@
           "size_mb": 0,
           "size_label": "100M",
           "lang_code": "gu",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -679,6 +757,7 @@
           "size_mb": 0,
           "size_label": "327M",
           "lang_code": "tg",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -688,6 +767,7 @@
           "size_mb": 0,
           "size_label": "50M",
           "lang_code": "tg",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -697,6 +777,7 @@
           "size_mb": 0,
           "size_label": "58M",
           "lang_code": "te",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -706,6 +787,7 @@
           "size_mb": 0,
           "size_label": "49M",
           "lang_code": "ky",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -715,6 +797,7 @@
           "size_mb": 0,
           "size_label": "1.1G",
           "lang_code": "ky",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -724,6 +807,7 @@
           "size_mb": 0,
           "size_label": "45M",
           "lang_code": "ka",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -733,6 +817,7 @@
           "size_mb": 0,
           "size_label": "700M",
           "lang_code": "ka",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -742,6 +827,7 @@
           "size_mb": 0,
           "size_label": "13M",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -751,6 +837,7 @@
           "size_mb": 0,
           "size_label": "1.6G",
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -760,6 +847,7 @@
           "size_mb": 0,
           "size_label": "1.6G",
           "lang_code": "ru",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -769,6 +857,7 @@
           "size_mb": 0,
           "size_label": "1.1G",
           "lang_code": "de",
+          "engine_type": null,
           "is_remote": true
         }
       ]
@@ -790,6 +879,9 @@
           "label": "Alexa",
           "path": "openwakeword/alexa_v0.1.onnx",
           "size_mb": 1,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
           "is_remote": false
         },
         {
@@ -797,6 +889,9 @@
           "label": "Hey Jarvis",
           "path": "openwakeword/hey_jarvis_v0.1.onnx",
           "size_mb": 1,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
           "is_remote": false
         },
         {
@@ -804,6 +899,9 @@
           "label": "Hey Mycroft",
           "path": "openwakeword/hey_mycroft_v0.1.onnx",
           "size_mb": 1,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
           "is_remote": false
         },
         {
@@ -811,6 +909,9 @@
           "label": "Hey Rhasspy",
           "path": "openwakeword/hey_rhasspy_v0.1.onnx",
           "size_mb": 1,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
           "is_remote": false
         }
       ]
@@ -829,19 +930,136 @@
         "wake_word_text"
       ],
       "models": [
-        { "id": "porcupine_builtin_alexa", "label": "Alexa", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_americano", "label": "Americano", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_blueberry", "label": "Blueberry", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_bumblebee", "label": "Bumblebee", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_computer", "label": "Computer", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_grapefruit", "label": "Grapefruit", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_grasshopper", "label": "Grasshopper", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_hey google", "label": "Hey Google", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_hey siri", "label": "Hey Siri", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_jarvis", "label": "Jarvis", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_picovoice", "label": "Picovoice", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_porcupine", "label": "Porcupine", "path": "", "size_mb": 0, "is_remote": false },
-        { "id": "porcupine_builtin_terminator", "label": "Terminator", "path": "", "size_mb": 0, "is_remote": false }
+        {
+          "id": "porcupine_builtin_alexa",
+          "label": "Alexa",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_americano",
+          "label": "Americano",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_blueberry",
+          "label": "Blueberry",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_bumblebee",
+          "label": "Bumblebee",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_computer",
+          "label": "Computer",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_grapefruit",
+          "label": "Grapefruit",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_grasshopper",
+          "label": "Grasshopper",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_hey google",
+          "label": "Hey Google",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_hey siri",
+          "label": "Hey Siri",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_jarvis",
+          "label": "Jarvis",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_picovoice",
+          "label": "Picovoice",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_porcupine",
+          "label": "Porcupine",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        },
+        {
+          "id": "porcupine_builtin_terminator",
+          "label": "Terminator",
+          "path": "",
+          "size_mb": 0,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": null,
+          "is_remote": false
+        }
       ]
     },
     "nlu_llm": {
@@ -857,6 +1075,8 @@
           "label": "Qwen 2.5 1.5B (High Precision q8)",
           "path": "https://github.com/razvan-eduard/VoxCommander/releases/download/nlu-assets/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
           "size_mb": 1490,
+          "size_label": null,
+          "lang_code": null,
           "engine_type": "MEDIAPIPE_GENAI",
           "is_remote": true
         },
@@ -865,6 +1085,8 @@
           "label": "Qwen 2.5 0.5B (Fastest q8)",
           "path": "https://github.com/razvan-eduard/VoxCommander/releases/download/nlu-assets/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
           "size_mb": 521,
+          "size_label": null,
+          "lang_code": null,
           "engine_type": "MEDIAPIPE_GENAI",
           "is_remote": true
         },
@@ -873,6 +1095,8 @@
           "label": "Gemma 3 1B (High Precision q8)",
           "path": "https://github.com/razvan-eduard/VoxCommander/releases/download/nlu-assets/Gemma3-1B-IT_seq128_q8_ekv1280.task",
           "size_mb": 1020,
+          "size_label": null,
+          "lang_code": null,
           "engine_type": "MEDIAPIPE_GENAI",
           "is_remote": true
         }
@@ -894,7 +1118,9 @@
           "label": "English (US) — Amy (Low)",
           "path": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-low.tar.bz2",
           "size_mb": 30,
+          "size_label": null,
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -902,7 +1128,9 @@
           "label": "English (UK) — Ryan (Low)",
           "path": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_GB-ryan-low.tar.bz2",
           "size_mb": 30,
+          "size_label": null,
           "lang_code": "en",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -910,7 +1138,9 @@
           "label": "Romanian — Mihai (Low)",
           "path": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ro_RO-mihai-low.tar.bz2",
           "size_mb": 30,
+          "size_label": null,
           "lang_code": "ro",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -918,7 +1148,9 @@
           "label": "German — Thorsten (Low)",
           "path": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-de_DE-thorsten-low.tar.bz2",
           "size_mb": 30,
+          "size_label": null,
           "lang_code": "de",
+          "engine_type": null,
           "is_remote": true
         },
         {
@@ -926,7 +1158,9 @@
           "label": "French — Siwis (Low)",
           "path": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fr_FR-siwis-low.tar.bz2",
           "size_mb": 30,
+          "size_label": null,
           "lang_code": "fr",
+          "engine_type": null,
           "is_remote": true
         }
       ]
