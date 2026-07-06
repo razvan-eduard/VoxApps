@@ -62,6 +62,17 @@ object AppResolver {
             }
         }
 
+        // 2b. No star set — fall back to the first app the user assigned to this domain. Custom
+        // categories have no probed default, so an assigned app acts as the implicit default.
+        if (settings != null) {
+            val assignedPkg = settings.domainAppPackages[intent.domain]?.firstOrNull { it.isNotBlank() }
+            val assigned = assignedPkg?.let { AppRegistry.resolveByPackage(it) }
+            if (assigned != null) {
+                Logger.log("Using first assigned app for '${intent.domain}' -> ${assigned.packageName}", TAG)
+                return assigned
+            }
+        }
+
         // 3. Try domain default (first installed app)
         val domainDefault = AppRegistry.getDefaultAppForDomain(intent.domain)
         if (domainDefault != null) {
