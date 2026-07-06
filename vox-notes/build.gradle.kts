@@ -14,6 +14,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1"
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     buildTypes {
@@ -45,8 +46,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    // Encrypted-at-rest storage: SQLCipher for Room + Keystore-backed passphrase
-    implementation("net.zetetic:android-database-sqlcipher:4.5.4")
+    // Encrypted-at-rest storage: SQLCipher for Room + Keystore-backed passphrase.
+    // sqlcipher-android (new edition) ships 16 KB-page-aligned native libs (Play requirement).
+    implementation("net.zetetic:sqlcipher-android:4.6.1")
     implementation("androidx.sqlite:sqlite:2.4.0")
     implementation(libs.androidx.security.crypto)
 }

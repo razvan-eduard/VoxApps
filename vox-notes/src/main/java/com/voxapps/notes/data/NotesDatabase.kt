@@ -4,8 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import net.sqlcipher.database.SQLiteDatabase
-import net.sqlcipher.database.SupportFactory
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(entities = [Note::class], version = 1, exportSchema = false)
 abstract class NotesDatabase : RoomDatabase() {
@@ -20,8 +19,7 @@ abstract class NotesDatabase : RoomDatabase() {
         }
 
         private fun build(context: Context): NotesDatabase {
-            SQLiteDatabase.loadLibs(context)
-            val factory = SupportFactory(DbKey.getOrCreatePassphrase(context))
+            val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, NotesDatabase::class.java, "vox-notes.db")
                 .openHelperFactory(factory)
                 .build()
