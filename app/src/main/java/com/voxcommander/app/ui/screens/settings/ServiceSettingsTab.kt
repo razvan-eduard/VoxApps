@@ -7,6 +7,8 @@ import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -517,6 +519,7 @@ fun ServiceSettingsTab(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         var pendingSensitivity by remember { mutableStateOf<String?>(null) }
+        val sensitivityScope = rememberCoroutineScope()
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -556,10 +559,16 @@ fun ServiceSettingsTab(
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        appStateManager.setWakeWordSensitivity(level)
-                        // Hot-reload the running engine so the new threshold takes effect now.
-                        if (uiState.isWakeWordServiceListening) onStartService()
+                        val wasListening = uiState.isWakeWordServiceListening
                         pendingSensitivity = null
+                        // Persist, THEN wait for the reactive state to reflect it, THEN reload.
+                        // uiState/getSettingsSnapshot are updated by a background flow collector, so
+                        // reloading immediately would re-init the engine with the OLD sensitivity.
+                        sensitivityScope.launch {
+                            settingsRepo.setWakeWordSensitivity(level)
+                            appStateManager.uiState.first { it.wakeWordSensitivity == level }
+                            if (wasListening) onStartService()
+                        }
                     }) { Text(languageManager.getString("apply_button") ?: "Apply") }
                 },
                 dismissButton = {
