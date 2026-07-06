@@ -251,16 +251,19 @@ class ModelDownloader(private val context: Context) {
             return true
         }
 
-        // Vosk/ZIP models: require a NON-EMPTY 'am' directory — an empty one means a broken
-        // extraction (e.g. the old non-recursive flatten left subdirs hollow). Check both the
-        // flat layout and a possible nested wrapper (older/interrupted extractions).
+        // Vosk/ZIP models must have a NON-EMPTY 'am' directory DIRECTLY under the model dir —
+        // Vosk's Model(path) cannot load a nested layout, and an empty 'am' means a broken
+        // extraction (e.g. the old non-recursive flatten left subdirs hollow).
         fun amPopulated(dir: File): Boolean {
             val am = File(dir, "am")
             return am.isDirectory && (am.listFiles()?.isNotEmpty() == true)
         }
-        val hasAmDir = amPopulated(targetDir) ||
-            targetDir.listFiles()?.any { it.isDirectory && amPopulated(it) } == true
-        if (!hasAmDir) {
+        // Self-heal a legacy/interrupted extraction that left the archive's wrapper dir in place
+        // (e.g. model/model/am/...): flatten it so 'am' sits directly under the model dir.
+        if (!amPopulated(targetDir)) {
+            flattenNestedDir(targetDir)
+        }
+        if (!amPopulated(targetDir)) {
             Logger.log("Model $modelId missing/empty 'am' directory — deleting incomplete model", TAG)
             targetDir.deleteRecursively()
             return false
