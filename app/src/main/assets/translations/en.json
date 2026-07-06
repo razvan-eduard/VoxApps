@@ -148,6 +148,7 @@
   "ww_sensitivity_confirm_title": "Change sensitivity?",
   "ww_sensitivity_confirm_msg": "Set wake word sensitivity to \"%s\"? The wake word engine will reload to apply it.",
   "apply_button": "Apply",
+  "ww_api_key_required": "This engine requires an API key. Enter it above to start.",
   "stt_sensitivity_label": "Microphone Sensitivity",
   "stt_sensitivity_desc": "Adjust how sensitive the microphone is when listening for commands",
   "stt_sensitivity_low": "Low",

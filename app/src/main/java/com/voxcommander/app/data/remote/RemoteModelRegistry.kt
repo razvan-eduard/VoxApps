@@ -284,23 +284,6 @@ object RemoteModelRegistry {
             newMap[key] = models
         }
 
-        // Inject Porcupine built-in keywords as virtual models (not in models.json)
-        val porcupineKeywords = listOf(
-            "alexa", "americano", "blueberry", "bumblebee", "computer",
-            "grapefruit", "grasshopper", "hey google", "hey siri", "jarvis",
-            "picovoice", "porcupine", "terminator"
-        )
-        val porcupineModels = porcupineKeywords.map { kw ->
-            VirtualModelItem(
-                id = "porcupine_builtin_$kw",
-                label = kw.replaceFirstChar { it.uppercase() },
-                engineType = "wake_porcupine",
-                sizeDescription = "Built-in"
-            )
-        }
-        newMap["wake_porcupine"] = porcupineModels.toMutableList()
-        Logger.log("Injected ${porcupineModels.size} Porcupine built-in keyword models", TAG)
-
         Logger.log("Final modelMap keys: ${newMap.keys}", TAG)
         _modelMap.value = newMap
     }
@@ -317,11 +300,7 @@ object RemoteModelRegistry {
     }
 
     fun getEngineKeysByType(type: String): List<String> {
-        val result = cachedSchema?.engines?.filter { type in it.value.type }?.keys?.toMutableList() ?: mutableListOf()
-        // Add virtual engines not in models.json
-        if (type == "wake_word" && !result.contains("wake_porcupine")) {
-            result.add("wake_porcupine")
-        }
+        val result = cachedSchema?.engines?.filter { type in it.value.type }?.keys?.toList() ?: emptyList()
         Logger.log("getEngineKeysByType(type=$type) -> $result", TAG)
         return result
     }
@@ -338,7 +317,6 @@ object RemoteModelRegistry {
             Strings.AiProcessors.OPENAI -> languageManager.getString("engine_label_openai_gpt")
             Strings.AiProcessors.GEMINI_NATIVE -> languageManager.getString("engine_label_gemini_nano")
             Strings.AiProcessors.GEMINI_CLOUD -> languageManager.getString("engine_label_gemini_cloud")
-            "wake_porcupine" -> "Porcupine"
             else -> engineKey.replace("_", " ").uppercase()
         }
     }
@@ -377,10 +355,6 @@ object RemoteModelRegistry {
     fun isMultilingual(engineKey: String): Boolean = cachedSchema?.engines?.get(engineKey)?.is_multilingual ?: false
 
     fun hasCapability(engineKey: String, capability: String): Boolean {
-        // Virtual engines with hardcoded capabilities
-        if (engineKey == "wake_porcupine") {
-            return capability in listOf("builtin_keywords", "requires_api_key", "wake_word_text")
-        }
         return capability in (cachedSchema?.engines?.get(engineKey)?.capabilities ?: emptyList())
     }
 

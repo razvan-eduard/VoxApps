@@ -673,10 +673,15 @@ fun ServiceSettingsTab(
                 model != null && uiState.isModelDownloaded(model.id)
             }
 
+        // Engines flagged `requires_api_key` (e.g. Porcupine → Picovoice AccessKey) can't start
+        // without a key — block it here instead of failing at runtime.
+        val hasApiKey = !uiState.picovoiceAccessKey.isNullOrBlank()
+        val apiKeyOk = !requiresApiKey || hasApiKey
+
         Button(
             onClick = if (uiState.isWakeWordServiceListening) onStopService else onStartService,
             modifier = Modifier.fillMaxWidth(),
-            enabled = uiState.isWakeWordServiceListening || isModelOnDevice,
+            enabled = uiState.isWakeWordServiceListening || (isModelOnDevice && apiKeyOk),
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (uiState.isWakeWordServiceListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
             )
@@ -688,6 +693,15 @@ fun ServiceSettingsTab(
         if (supportsModelDownload && !isModelOnDevice && !uiState.isWakeWordServiceListening) {
             Text(
                 text = "Selected model not on device. Please download the model first.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        // Show warning if an API key is required but not set (blocks start)
+        if (requiresApiKey && !hasApiKey && !uiState.isWakeWordServiceListening) {
+            Text(
+                text = languageManager.getString("ww_api_key_required") ?: "This engine requires an API key. Enter it above to start.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error
             )

@@ -193,6 +193,10 @@ class WakeWordService : Service() {
         startForeground(NOTIFICATION_ID, createNotification())
 
         serviceScope.launch {
+            // Ensure the model registry is loaded in this process (loads from filesDir, no network)
+            // so hasCapability()/model labels resolve in the notification even on a cold start.
+            com.voxcommander.app.data.remote.RemoteModelRegistry.fetchJson(settingsRepo, force = false)
+
             val snapshot = settingsRepo.getSettingsSnapshot()
             val wakeWord = snapshot.wakeWord
             val engineType = snapshot.wakeWordEngineType
@@ -453,10 +457,12 @@ class WakeWordService : Service() {
         val voiceState = uiState.voiceState
         val snapshot = settingsRepo.getSettingsSnapshot()
         val engineType = snapshot.wakeWordEngineType
-        // For Porcupine / OpenWakeWord the *model* is the wake word — there is no free-text word
-        // and any (Vosk-only) voice profile is irrelevant. For Vosk the trigger is either a
-        // calibrated voice profile or the manually-typed wake word.
-        val modelDeterminesWakeWord = engineType.contains("porcupine") || engineType.contains("openwakeword")
+        // Capability-driven: engines with `builtin_models` (OpenWakeWord, Porcupine) use the
+        // selected model/keyword AS the wake word — there is no free-text word and any (Vosk-only)
+        // voice profile is irrelevant. Engines without it (Vosk) use a calibrated voice profile or
+        // the manually-typed wake word.
+        val modelDeterminesWakeWord =
+            com.voxcommander.app.data.remote.RemoteModelRegistry.hasCapability(engineType, "builtin_models")
         val profileJson = settingsRepo.getWakeWordProfileJson()
         val hasVoiceProfile = profileJson != null && !modelDeterminesWakeWord
         val profileName = profileJson?.let { WakeWordProfile.fromJson(it)?.profileName }
@@ -469,9 +475,10 @@ class WakeWordService : Service() {
                 com.voxcommander.app.data.remote.RemoteModelRegistry.getModels(engineType)
                     .find { it.id == modelId }?.label ?: modelId
             } else currentModelDisplayName.ifBlank { null }
-            // Keep only the first block of ASCII letters — ignore everything from the first
-            // symbol/digit onward (e.g. "alexa_v0.1.onnx" -> "alexa", "hey-jarvis" -> "hey").
-            raw?.let { Regex("[A-Za-z]+").find(it)?.value ?: it }
+            // Keep the leading name (letters, underscores, spaces — so multi-word keywords like
+            // "Hey Jarvis" survive) but drop everything from the first version/format character
+            // (digit, '.', '-', '(') onward: "Modelul_meu_wake-0.1.1" -> "Modelul_meu_wake".
+            raw?.let { s -> Regex("^[^-0-9.(]+").find(s)?.value?.trim()?.takeIf { it.isNotBlank() } ?: s }
         } else null
 
         val finalContentText = contentText ?: when {

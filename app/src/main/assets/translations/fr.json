@@ -139,6 +139,7 @@
   "ww_sensitivity_confirm_title": "Modifier la sensibilité ?",
   "ww_sensitivity_confirm_msg": "Définir la sensibilité du mot d'éveil sur « %s » ? Le moteur de mot d'éveil sera rechargé pour l'appliquer.",
   "apply_button": "Appliquer",
+  "ww_api_key_required": "Ce moteur nécessite une clé API. Saisissez-la ci-dessus pour démarrer.",
   "stt_sensitivity_label": "Sensibilité du Microphone",
   "stt_sensitivity_desc": "Ajustez la sensibilité du microphone lors de l'écoute des commandes",
   "stt_sensitivity_low": "Bas",

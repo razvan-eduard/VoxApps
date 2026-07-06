@@ -815,6 +815,35 @@
         }
       ]
     },
+    "wake_porcupine": {
+      "is_multilingual": false,
+      "engine_label": "Porcupine",
+      "extension": "",
+      "type": [
+        "wake_word"
+      ],
+      "capabilities": [
+        "builtin_keywords",
+        "builtin_models",
+        "requires_api_key",
+        "wake_word_text"
+      ],
+      "models": [
+        { "id": "porcupine_builtin_alexa", "label": "Alexa", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_americano", "label": "Americano", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_blueberry", "label": "Blueberry", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_bumblebee", "label": "Bumblebee", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_computer", "label": "Computer", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_grapefruit", "label": "Grapefruit", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_grasshopper", "label": "Grasshopper", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_hey google", "label": "Hey Google", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_hey siri", "label": "Hey Siri", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_jarvis", "label": "Jarvis", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_picovoice", "label": "Picovoice", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_porcupine", "label": "Porcupine", "path": "", "size_mb": 0, "is_remote": false },
+        { "id": "porcupine_builtin_terminator", "label": "Terminator", "path": "", "size_mb": 0, "is_remote": false }
+      ]
+    },
     "nlu_llm": {
       "is_multilingual": false,
       "engine_label": "NLU (LLM)",
