@@ -48,10 +48,12 @@ VoxApplication.onCreate()
     → AppRegistry (PackageManager scan or cached JSON)
     → RemoteModelRegistry (parse models.json)
     → SearchProviderRegistry (parse search_definitions.json)
+    → IntentCatalog (parse intents.json — before the AppRegistry probe scan)
     → SpotifyRemoteManager (set client ID)
     → SpotifyPkceManager (load persisted tokens)
     → NewPipeExtractorHelper.warmUp() (if newpipe engine selected)
     → PipedSearchHelper.useNewPipe flag set
+    → reconcileDownloadedModels() (clear stale on-device flags vs disk)
     → WakeWordService started (if enabled)
 ```
 
@@ -88,25 +90,52 @@ interface IWakeWordEngine {
 
 ### Available Engines
 
+All three wake engines are defined in `models.json` (`wake_vosk`, `wake_openwakeword`, `wake_porcupine`) and are selected by **capability**, not by hardcoded engine names. Relevant capabilities:
+
+| Capability | Meaning |
+|------------|---------|
+| `wake_word_text` | User types the wake word (Vosk) |
+| `calibration` | Supports a calibrated voice profile (Vosk) |
+| `builtin_models` | The selected model IS the wake word — no free-text (OpenWakeWord, Porcupine) |
+| `builtin_keywords` | Ships fixed built-in keywords (Porcupine) |
+| `requires_api_key` | Blocks Start until a key is set (Porcupine → Picovoice AccessKey) |
+
+`WakeWordService.startWakeWordDetection()` dispatches to the concrete engine class by engine key; everything else (which models exist, whether an API key is required, whether the model or a typed word is the trigger) is read from the schema via `RemoteModelRegistry.hasCapability(...)`.
+
 #### Vosk (`WakeWordEngine.kt`)
 
 - **Template Mode + Voice Print** — DTW (Dynamic Time Warping) matches the acoustic template of the user's wake word recording.
 - **Voice Print Verification** — After template match, spectral features are compared against the user's voice print (threshold: 0.65 similarity). Rejects TTS audio and other speakers.
 - **Calibration** — `WakeWordCalibrator` measures ambient noise floor and sets a calibrated detection threshold.
 - **AEC** — Optional Acoustic Echo Cancellation for wake word detection during media/TTS playback (`wakeWordAecEnabled`).
-- **Sensitivity** — Three levels: low, medium, high (adjusts DTW threshold).
 
 #### Picovoice Porcupine (`PorcupineWakeWordEngine.kt`)
 
-- Uses Picovoice's Porcupine SDK with pre-trained wake word models.
-- Requires a Picovoice Access Key (`picovoiceAccessKey` in settings).
-- Supports custom `.ppn` model files.
+- Uses Picovoice's Porcupine SDK. The 13 built-in keywords (alexa, jarvis, computer, …) are defined as **non-remote models in `models.json`** (`wake_porcupine` engine) — no longer injected in Kotlin. Selecting one sets it as the wake word.
+- Requires a Picovoice Access Key (`picovoiceAccessKey`); the Service tab disables **Start** and shows a warning until the key is entered (driven by the `requires_api_key` capability).
+- Also supports custom `.ppn` model files in assets.
 
 #### OpenWakeWord (`OpenWakeWordEngine.kt`)
 
-- Fully open-source, ONNX-based wake word detection.
-- Uses `xyz.rementia:openwakeword:0.1.5` library.
-- ONNX models loaded at runtime.
+- Fully open-source, ONNX-based wake word detection via `xyz.rementia:openwakeword:0.1.5`. Models are `wake_openwakeword` entries in `models.json` (bundled in `assets/openwakeword/`).
+- **Startup warmup** — Detections in the first 1.5 s after each `start()` are ignored. Right after `start()` the mel/embedding feature buffers aren't primed and emit spurious high scores; without this guard the detect → command → re-arm cycle self-triggers into a loop.
+
+### Sensitivity (`WakeWordSensitivity.kt`)
+
+The low/medium/high **Wake Word Sensitivity** setting maps to a per-engine threshold in one shared, unit-tested helper. Note the engines disagree on direction:
+
+| Setting | OpenWakeWord (score ≥ threshold) | Porcupine (`setSensitivities`) | Vosk template DTW |
+|---------|------|------|------|
+| high | 0.3 (easier) | 0.7 (more sensitive) | 0.35 |
+| medium | 0.5 | 0.5 | 0.45 |
+| low | 0.7 (stricter) | 0.3 (less sensitive) | 0.55 |
+
+Sensitivity is baked in at engine `initialize()`, so changing it requires an engine reload. The Service tab shows a **confirmation dialog** on change and, if the service is running, persists the value (awaiting the write and the reactive-state propagation) and then hot-reloads the engine so the new threshold applies immediately.
+
+### Debounce & Notification
+
+- **App-level debounce** — `WakeWordService.onWakeWordDetected()` drops triggers arriving within 2.5 s of the last accepted one (a full wake→command cycle always exceeds this).
+- **Foreground notification** shows what actually triggers the wake, capability-driven: Vosk manual word → `Listening for '<word>'`; Vosk voice profile → `Listening <profileName>`; `builtin_models` engines → the selected model label (first ASCII-letter block, version suffix stripped, e.g. `hey_jarvis_v0.1.onnx` → `Hey Jarvis`).
 
 ### Wake Word Profile
 
@@ -357,10 +386,12 @@ Fallback handler — launches any app by name or package.
 
 ### AppRegistry (`AppRegistry.kt`)
 
-- **Static fallback** — Well-known apps (Spotify, YouTube, Waze, Google Maps, LibreTube) with predefined domains and URI templates
 - **Dynamic scan** — `PackageManager` scan at startup, caches results as JSON (`appCacheJson`)
-- **Domain mapping** — Each app has associated domains (audio, maps, messaging)
-- **URI templates** — Probed from app metadata (e.g., LibreTube `SEARCH` → `https://www.youtube.com/watch?v={query}`)
+- **Capability probing** — For each installed app, `KnownIntents.probeSupported()` fires each catalog entry against `queryIntentActivities` (by probe URI / MIME type / bare action) to discover which intents that app actually supports, plus a "launch" fallback.
+- **Domain mapping** — Deduced from each supported entry's `templateAction` via `template_action_domains` (navigate→maps, search→audio, send→messaging).
+- **URI templates** — Taken from the matched catalog entries (e.g., a browser `VIEW`/`https` → `https://www.youtube.com/watch?v={query}`).
+
+**The probe catalog is data-driven** — see `IntentCatalog` (`domain/intent/registry/IntentCatalog.kt`), which loads `intents.json` (root → assets → filesDir → remote, hot-reloadable like `models.json`; see §17). A compact hardcoded seed is used only if the asset read fails. The behavioral handlers (§6) stay in code; the catalog only feeds them.
 
 ### AppResolver (`AppResolver.kt`)
 
@@ -599,12 +630,18 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 }
 ```
 
-### Model Download
+### Model Download & Extraction (`ModelDownloader.kt`)
 
 - Models downloaded to app's files directory
 - `downloadedModelIds` — Set of downloaded model IDs in settings
 - `customModelPaths` — Map of custom local model paths (user-provided)
 - Download preference: `wifi_only` or `wifi_and_metered`
+- **Archive extraction** — `.zip` (Vosk) / `.tar.bz2` (Piper) are unpacked, then `flattenNestedDir()` collapses a single wrapper directory (`model/model/…` → `model/…`) using a `renameTo` move with a `copyRecursively` fallback. (A plain `File.copyTo` is non-recursive for directories, which used to leave a Vosk model's `am/ conf/ graph/` empty → "Failed to create a model".)
+- **Validation** — `validateModel()` requires a *populated* `am/` for Vosk/zip models; if it finds a nested wrapper it self-heals by flattening in place, otherwise it deletes the corrupt dir and returns false.
+
+### Startup Reconciliation (`VoxApplication.reconcileDownloadedModels()`)
+
+The green "on-device" indicator is a persisted `downloadedModelIds` flag, not recomputed from disk, so it can drift (files deleted externally, a hollow extraction). At startup a background pass validates every downloaded model against disk (archive models via `validateModel`, file models via a presence check — only registry-known ids) and clears the flag for anything missing/corrupt, so it turns re-downloadable. Runs decoupled from the network fetch; loads the registry locally first (`fetchJson(force = false)`).
 
 ### Whisper Native Libraries
 
@@ -792,7 +829,7 @@ UI: Settings → App Manager → External voice trigger toggle
 
 ## 17. Dynamic JSON Configuration
 
-VoxCommander uses three external JSON files for extensible, hot-reloadable configuration. All ship in `app/src/main/assets/` and can be updated from a remote GitHub repo at runtime — no app update required.
+VoxCommander uses four external JSON files for extensible, hot-reloadable configuration. All ship in `app/src/main/assets/` and can be updated from a remote GitHub repo at runtime — no app update required. `models.json`, `search_definitions.json`, and `intents.json` are authored at the repo root and copied into assets by Gradle; `normalization.json` lives directly in assets.
 
 ### models.json
 
@@ -803,13 +840,17 @@ VoxCommander uses three external JSON files for extensible, hot-reloadable confi
 **Contents**:
 - `schema_version` — Integer, used to detect newer versions for hot-reload
 - `prompts.standard_nlu` — The NLU system prompt sent to LLM interpreters (OpenAI, Gemini, Local LLM). Contains sentence anatomy rules, domain/action taxonomy, and JSON output format
-- `engines` — Map of engine key → engine definition:
+- `engines` — Map of engine key → engine definition. Each engine has `type`, `is_multilingual`, `extension`, a `capabilities` list, and a `models` array:
   - `stt_whisper` — Whisper.cpp models (tiny, base, small) with download URLs and sizes
-  - `wake_vosk` — Vosk wake word models
+  - `wake_vosk` — Vosk models (`voice` + `wake_word`); capabilities include `calibration`, `wake_word_text`, `model_download`
+  - `wake_openwakeword` — OpenWakeWord ONNX models (bundled); capability `builtin_models`
+  - `wake_porcupine` — Porcupine built-in keywords (virtual, no file); capabilities `builtin_keywords`, `builtin_models`, `requires_api_key`
+  - `nlu_llm` — Local LLM (GGUF) models
   - `piper_tts` — Piper TTS voice models (language, speaker, download URL)
-  - `stt_vosk` — Vosk STT models (for offline speech recognition)
 
-**Hot-reload**: At startup, `RemoteModelRegistry` checks `modelRepoBaseUrl` setting for a newer `models.json`. If the remote schema version is higher, it downloads and caches it.
+  Every model entry carries the same key set (`id, label, path, size_mb, size_label, lang_code, engine_type, is_remote`) — `null` where unused — for a uniform structure.
+
+**Hot-reload**: At startup, `RemoteModelRegistry` checks `modelRepoBaseUrl` setting for a newer `models.json`. If the remote schema version is higher, it downloads and caches it (never downgrades below the bundled asset version).
 
 ### search_definitions.json
 
@@ -831,6 +872,23 @@ VoxCommander uses three external JSON files for extensible, hot-reloadable confi
 **Hot-reload**: `SearchProviderRegistry.loadFromRemote()` fetches `search_definitions.json` from the remote repo URL (converted from GitHub URL to `raw.githubusercontent.com`). Falls back to assets copy if remote is unavailable. Local copy stored in `filesDir/search_definitions.json`.
 
 **Adding a new search provider**: Just add a new entry to `search_definitions.json` — no code changes needed. `DynamicSearchProvider` (`domain/search/DynamicSearchProvider.kt`) creates providers from JSON definitions at runtime.
+
+### intents.json
+
+**Location**: Repo root → copied to assets by `copyIntentsJson` Gradle task (`preBuild` dependency)
+
+**Parsed by**: `IntentCatalog` (`domain/intent/registry/IntentCatalog.kt`) — mirrors `SearchProviderRegistry` (init / fetchRemote / ensureLocalFile / loadFromFilesDir / saveLocalFile, schema-versioned no-downgrade).
+
+**Purpose**: The catalog of standard Android intents probed per installed app (previously the hardcoded `KnownIntents.PROBE_MAP` in `AppRegistry.kt`). See §7 — `AppRegistry.probeSupported()`/`probeMetadata()` iterate this catalog.
+
+**Contents**:
+- `schema_version` — Integer, for hot-reload detection
+- `template_action_domains` — Map of `templateAction` → domain (`navigate`→`maps`, `search`→`audio`, `send`→`messaging`)
+- `intents` — Array of intent definitions: `action` (the literal Android action string, e.g. `android.intent.action.VIEW`), `probe_uri`, `uri_template` (with `{query}`/`{destination}`/`{contact}` placeholders), `label`, `template_action`, `requires_query`, `mime_type`
+
+**Hot-reload**: fetched from the remote repo at startup and via the Settings "Sync JSON" button, same mechanism as `models.json`/`search_definitions.json`. If the JSON is missing/unparseable, a compact hardcoded seed (core routing intents) keeps the app functional.
+
+**Adding a probeable intent**: add an entry to `intents.json` — no code change. `IntentCatalogTest` is a golden test asserting each SDK action constant is transcribed byte-exact (a mistyped literal would silently never match).
 
 ### normalization.json
 
@@ -887,9 +945,15 @@ val copySearchDefinitions = tasks.register<Copy>("copySearchDefinitions") {
     into("${projectDir}/src/main/assets")
 }
 
+val copyIntentsJson = tasks.register<Copy>("copyIntentsJson") {
+    from("${project.rootDir}/intents.json")
+    into("${projectDir}/src/main/assets")
+}
+
 tasks.named("preBuild") {
     dependsOn(copyModelsJson)
     dependsOn(copySearchDefinitions)
+    dependsOn(copyIntentsJson)
 }
 ```
 
@@ -933,8 +997,9 @@ tasks.named("preBuild") {
 | `autoCheckVosk` | Checks for newer Vosk version on JitPack |
 | `copyModelsJson` | Copies `models.json` from repo root to assets |
 | `copySearchDefinitions` | Copies `search_definitions.json` from repo root to assets |
+| `copyIntentsJson` | Copies `intents.json` from repo root to assets |
 
-All four tasks are dependencies of `preBuild`.
+All five tasks are dependencies of `preBuild`.
 
 ### Repositories
 
