@@ -30,6 +30,12 @@ class OpenWakeWordEngine(
     private var isListening = false
     private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // Priming window after each start(): OpenWakeWord's mel/embedding feature buffers aren't
+    // filled yet, so the first inferences emit spurious high scores. Ignoring detections during
+    // this window prevents a self-triggering loop (detect → command → re-arm → instant re-detect).
+    private val WARMUP_MS = 1500L
+    @Volatile private var listenStartMs = 0L
+
     companion object {
         const val ENGINE_KEY = "wake_openwakeword"
     }
@@ -108,11 +114,18 @@ class OpenWakeWordEngine(
             appStateManager.setWakeWordServiceListening(true)
             appStateManager.setVoiceState(VoiceState.LISTENING_WAKEWORD)
 
+            listenStartMs = android.os.SystemClock.elapsedRealtime()
             eng.start()
 
             // Collect detections from the Flow
             detectionJob = engineScope.launch {
                 eng.detections.collect { detection: WakeWordDetection ->
+                    val sinceStart = android.os.SystemClock.elapsedRealtime() - listenStartMs
+                    if (sinceStart < WARMUP_MS) {
+                        // Feature buffers still priming — this is a startup transient, not a real hit.
+                        Logger.log("OpenWakeWord warmup: ignoring detection ${detection.model.name} (score=${detection.score}, ${sinceStart}ms after start)", TAG)
+                        return@collect
+                    }
                     Logger.log("OpenWakeWord detected: ${detection.model.name} (score=${detection.score})", TAG)
                     onWakeWordDetected()
                 }
