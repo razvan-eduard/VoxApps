@@ -205,9 +205,11 @@ app/src/main/java/com/voxcommander/app/
 
 | Engine | Type | Models |
 |--------|------|--------|
-| Vosk | On-device | Template mode + voice print verification |
-| Porcupine | On-device | Picovoice models (requires access key) |
-| OpenWakeWord | On-device | ONNX models (open-source) |
+| Vosk | On-device | Template mode + voice print verification; typed wake word or calibrated profile |
+| Porcupine | On-device | Built-in keywords (from `models.json`); requires a Picovoice access key |
+| OpenWakeWord | On-device | ONNX models (open-source), bundled |
+
+All three are defined in `models.json` and selected by capability (not hardcoded). A single **Wake Word Sensitivity** (low/medium/high) maps to a per-engine threshold; changing it prompts a confirmation and hot-reloads the running engine.
 
 ### YouTube Search Engines
 
@@ -220,18 +222,19 @@ Both engines resolve a search query to a YouTube video ID, then launch `youtu.be
 
 ### Dynamic JSON Configuration
 
-VoxCommander uses external JSON files for extensible configuration. These ship in `app/src/main/assets/` and can be hot-reloaded from a remote GitHub repo at runtime — no app update needed to add models, search providers, or normalization rules.
+VoxCommander uses external JSON files for extensible configuration. These ship in `app/src/main/assets/` and can be hot-reloaded from a remote GitHub repo at runtime — no app update needed to add models, search providers, probeable intents, or normalization rules.
 
 | File | Purpose | Location |
 |------|---------|----------|
-| `models.json` | AI/ML model definitions (Whisper, Vosk, Piper TTS, wake word), NLU prompt template, engine metadata | Repo root → copied to assets at build time |
+| `models.json` | AI/ML model definitions (Whisper, Vosk, Piper TTS, OpenWakeWord, Porcupine keywords, local LLM), NLU prompt template, engine metadata + capabilities | Repo root → copied to assets at build time |
 | `search_definitions.json` | Search provider definitions (DuckDuckGo, Wikipedia, Google News, GNews, WeatherAPI, Open-Meteo) — categories, endpoints, API key requirements, response parsers | Repo root → copied to assets at build time |
+| `intents.json` | Catalog of Android intents probed per app (action, probe URI, URI template, domain mapping) — the data behind "arbitrary dynamic intent to any app" | Repo root → copied to assets at build time |
 | `normalization.json` | 3-layer text normalization rules per language (abbreviations, regex interceptors, cleanup) — corrects STT output before NLU processing | `app/src/main/assets/normalization.json` |
 
 **How it works:**
-- At build time, `copyModelsJson` and `copySearchDefinitions` Gradle tasks copy the JSON from repo root into `assets/`
-- At runtime, the app checks the remote repo (`modelRepoBaseUrl` setting) for newer versions and downloads them if the schema version is higher
-- Adding a new search provider or model = just update the JSON, no code changes required
+- At build time, `copyModelsJson`, `copySearchDefinitions`, and `copyIntentsJson` Gradle tasks copy the JSON from repo root into `assets/`
+- At runtime, the app checks the remote repo (`modelRepoBaseUrl` setting) for newer versions and downloads them if the schema version is higher (never downgrading below the bundled copy)
+- Adding a new model, search provider, or probeable intent = just update the JSON, no code changes required
 
 ### External Voice Trigger
 
