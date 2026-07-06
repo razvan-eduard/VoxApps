@@ -516,6 +516,7 @@ fun ServiceSettingsTab(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        var pendingSensitivity by remember { mutableStateOf<String?>(null) }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -528,10 +529,45 @@ fun ServiceSettingsTab(
             levels.forEachIndexed { idx, level ->
                 FilterChip(
                     selected = uiState.wakeWordSensitivity == level,
-                    onClick = { appStateManager.setWakeWordSensitivity(level) },
+                    onClick = { if (uiState.wakeWordSensitivity != level) pendingSensitivity = level },
                     label = { Text(labels[idx]) }
                 )
             }
+        }
+
+        // Confirm before changing sensitivity: Porcupine/OpenWakeWord bake the threshold at engine
+        // init, so the change only applies after the engine reloads. If the service is running we
+        // reload it automatically so the new value takes effect immediately.
+        pendingSensitivity?.let { level ->
+            val levelLabel = when (level) {
+                "low" -> languageManager.getString("ww_sensitivity_low") ?: "Low"
+                "high" -> languageManager.getString("ww_sensitivity_high") ?: "High"
+                else -> languageManager.getString("ww_sensitivity_medium") ?: "Medium"
+            }
+            AlertDialog(
+                onDismissRequest = { pendingSensitivity = null },
+                title = { Text(languageManager.getString("ww_sensitivity_confirm_title") ?: "Change sensitivity?") },
+                text = {
+                    Text(
+                        (languageManager.getString("ww_sensitivity_confirm_msg")
+                            ?: "Set wake word sensitivity to \"%s\"? The wake word engine will reload to apply it.")
+                            .format(levelLabel)
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        appStateManager.setWakeWordSensitivity(level)
+                        // Hot-reload the running engine so the new threshold takes effect now.
+                        if (uiState.isWakeWordServiceListening) onStartService()
+                        pendingSensitivity = null
+                    }) { Text(languageManager.getString("apply_button") ?: "Apply") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingSensitivity = null }) {
+                        Text(languageManager.getString("cancel_button") ?: "Cancel")
+                    }
+                }
+            )
         }
 
         // --- ENGINE-SPECIFIC: Model Selection via EngineModelSection ---
