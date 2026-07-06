@@ -7,7 +7,7 @@
   },
   "taxonomy": {
     "domains": ["audio", "settings", "maps", "messaging", "system", "home", "search"],
-    "actions": ["play", "pause", "stop", "next", "prev", "volume_up", "volume_down", "wifi_toggle", "bluetooth_toggle", "gps_toggle", "navigate", "send", "query"],
+    "actions": ["play", "pause", "stop", "next", "prev", "volume_up", "volume_down", "wifi_toggle", "bluetooth_toggle", "gps_toggle", "navigate", "send", "query", "launch"],
     "actions_by_domain": {
       "audio": ["play", "pause", "stop", "next", "prev"],
       "settings": ["volume_up", "volume_down", "wifi_toggle", "bluetooth_toggle", "gps_toggle"],
