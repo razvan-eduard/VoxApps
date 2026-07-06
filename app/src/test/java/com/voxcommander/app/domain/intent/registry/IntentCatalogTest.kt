@@ -46,6 +46,35 @@ class IntentCatalogTest {
     }
 
     @Test
+    fun `taxonomy is present and covers the code vocabulary (superset invariant)`() {
+        val tax = schema().taxonomy
+        assertTrue("taxonomy block must be present", tax != null)
+        tax!!
+
+        // The JSON must not drop any domain/action the code relies on (handlers dispatch on these).
+        // Extra (satellite) domains are allowed — this only checks the seed is a subset.
+        val seedDomains = listOf("audio", "settings", "maps", "messaging", "system", "home", "search")
+        for (d in seedDomains) {
+            assertTrue("taxonomy.domains missing '$d'", tax.domains.contains(d))
+        }
+
+        val seedActions = listOf(
+            "play", "pause", "stop", "next", "prev", "volume_up", "volume_down",
+            "wifi_toggle", "bluetooth_toggle", "gps_toggle", "navigate", "send", "query"
+        )
+        for (a in seedActions) {
+            assertTrue("taxonomy.actions missing '$a'", tax.actions.contains(a))
+        }
+
+        // Per-domain actions must match for the handler domains (can't silently drift).
+        assertEquals(listOf("play", "pause", "stop", "next", "prev"), tax.actionsByDomain["audio"])
+        assertEquals(listOf("volume_up", "volume_down", "wifi_toggle", "bluetooth_toggle", "gps_toggle"), tax.actionsByDomain["settings"])
+        assertEquals(listOf("navigate"), tax.actionsByDomain["maps"])
+        assertEquals(listOf("send"), tax.actionsByDomain["messaging"])
+        assertEquals(listOf("query"), tax.actionsByDomain["search"])
+    }
+
+    @Test
     fun `every intent has a non-blank action and label`() {
         for (def in schema().intents) {
             assertTrue("blank action for '${def.label}'", def.action.isNotBlank())
