@@ -241,7 +241,7 @@ object IntentCatalog {
     private val FALLBACK_TAXONOMY: TaxonomyDef = TaxonomyDef(
         domains = listOf("audio", "settings", "maps", "messaging", "system", "home", "search"),
         actions = listOf("play", "pause", "stop", "next", "prev", "volume_up", "volume_down",
-            "wifi_toggle", "bluetooth_toggle", "gps_toggle", "navigate", "send", "query"),
+            "wifi_toggle", "bluetooth_toggle", "gps_toggle", "navigate", "send", "query", "launch"),
         actionsByDomain = mapOf(
             "audio" to listOf("play", "pause", "stop", "next", "prev"),
             "settings" to listOf("volume_up", "volume_down", "wifi_toggle", "bluetooth_toggle", "gps_toggle"),

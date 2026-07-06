@@ -60,7 +60,7 @@ class IntentCatalogTest {
 
         val seedActions = listOf(
             "play", "pause", "stop", "next", "prev", "volume_up", "volume_down",
-            "wifi_toggle", "bluetooth_toggle", "gps_toggle", "navigate", "send", "query"
+            "wifi_toggle", "bluetooth_toggle", "gps_toggle", "navigate", "send", "query", "launch"
         )
         for (a in seedActions) {
             assertTrue("taxonomy.actions missing '$a'", tax.actions.contains(a))

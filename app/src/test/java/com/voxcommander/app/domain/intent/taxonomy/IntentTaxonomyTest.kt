@@ -22,7 +22,8 @@ class IntentTaxonomyTest {
 
     @Test
     fun `Actions ALL contains all known actions`() {
-        assertEquals(13, IntentTaxonomy.Actions.ALL.size)
+        assertEquals(14, IntentTaxonomy.Actions.ALL.size)
+        assertTrue(IntentTaxonomy.Actions.ALL.contains("launch"))
     }
 
     @Test

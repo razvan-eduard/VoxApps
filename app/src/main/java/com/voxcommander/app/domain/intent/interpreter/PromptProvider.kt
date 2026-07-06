@@ -36,8 +36,9 @@ object PromptProvider {
         }
         val langHint = modelFilterLang?.let { "\nInput language: $it." } ?: ""
         val systemPart = stripToRules(template)
+        val allDomains = (IntentTaxonomy.Domains.ALL + (settings?.customDomains ?: emptyList())).distinct()
         return systemPart
-            .replace(PLACEHOLDER_DOMAINS, IntentTaxonomy.Domains.ALL.joinToString(", ") { "\"$it\"" })
+            .replace(PLACEHOLDER_DOMAINS, allDomains.joinToString(", ") { "\"$it\"" })
             .replace(PLACEHOLDER_ACTIONS, IntentTaxonomy.Actions.ALL.joinToString(", ") { "\"$it\"" })
             .replace(PLACEHOLDER_APPS, buildAppsSection(settings))
             .replace(PLACEHOLDER_SEARCH, buildSearchSection(settingsRepo))
@@ -80,8 +81,13 @@ object PromptProvider {
             ?.flatMap { rule -> rule.aliases.map { alias -> alias to rule.packageName } }
             ?.toMap() ?: emptyMap()
 
-        for (domain in IntentTaxonomy.Domains.ALL) {
-            val apps = AppRegistry.getInstalledAppsForDomain(domain)
+        val domains = (IntentTaxonomy.Domains.ALL + (settings?.customDomains ?: emptyList())).distinct()
+        for (domain in domains) {
+            // Probed apps for the domain, plus any the user manually assigned (custom categories
+            // only live in domainAppPackages — they have no probed domain).
+            val assigned = settings?.domainAppPackages?.get(domain)
+                ?.mapNotNull { AppRegistry.resolveByPackage(it) } ?: emptyList()
+            val apps = (AppRegistry.getInstalledAppsForDomain(domain) + assigned).distinctBy { it.packageName }
             if (apps.isEmpty()) continue
 
             val defaultPkg = settings?.defaultAppPackages?.get(domain)

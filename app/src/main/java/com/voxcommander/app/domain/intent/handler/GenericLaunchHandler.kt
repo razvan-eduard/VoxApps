@@ -10,15 +10,14 @@ import com.voxcommander.app.utils.IntentUtils
 import com.voxcommander.app.utils.Logger
 
 /**
- * Handles "custom" domain intents from FastMap rules.
- * Fires the intentAction specified in the rule (e.g. MEDIA_PLAY_FROM_SEARCH)
- * with the query as an extra. Falls back to simple launch if no action specified.
+ * Catch-all handler (registered LAST in IntentRouter). Runs only for intents no specific handler
+ * (Search/Audio/Navigation/System/Messaging) claimed — i.e. the "custom" domain from FastMap rules
+ * AND any custom-category domain from DefaultApps. Fires the rule's intentAction with the query as
+ * an extra, or just launches the resolved default app when no action is specified.
  */
 class GenericLaunchHandler : IntentHandler {
 
-    override fun canHandle(intent: NluIntent): Boolean {
-        return intent.domain == "custom"
-    }
+    override fun canHandle(intent: NluIntent): Boolean = true
 
     override fun execute(context: Context, intent: NluIntent, resolvedApp: AppRegistry.AppEntry?): Boolean {
         val pkg = intent.targetApp ?: resolvedApp?.packageName
