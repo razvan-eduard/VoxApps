@@ -134,11 +134,7 @@ class WakeWordEngine(
             similarityThreshold = profile.similarityThreshold
             storedTemplate = VoiceFeatureExtractor.decodeSequence(profile.wakeWordTemplate)
             val sensitivity = appStateManager.uiState.value.wakeWordSensitivity
-            val sensitivityThreshold = when (sensitivity) {
-                "high" -> 0.35f
-                "low" -> 0.55f
-                else -> 0.45f // medium
-            }
+            val sensitivityThreshold = WakeWordSensitivity.voskTemplateThreshold(sensitivity)
             templateThreshold = profile.templateThreshold.coerceAtMost(sensitivityThreshold)
             useTemplateMode = storedTemplate != null
             Logger.log("Calibrated: threshold=$voiceRmsThreshold, voicePrint=${if (storedVoicePrint != null) "yes" else "no"}, templateMode=$useTemplateMode, templateThreshold=$templateThreshold", TAG)
@@ -479,18 +475,27 @@ class WakeWordEngine(
     }
 
     override fun releaseForMemoryPressure() {
-        if (!isListening) {
-            Logger.log("Releasing Vosk model for memory pressure (model=${storedModelPath})", TAG)
-            AppScope.io.launch {
-                appStateManager.executeSecureVoiceAction {
-                    try { recognizer?.close() } catch (_: Exception) {}
-                    try { model?.close() } catch (_: Exception) {}
-                    recognizer = null
-                    model = null
-                }
-            }
-        } else {
+        // Only release when genuinely idle. `!isListening` alone is not enough: during a
+        // command flow the service calls stopListening() (isListening=false) while voiceState
+        // is PROCESSING/LISTENING_COMMAND — releasing there frees the recognizer mid-flight
+        // and the async reinit can lose the next wake trigger.
+        val voiceState = appStateManager.uiState.value.voiceState
+        if (isListening) {
             Logger.log("Skipping memory pressure release — engine is actively listening", TAG)
+            return
+        }
+        if (voiceState != VoiceState.IDLE) {
+            Logger.log("Skipping memory pressure release — command flow in progress (state=$voiceState)", TAG)
+            return
+        }
+        Logger.log("Releasing Vosk model for memory pressure (model=${storedModelPath})", TAG)
+        AppScope.io.launch {
+            appStateManager.executeSecureVoiceAction {
+                try { recognizer?.close() } catch (_: Exception) {}
+                try { model?.close() } catch (_: Exception) {}
+                recognizer = null
+                model = null
+            }
         }
     }
 
