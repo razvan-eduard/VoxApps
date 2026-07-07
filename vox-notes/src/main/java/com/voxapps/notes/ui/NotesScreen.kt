@@ -60,7 +60,7 @@ fun NotesScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    var editing by remember { mutableStateOf<EditorTarget?>(null) }
+    var editing by remember { mutableStateOf<EditBuffer?>(null) }
     var showDateSheet by remember { mutableStateOf(false) }
 
     ModalNavigationDrawer(
@@ -98,7 +98,10 @@ fun NotesScreen(
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = { editing = EditorTarget.New }) {
+                FloatingActionButton(onClick = {
+                    commitEdit(editing, stateManager)
+                    editing = EditBuffer(id = null, title = "", text = "", categoryId = state.selectedCategoryId)
+                }) {
                     Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.add_note))
                 }
             }
@@ -109,34 +112,48 @@ fun NotesScreen(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // New-note draft editor at the top.
+                    if (editing?.id == null && editing != null) {
+                        item(key = "new-note-editor") {
+                            NoteEditorCard(
+                                title = editing!!.title,
+                                text = editing!!.text,
+                                categoryId = editing!!.categoryId,
+                                categories = state.categories,
+                                onTitleChange = { editing = editing!!.copy(title = it) },
+                                onTextChange = { editing = editing!!.copy(text = it) },
+                                onCategoryChange = { editing = editing!!.copy(categoryId = it) },
+                                onDone = { commitEdit(editing, stateManager); editing = null },
+                                onDelete = { editing = null }
+                            )
+                        }
+                    }
                     items(state.notes, key = { it.note.id }) { nwc ->
-                        NoteCard(
-                            item = nwc,
-                            onClick = { editing = EditorTarget.Edit(nwc.note) },
-                            onDelete = { stateManager.deleteNote(nwc.note) }
-                        )
+                        if (editing?.id == nwc.note.id) {
+                            NoteEditorCard(
+                                title = editing!!.title,
+                                text = editing!!.text,
+                                categoryId = editing!!.categoryId,
+                                categories = state.categories,
+                                onTitleChange = { editing = editing!!.copy(title = it) },
+                                onTextChange = { editing = editing!!.copy(text = it) },
+                                onCategoryChange = { editing = editing!!.copy(categoryId = it) },
+                                onDone = { commitEdit(editing, stateManager); editing = null },
+                                onDelete = { stateManager.deleteNote(nwc.note); editing = null }
+                            )
+                        } else {
+                            CollapsedNoteCard(
+                                item = nwc,
+                                onClick = {
+                                    commitEdit(editing, stateManager)
+                                    editing = EditBuffer(nwc.note.id, nwc.note.title.orEmpty(), nwc.note.text, nwc.note.categoryId)
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
-    }
-
-    editing?.let { target ->
-        NoteEditorDialog(
-            initial = (target as? EditorTarget.Edit)?.note,
-            categories = state.categories,
-            defaultCategoryId = state.selectedCategoryId,
-            onDismiss = { editing = null },
-            onSave = { title, text, categoryId ->
-                when (target) {
-                    EditorTarget.New -> stateManager.addNote(title, text, categoryId)
-                    is EditorTarget.Edit -> stateManager.updateNote(
-                        target.note.copy(title = title, text = text, categoryId = categoryId)
-                    )
-                }
-                editing = null
-            }
-        )
     }
 
     if (showDateSheet) {
@@ -158,9 +175,20 @@ fun NotesScreen(
     }
 }
 
-private sealed interface EditorTarget {
-    data object New : EditorTarget
-    data class Edit(val note: Note) : EditorTarget
+/** Local edit buffer for the inline note editor. [id] == null means a new (unsaved) note. */
+private data class EditBuffer(val id: Long?, val title: String, val text: String, val categoryId: Long?)
+
+/** Persist an edit buffer: create/update when it has content, delete an emptied existing note. */
+private fun commitEdit(buf: EditBuffer?, stateManager: NotesStateManager) {
+    if (buf == null) return
+    val title = buf.title.trim().ifBlank { null }
+    val text = buf.text.trim()
+    val empty = title == null && text.isEmpty()
+    when {
+        buf.id == null -> if (!empty) stateManager.addNote(title, text, buf.categoryId)
+        empty -> stateManager.deleteNoteById(buf.id)
+        else -> stateManager.updateNoteFields(buf.id, title, text, buf.categoryId)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -193,44 +221,3 @@ private fun FilterChipsRow(state: NotesUiState.Unlocked, stateManager: NotesStat
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun NoteCard(item: NoteWithCategory, onClick: () -> Unit, onDelete: () -> Unit) {
-    val note = item.note
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            item.category?.let { cat ->
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(CategoryColors.fromStored(cat.colorArgb))
-                )
-            }
-            Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
-                if (!note.title.isNullOrBlank()) {
-                    Text(
-                        note.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                if (note.text.isNotBlank()) {
-                    Text(
-                        note.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.delete))
-            }
-        }
-    }
-}

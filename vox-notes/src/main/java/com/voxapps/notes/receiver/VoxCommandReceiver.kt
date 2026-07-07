@@ -4,13 +4,16 @@ import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import com.voxapps.ipc.VoxCommand
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
 import com.voxapps.notes.NotesApplication
+import com.voxapps.notes.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The satellite's entire "brain" — NO NLU/LLM. It receives a Commander-authored [VoxCommand] JSON,
@@ -37,11 +40,30 @@ class VoxCommandReceiver : BroadcastReceiver() {
             }
 
             VoxIpc.OP_CREATE -> {
-                container.notesStateManager.addNote(
-                    title = command.title,
-                    text = command.text.orEmpty(),
-                    categoryId = null
-                )
+                val text = command.text.orEmpty()
+                val settings = container.settingsRepository.getSnapshot()
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val resolved = container.notesRepository.addVoiceNote(
+                            title = command.title,
+                            text = text,
+                            spokenCategory = command.category,
+                            defaultCategoryId = settings.defaultVoiceCategoryId,
+                            createdAt = System.currentTimeMillis()
+                        )
+                        if (settings.voiceSaveToastEnabled) {
+                            val label = command.title?.takeIf { it.isNotBlank() } ?: text
+                            val msg = context.getString(R.string.toast_note_saved, label) +
+                                (resolved.categoryName?.let { " · $it" } ?: "")
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context.applicationContext, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } finally {
+                        pending.finish()
+                    }
+                }
             }
 
             VoxIpc.OP_READ -> {

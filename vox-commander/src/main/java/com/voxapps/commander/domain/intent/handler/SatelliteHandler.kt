@@ -53,7 +53,12 @@ class SatelliteHandler : IntentHandler {
             ?: intent.actionVerb.takeIf { it.isNotBlank() }
             ?: return false
 
-        val payload = VoxCommand(op = VoxIpc.OP_CREATE, text = text, domain = intent.domain).toJson()
+        val payload = VoxCommand(
+            op = VoxIpc.OP_CREATE,
+            text = text,
+            category = intent.category?.takeIf { it.isNotBlank() },
+            domain = intent.domain
+        ).toJson()
         context.sendBroadcast(
             Intent(VoxIpc.ACTION_COMMAND).setPackage(pkg).putExtra(VoxIpc.EXTRA_PAYLOAD, payload)
         )

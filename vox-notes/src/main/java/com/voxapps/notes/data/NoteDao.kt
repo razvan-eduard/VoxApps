@@ -29,6 +29,13 @@ interface NoteDao {
     @Query("UPDATE notes SET categoryId = NULL WHERE categoryId = :categoryId")
     suspend fun clearCategory(categoryId: Long)
 
+    /** Partial update from the inline editor — preserves createdAt. */
+    @Query("UPDATE notes SET title = :title, text = :text, categoryId = :categoryId WHERE id = :id")
+    suspend fun updateFields(id: Long, title: String?, text: String, categoryId: Long?)
+
+    @Query("DELETE FROM notes WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
     @Update
     suspend fun update(note: Note)
 

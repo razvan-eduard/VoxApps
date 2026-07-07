@@ -27,9 +27,36 @@ class NotesRepository(
         noteDao.insert(Note(title = cleanTitle, text = clean, createdAt = createdAt, categoryId = categoryId))
     }
 
+    /**
+     * Headless voice-note insert: resolves the spoken category name (or the configured default) to a
+     * category, saves, and returns the resolved [VoiceCategoryResolver.Resolved] so the caller can
+     * toast the category name. Uncategorized when nothing resolves.
+     */
+    suspend fun addVoiceNote(
+        title: String?,
+        text: String,
+        spokenCategory: String?,
+        defaultCategoryId: Long?,
+        createdAt: Long
+    ): VoiceCategoryResolver.Resolved {
+        val resolved = VoiceCategoryResolver.resolve(spokenCategory, categoryDao.observeAll().first(), defaultCategoryId)
+        addNote(title, text, resolved.categoryId, createdAt)
+        return resolved
+    }
+
     suspend fun updateNote(note: Note) = noteDao.update(note)
 
+    /** Update editable fields by id (keeps createdAt). Deletes the note if it ends up empty. */
+    suspend fun updateNoteFields(id: Long, title: String?, text: String, categoryId: Long?) {
+        val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanText = text.trim()
+        if (cleanTitle == null && cleanText.isEmpty()) noteDao.deleteById(id)
+        else noteDao.updateFields(id, cleanTitle, cleanText, categoryId)
+    }
+
     suspend fun deleteNote(note: Note) = noteDao.delete(note)
+
+    suspend fun deleteNoteById(id: Long) = noteDao.deleteById(id)
 
     // --- CATEGORIES ---
     suspend fun addCategory(name: String, colorArgb: Long, position: Int, createdAt: Long): Long {

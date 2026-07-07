@@ -33,6 +33,13 @@
     <string name="settings">Settings</string>
     <string name="general">General</string>
     <string name="back">Back</string>
+    <string name="notifications">Notifications</string>
+    <string name="voice_save_toast">Toast when a note is saved by voice</string>
+    <string name="voice_save_toast_desc">Show a confirmation (text + category) when VoxCommander saves a note</string>
+    <string name="default_voice_category">Default category for voice notes</string>
+    <string name="default_voice_category_desc">Voice notes without a spoken category go here</string>
+    <string name="toast_note_saved">Note saved: %1$s</string>
+
     <string name="require_fingerprint">Require fingerprint to read notes</string>
     <string name="require_fingerprint_desc">Notes stay encrypted at rest; this gates reading them in the app and via VoxCommander</string>
     <string name="session_timeout">Session timeout</string>

@@ -14,4 +14,6 @@ interface NotesSettingsRepository {
 
     suspend fun setBiometricRequired(required: Boolean)
     suspend fun setSessionTimeoutMinutes(minutes: Int)
+    suspend fun setDefaultVoiceCategoryId(id: Long?)
+    suspend fun setVoiceSaveToastEnabled(enabled: Boolean)
 }

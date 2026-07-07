@@ -75,6 +75,8 @@ class NotesStateManager internal constructor(
     // --- SETTINGS WRITES (delegate to repo; settingsFlow updates uiState reactively) ---
     fun setBiometricRequired(required: Boolean) { scope.launch { settingsRepo.setBiometricRequired(required) } }
     fun setSessionTimeoutMinutes(minutes: Int) { scope.launch { settingsRepo.setSessionTimeoutMinutes(minutes) } }
+    fun setDefaultVoiceCategoryId(id: Long?) { scope.launch { settingsRepo.setDefaultVoiceCategoryId(id) } }
+    fun setVoiceSaveToastEnabled(enabled: Boolean) { scope.launch { settingsRepo.setVoiceSaveToastEnabled(enabled) } }
 
     // --- SESSION LOCK ---
     /** Called after a successful biometric auth; opens the read window per the timeout setting. */
@@ -99,7 +101,11 @@ class NotesStateManager internal constructor(
     }
 
     fun updateNote(note: Note) { scope.launch { notesRepo.updateNote(note) } }
+    fun updateNoteFields(id: Long, title: String?, text: String, categoryId: Long?) {
+        scope.launch { notesRepo.updateNoteFields(id, title, text, categoryId) }
+    }
     fun deleteNote(note: Note) { scope.launch { notesRepo.deleteNote(note) } }
+    fun deleteNoteById(id: Long) { scope.launch { notesRepo.deleteNoteById(id) } }
 
     // --- CATEGORY CRUD (delegated) ---
     fun addCategory(name: String, colorArgb: Long) {
