@@ -1,5 +1,6 @@
 package com.voxapps.commander.domain.intent.interpreter
 
+import com.voxapps.commander.domain.integration.VoxAppInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -41,5 +42,31 @@ class PromptProviderTest {
         val noExamples = "Rules here.\nInput: \"\${spokenText}\"\nJSON:"
         val rules = PromptProvider.stripToRules(noExamples)
         assertEquals("Rules here.", rules)
+    }
+
+    // --- Satellite-declared NLU hints (injected dynamically, no models.json edit per satellite) ---
+
+    private fun sat(domain: String?, hint: String?) =
+        VoxAppInfo(packageName = "com.x.$domain", label = domain ?: "x", domain = domain, actions = emptyList(), nluHint = hint)
+
+    @Test
+    fun `no satellite hint appends nothing`() {
+        assertEquals("", PromptProvider.buildSatelliteHints(emptyList()))
+        assertEquals("", PromptProvider.buildSatelliteHints(listOf(sat("notes", null), sat("notes", "  "))))
+    }
+
+    @Test
+    fun `hinted satellites are appended as domain-specific lines`() {
+        val out = PromptProvider.buildSatelliteHints(
+            listOf(sat("expenses", "amount -> extras.amount"), sat("tasks", "due -> extras.due"))
+        )
+        assertTrue(out.contains("Domain-specific extraction:"))
+        assertTrue(out.contains("- expenses: amount -> extras.amount"))
+        assertTrue(out.contains("- tasks: due -> extras.due"))
+    }
+
+    @Test
+    fun `hint without a domain is skipped`() {
+        assertEquals("", PromptProvider.buildSatelliteHints(listOf(sat(null, "some hint"))))
     }
 }

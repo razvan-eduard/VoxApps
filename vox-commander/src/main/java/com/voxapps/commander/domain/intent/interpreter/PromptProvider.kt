@@ -2,6 +2,8 @@ package com.voxapps.commander.domain.intent.interpreter
 
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.integration.VoxAppInfo
+import com.voxapps.commander.domain.integration.VoxSatelliteRegistry
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
 import com.voxapps.commander.domain.search.SearchProviderRegistry
@@ -42,7 +44,22 @@ object PromptProvider {
             .replace(PLACEHOLDER_ACTIONS, IntentTaxonomy.Actions.ALL.joinToString(", ") { "\"$it\"" })
             .replace(PLACEHOLDER_APPS, buildAppsSection(settings))
             .replace(PLACEHOLDER_SEARCH, buildSearchSection(settingsRepo))
+            .plus(buildSatelliteHints(VoxSatelliteRegistry.apps.value))
             .plus(langHint)
+    }
+
+    /**
+     * Domain-specific extraction hints declared by installed satellites (via meta-data). Lets a rich
+     * companion app teach the LLM its own fields without any edit to Commander/models.json. Returns an
+     * empty string (nothing appended) when no installed satellite declares a hint.
+     */
+    internal fun buildSatelliteHints(apps: List<VoxAppInfo>): String {
+        val hinted = apps.filter { !it.nluHint.isNullOrBlank() && !it.domain.isNullOrBlank() }
+        if (hinted.isEmpty()) return ""
+        return buildString {
+            append("\n\nDomain-specific extraction:")
+            for (app in hinted) append("\n- ${app.domain}: ${app.nluHint!!.trim()}")
+        }
     }
 
     /**

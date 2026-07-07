@@ -43,6 +43,13 @@ object VoxIpc {
     const val META_ACTIONS = "com.voxapps.vox.actions"
     const val META_LABEL = "com.voxapps.vox.label"
 
+    /**
+     * Optional free-text NLU hint the satellite declares to teach Commander how to extract its
+     * domain-specific fields (e.g. "put the amount in extras.amount"). Injected into the NLU prompt
+     * dynamically, so a rich satellite needs no edits to Commander/models.json. Omit for simple apps.
+     */
+    const val META_NLU_HINT = "com.voxapps.vox.nluHint"
+
     // --- Custom permissions (guard the exported receivers) ---
     const val SPEAK_PERMISSION = "com.voxapps.commander.permission.SPEAK"
 

@@ -23,7 +23,9 @@ data class VoxAppInfo(
     val domain: String?,
     val actions: List<String>,
     /** True if signed with Commander's own key — a "first-party" satellite that wins routing ties. */
-    val isFirstParty: Boolean = false
+    val isFirstParty: Boolean = false,
+    /** Optional NLU extraction hint the satellite advertises; injected into the prompt. */
+    val nluHint: String? = null
 )
 
 /**
@@ -48,7 +50,15 @@ object VoxAppsDiscovery {
                 val domain = md?.getString(VoxIpc.META_DOMAIN)
                 val actions = md?.getString(VoxIpc.META_ACTIONS)
                     ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
-                VoxAppInfo(info.packageName, label, domain, actions, isFirstParty(pm, context.packageName, info.packageName))
+                val nluHint = md?.getString(VoxIpc.META_NLU_HINT)?.trim()?.takeIf { it.isNotEmpty() }
+                VoxAppInfo(
+                    packageName = info.packageName,
+                    label = label,
+                    domain = domain,
+                    actions = actions,
+                    isFirstParty = isFirstParty(pm, context.packageName, info.packageName),
+                    nluHint = nluHint
+                )
             }
             .distinctBy { it.packageName }
             .sortedBy { it.label.lowercase() }
