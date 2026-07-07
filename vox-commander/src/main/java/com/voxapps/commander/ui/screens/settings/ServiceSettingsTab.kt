@@ -624,39 +624,43 @@ fun ServiceSettingsTab(
             )
         }
 
-        // --- COMMON: Wake Word Text Field ---
+        // --- Wake Word Text Field — only for engines that accept a typed custom word ---
+        // (capability `wake_word_text`, e.g. Vosk). Porcupine/OpenWakeWord pick a built-in keyword or
+        // model from the dropdown instead, so no free-text box for them.
         val hasProfile = uiState.wakeWordProfileJson != null
 
-        val isWakeWordModelOnDevice = if (supportsBuiltinKeywords || hasBuiltinModels) true
-            else remember(selectedModel, refreshTrigger) {
-                val model = selectedModel ?: displayModels.firstOrNull()
-                model != null && uiState.isModelDownloaded(model.id)
-            }
-
-        var localWakeWord by remember { mutableStateOf(uiState.wakeWord ?: "") }
-        LaunchedEffect(uiState.wakeWord) {
-            if ((uiState.wakeWord ?: "") != localWakeWord) {
-                localWakeWord = uiState.wakeWord ?: ""
-            }
-        }
-
-        VoiceInputTextField(
-            value = if (hasProfile) "" else localWakeWord,
-            onValueChange = {
-                if (!hasProfile) {
-                    localWakeWord = it
-                    appStateManager.setWakeWord(it)
+        if (supportsWakeWordText) {
+            val isWakeWordModelOnDevice = if (supportsBuiltinKeywords || hasBuiltinModels) true
+                else remember(selectedModel, refreshTrigger) {
+                    val model = selectedModel ?: displayModels.firstOrNull()
+                    model != null && uiState.isModelDownloaded(model.id)
                 }
-            },
-            label = { Text(languageManager.getString("wake_word_label")) },
-            placeholder = { Text(if (hasProfile) languageManager.getString("ww_profile_used") else languageManager.getString("wake_word_hint")) },
 
-            modelFilterLang = uiState.modelFilterLang,
-            voiceProcessor = uiState.voiceProcessor,
-            isModelOnDevice = isWakeWordModelOnDevice,
-            readOnly = hasProfile,
-            enabled = !hasProfile
-        )
+            var localWakeWord by remember { mutableStateOf(uiState.wakeWord ?: "") }
+            LaunchedEffect(uiState.wakeWord) {
+                if ((uiState.wakeWord ?: "") != localWakeWord) {
+                    localWakeWord = uiState.wakeWord ?: ""
+                }
+            }
+
+            VoiceInputTextField(
+                value = if (hasProfile) "" else localWakeWord,
+                onValueChange = {
+                    if (!hasProfile) {
+                        localWakeWord = it
+                        appStateManager.setWakeWord(it)
+                    }
+                },
+                label = { Text(languageManager.getString("wake_word_label")) },
+                placeholder = { Text(if (hasProfile) languageManager.getString("ww_profile_used") else languageManager.getString("wake_word_hint")) },
+
+                modelFilterLang = uiState.modelFilterLang,
+                voiceProcessor = uiState.voiceProcessor,
+                isModelOnDevice = isWakeWordModelOnDevice,
+                readOnly = hasProfile,
+                enabled = !hasProfile
+            )
+        }
 
         // Built-in keywords hint
         if (supportsBuiltinKeywords) {

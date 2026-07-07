@@ -926,8 +926,7 @@
       "capabilities": [
         "builtin_keywords",
         "builtin_models",
-        "requires_api_key",
-        "wake_word_text"
+        "requires_api_key"
       ],
       "models": [
         {
