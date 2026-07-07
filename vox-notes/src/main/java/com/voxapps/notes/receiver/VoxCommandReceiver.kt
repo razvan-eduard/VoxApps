@@ -50,6 +50,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                             text = text,
                             spokenCategory = command.category,
                             defaultCategoryId = settings.defaultVoiceCategoryId,
+                            autoCreate = settings.autoCreateVoiceCategory,
                             createdAt = System.currentTimeMillis()
                         )
                         if (settings.voiceSaveToastEnabled) {

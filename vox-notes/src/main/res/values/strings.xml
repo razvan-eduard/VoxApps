@@ -38,6 +38,8 @@
     <string name="voice_save_toast_desc">Show a confirmation (text + category) when VoxCommander saves a note</string>
     <string name="default_voice_category">Default category for voice notes</string>
     <string name="default_voice_category_desc">Voice notes without a spoken category go here</string>
+    <string name="auto_create_voice_category">Create missing categories from voice</string>
+    <string name="auto_create_voice_category_desc">If you say a category that doesn\'t exist, create it (auto-colored) instead of falling back</string>
     <string name="toast_note_saved">Note saved: %1$s</string>
 
     <string name="require_fingerprint">Require fingerprint to read notes</string>

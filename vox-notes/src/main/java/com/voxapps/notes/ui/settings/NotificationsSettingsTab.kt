@@ -85,5 +85,23 @@ fun NotificationsSettingsTab(
                 }
             }
         }
+
+        HorizontalDivider()
+
+        // --- Auto-create spoken categories ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.auto_create_voice_category), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    stringResource(R.string.auto_create_voice_category_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.autoCreateVoiceCategory,
+                onCheckedChange = { stateManager.setAutoCreateVoiceCategory(it) }
+            )
+        }
     }
 }

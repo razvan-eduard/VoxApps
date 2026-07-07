@@ -2,6 +2,7 @@ package com.voxapps.notes.data.preferences
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class NotesSettingsTest {
@@ -11,6 +12,14 @@ class NotesSettingsTest {
         val s = NotesSettings()
         assertFalse(s.isBiometricRequired)
         assertEquals(NotesSettings.TIMEOUT_30M, s.sessionTimeoutMinutes)
+    }
+
+    @Test
+    fun `voice-note defaults are off and uncategorized`() {
+        val s = NotesSettings()
+        assertNull(s.defaultVoiceCategoryId)
+        assertFalse(s.voiceSaveToastEnabled)
+        assertFalse(s.autoCreateVoiceCategory)
     }
 
     @Test

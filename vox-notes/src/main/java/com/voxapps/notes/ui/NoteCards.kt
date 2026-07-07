@@ -1,15 +1,14 @@
 package com.voxapps.notes.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,7 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -28,24 +28,31 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voxapps.notes.R
 import com.voxapps.notes.data.Category
 import com.voxapps.notes.data.NoteWithCategory
+import kotlin.math.abs
 
 /** Low-alpha tint applied to a note card's background from its category color. */
 private const val CARD_TINT_ALPHA = 0.18f
@@ -144,7 +151,7 @@ fun NoteEditorCard(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp).padding(top = 8.dp)
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -159,7 +166,8 @@ fun NoteEditorCard(
                 }
             }
 
-            CategoryCarousel(
+            // Vertical coverflow category picker on the right edge.
+            CategoryCoverflow(
                 categories = categories,
                 selectedId = categoryId,
                 onSelect = onCategoryChange
@@ -169,65 +177,91 @@ fun NoteEditorCard(
 }
 
 /**
- * Vertical color carousel: "none" + one swatch per category. Tapping selects; while scrolling, the
- * name of the swatch at the top of the viewport is shown as a floating label to the left.
+ * Vertical "coverflow" category picker: a snapping scroller of color swatches on the right. The swatch
+ * nearest the vertical center is the selection — enlarged/opaque, its neighbors shrink and fade. The
+ * centered category's name shows to the left. Tapping a swatch snaps it to center + selects it.
  */
 @Composable
-private fun CategoryCarousel(
+private fun CategoryCoverflow(
     categories: List<Category>,
     selectedId: Long?,
     onSelect: (Long?) -> Unit
 ) {
-    // Entry(null) = "no category".
     val entries = remember(categories) { listOf<Category?>(null) + categories }
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    val topName by remember {
-        androidx.compose.runtime.derivedStateOf {
-            val idx = listState.firstVisibleItemIndex.coerceIn(0, entries.lastIndex)
-            entries[idx]?.name
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val itemHeight = 44.dp
+    val viewportHeight = 176.dp
+    val halfViewportPx = with(density) { viewportHeight.toPx() / 2f }
+
+    val centeredIndex by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val center = (info.viewportStartOffset + info.viewportEndOffset) / 2f
+            info.visibleItemsInfo.minByOrNull { abs((it.offset + it.size / 2f) - center) }?.index ?: 0
         }
     }
 
-    Box(contentAlignment = Alignment.CenterStart) {
+    // Center the current selection on first show.
+    LaunchedEffect(Unit) {
+        val idx = entries.indexOfFirst { it?.id == selectedId }.coerceAtLeast(0)
+        listState.scrollToItem(idx)
+    }
+
+    // Commit the centered swatch as the selection once a scroll settles (skip the initial state).
+    var wasScrolling by remember { mutableStateOf(false) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (wasScrolling && !scrolling) onSelect(entries.getOrNull(centeredIndex)?.id)
+            wasScrolling = scrolling
+        }
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = entries.getOrNull(centeredIndex)?.name ?: stringResource(R.string.none),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(72.dp).padding(end = 6.dp)
+        )
         LazyColumn(
             state = listState,
-            modifier = Modifier.width(40.dp).heightIn(max = 180.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            flingBehavior = rememberSnapFlingBehavior(listState),
+            modifier = Modifier.height(viewportHeight).width(48.dp),
+            contentPadding = PaddingValues(vertical = (viewportHeight - itemHeight) / 2),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            items(entries, key = { it?.id ?: -1L }) { cat ->
+            itemsIndexed(entries, key = { _, it -> it?.id ?: -1L }) { index, cat ->
+                val info = listState.layoutInfo
+                val center = (info.viewportStartOffset + info.viewportEndOffset) / 2f
+                val itemInfo = info.visibleItemsInfo.firstOrNull { it.index == index }
+                val dist = itemInfo?.let { abs((it.offset + it.size / 2f) - center) } ?: (halfViewportPx * 2)
+                val norm = (1f - dist / halfViewportPx).coerceIn(0f, 1f)
+                val scale = 0.55f + 0.55f * norm
                 val color = cat?.let { CategoryColors.fromStored(it.colorArgb) }
                     ?: MaterialTheme.colorScheme.surfaceVariant
                 val isSelected = cat?.id == selectedId
                 Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(color)
-                        .then(
-                            if (isSelected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                            else if (cat == null) Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            else Modifier
-                        )
-                        .clickable { onSelect(cat?.id) }
-                )
-            }
-        }
-
-        // Name of the swatch at the top of the viewport, shown while scrolling.
-        AnimatedVisibility(
-            visible = listState.isScrollInProgress && topName != null,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.padding(end = 44.dp)
-        ) {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.inverseSurface)) {
-                Text(
-                    topName ?: "",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
+                    modifier = Modifier.height(itemHeight).fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .graphicsLayer { scaleX = scale; scaleY = scale; alpha = 0.35f + 0.65f * norm }
+                            .clip(CircleShape)
+                            .background(color)
+                            .then(
+                                if (isSelected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                                else if (cat == null) Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                else Modifier
+                            )
+                            .clickable { onSelect(cat?.id) }
+                    )
+                }
             }
         }
     }

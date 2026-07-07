@@ -37,9 +37,19 @@ class NotesRepository(
         text: String,
         spokenCategory: String?,
         defaultCategoryId: Long?,
+        autoCreate: Boolean,
         createdAt: Long
     ): VoiceCategoryResolver.Resolved {
-        val resolved = VoiceCategoryResolver.resolve(spokenCategory, categoryDao.observeAll().first(), defaultCategoryId)
+        val cats = categoryDao.observeAll().first()
+        var resolved = VoiceCategoryResolver.resolve(spokenCategory, cats, defaultCategoryId)
+
+        // Unknown spoken category + opt-in → create it (auto-colored) rather than falling back.
+        val spoken = spokenCategory?.trim()?.takeIf { it.isNotEmpty() }
+        if (resolved.categoryId == null && autoCreate && spoken != null) {
+            val id = addCategory(spoken, CategoryPalette.colorForIndex(cats.size), cats.size, createdAt)
+            if (id > 0) resolved = VoiceCategoryResolver.Resolved(id, spoken)
+        }
+
         addNote(title, text, resolved.categoryId, createdAt)
         return resolved
     }

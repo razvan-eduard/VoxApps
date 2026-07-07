@@ -25,6 +25,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val SESSION_TIMEOUT_MINUTES = intPreferencesKey("session_timeout_minutes")
         val DEFAULT_VOICE_CATEGORY_ID = longPreferencesKey("default_voice_category_id")
         val VOICE_SAVE_TOAST_ENABLED = booleanPreferencesKey("voice_save_toast_enabled")
+        val AUTO_CREATE_VOICE_CATEGORY = booleanPreferencesKey("auto_create_voice_category")
     }
 
     override val settingsFlow: Flow<NotesSettings> = dataStore.data.map { prefs ->
@@ -32,7 +33,8 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             isBiometricRequired = prefs[Keys.IS_BIOMETRIC_REQUIRED] ?: false,
             sessionTimeoutMinutes = prefs[Keys.SESSION_TIMEOUT_MINUTES] ?: NotesSettings.TIMEOUT_30M,
             defaultVoiceCategoryId = prefs[Keys.DEFAULT_VOICE_CATEGORY_ID],
-            voiceSaveToastEnabled = prefs[Keys.VOICE_SAVE_TOAST_ENABLED] ?: false
+            voiceSaveToastEnabled = prefs[Keys.VOICE_SAVE_TOAST_ENABLED] ?: false,
+            autoCreateVoiceCategory = prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] ?: false
         )
     }
 
@@ -63,5 +65,9 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
 
     override suspend fun setVoiceSaveToastEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.VOICE_SAVE_TOAST_ENABLED] = enabled }
+    }
+
+    override suspend fun setAutoCreateVoiceCategory(enabled: Boolean) {
+        dataStore.edit { it[Keys.AUTO_CREATE_VOICE_CATEGORY] = enabled }
     }
 }

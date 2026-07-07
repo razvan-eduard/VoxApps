@@ -16,4 +16,5 @@ interface NotesSettingsRepository {
     suspend fun setSessionTimeoutMinutes(minutes: Int)
     suspend fun setDefaultVoiceCategoryId(id: Long?)
     suspend fun setVoiceSaveToastEnabled(enabled: Boolean)
+    suspend fun setAutoCreateVoiceCategory(enabled: Boolean)
 }

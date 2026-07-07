@@ -17,7 +17,9 @@ data class NotesSettings(
     val isBiometricRequired: Boolean = false,
     val sessionTimeoutMinutes: Int = TIMEOUT_30M,
     val defaultVoiceCategoryId: Long? = null,
-    val voiceSaveToastEnabled: Boolean = false
+    val voiceSaveToastEnabled: Boolean = false,
+    /** If true, a spoken category that doesn't exist is created; otherwise it falls back. */
+    val autoCreateVoiceCategory: Boolean = false
 ) {
     companion object {
         const val TIMEOUT_30M = 30
