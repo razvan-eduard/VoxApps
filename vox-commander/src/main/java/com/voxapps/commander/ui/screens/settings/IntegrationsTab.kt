@@ -28,7 +28,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.filled.Apps
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.domain.integration.VoxAppsDiscovery
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.service.SpotifyPkceManager
 import com.voxapps.commander.service.SpotifyRemoteManager
@@ -61,6 +63,9 @@ fun IntegrationsTab(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+
+        // --- Vox Apps (contract-implementing satellites) ---
+        VoxAppsSection(languageManager)
 
         // --- Spotify Integration Card ---
         Card(
@@ -272,6 +277,132 @@ fun IntegrationsTab(
             },
             initialClientId = spotifyClientId
         )
+    }
+}
+
+@Composable
+private fun VoxAppsSection(languageManager: LanguageManager) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val apps by com.voxapps.commander.domain.integration.VoxSatelliteRegistry.apps.collectAsStateWithLifecycle()
+    // packageName -> "testing" | "ok" | "fail"
+    val pingStatus = remember { mutableStateMapOf<String, String>() }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { com.voxapps.commander.domain.integration.VoxSatelliteRegistry.refresh(context) }
+        // Auto-run the contract test so only apps that actually respond show as verified.
+        com.voxapps.commander.domain.integration.VoxSatelliteRegistry.apps.value.forEach { app ->
+            pingStatus[app.packageName] = "testing"
+            pingStatus[app.packageName] = if (VoxAppsDiscovery.ping(context, app.packageName)) "ok" else "fail"
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Apps, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                }
+                Column {
+                    Text("Vox Apps", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = languageManager.getString("vox_apps_desc") ?: "Installed apps that implement the Vox contract",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (apps.isEmpty()) {
+                Text(
+                    text = languageManager.getString("vox_apps_none") ?: "No Vox apps found. Install a satellite app (e.g. Vox Notes) to see it here.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                apps.forEach { app ->
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val status = pingStatus[app.packageName]
+                        Box(
+                            modifier = Modifier.size(10.dp).clip(CircleShape).background(
+                                when (status) {
+                                    "ok" -> Color(0xFF4CAF50)
+                                    "fail" -> Color(0xFFF44336)
+                                    else -> MaterialTheme.colorScheme.outline
+                                }
+                            )
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(app.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                val partyLabel = if (app.isFirstParty)
+                                    (languageManager.getString("vox_apps_first_party") ?: "First-party")
+                                else (languageManager.getString("vox_apps_third_party") ?: "Third-party")
+                                Surface(
+                                    color = if (app.isFirstParty) MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        partyLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        color = if (app.isFirstParty) MaterialTheme.colorScheme.onPrimaryContainer
+                                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            val sub = app.domain?.let { d ->
+                                if (app.actions.isNotEmpty()) "$d • ${app.actions.joinToString(", ")}" else d
+                            } ?: app.packageName
+                            Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val statusLabel = when (status) {
+                                "ok" -> languageManager.getString("vox_apps_verified") ?: "Contract verified"
+                                "fail" -> languageManager.getString("vox_apps_unverified") ?: "Not responding"
+                                "testing" -> languageManager.getString("vox_apps_testing") ?: "Testing…"
+                                else -> null
+                            }
+                            statusLabel?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = when (status) {
+                                        "ok" -> Color(0xFF2E7D32)
+                                        "fail" -> Color(0xFFC62828)
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                        if (status == "testing") {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            TextButton(onClick = {
+                                pingStatus[app.packageName] = "testing"
+                                scope.launch {
+                                    val ok = VoxAppsDiscovery.ping(context, app.packageName)
+                                    pingStatus[app.packageName] = if (ok) "ok" else "fail"
+                                }
+                            }) {
+                                Text(languageManager.getString("vox_apps_test") ?: "Test")
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

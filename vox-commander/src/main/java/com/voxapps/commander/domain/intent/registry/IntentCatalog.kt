@@ -214,17 +214,28 @@ object IntentCatalog {
     val isInitialized: Boolean
         get() = cachedSchema != null && cachedSchema!!.intents.isNotEmpty()
 
-    // ---- NLU taxonomy (domains/actions vocabulary) — JSON primary, compact seed fallback ----
+    // ---- NLU taxonomy (domains/actions vocabulary) — JSON primary, compact seed fallback,
+    //      PLUS domains/actions contributed dynamically by discovered Vox satellites (:core:ipc
+    //      contract). Satellite verticals are NOT defined in intents.json — they self-register. ----
 
-    fun taxonomyDomains(): List<String> =
-        cachedSchema?.taxonomy?.domains?.takeIf { it.isNotEmpty() } ?: FALLBACK_TAXONOMY.domains
+    fun taxonomyDomains(): List<String> {
+        val base = cachedSchema?.taxonomy?.domains?.takeIf { it.isNotEmpty() } ?: FALLBACK_TAXONOMY.domains
+        return (base + com.voxapps.commander.domain.integration.VoxSatelliteRegistry.domains()).distinct()
+    }
 
-    fun taxonomyActions(): List<String> =
-        cachedSchema?.taxonomy?.actions?.takeIf { it.isNotEmpty() } ?: FALLBACK_TAXONOMY.actions
+    fun taxonomyActions(): List<String> {
+        val base = cachedSchema?.taxonomy?.actions?.takeIf { it.isNotEmpty() } ?: FALLBACK_TAXONOMY.actions
+        val satellite = com.voxapps.commander.domain.integration.VoxSatelliteRegistry.apps.value
+            .flatMap { it.actions }
+        return (base + satellite).distinct()
+    }
 
-    /** Actions for a domain, or null if neither the JSON nor the seed knows it (→ generic "launch"). */
-    fun taxonomyActionsForDomain(domain: String): List<String>? =
-        cachedSchema?.taxonomy?.actionsByDomain?.get(domain) ?: FALLBACK_TAXONOMY.actionsByDomain[domain]
+    /** Actions for a domain, or null if neither the JSON, the seed, nor a satellite knows it. */
+    fun taxonomyActionsForDomain(domain: String): List<String>? {
+        val satellite = com.voxapps.commander.domain.integration.VoxSatelliteRegistry.actionsFor(domain)
+        if (satellite.isNotEmpty()) return satellite
+        return cachedSchema?.taxonomy?.actionsByDomain?.get(domain) ?: FALLBACK_TAXONOMY.actionsByDomain[domain]
+    }
 
     // ---- Last-resort fallback (only used if assets read fails — near-impossible) ----
     // Covers the core routing intents (those carrying a templateAction → domain/uriTemplate).

@@ -25,6 +25,7 @@
 - **Natural Language Understanding** — Triple AI Brain: FastMap regex (L1) → Primary LLM (L2) → Offline fallback (L3)
 - **Intent Routing** — Unified `NluIntent` → `IntentHandler` pipeline with per-domain app resolution
 - **App Management** — Default apps per domain, app aliases, custom domains, return-to-previous-app
+- **Vox Apps ecosystem** — Companion apps (e.g. Vox Notes) self-register their voice capabilities via the `:core:ipc` contract; Commander discovers them at warmup, adds their domains to the NLU, and routes commands over a local JSON bus (create/read → spoken back via TTS)
 - **Media Control** — Spotify (Web API + App Remote), YouTube search via Piped API or NewPipe Extractor, playback on any selected app (LibreTube, NewPipe, etc.), media session control
 - **Text-to-Speech** — Android TTS or Piper TTS (on-device neural voices via sherpa-onnx)
 - **Search** — Web search via DuckDuckGo, Wikipedia, Google News, GNews, WeatherAPI, Open-Meteo
@@ -128,6 +129,38 @@ GitHub Actions will build the APK and publish it as a release automatically.
   Spotify/LibreTube  Waze/Google Maps    Volume/WiFi/BT
   NewPipe/Piped      geo: URI            Settings intents
 ```
+
+### Vox Apps ecosystem (cross-app plugin bus)
+
+Beyond routing to arbitrary Android apps, Commander is a **local plugin hub** for companion "satellite"
+apps that speak the **Vox contract** (`:core:ipc`, a contracts-only library — no runtime coupling).
+Each app stays a fully independent product; a user can install any subset.
+
+- **Self-registration** — a satellite declares an exported `VoxCommandReceiver` (guarded by a
+  `signature`-level custom permission) with `<meta-data>` advertising the NLU **domain** it owns and
+  the **actions** it accepts. Nothing is hardcoded in Commander, and no per-app entry in `intents.json`.
+- **Discovery** — at warmup (and on the Integrations screen) Commander scans installed apps for the
+  contract, reads their capabilities, and **merges their domains/actions into the NLU taxonomy
+  dynamically**. A user's own app that implements the contract appears automatically.
+- **Command bus** — Commander authors a small JSON envelope (`VoxCommand`) and sends it as a broadcast:
+  `create` (fire-and-forget) or `read` (ordered broadcast → the satellite returns text → Commander
+  **speaks it with the TTS hook**, reusing all of Commander's TTS settings). Plaintext over Binder;
+  encryption at rest stays the satellite's concern.
+- **Routing when several apps claim a domain** — deterministic hierarchy:
+  ① app named in the utterance → ② user **star** (Settings → Default Apps) → ③ **first-party**
+  (signed with Commander's own key, `checkSignatures == SIGNATURE_MATCH`) → ④ single third-party →
+  ⑤ 2+ third-party with no star = first discovered (voice disambiguation is a planned follow-up).
+  So a first-party app (e.g. Vox Notes) wins over a third-party alternative silently, while the user
+  can always override with a star. Discovered apps + their First-party/Third-party status show under
+  **Settings → Integrations → Vox Apps**.
+
+```
+Commander ──VoxCommand{op,text,domain}──▶ satellite VoxCommandReceiver
+   ▲                                              │ create → DB append
+   └────────── VoxResult{ok,text} ────────────────┘ read → returns text → TtsManager.speak(...)
+```
+
+The first satellite shipping in this repo is **`vox-notes`** (domain `notes`, actions `create`/`read`).
 
 ## Key Technologies
 

@@ -1,4 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Vox Notes</string>
+
+    <!-- Top bar / actions -->
+    <string name="notes_title">Vox Notes</string>
+    <string name="categories">Categories</string>
+    <string name="all_notes">All notes</string>
+    <string name="add_note">Add note</string>
+    <string name="edit_note">Edit note</string>
+    <string name="add_category">Add category</string>
+    <string name="remove_category">Remove category</string>
+    <string name="new_note">New note</string>
+    <string name="note_title_optional">Title (optional)</string>
+    <string name="note_text">Note</string>
+    <string name="category_name">Category name</string>
+    <string name="category">Category</string>
+    <string name="none">None</string>
+    <string name="open_menu">Open categories</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="apply">Apply</string>
+    <string name="clear">Clear</string>
+
+    <!-- Sort / date -->
+    <string name="sort_and_filter">Sort &amp; filter by date</string>
+    <string name="sort_newest">Newest first</string>
+    <string name="sort_oldest">Oldest first</string>
+    <string name="date_range">Date range</string>
+
+    <!-- Settings -->
+    <string name="settings">Settings</string>
+    <string name="general">General</string>
+    <string name="back">Back</string>
+    <string name="require_fingerprint">Require fingerprint to read notes</string>
+    <string name="require_fingerprint_desc">Notes stay encrypted at rest; this gates reading them in the app and via VoxCommander</string>
+    <string name="session_timeout">Session timeout</string>
+    <string name="timeout_30m">30 min</string>
+    <string name="timeout_1h">1 hour</string>
+    <string name="timeout_1d">1 day</string>
+    <string name="timeout_unlimited">Unlimited</string>
+
+    <!-- Lock -->
+    <string name="locked_title">Notes are locked</string>
+    <string name="unlock">Unlock with fingerprint</string>
+    <string name="unlock_title">Unlock Vox Notes</string>
+    <string name="unlock_subtitle">Authenticate to read your notes</string>
 </resources>

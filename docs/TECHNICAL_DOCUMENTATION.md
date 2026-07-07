@@ -1,6 +1,6 @@
 # VoxCommander — Technical Documentation
 
-> Part of the **VoxApps** monorepo (module `:vox-commander`, `com.voxapps.commander`, source under `vox-commander/`). Sibling apps (e.g. `:vox-notes`) are fully independent — the only cross-app link is the optional Vox native intent (`com.voxapps.action.HANDLE`). This document covers `:vox-commander`.
+> Part of the **VoxApps** monorepo (module `:vox-commander`, `com.voxapps.commander`, source under `vox-commander/`). Sibling apps (e.g. `:vox-notes`) are fully independent products — the only cross-app link is the optional **Vox contract** (`:core:ipc`, a contracts-only library): a satellite app self-registers voice capabilities and Commander routes commands to it over a local JSON bus. See [§19 Vox Apps Ecosystem](#19-vox-apps-ecosystem-cross-app-contract). This document covers `:vox-commander`.
 
 ## Table of Contents
 
@@ -22,6 +22,7 @@
 16. [External Voice Trigger](#16-external-voice-trigger)
 17. [Dynamic JSON Configuration](#17-dynamic-json-configuration)
 18. [Dependency Graph](#18-dependency-graph)
+19. [Vox Apps Ecosystem (Cross-App Contract)](#19-vox-apps-ecosystem-cross-app-contract)
 
 ---
 
@@ -302,6 +303,7 @@ Central dispatcher that:
 
 ```kotlin
 val handlers = listOf(
+    SatelliteHandler(),                       // domain=<any advertised by a Vox satellite> — see §19
     SearchIntentHandler(settingsRepository),  // domain=search
     AudioIntentHandler(),                     // domain=audio
     NavigationIntentHandler(),                // domain=maps
@@ -310,6 +312,10 @@ val handlers = listOf(
     GenericLaunchHandler()                    // fallback: launch app by name
 )
 ```
+
+`SatelliteHandler` is first so that domains contributed by companion apps (e.g. `notes`) are routed
+over the Vox contract before the built-in handlers. It only `canHandle()` a domain that a discovered
+satellite advertises, so it's inert when no satellite is installed.
 
 ### IntentHandler Interface
 
@@ -1012,6 +1018,103 @@ All five tasks are dependencies of `preBuild`.
 - **Maven Central** — OkHttp, Retrofit, Gson, Apache Commons, ONNX Runtime
 - **JitPack** — Vosk, sherpa-onnx, NewPipe Extractor, OpenWakeWord
 - **Picovoice Maven** — Porcupine
+
+---
+
+## 19. Vox Apps Ecosystem (Cross-App Contract)
+
+VoxCommander doubles as a **local plugin hub** ("micro-OS for offline plugins"): companion *satellite*
+apps declare voice capabilities and Commander routes commands to them. There is **no runtime coupling**
+— each app is an independent product; the only shared artifact is a **contracts-only** library.
+
+### The contract module (`:core:ipc`)
+
+A tiny Android library (`com.voxapps.ipc`) with **no logic** — just the wire protocol, compiled into
+each app (like `:core:design` for theming). A third-party developer can integrate by mirroring these
+strings locally; nothing forces a dependency.
+
+| Type | Purpose |
+|------|---------|
+| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`), permission helpers |
+| `VoxCommand` | Command envelope authored by Commander (`op`, `text?`, `title?`, `category?`, `domain?`) with `toJson()`/`fromJson()` (org.json) |
+| `VoxResult` | Satellite reply for reads (`ok`, `text`) — the notes payload, or a spoken "locked" message |
+
+### Capability advertising & discovery (the handshake)
+
+A satellite declares an **exported** `BroadcastReceiver` for `ACTION_COMMAND`, guarded by a
+`signature`-level custom permission (`<pkg>.permission.COMMAND`), with `<meta-data>` describing what
+it handles:
+
+```xml
+<receiver android:name=".receiver.VoxCommandReceiver" android:exported="true"
+          android:permission="com.voxapps.notes.permission.COMMAND">
+    <intent-filter><action android:name="com.voxapps.action.VOX_COMMAND"/></intent-filter>
+    <meta-data android:name="com.voxapps.vox.domain"  android:value="notes"/>
+    <meta-data android:name="com.voxapps.vox.actions" android:value="create,read"/>
+    <meta-data android:name="com.voxapps.vox.label"   android:value="Notes"/>
+</receiver>
+```
+
+On the Commander side:
+
+- **`VoxAppsDiscovery.discover()`** — `queryBroadcastReceivers(ACTION_COMMAND, GET_META_DATA)`, reads
+  each app's advertised `domain`/`actions`/`label`, and computes **`isFirstParty`** via
+  `PackageManager.checkSignatures(self, target) == SIGNATURE_MATCH` (same developer key = native app).
+- **`VoxSatelliteRegistry`** — a `StateFlow<List<VoxAppInfo>>` rebuilt by `refresh(context)`, called at
+  **warmup** (`AppContainer.init`) and from the Integrations screen. It's the single dynamic source of
+  truth for "which app owns which domain".
+- **Dynamic NLU taxonomy** — `IntentCatalog.taxonomyDomains()/taxonomyActions()/taxonomyActionsForDomain()`
+  merge the registry's domains/actions on top of the JSON/seed vocabulary, so the LLM can emit a
+  satellite domain only when a satellite for it is installed. **Satellite verticals are NOT defined in
+  `intents.json`.**
+- **`OP_PING`** — a live handshake (ordered broadcast, expects `VoxResult.ok`) used by the Integrations
+  UI to show a "Contract verified" status.
+
+### Command bus (transport)
+
+Ordered broadcasts over Binder — no Activity, no ContentProvider, no NLU on the satellite side:
+
+- **create** — `sendBroadcast(ACTION_COMMAND, setPackage(pkg), EXTRA_PAYLOAD=VoxCommand.toJson())`,
+  fire-and-forget (append; never wakes the UI).
+- **read** — `sendOrderedBroadcast(..., resultReceiver)`; the satellite `goAsync()`s, reads its DB, and
+  returns `VoxResult` in `setResultData`; Commander speaks it via the **TTS hook** (`TtsHookService` →
+  `TtsManager.speak`, which already carries the user's rate/pitch/voice/language). The same hook is
+  exposed as `ACTION_SPEAK` (permission `com.voxapps.commander.permission.SPEAK`) so any authorized app
+  can ask Commander to speak.
+
+Payloads are **plaintext over Binder** by design: Binder IPC is kernel-mediated and invisible to other
+apps; encryption *at rest* stays the satellite's concern (e.g. Vox Notes uses SQLCipher). Encrypting the
+payload would require sharing keys across apps and break their independence.
+
+### Routing hierarchy (`SatelliteHandler` + `SatelliteRouting`)
+
+When several apps advertise the same domain (e.g. Vox Notes **and** a third-party OpenNotes both handle
+`notes`), `SatelliteRouting.pick(candidates, starredPkg, explicitPkg)` — a **pure, unit-tested** function
+— decides, in order:
+
+1. **Explicit** — an app named in the utterance ("save in OpenNotes"), if it's a candidate.
+2. **User star** — the default the user set in **Settings → Default Apps** (`AppResolver` reads
+   `defaultAppPackages[domain]`; satellite domains are now listed there). `IntentRouter` resolves this
+   into `resolvedApp` before the handler runs, so it's honored automatically.
+3. **First-party** — a candidate with `isFirstParty == true` (same signing key as Commander). Vox Notes
+   beats a third-party alternative **silently** — signature-based, so it can't be spoofed by app name.
+4. **Single third-party** — exactly one candidate → route to it.
+5. **2+ third-party, no star** — route to the first discovered and flag `ambiguous` (logged). A spoken
+   "which app?" disambiguation that persists the choice as a star is a planned follow-up.
+
+The **Integrations → Vox Apps** section lists discovered apps with their `domain • actions`, a
+**First-party / Third-party** badge, and the live ping status.
+
+### Key classes
+
+| Class | Path |
+|-------|------|
+| `VoxIpc` / `VoxCommand` / `VoxResult` | `core/ipc/src/main/java/com/voxapps/ipc/` |
+| `VoxAppsDiscovery` / `VoxAppInfo` / `VoxSatelliteRegistry` | `domain/integration/` |
+| `SatelliteRouting` (pure decision) | `domain/integration/SatelliteRouting.kt` |
+| `SatelliteHandler` (dispatch) | `domain/intent/handler/SatelliteHandler.kt` |
+| `TtsHookReceiver` / `TtsHookService` | `service/` |
+| Satellite receiver (Notes) | `vox-notes/.../receiver/VoxCommandReceiver.kt` |
 
 ---
 

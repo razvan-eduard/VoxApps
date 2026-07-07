@@ -3,7 +3,19 @@
 
     <!-- Private, on-device notes. No network permission by design. -->
 
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!--
+        Custom permission guarding the cross-app command bus. Any app that wants to send Vox
+        commands to Notes must hold it. `signature` = only apps signed with the same key (the
+        monorepo apps) qualify; loosen to `normal` if Commander ships under a different key.
+    -->
+    <permission
+        android:name="com.voxapps.notes.permission.COMMAND"
+        android:protectionLevel="signature" />
+
     <application
+        android:name=".NotesApplication"
         android:allowBackup="false"
         android:icon="@android:drawable/sym_def_app_icon"
         android:label="@string/app_name"
@@ -20,14 +32,25 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <!-- OPTIONAL Vox integration: if VoxCommander is installed it can hand this app a
-                 command via a native intent. Parsed with plain Android APIs (no shared library). -->
-            <intent-filter>
-                <action android:name="com.voxapps.action.HANDLE" />
-                <category android:name="com.voxapps.category.VOX" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
         </activity>
+
+        <!--
+            OPTIONAL Vox integration: VoxCommander (or any authorized app) hands us a JSON command
+            (create/read) via this native broadcast. Parsed with :core:ipc — no shared runtime, no
+            NLU here. Guarded by the COMMAND permission above.
+        -->
+        <receiver
+            android:name=".receiver.VoxCommandReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.notes.permission.COMMAND">
+            <intent-filter>
+                <action android:name="com.voxapps.action.VOX_COMMAND" />
+            </intent-filter>
+            <!-- Capability advertising: Commander reads this at scan time to route the "notes" NLU
+                 domain here (create/read), with no per-app config on Commander's side. -->
+            <meta-data android:name="com.voxapps.vox.domain" android:value="notes" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read" />
+            <meta-data android:name="com.voxapps.vox.label" android:value="Notes" />
+        </receiver>
     </application>
 </manifest>

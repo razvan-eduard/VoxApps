@@ -25,7 +25,8 @@ import kotlinx.coroutines.launch
 private data class DomainInfo(
     val name: String,
     val description: String,
-    val isCustom: Boolean = false
+    val isCustom: Boolean = false,
+    val isSatellite: Boolean = false
 )
 
 @Composable
@@ -45,7 +46,14 @@ fun DefaultAppsTab(
         DomainInfo(IntentTaxonomy.Domains.MESSAGING, "Messages & communication")
     )
     val customDomains = settings.customDomains.map { DomainInfo(it, "Custom category", isCustom = true) }
-    val allDomains = builtInDomains + customDomains
+    // Domains contributed dynamically by discovered Vox satellite apps (e.g. "notes"). Lets the user
+    // pick a preferred app when several implement the same domain; the star wins over first-party.
+    val satelliteApps by com.voxapps.commander.domain.integration.VoxSatelliteRegistry.apps.collectAsStateWithLifecycle()
+    val takenNames = (builtInDomains + customDomains).map { it.name }.toSet()
+    val satelliteDomains = satelliteApps.mapNotNull { it.domain }.distinct()
+        .filter { it !in takenNames }
+        .map { DomainInfo(it, "Vox app", isSatellite = true) }
+    val allDomains = builtInDomains + customDomains + satelliteDomains
 
     var allApps by remember { mutableStateOf(AppRegistry.getAllInstalledAppEntries(context)) }
     val appScanState by appStateManager.appScanState.collectAsStateWithLifecycle()
@@ -78,7 +86,11 @@ fun DefaultAppsTab(
                         scope.launch { settingsRepo.setDefaultAppPackage(domainInfo.name, pkg) }
                     },
                     domain = null,
-                    label = domainInfo.name.replaceFirstChar { it.uppercase() } + if (domainInfo.isCustom) " (custom)" else "",
+                    label = domainInfo.name.replaceFirstChar { it.uppercase() } + when {
+                        domainInfo.isCustom -> " (custom)"
+                        domainInfo.isSatellite -> " (Vox app)"
+                        else -> ""
+                    },
                     filterMode = settings.domainAppFilters[domainInfo.name] ?: "all",
                     extraPackages = emptyList()
 

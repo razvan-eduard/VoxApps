@@ -430,5 +430,13 @@
   "theme_light": "Luminos",
   "theme_dark": "Întunecat",
   "theme_colored": "Colorat (Material You)",
-  "theme_colored_desc": "Folosește culorile dinamice ale sistemului (Android 12+)"
+  "theme_colored_desc": "Folosește culorile dinamice ale sistemului (Android 12+)",
+  "vox_apps_desc": "Aplicații instalate care implementează contractul Vox",
+  "vox_apps_none": "Nicio aplicație Vox găsită. Instalează un satelit (ex. Vox Notes) ca să apară aici.",
+  "vox_apps_test": "Testează",
+  "vox_apps_verified": "Contract verificat",
+  "vox_apps_unverified": "Nu răspunde",
+  "vox_apps_testing": "Se testează…",
+  "vox_apps_first_party": "Oficială",
+  "vox_apps_third_party": "Terță parte"
 }

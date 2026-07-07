@@ -93,6 +93,10 @@ class AppContainer(context: Context) {
         Logger.log("AppContainer init - starting compatibility checks", "AppContainer")
         checkVulkanCrashCookie()
         detectGeminiSupport()
+
+        // Scan for Vox satellite apps (contract-implementing companions) at warmup so their NLU
+        // domains are available immediately. Re-scanned on refresh from the Integrations screen.
+        com.voxapps.commander.domain.integration.VoxSatelliteRegistry.refresh(appContext)
     }
 
     /**

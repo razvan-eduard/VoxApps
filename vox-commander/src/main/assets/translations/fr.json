@@ -389,5 +389,13 @@
   "theme_light": "Clair",
   "theme_dark": "Sombre",
   "theme_colored": "Coloré (Material You)",
-  "theme_colored_desc": "Utiliser les couleurs dynamiques du système (Android 12+)"
+  "theme_colored_desc": "Utiliser les couleurs dynamiques du système (Android 12+)",
+  "vox_apps_desc": "Applications installées qui implémentent le contrat Vox",
+  "vox_apps_none": "Aucune application Vox trouvée. Installez une app satellite (ex. Vox Notes) pour la voir ici.",
+  "vox_apps_test": "Tester",
+  "vox_apps_verified": "Contrat vérifié",
+  "vox_apps_unverified": "Ne répond pas",
+  "vox_apps_testing": "Test en cours…",
+  "vox_apps_first_party": "Native",
+  "vox_apps_third_party": "Tierce"
 }

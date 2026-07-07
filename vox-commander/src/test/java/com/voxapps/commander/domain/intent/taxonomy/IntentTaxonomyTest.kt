@@ -10,6 +10,8 @@ class IntentTaxonomyTest {
 
     @Test
     fun `Domains ALL contains all known domains`() {
+        // Satellite verticals (e.g. "notes") are contributed dynamically by VoxSatelliteRegistry at
+        // runtime, not baked into the base taxonomy — so the static seed stays at 7.
         assertEquals(7, IntentTaxonomy.Domains.ALL.size)
         assertTrue(IntentTaxonomy.Domains.ALL.contains(IntentTaxonomy.Domains.AUDIO))
         assertTrue(IntentTaxonomy.Domains.ALL.contains(IntentTaxonomy.Domains.SETTINGS))

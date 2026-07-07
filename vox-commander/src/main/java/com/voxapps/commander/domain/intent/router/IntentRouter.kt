@@ -8,6 +8,7 @@ import com.voxapps.commander.domain.intent.handler.GenericLaunchHandler
 import com.voxapps.commander.domain.intent.handler.IntentHandler
 import com.voxapps.commander.domain.intent.handler.MessagingIntentHandler
 import com.voxapps.commander.domain.intent.handler.NavigationIntentHandler
+import com.voxapps.commander.domain.intent.handler.SatelliteHandler
 import com.voxapps.commander.domain.intent.handler.SearchIntentHandler
 import com.voxapps.commander.domain.intent.handler.SystemIntentHandler
 import com.voxapps.commander.domain.intent.model.NluIntent
@@ -30,6 +31,7 @@ class IntentRouter(
 ) {
 
     private val handlers: List<IntentHandler> = listOf(
+        SatelliteHandler(),
         SearchIntentHandler(settingsRepository),
         AudioIntentHandler(),
         NavigationIntentHandler(),
