@@ -25,12 +25,61 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.commander.domain.integration.VoxSatelliteRegistry
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.service.SpotifyRemoteManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * Builds the candidate app list shared by both [AppSelectorDropdown] overloads.
+ *
+ * Vox satellite apps (those implementing the :core:ipc contract) are driven over the IPC command bus,
+ * not launched as normal intents — so they are hidden from the generic pickers ([excludeSatellites],
+ * default true). The one exception is [satelliteDomain]: when set, the list is ONLY the satellites
+ * advertising that domain (the "pick a preferred notes app" star row), overriding the generic list.
+ */
+@Composable
+private fun rememberCandidateApps(
+    domain: String?,
+    extraPackages: List<String>,
+    excludeSatellites: Boolean,
+    satelliteDomain: String?
+): List<AppRegistry.AppEntry> {
+    val satellites by VoxSatelliteRegistry.apps.collectAsStateWithLifecycle()
+    return remember(domain, extraPackages, excludeSatellites, satelliteDomain, satellites) {
+        if (satelliteDomain != null) {
+            // Satellite star row: only apps advertising this domain, resolved to AppEntry.
+            return@remember VoxSatelliteRegistry.candidatesForDomain(satelliteDomain)
+                .map { s ->
+                    AppRegistry.resolveByPackage(s.packageName)
+                        ?: AppRegistry.AppEntry(packageName = s.packageName, displayName = s.label)
+                }
+                .sortedBy { it.displayName.lowercase() }
+        }
+        val domainApps = if (domain != null) {
+            AppRegistry.getInstalledAppsForDomain(domain)
+        } else {
+            AppRegistry.allInstalledApps()
+        }
+        val base = if (extraPackages.isEmpty()) {
+            domainApps
+        } else {
+            val existingPkgs = domainApps.map { it.packageName }.toSet()
+            val extraApps = AppRegistry.allInstalledApps().filter {
+                it.packageName in extraPackages && it.packageName !in existingPkgs
+            }
+            (domainApps + extraApps).sortedBy { it.displayName.lowercase() }
+        }
+        if (excludeSatellites) {
+            val satellitePkgs = satellites.map { it.packageName }.toSet()
+            base.filter { it.packageName !in satellitePkgs }
+        } else base
+    }
+}
 
 /**
  * Reusable app picker with inline expand (same pattern as DefaultApps domain cards).
@@ -47,7 +96,8 @@ fun AppSelectorDropdown(
     label: String = "Select app",
     allowNone: Boolean = true,
     extraPackages: List<String> = emptyList(),
-
+    excludeSatellites: Boolean = true,
+    satelliteDomain: String? = null,
     maxDropdownHeight: androidx.compose.ui.unit.Dp = 300.dp
 ) {
         val languageManager = LocalLanguageManager.current
@@ -57,22 +107,7 @@ fun AppSelectorDropdown(
     var showSpotifyOAuthDialog by remember { mutableStateOf(false) }
     var spotifyOAuthAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    val allApps = remember(domain, extraPackages) {
-        val domainApps = if (domain != null) {
-            AppRegistry.getInstalledAppsForDomain(domain)
-        } else {
-            AppRegistry.allInstalledApps()
-        }
-        if (extraPackages.isEmpty()) {
-            domainApps
-        } else {
-            val existingPkgs = domainApps.map { it.packageName }.toSet()
-            val extraApps = AppRegistry.allInstalledApps().filter {
-                it.packageName in extraPackages && it.packageName !in existingPkgs
-            }
-            (domainApps + extraApps).sortedBy { it.displayName.lowercase() }
-        }
-    }
+    val allApps = rememberCandidateApps(domain, extraPackages, excludeSatellites, satelliteDomain)
 
     val selectedApp = remember(selectedPackage, allApps) {
         allApps.find { it.packageName == selectedPackage }
@@ -181,7 +216,9 @@ fun AppSelectorDropdown(
     domain: String? = null,
     label: String = "Select apps",
     filterMode: String = "all",
-    extraPackages: List<String> = emptyList()
+    extraPackages: List<String> = emptyList(),
+    excludeSatellites: Boolean = true,
+    satelliteDomain: String? = null
 ) {
         val languageManager = LocalLanguageManager.current
     val lm = languageManager
@@ -190,22 +227,7 @@ fun AppSelectorDropdown(
     var showSpotifyOAuthDialog by remember { mutableStateOf(false) }
     var spotifyOAuthAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    val allApps = remember(domain, extraPackages) {
-        val domainApps = if (domain != null) {
-            AppRegistry.getInstalledAppsForDomain(domain)
-        } else {
-            AppRegistry.allInstalledApps()
-        }
-        if (extraPackages.isEmpty()) {
-            domainApps
-        } else {
-            val existingPkgs = domainApps.map { it.packageName }.toSet()
-            val extraApps = AppRegistry.allInstalledApps().filter {
-                it.packageName in extraPackages && it.packageName !in existingPkgs
-            }
-            (domainApps + extraApps).sortedBy { it.displayName.lowercase() }
-        }
-    }
+    val allApps = rememberCandidateApps(domain, extraPackages, excludeSatellites, satelliteDomain)
 
     val selectedApps = allApps.filter { it.packageName in selectedPackages }
     val defaultApp = selectedApps.find { it.packageName == defaultPackage }

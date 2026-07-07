@@ -92,8 +92,10 @@ fun DefaultAppsTab(
                         else -> ""
                     },
                     filterMode = settings.domainAppFilters[domainInfo.name] ?: "all",
-                    extraPackages = emptyList()
-
+                    extraPackages = emptyList(),
+                    // Satellite domain row lists ONLY the apps advertising this domain; other rows
+                    // hide satellites (default excludeSatellites = true).
+                    satelliteDomain = if (domainInfo.isSatellite) domainInfo.name else null
                 )
                 if (domainInfo.isCustom) {
                     Row(

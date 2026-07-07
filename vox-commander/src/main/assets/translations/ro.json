@@ -438,5 +438,8 @@
   "vox_apps_unverified": "Nu răspunde",
   "vox_apps_testing": "Se testează…",
   "vox_apps_first_party": "Oficială",
-  "vox_apps_third_party": "Terță parte"
+  "vox_apps_third_party": "Terță parte",
+  "onboarding_permissions_title": "Permisiuni",
+  "onboarding_permissions_intro": "Acordă-le ca asistentul vocal și microfonul flotant să funcționeze oriunde. Le poți schimba mai târziu în Setări.",
+  "continue_button": "Continuă"
 }

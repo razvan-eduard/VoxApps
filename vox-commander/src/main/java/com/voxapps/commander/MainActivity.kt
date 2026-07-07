@@ -155,6 +155,7 @@ class MainActivity : ComponentActivity() {
                 val settingsSnapshot = appContainer.settingsRepository.getSettingsSnapshot()
                 var showLanguageSelection by remember { mutableStateOf(false) }
                 var showTutorial by remember { mutableStateOf(false) }
+                var showPermissions by remember { mutableStateOf(false) }
                 val tutorialManager = remember { TutorialManager(this@MainActivity) }
 
                 if (showSplash) {
@@ -192,11 +193,36 @@ class MainActivity : ComponentActivity() {
                         langCode = appContainer.settingsRepository.getSettingsSnapshot().language,
                         onSkip = {
                             showTutorial = false
-                            appContainer.appStateManager.setFirstLaunchCompleted(true)
-                            appContainer.appStateManager.setTutorialCompleted(true)
+                            showPermissions = true
                         },
                         onFinish = {
                             showTutorial = false
+                            showPermissions = true
+                        }
+                    )
+                    return@VoxCommanderTheme
+                }
+
+                if (showPermissions) {
+                    // First-run permission step — request overlay/mic/notifications so the floating
+                    // voice overlay actually works (it's silently hidden without SYSTEM_ALERT_WINDOW).
+                    // The permission launchers already call refreshPermissions() on return, so the
+                    // granted status updates live.
+                    com.voxapps.commander.ui.screens.onboarding.PermissionsOnboardingScreen(
+                        appStateManager = appContainer.appStateManager,
+                        onRequestOverlay = {
+                            overlayPermissionLauncher.launch(com.voxapps.commander.utils.PermissionUtils.getOverlayPermissionIntent(this@MainActivity))
+                        },
+                        onRequestMicrophone = {
+                            requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        },
+                        onRequestNotification = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
+                        onContinue = {
+                            showPermissions = false
                             appContainer.appStateManager.setFirstLaunchCompleted(true)
                             appContainer.appStateManager.setTutorialCompleted(true)
                         }

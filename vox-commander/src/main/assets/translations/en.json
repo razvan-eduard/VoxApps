@@ -445,5 +445,8 @@
   "vox_apps_unverified": "Not responding",
   "vox_apps_testing": "Testing…",
   "vox_apps_first_party": "First-party",
-  "vox_apps_third_party": "Third-party"
+  "vox_apps_third_party": "Third-party",
+  "onboarding_permissions_title": "Permissions",
+  "onboarding_permissions_intro": "Grant these so the voice assistant and its floating microphone work anywhere. You can change them later in Settings.",
+  "continue_button": "Continue"
 }

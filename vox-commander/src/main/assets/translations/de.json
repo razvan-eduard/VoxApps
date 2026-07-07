@@ -397,5 +397,8 @@
   "vox_apps_unverified": "Keine Antwort",
   "vox_apps_testing": "Wird getestet…",
   "vox_apps_first_party": "Erstanbieter",
-  "vox_apps_third_party": "Drittanbieter"
+  "vox_apps_third_party": "Drittanbieter",
+  "onboarding_permissions_title": "Berechtigungen",
+  "onboarding_permissions_intro": "Erteile diese, damit der Sprachassistent und sein schwebendes Mikrofon überall funktionieren. Du kannst sie später in den Einstellungen ändern.",
+  "continue_button": "Weiter"
 }

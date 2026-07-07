@@ -56,9 +56,9 @@
           "description": "Set the language for speech recognition. This affects how the STT engine interprets your voice."
         },
         {
-          "element": "tts_settings",
-          "title": "Text-to-Speech",
-          "description": "Enable or disable spoken responses, and configure TTS engine, speed, and pitch."
+          "element": "theme_settings",
+          "title": "Theme",
+          "description": "Switch between light, dark, or system theme, and enable colored (Material You) accents."
         }
       ]
     },
@@ -91,14 +91,14 @@
           "description": "Enable hands-free activation. Say your wake word to trigger the assistant without touching your phone."
         },
         {
-          "element": "external_trigger",
-          "title": "External Trigger",
-          "description": "Allow automation apps like Tasker or MacroDroid to trigger the voice assistant via broadcast intent."
+          "element": "tts_settings",
+          "title": "Text-to-Speech",
+          "description": "Enable or disable spoken responses, and configure TTS engine, speed, and pitch."
         },
         {
-          "element": "return_after_action",
-          "title": "Return to Previous App",
-          "description": "Automatically return to the app you were using after a command is executed (e.g. return to Spotify after playing a song)."
+          "element": "command_queue",
+          "title": "Command Queue",
+          "description": "Queue several commands in a row and let VoxCommander run them one after another."
         }
       ]
     },
@@ -114,6 +114,16 @@
           "element": "app_aliases",
           "title": "App Aliases",
           "description": "Create custom names for apps. Say 'play on my music app' instead of naming Spotify explicitly."
+        },
+        {
+          "element": "external_trigger",
+          "title": "External Trigger",
+          "description": "Allow automation apps like Tasker or MacroDroid to trigger the voice assistant via broadcast intent."
+        },
+        {
+          "element": "return_after_action",
+          "title": "Return to Previous App",
+          "description": "Automatically return to the app you were using after a command is executed (e.g. return to Spotify after playing a song)."
         }
       ]
     },
@@ -124,6 +134,11 @@
           "element": "spotify_integration",
           "title": "Spotify Integration",
           "description": "Connect your Spotify account for direct playback control. Requires OAuth authorization."
+        },
+        {
+          "element": "vox_apps",
+          "title": "Vox Apps",
+          "description": "Companion apps that add voice features. Installed apps implementing the Vox contract — like Vox Notes — appear here automatically; say 'take a note…' and it's routed to them."
         },
         {
           "element": "youtube_engine",
@@ -242,9 +257,9 @@
           "description": "Legt die Sprache für die Spracherkennung fest."
         },
         {
-          "element": "tts_settings",
-          "title": "Text-to-Speech",
-          "description": "Aktivieren Sie gesprochene Antworten und konfigurieren Sie TTS-Engine, Geschwindigkeit und Tonhöhe."
+          "element": "theme_settings",
+          "title": "Design",
+          "description": "Wechsle zwischen hellem, dunklem oder System-Design und aktiviere farbige (Material You) Akzente."
         }
       ]
     },
@@ -277,14 +292,14 @@
           "description": "Aktivieren Sie die freihändige Bedienung. Sagen Sie Ihr Wachwort, um den Assistenten zu starten."
         },
         {
-          "element": "external_trigger",
-          "title": "Externer Trigger",
-          "description": "Erlauben Sie Automatisierungs-Apps wie Tasker, den Sprachassistenten per Broadcast auszulösen."
+          "element": "tts_settings",
+          "title": "Text-to-Speech",
+          "description": "Aktivieren Sie gesprochene Antworten und konfigurieren Sie TTS-Engine, Geschwindigkeit und Tonhöhe."
         },
         {
-          "element": "return_after_action",
-          "title": "Zurück zur vorherigen App",
-          "description": "Kehren Sie nach der Befehlsausführung automatisch zur vorherigen App zurück."
+          "element": "command_queue",
+          "title": "Befehls-Warteschlange",
+          "description": "Reihe mehrere Befehle aneinander und lass VoxCommander sie nacheinander ausführen."
         }
       ]
     },
@@ -300,6 +315,16 @@
           "element": "app_aliases",
           "title": "App-Aliase",
           "description": "Erstellen Sie benutzerdefinierte Namen für Apps."
+        },
+        {
+          "element": "external_trigger",
+          "title": "Externer Trigger",
+          "description": "Erlauben Sie Automatisierungs-Apps wie Tasker, den Sprachassistenten per Broadcast auszulösen."
+        },
+        {
+          "element": "return_after_action",
+          "title": "Zurück zur vorherigen App",
+          "description": "Kehren Sie nach der Befehlsausführung automatisch zur vorherigen App zurück."
         }
       ]
     },
@@ -310,6 +335,11 @@
           "element": "spotify_integration",
           "title": "Spotify-Integration",
           "description": "Verbinden Sie Ihr Spotify-Konto für direkte Wiedergabesteuerung. Erfordert OAuth-Autorisierung."
+        },
+        {
+          "element": "vox_apps",
+          "title": "Vox-Apps",
+          "description": "Begleit-Apps mit zusätzlichen Sprachfunktionen. Installierte Apps, die den Vox-Vertrag umsetzen – wie Vox Notes – erscheinen hier automatisch; sag „mach eine Notiz…\" und der Befehl wird an sie geleitet."
         },
         {
           "element": "youtube_engine",
@@ -428,9 +458,9 @@
           "description": "Définissez la langue pour la reconnaissance vocale."
         },
         {
-          "element": "tts_settings",
-          "title": "Synthèse vocale",
-          "description": "Activez les réponses parlées et configurez le moteur TTS, la vitesse et la tonalité."
+          "element": "theme_settings",
+          "title": "Thème",
+          "description": "Basculez entre le thème clair, sombre ou système, et activez les couleurs dynamiques (Material You)."
         }
       ]
     },
@@ -463,14 +493,14 @@
           "description": "Activez l'activation mains libres. Dites votre mot de réveil pour déclencher l'assistant."
         },
         {
-          "element": "external_trigger",
-          "title": "Déclencheur externe",
-          "description": "Autorisez les applications d'automatisation comme Tasker à déclencher l'assistant par broadcast."
+          "element": "tts_settings",
+          "title": "Synthèse vocale",
+          "description": "Activez les réponses parlées et configurez le moteur TTS, la vitesse et la tonalité."
         },
         {
-          "element": "return_after_action",
-          "title": "Retour à l'app précédente",
-          "description": "Revenez automatiquement à l'application utilisée après l'exécution d'une commande."
+          "element": "command_queue",
+          "title": "File de commandes",
+          "description": "Enchaînez plusieurs commandes et laissez VoxCommander les exécuter l'une après l'autre."
         }
       ]
     },
@@ -486,6 +516,16 @@
           "element": "app_aliases",
           "title": "Alias d'applications",
           "description": "Créez des noms personnalisés pour vos applications."
+        },
+        {
+          "element": "external_trigger",
+          "title": "Déclencheur externe",
+          "description": "Autorisez les applications d'automatisation comme Tasker à déclencher l'assistant par broadcast."
+        },
+        {
+          "element": "return_after_action",
+          "title": "Retour à l'app précédente",
+          "description": "Revenez automatiquement à l'application utilisée après l'exécution d'une commande."
         }
       ]
     },
@@ -496,6 +536,11 @@
           "element": "spotify_integration",
           "title": "Intégration Spotify",
           "description": "Connectez votre compte Spotify pour le contrôle direct de la lecture. Nécessite une autorisation OAuth."
+        },
+        {
+          "element": "vox_apps",
+          "title": "Apps Vox",
+          "description": "Applications compagnons qui ajoutent des fonctions vocales. Les apps installées implémentant le contrat Vox — comme Vox Notes — apparaissent ici automatiquement ; dites « prends une note… » et la commande leur est transmise."
         },
         {
           "element": "youtube_engine",
@@ -614,9 +659,9 @@
           "description": "Setează limba pentru recunoașterea vocală."
         },
         {
-          "element": "tts_settings",
-          "title": "Text-to-Speech",
-          "description": "Activează răspunsurile vorbite și configurează motorul TTS, viteza și tonul."
+          "element": "theme_settings",
+          "title": "Temă",
+          "description": "Comută între tema luminoasă, întunecată sau de sistem și activează culorile dinamice (Material You)."
         }
       ]
     },
@@ -649,14 +694,14 @@
           "description": "Activează activarea mâini-libere. Spune cuvântul de activare pentru a porni asistentul."
         },
         {
-          "element": "external_trigger",
-          "title": "Declanșator extern",
-          "description": "Permite aplicațiilor de automatizare precum Tasker să declanșeze asistentul vocal prin broadcast."
+          "element": "tts_settings",
+          "title": "Text-to-Speech",
+          "description": "Activează răspunsurile vorbite și configurează motorul TTS, viteza și tonul."
         },
         {
-          "element": "return_after_action",
-          "title": "Întoarcere la aplicația anterioară",
-          "description": "Revino automat la aplicația folosită după executarea unei comenzi."
+          "element": "command_queue",
+          "title": "Coadă de comenzi",
+          "description": "Pune mai multe comenzi la rând, iar VoxCommander le execută una după alta."
         }
       ]
     },
@@ -672,6 +717,16 @@
           "element": "app_aliases",
           "title": "Alias-uri aplicații",
           "description": "Creează nume personalizate pentru aplicații."
+        },
+        {
+          "element": "external_trigger",
+          "title": "Declanșator extern",
+          "description": "Permite aplicațiilor de automatizare precum Tasker să declanșeze asistentul vocal prin broadcast."
+        },
+        {
+          "element": "return_after_action",
+          "title": "Întoarcere la aplicația anterioară",
+          "description": "Revino automat la aplicația folosită după executarea unei comenzi."
         }
       ]
     },
@@ -682,6 +737,11 @@
           "element": "spotify_integration",
           "title": "Integrare Spotify",
           "description": "Conectează contul Spotify pentru control direct al redării. Necesită autorizare OAuth."
+        },
+        {
+          "element": "vox_apps",
+          "title": "Aplicații Vox",
+          "description": "Aplicații companion care adaugă funcții vocale. Aplicațiile instalate care implementează contractul Vox — precum Vox Notes — apar aici automat; spune „notează…\" și comanda le este trimisă."
         },
         {
           "element": "youtube_engine",

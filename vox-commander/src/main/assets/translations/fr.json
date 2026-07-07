@@ -397,5 +397,8 @@
   "vox_apps_unverified": "Ne répond pas",
   "vox_apps_testing": "Test en cours…",
   "vox_apps_first_party": "Native",
-  "vox_apps_third_party": "Tierce"
+  "vox_apps_third_party": "Tierce",
+  "onboarding_permissions_title": "Autorisations",
+  "onboarding_permissions_intro": "Accordez-les pour que l'assistant vocal et son micro flottant fonctionnent partout. Vous pourrez les modifier plus tard dans les Réglages.",
+  "continue_button": "Continuer"
 }
