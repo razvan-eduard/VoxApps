@@ -84,6 +84,8 @@ class SettingsRepositoryImpl(
         // Logging
         val LOG_LEVEL = stringPreferencesKey("log_level")
         val VERBOSE_LOGGING_ENABLED = booleanPreferencesKey("verbose_logging_enabled")
+        val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
+        val THEME_COLORED = booleanPreferencesKey("theme_colored")
 
         // Vulkan
         val VULKAN_INCOMPATIBLE = booleanPreferencesKey("vulkan_incompatible")
@@ -317,6 +319,8 @@ class SettingsRepositoryImpl(
 
             logLevel = prefs[Keys.LOG_LEVEL] ?: "LOGCAT_ONLY",
             verboseLoggingEnabled = prefs[Keys.VERBOSE_LOGGING_ENABLED] ?: false,
+            themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: "SYSTEM",
+            themeColored = prefs[Keys.THEME_COLORED] ?: false,
 
             vulkanIncompatible = prefs[Keys.VULKAN_INCOMPATIBLE] ?: false,
             vulkanProbeDone = prefs[Keys.VULKAN_PROBE_DONE] ?: false,
@@ -580,6 +584,14 @@ class SettingsRepositoryImpl(
 
     override suspend fun setVerboseLoggingEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.VERBOSE_LOGGING_ENABLED] = enabled }
+    }
+
+    override suspend fun setThemeDarkMode(mode: String) {
+        dataStore.edit { it[Keys.THEME_DARK_MODE] = mode }
+    }
+
+    override suspend fun setThemeColored(colored: Boolean) {
+        dataStore.edit { it[Keys.THEME_COLORED] = colored }
     }
 
     // --- VULKAN ---

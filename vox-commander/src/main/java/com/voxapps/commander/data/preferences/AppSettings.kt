@@ -56,6 +56,8 @@ data class AppSettings(
     // --- LOGGING ---
     val logLevel: String = "LOGCAT_ONLY",
     val verboseLoggingEnabled: Boolean = false,
+    val themeDarkMode: String = "SYSTEM", // "SYSTEM", "LIGHT", "DARK"
+    val themeColored: Boolean = false,    // true = Material You dynamic color (Android 12+)
 
     // --- VULKAN ---
     val vulkanIncompatible: Boolean = false,

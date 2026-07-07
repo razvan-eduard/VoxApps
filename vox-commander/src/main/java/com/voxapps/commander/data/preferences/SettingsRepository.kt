@@ -74,6 +74,8 @@ interface SettingsRepository {
     // --- LOGGING ---
     suspend fun setLogLevel(level: String)
     suspend fun setVerboseLoggingEnabled(enabled: Boolean)
+    suspend fun setThemeDarkMode(mode: String)
+    suspend fun setThemeColored(colored: Boolean)
 
     // --- VULKAN ---
     suspend fun setVulkanIncompatible(incompatible: Boolean)

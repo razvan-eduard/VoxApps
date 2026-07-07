@@ -26,6 +26,8 @@ import com.voxapps.commander.ui.screens.main.ListeningScreen
 import com.voxapps.commander.ui.screens.main.SpeakingOverlay
 import com.voxapps.commander.ui.theme.VoxCommanderTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.commander.ui.LocalLanguageManager
 import com.voxapps.commander.utils.Logger
 
@@ -80,7 +82,15 @@ class VoiceOverlayManager(
         val view = ComposeView(context).apply {
             setContent {
                 CompositionLocalProvider(LocalLanguageManager provides languageManager) {
-                VoxCommanderTheme {
+                val themeUi by appStateManager.uiState.collectAsStateWithLifecycle()
+                VoxCommanderTheme(
+                    darkMode = when (themeUi.themeDarkMode) {
+                        "LIGHT" -> com.voxapps.design.VoxDarkMode.LIGHT
+                        "DARK" -> com.voxapps.design.VoxDarkMode.DARK
+                        else -> com.voxapps.design.VoxDarkMode.SYSTEM
+                    },
+                    colored = themeUi.themeColored
+                ) {
                     val stopAll = {
                         VoiceManager.stopListening()
                         TtsManager.stop()

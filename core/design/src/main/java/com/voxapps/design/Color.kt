@@ -1,7 +1,8 @@
-package com.voxapps.commander.ui.theme
+package com.voxapps.design
 
 import androidx.compose.ui.graphics.Color
 
+// Vox brand palette (static scheme, used when Material You "colored" is off).
 val Purple80 = Color(0xFFD0BCFF)
 val PurpleGrey80 = Color(0xFFCCC2DC)
 val Pink80 = Color(0xFFEFB8C8)

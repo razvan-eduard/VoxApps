@@ -133,7 +133,15 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CompositionLocalProvider(LocalLanguageManager provides appContainer.languageManager) {
-            VoxCommanderTheme {
+            val themeUi by appContainer.appStateManager.uiState.collectAsStateWithLifecycle()
+            VoxCommanderTheme(
+                darkMode = when (themeUi.themeDarkMode) {
+                    "LIGHT" -> com.voxapps.design.VoxDarkMode.LIGHT
+                    "DARK" -> com.voxapps.design.VoxDarkMode.DARK
+                    else -> com.voxapps.design.VoxDarkMode.SYSTEM
+                },
+                colored = themeUi.themeColored
+            ) {
                 val navController = rememberNavController()
                 val currentProgress by appContainer.modelManagementViewModel.downloadProgress.collectAsStateWithLifecycle()
                 val successMessage by appContainer.modelManagementViewModel.selectionSuccessMessage.collectAsStateWithLifecycle()

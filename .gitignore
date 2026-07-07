@@ -3,7 +3,11 @@
 # =========================
 .gradle/
 */build/
+**/build/
 /build
+
+# Local-only assistant guidance
+CLAUDE.md
 gradle-app.setting
 bin/
 gen/

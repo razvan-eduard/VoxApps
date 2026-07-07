@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.voxapps.design.VoxDarkMode
+import com.voxapps.design.VoxTheme
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NoteDao
 import com.voxapps.notes.data.NotesDatabase
@@ -64,7 +66,7 @@ class NotesActivity : ComponentActivity() {
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @androidx.compose.runtime.Composable
 private fun NotesApp(dao: NoteDao) {
-    MaterialTheme {
+    VoxTheme(darkMode = VoxDarkMode.SYSTEM, colored = true) {
         val notes by dao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
         val scope = rememberCoroutineScope()
         var draft by remember { mutableStateOf("") }

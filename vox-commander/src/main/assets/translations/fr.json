@@ -383,5 +383,11 @@
   "search_test_placeholder": "Saisir une recherche...",
   "tutorial_section": "Tutoriel",
   "replay_tutorial": "Revoir le tutoriel",
-  "tutorial_description": "Redémarre l'application et affiche à nouveau le tutoriel. Vous pouvez le passer à tout moment."
+  "tutorial_description": "Redémarre l'application et affiche à nouveau le tutoriel. Vous pouvez le passer à tout moment.",
+  "theme_section": "Thème",
+  "theme_system": "Système",
+  "theme_light": "Clair",
+  "theme_dark": "Sombre",
+  "theme_colored": "Coloré (Material You)",
+  "theme_colored_desc": "Utiliser les couleurs dynamiques du système (Android 12+)"
 }

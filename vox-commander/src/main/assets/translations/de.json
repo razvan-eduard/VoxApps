@@ -383,5 +383,11 @@
   "search_test_placeholder": "Suchanfrage eingeben...",
   "tutorial_section": "Tutorial",
   "replay_tutorial": "Tutorial wiederholen",
-  "tutorial_description": "Startet die App neu und zeigt das Tutorial erneut an. Sie können es jederzeit überspringen."
+  "tutorial_description": "Startet die App neu und zeigt das Tutorial erneut an. Sie können es jederzeit überspringen.",
+  "theme_section": "Design",
+  "theme_system": "System",
+  "theme_light": "Hell",
+  "theme_dark": "Dunkel",
+  "theme_colored": "Farbig (Material You)",
+  "theme_colored_desc": "Dynamische Systemfarben verwenden (Android 12+)"
 }

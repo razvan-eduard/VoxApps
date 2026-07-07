@@ -424,5 +424,11 @@
   "search_test_placeholder": "Introduceți o căutare...",
   "tutorial_section": "Tutorial",
   "replay_tutorial": "Reia tutorialul",
-  "tutorial_description": "Repornește aplicația și afișează din nou tutorialul. Poți renunța oricând."
+  "tutorial_description": "Repornește aplicația și afișează din nou tutorialul. Poți renunța oricând.",
+  "theme_section": "Temă",
+  "theme_system": "Sistem",
+  "theme_light": "Luminos",
+  "theme_dark": "Întunecat",
+  "theme_colored": "Colorat (Material You)",
+  "theme_colored_desc": "Folosește culorile dinamice ale sistemului (Android 12+)"
 }

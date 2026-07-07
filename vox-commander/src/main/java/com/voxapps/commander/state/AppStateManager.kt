@@ -330,6 +330,14 @@ class AppStateManager private constructor(
         scope.launch { repo.setWakeWordSensitivity(sensitivity) }
     }
 
+    fun setThemeDarkMode(mode: String) {
+        scope.launch { repo.setThemeDarkMode(mode) }
+    }
+
+    fun setThemeColored(colored: Boolean) {
+        scope.launch { repo.setThemeColored(colored) }
+    }
+
     fun setWakeWordAecEnabled(enabled: Boolean) {
         scope.launch { repo.setWakeWordAecEnabled(enabled) }
     }

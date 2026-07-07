@@ -431,5 +431,11 @@
   "search_test_placeholder": "Enter a search query...",
   "tutorial_section": "Tutorial",
   "replay_tutorial": "Replay Tutorial",
-  "tutorial_description": "Restart the app and show the onboarding tutorial again. You can skip it at any time."
+  "tutorial_description": "Restart the app and show the onboarding tutorial again. You can skip it at any time.",
+  "theme_section": "Theme",
+  "theme_system": "System",
+  "theme_light": "Light",
+  "theme_dark": "Dark",
+  "theme_colored": "Colored (Material You)",
+  "theme_colored_desc": "Use system dynamic colors (Android 12+)"
 }
