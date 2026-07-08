@@ -45,6 +45,19 @@ class WakeWordSensitivityTest {
             assertEquals(0.5f, WakeWordSensitivity.openWakeWordThreshold(bad))
             assertEquals(0.5f, WakeWordSensitivity.porcupineSensitivity(bad))
             assertEquals(0.45f, WakeWordSensitivity.voskTemplateThreshold(bad))
+            assertEquals(0.01f, WakeWordSensitivity.openWakeWordRmsGate(bad))
         }
+    }
+
+    @Test
+    fun `openWakeWord RMS gate - higher sensitivity means a lower (less aggressive) floor`() {
+        val high = WakeWordSensitivity.openWakeWordRmsGate("high")
+        val medium = WakeWordSensitivity.openWakeWordRmsGate("medium")
+        val low = WakeWordSensitivity.openWakeWordRmsGate("low")
+        assertEquals(0.006f, high)
+        assertEquals(0.01f, medium)
+        assertEquals(0.02f, low)
+        // high sensitivity must gate less aggressively than low, so quiet speech still reaches ONNX
+        assertTrue("high gate must be lower (less aggressive) than low", high < low)
     }
 }

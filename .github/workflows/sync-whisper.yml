@@ -1,0 +1,134 @@
+name: Sync whisper.cpp Fork
+
+# vox-commander/src/main/cpp/whisper.cpp is vendored unmodified (no local patch, unlike
+# core/wakeword). This only checks for a new upstream stable tag, compiles it (to prove it still
+# builds against our CMake/Vulkan setup) and opens a PR bumping the submodule pin — it deliberately
+# does NOT call scripts/publish_whisper_libs.sh (that step publishes the compiled .so files as the
+# production DLC release real users download, and must stay a manual, reviewed action after the PR
+# is merged and someone has sanity-checked actual transcription quality on a device — CI can only
+# verify "it compiles", never "it still transcribes correctly").
+
+on:
+  schedule:
+    - cron: '0 6 1 * *' # monthly, 1st day 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Determine current pin and latest upstream stable tag
+        id: versions
+        run: |
+          cd vox-commander/src/main/cpp/whisper.cpp
+          git fetch --tags --quiet
+          CURRENT_SHA=$(git rev-parse --short HEAD)
+          CURRENT_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
+          LATEST_TAG=$(git tag -l "v*" | sort -V | tail -1)
+          cd -
+
+          echo "current_tag=$CURRENT_TAG" >> "$GITHUB_OUTPUT"
+          echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$LATEST_TAG" ] || [ "$CURRENT_TAG" == "$LATEST_TAG" ]; then
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 17
+        if: steps.versions.outputs.has_update == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        if: steps.versions.outputs.has_update == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-licenses: true
+
+      - name: Install NDK and CMake
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Symlink SDK for whisper build script
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          mkdir -p ~/Library/Android/sdk
+          ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
+
+      - name: Install SPIRV-Headers and Shaderc for whisper Vulkan build
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq glslc libshaderc-dev
+          git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git /tmp/spirv-headers
+          cd /tmp/spirv-headers && cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local && sudo cmake --install build
+          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vulkan-headers
+          cd /tmp/vulkan-headers && cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local && sudo cmake --install build
+          sudo ln -sf /usr/bin/glslc /usr/local/bin/glslc 2>/dev/null || true
+
+      - name: Bump submodule to latest tag
+        if: steps.versions.outputs.has_update == 'true'
+        id: bump
+        run: |
+          LATEST_TAG="${{ steps.versions.outputs.latest_tag }}"
+          BRANCH="chore/sync-whisper-$LATEST_TAG"
+          git checkout -b "$BRANCH"
+          cd vox-commander/src/main/cpp/whisper.cpp
+          git checkout "$LATEST_TAG"
+          cd -
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Grant execute permission for gradlew
+        if: steps.versions.outputs.has_update == 'true'
+        run: chmod +x gradlew
+
+      - name: Compile (proves it still builds against our CMake/Vulkan setup)
+        if: steps.versions.outputs.has_update == 'true'
+        run: ./gradlew :vox-commander:assembleDebug --no-daemon
+
+      - name: Run unit tests
+        if: steps.versions.outputs.has_update == 'true'
+        run: ./gradlew :vox-commander:testDebugUnitTest --no-daemon
+
+      - name: Commit submodule bump
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add vox-commander/src/main/cpp/whisper.cpp
+          git commit -m "chore: bump whisper.cpp submodule to ${{ steps.versions.outputs.latest_tag }}"
+          git push origin "${{ steps.bump.outputs.branch }}"
+
+      - name: Open PR
+        if: steps.versions.outputs.has_update == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --title "chore: whisper.cpp upstream ${{ steps.versions.outputs.latest_tag }} available" \
+            --body "Upstream [ggerganov/whisper.cpp](https://github.com/ggerganov/whisper.cpp) tagged \`${{ steps.versions.outputs.latest_tag }}\` (we're pinned at \`${{ steps.versions.outputs.current_tag || steps.versions.outputs.current_sha }}\`).
+
+          This PR bumps the submodule pin and confirms the new version **compiles** (CMake/Vulkan build succeeded) and unit tests pass. It does **not** publish anything.
+
+          Before merging, please:
+          1. Install the debug build on a device and sanity-check actual transcription quality/latency — a successful compile says nothing about STT accuracy.
+          2. Only after merging, run \`./scripts/publish_whisper_libs.sh\` yourself to publish the new \`.so\` libs as the production DLC release (this workflow deliberately never does that automatically)." \
+            --base main \
+            --head "${{ steps.bump.outputs.branch }}"

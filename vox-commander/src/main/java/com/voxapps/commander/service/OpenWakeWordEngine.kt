@@ -87,7 +87,8 @@ class OpenWakeWordEngine(
                 models = models,
                 detectionMode = DetectionMode.SINGLE_BEST,
                 detectionCooldownMs = 2000L,
-                scope = engineScope
+                scope = engineScope,
+                rmsGate = WakeWordSensitivity.openWakeWordRmsGate(sensitivity)
             )
 
             Logger.log("OpenWakeWord engine initialized successfully", TAG)

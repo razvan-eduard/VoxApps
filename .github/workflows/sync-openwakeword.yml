@@ -1,0 +1,107 @@
+name: Sync OpenWakeWord Fork
+
+# core/wakeword vendors + locally patches xyz.rementia/openwakeword-android-kt (see
+# core/wakeword/NOTICE). This does NOT auto-merge anything: it only opens a PR that bumps the
+# vendor/openwakeword-android-kt submodule pin when a new upstream tag appears, so a human can
+# re-vendor the changed sources and re-apply the RMS silence gate patch (search "VoxCommander
+# patch" markers in core/wakeword/.../WakeWordEngine.kt) before merging.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Determine current pin and latest upstream tag
+        id: versions
+        run: |
+          UPSTREAM_URL="https://github.com/Re-MENTIA/openwakeword-android-kt.git"
+          CURRENT_TAG=$(git -C vendor/openwakeword-android-kt describe --tags --exact-match 2>/dev/null || true)
+          CURRENT_SHA=$(git -C vendor/openwakeword-android-kt rev-parse --short HEAD)
+          LATEST_TAG=$(git ls-remote --tags --refs "$UPSTREAM_URL" \
+            | grep -oE "refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$" \
+            | sed 's#refs/tags/##' \
+            | sort -V | tail -1)
+
+          echo "current_tag=$CURRENT_TAG" >> "$GITHUB_OUTPUT"
+          echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+          elif [ "$CURRENT_TAG" == "$LATEST_TAG" ]; then
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump submodule pin + collect source diff
+        if: steps.versions.outputs.has_update == 'true'
+        id: bump
+        run: |
+          LATEST_TAG="${{ steps.versions.outputs.latest_tag }}"
+          BRANCH="chore/sync-openwakeword-$LATEST_TAG"
+
+          git checkout -b "$BRANCH"
+
+          cd vendor/openwakeword-android-kt
+          git fetch --tags --quiet
+          git checkout "$LATEST_TAG"
+          cd ../..
+
+          # Informational diff for the PR body — NOT applied anywhere automatically.
+          diff -ru core/wakeword/src/main/kotlin vendor/openwakeword-android-kt/wakeword/src/main/kotlin \
+            > /tmp/oww-upstream.diff || true
+          {
+            echo "diff<<EOF_DIFF"
+            head -c 60000 /tmp/oww-upstream.diff
+            echo "EOF_DIFF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Commit submodule bump
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add vendor/openwakeword-android-kt
+          git commit -m "chore: bump vendor/openwakeword-android-kt to ${{ steps.versions.outputs.latest_tag }}"
+          git push origin "${{ steps.bump.outputs.branch }}"
+
+      - name: Open PR for manual re-vendor + patch review
+        if: steps.versions.outputs.has_update == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --title "chore: OpenWakeWord upstream ${{ steps.versions.outputs.latest_tag }} available" \
+            --body "Upstream [Re-MENTIA/openwakeword-android-kt](https://github.com/Re-MENTIA/openwakeword-android-kt) released \`${{ steps.versions.outputs.latest_tag }}\` (we're pinned at \`${{ steps.versions.outputs.current_tag || steps.versions.outputs.current_sha }}\`).
+
+          This PR only bumps the \`vendor/openwakeword-android-kt\` submodule pin. **It does NOT touch \`core/wakeword\`** — that needs a human to:
+          1. Re-copy the changed source files from \`vendor/openwakeword-android-kt/wakeword/src/main/kotlin\` into \`core/wakeword/src/main/kotlin\`.
+          2. Re-apply the RMS silence gate patch (search for \`VoxCommander patch\` markers) — the diff below shows what changed upstream.
+          3. Rebuild + run \`:vox-commander:testDebugUnitTest\` before merging.
+
+          <details><summary>Upstream vs. currently vendored source diff</summary>
+
+          \`\`\`diff
+          ${{ steps.bump.outputs.diff }}
+          \`\`\`
+
+          </details>" \
+            --base main \
+            --head "${{ steps.bump.outputs.branch }}"

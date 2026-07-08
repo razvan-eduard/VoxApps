@@ -1,3 +1,6 @@
 [submodule "app/src/main/cpp/whisper.cpp"]
 	path = vox-commander/src/main/cpp/whisper.cpp
 	url = https://github.com/ggerganov/whisper.cpp.git
+[submodule "vendor/openwakeword-android-kt"]
+	path = vendor/openwakeword-android-kt
+	url = https://github.com/Re-MENTIA/openwakeword-android-kt.git

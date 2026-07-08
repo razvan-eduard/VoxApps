@@ -1,0 +1,29 @@
+This module vendors and locally patches code from:
+
+OpenWakeWord Android Kotlin Library
+Copyright 2024 Rementia
+https://github.com/Re-MENTIA/openwakeword-android-kt (Apache License, Version 2.0)
+
+Forked at tag v0.1.5 (commit 24a3517e1e97670daae1ab3e76cb4b2bc48cbd17) into
+core/wakeword/src/main/kotlin. Local patch: an RMS silence gate in WakeWordEngine.kt that skips
+ONNX inference on buffers below an energy floor (see the "VoxCommander patch" markers in that
+file), to reduce always-on wake word battery use. The pristine upstream source is kept as a git
+submodule at vendor/openwakeword-android-kt for future diffing (see scripts/check_openwakeword_version.sh).
+
+That library in turn includes software developed by:
+
+1. OpenWakeWord (https://github.com/dscripka/openWakeWord)
+   Copyright (c) 2022-2024 David Scripka
+   Licensed under the Apache License, Version 2.0
+
+2. Google Speech Embedding Model
+   Copyright Google LLC
+   Licensed under the Apache License, Version 2.0
+
+3. ONNX Runtime Android
+   Copyright (c) Microsoft Corporation
+   Licensed under the MIT License
+
+4. Apache Commons Math
+   Copyright 2001-2016 The Apache Software Foundation
+   Licensed under the Apache License, Version 2.0

@@ -122,8 +122,10 @@ dependencies {
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
     // Porcupine Wake Word Engine (Picovoice)
     implementation("ai.picovoice:porcupine-android:3.0.2")
-    // OpenWakeWord (fully open-source, ONNX-based wake word detection)
-    implementation("xyz.rementia:openwakeword:0.1.5")
+    // OpenWakeWord (fully open-source, ONNX-based wake word detection) — local fork with an RMS
+    // silence gate patch (see core/wakeword/NOTICE); pristine upstream kept at
+    // vendor/openwakeword-android-kt for sync (scripts/check_openwakeword_version.sh).
+    implementation(project(":core:wakeword"))
     // Force ONNX Runtime 1.20.1+ for 16KB page size alignment (required for Android 15+)
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
     // Piper TTS via sherpa-onnx (on-device neural TTS)
@@ -164,8 +166,16 @@ val autoCompileWhisper = tasks.register<Exec>("autoCompileWhisper") {
 val autoCheckVosk = tasks.register<Exec>("autoCheckVosk") {
     group = "verification"
     description = "Verifică dacă a apărut o versiune mai nouă de Vosk pe JitPack."
-    
+
     commandLine("sh", "${project.rootDir}/scripts/check_vosk_version.sh")
+}
+
+// Verifică dacă fork-ul local OpenWakeWord (core/wakeword) a rămas în urma tag-urilor upstream
+val autoCheckOpenWakeWord = tasks.register<Exec>("autoCheckOpenWakeWord") {
+    group = "verification"
+    description = "Verifică dacă submodulul OpenWakeWord a rămas în urma unui tag upstream nou."
+
+    commandLine("sh", "${project.rootDir}/scripts/check_openwakeword_version.sh")
 }
 
 // Copy models.json from repo root into assets (single source of truth in root)
@@ -196,6 +206,7 @@ val copyIntentsJson = tasks.register<Copy>("copyIntentsJson") {
 tasks.named("preBuild") {
     dependsOn(autoCompileWhisper)
     dependsOn(autoCheckVosk)
+    dependsOn(autoCheckOpenWakeWord)
     dependsOn(copyModelsJson)
     dependsOn(copySearchDefinitions)
     dependsOn(copyIntentsJson)

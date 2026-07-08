@@ -36,4 +36,16 @@ object WakeWordSensitivity {
         LOW -> 0.55f
         else -> 0.45f // medium / unknown
     }
+
+    /**
+     * OpenWakeWord RMS silence gate: buffers whose RMS energy falls below this floor skip ONNX
+     * inference entirely (the dominant battery cost of always-on wake word — see forked
+     * WakeWordEngine.start()). Lower = catches quieter speech but saves less; higher = cuts more
+     * aggressively (more battery saved) at the risk of clipping a soft utterance.
+     */
+    fun openWakeWordRmsGate(setting: String?): Float = when (setting) {
+        HIGH -> 0.006f
+        LOW -> 0.02f
+        else -> 0.01f // medium / unknown
+    }
 }
