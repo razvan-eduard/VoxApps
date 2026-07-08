@@ -1,0 +1,109 @@
+name: Sync Vosk Version
+
+# Vosk (com.alphacephei:vosk-android, resolved via JitPack) is a plain binary dependency — no local
+# patch, no native compile. Dependabot's Gradle updater does not reliably track this JitPack-style
+# coordinate (confirmed empirically: it has never opened a PR for it, unlike proper Maven Central
+# artifacts), which is why scripts/check_vosk_version.sh exists as a manual, local-only check. This
+# workflow runs the same check on a schedule and, if newer, opens a PR bumping the version in
+# gradle/libs.versions.toml — reviewed like any dependency PR, no auto-merge.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine current and latest Vosk version
+        id: versions
+        run: |
+          TOML_FILE="gradle/libs.versions.toml"
+          CURRENT_VERSION=$(grep "^vosk =" "$TOML_FILE" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
+
+          LATEST_VERSION=$(curl -s --connect-timeout 5 --max-time 10 \
+            https://jitpack.io/api/builds/com.github.alphacep/vosk-android/latest \
+            | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
+          if [ -z "$LATEST_VERSION" ]; then
+            LATEST_VERSION=$(curl -s --connect-timeout 5 --max-time 10 \
+              "https://search.maven.org/solrsearch/select?q=g:com.alphacephei+AND+a:vosk-android&rows=50&wt=json" \
+              | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | sort -V | tail -1)
+          fi
+
+          echo "current=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST_VERSION" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$LATEST_VERSION" ] || [ "$CURRENT_VERSION" == "$LATEST_VERSION" ]; then
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+          else
+            HIGHER=$(printf "%s\n%s" "$CURRENT_VERSION" "$LATEST_VERSION" | sort -V | tail -1)
+            if [ "$HIGHER" == "$LATEST_VERSION" ]; then
+              echo "has_update=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "has_update=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Set up JDK 17
+        if: steps.versions.outputs.has_update == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        if: steps.versions.outputs.has_update == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-licenses: true
+
+      - name: Bump version in libs.versions.toml
+        if: steps.versions.outputs.has_update == 'true'
+        id: bump
+        run: |
+          LATEST="${{ steps.versions.outputs.latest }}"
+          BRANCH="chore/sync-vosk-$LATEST"
+          git checkout -b "$BRANCH"
+          sed -i "s/^vosk = \".*\"/vosk = \"$LATEST\"/" gradle/libs.versions.toml
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Grant execute permission for gradlew
+        if: steps.versions.outputs.has_update == 'true'
+        run: chmod +x gradlew
+
+      - name: Compile + run unit tests
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          ./gradlew :vox-commander:assembleDebug :vox-commander:testDebugUnitTest --no-daemon
+
+      - name: Commit and push
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gradle/libs.versions.toml
+          git commit -m "chore: bump Vosk to ${{ steps.versions.outputs.latest }}"
+          git push origin "${{ steps.bump.outputs.branch }}"
+
+      - name: Open PR
+        if: steps.versions.outputs.has_update == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --title "chore: bump Vosk ${{ steps.versions.outputs.current }} -> ${{ steps.versions.outputs.latest }}" \
+            --body "New Vosk Android version detected on JitPack (dependabot does not reliably track this coordinate — see scripts/check_vosk_version.sh).
+
+          Compiles and unit tests pass. Before merging, please sanity-check wake-word/STT behavior on a device — a green build doesn't confirm model-loading or recognition accuracy is unaffected." \
+            --base main \
+            --head "${{ steps.bump.outputs.branch }}"
