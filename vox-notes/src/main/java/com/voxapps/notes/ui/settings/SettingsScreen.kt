@@ -1,5 +1,6 @@
 package com.voxapps.notes.ui.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,6 +45,10 @@ fun SettingsScreen(
     val categories = (ui as? NotesUiState.Unlocked)?.categories ?: emptyList()
 
     var page by remember { mutableStateOf(SettingsPage.MENU) }
+
+    // System back mirrors the top-bar arrow: subpage → menu, menu → notes. Without this the back
+    // gesture reaches the activity and closes the app.
+    BackHandler { if (page == SettingsPage.MENU) onBack() else page = SettingsPage.MENU }
 
     val title = when (page) {
         SettingsPage.MENU -> stringResource(R.string.settings)

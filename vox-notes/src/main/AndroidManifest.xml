@@ -4,7 +4,9 @@
     <!-- Private, on-device notes. No network permission by design. -->
 
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-
+    <!-- Android 13+ suppresses toasts from backgrounded apps unless notifications are allowed.
+         Needed for the "toast on voice save" setting (the save is headless via broadcast). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!--
         Custom permission guarding the cross-app command bus. Any app that wants to send Vox
         commands to Notes must hold it. `signature` = only apps signed with the same key (the
