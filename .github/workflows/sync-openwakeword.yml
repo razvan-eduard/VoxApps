@@ -4,7 +4,7 @@ name: Sync OpenWakeWord Fork
 # core/wakeword/NOTICE). This does NOT auto-merge anything: it only opens a PR that bumps the
 # vendor/openwakeword-android-kt submodule pin when a new upstream tag appears, so a human can
 # re-vendor the changed sources and re-apply the RMS silence gate patch (search "VoxCommander
-# patch" markers in core/wakeword/.../WakeWordEngine.kt) before merging.
+# patch" markers in core/wakeword/.../audio/AudioRecorder.kt) before merging.
 
 on:
   schedule:

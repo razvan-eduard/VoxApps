@@ -5,10 +5,12 @@ Copyright 2024 Rementia
 https://github.com/Re-MENTIA/openwakeword-android-kt (Apache License, Version 2.0)
 
 Forked at tag v0.1.5 (commit 24a3517e1e97670daae1ab3e76cb4b2bc48cbd17) into
-core/wakeword/src/main/kotlin. Local patch: an RMS silence gate in WakeWordEngine.kt that skips
-ONNX inference on buffers below an energy floor (see the "VoxCommander patch" markers in that
-file), to reduce always-on wake word battery use. The pristine upstream source is kept as a git
-submodule at vendor/openwakeword-android-kt for future diffing (see scripts/check_openwakeword_version.sh).
+core/wakeword/src/main/kotlin. Local patch: an RMS silence gate in audio/AudioRecorder.kt that
+drops buffers below an energy floor before they are ever converted or emitted, so WakeWordEngine's
+ONNX inference (mel-spectrogram + embedding + classifier) never runs on silence — the dominant
+CPU/battery cost of always-on wake word detection (see the "VoxCommander patch" markers in that
+file). The pristine upstream source is kept as a git submodule at vendor/openwakeword-android-kt
+for future diffing (see scripts/check_openwakeword_version.sh).
 
 That library in turn includes software developed by:
 

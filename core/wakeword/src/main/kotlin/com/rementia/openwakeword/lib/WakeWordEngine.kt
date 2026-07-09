@@ -77,21 +77,22 @@ class WakeWordEngine(
     private val detectionMode: DetectionMode = DetectionMode.SINGLE_BEST,
     private val detectionCooldownMs: Long = 2000L,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
-    // --- VoxCommander patch: RMS silence gate (battery) — start ---
-    // Buffers whose RMS energy falls below this floor skip ONNX inference entirely (mel-spectrogram +
-    // embedding + classifier), which is the dominant CPU/battery cost of always-on wake word detection
-    // on plain silence. 0f preserves upstream behavior (gate disabled). See WakeWordSensitivity in the
-    // consuming app for how this is derived from the user's sensitivity setting.
+    // --- VoxCommander patch: RMS silence gate (battery) — forwarding parameter, no logic here ---
+    // Forwarded straight to AudioRecorder, which is the only place that acts on it (see the
+    // "VoxCommander patch" there). Kept on this public constructor so the consuming app's call site
+    // (OpenWakeWordEngine.kt) doesn't need to change if the gate ever moves again. 0f = disabled,
+    // preserving upstream behavior. See WakeWordSensitivity in the consuming app for how this is
+    // derived from the user's sensitivity setting.
     private val rmsGate: Float = 0f
     // --- VoxCommander patch: RMS silence gate (battery) — end ---
 ) {
-    
+
     companion object {
         private const val TAG = "WakeWordEngine"
     }
-    
+
     private val assetManager: AssetManager = context.assets
-    private val audioRecorder = AudioRecorder(context)
+    private val audioRecorder = AudioRecorder(context, rmsGate)
     private val modelProcessors = mutableMapOf<WakeWordModel, ModelProcessor>()
     private val detectionCooldowns = mutableMapOf<String, Long>()
     
@@ -190,17 +191,9 @@ class WakeWordEngine(
         recordingJob = scope.launch {
             audioRecorder.startRecording()
                 .collect { audioBuffer ->
-                    // --- VoxCommander patch: RMS silence gate (battery) — start ---
-                    // On plain silence, skip ONNX inference (mel-spectrogram + embedding + classifier)
-                    // entirely for this buffer — this is the dominant CPU/battery cost of always-on
-                    // wake word detection. rmsGate=0f (upstream default) never gates anything.
-                    if (rmsGate > 0f) {
-                        var energy = 0f
-                        for (sample in audioBuffer) energy += sample * sample
-                        val rms = kotlin.math.sqrt(energy / audioBuffer.size)
-                        if (rms < rmsGate) return@collect
-                    }
-                    // --- VoxCommander patch: RMS silence gate (battery) — end ---
+                    // The RMS silence gate lives in AudioRecorder (see "VoxCommander patch" there) —
+                    // it never emits a below-threshold buffer, so every buffer reaching this point
+                    // already warrants full ONNX inference.
 
                     // Process all models in parallel and collect results
                     val detectionResults = models.mapIndexed { index, model ->
