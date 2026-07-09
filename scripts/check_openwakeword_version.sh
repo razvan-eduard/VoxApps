@@ -56,7 +56,7 @@ if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
     echo "  2. git add vendor/openwakeword-android-kt   # re-pin the submodule"
     echo "  3. Diff vendor/openwakeword-android-kt/wakeword/src/main/kotlin against core/wakeword/src/main/kotlin,"
     echo "     re-copy changed files, and re-apply the RMS gate patch (search for"
-    echo "     '${BLUE}VoxCommander patch${NC}' markers in core/wakeword/WakeWordEngine.kt)."
+    echo "     '${BLUE}VoxCommander patch${NC}' markers in core/wakeword/.../audio/AudioRecorder.kt)."
     echo -e "  4. Rebuild + retest before committing.\n"
     echo "(The scheduled sync-openwakeword.yml workflow opens a PR for this automatically — this script"
     echo " is the same check run locally/at build time.)"
