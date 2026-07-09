@@ -1,10 +1,13 @@
 package com.voxapps.commander.domain.intent.interpreter
 
+import com.google.gson.Gson
+import com.voxapps.commander.data.remote.RemoteModelSchema
 import com.voxapps.commander.domain.integration.VoxAppInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * Tests for [PromptProvider.stripToRules] — the NLU template is cut to rules-only
@@ -42,6 +45,52 @@ class PromptProviderTest {
         val noExamples = "Rules here.\nInput: \"\${spokenText}\"\nJSON:"
         val rules = PromptProvider.stripToRules(noExamples)
         assertEquals("Rules here.", rules)
+    }
+
+    @Test
+    fun `a rule appended after Examples never reaches the model`() {
+        // Guards the exact failure mode found in production: SATELLITE OVERRIDE was appended after
+        // the Examples: section in models.json and was silently discarded by stripToRules, so the
+        // LLM never saw it (notes never got their category/content extracted correctly).
+        val misplaced = "$template\n\nSATELLITE OVERRIDE: this rule was appended too late."
+        val rules = PromptProvider.stripToRules(misplaced)
+        assertFalse("a rule placed after Examples: is lost", rules.contains("SATELLITE OVERRIDE"))
+    }
+
+    @Test
+    fun `a rule placed before Examples survives stripToRules`() {
+        val withOverride = template.replace(
+            "\${searchProviders}",
+            "\${searchProviders}\n\nSATELLITE OVERRIDE: this rule must reach the model."
+        )
+        val rules = PromptProvider.stripToRules(withOverride)
+        assertTrue("a rule placed before Examples: survives the cut", rules.contains("SATELLITE OVERRIDE"))
+    }
+
+    @Test
+    fun `the real models json prompt keeps SATELLITE OVERRIDE before the Examples cut`() {
+        // Reads the actual repo-root models.json (single source of truth, copied into assets at
+        // build time) to make sure this specific rule never regresses back to living after
+        // Examples: again.
+        val modelsJson = File("../models.json")
+        val schema = Gson().fromJson(modelsJson.readText(), RemoteModelSchema::class.java)
+        val template = requireNotNull(schema.prompts?.get("standard_nlu")) { "standard_nlu prompt missing from models.json" }
+
+        assertTrue(
+            "SATELLITE OVERRIDE must be present in models.json's standard_nlu prompt",
+            template.contains("SATELLITE OVERRIDE")
+        )
+        val rules = PromptProvider.stripToRules(template)
+        assertTrue(
+            "SATELLITE OVERRIDE must survive stripToRules (i.e. be placed before Examples:)",
+            rules.contains("SATELLITE OVERRIDE")
+        )
+        assertFalse(
+            "the shared SATELLITE OVERRIDE rule must stay domain-agnostic — the notes-specific " +
+                "category extraction now lives in vox-notes's own nluHint manifest declaration, " +
+                "surfaced via buildSatelliteHints instead",
+            rules.contains("target list/category")
+        )
     }
 
     // --- Satellite-declared NLU hints (injected dynamically, no models.json edit per satellite) ---
