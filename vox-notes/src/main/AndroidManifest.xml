@@ -53,6 +53,9 @@
             <meta-data android:name="com.voxapps.vox.domain" android:value="notes" />
             <meta-data android:name="com.voxapps.vox.actions" android:value="create,read" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Notes" />
+            <meta-data
+                android:name="com.voxapps.vox.nluHint"
+                android:value="If the user names a target list/category (e.g. &quot;note it in shopping&quot;, &quot;adaugă la cumpărături&quot;, &quot;in the work list&quot;), put that category name in the category field; otherwise category=null." />
         </receiver>
     </application>
 </manifest>

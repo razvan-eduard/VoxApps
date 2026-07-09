@@ -120,8 +120,13 @@ All three wake engines are defined in `models.json` (`wake_vosk`, `wake_openwake
 
 #### OpenWakeWord (`OpenWakeWordEngine.kt`)
 
-- Fully open-source, ONNX-based wake word detection via `xyz.rementia:openwakeword:0.1.5`. Models are `wake_openwakeword` entries in `models.json` (bundled in `assets/openwakeword/`).
+- Fully open-source, ONNX-based wake word detection. Models are `wake_openwakeword` entries in `models.json` (bundled in `assets/openwakeword/`).
 - **Startup warmup** — Detections in the first 1.5 s after each `start()` are ignored. Right after `start()` the mel/embedding feature buffers aren't primed and emit spurious high scores; without this guard the detect → command → re-arm cycle self-triggers into a loop.
+- **Vendored + patched fork (`:core:wakeword`)** — no longer consumed as the `xyz.rementia:openwakeword`
+  JitPack artifact. Upstream runs full ONNX inference (mel-spectrogram → embedding → classifier) on
+  *every* ~80 ms audio buffer, including silence — the dominant CPU/battery cost of always-on wake word
+  detection, and the library exposes no VAD/gating hook (`internal` visibility, no `feed()` API), so a
+  wrapper couldn't fix it — only a source fork could. See [OpenWakeWord Fork & Sync](#openwakeword-fork--sync) below.
 
 ### Sensitivity (`WakeWordSensitivity.kt`)
 
@@ -148,6 +153,42 @@ Sensitivity is baked in at engine `initialize()`, so changing it requires an eng
 - Calibration data (noise floor, threshold)
 
 Serialized as JSON in `wakeWordProfileJson` setting.
+
+### OpenWakeWord Fork & Sync
+
+**Why forked:** upstream (`Re-MENTIA/openwakeword-android-kt`) runs its full ONNX pipeline on every
+buffer regardless of silence, with no exposed gating hook — a real, measurable battery cost for an
+always-on service. Vosk already had bandpass+RMS VAD gating; Porcupine is closed-source and
+purpose-built as a lightweight DSP algorithm (not prioritized — small expected gain, unverifiable
+internals). OpenWakeWord was the one engine that actually needed the fix, and fixing it required
+owning the source.
+
+**Structure:**
+
+| Path | Role |
+|------|------|
+| `vendor/openwakeword-android-kt` | Git submodule — pristine upstream source at a pinned tag. Reference only, never compiled directly. |
+| `core/wakeword/` | Local Gradle module (`android-library`) — vendored + patched copy of the upstream `:wakeword` module, compiled into `vox-commander`. |
+| `core/wakeword/src/main/kotlin/.../audio/AudioRecorder.kt` | The one patched file. An RMS silence gate drops buffers below an energy floor *before* the short→float conversion and *before* anything is emitted — so `WakeWordEngine`'s ONNX inference never runs on silence. Gate floor (`rmsGate`) is derived from the user's Wake Word Sensitivity setting via `WakeWordSensitivity.openWakeWordRmsGate()`; `0f` preserves upstream behavior. |
+| `core/wakeword/patches/0001-rms-silence-gate.patch` | The patch, maintained as a real unified diff (not just "the current file") — regenerate with `scripts/regen_openwakeword_patch.sh` any time the patch itself changes. |
+| `core/wakeword/NOTICE` / `LICENSE` | Apache 2.0 attribution chain (OpenWakeWord, Google Speech Embedding Model, ONNX Runtime). |
+
+**Keeping it in sync with upstream releases:**
+
+- `scripts/check_openwakeword_version.sh` — local, non-destructive dry-run: checks for a newer upstream
+  tag and whether the stored patch would still `git apply --check` cleanly against it, without touching
+  the working tree either way. Wired into `vox-commander`'s `preBuild` as the `autoCheckOpenWakeWord`
+  Gradle task.
+- `.github/workflows/sync-openwakeword.yml` — weekly scheduled (+ manual dispatch) workflow: on a new
+  upstream tag, bumps the submodule, fully re-vendors `core/wakeword`'s sources, and tries to `git apply`
+  the stored patch. If it applies cleanly *and* the module compiles + unit tests pass, it opens a PR
+  that's already ready to review/approve — nothing to hand-merge in the common case. It only surfaces a
+  manual-merge PR (with the reject hunk attached) if the patch genuinely conflicts with an upstream
+  change to the same lines. Never auto-merges.
+- The same pattern (submodule + scheduled sync workflow, PR-per-update, never auto-merged) is used for
+  Whisper.cpp (`sync-whisper.yml`, monthly — compiles/tests only, deliberately never publishes the
+  production `.so` DLC) and Vosk (`sync-vosk.yml`, weekly — Vosk is a binary Maven/JitPack dependency,
+  not vendored source, so it's a version bump in `gradle/libs.versions.toml` rather than a patch).
 
 ---
 
@@ -276,6 +317,24 @@ The NLU prompt is defined in `models.json` under `prompts.standard_nlu`. It inst
 4. Return JSON matching `NluIntent` fields
 
 The prompt is multilingual — it works in any language and always returns domain/action in English.
+
+**`stripToRules()` and rule placement — a load-bearing detail.** `getNluSystemPrompt()` sends the LLM
+only the *rules* portion of the template, not the few-shot examples: `stripToRules()` cuts the raw
+`standard_nlu` string at the **first occurrence of `"Examples:"`** and discards everything after it
+(the examples are for readability/authoring, not for the LLM — the numbered rules are meant to be
+self-describing). This means **any rule — including `SATELLITE OVERRIDE` — must be written before the
+`Examples:` marker in `models.json`, or the LLM silently never sees it.** This exact mistake shipped
+once (the override was appended at the end of the file, after `Examples:`, so every satellite `create`
+command silently lost its category/content extraction until the placement was fixed) — see the
+regression tests in `PromptProviderTest.kt` (`a rule appended after Examples never reaches the model`,
+`the real models json prompt keeps SATELLITE OVERRIDE before the Examples cut`), which read the actual
+repo-root `models.json` and assert the rule survives the cut.
+
+**Shared rule vs. per-satellite hint.** `SATELLITE OVERRIDE` (in `models.json`) is intentionally
+domain-agnostic — the universal create/read stripping semantics for *any* companion-app domain — and
+does not need to grow as more satellites are added. Anything domain-*specific* (e.g. Vox Notes' spoken
+`category`) instead belongs in that satellite's own `nluHint` manifest declaration, surfaced via
+`buildSatelliteHints()` — see [§19 Domain-specific NLU hints](#domain-specific-nlu-hints-nluhint).
 
 ### NluIntentParser (`NluIntentParser.kt`)
 
@@ -986,7 +1045,7 @@ tasks.named("preBuild") {
 | MediaPipe GenAI | (via libs.versions) | Local LLM (llama.cpp) |
 | Google Generative AI | 0.9.0 | Gemini Nano |
 | Picovoice Porcupine | 3.0.2 | Wake word engine |
-| OpenWakeWord | 0.1.5 (rementia) | Wake word engine |
+| OpenWakeWord | v0.1.5 (rementia, vendored fork — `:core:wakeword`) | Wake word engine, RMS silence-gate patched |
 | ONNX Runtime | 1.22.0 | ML inference for OpenWakeWord |
 | Spotify App Remote | (local AAR) | Spotify media control |
 | NewPipe Extractor | v0.24.8 (JitPack) | YouTube search/parsing |
@@ -1006,18 +1065,22 @@ tasks.named("preBuild") {
 |------|-------------|
 | `autoCompileWhisper` | Checks whisper.cpp upstream and recompiles via CMake if needed |
 | `autoCheckVosk` | Checks for newer Vosk version on JitPack |
+| `autoCheckOpenWakeWord` | Checks for a newer OpenWakeWord upstream tag and whether the RMS-gate patch would still apply (see [§2 OpenWakeWord Fork & Sync](#openwakeword-fork--sync)) |
 | `copyModelsJson` | Copies `models.json` from repo root to assets |
 | `copySearchDefinitions` | Copies `search_definitions.json` from repo root to assets |
 | `copyIntentsJson` | Copies `intents.json` from repo root to assets |
 
-All five tasks are dependencies of `preBuild`.
+All six tasks are dependencies of `preBuild`.
 
 ### Repositories
 
 - **Google Maven** — AndroidX, Compose, MediaPipe
 - **Maven Central** — OkHttp, Retrofit, Gson, Apache Commons, ONNX Runtime
-- **JitPack** — Vosk, sherpa-onnx, NewPipe Extractor, OpenWakeWord
+- **JitPack** — Vosk, sherpa-onnx, NewPipe Extractor
 - **Picovoice Maven** — Porcupine
+
+OpenWakeWord is no longer pulled from JitPack — it's vendored as source (`:core:wakeword`, patched) with
+its pristine upstream tracked via a git submodule. See [§2 OpenWakeWord Fork & Sync](#openwakeword-fork--sync).
 
 ---
 
@@ -1035,7 +1098,7 @@ strings locally; nothing forces a dependency.
 
 | Type | Purpose |
 |------|---------|
-| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`), permission helpers |
+| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`, `META_NLU_HINT`), permission helpers |
 | `VoxCommand` | Command envelope authored by Commander (`op`, `text?`, `title?`, `category?`, `domain?`) with `toJson()`/`fromJson()` (org.json) |
 | `VoxResult` | Satellite reply for reads (`ok`, `text`) — the notes payload, or a spoken "locked" message |
 
@@ -1049,11 +1112,15 @@ it handles:
 <receiver android:name=".receiver.VoxCommandReceiver" android:exported="true"
           android:permission="com.voxapps.notes.permission.COMMAND">
     <intent-filter><action android:name="com.voxapps.action.VOX_COMMAND"/></intent-filter>
-    <meta-data android:name="com.voxapps.vox.domain"  android:value="notes"/>
-    <meta-data android:name="com.voxapps.vox.actions" android:value="create,read"/>
-    <meta-data android:name="com.voxapps.vox.label"   android:value="Notes"/>
+    <meta-data android:name="com.voxapps.vox.domain"   android:value="notes"/>
+    <meta-data android:name="com.voxapps.vox.actions"  android:value="create,read"/>
+    <meta-data android:name="com.voxapps.vox.label"    android:value="Notes"/>
+    <meta-data android:name="com.voxapps.vox.nluHint"
+               android:value="If the user names a target list/category, put that category name in the category field; otherwise category=null."/>
 </receiver>
 ```
+
+`nluHint` is optional — see [Domain-specific NLU hints](#domain-specific-nlu-hints-nluhint) below.
 
 On the Commander side:
 
@@ -1086,6 +1153,24 @@ Payloads are **plaintext over Binder** by design: Binder IPC is kernel-mediated 
 apps; encryption *at rest* stays the satellite's concern (e.g. Vox Notes uses SQLCipher). Encrypting the
 payload would require sharing keys across apps and break their independence.
 
+### Domain-specific NLU hints (`nluHint`)
+
+`models.json`'s `SATELLITE OVERRIDE` prompt rule (see [§4 Prompt System](#prompt-system-promptproviderkt))
+only covers behavior that's universal to *any* companion-app domain (create/read stripping semantics).
+Anything domain-*specific* — e.g. Vox Notes' spoken `category` field — is instead declared by the
+satellite itself, via the optional `com.voxapps.vox.nluHint` meta-data key, so that Commander's shared
+prompt never needs a per-app edit:
+
+- **`VoxAppsDiscovery`** reads `META_NLU_HINT` alongside domain/actions/label during discovery and stores
+  it on `VoxAppInfo.nluHint`.
+- **`PromptProvider.buildSatelliteHints()`** filters `VoxSatelliteRegistry.apps` down to installed
+  satellites with a non-blank hint, and appends one line per app under a `Domain-specific extraction:`
+  section, after the rules — e.g. `- notes: If the user names a target list/category, put that category
+  name in the category field; otherwise category=null.`
+- This scales to any number of satellites at negligible prompt-size cost (one short line each) and, more
+  importantly, means a *future* satellite (e.g. a hypothetical expenses app with an `amount` field) never
+  requires touching `models.json` — it just declares its own hint, exactly like Vox Notes does today.
+
 ### Routing hierarchy (`SatelliteHandler` + `SatelliteRouting`)
 
 When several apps advertise the same domain (e.g. Vox Notes **and** a third-party OpenNotes both handle
@@ -1113,6 +1198,7 @@ The **Integrations → Vox Apps** section lists discovered apps with their `doma
 | `VoxAppsDiscovery` / `VoxAppInfo` / `VoxSatelliteRegistry` | `domain/integration/` |
 | `SatelliteRouting` (pure decision) | `domain/integration/SatelliteRouting.kt` |
 | `SatelliteHandler` (dispatch) | `domain/intent/handler/SatelliteHandler.kt` |
+| `PromptProvider.buildSatelliteHints()` (nluHint → prompt) | `domain/intent/interpreter/PromptProvider.kt` |
 | `TtsHookReceiver` / `TtsHookService` | `service/` |
 | Satellite receiver (Notes) | `vox-notes/.../receiver/VoxCommandReceiver.kt` |
 

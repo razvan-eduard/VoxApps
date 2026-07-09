@@ -15,7 +15,7 @@
 
 ---
 
-> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — no shared modules; the only (optional) link is a native Android Intent. Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`) and **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher). Each has its own applicationId, APK, and release workflow. The rest of this README covers `vox-commander`.
+> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, and release workflow; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`) and **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher). A few `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork) are compiled into one or both apps for code reuse — they carry no shared runtime state, just library code. The rest of this README covers `vox-commander`.
 
 ## Features
 
@@ -139,6 +139,9 @@ Each app stays a fully independent product; a user can install any subset.
 - **Self-registration** — a satellite declares an exported `VoxCommandReceiver` (guarded by a
   `signature`-level custom permission) with `<meta-data>` advertising the NLU **domain** it owns and
   the **actions** it accepts. Nothing is hardcoded in Commander, and no per-app entry in `intents.json`.
+  A satellite can optionally declare an `nluHint` too — a free-text sentence teaching the LLM its own
+  domain-specific fields (e.g. Vox Notes' `category` field). Commander surfaces it as a
+  "Domain-specific extraction" line in the shared NLU prompt — no edit to `models.json` needed per app.
 - **Discovery** — at warmup (and on the Integrations screen) Commander scans installed apps for the
   contract, reads their capabilities, and **merges their domains/actions into the NLU taxonomy
   dynamically**. A user's own app that implements the contract appears automatically.
@@ -168,7 +171,7 @@ The first satellite shipping in this repo is **`vox-notes`** (domain `notes`, ac
 |-----------|-----------|
 | UI | Jetpack Compose, Material 3 |
 | STT | Whisper.cpp (GGML, on-device) |
-| Wake Word | Vosk, Picovoice Porcupine, OpenWakeWord |
+| Wake Word | Vosk, Picovoice Porcupine, OpenWakeWord (vendored fork, `:core:wakeword`) |
 | NLU | OpenAI API, Gemini Nano (on-device), Local LLM (llama.cpp) |
 | TTS | Android TextToSpeech, Piper TTS (sherpa-onnx) |
 | Storage | DataStore (preferences), EncryptedSharedPreferences, Room |
@@ -245,6 +248,16 @@ vox-commander/src/main/java/com/voxapps/commander/
 | OpenWakeWord | On-device | ONNX models (open-source), bundled |
 
 All three are defined in `models.json` and selected by capability (not hardcoded). A single **Wake Word Sensitivity** (low/medium/high) maps to a per-engine threshold; changing it prompts a confirmation and hot-reloads the running engine.
+
+**OpenWakeWord is vendored locally as `:core:wakeword`**, not pulled from JitPack — the upstream library
+runs full ONNX inference (mel-spectrogram + embedding + classifier) on every audio buffer, including
+silence, which was a meaningful battery cost for always-on wake word detection. The fork carries a small
+RMS silence-gate patch (`AudioRecorder.kt`) that drops silent buffers before inference ever runs. A git
+submodule (`vendor/openwakeword-android-kt`) tracks the pristine upstream source; the patch itself is a
+maintained diff (`core/wakeword/patches/0001-rms-silence-gate.patch`); a scheduled workflow
+(`.github/workflows/sync-openwakeword.yml`) checks for new upstream releases weekly and opens a PR with
+the patch already re-applied and tested (only needs a manual merge if the patch genuinely conflicts).
+See `core/wakeword/NOTICE` for the full attribution and maintenance process.
 
 ### YouTube Search Engines
 
