@@ -9,8 +9,16 @@ core/wakeword/src/main/kotlin. Local patch: an RMS silence gate in audio/AudioRe
 drops buffers below an energy floor before they are ever converted or emitted, so WakeWordEngine's
 ONNX inference (mel-spectrogram + embedding + classifier) never runs on silence — the dominant
 CPU/battery cost of always-on wake word detection (see the "VoxCommander patch" markers in that
-file). The pristine upstream source is kept as a git submodule at vendor/openwakeword-android-kt
-for future diffing (see scripts/check_openwakeword_version.sh).
+file). The pristine upstream source is kept as a git submodule at vendor/openwakeword-android-kt.
+
+The patch itself is maintained as a real, storable diff at
+core/wakeword/patches/0001-rms-silence-gate.patch (regenerate with
+scripts/regen_openwakeword_patch.sh whenever the patch changes). On an upstream release, the
+scheduled sync-openwakeword.yml workflow re-vendors the sources and auto-applies this patch file —
+opening a PR that's already merged + compiled + tested in the common case. It only needs a manual
+merge if the patch genuinely conflicts (upstream changed the same lines), in which case the PR says
+so explicitly with the reject details attached. scripts/check_openwakeword_version.sh runs the same
+"would it still apply?" check locally, non-destructively.
 
 That library in turn includes software developed by:
 
