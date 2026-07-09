@@ -17,10 +17,12 @@ SUBMODULE_DIR="$PROJECT_ROOT/vendor/openwakeword-android-kt"
 UPSTREAM_URL="https://github.com/Re-MENTIA/openwakeword-android-kt.git"
 
 # Unlike Vosk (consumed as an unmodified binary artifact), OpenWakeWord is vendored as source into
-# core/wakeword with a local patch (RMS silence gate — see core/wakeword/NOTICE). So an available
-# update can't be a one-line version bump: it needs the new source re-copied and the patch
-# re-applied/verified by hand, which is why this only WARNS (same as Vosk) and why the CI sync
-# workflow (.github/workflows/sync-openwakeword.yml) opens a PR instead of auto-merging.
+# core/wakeword with a local patch (RMS silence gate — see core/wakeword/NOTICE), maintained as a
+# real diff at core/wakeword/patches/0001-rms-silence-gate.patch. When a new upstream tag appears,
+# the scheduled CI workflow (.github/workflows/sync-openwakeword.yml) re-vendors the sources and
+# tries to auto-apply that patch — a PR arrives already merged/tested in the common case, and only
+# needs manual work if the patch genuinely conflicts. This script does the same "would it still
+# apply?" dry-run locally, non-destructively (the working tree is left untouched either way).
 
 if [ ! -e "$SUBMODULE_DIR/.git" ]; then
     log_warn "⚠️ vendor/openwakeword-android-kt submodule not initialized — skipping check."
@@ -51,15 +53,44 @@ fi
 
 if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
     log_warn "🚀 UPDATE AVAILABLE: ${CURRENT_TAG:-$CURRENT_SHA} -> $LATEST_TAG"
-    echo -e "\nThis is a ${YELLOW}vendored + patched${NC} fork, not a plain version bump. To update:"
-    echo "  1. cd vendor/openwakeword-android-kt && git fetch --tags && git checkout $LATEST_TAG && cd -"
+
+    # Non-destructive dry-run: fetch the new tag's AudioRecorder.kt content (object database only,
+    # no working-tree checkout), swap it in temporarily, try the patch, then always restore.
+    REL_PATH="core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt"
+    PATCH_FILE="$PROJECT_ROOT/core/wakeword/patches/0001-rms-silence-gate.patch"
+    NEW_PRISTINE=$(mktemp)
+
+    git -C "$SUBMODULE_DIR" fetch --tags --quiet 2>/dev/null
+    UPSTREAM_BLOB=$(git -C "$SUBMODULE_DIR" ls-tree "$LATEST_TAG" -- \
+        "wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt" \
+        2>/dev/null | awk '{print $3}')
+    if [ -n "$UPSTREAM_BLOB" ] && git -C "$SUBMODULE_DIR" cat-file -p "$UPSTREAM_BLOB" > "$NEW_PRISTINE" 2>/dev/null; then
+
+        cp "$PROJECT_ROOT/$REL_PATH" /tmp/oww_check_backup.kt
+        cp "$NEW_PRISTINE" "$PROJECT_ROOT/$REL_PATH"
+
+        if (cd "$PROJECT_ROOT" && git apply --check "$PATCH_FILE" 2>/dev/null); then
+            log_info "✅ The RMS gate patch would still apply cleanly against $LATEST_TAG."
+        else
+            log_warn "⚠️ The RMS gate patch would CONFLICT against $LATEST_TAG — manual merge needed."
+        fi
+
+        cp /tmp/oww_check_backup.kt "$PROJECT_ROOT/$REL_PATH"
+        rm -f /tmp/oww_check_backup.kt
+    else
+        log_warn "⚠️ Could not fetch AudioRecorder.kt at $LATEST_TAG to dry-run the patch."
+    fi
+    rm -f "$NEW_PRISTINE"
+
+    echo -e "\nThis is a ${YELLOW}vendored + patched${NC} fork. To update:"
+    echo "  1. cd vendor/openwakeword-android-kt && git checkout $LATEST_TAG && cd -"
     echo "  2. git add vendor/openwakeword-android-kt   # re-pin the submodule"
-    echo "  3. Diff vendor/openwakeword-android-kt/wakeword/src/main/kotlin against core/wakeword/src/main/kotlin,"
-    echo "     re-copy changed files, and re-apply the RMS gate patch (search for"
-    echo "     '${BLUE}VoxCommander patch${NC}' markers in core/wakeword/.../audio/AudioRecorder.kt)."
-    echo -e "  4. Rebuild + retest before committing.\n"
-    echo "(The scheduled sync-openwakeword.yml workflow opens a PR for this automatically — this script"
-    echo " is the same check run locally/at build time.)"
+    echo "  3. Re-vendor core/wakeword/src/main/kotlin from the submodule, then re-apply"
+    echo "     core/wakeword/patches/0001-rms-silence-gate.patch (git apply it)."
+    echo "  4. If it conflicts, resolve by hand, then run ./scripts/regen_openwakeword_patch.sh"
+    echo -e "  5. Rebuild + retest before committing.\n"
+    echo "(The scheduled sync-openwakeword.yml workflow does all of this automatically and opens a PR —"
+    echo " already merged+tested in the common case, or clearly flagged if it needs manual attention.)"
 else
     log_info "✅ OpenWakeWord fork is up to date (${CURRENT_TAG:-$CURRENT_SHA})."
 fi

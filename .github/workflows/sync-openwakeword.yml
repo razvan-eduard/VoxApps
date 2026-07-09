@@ -1,10 +1,18 @@
-name: Sync OpenWakeWord Fork
+name: Sync OpenWakeword Fork
 
 # core/wakeword vendors + locally patches xyz.rementia/openwakeword-android-kt (see
-# core/wakeword/NOTICE). This does NOT auto-merge anything: it only opens a PR that bumps the
-# vendor/openwakeword-android-kt submodule pin when a new upstream tag appears, so a human can
-# re-vendor the changed sources and re-apply the RMS silence gate patch (search "VoxCommander
-# patch" markers in core/wakeword/.../audio/AudioRecorder.kt) before merging.
+# core/wakeword/NOTICE). The RMS silence gate patch is maintained as a real, storable diff
+# (core/wakeword/patches/0001-rms-silence-gate.patch — regenerate with
+# scripts/regen_openwakeword_patch.sh whenever the patch itself changes).
+#
+# When a new upstream tag appears, this workflow: bumps the pristine vendor/openwakeword-android-kt
+# submodule, re-vendors ALL sources into core/wakeword, and tries to `git apply` the stored patch.
+#   - If it applies cleanly AND the module still compiles + tests pass -> opens a PR that's already
+#     ready to review/approve (the common case — nothing for a human to hand-merge).
+#   - If the patch conflicts (upstream changed the exact patched region) -> opens a PR with the
+#     conflicting hunk attached, clearly marked as needing a manual merge.
+#   - If it applies but something else broke -> opens a PR with the build/test failure attached.
+# Never auto-merges — always a PR for review.
 
 on:
   schedule:
@@ -40,68 +48,137 @@ jobs:
           echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
           echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
 
-          if [ -z "$LATEST_TAG" ]; then
-            echo "has_update=false" >> "$GITHUB_OUTPUT"
-          elif [ "$CURRENT_TAG" == "$LATEST_TAG" ]; then
+          if [ -z "$LATEST_TAG" ] || [ "$CURRENT_TAG" == "$LATEST_TAG" ]; then
             echo "has_update=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_update=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Bump submodule pin + collect source diff
+      - name: Bump submodule + re-vendor sources
         if: steps.versions.outputs.has_update == 'true'
         id: bump
         run: |
           LATEST_TAG="${{ steps.versions.outputs.latest_tag }}"
           BRANCH="chore/sync-openwakeword-$LATEST_TAG"
-
           git checkout -b "$BRANCH"
 
           cd vendor/openwakeword-android-kt
           git fetch --tags --quiet
           git checkout "$LATEST_TAG"
-          cd ../..
+          cd "$GITHUB_WORKSPACE"
 
-          # Informational diff for the PR body — NOT applied anywhere automatically.
-          diff -ru core/wakeword/src/main/kotlin vendor/openwakeword-android-kt/wakeword/src/main/kotlin \
-            > /tmp/oww-upstream.diff || true
-          {
-            echo "diff<<EOF_DIFF"
-            head -c 60000 /tmp/oww-upstream.diff
-            echo "EOF_DIFF"
-          } >> "$GITHUB_OUTPUT"
+          # Full re-vendor: mirror every upstream source file into core/wakeword. For files other
+          # than AudioRecorder.kt this is a pure refresh; AudioRecorder.kt is overwritten with the
+          # pristine upstream version here and patched in the next step.
+          rm -rf core/wakeword/src/main/kotlin/com/rementia
+          mkdir -p core/wakeword/src/main/kotlin/com/rementia
+          cp -r vendor/openwakeword-android-kt/wakeword/src/main/kotlin/com/rementia/* \
+                core/wakeword/src/main/kotlin/com/rementia/
 
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      - name: Commit submodule bump
+      - name: Apply the RMS silence gate patch
+        if: steps.versions.outputs.has_update == 'true'
+        id: apply
+        run: |
+          if git apply --check core/wakeword/patches/0001-rms-silence-gate.patch 2>/tmp/apply-reject.txt; then
+            git apply core/wakeword/patches/0001-rms-silence-gate.patch
+            echo "status=clean" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+            echo "Patch did not apply — see reject details below:"
+            cat /tmp/apply-reject.txt
+          fi
+
+      - name: Set up JDK 17
+        if: steps.versions.outputs.has_update == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        if: steps.versions.outputs.has_update == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-licenses: true
+
+      - name: Grant execute permission for gradlew
+        if: steps.versions.outputs.has_update == 'true'
+        run: chmod +x gradlew
+
+      # Only run the build when the patch applied cleanly — a conflict already means "needs manual
+      # merge", so there's nothing meaningful to compile yet. compileDebugKotlin/testDebugUnitTest
+      # (not assembleDebug) deliberately skip the unrelated whisper.cpp native build and Vosk/OWW
+      # version-check tasks wired into preBuild — this workflow only needs to prove the OpenWakeWord
+      # module and its consumer still compile and pass unit tests.
+      - name: Compile + test (only if the patch applied cleanly)
+        if: steps.versions.outputs.has_update == 'true' && steps.apply.outputs.status == 'clean'
+        id: build
+        run: |
+          if ./gradlew :core:wakeword:compileDebugKotlin \
+                       :vox-commander:compileDebugKotlin \
+                       :vox-commander:testDebugUnitTest \
+                       -x autoCompileWhisper -x autoCheckVosk -x autoCheckOpenWakeWord \
+                       --no-daemon > /tmp/build.log 2>&1; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            tail -c 20000 /tmp/build.log
+          fi
+
+      - name: Commit re-vendor + submodule bump
         if: steps.versions.outputs.has_update == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add vendor/openwakeword-android-kt
-          git commit -m "chore: bump vendor/openwakeword-android-kt to ${{ steps.versions.outputs.latest_tag }}"
+          git add vendor/openwakeword-android-kt core/wakeword/src/main/kotlin
+          git commit -m "chore: sync OpenWakeWord fork to ${{ steps.versions.outputs.latest_tag }}"
           git push origin "${{ steps.bump.outputs.branch }}"
 
-      - name: Open PR for manual re-vendor + patch review
+      - name: Prepare PR body
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          APPLY_STATUS="${{ steps.apply.outputs.status }}"
+          BUILD_STATUS="${{ steps.build.outputs.status }}"
+
+          {
+            echo "Upstream [Re-MENTIA/openwakeword-android-kt](https://github.com/Re-MENTIA/openwakeword-android-kt) released \`${{ steps.versions.outputs.latest_tag }}\` (we were pinned at \`${{ steps.versions.outputs.current_tag || steps.versions.outputs.current_sha }}\`)."
+            echo ""
+            if [ "$APPLY_STATUS" == "clean" ] && [ "$BUILD_STATUS" == "pass" ]; then
+              echo "**✅ Patch applied automatically. Compiles and unit tests pass.** All sources are re-vendored and the RMS silence gate patch (core/wakeword/patches/0001-rms-silence-gate.patch) is already re-applied — nothing left to hand-merge. Please review the diff and approve."
+            elif [ "$APPLY_STATUS" == "clean" ] && [ "$BUILD_STATUS" == "fail" ]; then
+              echo "**⚠️ Patch applied textually, but the build/tests failed** — something else in this release broke compatibility. Log tail:"
+              echo '```'
+              tail -c 8000 /tmp/build.log 2>/dev/null || echo "(log unavailable)"
+              echo '```'
+            else
+              echo "**⚠️ Manual merge needed** — the RMS silence gate patch no longer applies cleanly (upstream changed the same lines in AudioRecorder.kt). All other files are already re-vendored. Reject details:"
+              echo '```'
+              cat /tmp/apply-reject.txt 2>/dev/null || echo "(reject details unavailable)"
+              echo '```'
+              echo ""
+              echo "After resolving, regenerate the patch file with \`./scripts/regen_openwakeword_patch.sh\`."
+            fi
+          } > /tmp/pr-body.md
+
+      - name: Open PR
         if: steps.versions.outputs.has_update == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          APPLY_STATUS="${{ steps.apply.outputs.status }}"
+          BUILD_STATUS="${{ steps.build.outputs.status }}"
+          if [ "$APPLY_STATUS" == "clean" ] && [ "$BUILD_STATUS" == "pass" ]; then
+            TITLE="chore: OpenWakeWord ${{ steps.versions.outputs.latest_tag }} — ready to review"
+          elif [ "$APPLY_STATUS" == "clean" ]; then
+            TITLE="chore: OpenWakeWord ${{ steps.versions.outputs.latest_tag }} — applied but build failed"
+          else
+            TITLE="chore: OpenWakeWord ${{ steps.versions.outputs.latest_tag }} — manual merge needed"
+          fi
+
           gh pr create \
-            --title "chore: OpenWakeWord upstream ${{ steps.versions.outputs.latest_tag }} available" \
-            --body "Upstream [Re-MENTIA/openwakeword-android-kt](https://github.com/Re-MENTIA/openwakeword-android-kt) released \`${{ steps.versions.outputs.latest_tag }}\` (we're pinned at \`${{ steps.versions.outputs.current_tag || steps.versions.outputs.current_sha }}\`).
-
-          This PR only bumps the \`vendor/openwakeword-android-kt\` submodule pin. **It does NOT touch \`core/wakeword\`** — that needs a human to:
-          1. Re-copy the changed source files from \`vendor/openwakeword-android-kt/wakeword/src/main/kotlin\` into \`core/wakeword/src/main/kotlin\`.
-          2. Re-apply the RMS silence gate patch (search for \`VoxCommander patch\` markers) — the diff below shows what changed upstream.
-          3. Rebuild + run \`:vox-commander:testDebugUnitTest\` before merging.
-
-          <details><summary>Upstream vs. currently vendored source diff</summary>
-
-          \`\`\`diff
-          ${{ steps.bump.outputs.diff }}
-          \`\`\`
-
-          </details>" \
+            --title "$TITLE" \
+            --body-file /tmp/pr-body.md \
             --base main \
             --head "${{ steps.bump.outputs.branch }}"

@@ -1,0 +1,39 @@
+--- a/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt
++++ b/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt
+@@ -20,7 +20,16 @@
+  * Emits audio buffers as a Flow for processing.
+  */
+ internal class AudioRecorder(
+-    private val context: Context
++    private val context: Context,
++    // --- VoxCommander patch: RMS silence gate (battery) — start ---
++    // Buffers whose (normalized) RMS energy falls below this floor are dropped here, at the
++    // earliest possible point — before the short->float conversion/allocation and before anything
++    // is emitted into the Flow — so WakeWordEngine's ONNX inference (mel-spectrogram + embedding +
++    // classifier, the dominant CPU/battery cost of always-on wake word detection) never even sees
++    // silence. 0f preserves upstream behavior (gate disabled). See WakeWordSensitivity in the
++    // consuming app for how this is derived from the user's sensitivity setting.
++    private val rmsGate: Float = 0f
++    // --- VoxCommander patch: RMS silence gate (battery) — end ---
+ ) {
+     
+     companion object {
+@@ -73,6 +82,18 @@
+                 val readCount = audioRecord.read(audioBuffer, 0, audioBuffer.size)
+                 
+                 if (readCount > 0) {
++                    // --- VoxCommander patch: RMS silence gate (battery) — start ---
++                    if (rmsGate > 0f) {
++                        var energy = 0f
++                        for (i in 0 until readCount) {
++                            val normalized = audioBuffer[i] / 32768.0f
++                            energy += normalized * normalized
++                        }
++                        val rms = kotlin.math.sqrt(energy / readCount)
++                        if (rms < rmsGate) continue // silence — skip conversion + emit entirely
++                    }
++                    // --- VoxCommander patch: RMS silence gate (battery) — end ---
++
+                     // Convert short array to float array (normalize to -1.0 to 1.0)
+                     val floatBuffer = FloatArray(readCount) { i ->
+                         audioBuffer[i] / 32768.0f
