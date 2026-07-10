@@ -51,6 +51,11 @@ dependencies {
 
     // Biometric read-gate (UI-level access gate; DB stays encrypted via Keystore passphrase).
     implementation(libs.androidx.biometric)
+    // androidx.biometric:1.1.0 transitively pulls the ancient androidx.fragment:1.2.5, whose strict
+    // "lower 16 bits only" requestCode check crashes against the modern ActivityResultRegistry
+    // (androidx.activity, pulled in by the Compose stack) when requesting a runtime permission via
+    // registerForActivityResult — force a current fragment version so it wins dependency resolution.
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 
     // Room + KSP
     implementation(libs.androidx.room.runtime)
