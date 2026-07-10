@@ -40,10 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.voxapps.notes.R
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NoteWithCategory
 import com.voxapps.notes.state.NotesStateManager
@@ -57,6 +55,7 @@ fun NotesScreen(
     stateManager: NotesStateManager,
     onOpenSettings: () -> Unit
 ) {
+    val languageManager = LocalLanguageManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -74,6 +73,9 @@ fun NotesScreen(
                     scope.launch { drawerState.close() }
                 },
                 onAddCategory = { name, color -> stateManager.addCategory(name, color) },
+                onEditCategory = { category, name, color ->
+                    stateManager.updateCategory(category.copy(name = name, colorArgb = color))
+                },
                 onRemoveCategory = { stateManager.removeCategory(it) }
             )
         }
@@ -81,18 +83,18 @@ fun NotesScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.notes_title)) },
+                    title = { Text(languageManager.getString("notes_title")) },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = stringResource(R.string.open_menu))
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = languageManager.getString("open_menu"))
                         }
                     },
                     actions = {
                         IconButton(onClick = { showDateSheet = true }) {
-                            Icon(Icons.Filled.CalendarMonth, contentDescription = stringResource(R.string.sort_and_filter))
+                            Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("sort_and_filter"))
                         }
                         IconButton(onClick = onOpenSettings) {
-                            Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings))
+                            Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
                         }
                     }
                 )
@@ -102,7 +104,7 @@ fun NotesScreen(
                     commitEdit(editing, stateManager)
                     editing = EditBuffer(id = null, title = "", text = "", categoryId = state.selectedCategoryId)
                 }) {
-                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.add_note))
+                    Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_note"))
                 }
             }
         ) { pad ->
@@ -194,6 +196,7 @@ private fun commitEdit(buf: EditBuffer?, stateManager: NotesStateManager) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterChipsRow(state: NotesUiState.Unlocked, stateManager: NotesStateManager) {
+    val languageManager = LocalLanguageManager.current
     val selectedName = state.categories.firstOrNull { it.id == state.selectedCategoryId }?.name
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -202,7 +205,7 @@ private fun FilterChipsRow(state: NotesUiState.Unlocked, stateManager: NotesStat
         FilterChip(
             selected = state.selectedCategoryId == null,
             onClick = { stateManager.setCategoryFilter(null) },
-            label = { Text(stringResource(R.string.all_notes)) }
+            label = { Text(languageManager.getString("all_notes")) }
         )
         if (selectedName != null) {
             FilterChip(
@@ -215,7 +218,7 @@ private fun FilterChipsRow(state: NotesUiState.Unlocked, stateManager: NotesStat
             FilterChip(
                 selected = true,
                 onClick = { stateManager.clearDateFilter() },
-                label = { Text(stringResource(R.string.date_range)) }
+                label = { Text(languageManager.getString("date_range")) }
             )
         }
     }

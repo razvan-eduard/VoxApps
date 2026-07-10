@@ -28,8 +28,18 @@
         android:protectionLevel="signature"
         android:label="Speak text via VoxCommander TTS" />
 
+    <!-- Custom permission guarding the generic LLM hook (a first-party satellite can ask Commander's
+         selected LLM to process a raw prompt). -->
+    <permission
+        android:name="com.voxapps.commander.permission.LLM_PROCESS"
+        android:protectionLevel="signature"
+        android:label="Send a generic LLM request to VoxCommander" />
+
     <!-- Held so Commander can send commands to the Notes satellite's command bus. -->
     <uses-permission android:name="com.voxapps.notes.permission.COMMAND" />
+
+    <!-- Held so Commander can deliver an async LLM hook result back to the Notes satellite. -->
+    <uses-permission android:name="com.voxapps.notes.permission.LLM_RESULT" />
 
     <application
         android:name=".VoxApplication"
@@ -128,6 +138,18 @@
             android:name=".service.TtsHookService"
             android:enabled="true"
             android:exported="false" />
+
+        <!-- Generic LLM hook: a first-party satellite can ask Commander's currently-selected LLM to
+             process a raw prompt and get an async reply back via ACTION_LLM_RESULT. -->
+        <receiver
+            android:name=".service.LlmHookReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="com.voxapps.commander.permission.LLM_PROCESS">
+            <intent-filter>
+                <action android:name="com.voxapps.action.LLM_PROCESS" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

@@ -16,6 +16,17 @@
         android:name="com.voxapps.notes.permission.COMMAND"
         android:protectionLevel="signature" />
 
+    <!--
+        Guards Notes' own generic-LLM-hook result receiver — only Commander (same signing key) may
+        deliver an async LLM reply here, so a third app can't spoof a fake category-merge suggestion.
+    -->
+    <permission
+        android:name="com.voxapps.notes.permission.LLM_RESULT"
+        android:protectionLevel="signature" />
+
+    <!-- Held so Notes can send a generic LLM request to Commander's hook. -->
+    <uses-permission android:name="com.voxapps.commander.permission.LLM_PROCESS" />
+
     <application
         android:name=".NotesApplication"
         android:allowBackup="false"
@@ -56,6 +67,20 @@
             <meta-data
                 android:name="com.voxapps.vox.nluHint"
                 android:value="If the user names a target list/category (e.g. &quot;note it in shopping&quot;, &quot;adaugă la cumpărături&quot;, &quot;in the work list&quot;), put that category name in the category field; otherwise category=null." />
+        </receiver>
+
+        <!--
+            Generic LLM hook result: Commander delivers an async reply here after processing a raw
+            prompt Notes sent it (e.g. the category auto-merge mapping). Guarded by the LLM_RESULT
+            permission above — only Commander (same signing key) can deliver it.
+        -->
+        <receiver
+            android:name=".receiver.LlmResultReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.notes.permission.LLM_RESULT">
+            <intent-filter>
+                <action android:name="com.voxapps.action.LLM_RESULT" />
+            </intent-filter>
         </receiver>
     </application>
 </manifest>

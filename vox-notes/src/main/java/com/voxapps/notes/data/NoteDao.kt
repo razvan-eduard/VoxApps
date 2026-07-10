@@ -29,6 +29,10 @@ interface NoteDao {
     @Query("UPDATE notes SET categoryId = NULL WHERE categoryId = :categoryId")
     suspend fun clearCategory(categoryId: Long)
 
+    /** Reassigns all notes from one category to another (used by category auto-merge). */
+    @Query("UPDATE notes SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
+    suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long)
+
     /** Partial update from the inline editor — preserves createdAt. */
     @Query("UPDATE notes SET title = :title, text = :text, categoryId = :categoryId WHERE id = :id")
     suspend fun updateFields(id: Long, title: String?, text: String, categoryId: Long?)

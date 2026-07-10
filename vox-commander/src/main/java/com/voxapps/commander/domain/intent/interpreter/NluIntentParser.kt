@@ -20,6 +20,14 @@ object NluIntentParser {
     private val TAG = "NluIntentParser"
     private val gson = Gson()
 
+    /**
+     * Generic cleanup for the LLM hook (satellite raw-prompt requests): strips markdown fences and
+     * isolates the first JSON object if the response contains one, otherwise returns the trimmed raw
+     * text unchanged. Domain-agnostic — unlike [parse], it does not assume or require JSON output, so
+     * it works for future non-JSON hook tasks too. Reuses the exact same cleanup [parse] applies today.
+     */
+    fun cleanGenericOutput(raw: String): String = extractJsonBlock(raw)
+
     fun parse(json: String): NluIntent? {
         return try {
             val cleaned = extractJsonBlock(json)

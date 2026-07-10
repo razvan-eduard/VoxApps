@@ -17,4 +17,6 @@ interface NotesSettingsRepository {
     suspend fun setDefaultVoiceCategoryId(id: Long?)
     suspend fun setVoiceSaveToastEnabled(enabled: Boolean)
     suspend fun setAutoCreateVoiceCategory(enabled: Boolean)
+    suspend fun setLanguage(code: String)
+    suspend fun setScheduledMergeInterval(interval: String)
 }

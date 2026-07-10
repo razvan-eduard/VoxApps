@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +27,8 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val DEFAULT_VOICE_CATEGORY_ID = longPreferencesKey("default_voice_category_id")
         val VOICE_SAVE_TOAST_ENABLED = booleanPreferencesKey("voice_save_toast_enabled")
         val AUTO_CREATE_VOICE_CATEGORY = booleanPreferencesKey("auto_create_voice_category")
+        val LANGUAGE = stringPreferencesKey("language")
+        val SCHEDULED_MERGE_INTERVAL = stringPreferencesKey("scheduled_merge_interval")
     }
 
     override val settingsFlow: Flow<NotesSettings> = dataStore.data.map { prefs ->
@@ -34,7 +37,9 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             sessionTimeoutMinutes = prefs[Keys.SESSION_TIMEOUT_MINUTES] ?: NotesSettings.TIMEOUT_30M,
             defaultVoiceCategoryId = prefs[Keys.DEFAULT_VOICE_CATEGORY_ID],
             voiceSaveToastEnabled = prefs[Keys.VOICE_SAVE_TOAST_ENABLED] ?: false,
-            autoCreateVoiceCategory = prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] ?: false
+            autoCreateVoiceCategory = prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] ?: false,
+            language = prefs[Keys.LANGUAGE] ?: defaultDeviceLanguage(),
+            scheduledMergeInterval = prefs[Keys.SCHEDULED_MERGE_INTERVAL] ?: NotesSettings.INTERVAL_OFF
         )
     }
 
@@ -70,4 +75,15 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
     override suspend fun setAutoCreateVoiceCategory(enabled: Boolean) {
         dataStore.edit { it[Keys.AUTO_CREATE_VOICE_CATEGORY] = enabled }
     }
+
+    override suspend fun setLanguage(code: String) {
+        dataStore.edit { it[Keys.LANGUAGE] = code }
+    }
+
+    override suspend fun setScheduledMergeInterval(interval: String) {
+        dataStore.edit { it[Keys.SCHEDULED_MERGE_INTERVAL] = interval }
+    }
+
+    private fun defaultDeviceLanguage(): String =
+        java.util.Locale.getDefault().language.ifBlank { NotesSettings.DEFAULT_LANGUAGE }
 }

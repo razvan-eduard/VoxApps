@@ -16,9 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.voxapps.notes.R
 
 /**
  * The visual barrier shown while [com.voxapps.notes.state.NotesUiState.Locked]. Auto-triggers the
@@ -26,6 +24,7 @@ import com.voxapps.notes.R
  */
 @Composable
 fun AuthGate(onUnlockRequest: () -> Unit) {
+    val languageManager = LocalLanguageManager.current
     LaunchedEffect(Unit) { onUnlockRequest() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -41,12 +40,12 @@ fun AuthGate(onUnlockRequest: () -> Unit) {
                 tint = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = stringResource(R.string.locked_title),
+                text = languageManager.getString("locked_title"),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = 16.dp)
             )
             Button(onClick = onUnlockRequest, modifier = Modifier.padding(top = 24.dp)) {
-                Text(stringResource(R.string.unlock))
+                Text(languageManager.getString("unlock"))
             }
         }
     }

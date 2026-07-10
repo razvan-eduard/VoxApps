@@ -61,10 +61,16 @@ dependencies {
     implementation("androidx.sqlite:sqlite:2.4.0")
     implementation(libs.androidx.security.crypto)
 
+    // Scheduled Auto-Merge Categories (off/daily/weekly/monthly)
+    implementation(libs.androidx.work.runtime.ktx)
+
     // --- Unit tests (JVM, mirror vox-commander) ---
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("app.cash.turbine:turbine:1.1.0")
     testImplementation("androidx.test:core:1.7.0")
+    // org.json ships in android.jar at compile time; unit tests need the real implementation
+    // (mirrors :core:ipc, which needed this for the exact same reason).
+    testImplementation("org.json:json:20240303")
 }

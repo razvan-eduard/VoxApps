@@ -5,6 +5,7 @@ import com.voxapps.notes.data.NotesDatabase
 import com.voxapps.notes.data.NotesRepository
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
 import com.voxapps.notes.data.preferences.NotesSettingsRepositoryImpl
+import com.voxapps.notes.domain.localization.LanguageManager
 import com.voxapps.notes.state.NotesStateManager
 import com.voxapps.notes.state.SessionManager
 
@@ -23,4 +24,8 @@ class NotesContainer(context: Context) {
     val sessionManager = SessionManager()
 
     val notesStateManager = NotesStateManager.getInstance(settingsRepository, notesRepository, sessionManager)
+
+    val languageManager = LanguageManager(appContext).also {
+        it.loadLanguage(settingsRepository.getSnapshot().language)
+    }
 }

@@ -49,4 +49,29 @@ class VoiceCategoryResolverTest {
         val r = VoiceCategoryResolver.resolve(null, cats, defaultCategoryId = 999)
         assertNull(r.categoryId)
     }
+
+    @Test
+    fun `fuzzy match ignores diacritics`() {
+        val cumparaturi = NotesTestDataFactory.category(id = 3, name = "Cumpărături")
+        val catsWithDiacritics = cats + cumparaturi
+        val r = VoiceCategoryResolver.resolve("cumparaturi", catsWithDiacritics, defaultCategoryId = null)
+        assertEquals(3L, r.categoryId)
+        assertEquals("Cumpărături", r.categoryName)
+    }
+
+    @Test
+    fun `fuzzy match handles minor typos`() {
+        val r = VoiceCategoryResolver.resolve("Shoping", cats, defaultCategoryId = null)
+        assertEquals(1L, r.categoryId)
+        assertEquals("Shopping", r.categoryName)
+    }
+
+    @Test
+    fun `fuzzy match rejects dissimilar names and falls back to default`() {
+        val cumparaturi = NotesTestDataFactory.category(id = 3, name = "Cumpărături")
+        val catsWithDiacritics = cats + cumparaturi
+        val r = VoiceCategoryResolver.resolve("Groceries", catsWithDiacritics, defaultCategoryId = 3)
+        assertEquals(3L, r.categoryId)
+        assertEquals("Cumpărături", r.categoryName)
+    }
 }

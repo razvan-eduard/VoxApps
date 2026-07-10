@@ -49,6 +49,12 @@ class GeminiNanoInterpreter(
         null
     }
 
+    override suspend fun rawPrompt(promptText: String): String? {
+        // On-device Gemini Nano inference isn't implemented yet (see processCommand) — the LLM hook
+        // special-cases this engine for a clearer error message rather than relying on this null.
+        return null
+    }
+
     private fun isAicoreAvailable(): Boolean {
         return try {
             context.packageManager.getPackageInfo("com.google.android.aicore", 0)

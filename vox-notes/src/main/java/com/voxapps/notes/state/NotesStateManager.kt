@@ -1,9 +1,12 @@
 package com.voxapps.notes.state
 
+import android.content.Context
 import com.voxapps.notes.data.Category
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NotesRepository
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
+import com.voxapps.notes.domain.llm.CategoryAutoMergeScheduler
+import com.voxapps.notes.domain.llm.CategoryMergeRequestSender
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -78,6 +81,11 @@ class NotesStateManager internal constructor(
     fun setDefaultVoiceCategoryId(id: Long?) { scope.launch { settingsRepo.setDefaultVoiceCategoryId(id) } }
     fun setVoiceSaveToastEnabled(enabled: Boolean) { scope.launch { settingsRepo.setVoiceSaveToastEnabled(enabled) } }
     fun setAutoCreateVoiceCategory(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateVoiceCategory(enabled) } }
+    fun setLanguage(code: String) { scope.launch { settingsRepo.setLanguage(code) } }
+    fun setScheduledMergeInterval(context: Context, interval: String) {
+        scope.launch { settingsRepo.setScheduledMergeInterval(interval) }
+        CategoryAutoMergeScheduler.reschedule(context, interval)
+    }
 
     // --- SESSION LOCK ---
     /** Called after a successful biometric auth; opens the read window per the timeout setting. */
@@ -125,6 +133,17 @@ class NotesStateManager internal constructor(
 
     private fun uiStateCategories(): List<Category> =
         (_uiState.value as? NotesUiState.Unlocked)?.categories ?: emptyList()
+
+    /**
+     * Fires the Auto-Merge Categories request for exactly [categoryNames] (the caller decides which
+     * categories to include — e.g. the manual button only sends the user's checked selection). The
+     * scheduled job (see [com.voxapps.notes.domain.llm.CategoryAutoMergeWorker]) gathers all category
+     * names itself and calls this with the full list.
+     */
+    fun requestCategoryAutoMerge(context: Context, categoryNames: List<String>) {
+        val language = settingsRepo.getSnapshot().language
+        CategoryMergeRequestSender.send(context, categoryNames, language)
+    }
 
     companion object {
         @Volatile private var instance: NotesStateManager? = null

@@ -14,9 +14,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.voxapps.notes.R
 import com.voxapps.notes.state.SortMode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -29,6 +27,7 @@ fun DateSortSheet(
     onClear: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val languageManager = LocalLanguageManager.current
     val rangeState = rememberDateRangePickerState(
         initialSelectedStartDateMillis = dateFrom,
         initialSelectedEndDateMillis = dateTo
@@ -43,12 +42,12 @@ fun DateSortSheet(
                 FilterChip(
                     selected = sort == SortMode.NEWEST,
                     onClick = { onApply(SortMode.NEWEST, rangeState.selectedStartDateMillis, rangeState.selectedEndDateMillis) },
-                    label = { Text(stringResource(R.string.sort_newest)) }
+                    label = { Text(languageManager.getString("sort_newest")) }
                 )
                 FilterChip(
                     selected = sort == SortMode.OLDEST,
                     onClick = { onApply(SortMode.OLDEST, rangeState.selectedStartDateMillis, rangeState.selectedEndDateMillis) },
-                    label = { Text(stringResource(R.string.sort_oldest)) }
+                    label = { Text(languageManager.getString("sort_oldest")) }
                 )
             }
 
@@ -58,10 +57,10 @@ fun DateSortSheet(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                TextButton(onClick = onClear) { Text(stringResource(R.string.clear)) }
+                TextButton(onClick = onClear) { Text(languageManager.getString("clear")) }
                 TextButton(
                     onClick = { onApply(sort, rangeState.selectedStartDateMillis, rangeState.selectedEndDateMillis) }
-                ) { Text(stringResource(R.string.apply)) }
+                ) { Text(languageManager.getString("apply")) }
             }
         }
     }

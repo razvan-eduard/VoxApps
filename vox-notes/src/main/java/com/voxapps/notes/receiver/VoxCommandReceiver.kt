@@ -9,7 +9,6 @@ import com.voxapps.ipc.VoxCommand
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
 import com.voxapps.notes.NotesApplication
-import com.voxapps.notes.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -55,7 +54,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                         )
                         if (settings.voiceSaveToastEnabled) {
                             val label = command.title?.takeIf { it.isNotBlank() } ?: text
-                            val msg = context.getString(R.string.toast_note_saved, label) +
+                            val template = container.languageManager.getString("toast_note_saved")
+                            val msg = String.format(template, label) +
                                 (resolved.categoryName?.let { " · $it" } ?: "")
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(context.applicationContext, msg, Toast.LENGTH_SHORT).show()

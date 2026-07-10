@@ -35,14 +35,30 @@ class OpenAiInterpreter(
         val systemPrompt = PromptProvider.getNluSystemPrompt(snapshot, modelFilterLang, settingsRepo)
         val userPrompt = PromptProvider.formatUserInput(spokenText)
 
+        val content = sendChatCompletion(apiKey, systemPrompt, userPrompt, forceJson = true) ?: return@withContext null
+        Logger.log("OpenAI Response: $content", TAG)
+        NluIntentParser.parse(content)
+    }
+
+    override suspend fun rawPrompt(promptText: String): String? = withContext(Dispatchers.IO) {
+        val apiKey = settingsRepo.getApiKeySync()
+        if (apiKey.isNullOrBlank()) {
+            Logger.log("OpenAI API Key is missing (rawPrompt)", TAG)
+            return@withContext null
+        }
+        sendChatCompletion(apiKey, systemPrompt = null, userPrompt = promptText, forceJson = false)
+    }
+
+    /** Shared "send prompt, get raw text" call used by both [processCommand] and [rawPrompt]. */
+    private fun sendChatCompletion(apiKey: String, systemPrompt: String?, userPrompt: String, forceJson: Boolean): String? {
         val jsonBody = JSONObject().apply {
             put("model", Strings.Models.GPT_4O_MINI)
             put("temperature", 0.0) // Match precision
             put("messages", JSONArray().apply {
-                put(JSONObject().apply { put("role", "system"); put("content", systemPrompt) })
+                systemPrompt?.let { put(JSONObject().apply { put("role", "system"); put("content", it) }) }
                 put(JSONObject().apply { put("role", "user"); put("content", userPrompt) })
             })
-            put("response_format", JSONObject().apply { put("type", "json_object") })
+            if (forceJson) put("response_format", JSONObject().apply { put("type", "json_object") })
         }
 
         val request = Request.Builder()
@@ -51,25 +67,23 @@ class OpenAiInterpreter(
             .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        try {
+        return try {
             val response = client.newCall(request).execute()
             val bodyString = response.body?.string()
-            
+
             if (response.isSuccessful && bodyString != null) {
                 val jsonResponse = JSONObject(bodyString)
-                val content = jsonResponse.getJSONArray("choices")
+                jsonResponse.getJSONArray("choices")
                     .getJSONObject(0)
                     .getJSONObject("message")
                     .getString("content")
-                
-                Logger.log("OpenAI Response: $content", TAG)
-                return@withContext NluIntentParser.parse(content)
             } else {
                 Logger.log("OpenAI API Error: ${response.code} - $bodyString", TAG)
+                null
             }
         } catch (e: Exception) {
             Logger.log("OpenAI Request Failed: ${e.message}", TAG)
+            null
         }
-        null
     }
 }
