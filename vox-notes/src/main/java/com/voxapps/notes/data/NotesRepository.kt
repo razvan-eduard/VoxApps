@@ -46,7 +46,7 @@ class NotesRepository(
         // Unknown spoken category + opt-in → create it (auto-colored) rather than falling back.
         val spoken = spokenCategory?.trim()?.takeIf { it.isNotEmpty() }
         if (resolved.categoryId == null && autoCreate && spoken != null) {
-            val id = addCategory(spoken, CategoryPalette.colorForIndex(cats.size), cats.size, createdAt)
+            val id = addCategory(spoken, CategoryPalette.unusedOrRandomColor(cats.map { it.colorArgb }), cats.size, createdAt)
             if (id > 0) resolved = VoiceCategoryResolver.Resolved(id, spoken)
         }
 
@@ -83,5 +83,24 @@ class NotesRepository(
     suspend fun deleteCategory(category: Category) {
         noteDao.clearCategory(category.id)
         categoryDao.delete(category)
+    }
+
+    /**
+     * Applies an LLM-suggested category merge mapping (old name -> canonical name), e.g. from the
+     * Auto-Merge Categories feature. For each entry where both names resolve to an existing category
+     * and they differ, reassigns all notes from the old category to the canonical one, then deletes
+     * the old category. Case-insensitive name matching, same as [VoiceCategoryResolver]. Entries whose
+     * old or canonical name doesn't match any existing category are silently skipped (the LLM may
+     * suggest names that no longer exist if categories changed between the request and the reply).
+     */
+    suspend fun mergeCategories(mapping: Map<String, String>) {
+        val cats = categoryDao.observeAll().first()
+        for ((oldName, canonicalName) in mapping) {
+            if (oldName.equals(canonicalName, ignoreCase = true)) continue
+            val old = cats.firstOrNull { it.name.equals(oldName, ignoreCase = true) } ?: continue
+            val canonical = cats.firstOrNull { it.name.equals(canonicalName, ignoreCase = true) } ?: continue
+            noteDao.reassignCategory(old.id, canonical.id)
+            categoryDao.delete(old)
+        }
     }
 }

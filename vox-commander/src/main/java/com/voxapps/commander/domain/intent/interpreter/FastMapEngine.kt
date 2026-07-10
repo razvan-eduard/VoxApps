@@ -93,4 +93,7 @@ class FastMapEngine(
 
         return null
     }
+
+    // Regex fast-path has no concept of a raw prompt — always a miss.
+    override suspend fun rawPrompt(promptText: String): String? = null
 }

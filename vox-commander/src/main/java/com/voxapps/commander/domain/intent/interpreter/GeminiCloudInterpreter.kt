@@ -51,4 +51,19 @@ class GeminiCloudInterpreter(
         }
         null
     }
+
+    override suspend fun rawPrompt(promptText: String): String? = withContext(Dispatchers.IO) {
+        val apiKey = settingsRepo.getSettingsSnapshot().geminiApiKey
+        if (apiKey.isNullOrBlank()) {
+            Logger.log("Gemini API key not set — cannot use Gemini Cloud (rawPrompt)", TAG)
+            return@withContext null
+        }
+        val model = GenerativeModel(modelName = Strings.Models.GEMINI_1_5_FLASH, apiKey = apiKey)
+        try {
+            model.generateContent(content { text(promptText) }).text
+        } catch (e: Exception) {
+            Logger.log("Gemini Cloud rawPrompt failed: ${e.message}", TAG)
+            null
+        }
+    }
 }

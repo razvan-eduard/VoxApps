@@ -39,8 +39,8 @@ class NotesActivity : FragmentActivity() {
         }
         BiometricGate.authenticate(
             activity = this,
-            title = getString(R.string.unlock_title),
-            subtitle = getString(R.string.unlock_subtitle),
+            title = container.languageManager.getString("unlock_title"),
+            subtitle = container.languageManager.getString("unlock_subtitle"),
             onSuccess = { container.notesStateManager.unlock() }
         )
     }

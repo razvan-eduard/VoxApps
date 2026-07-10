@@ -107,4 +107,8 @@ class IntentDecisionMap(
         Logger.log("🚫 NO INTENT DETECTED at any level.", TAG)
         return null
     }
+
+    // Not applicable — this class is the NLU-specific L1->L2->L3 cascade orchestrator. The generic
+    // LLM hook (satellite raw-prompt requests) uses the dedicated, non-cascading LlmHookEngineSelector.
+    override suspend fun rawPrompt(promptText: String): String? = null
 }

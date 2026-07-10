@@ -1,6 +1,7 @@
 package com.voxapps.notes.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -13,34 +14,36 @@ import com.voxapps.notes.state.NotesUiState
 import com.voxapps.notes.ui.settings.SettingsScreen
 
 /**
- * Top-level composable: applies the shared theme, observes [NotesUiState], and switches between the
- * lock screen (AuthGate), the notes screen, and settings.
+ * Top-level composable: applies the shared theme, provides [LocalLanguageManager], observes
+ * [NotesUiState], and switches between the lock screen (AuthGate), the notes screen, and settings.
  */
 @Composable
 fun NotesRoot(
     container: NotesContainer,
     onUnlockRequest: () -> Unit
 ) {
-    VoxTheme(darkMode = VoxDarkMode.SYSTEM, colored = true) {
-        val ui by container.notesStateManager.uiState.collectAsStateWithLifecycle()
-        var showSettings by remember { mutableStateOf(false) }
+    CompositionLocalProvider(LocalLanguageManager provides container.languageManager) {
+        VoxTheme(darkMode = VoxDarkMode.SYSTEM, colored = true) {
+            val ui by container.notesStateManager.uiState.collectAsStateWithLifecycle()
+            var showSettings by remember { mutableStateOf(false) }
 
-        when (val state = ui) {
-            is NotesUiState.Loading -> Unit
-            is NotesUiState.Locked -> AuthGate(onUnlockRequest = onUnlockRequest)
-            is NotesUiState.Unlocked -> {
-                if (showSettings) {
-                    SettingsScreen(
-                        stateManager = container.notesStateManager,
-                        settingsRepo = container.settingsRepository,
-                        onBack = { showSettings = false }
-                    )
-                } else {
-                    NotesScreen(
-                        state = state,
-                        stateManager = container.notesStateManager,
-                        onOpenSettings = { showSettings = true }
-                    )
+            when (val state = ui) {
+                is NotesUiState.Loading -> Unit
+                is NotesUiState.Locked -> AuthGate(onUnlockRequest = onUnlockRequest)
+                is NotesUiState.Unlocked -> {
+                    if (showSettings) {
+                        SettingsScreen(
+                            stateManager = container.notesStateManager,
+                            settingsRepo = container.settingsRepository,
+                            onBack = { showSettings = false }
+                        )
+                    } else {
+                        NotesScreen(
+                            state = state,
+                            stateManager = container.notesStateManager,
+                            onOpenSettings = { showSettings = true }
+                        )
+                    }
                 }
             }
         }

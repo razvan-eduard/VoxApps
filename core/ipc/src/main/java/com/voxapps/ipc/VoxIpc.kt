@@ -9,17 +9,26 @@ package com.voxapps.ipc
  *  - Commander → satellite: [ACTION_COMMAND] broadcast carrying a [VoxCommand] JSON in [EXTRA_PAYLOAD].
  *  - satellite → Commander (read result): ordered-broadcast `resultData` carrying a [VoxResult] JSON.
  *  - any app → Commander TTS: [ACTION_SPEAK] broadcast carrying text in [EXTRA_QUERY].
+ *  - satellite → Commander (generic LLM hook): [ACTION_LLM_PROCESS] broadcast carrying a [VoxLlmRequest]
+ *    JSON in [EXTRA_LLM_PAYLOAD], guarded by [LLM_PROCESS_PERMISSION]. Fully asynchronous — Commander
+ *    replies later, it does not respond within this broadcast.
+ *  - Commander → satellite (LLM result): [ACTION_LLM_RESULT] explicit-intent broadcast (targeted at the
+ *    request's `sourcePackage`) carrying a [VoxLlmResult] JSON in [EXTRA_LLM_PAYLOAD], guarded by the
+ *    satellite's own [llmResultPermission].
  */
 object VoxIpc {
     // --- Actions ---
     const val ACTION_COMMAND = "com.voxapps.action.VOX_COMMAND"
     const val ACTION_SPEAK = "com.voxapps.action.SPEAK"
     const val CATEGORY_VOX = "com.voxapps.category.VOX"
+    const val ACTION_LLM_PROCESS = "com.voxapps.action.LLM_PROCESS"
+    const val ACTION_LLM_RESULT = "com.voxapps.action.LLM_RESULT"
 
     // --- Extras ---
     const val EXTRA_PAYLOAD = "com.voxapps.extra.PAYLOAD"
     const val EXTRA_RESULT = "com.voxapps.extra.RESULT"
     const val EXTRA_QUERY = "com.voxapps.extra.QUERY"
+    const val EXTRA_LLM_PAYLOAD = "com.voxapps.extra.LLM_PAYLOAD"
 
     // --- Command ops ---
     const val OP_CREATE = "create"
@@ -55,4 +64,10 @@ object VoxIpc {
 
     /** The permission a caller must hold to send commands to a satellite package. */
     fun commandPermission(satellitePackage: String): String = "$satellitePackage.permission.COMMAND"
+
+    /** The permission a caller must hold to send a generic LLM request to Commander. */
+    const val LLM_PROCESS_PERMISSION = "com.voxapps.commander.permission.LLM_PROCESS"
+
+    /** The permission Commander must hold to deliver an async LLM result back to a satellite package. */
+    fun llmResultPermission(satellitePackage: String): String = "$satellitePackage.permission.LLM_RESULT"
 }

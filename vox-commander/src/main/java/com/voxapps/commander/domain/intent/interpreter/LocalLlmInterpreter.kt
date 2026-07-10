@@ -159,6 +159,27 @@ class LocalLlmInterpreter(
         }
     }
 
+    override suspend fun rawPrompt(promptText: String): String? = withContext(Dispatchers.IO) {
+        isProcessing = true
+        try {
+            setupLlm()
+            val engine = llmInference ?: return@withContext null
+            // Deliberately does NOT touch baseSession/cachedSystemPromptHash — those are primed with
+            // the NLU system prompt for processCommand()'s per-utterance path. A raw-prompt call has
+            // a different "system" framing per task and is infrequent (manual button / scheduled
+            // job), so it uses the same no-session fallback path processCommand() already has for
+            // when no session is available, rather than corrupting or reusing the NLU session cache.
+            try {
+                engine.generateResponse(promptText)
+            } catch (e: Exception) {
+                Logger.log("LLM rawPrompt generation failed: ${e.message}", TAG)
+                null
+            }
+        } finally {
+            isProcessing = false
+        }
+    }
+
     /**
      * Releases the LLM engine (~500MB+) on system memory pressure while keeping
      * the interpreter alive. setupLlm() will transparently reload it on the next

@@ -60,6 +60,13 @@ class AppContainer(context: Context) {
     val geminiNanoInterpreter = GeminiNanoInterpreter(appContext, settingsRepository)
     val geminiCloudInterpreter = GeminiCloudInterpreter(settingsRepository)
     val masterIntentEngine = IntentDecisionMap(l1Engine, l2Engine, localLlmInterpreter, geminiNanoInterpreter, geminiCloudInterpreter, settingsRepository)
+    val llmHookEngineSelector = com.voxapps.commander.domain.intent.LlmHookEngineSelector(
+        openAiEngine = l2Engine,
+        geminiCloudEngine = geminiCloudInterpreter,
+        localLlmEngine = localLlmInterpreter,
+        geminiNanoEngine = geminiNanoInterpreter,
+        settingsRepo = settingsRepository
+    )
     val intentRouter = IntentRouter(appContext, settingsRepository)
 
     // --- VIEW MODELS ---

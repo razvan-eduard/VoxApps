@@ -45,11 +45,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.voxapps.notes.R
 import com.voxapps.notes.data.Category
 import com.voxapps.notes.data.NoteWithCategory
 import kotlin.math.abs
@@ -111,6 +109,7 @@ fun NoteEditorCard(
     onDone: () -> Unit,
     onDelete: (() -> Unit)?
 ) {
+    val languageManager = LocalLanguageManager.current
     val selectedCategory = categories.firstOrNull { it.id == categoryId }
     Card(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
@@ -127,7 +126,7 @@ fun NoteEditorCard(
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     decorationBox = { inner ->
                         if (title.isEmpty()) Text(
-                            stringResource(R.string.note_title_optional),
+                            languageManager.getString("note_title_optional"),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -142,7 +141,7 @@ fun NoteEditorCard(
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     decorationBox = { inner ->
                         if (text.isEmpty()) Text(
-                            stringResource(R.string.note_text),
+                            languageManager.getString("note_text"),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -157,11 +156,11 @@ fun NoteEditorCard(
                 ) {
                     if (onDelete != null) {
                         IconButton(onClick = onDelete) {
-                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.delete))
+                            Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
                         }
                     }
                     IconButton(onClick = onDone) {
-                        Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.save))
+                        Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
                     }
                 }
             }
@@ -187,6 +186,7 @@ private fun CategoryCoverflow(
     selectedId: Long?,
     onSelect: (Long?) -> Unit
 ) {
+    val languageManager = LocalLanguageManager.current
     val entries = remember(categories) { listOf<Category?>(null) + categories }
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -219,7 +219,7 @@ private fun CategoryCoverflow(
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = entries.getOrNull(centeredIndex)?.name ?: stringResource(R.string.none),
+            text = entries.getOrNull(centeredIndex)?.name ?: languageManager.getString("none"),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.End,
