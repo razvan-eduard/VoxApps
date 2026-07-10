@@ -6,12 +6,12 @@
 > *build-time mechanism* — what gets fetched, built, or patched before compilation, and how it stays
 > in sync with upstream — as its own cross-cutting topic.
 
-VoxApps depends on five native/ML libraries that aren't simple Maven artifacts. Each falls into one of
+VoxApps depends on six native/ML libraries that aren't simple Maven artifacts. Each falls into one of
 two patterns:
 
 | Pattern | Meaning | Used by |
 |---|---|---|
-| **A — binary dependency, version-check only** | A normal Maven/JitPack artifact; no source vendored, nothing compiled locally. A script just checks whether a newer published version exists. | Vosk |
+| **A — binary dependency, version-check only** | A normal Maven/JitPack artifact; no source vendored, nothing compiled locally. A script just checks whether a newer published version exists. | Vosk, NewPipeExtractor |
 | **B — vendored source, built and/or patched locally** | The actual source (unmodified, or with a small local patch) lives in this repo/is compiled from a submodule at build time, because the upstream binary is broken, unmaintained, or missing a feature we need. | Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk |
 
 ## At a glance
@@ -19,6 +19,7 @@ two patterns:
 | Dependency | Module | Pristine reference | Local copy | Patched? | Built at build time? | Gradle task | Sync workflow |
 |---|---|---|---|---|---|---|---|
 | Vosk | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckVosk` | `sync-vosk.yml` (weekly) |
+| NewPipeExtractor | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckNewPipeExtractor` | `sync-newpipe-extractor.yml` (weekly) |
 | Whisper.cpp | `vox-commander/src/main/cpp/whisper.cpp` | *is* the submodule | *is* the submodule | No | Yes (CMake, every build if stale) | `autoCompileWhisper` | `sync-whisper.yml` (monthly, compile-check only) |
 | OpenWakeWord | `core/wakeword` | `vendor/openwakeword-android-kt` (submodule) | `core/wakeword/src/...` | Yes — RMS silence gate | No (plain Kotlin/ONNX Runtime) | `autoCheckOpenWakeWord` | `sync-openwakeword.yml` (weekly) |
 | OpenCV | `vendor/ppocr-sdk/opencv/` (gitignored output) | `vendor/opencv` (submodule) | — (build output only, not vendored as source) | No | Yes (CMake, skips only if the built commit matches the pinned submodule commit — see below) | `autoCompileOpenCv` | `sync-opencv.yml` (weekly) |
@@ -41,11 +42,31 @@ JitPack-style coordinate (confirmed empirically — it has never opened a PR for
   update notice (no automatic change).
 - **`autoCheckVosk`** Gradle task (`vox-commander/build.gradle.kts`) runs this on every `preBuild`.
 - **`.github/workflows/sync-vosk.yml`** — same check on a weekly schedule; bumps
-  `libs.versions.toml`, runs `assembleDebug` + `testDebugUnitTest`, and — the one `sync-*.yml` that
-  does — **auto-merges on green**, same as `dependabot-automerge.yml`. Vosk carries no local patch and
-  isn't compiled in-repo, the closest risk profile to a normal Dependabot bump; accepted residual risk
-  is that a green build can't confirm wake-word model-loading/recognition accuracy, only that Vosk's
-  API surface still resolves and compiles.
+  `libs.versions.toml`, runs `assembleDebug` + `testDebugUnitTest`, and — one of two `sync-*.yml`
+  workflows that does — **auto-merges on green**, same as `dependabot-automerge.yml`. Vosk carries no
+  local patch and isn't compiled in-repo, the closest risk profile to a normal Dependabot bump;
+  accepted residual risk is that a green build can't confirm wake-word model-loading/recognition
+  accuracy, only that Vosk's API surface still resolves and compiles.
+
+---
+
+## Pattern A: NewPipeExtractor (version-check only)
+
+`com.github.teamnewpipe:NewPipeExtractor` (resolved via JitPack) — YouTube search/extraction, used in
+place of a cloud API. Same shape as Vosk: no source vendored, nothing compiled, Dependabot doesn't
+reliably track this JitPack-style coordinate either.
+
+- **`scripts/check_newpipe_extractor_version.sh`** — queries the JitPack API (with a GitHub-tags
+  fallback, since unlike Vosk this isn't published on Maven Central at all) for the latest tag,
+  compares it against `gradle/libs.versions.toml`, and prints an update notice (no automatic change).
+- **`autoCheckNewPipeExtractor`** Gradle task (`vox-commander/build.gradle.kts`) runs this on every
+  `preBuild`.
+- **`.github/workflows/sync-newpipe-extractor.yml`** — same check weekly; bumps `libs.versions.toml`,
+  runs `assembleDebug` + `testDebugUnitTest`, and — like Vosk — **auto-merges on green**. Same risk
+  profile as Vosk (no patch, no in-repo compile); accepted residual risk is that a green build can't
+  confirm YouTube search/extraction still works against YouTube's current page structure — that's
+  exactly the kind of breakage this library needs frequent updates for — only that its API surface
+  still resolves and compiles.
 
 ---
 
@@ -210,7 +231,8 @@ Across Pattern B dependencies:
 - **Naming**: `scripts/check_<name>_version.sh` (dry-run, non-destructive, safe to run anytime),
   `scripts/regen_<name>_patch.sh` (regenerates the stored patch — only run when you've intentionally
   changed the patch itself), `.github/workflows/sync-<name>.yml` (the scheduled job that does the real
-  work: re-vendor + re-apply + build/test + open a PR). Only `sync-vosk.yml` auto-merges on green —
+  work: re-vendor + re-apply + build/test + open a PR). Only `sync-vosk.yml` and
+  `sync-newpipe-extractor.yml` auto-merge on green (Pattern A, no patch, no in-repo compile) —
   every other one always waits for manual review, since a green build can't verify audio/wake-word/
   speech/vision *behavior*, only that the code still compiles.
 - **NOTICE** file per vendored module: upstream attribution, the exact pinned commit/tag, what the

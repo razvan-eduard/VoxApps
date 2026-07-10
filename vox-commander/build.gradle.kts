@@ -135,8 +135,10 @@ dependencies {
     implementation("com.github.k2-fsa:sherpa-onnx:v1.13.3")
     // Apache Commons Compress for .tar.bz2 extraction (Piper voice models)
     implementation("org.apache.commons:commons-compress:1.28.0")
-    // NewPipe Extractor — YouTube search & video URL parsing (replaces Piped API dependency)
-    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.8")
+    // NewPipe Extractor — YouTube search & video URL parsing (replaces Piped API dependency).
+    // JitPack coordinate, same as Vosk — version pinned in gradle/libs.versions.toml, checked weekly
+    // by scripts/check_newpipe_extractor_version.sh / .github/workflows/sync-newpipe-extractor.yml.
+    implementation(libs.newpipe.extractor)
     // ProcessPhoenix — reliable app restart (handles process kill + relaunch)
     implementation("com.jakewharton:process-phoenix:3.0.0")
     // STT Engines (Whisper.cpp integration)
@@ -171,6 +173,14 @@ val autoCheckVosk = tasks.register<Exec>("autoCheckVosk") {
     description = "Verifică dacă a apărut o versiune mai nouă de Vosk pe JitPack."
 
     commandLine("sh", "${project.rootDir}/scripts/check_vosk_version.sh")
+}
+
+// Înregistrează o sarcină de execuție pentru verificarea versiunii NewPipeExtractor
+val autoCheckNewPipeExtractor = tasks.register<Exec>("autoCheckNewPipeExtractor") {
+    group = "verification"
+    description = "Verifică dacă a apărut o versiune mai nouă de NewPipeExtractor pe JitPack."
+
+    commandLine("sh", "${project.rootDir}/scripts/check_newpipe_extractor_version.sh")
 }
 
 // Verifică dacă fork-ul local OpenWakeWord (core/wakeword) a rămas în urma tag-urilor upstream
@@ -219,6 +229,7 @@ val copyExternalServicesJson = tasks.register<Copy>("copyExternalServicesJson") 
 tasks.named("preBuild") {
     dependsOn(autoCompileWhisper)
     dependsOn(autoCheckVosk)
+    dependsOn(autoCheckNewPipeExtractor)
     dependsOn(autoCheckOpenWakeWord)
     dependsOn(copyModelsJson)
     dependsOn(copySearchDefinitions)

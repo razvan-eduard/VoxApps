@@ -1,0 +1,124 @@
+name: Sync NewPipeExtractor Version
+
+# NewPipeExtractor (com.github.teamnewpipe:NewPipeExtractor, resolved via JitPack) is a plain binary
+# dependency — no local patch, no native compile — exactly like sync-vosk.yml's Vosk. Dependabot's
+# Gradle updater does not reliably track this JitPack-style coordinate (same reasoning as Vosk), which
+# is why scripts/check_newpipe_extractor_version.sh exists as a manual, local-only check. This
+# workflow runs the same check on a schedule and, if newer, bumps gradle/libs.versions.toml.
+#
+# Auto-merges on green (assembleDebug + testDebugUnitTest), same as dependabot-automerge.yml and
+# sync-vosk.yml — this one's risk profile is just as low: no patch, no in-repo compile. Accepted
+# residual risk: a green build can't confirm YouTube search/extraction still actually works against
+# YouTube's current page structure (NewPipeExtractor is inherently fragile to upstream YouTube
+# changes — that's exactly why it needs frequent updates), only that its API surface still resolves
+# and compiles.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine current and latest NewPipeExtractor version
+        id: versions
+        run: |
+          TOML_FILE="gradle/libs.versions.toml"
+          CURRENT_VERSION=$(grep "^newpipeExtractor =" "$TOML_FILE" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+")
+
+          LATEST_VERSION=$(curl -s --connect-timeout 5 --max-time 10 \
+            https://jitpack.io/api/builds/com.github.teamnewpipe/NewPipeExtractor/latest \
+            | grep -oE "v?[0-9]+\.[0-9]+\.[0-9]+")
+          if [ -z "$LATEST_VERSION" ]; then
+            # Not on Maven Central (unlike Vosk) — fall back to GitHub's own tag list.
+            LATEST_VERSION=$(git ls-remote --tags --refs https://github.com/TeamNewPipe/NewPipeExtractor.git \
+              | grep -oE "refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$" | sed 's#refs/tags/##' | sort -V | tail -1)
+          fi
+          [[ -n "$LATEST_VERSION" && "$LATEST_VERSION" != v* ]] && LATEST_VERSION="v$LATEST_VERSION"
+
+          echo "current=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST_VERSION" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$LATEST_VERSION" ] || [ "$CURRENT_VERSION" == "$LATEST_VERSION" ]; then
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+          else
+            HIGHER=$(printf "%s\n%s" "${CURRENT_VERSION#v}" "${LATEST_VERSION#v}" | sort -V | tail -1)
+            if [ "$HIGHER" == "${LATEST_VERSION#v}" ]; then
+              echo "has_update=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "has_update=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Set up JDK 17
+        if: steps.versions.outputs.has_update == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        if: steps.versions.outputs.has_update == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-licenses: true
+
+      - name: Bump version in libs.versions.toml
+        if: steps.versions.outputs.has_update == 'true'
+        id: bump
+        run: |
+          LATEST="${{ steps.versions.outputs.latest }}"
+          BRANCH="chore/sync-newpipe-extractor-$LATEST"
+          git checkout -b "$BRANCH"
+          sed -i "s/^newpipeExtractor = \".*\"/newpipeExtractor = \"$LATEST\"/" gradle/libs.versions.toml
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Grant execute permission for gradlew
+        if: steps.versions.outputs.has_update == 'true'
+        run: chmod +x gradlew
+
+      - name: Compile + run unit tests
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          ./gradlew :vox-commander:assembleDebug :vox-commander:testDebugUnitTest --no-daemon
+
+      - name: Commit and push
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gradle/libs.versions.toml
+          git commit -m "chore: bump NewPipeExtractor to ${{ steps.versions.outputs.latest }}"
+          git push origin "${{ steps.bump.outputs.branch }}"
+
+      - name: Open PR
+        if: steps.versions.outputs.has_update == 'true'
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          URL=$(gh pr create \
+            --title "chore: bump NewPipeExtractor ${{ steps.versions.outputs.current }} -> ${{ steps.versions.outputs.latest }}" \
+            --body "New NewPipeExtractor version detected on JitPack/GitHub (dependabot does not reliably track this coordinate — see scripts/check_newpipe_extractor_version.sh).
+
+          Compiles and unit tests pass — auto-merging. A green build doesn't confirm YouTube search/extraction still works against YouTube's current page structure, only that NewPipeExtractor's API surface still resolves and compiles; if you notice YouTube search/playback regressions after this lands, this PR is the first place to check." \
+            --base main \
+            --head "${{ steps.bump.outputs.branch }}")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Auto-merge
+        if: steps.versions.outputs.has_update == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge "${{ steps.pr.outputs.url }}" --squash --delete-branch

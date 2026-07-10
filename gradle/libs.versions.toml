@@ -18,6 +18,7 @@ securityCrypto = "1.1.0"
 navigationCompose = "2.9.8"
 gson = "2.14.0"
 vosk = "0.3.75"
+newpipeExtractor = "v0.24.8"
 jna = "5.13.0"
 jsoup = "1.22.2"
 whisperCpp = "0.2.1"
@@ -71,6 +72,7 @@ androidx-biometric = { group = "androidx.biometric", name = "biometric", version
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 vosk-android = { group = "com.alphacephei", name = "vosk-android", version.ref = "vosk" }
+newpipe-extractor = { group = "com.github.teamnewpipe", name = "NewPipeExtractor", version.ref = "newpipeExtractor" }
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 whisper-android = { group = "com.github.PavelDoichev", name = "whisper-android", version = "v1.1.0" }
