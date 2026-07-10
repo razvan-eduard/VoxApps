@@ -1,7 +1,7 @@
 package com.voxapps.vision.ocr
 
 import android.content.Context
-import android.util.Log
+import com.voxapps.logging.Logger
 import com.voxapps.vision.domain.OcrModelRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -59,11 +59,11 @@ class VisionModelDownloader(
         tmpConfig.delete()
         activeZoneFile.writeText(newZone)
 
-        Log.d(TAG, "Switched OCR zone to '$newZone'")
+        Logger.d(TAG, "Switched OCR zone to '$newZone'")
     }
 
     private fun downloadTo(urlString: String, dest: File) {
-        Log.d(TAG, "Downloading $urlString -> ${dest.name}")
+        Logger.d(TAG, "Downloading $urlString -> ${dest.name}")
         URL(urlString).openStream().use { input ->
             dest.outputStream().use { output -> input.copyTo(output) }
         }

@@ -2,7 +2,7 @@ package com.voxapps.notes.domain.llm
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequest
 
@@ -18,7 +18,7 @@ object CategoryMergeRequestSender {
 
     fun send(context: Context, categoryNames: List<String>, languageCode: String) {
         if (categoryNames.size < 2) {
-            Log.w(TAG, "Not sending — fewer than 2 category names: $categoryNames")
+            Logger.w(TAG, "Not sending — fewer than 2 category names: $categoryNames")
             return // nothing to merge
         }
 
@@ -30,7 +30,7 @@ object CategoryMergeRequestSender {
             data = categoryNames
         ).toJson()
 
-        Log.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for ${categoryNames.size} categories: $categoryNames")
+        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for ${categoryNames.size} categories: $categoryNames")
         context.sendBroadcast(
             Intent(VoxIpc.ACTION_LLM_PROCESS)
                 .setPackage(COMMANDER_PACKAGE)

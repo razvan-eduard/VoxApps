@@ -2,7 +2,7 @@ package com.voxapps.vision.domain
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.voxapps.logging.Logger
 import android.widget.Toast
 import com.voxapps.ipc.VoxCommand
 import com.voxapps.ipc.VoxIpc
@@ -26,7 +26,7 @@ object NoteForwarder {
             title = title?.takeIf { it.isNotBlank() },
             category = category?.takeIf { it.isNotBlank() }
         )
-        Log.d(TAG, "Sending create-note command to $NOTES_PACKAGE: title=$title category=$category")
+        Logger.d(TAG, "Sending create-note command to $NOTES_PACKAGE: title=$title category=$category")
         context.sendBroadcast(
             Intent(VoxIpc.ACTION_COMMAND)
                 .setPackage(NOTES_PACKAGE)

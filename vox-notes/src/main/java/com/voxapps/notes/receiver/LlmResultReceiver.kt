@@ -3,7 +3,7 @@ package com.voxapps.notes.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.notes.NotesApplication
@@ -36,19 +36,19 @@ class LlmResultReceiver : BroadcastReceiver() {
             LlmTasks.CATEGORY_DEDUPLICATION -> {
                 val rawJson = result.rawJson
                 if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
-                    Log.w(TAG, "Category auto-merge failed: ${result.error}")
+                    Logger.w(TAG, "Category auto-merge failed: ${result.error}")
                     return
                 }
                 val mapping = CategoryMergeMappingParser.parse(rawJson) ?: run {
-                    Log.w(TAG, "Category auto-merge: could not parse LLM mapping. rawJson=$rawJson")
+                    Logger.w(TAG, "Category auto-merge: could not parse LLM mapping. rawJson=$rawJson")
                     return
                 }
-                Log.d(TAG, "Category auto-merge: applying mapping $mapping")
+                Logger.d(TAG, "Category auto-merge: applying mapping $mapping")
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         container.notesRepository.mergeCategories(mapping)
-                        Log.d(TAG, "Category auto-merge: mergeCategories() completed")
+                        Logger.d(TAG, "Category auto-merge: mergeCategories() completed")
                     } finally {
                         pending.finish()
                     }
@@ -57,14 +57,14 @@ class LlmResultReceiver : BroadcastReceiver() {
             LlmTasks.NOTE_SCAN_CLEANUP -> {
                 val rawJson = result.rawJson
                 if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
-                    Log.w(TAG, "Note scan cleanup failed: ${result.error}")
+                    Logger.w(TAG, "Note scan cleanup failed: ${result.error}")
                     return
                 }
                 val cleaned = NoteScanCleanupResultParser.parse(rawJson) ?: run {
-                    Log.w(TAG, "Note scan cleanup: could not parse LLM result. rawJson=$rawJson")
+                    Logger.w(TAG, "Note scan cleanup: could not parse LLM result. rawJson=$rawJson")
                     return
                 }
-                Log.d(TAG, "Note scan cleanup: creating note title=${cleaned.title} category=${cleaned.category}")
+                Logger.d(TAG, "Note scan cleanup: creating note title=${cleaned.title} category=${cleaned.category}")
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
@@ -88,16 +88,16 @@ class LlmResultReceiver : BroadcastReceiver() {
             LlmTasks.NOTE_DEDUPLICATION -> {
                 val rawJson = result.rawJson
                 if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
-                    Log.w(TAG, "Note deduplication failed: ${result.error}")
+                    Logger.w(TAG, "Note deduplication failed: ${result.error}")
                     return
                 }
                 val groups = NoteDeduplicationResultParser.parse(rawJson) ?: run {
-                    Log.w(TAG, "Note deduplication: could not parse LLM result. rawJson=$rawJson")
+                    Logger.w(TAG, "Note deduplication: could not parse LLM result. rawJson=$rawJson")
                     return
                 }
                 // Deliberately NOT applied here, unlike category merge — real note content needs
                 // user confirmation, so the suggestion is stored for review in Settings instead.
-                Log.d(TAG, "Note deduplication: storing ${groups.size} proposed group(s) for review")
+                Logger.d(TAG, "Note deduplication: storing ${groups.size} proposed group(s) for review")
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
@@ -109,7 +109,7 @@ class LlmResultReceiver : BroadcastReceiver() {
             }
 
             // Future LLM-backed features add a branch here — zero Commander/:core:ipc changes needed.
-            else -> Log.d(TAG, "Ignoring unknown LLM task: ${result.task}")
+            else -> Logger.d(TAG, "Ignoring unknown LLM task: ${result.task}")
         }
     }
 }

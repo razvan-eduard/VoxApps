@@ -2,7 +2,7 @@ package com.voxapps.vision.domain.llm
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequest
 
@@ -25,7 +25,7 @@ object OcrCleanupRequestSender {
             data = listOf(rawText)
         ).toJson()
 
-        Log.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for OCR cleanup")
+        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for OCR cleanup")
         context.sendBroadcast(
             Intent(VoxIpc.ACTION_LLM_PROCESS)
                 .setPackage(COMMANDER_PACKAGE)

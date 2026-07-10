@@ -2,7 +2,7 @@ package com.voxapps.notes.domain.llm
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequest
 
@@ -19,7 +19,7 @@ object NoteDeduplicationRequestSender {
 
     fun send(context: Context, notes: List<NoteSummary>) {
         if (notes.size < 2) {
-            Log.w(TAG, "Not sending — fewer than 2 notes")
+            Logger.w(TAG, "Not sending — fewer than 2 notes")
             return // nothing to dedup
         }
 
@@ -31,7 +31,7 @@ object NoteDeduplicationRequestSender {
             data = notes.map { it.id.toString() }
         ).toJson()
 
-        Log.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for ${notes.size} notes")
+        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for ${notes.size} notes")
         context.sendBroadcast(
             Intent(VoxIpc.ACTION_LLM_PROCESS)
                 .setPackage(COMMANDER_PACKAGE)

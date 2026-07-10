@@ -1,6 +1,7 @@
 package com.voxapps.vision.data.preferences
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
@@ -17,6 +18,7 @@ class VisionSettingsRepository(context: Context) {
     private object Keys {
         val OCR_ZONE = stringPreferencesKey("ocr_zone")
         val AUTO_TRIGGER_SENSITIVITY = stringPreferencesKey("auto_trigger_sensitivity")
+        val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
     }
 
     companion object {
@@ -41,5 +43,13 @@ class VisionSettingsRepository(context: Context) {
 
     suspend fun setAutoTriggerSensitivity(sensitivity: String) {
         dataStore.edit { it[Keys.AUTO_TRIGGER_SENSITIVITY] = sensitivity }
+    }
+
+    /** Gates `com.voxapps.logging.Logger` output — off by default so logcat isn't flooded. */
+    val debugLoggingEnabledFlow: Flow<Boolean> =
+        dataStore.data.map { it[Keys.DEBUG_LOGGING_ENABLED] ?: false }
+
+    suspend fun setDebugLoggingEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
     }
 }

@@ -2,7 +2,7 @@ package com.voxapps.notes.domain.llm
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrRequest
 
@@ -24,7 +24,7 @@ object ScanRequestSender {
             hint = "Scanning for Notes"
         ).toJson()
 
-        Log.d(TAG, "Launching Vision directly for a scan")
+        Logger.d(TAG, "Launching Vision directly for a scan")
         context.startActivity(
             Intent().apply {
                 setClassName(VoxIpc.VISION_PACKAGE, VoxIpc.VISION_ACTIVITY_CLASS)

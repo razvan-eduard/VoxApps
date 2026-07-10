@@ -3,7 +3,7 @@ package com.voxapps.vision.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.vision.domain.NoteForwarder
@@ -28,18 +28,18 @@ class LlmResultReceiver : BroadcastReceiver() {
             LlmTasks.OCR_CLEANUP -> {
                 val rawJson = result.rawJson
                 if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
-                    Log.w(TAG, "OCR cleanup failed: ${result.error}")
+                    Logger.w(TAG, "OCR cleanup failed: ${result.error}")
                     return
                 }
                 val cleaned = OcrCleanupResultParser.parse(rawJson) ?: run {
-                    Log.w(TAG, "OCR cleanup: could not parse LLM result. rawJson=$rawJson")
+                    Logger.w(TAG, "OCR cleanup: could not parse LLM result. rawJson=$rawJson")
                     return
                 }
-                Log.d(TAG, "OCR cleanup: forwarding cleaned note title=${cleaned.title}")
+                Logger.d(TAG, "OCR cleanup: forwarding cleaned note title=${cleaned.title}")
                 NoteForwarder.send(context, text = cleaned.text, title = cleaned.title, category = null)
             }
             // Future LLM-backed features add a branch here — zero Commander/:core:ipc changes needed.
-            else -> Log.d(TAG, "Ignoring unknown LLM task: ${result.task}")
+            else -> Logger.d(TAG, "Ignoring unknown LLM task: ${result.task}")
         }
     }
 }

@@ -3,7 +3,7 @@ package com.voxapps.vision
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.util.Log
+import com.voxapps.logging.Logger
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,7 +47,7 @@ class VisionActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         pendingState = parsePendingRequest(intent)
-        Log.d("VisionActivity", "onCreate: pendingState=$pendingState")
+        Logger.d("VisionActivity", "onCreate: pendingState=$pendingState")
 
         setContent {
             CompositionLocalProvider(LocalLanguageManager provides container.languageManager) {
@@ -68,7 +68,7 @@ class VisionActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingState = parsePendingRequest(intent)
-        Log.d("VisionActivity", "onNewIntent: pendingState=$pendingState")
+        Logger.d("VisionActivity", "onNewIntent: pendingState=$pendingState")
     }
 
     private fun parsePendingRequest(intent: Intent): PendingScanRequest? =

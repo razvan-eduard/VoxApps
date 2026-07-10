@@ -10,8 +10,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
@@ -48,6 +50,7 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
     val activeSensitivity by container.settingsRepository.autoTriggerSensitivityFlow.collectAsState(
         initial = VisionSettingsRepository.DEFAULT_SENSITIVITY
     )
+    val debugLoggingEnabled by container.settingsRepository.debugLoggingEnabledFlow.collectAsState(initial = false)
     var switching by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -110,6 +113,26 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
                     RadioButton(selected = level == activeSensitivity, onClick = null)
                     Text(languageManager.getString("sensitivity_$level"), modifier = Modifier.padding(start = 8.dp))
                 }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(top = 24.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("debug_logging"), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        languageManager.getString("debug_logging_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = debugLoggingEnabled,
+                    onCheckedChange = { scope.launch { container.settingsRepository.setDebugLoggingEnabled(it) } }
+                )
             }
         }
     }

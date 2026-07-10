@@ -77,5 +77,7 @@
   "keep_label": "Păstrează",
   "duplicate_label": "Șterge",
   "apply_selected_button": "Aplică selecția",
-  "dismiss_all_button": "Respinge tot"
+  "dismiss_all_button": "Respinge tot",
+  "debug_logging": "Jurnalizare depanare",
+  "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme"
 }

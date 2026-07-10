@@ -77,5 +77,7 @@
   "keep_label": "Conserver",
   "duplicate_label": "Supprimer",
   "apply_selected_button": "Appliquer la sélection",
-  "dismiss_all_button": "Tout rejeter"
+  "dismiss_all_button": "Tout rejeter",
+  "debug_logging": "Journalisation de débogage",
+  "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage"
 }

@@ -3,7 +3,7 @@ package com.voxapps.notes.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequest
 import com.voxapps.ipc.VoxOcrResult
@@ -32,17 +32,17 @@ class OcrResultReceiver : BroadcastReceiver() {
         val result = VoxOcrResult.fromJson(intent.getStringExtra(VoxIpc.EXTRA_OCR_PAYLOAD)) ?: return
 
         if (result.task != LlmTasks.NOTE_SCAN_CLEANUP) {
-            Log.d(TAG, "Ignoring unknown OCR task: ${result.task}")
+            Logger.d(TAG, "Ignoring unknown OCR task: ${result.task}")
             return
         }
 
         val rawText = result.rawText
         if (result.status != VoxOcrResult.STATUS_SUCCESS || rawText.isNullOrBlank()) {
-            Log.w(TAG, "Scan failed or empty: ${result.error}")
+            Logger.w(TAG, "Scan failed or empty: ${result.error}")
             return
         }
 
-        Log.d(TAG, "Scan result received, forwarding to Commander for cleanup")
+        Logger.d(TAG, "Scan result received, forwarding to Commander for cleanup")
         val container = (context.applicationContext as NotesApplication).container
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {

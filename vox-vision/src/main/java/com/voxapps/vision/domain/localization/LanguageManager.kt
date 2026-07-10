@@ -1,7 +1,7 @@
 package com.voxapps.vision.domain.localization
 
 import android.content.Context
-import android.util.Log
+import com.voxapps.logging.Logger
 import com.voxapps.vision.utils.Strings
 import org.json.JSONObject
 
@@ -20,7 +20,7 @@ class LanguageManager(private val context: Context) {
             val obj = JSONObject(json)
             translations = obj.keys().asSequence().associateWith { obj.optString(it) }
         } catch (e: Exception) {
-            Log.w("LanguageManager", "Language load failed for '$langCode': ${e.message}")
+            Logger.w("LanguageManager", "Language load failed for '$langCode': ${e.message}")
             if (langCode != Strings.Languages.DEFAULT) {
                 loadLanguage(Strings.Languages.DEFAULT)
             }

@@ -12,6 +12,7 @@ import com.voxapps.notes.domain.llm.NoteDeduplicationRepository
 import com.voxapps.notes.domain.llm.NoteDeduplicationRequestSender
 import com.voxapps.notes.domain.llm.NoteDeduplicationScheduler
 import com.voxapps.notes.domain.llm.NoteSummary
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -93,6 +94,10 @@ class NotesStateManager internal constructor(
     fun setScheduledMergeInterval(context: Context, interval: String) {
         scope.launch { settingsRepo.setScheduledMergeInterval(interval) }
         CategoryAutoMergeScheduler.reschedule(context, interval)
+    }
+    fun setDebugLoggingEnabled(enabled: Boolean) {
+        Logger.setEnabled(enabled)
+        scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }
     }
 
     // --- SESSION LOCK ---

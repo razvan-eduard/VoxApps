@@ -3,7 +3,7 @@ package com.voxapps.vision.domain
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.util.Log
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrResult
 
@@ -24,7 +24,7 @@ object OcrResultSender {
             false
         }
         if (!same) {
-            Log.w(TAG, "Refusing OCR reply — signature mismatch for $sourcePackage")
+            Logger.w(TAG, "Refusing OCR reply — signature mismatch for $sourcePackage")
             return
         }
         context.sendBroadcast(
@@ -32,6 +32,6 @@ object OcrResultSender {
                 .setPackage(sourcePackage)
                 .putExtra(VoxIpc.EXTRA_OCR_PAYLOAD, result.toJson())
         )
-        Log.d(TAG, "Sent OCR result to $sourcePackage: status=${result.status}")
+        Logger.d(TAG, "Sent OCR result to $sourcePackage: status=${result.status}")
     }
 }

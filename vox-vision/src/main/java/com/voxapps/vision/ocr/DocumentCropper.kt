@@ -1,6 +1,7 @@
 package com.voxapps.vision.ocr
 
 import android.graphics.Bitmap
+import com.voxapps.logging.Logger
 import org.opencv.android.Utils
 import org.opencv.core.CvType
 import org.opencv.core.Mat
@@ -124,7 +125,7 @@ object DocumentCropper {
 
             val imageArea = gray.rows().toDouble() * gray.cols().toDouble()
             val topCandidates = contours.sortedByDescending { Imgproc.contourArea(it) }.take(5)
-            android.util.Log.d(
+            Logger.d(
                 "DocumentCropper",
                 "size=${gray.cols()}x${gray.rows()} contours=${contours.size} " +
                     "topAreaFraction=${topCandidates.firstOrNull()?.let { Imgproc.contourArea(it) / imageArea }}"

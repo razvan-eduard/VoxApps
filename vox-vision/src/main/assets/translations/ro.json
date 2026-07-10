@@ -24,5 +24,7 @@
   "auto_trigger_sensitivity": "Sensibilitate auto-captură",
   "sensitivity_low": "Scăzută (mai puține declanșări false)",
   "sensitivity_medium": "Medie",
-  "sensitivity_high": "Ridicată (detectează mai mult, poate declanșa pe fundal aglomerat)"
+  "sensitivity_high": "Ridicată (detectează mai mult, poate declanșa pe fundal aglomerat)",
+  "debug_logging": "Jurnalizare depanare",
+  "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme"
 }

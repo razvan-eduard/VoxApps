@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import com.voxapps.logging.Logger
 import androidx.camera.core.ImageProxy
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
@@ -127,9 +128,9 @@ fun VisionScreen(
             try {
                 container.ocrEngineForZone(currentZoneOrDefault(container))
                 engineReady = true
-                android.util.Log.d("VisionScreen", "Engine pre-warm succeeded")
+                Logger.d("VisionScreen", "Engine pre-warm succeeded")
             } catch (t: Throwable) {
-                android.util.Log.e("VisionScreen", "Engine pre-warm failed", t)
+                Logger.e("VisionScreen", "Engine pre-warm failed", t)
             }
         }
     }
@@ -204,7 +205,7 @@ fun VisionScreen(
                     try { DocumentCropper.detectLiveBounds(mat, sensitivityState.value) } finally { mat.release() }
                 }
             } catch (t: Throwable) {
-                android.util.Log.e("VisionScreen", "Framing analysis failed", t)
+                Logger.e("VisionScreen", "Framing analysis failed", t)
                 null
             } finally {
                 image.close()
@@ -221,7 +222,7 @@ fun VisionScreen(
                 armed[0] = false
                 stability[0] = 0
                 liveBounds = null
-                android.util.Log.d("VisionScreen", "Auto-capture triggered (stable framing)")
+                Logger.d("VisionScreen", "Auto-capture triggered (stable framing)")
                 captureAndRecognize(
                     context, scope, cameraController, container,
                     onRecognizing = { isRecognizing = it },
@@ -370,13 +371,13 @@ private fun captureAndRecognize(
     onRecognizing: (Boolean) -> Unit,
     onResult: (String) -> Unit
 ) {
-    android.util.Log.d("VisionScreen", "Scan tapped")
+    Logger.d("VisionScreen", "Scan tapped")
     onRecognizing(true)
     cameraController.takePicture(
         ContextCompat.getMainExecutor(context),
         object : ImageCapture.OnImageCapturedCallback() {
             override fun onCaptureSuccess(image: ImageProxy) {
-                android.util.Log.d("VisionScreen", "Capture succeeded, size=${image.width}x${image.height} format=${image.format} rotation=${image.imageInfo.rotationDegrees}")
+                Logger.d("VisionScreen", "Capture succeeded, size=${image.width}x${image.height} format=${image.format} rotation=${image.imageInfo.rotationDegrees}")
                 val bitmap = imageProxyToBitmap(image)
                 image.close()
                 scope.launch {
@@ -386,12 +387,12 @@ private fun captureAndRecognize(
                         // (OcrEngine.create()) — DocumentCropper needs that done first.
                         val engine = container.ocrEngineForZone(zone)
                         val cropped = withContext(Dispatchers.IO) { DocumentCropper.crop(bitmap) }
-                        android.util.Log.d("VisionScreen", "Recognizing with zone=$zone")
+                        Logger.d("VisionScreen", "Recognizing with zone=$zone")
                         val text = engine.recognize(cropped)
-                        android.util.Log.d("VisionScreen", "Recognized text: $text")
+                        Logger.d("VisionScreen", "Recognized text: $text")
                         onResult(text)
                     } catch (t: Throwable) {
-                        android.util.Log.e("VisionScreen", "Recognition failed", t)
+                        Logger.e("VisionScreen", "Recognition failed", t)
                     } finally {
                         onRecognizing(false)
                     }
@@ -399,7 +400,7 @@ private fun captureAndRecognize(
             }
 
             override fun onError(exception: ImageCaptureException) {
-                android.util.Log.e("VisionScreen", "Capture failed", exception)
+                Logger.e("VisionScreen", "Capture failed", exception)
                 onRecognizing(false)
             }
         }

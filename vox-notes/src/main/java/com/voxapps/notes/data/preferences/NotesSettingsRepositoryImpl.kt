@@ -30,6 +30,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val LANGUAGE = stringPreferencesKey("language")
         val SCHEDULED_MERGE_INTERVAL = stringPreferencesKey("scheduled_merge_interval")
         val SCHEDULED_NOTE_DEDUP_INTERVAL = stringPreferencesKey("scheduled_note_dedup_interval")
+        val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
     }
 
     override val settingsFlow: Flow<NotesSettings> = dataStore.data.map { prefs ->
@@ -41,7 +42,8 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             autoCreateVoiceCategory = prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] ?: false,
             language = prefs[Keys.LANGUAGE] ?: defaultDeviceLanguage(),
             scheduledMergeInterval = prefs[Keys.SCHEDULED_MERGE_INTERVAL] ?: NotesSettings.INTERVAL_OFF,
-            scheduledNoteDedupInterval = prefs[Keys.SCHEDULED_NOTE_DEDUP_INTERVAL] ?: NotesSettings.INTERVAL_OFF
+            scheduledNoteDedupInterval = prefs[Keys.SCHEDULED_NOTE_DEDUP_INTERVAL] ?: NotesSettings.INTERVAL_OFF,
+            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false
         )
     }
 
@@ -88,6 +90,10 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
 
     override suspend fun setScheduledNoteDedupInterval(interval: String) {
         dataStore.edit { it[Keys.SCHEDULED_NOTE_DEDUP_INTERVAL] = interval }
+    }
+
+    override suspend fun setDebugLoggingEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
     }
 
     private fun defaultDeviceLanguage(): String =

@@ -24,5 +24,7 @@
   "auto_trigger_sensitivity": "Auto-Erfassungsempfindlichkeit",
   "sensitivity_low": "Niedrig (weniger Fehlauslösungen)",
   "sensitivity_medium": "Mittel",
-  "sensitivity_high": "Hoch (erkennt mehr, kann bei Unordnung auslösen)"
+  "sensitivity_high": "Hoch (erkennt mehr, kann bei Unordnung auslösen)",
+  "debug_logging": "Debug-Protokollierung",
+  "debug_logging_desc": "Debug-Informationen ins Logcat schreiben — nur bei der Fehlersuche aktivieren"
 }

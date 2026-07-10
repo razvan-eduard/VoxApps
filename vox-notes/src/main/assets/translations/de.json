@@ -77,5 +77,7 @@
   "keep_label": "Behalten",
   "duplicate_label": "Entfernen",
   "apply_selected_button": "Auswahl anwenden",
-  "dismiss_all_button": "Alle verwerfen"
+  "dismiss_all_button": "Alle verwerfen",
+  "debug_logging": "Debug-Protokollierung",
+  "debug_logging_desc": "Debug-Informationen ins Logcat schreiben — nur bei der Fehlersuche aktivieren"
 }

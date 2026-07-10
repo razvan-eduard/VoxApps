@@ -34,6 +34,7 @@ android {
 dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:ipc"))
+    implementation(project(":core:logging"))
     implementation(project(":vendor:ppocr-sdk"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

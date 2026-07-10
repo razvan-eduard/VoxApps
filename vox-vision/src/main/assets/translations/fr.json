@@ -24,5 +24,7 @@
   "auto_trigger_sensitivity": "Sensibilité de capture automatique",
   "sensitivity_low": "Faible (moins de déclenchements erronés)",
   "sensitivity_medium": "Moyenne",
-  "sensitivity_high": "Élevée (détecte plus, peut se déclencher sur du désordre)"
+  "sensitivity_high": "Élevée (détecte plus, peut se déclencher sur du désordre)",
+  "debug_logging": "Journalisation de débogage",
+  "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage"
 }

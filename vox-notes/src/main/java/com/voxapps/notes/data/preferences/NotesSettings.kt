@@ -19,6 +19,8 @@ import androidx.compose.runtime.Immutable
  * - [scheduledNoteDedupInterval]: same idea, for the note-deduplication feature — kept as its own
  *   independent setting rather than reusing [scheduledMergeInterval] since the two features run on
  *   independent schedules.
+ * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output to logcat. Off by default so a
+ *   normal install never floods logcat; flip it on only while actively debugging.
  */
 @Immutable
 data class NotesSettings(
@@ -30,7 +32,8 @@ data class NotesSettings(
     val autoCreateVoiceCategory: Boolean = false,
     val language: String = DEFAULT_LANGUAGE,
     val scheduledMergeInterval: String = INTERVAL_OFF,
-    val scheduledNoteDedupInterval: String = INTERVAL_OFF
+    val scheduledNoteDedupInterval: String = INTERVAL_OFF,
+    val debugLoggingEnabled: Boolean = false
 ) {
     companion object {
         const val TIMEOUT_30M = 30

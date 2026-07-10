@@ -24,5 +24,7 @@
   "auto_trigger_sensitivity": "Auto-capture sensitivity",
   "sensitivity_low": "Low (fewer false triggers)",
   "sensitivity_medium": "Medium",
-  "sensitivity_high": "High (catches more, may trigger on clutter)"
+  "sensitivity_high": "High (catches more, may trigger on clutter)",
+  "debug_logging": "Debug logging",
+  "debug_logging_desc": "Write debug info to logcat — leave off unless you're troubleshooting an issue"
 }
