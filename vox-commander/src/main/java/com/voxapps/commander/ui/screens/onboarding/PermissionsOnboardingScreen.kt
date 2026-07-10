@@ -38,6 +38,7 @@ fun PermissionsOnboardingScreen(
     onRequestOverlay: () -> Unit,
     onRequestMicrophone: () -> Unit,
     onRequestNotification: () -> Unit,
+    onRequestLocation: () -> Unit,
     onContinue: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
@@ -88,6 +89,15 @@ fun PermissionsOnboardingScreen(
                     onClick = onRequestNotification
                 )
             }
+
+            // Location — needed by the weather search provider (WeatherAPI/Open-Meteo)
+            PermissionRow(
+                title = languageManager.getString("permission_location_title") ?: "Location",
+                desc = languageManager.getString("permission_location_desc")
+                    ?: "Required for weather search provider to get local forecast.",
+                isGranted = uiState.hasLocationPermission,
+                onClick = onRequestLocation
+            )
 
             Button(
                 onClick = onContinue,

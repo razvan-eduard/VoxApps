@@ -204,8 +204,9 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (showPermissions) {
-                    // First-run permission step — request overlay/mic/notifications so the floating
-                    // voice overlay actually works (it's silently hidden without SYSTEM_ALERT_WINDOW).
+                    // First-run permission step — request overlay/mic/notifications/location so the
+                    // floating voice overlay and weather search actually work (overlay is silently
+                    // hidden without SYSTEM_ALERT_WINDOW; weather queries silently fail without location).
                     // The permission launchers already call refreshPermissions() on return, so the
                     // granted status updates live.
                     com.voxapps.commander.ui.screens.onboarding.PermissionsOnboardingScreen(
@@ -220,6 +221,9 @@ class MainActivity : ComponentActivity() {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             }
+                        },
+                        onRequestLocation = {
+                            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                         },
                         onContinue = {
                             showPermissions = false
