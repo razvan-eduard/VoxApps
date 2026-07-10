@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.DrawerValue
@@ -40,10 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NoteWithCategory
+import com.voxapps.notes.domain.llm.ScanRequestSender
 import com.voxapps.notes.state.NotesStateManager
 import com.voxapps.notes.state.NotesUiState
 import kotlinx.coroutines.launch
@@ -90,6 +93,10 @@ fun NotesScreen(
                         }
                     },
                     actions = {
+                        val context = LocalContext.current
+                        IconButton(onClick = { ScanRequestSender.send(context) }) {
+                            Icon(Icons.Filled.DocumentScanner, contentDescription = languageManager.getString("scan_note"))
+                        }
                         IconButton(onClick = { showDateSheet = true }) {
                             Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("sort_and_filter"))
                         }

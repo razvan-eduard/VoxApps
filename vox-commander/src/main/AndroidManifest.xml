@@ -41,6 +41,12 @@
     <!-- Held so Commander can deliver an async LLM hook result back to the Notes satellite. -->
     <uses-permission android:name="com.voxapps.notes.permission.LLM_RESULT" />
 
+    <!-- Held so Commander's "Vox Apps" discovery can ping the Vision satellite's command bus. -->
+    <uses-permission android:name="com.voxapps.vision.permission.COMMAND" />
+
+    <!-- Held so Commander can deliver an async LLM hook result back to the Vision satellite. -->
+    <uses-permission android:name="com.voxapps.vision.permission.LLM_RESULT" />
+
     <application
         android:name=".VoxApplication"
         android:allowBackup="true"

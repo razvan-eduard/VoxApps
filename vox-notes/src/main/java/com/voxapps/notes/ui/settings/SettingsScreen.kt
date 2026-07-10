@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MergeType
+import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,7 +32,7 @@ import com.voxapps.notes.state.NotesStateManager
 import com.voxapps.notes.state.NotesUiState
 import com.voxapps.notes.ui.LocalLanguageManager
 
-private enum class SettingsPage { MENU, GENERAL, NOTIFICATIONS, CATEGORIES }
+private enum class SettingsPage { MENU, GENERAL, NOTIFICATIONS, CATEGORIES, NOTE_CLEANUP }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +45,7 @@ fun SettingsScreen(
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = NotesSettings())
     val ui by stateManager.uiState.collectAsStateWithLifecycle()
     val categories = (ui as? NotesUiState.Unlocked)?.categories ?: emptyList()
+    val notes = (ui as? NotesUiState.Unlocked)?.notes?.map { it.note } ?: emptyList()
 
     var page by remember { mutableStateOf(SettingsPage.MENU) }
 
@@ -56,6 +58,7 @@ fun SettingsScreen(
         SettingsPage.GENERAL -> languageManager.getString("general")
         SettingsPage.NOTIFICATIONS -> languageManager.getString("notifications")
         SettingsPage.CATEGORIES -> languageManager.getString("categories_settings_title")
+        SettingsPage.NOTE_CLEANUP -> languageManager.getString("note_cleanup_settings_title")
     }
 
     Scaffold(
@@ -88,6 +91,11 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.MergeType, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CATEGORIES }
                 )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("note_cleanup_settings_title")) },
+                    leadingContent = { Icon(Icons.Filled.CleaningServices, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTE_CLEANUP }
+                )
             }
             SettingsPage.GENERAL -> GeneralSettingsTab(settings = settings, stateManager = stateManager, modifier = mod)
             SettingsPage.NOTIFICATIONS -> NotificationsSettingsTab(
@@ -99,6 +107,12 @@ fun SettingsScreen(
             SettingsPage.CATEGORIES -> CategoriesSettingsTab(
                 settings = settings,
                 categories = categories,
+                stateManager = stateManager,
+                modifier = mod
+            )
+            SettingsPage.NOTE_CLEANUP -> NoteCleanupSettingsTab(
+                settings = settings,
+                notes = notes,
                 stateManager = stateManager,
                 modifier = mod
             )

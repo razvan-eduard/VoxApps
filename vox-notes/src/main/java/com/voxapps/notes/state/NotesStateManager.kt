@@ -7,6 +7,11 @@ import com.voxapps.notes.data.NotesRepository
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
 import com.voxapps.notes.domain.llm.CategoryAutoMergeScheduler
 import com.voxapps.notes.domain.llm.CategoryMergeRequestSender
+import com.voxapps.notes.domain.llm.DuplicateGroup
+import com.voxapps.notes.domain.llm.NoteDeduplicationRepository
+import com.voxapps.notes.domain.llm.NoteDeduplicationRequestSender
+import com.voxapps.notes.domain.llm.NoteDeduplicationScheduler
+import com.voxapps.notes.domain.llm.NoteSummary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,6 +19,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -28,7 +35,8 @@ import kotlinx.coroutines.launch
 class NotesStateManager internal constructor(
     private val settingsRepo: NotesSettingsRepository,
     private val notesRepo: NotesRepository,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val noteDeduplicationRepo: NoteDeduplicationRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -145,15 +153,46 @@ class NotesStateManager internal constructor(
         CategoryMergeRequestSender.send(context, categoryNames, language)
     }
 
+    /** Fires the note-deduplication request for every current note. See [requestCategoryAutoMerge]. */
+    fun requestNoteDeduplication(context: Context) {
+        scope.launch {
+            val notes = notesRepo.notes.first().map { NoteSummary(it.id, it.title, it.text) }
+            NoteDeduplicationRequestSender.send(context, notes)
+        }
+    }
+
+    fun setScheduledNoteDedupInterval(context: Context, interval: String) {
+        scope.launch { settingsRepo.setScheduledNoteDedupInterval(interval) }
+        NoteDeduplicationScheduler.reschedule(context, interval)
+    }
+
+    /** Reactive pending-suggestion stream for the review UI in Settings. */
+    val pendingNoteDuplicateGroups: Flow<List<DuplicateGroup>> = noteDeduplicationRepo.pendingGroupsFlow
+
+    /** User approved (a subset of) the proposed groups — apply them, then clear the pending set. */
+    fun approveNoteDeduplication(groups: List<DuplicateGroup>) {
+        scope.launch {
+            notesRepo.applyNoteDeduplication(groups)
+            noteDeduplicationRepo.clearPendingGroups()
+        }
+    }
+
+    /** User dismissed the suggestion without applying anything. */
+    fun dismissNoteDeduplication() {
+        scope.launch { noteDeduplicationRepo.clearPendingGroups() }
+    }
+
     companion object {
         @Volatile private var instance: NotesStateManager? = null
 
         fun getInstance(
             settingsRepo: NotesSettingsRepository,
             notesRepo: NotesRepository,
-            sessionManager: SessionManager
+            sessionManager: SessionManager,
+            noteDeduplicationRepo: NoteDeduplicationRepository
         ): NotesStateManager = instance ?: synchronized(this) {
-            instance ?: NotesStateManager(settingsRepo, notesRepo, sessionManager).also { instance = it }
+            instance ?: NotesStateManager(settingsRepo, notesRepo, sessionManager, noteDeduplicationRepo)
+                .also { instance = it }
         }
     }
 }

@@ -6,6 +6,7 @@ import com.voxapps.notes.data.NoteWithCategory
 import com.voxapps.notes.data.NotesRepository
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
+import com.voxapps.notes.domain.llm.NoteDeduplicationRepository
 import com.voxapps.notes.testutil.NotesTestDataFactory
 import io.mockk.every
 import io.mockk.mockk
@@ -33,6 +34,7 @@ class NotesStateManagerTest {
     private lateinit var categoriesFlow: MutableStateFlow<List<Category>>
     private var now = 1_000_000L
     private lateinit var sessionManager: SessionManager
+    private lateinit var noteDeduplicationRepo: NoteDeduplicationRepository
 
     @Before
     fun setup() {
@@ -50,12 +52,14 @@ class NotesStateManagerTest {
         every { notesRepo.categories } returns categoriesFlow
 
         sessionManager = SessionManager(clock = { now })
+        noteDeduplicationRepo = mockk(relaxed = true)
+        every { noteDeduplicationRepo.pendingGroupsFlow } returns MutableStateFlow(emptyList())
     }
 
     @After
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun manager() = NotesStateManager(settingsRepo, notesRepo, sessionManager)
+    private fun manager() = NotesStateManager(settingsRepo, notesRepo, sessionManager, noteDeduplicationRepo)
 
     @Test
     fun `category filter narrows the visible notes`() = runTest {

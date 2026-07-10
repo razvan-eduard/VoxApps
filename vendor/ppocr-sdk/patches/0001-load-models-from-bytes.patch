@@ -1,0 +1,124 @@
+--- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/ORTSessionManager.kt
++++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/ORTSessionManager.kt
+@@ -35,6 +35,16 @@
+         private set
+ 
+     fun loadModels(detAssetPath: String, recAssetPath: String) {
++        loadModelsFromBytes(readModelAsset(detAssetPath), readModelAsset(recAssetPath))
++    }
++
++    // --- VoxApps patch: load from raw bytes (e.g. runtime-downloaded files), not just APK assets —
++    // see vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch. ---
++    fun loadModels(detBytes: ByteArray, recBytes: ByteArray) {
++        loadModelsFromBytes(detBytes, recBytes)
++    }
++
++    private fun loadModelsFromBytes(detBytes: ByteArray, recBytes: ByteArray) {
+         val loadStart = System.currentTimeMillis()
+         env = OrtEnvironment.getEnvironment()
+         val opts = OrtSession.SessionOptions().apply {
+@@ -43,8 +53,6 @@
+         }
+         try {
+             val ortEnv = env ?: throw OCRError.ModelLoadFailed("OCR", Exception("Environment not initialized"))
+-            val detBytes = readModelAsset(detAssetPath)
+-            val recBytes = readModelAsset(recAssetPath)
+             try {
+                 detSession = ortEnv.createSession(detBytes, opts)
+             } catch (t: Throwable) {
+--- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/model/ModelConfig.kt
++++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/model/ModelConfig.kt
+@@ -27,12 +27,18 @@
+             } catch (t: Throwable) {
+                 throw OCRError.ConfigParseFailed(assetPath, t)
+             }
++            return parse(content, assetPath)
++        }
++
++        // --- VoxApps patch: parse from raw yml text (e.g. a runtime-downloaded config file), not
++        // just APK assets — see vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch. ---
++        fun parse(content: String, sourceLabel: String = "config"): ModelConfig {
+             val characterDict = try {
+-                extractCharacterDict(content, assetPath)
++                extractCharacterDict(content, sourceLabel)
+             } catch (e: OCRError.ConfigParseFailed) {
+                 throw e
+             } catch (t: Throwable) {
+-                throw OCRError.ConfigParseFailed(assetPath, t)
++                throw OCRError.ConfigParseFailed(sourceLabel, t)
+             }
+             val charListWithSpace = characterDict.toMutableList().apply {
+                 if (lastOrNull() != " ") add(" ")
+--- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/OCREngine.kt
++++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/OCREngine.kt
+@@ -32,6 +32,11 @@
+     detModelAsset: String = "models/det/inference.onnx",
+     recModelAsset: String = "models/rec/inference.onnx",
+     recConfigAsset: String = "models/rec/inference.yml",
++    // --- VoxApps patch: load from raw bytes/content (e.g. runtime-downloaded files) instead of APK
++    // assets, when provided — see vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch. ---
++    detModelBytes: ByteArray? = null,
++    recModelBytes: ByteArray? = null,
++    recConfigContent: String? = null,
+ ) {
+     private val ortManager = ORTSessionManager(context, engineConfig)
+     private val detectionEngine: DetectionEngine
+@@ -40,9 +45,16 @@
+ 
+     init {
+         val configured = try {
+-            ortManager.loadModels(detModelAsset, recModelAsset)
+-            val recModelConfig = ModelConfig.parse(context, recConfigAsset)
+-            recModelConfig
++            if (detModelBytes != null && recModelBytes != null) {
++                ortManager.loadModels(detModelBytes, recModelBytes)
++            } else {
++                ortManager.loadModels(detModelAsset, recModelAsset)
++            }
++            if (recConfigContent != null) {
++                ModelConfig.parse(recConfigContent)
++            } else {
++                ModelConfig.parse(context, recConfigAsset)
++            }
+         } catch (t: Throwable) {
+             ortManager.release()
+             throw t
+--- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/PaddleOCR.kt
++++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/PaddleOCR.kt
+@@ -22,6 +22,7 @@
+ import com.paddle.ocr.model.OCRError
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.withContext
++import java.io.File
+ 
+ class PaddleOCR private constructor(
+     private val engine: OCREngine,
+@@ -70,6 +71,28 @@
+                 PaddleOCR(engine)
+             }
+         }
++
++        // --- VoxApps patch: create from runtime-downloaded files instead of APK assets — see
++        // vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch. ---
++        suspend fun create(
++            context: Context,
++            config: PaddleOCRConfig,
++            engineConfig: EngineConfig,
++            detModelFile: File,
++            recModelFile: File,
++            recConfigFile: File,
++        ): PaddleOCR {
++            val appContext = context.applicationContext
++            return withContext(Dispatchers.IO) {
++                val engine = OCREngine(
++                    appContext, config, engineConfig,
++                    detModelBytes = detModelFile.readBytes(),
++                    recModelBytes = recModelFile.readBytes(),
++                    recConfigContent = recConfigFile.readText(),
++                )
++                PaddleOCR(engine)
++            }
++        }
+     }
+ 
+     suspend fun recognize(bitmap: Bitmap): OCRRunResult {

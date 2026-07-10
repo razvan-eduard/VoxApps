@@ -15,7 +15,7 @@
 
 ---
 
-> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, and release workflow; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`) and **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher). A few `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork) are compiled into one or both apps for code reuse — they carry no shared runtime state, just library code. The rest of this README covers `vox-commander`.
+> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, and release workflow; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`), **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher), and **`vox-vision`** (a standalone document scanner, `com.voxapps.vision`, camera capture + on-device OCR). A few `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork) are compiled into one or more apps for code reuse — they carry no shared runtime state, just library code. See [Vox Notes](#vox-notes) and [Vox Vision](#vox-vision) below for what those two do; the rest of this README covers `vox-commander`.
 
 ## Features
 
@@ -72,6 +72,8 @@ adb shell am start -n com.voxapps.commander/.MainActivity
 ```
 
 212 unit tests covering: intent taxonomy, NLU decision map, AppState/AppStateManager, AppSettings (external trigger, return-to-previous-app), model management, search providers, FastMap engine, and more.
+
+> Swap `:vox-commander` for `:vox-notes` or `:vox-vision` in any of the commands above to build/install/test the companion apps instead — each has its own `assembleDebug`/`installDebug`/`testDebugUnitTest` tasks.
 
 ## Download APK
 
@@ -156,14 +158,77 @@ Each app stays a fully independent product; a user can install any subset.
   So a first-party app (e.g. Vox Notes) wins over a third-party alternative silently, while the user
   can always override with a star. Discovered apps + their First-party/Third-party status show under
   **Settings → Integrations → Vox Apps**.
+- **Generic LLM hook** — beyond the create/read command bus, any first-party satellite can also ask
+  Commander's *currently-selected* LLM to process an arbitrary prompt: broadcast `ACTION_LLM_PROCESS`
+  with a `VoxLlmRequest{sourcePackage, task, promptText}`, handled by a WorkManager job
+  (`LlmHookReceiver` → `LlmHookWorker`, so a slow LLM call never risks an ANR on a receiver with no
+  visible UI), then get an async `ACTION_LLM_RESULT` reply (`VoxLlmResult{task, status, rawJson}`)
+  targeted back at `sourcePackage`. Commander never interprets `task`/`promptText`/`rawJson` — building
+  the prompt and parsing the result is entirely the caller's concern, so new LLM-backed satellite
+  features ship with zero Commander changes. Consumers today: Vox Notes' **Auto-Merge Categories** and
+  **Note cleanup** (duplicate detection), and Vox Vision's OCR-text cleanup (see below).
+- **Vox Vision's scan-to-note flow** — a second satellite, `vox-vision` (domain `vision`), turns the
+  camera into a document scanner: live brightness/edge detection auto-triggers a capture, OpenCV crops
+  it to the detected document, on-device PaddleOCR (`ppocr-sdk`) recognizes the text, then the generic
+  LLM hook above cleans the raw OCR text into a title + body (and can suggest a category, reusing Vox
+  Notes' own voice-note category-resolution logic) before forwarding it to Vox Notes as a new note.
+  Vision can also be launched directly by another satellite (`startActivity` with an explicit
+  `VoxOcrRequest` payload) for a hands-free "scan → auto-submit" pending-request flow — a direct
+  explicit-intent launch rather than a broadcast, because Android's background-activity-launch
+  restriction is evaluated against the *calling* app's foreground state, not Vision's, so this needs no
+  notification-tap workaround.
 
 ```
 Commander ──VoxCommand{op,text,domain}──▶ satellite VoxCommandReceiver
    ▲                                              │ create → DB append
    └────────── VoxResult{ok,text} ────────────────┘ read → returns text → TtsManager.speak(...)
+
+satellite ──VoxLlmRequest{task,promptText}──▶ LlmHookReceiver/Worker (Commander's LLM)
+   ▲                                                          │
+   └──────────── VoxLlmResult{task,rawJson} ──────────────────┘ (async, explicit intent back to caller)
 ```
 
-The first satellite shipping in this repo is **`vox-notes`** (domain `notes`, actions `create`/`read`).
+Two satellites ship in this repo today: **`vox-notes`** (domain `notes`, actions `create`/`read`) and
+**`vox-vision`** (domain `vision`, a note *producer* rather than a voice-command consumer).
+
+### Vox Notes
+
+Standalone, encrypted on-device notes app (`com.voxapps.notes`, Room + SQLCipher). Voice-created
+through Commander (`create`/`read`) or used entirely on its own.
+
+- **Categories** with a coverflow-style picker; **Auto-Merge Categories** asks Commander's LLM hook to
+  find and merge near-duplicate categories (e.g. "Shopping" / "Groceries")
+- **Note cleanup** — the same LLM hook finds near-duplicate/redundant notes, but unlike category
+  merge this only *proposes* groups (kept note + duplicates); the user reviews and taps **Apply
+  selected** before anything is deleted — nothing is ever auto-deleted
+- Both triggers are available **on-demand** and on a **schedule** (off/daily/weekly/monthly)
+- **Scan-to-note** — receives raw OCR text from Vox Vision, sends it through the LLM hook to get a
+  clean title/body and a suggested category, then creates the note
+- Editor UI: tap a note's title to expand/collapse it in place (collapse via a dedicated chevron
+  above the title, separated from the body by a shaded header)
+- Multi-language UI (English, Romanian, German, French)
+
+### Vox Vision
+
+Standalone document scanner (`com.voxapps.vision`, `com.voxapps.vision.VisionActivity`) — no voice
+commands in, only OCR text out.
+
+- **Camera capture** (CameraX) with a live overlay of the detected document bounds
+- **Auto-capture** — a throttled `ImageAnalysis` pass runs Otsu-threshold brightness-blob detection
+  (deliberately not the stricter quad detection used for the final crop, since a document extending
+  past the frame edge can't close into a 4-sided contour) and auto-triggers a capture once the bounds
+  are stable; sensitivity is user-configurable (low/medium/high)
+- **Edge cropping** — the final captured frame is cropped to the detected document quad via OpenCV
+  (`DocumentCropper.kt`), built from source against a vendored OpenCV (see
+  [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md))
+- **On-device OCR** via a vendored, patched PaddleOCR Android SDK (`:vendor:ppocr-sdk`) — no network
+  round-trip for text recognition
+- Recognized text is cleaned up and titled via Commander's generic LLM hook, then forwarded to Vox
+  Notes as a new note (see [Vox Vision's scan-to-note flow](#vox-apps-ecosystem-cross-app-plugin-bus)
+  above)
+- Works fully standalone (its own launcher icon) or as a **pending-request target** launched directly
+  by another satellite for a hands-free "scan → auto-submit" flow
+- Multi-language UI (English, Romanian, German, French)
 
 ## Key Technologies
 
@@ -307,6 +372,16 @@ adb shell am broadcast -a com.voxapps.commander.TRIGGER_VOICE
 5. Target package: `com.voxapps.commander`
 
 Enable/disable in Settings → App Manager → External voice trigger toggle.
+
+## Further Reading
+
+- [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md) — deep-dive on `vox-commander`'s
+  architecture, wake word/STT/NLU/TTS engines, intent routing, and the cross-app Vox contract.
+- [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md) — monorepo-wide reference for
+  every native/ML dependency that's vendored, patched, or compiled from source at build time (Vosk,
+  Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk) — what gets fetched, how patches are kept as
+  real diffs, how each stays in sync with upstream via a weekly `sync-*.yml` workflow, and which one
+  (`sync-vosk.yml`) is judged safe enough to auto-merge on green.
 
 ## License
 

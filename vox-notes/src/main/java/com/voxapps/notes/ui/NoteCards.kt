@@ -24,11 +24,14 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -117,60 +120,90 @@ fun NoteEditorCard(
             containerColor = cardColor(selectedCategory, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
         )
     ) {
-        Row(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                BasicTextField(
-                    value = title,
-                    onValueChange = onTitleChange,
-                    textStyle = MaterialTheme.typography.titleMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    decorationBox = { inner ->
-                        if (title.isEmpty()) Text(
-                            languageManager.getString("note_title_optional"),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        inner()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                BasicTextField(
-                    value = text,
-                    onValueChange = onTextChange,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    decorationBox = { inner ->
-                        if (text.isEmpty()) Text(
-                            languageManager.getString("note_text"),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        inner()
-                    },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp).padding(top = 8.dp)
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Collapse affordance: its own centered row above everything else, in a shadowed
+            // pill so it reads as a distinct floating control rather than blending into the title.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Surface(
+                    onClick = onDone,
+                    shape = CircleShape,
+                    shadowElevation = 4.dp,
+                    tonalElevation = 2.dp
                 ) {
-                    if (onDelete != null) {
-                        IconButton(onClick = onDelete) {
-                            Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
-                        }
-                    }
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
-                    }
+                    Icon(
+                        Icons.Filled.ExpandLess,
+                        contentDescription = languageManager.getString("collapse_note"),
+                        modifier = Modifier.padding(6.dp)
+                    )
                 }
             }
 
-            // Vertical coverflow category picker on the right edge.
-            CategoryCoverflow(
-                categories = categories,
-                selectedId = categoryId,
-                onSelect = onCategoryChange
-            )
+            Row(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                            .padding(horizontal = 4.dp, vertical = 6.dp)
+                    ) {
+                        BasicTextField(
+                            value = title,
+                            onValueChange = onTitleChange,
+                            textStyle = MaterialTheme.typography.titleMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            decorationBox = { inner ->
+                                if (title.isEmpty()) Text(
+                                    languageManager.getString("note_title_optional"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                inner()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    BasicTextField(
+                        value = text,
+                        onValueChange = onTextChange,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        decorationBox = { inner ->
+                            if (text.isEmpty()) Text(
+                                languageManager.getString("note_text"),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            inner()
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp).padding(top = 8.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (onDelete != null) {
+                            IconButton(onClick = onDelete) {
+                                Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
+                            }
+                        }
+                        IconButton(onClick = onDone) {
+                            Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
+                        }
+                    }
+                }
+
+                // Vertical coverflow category picker on the right edge.
+                CategoryCoverflow(
+                    categories = categories,
+                    selectedId = categoryId,
+                    onSelect = onCategoryChange
+                )
+            }
         }
     }
 }

@@ -1,0 +1,45 @@
+This module vendors and locally patches code from:
+
+PaddleOCR — ppocr-android SDK
+Copyright (c) PaddlePaddle Authors
+https://github.com/PaddlePaddle/PaddleOCR (Apache License, Version 2.0)
+Path: deploy/ppocr-android/ppocr-sdk
+
+Vendored at commit 211989f046cc1878460f9e65574690c00a127a1a (2026-06-26) into
+vendor/ppocr-sdk/src/main: a straight copy of the non-UI OCR pipeline (ONNX Runtime session
+management, detection/recognition preprocessing, DB postprocessing (NMS/box-sort), perspective crop,
+CTC decode). The pristine upstream source is kept as a git submodule at vendor/paddleocr-upstream,
+sparse-checked-out to just deploy/ppocr-android/ppocr-sdk (PaddleOCR itself is a large monorepo we
+otherwise have no use for).
+
+Local patch: load models from raw bytes/files, not just APK assets. Upstream's
+`ORTSessionManager`/`ModelConfig`/`OCREngine`/`PaddleOCR` only ever read model/config files from
+`context.assets`, but Vision's models are downloaded at runtime into app-internal storage (never
+bundled in the APK or committed to git — see vox-vision/src/main/java/com/voxapps/vision/ocr/). Added
+purely-additive overloads (`ORTSessionManager.loadModels(ByteArray, ByteArray)`,
+`ModelConfig.parse(String, String)`, `OCREngine`'s `detModelBytes`/`recModelBytes`/`recConfigContent`
+constructor params, `PaddleOCR.create(..., detModelFile: File, recModelFile: File, recConfigFile:
+File)`) — every original asset-path-based method/constructor is untouched and still works.
+
+The patch itself is maintained as a real, storable diff at
+patches/0001-load-models-from-bytes.patch (regenerate with scripts/regen_ppocr_sdk_patch.sh whenever
+the patch changes). scripts/check_ppocr_sdk_version.sh checks whether upstream has moved past the
+pinned commit and whether the stored patch would still apply cleanly against the newer tree.
+
+Used by vox-vision for on-device OCR (PP-OCRv5 mobile detection + recognition models). Model files
+themselves are NOT vendored here — they are downloaded at runtime from a GitHub Release on this repo
+(tag ocr-models-v1) into app-internal storage, mirroring how vox-commander already handles
+Whisper/Vosk models. See vox-vision/src/main/java/com/voxapps/vision/ocr/ for the download +
+integration code.
+
+Dependencies pulled in by this module:
+
+1. ONNX Runtime Android
+   Copyright (c) Microsoft Corporation
+   Licensed under the MIT License
+
+2. OpenCV Android
+   Copyright (c) OpenCV team
+   Licensed under the Apache License, Version 2.0
+   (built from source — see vendor/opencv and scripts/build_opencv_android.sh — not a Maven
+   dependency; opencv/libs and opencv/java here are that build's output, gitignored)

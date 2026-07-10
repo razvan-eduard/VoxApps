@@ -9,6 +9,8 @@ import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.notes.NotesApplication
 import com.voxapps.notes.domain.llm.CategoryMergeMappingParser
 import com.voxapps.notes.domain.llm.LlmTasks
+import com.voxapps.notes.domain.llm.NoteDeduplicationResultParser
+import com.voxapps.notes.domain.llm.NoteScanCleanupResultParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -52,6 +54,60 @@ class LlmResultReceiver : BroadcastReceiver() {
                     }
                 }
             }
+            LlmTasks.NOTE_SCAN_CLEANUP -> {
+                val rawJson = result.rawJson
+                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
+                    Log.w(TAG, "Note scan cleanup failed: ${result.error}")
+                    return
+                }
+                val cleaned = NoteScanCleanupResultParser.parse(rawJson) ?: run {
+                    Log.w(TAG, "Note scan cleanup: could not parse LLM result. rawJson=$rawJson")
+                    return
+                }
+                Log.d(TAG, "Note scan cleanup: creating note title=${cleaned.title} category=${cleaned.category}")
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val settings = container.settingsRepository.getSnapshot()
+                        // Same category resolution voice notes already use: match an existing
+                        // category case-insensitively, else fall back to the default / auto-create.
+                        container.notesRepository.addVoiceNote(
+                            title = cleaned.title,
+                            text = cleaned.text,
+                            spokenCategory = cleaned.category,
+                            defaultCategoryId = settings.defaultVoiceCategoryId,
+                            autoCreate = settings.autoCreateVoiceCategory,
+                            createdAt = System.currentTimeMillis()
+                        )
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            LlmTasks.NOTE_DEDUPLICATION -> {
+                val rawJson = result.rawJson
+                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
+                    Log.w(TAG, "Note deduplication failed: ${result.error}")
+                    return
+                }
+                val groups = NoteDeduplicationResultParser.parse(rawJson) ?: run {
+                    Log.w(TAG, "Note deduplication: could not parse LLM result. rawJson=$rawJson")
+                    return
+                }
+                // Deliberately NOT applied here, unlike category merge — real note content needs
+                // user confirmation, so the suggestion is stored for review in Settings instead.
+                Log.d(TAG, "Note deduplication: storing ${groups.size} proposed group(s) for review")
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        container.noteDeduplicationRepository.setPendingGroups(groups)
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
             // Future LLM-backed features add a branch here — zero Commander/:core:ipc changes needed.
             else -> Log.d(TAG, "Ignoring unknown LLM task: ${result.task}")
         }

@@ -78,3 +78,10 @@ google-services.json
 # Configurații specifice proiectului
 # =========================
 /build
+
+# OpenCV native build scratch dir (disposable CMake/ninja output, not source)
+/vendor/opencv-android-build/
+
+# OpenCV build output copied into ppocr-sdk by the autoCompileOpenCv Gradle task — regenerated
+# from vendor/opencv, not source vendor/ppocr-sdk maintains itself.
+/vendor/ppocr-sdk/opencv/

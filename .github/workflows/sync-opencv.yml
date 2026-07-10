@@ -1,0 +1,168 @@
+name: Sync OpenCV Fork
+
+# vendor/opencv is a git submodule pointing at opencv/opencv directly, used UNMODIFIED (no local
+# patch, unlike core/wakeword or vendor/ppocr-sdk) — vendor/ppocr-sdk builds it from source via
+# scripts/build_opencv_android.sh (see its own commit-stamped staleness check) rather than depending
+# on a prebuilt Maven artifact. Since there's no patch, this is structurally closer to
+# sync-whisper.yml (submodule + tag bump + compile-check) than to sync-openwakeword.yml/
+# sync-ppocr-sdk.yml (which also apply a stored patch).
+#
+# When a new upstream tag appears, this workflow bumps the vendor/opencv submodule pin and confirms
+# the new version still builds (autoCompileOpenCv runs for real as part of the compile-check below,
+# since vendor/ppocr-sdk's Kotlin source directly imports the generated org.opencv.* bindings) and
+# opens a PR — ready to review if it compiles, flagged if it doesn't. Never auto-merges.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (without submodules — vendor/opencv fetched explicitly below)
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Determine current pin and latest upstream tag
+        id: versions
+        run: |
+          UPSTREAM_URL="https://github.com/opencv/opencv.git"
+          CURRENT_SHA=$(git ls-tree HEAD vendor/opencv | awk '{print $3}')
+          LATEST_TAG=$(git ls-remote --tags --refs "$UPSTREAM_URL" \
+            | grep -oE "refs/tags/[0-9]+\.[0-9]+\.[0-9]+$" \
+            | sed 's#refs/tags/##' \
+            | sort -V | tail -1)
+          LATEST_SHA=$(git ls-remote --tags --refs "$UPSTREAM_URL" "refs/tags/$LATEST_TAG" | awk '{print $1}')
+
+          echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+          echo "latest_sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$LATEST_TAG" ] || [ "$CURRENT_SHA" == "$LATEST_SHA" ]; then
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump submodule to latest tag
+        if: steps.versions.outputs.has_update == 'true'
+        id: bump
+        run: |
+          LATEST_TAG="${{ steps.versions.outputs.latest_tag }}"
+          BRANCH="chore/sync-opencv-$LATEST_TAG"
+          git checkout -b "$BRANCH"
+
+          git submodule update --init vendor/opencv
+          cd vendor/opencv
+          git fetch --tags --quiet
+          git checkout "$LATEST_TAG"
+          cd "$GITHUB_WORKSPACE"
+
+          # Force a rebuild even if a stale prior build's output happens to exist on this runner —
+          # the commit-stamped staleness check in build_opencv_android.sh would already catch this
+          # correctly, but a clean slate keeps this workflow's build step unambiguous either way.
+          rm -rf vendor/ppocr-sdk/opencv vendor/opencv-android-build
+
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 17
+        if: steps.versions.outputs.has_update == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        if: steps.versions.outputs.has_update == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-licenses: true
+
+      - name: Install NDK and CMake
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Symlink SDK for the OpenCV build script (hardcodes the macOS SDK path)
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          mkdir -p ~/Library/Android/sdk
+          ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
+
+      - name: Grant execute permission for gradlew
+        if: steps.versions.outputs.has_update == 'true'
+        run: chmod +x gradlew
+
+      # Compiles vendor/ppocr-sdk (which triggers autoCompileOpenCv as a preBuild dependency, building
+      # OpenCV from the newly-bumped submodule for real) and vox-vision (its consumer). No patch to
+      # apply here — OpenCV is used unmodified — so this is the only correctness gate before opening
+      # the PR. Expect this step to take a few minutes (a real OpenCV native build).
+      - name: Compile
+        if: steps.versions.outputs.has_update == 'true'
+        id: build
+        run: |
+          if ./gradlew :vendor:ppocr-sdk:compileDebugKotlin :vox-vision:compileDebugKotlin \
+                       --no-daemon > /tmp/build.log 2>&1; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            tail -c 20000 /tmp/build.log
+          fi
+
+      - name: Commit submodule bump
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add vendor/opencv
+          git commit -m "chore: bump vendor/opencv submodule to ${{ steps.versions.outputs.latest_tag }}"
+          git push origin "${{ steps.bump.outputs.branch }}"
+
+      - name: Prepare PR body
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          BUILD_STATUS="${{ steps.build.outputs.status }}"
+          CURRENT_SHORT="${{ steps.versions.outputs.current_sha }}"
+          CURRENT_SHORT="${CURRENT_SHORT:0:9}"
+
+          {
+            echo "Upstream [opencv/opencv](https://github.com/opencv/opencv) tagged \`${{ steps.versions.outputs.latest_tag }}\` (we were pinned at \`$CURRENT_SHORT\`)."
+            echo ""
+            if [ "$BUILD_STATUS" == "pass" ]; then
+              echo "**✅ Bumped and confirmed it still builds** — \`vendor/ppocr-sdk\` (which builds OpenCV from source via \`autoCompileOpenCv\`) and \`vox-vision\` both compile cleanly against this version. No patch involved (OpenCV is vendored unmodified). Please review and approve."
+            else
+              echo "**⚠️ Bumped, but the build failed** — this OpenCV release likely changed something \`vendor/ppocr-sdk\`'s build script or the generated Java bindings depend on (e.g. CMake option renames, a module we build going away). Log tail:"
+              echo '```'
+              tail -c 8000 /tmp/build.log 2>/dev/null || echo "(log unavailable)"
+              echo '```'
+              echo ""
+              echo "Check \`scripts/build_opencv_android.sh\` for CMake flags that may need updating for this release before merging."
+            fi
+          } > /tmp/pr-body.md
+
+      - name: Open PR
+        if: steps.versions.outputs.has_update == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BUILD_STATUS="${{ steps.build.outputs.status }}"
+          if [ "$BUILD_STATUS" == "pass" ]; then
+            TITLE="chore: OpenCV ${{ steps.versions.outputs.latest_tag }} — ready to review"
+          else
+            TITLE="chore: OpenCV ${{ steps.versions.outputs.latest_tag }} — build failed"
+          fi
+
+          gh pr create \
+            --title "$TITLE" \
+            --body-file /tmp/pr-body.md \
+            --base main \
+            --head "${{ steps.bump.outputs.branch }}"

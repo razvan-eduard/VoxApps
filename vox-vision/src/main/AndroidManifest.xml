@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!--
+        Custom permission guarding Vision's own command bus (currently just the discovery ping).
+        `signature` = only apps signed with the same key (the monorepo apps) qualify.
+    -->
+    <permission
+        android:name="com.voxapps.vision.permission.COMMAND"
+        android:protectionLevel="signature" />
+
+    <!--
+        Guards Vision's generic-LLM-hook result receiver — only Commander (same signing key) may
+        deliver an async LLM reply here.
+    -->
+    <permission
+        android:name="com.voxapps.vision.permission.LLM_RESULT"
+        android:protectionLevel="signature" />
+
+    <!-- Held so Vision can send a create-note command directly to the Notes satellite. -->
+    <uses-permission android:name="com.voxapps.notes.permission.COMMAND" />
+
+    <!-- Held so Vision can send a generic LLM cleanup request to Commander's hook. -->
+    <uses-permission android:name="com.voxapps.commander.permission.LLM_PROCESS" />
+
+    <!-- Held so Vision can deliver an async OCR_RESULT reply back to whichever satellite requested a scan. -->
+    <uses-permission android:name="com.voxapps.notes.permission.OCR_RESULT" />
+
+    <application
+        android:name=".VisionApplication"
+        android:allowBackup="false"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VoxVision">
+
+        <activity
+            android:name=".VisionActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask">
+
+            <!-- Standalone launcher: works fully without VoxCommander -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Discovery handshake only for now — Vision doesn't consume commands yet (it's a producer
+            of notes, not a consumer of voice commands). Commander's "Vox Apps" scan pings this to
+            confirm Vision is installed and responding.
+        -->
+        <receiver
+            android:name=".receiver.VisionCommandReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.vision.permission.COMMAND">
+            <intent-filter>
+                <action android:name="com.voxapps.action.VOX_COMMAND" />
+            </intent-filter>
+            <meta-data android:name="com.voxapps.vox.domain" android:value="vision" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="ping" />
+            <meta-data android:name="com.voxapps.vox.label" android:value="Vision" />
+        </receiver>
+
+        <!--
+            Generic LLM hook result: Commander delivers an async reply here after processing the raw
+            OCR-cleanup prompt Vision sent it. Guarded by Vision's own LLM_RESULT permission — only
+            Commander (same signing key) can deliver it.
+        -->
+        <receiver
+            android:name=".receiver.LlmResultReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.vision.permission.LLM_RESULT">
+            <intent-filter>
+                <action android:name="com.voxapps.action.LLM_RESULT" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

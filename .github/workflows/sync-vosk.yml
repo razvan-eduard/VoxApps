@@ -4,8 +4,14 @@ name: Sync Vosk Version
 # patch, no native compile. Dependabot's Gradle updater does not reliably track this JitPack-style
 # coordinate (confirmed empirically: it has never opened a PR for it, unlike proper Maven Central
 # artifacts), which is why scripts/check_vosk_version.sh exists as a manual, local-only check. This
-# workflow runs the same check on a schedule and, if newer, opens a PR bumping the version in
-# gradle/libs.versions.toml — reviewed like any dependency PR, no auto-merge.
+# workflow runs the same check on a schedule and, if newer, bumps gradle/libs.versions.toml.
+#
+# Auto-merges on green (assembleDebug + testDebugUnitTest), same as dependabot-automerge.yml — this
+# is the one sync-*.yml that does, since Vosk itself carries no local patch and isn't compiled
+# in-repo, the closest risk profile to a normal Dependabot bump. Accepted residual risk: a green
+# build can't confirm wake-word model-loading/recognition accuracy is unaffected, only that Vosk's
+# API surface still resolves and compiles — unlike Whisper/OpenWakeWord/ppocr-sdk/OpenCV, this one's
+# judged an acceptable trade for staying current automatically.
 
 on:
   schedule:
@@ -97,13 +103,21 @@ jobs:
 
       - name: Open PR
         if: steps.versions.outputs.has_update == 'true'
+        id: pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr create \
+          URL=$(gh pr create \
             --title "chore: bump Vosk ${{ steps.versions.outputs.current }} -> ${{ steps.versions.outputs.latest }}" \
             --body "New Vosk Android version detected on JitPack (dependabot does not reliably track this coordinate — see scripts/check_vosk_version.sh).
 
-          Compiles and unit tests pass. Before merging, please sanity-check wake-word/STT behavior on a device — a green build doesn't confirm model-loading or recognition accuracy is unaffected." \
+          Compiles and unit tests pass — auto-merging. A green build doesn't confirm wake-word model-loading or recognition accuracy is unaffected, only that Vosk's API surface still resolves and compiles; if you notice wake-word/STT regressions after this lands, this PR is the first place to check." \
             --base main \
-            --head "${{ steps.bump.outputs.branch }}"
+            --head "${{ steps.bump.outputs.branch }}")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Auto-merge
+        if: steps.versions.outputs.has_update == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge "${{ steps.pr.outputs.url }}" --squash --delete-branch

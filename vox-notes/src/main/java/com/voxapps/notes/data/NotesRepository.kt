@@ -1,5 +1,6 @@
 package com.voxapps.notes.data
 
+import com.voxapps.notes.domain.llm.DuplicateGroup
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -67,6 +68,21 @@ class NotesRepository(
     suspend fun deleteNote(note: Note) = noteDao.delete(note)
 
     suspend fun deleteNoteById(id: Long) = noteDao.deleteById(id)
+
+    /**
+     * Applies a user-approved note-deduplication resolution: for each [DuplicateGroup], deletes every
+     * id in `duplicateIds` except `keepId` (in case the LLM redundantly listed the kept note as its
+     * own duplicate). Unlike [mergeCategories], this is only ever called after explicit user
+     * confirmation in the review UI — see [com.voxapps.notes.domain.llm.NoteDeduplicationRepository].
+     */
+    suspend fun applyNoteDeduplication(groups: List<DuplicateGroup>) {
+        for (group in groups) {
+            for (duplicateId in group.duplicateIds) {
+                if (duplicateId == group.keepId) continue
+                noteDao.deleteById(duplicateId)
+            }
+        }
+    }
 
     // --- CATEGORIES ---
     suspend fun addCategory(name: String, colorArgb: Long, position: Int, createdAt: Long): Long {

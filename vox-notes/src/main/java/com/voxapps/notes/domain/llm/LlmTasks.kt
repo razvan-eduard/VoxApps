@@ -8,4 +8,6 @@ package com.voxapps.notes.domain.llm
  */
 object LlmTasks {
     const val CATEGORY_DEDUPLICATION = "CATEGORY_DEDUPLICATION"
+    const val NOTE_SCAN_CLEANUP = "NOTE_SCAN_CLEANUP"
+    const val NOTE_DEDUPLICATION = "NOTE_DEDUPLICATION"
 }

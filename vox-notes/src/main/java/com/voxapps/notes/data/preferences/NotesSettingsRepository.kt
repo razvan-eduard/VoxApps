@@ -19,4 +19,5 @@ interface NotesSettingsRepository {
     suspend fun setAutoCreateVoiceCategory(enabled: Boolean)
     suspend fun setLanguage(code: String)
     suspend fun setScheduledMergeInterval(interval: String)
+    suspend fun setScheduledNoteDedupInterval(interval: String)
 }

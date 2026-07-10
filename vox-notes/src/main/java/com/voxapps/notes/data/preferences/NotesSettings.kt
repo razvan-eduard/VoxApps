@@ -16,6 +16,9 @@ import androidx.compose.runtime.Immutable
  *   vox-commander's own precedent of reusing a single language setting for UI + NLU hints.
  * - [scheduledMergeInterval]: how often Auto-Merge Categories runs automatically in the background
  *   ([INTERVAL_OFF] = manual button only).
+ * - [scheduledNoteDedupInterval]: same idea, for the note-deduplication feature — kept as its own
+ *   independent setting rather than reusing [scheduledMergeInterval] since the two features run on
+ *   independent schedules.
  */
 @Immutable
 data class NotesSettings(
@@ -26,7 +29,8 @@ data class NotesSettings(
     /** If true, a spoken category that doesn't exist is created; otherwise it falls back. */
     val autoCreateVoiceCategory: Boolean = false,
     val language: String = DEFAULT_LANGUAGE,
-    val scheduledMergeInterval: String = INTERVAL_OFF
+    val scheduledMergeInterval: String = INTERVAL_OFF,
+    val scheduledNoteDedupInterval: String = INTERVAL_OFF
 ) {
     companion object {
         const val TIMEOUT_30M = 30

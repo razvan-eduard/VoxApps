@@ -27,6 +27,14 @@
     <!-- Held so Notes can send a generic LLM request to Commander's hook. -->
     <uses-permission android:name="com.voxapps.commander.permission.LLM_PROCESS" />
 
+    <!--
+        Guards Notes' OCR-scan result receiver — only Vision (same signing key) may deliver an async
+        scan reply here, so a third app can't spoof fake OCR text into a note.
+    -->
+    <permission
+        android:name="com.voxapps.notes.permission.OCR_RESULT"
+        android:protectionLevel="signature" />
+
     <application
         android:name=".NotesApplication"
         android:allowBackup="false"
@@ -80,6 +88,20 @@
             android:permission="com.voxapps.notes.permission.LLM_RESULT">
             <intent-filter>
                 <action android:name="com.voxapps.action.LLM_RESULT" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+            OCR-scan result: Vision delivers an async reply here after scanning a document Notes
+            asked it to (the "Scanează o notiță" entry point). Guarded by the OCR_RESULT permission
+            above — only Vision (same signing key) can deliver it.
+        -->
+        <receiver
+            android:name=".receiver.OcrResultReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.notes.permission.OCR_RESULT">
+            <intent-filter>
+                <action android:name="com.voxapps.action.OCR_RESULT" />
             </intent-filter>
         </receiver>
     </application>

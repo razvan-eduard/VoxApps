@@ -1,0 +1,5 @@
+{
+  "det": "https://github.com/razvan-eduard/VoxApps/releases/download/ocr-models-v1/det.onnx",
+  "latin": "https://github.com/razvan-eduard/VoxApps/releases/download/ocr-models-v1/latin_rec.onnx",
+  "latin_config": "https://github.com/razvan-eduard/VoxApps/releases/download/ocr-models-v1/latin_rec.yml"
+}

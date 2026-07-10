@@ -26,6 +26,8 @@ dependencyResolutionManagement {
 rootProject.name = "VoxApps"
 include(":vox-commander")
 include(":vox-notes")
+include(":vox-vision")
 include(":core:design")
 include(":core:ipc")
 include(":core:wakeword")
+include(":vendor:ppocr-sdk")

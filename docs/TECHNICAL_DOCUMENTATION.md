@@ -1190,17 +1190,88 @@ When several apps advertise the same domain (e.g. Vox Notes **and** a third-part
 The **Integrations → Vox Apps** section lists discovered apps with their `domain • actions`, a
 **First-party / Third-party** badge, and the live ping status.
 
+### Generic LLM hook (`ACTION_LLM_PROCESS` / `ACTION_LLM_RESULT`)
+
+The create/read command bus above only covers a satellite's own domain data. Several newer satellite
+features (Vox Notes' category/note-duplicate cleanup, Vox Vision's OCR-text cleanup) need something
+different: *ask Commander's LLM to process an arbitrary prompt*, without Commander needing to
+understand what the feature is. That's the generic LLM hook — a second, parallel bus, symmetric to the
+command bus but carrying opaque prompt/result payloads instead of structured notes data:
+
+- **Request** — a satellite broadcasts `VoxIpc.ACTION_LLM_PROCESS` with a `VoxLlmRequest{sourcePackage,
+  task, promptText, data}` JSON in `EXTRA_LLM_PAYLOAD`, guarded by the signature-level
+  `com.voxapps.commander.permission.LLM_PROCESS` permission. `task` and `promptText` are entirely
+  owned by the caller — Commander never parses or validates them.
+- **`LlmHookReceiver`** does only fast parse/validate work, then hands off to a one-time
+  **`LlmHookWorker`** (`WorkManager`, not a plain `Service`) — on-device testing showed a plain
+  non-foreground `Service` started from a `BroadcastReceiver` can be silently blocked by OEM/Doze
+  background-execution restrictions when Commander has no visible UI, whereas `WorkManager`'s
+  `JobScheduler`-backed execution is exempted.
+- **`LlmHookEngineSelector.run(promptText)`** routes the raw prompt to whichever engine is currently
+  configured as the user's primary AI processor (`aiProcessor` setting — the same selection
+  [`IntentDecisionMap`](#4-natural-language-understanding-nlu) uses for its L2 step), calling
+  `AssistantEngine.rawPrompt()` directly with **no L1/L3 fallback cascade** (this hook always targets a
+  single, currently-selected engine, not the triple-brain pipeline).
+- **Reply** — `LlmHookWorker` applies only generic cleanup (`NluIntentParser.cleanGenericOutput`,
+  stripping markdown/prose fences) to the LLM's raw text, wraps it in a `VoxLlmResult{task, status,
+  rawJson}`, and delivers it as an **explicit-intent** broadcast (`ACTION_LLM_RESULT`, targeted at
+  `sourcePackage`) — only after re-checking `checkSignatures(..) == SIGNATURE_MATCH` against the
+  requester, so a reply is never sent to an unrelated package. The satellite's own `LLM_RESULT`
+  signature permission guards receipt on its end.
+- Because Commander never interprets `task`/`promptText`/`rawJson`, a satellite can add a brand-new
+  LLM-backed feature (prompt design, result parsing, and applying the result) with **zero Commander
+  changes** — it just picks a new `task` string.
+
+```
+satellite ──VoxLlmRequest{sourcePackage,task,promptText}──▶ LlmHookReceiver ──▶ LlmHookWorker
+                                                                                      │
+                                                                    LlmHookEngineSelector.run(promptText)
+                                                                                      │
+satellite  ◀── VoxLlmResult{task,status,rawJson} ── explicit intent, signature-checked ┘
+```
+
+### Vox Vision (OCR satellite)
+
+`vox-vision` (`com.voxapps.vision`) is the second satellite in this repo — unlike Vox Notes, it never
+receives voice commands (its `VisionCommandReceiver` only answers the discovery `ping`); it's purely a
+**note producer**. Two ways it's invoked:
+
+- **Direct explicit-intent launch, not a broadcast** — a satellite wanting a scan (e.g. Vox Notes) calls
+  `context.startActivity(Intent().setClassName(VoxIpc.VISION_PACKAGE, VoxIpc.VISION_ACTIVITY_CLASS))`
+  with a `VoxOcrRequest{sourcePackage, task, hint}` JSON in `EXTRA_OCR_PAYLOAD`. This is deliberate:
+  camera capture needs a live foreground window, and Android's background-activity-launch (BAL)
+  restriction is evaluated against the **calling** app's foreground state, not the callee's — so a
+  foreground-to-foreground `startActivity` (button tap → `VisionActivity`) hits no restriction at all.
+  An earlier design routed this through a `BroadcastReceiver` that tried to self-launch its own
+  Activity with no visible caller UI backing it, which BAL silently blocked; that receiver was removed.
+- **`VisionActivity`** is `android:launchMode="singleTask"` with an `onNewIntent` override, so a second
+  scan request while it's already running redelivers into the same instance instead of losing the
+  pending-request extras (both the launch mode *and* the override are required together — either alone
+  is insufficient).
+- Vision's own OCR pipeline (camera capture → brightness-blob auto-capture → OpenCV quad crop →
+  on-device PaddleOCR) hands raw text to Vox Vision's own copy of the generic LLM hook (its
+  `LlmResultReceiver`, `LlmTasks.OCR_CLEANUP`) to get a clean title/body, then forwards it to Vox Notes
+  as a create command. When launched as a pending-request target (`hint`/`task` present), an
+  auto-triggered capture skips straight to submission with no manual tap — a manual capture always
+  still requires one, since there's no guarantee every field is already correct.
+
 ### Key classes
 
 | Class | Path |
 |-------|------|
 | `VoxIpc` / `VoxCommand` / `VoxResult` | `core/ipc/src/main/java/com/voxapps/ipc/` |
+| `VoxLlmRequest` / `VoxLlmResult` | `core/ipc/src/main/java/com/voxapps/ipc/` |
+| `VoxOcrRequest` / `VoxOcrResult` | `core/ipc/src/main/java/com/voxapps/ipc/` |
 | `VoxAppsDiscovery` / `VoxAppInfo` / `VoxSatelliteRegistry` | `domain/integration/` |
 | `SatelliteRouting` (pure decision) | `domain/integration/SatelliteRouting.kt` |
 | `SatelliteHandler` (dispatch) | `domain/intent/handler/SatelliteHandler.kt` |
 | `PromptProvider.buildSatelliteHints()` (nluHint → prompt) | `domain/intent/interpreter/PromptProvider.kt` |
 | `TtsHookReceiver` / `TtsHookService` | `service/` |
+| `LlmHookReceiver` / `LlmHookWorker` / `LlmHookEngineSelector` | `service/`, `domain/intent/` |
 | Satellite receiver (Notes) | `vox-notes/.../receiver/VoxCommandReceiver.kt` |
+| Vision's LLM result receiver | `vox-vision/.../receiver/LlmResultReceiver.kt` |
+| `VisionActivity` (`singleTask` + `onNewIntent`) | `vox-vision/src/main/java/com/voxapps/vision/VisionActivity.kt` |
+| `DocumentCropper` (Otsu live-bounds + strict-quad crop) | `vox-vision/.../ocr/DocumentCropper.kt` |
 
 ---
 

@@ -4,3 +4,9 @@
 [submodule "vendor/openwakeword-android-kt"]
 	path = vendor/openwakeword-android-kt
 	url = https://github.com/Re-MENTIA/openwakeword-android-kt.git
+[submodule "vendor/opencv"]
+	path = vendor/opencv
+	url = https://github.com/opencv/opencv.git
+[submodule "vendor/paddleocr-upstream"]
+	path = vendor/paddleocr-upstream
+	url = https://github.com/PaddlePaddle/PaddleOCR.git

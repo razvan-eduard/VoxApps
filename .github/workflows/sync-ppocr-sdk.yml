@@ -1,0 +1,210 @@
+name: Sync PaddleOCR ppocr-sdk Fork
+
+# vendor/ppocr-sdk vendors + locally patches PaddlePaddle/PaddleOCR's Android SDK (see
+# vendor/ppocr-sdk/NOTICE). The byte-loading patch is maintained as a real, storable diff
+# (vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch — regenerate with
+# scripts/regen_ppocr_sdk_patch.sh whenever the patch itself changes).
+#
+# Unlike OpenWakeWord's small, focused fork, PaddleOCR is a ~2GB monorepo — we only need its
+# deploy/ppocr-android/ppocr-sdk subdirectory, so vendor/paddleocr-upstream is a blobless, sparse
+# submodule (see scripts/check_ppocr_sdk_version.sh for the same reasoning), and PaddleOCR has no
+# release tags for this path — upstream is tracked by comparing commit SHAs on its default branch.
+#
+# When upstream's default branch moves, this workflow: bumps the pristine vendor/paddleocr-upstream
+# submodule (re-fetched sparse + shallow at the new commit), re-vendors ALL of
+# vendor/ppocr-sdk/src/main/java/com/paddle from it, and tries to `git apply` the stored patch.
+#   - If it applies cleanly AND the module still compiles -> opens a PR that's already ready to
+#     review/approve (the common case — nothing for a human to hand-merge).
+#   - If the patch conflicts (upstream changed the exact patched lines) -> opens a PR with the
+#     conflicting hunk attached, clearly marked as needing a manual merge.
+#   - If it applies but something else broke -> opens a PR with the build failure attached.
+# Never auto-merges — always a PR for review.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (without submodules — handled explicitly below)
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Determine current pin and latest upstream commit
+        id: versions
+        run: |
+          UPSTREAM_URL="https://github.com/PaddlePaddle/PaddleOCR.git"
+          CURRENT_SHA=$(git ls-tree HEAD vendor/paddleocr-upstream | awk '{print $3}')
+          LATEST_SHA=$(git ls-remote "$UPSTREAM_URL" HEAD | awk '{print $1}')
+
+          echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
+          echo "latest_sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$LATEST_SHA" ] || [ "$CURRENT_SHA" == "$LATEST_SHA" ]; then
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump submodule (sparse + shallow at the new commit) + re-vendor sources
+        if: steps.versions.outputs.has_update == 'true'
+        id: bump
+        run: |
+          LATEST_SHA="${{ steps.versions.outputs.latest_sha }}"
+          LATEST_SHORT="${LATEST_SHA:0:9}"
+          BRANCH="chore/sync-ppocr-sdk-$LATEST_SHORT"
+          git checkout -b "$BRANCH"
+
+          rm -rf vendor/paddleocr-upstream
+          git clone --filter=blob:none --sparse --no-checkout \
+            https://github.com/PaddlePaddle/PaddleOCR.git vendor/paddleocr-upstream
+          cd vendor/paddleocr-upstream
+          git sparse-checkout set deploy/ppocr-android/ppocr-sdk
+          git fetch --depth 1 origin "$LATEST_SHA"
+          git checkout "$LATEST_SHA"
+          cd "$GITHUB_WORKSPACE"
+
+          # Full re-vendor: mirror every upstream source file into vendor/ppocr-sdk/src/main/java.
+          # For most files this is a pure refresh; the 4 patched files are overwritten with the
+          # pristine upstream version here and patched in the next step. build.gradle.kts,
+          # AndroidManifest.xml, proguard-rules.pro, and the dropped androidTest/ dir are VoxApps
+          # build-config adaptations, not part of the upstream re-vendor — left untouched.
+          rm -rf vendor/ppocr-sdk/src/main/java/com/paddle
+          mkdir -p vendor/ppocr-sdk/src/main/java/com/paddle
+          cp -r vendor/paddleocr-upstream/deploy/ppocr-android/ppocr-sdk/src/main/java/com/paddle/* \
+                vendor/ppocr-sdk/src/main/java/com/paddle/
+
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Apply the byte-loading patch
+        if: steps.versions.outputs.has_update == 'true'
+        id: apply
+        run: |
+          if git apply --check vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch 2>/tmp/apply-reject.txt; then
+            git apply vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch
+            echo "status=clean" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+            echo "Patch did not apply — see reject details below:"
+            cat /tmp/apply-reject.txt
+          fi
+
+      - name: Set up JDK 17
+        if: steps.versions.outputs.has_update == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        if: steps.versions.outputs.has_update == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-licenses: true
+
+      - name: Install NDK and CMake (needed to build OpenCV, a compile-time dependency of ppocr-sdk)
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Symlink SDK for the OpenCV build script (hardcodes the macOS SDK path)
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          mkdir -p ~/Library/Android/sdk
+          ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
+
+      - name: Fetch vendor/opencv submodule (needed to build OpenCV before ppocr-sdk can compile)
+        if: steps.versions.outputs.has_update == 'true'
+        run: git submodule update --init vendor/opencv
+
+      - name: Grant execute permission for gradlew
+        if: steps.versions.outputs.has_update == 'true'
+        run: chmod +x gradlew
+
+      # Only run the build when the patch applied cleanly — a conflict already means "needs manual
+      # merge", so there's nothing meaningful to compile yet. This runs autoCompileOpenCv for real
+      # (ppocr-sdk's Kotlin source imports its generated org.opencv.* bindings, unlike OpenWakeWord's
+      # self-contained module) — expect this step to take a few minutes.
+      - name: Compile (only if the patch applied cleanly)
+        if: steps.versions.outputs.has_update == 'true' && steps.apply.outputs.status == 'clean'
+        id: build
+        run: |
+          if ./gradlew :vendor:ppocr-sdk:compileDebugKotlin :vox-vision:compileDebugKotlin \
+                       --no-daemon > /tmp/build.log 2>&1; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            tail -c 20000 /tmp/build.log
+          fi
+
+      - name: Commit re-vendor + submodule bump
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add vendor/paddleocr-upstream vendor/ppocr-sdk/src/main/java
+          git commit -m "chore: sync PaddleOCR ppocr-sdk fork to ${{ steps.versions.outputs.latest_sha }}"
+          git push origin "${{ steps.bump.outputs.branch }}"
+
+      - name: Prepare PR body
+        if: steps.versions.outputs.has_update == 'true'
+        run: |
+          APPLY_STATUS="${{ steps.apply.outputs.status }}"
+          BUILD_STATUS="${{ steps.build.outputs.status }}"
+          LATEST_SHORT="${{ steps.versions.outputs.latest_sha }}"
+          LATEST_SHORT="${LATEST_SHORT:0:9}"
+          CURRENT_SHORT="${{ steps.versions.outputs.current_sha }}"
+          CURRENT_SHORT="${CURRENT_SHORT:0:9}"
+
+          {
+            echo "Upstream [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) (deploy/ppocr-android/ppocr-sdk) moved to \`$LATEST_SHORT\` (we were pinned at \`$CURRENT_SHORT\`)."
+            echo ""
+            if [ "$APPLY_STATUS" == "clean" ] && [ "$BUILD_STATUS" == "pass" ]; then
+              echo "**✅ Patch applied automatically. Compiles.** All sources are re-vendored and the byte-loading patch (vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch) is already re-applied — nothing left to hand-merge. Please review the diff and approve."
+            elif [ "$APPLY_STATUS" == "clean" ] && [ "$BUILD_STATUS" == "fail" ]; then
+              echo "**⚠️ Patch applied textually, but the build failed** — something else in this release broke compatibility. Log tail:"
+              echo '```'
+              tail -c 8000 /tmp/build.log 2>/dev/null || echo "(log unavailable)"
+              echo '```'
+            else
+              echo "**⚠️ Manual merge needed** — the byte-loading patch no longer applies cleanly (upstream changed the same lines in one of the 4 patched files). All other files are already re-vendored. Reject details:"
+              echo '```'
+              cat /tmp/apply-reject.txt 2>/dev/null || echo "(reject details unavailable)"
+              echo '```'
+              echo ""
+              echo "After resolving, regenerate the patch file with \`./scripts/regen_ppocr_sdk_patch.sh\`."
+            fi
+          } > /tmp/pr-body.md
+
+      - name: Open PR
+        if: steps.versions.outputs.has_update == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APPLY_STATUS="${{ steps.apply.outputs.status }}"
+          BUILD_STATUS="${{ steps.build.outputs.status }}"
+          LATEST_SHORT="${{ steps.versions.outputs.latest_sha }}"
+          LATEST_SHORT="${LATEST_SHORT:0:9}"
+          if [ "$APPLY_STATUS" == "clean" ] && [ "$BUILD_STATUS" == "pass" ]; then
+            TITLE="chore: PaddleOCR ppocr-sdk $LATEST_SHORT — ready to review"
+          elif [ "$APPLY_STATUS" == "clean" ]; then
+            TITLE="chore: PaddleOCR ppocr-sdk $LATEST_SHORT — applied but build failed"
+          else
+            TITLE="chore: PaddleOCR ppocr-sdk $LATEST_SHORT — manual merge needed"
+          fi
+
+          gh pr create \
+            --title "$TITLE" \
+            --body-file /tmp/pr-body.md \
+            --base main \
+            --head "${{ steps.bump.outputs.branch }}"
