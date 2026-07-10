@@ -47,6 +47,12 @@
     <!-- Held so Commander can deliver an async LLM hook result back to the Vision satellite. -->
     <uses-permission android:name="com.voxapps.vision.permission.LLM_RESULT" />
 
+    <!-- Held so Commander can send commands to the Expenses satellite's command bus. -->
+    <uses-permission android:name="com.voxapps.expenses.permission.COMMAND" />
+
+    <!-- Held so Commander can deliver an async LLM hook result back to the Expenses satellite. -->
+    <uses-permission android:name="com.voxapps.expenses.permission.LLM_RESULT" />
+
     <application
         android:name=".VoxApplication"
         android:allowBackup="true"

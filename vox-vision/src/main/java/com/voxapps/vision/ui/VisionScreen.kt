@@ -120,6 +120,16 @@ fun VisionScreen(
         if (!cameraGranted) requestCameraPermission { cameraGranted = it }
     }
 
+    // Clears any leftover recognized text from a previous scan (standalone or a different caller's
+    // request) as soon as a new/different pending request comes in via onNewIntent — without this,
+    // stale text from before sat in the field looking like it had already scanned something, and
+    // the auto-capture analyzer below (a stale-closure bug, fixed alongside this) never re-armed a
+    // fresh auto-submit for the new caller either. Runs on first composition too (a no-op, rawText
+    // already starts empty).
+    LaunchedEffect(pendingRequest) {
+        rawText = ""
+    }
+
     // Pre-warms the OCR engine (and, as a side effect, the OpenCV native lib) as soon as the camera
     // is available, so the auto-capture analyzer below isn't racing an uninitialized native lib on
     // its very first frames — the same ordering bug hit earlier with DocumentCropper.
@@ -175,6 +185,14 @@ fun VisionScreen(
 
     val isRecognizingState = rememberUpdatedState(isRecognizing)
     val engineReadyState = rememberUpdatedState(engineReady)
+    // The analyzer callback below is registered once inside LaunchedEffect(cameraController), which
+    // never re-runs (cameraController's identity never changes) — a bare `pendingRequest` reference
+    // in that closure would freeze at whatever it was on the *first* composition. If Vision started
+    // standalone (null) and a satellite's request arrived later via onNewIntent, or a second request
+    // from a different caller arrived while Vision was already open, the stale closure either never
+    // auto-submitted at all, or would have submitted back to the wrong caller. rememberUpdatedState
+    // keeps this read live.
+    val pendingRequestState = rememberUpdatedState(pendingRequest)
     val sensitivitySetting by container.settingsRepository.autoTriggerSensitivityFlow.collectAsStateWithLifecycle(
         initialValue = VisionSettingsRepository.DEFAULT_SENSITIVITY
     )
@@ -232,8 +250,9 @@ fun VisionScreen(
                         // to fill in (Title/Category are hidden when pendingRequest != null) — so an
                         // auto-triggered capture there can go straight through and hand control back to
                         // the caller. Standalone mode still needs a deliberate tap: the user may want to
-                        // add a title/category or toggle "clean up with AI" before saving.
-                        if (pendingRequest != null) submitState.value(text)
+                        // add a title/category or toggle "clean up with AI" before saving. Reads the
+                        // live pendingRequestState, not the closure-frozen pendingRequest (see above).
+                        if (pendingRequestState.value != null) submitState.value(text)
                     }
                 )
             }
