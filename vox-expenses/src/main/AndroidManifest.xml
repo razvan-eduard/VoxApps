@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Expenses live on-device; the only network use is Stage 5's exchange-rate lookup at
+         reporting time (never per-expense), a plain outbound HTTPS GET to exchangerate-api.com. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Android 13+ suppresses toasts from backgrounded apps unless notifications are allowed.
+         Needed for the "toast on voice save" setting (the save is headless via broadcast). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        Custom permission guarding the cross-app command bus. Any app that wants to send Vox
+        commands to Expenses must hold it. `signature` = only apps signed with the same key (the
+        monorepo apps) qualify.
+    -->
+    <permission
+        android:name="com.voxapps.expenses.permission.COMMAND"
+        android:protectionLevel="signature" />
+
+    <!--
+        Guards Expenses' own generic-LLM-hook result receiver — only Commander (same signing key) may
+        deliver an async LLM reply here, so a third app can't spoof a fake parsed expense.
+    -->
+    <permission
+        android:name="com.voxapps.expenses.permission.LLM_RESULT"
+        android:protectionLevel="signature" />
+
+    <!-- Held so Expenses can send a generic LLM request to Commander's hook. -->
+    <uses-permission android:name="com.voxapps.commander.permission.LLM_PROCESS" />
+
+    <!--
+        Guards Expenses' OCR-scan result receiver — only Vision (same signing key) may deliver an
+        async scan reply here, so a third app can't spoof fake OCR text into an expense.
+    -->
+    <permission
+        android:name="com.voxapps.expenses.permission.OCR_RESULT"
+        android:protectionLevel="signature" />
+
+    <application
+        android:name=".ExpensesApplication"
+        android:allowBackup="false"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VoxExpenses">
+
+        <activity
+            android:name=".ExpensesActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+
+            <!-- Standalone launcher: works fully without VoxCommander -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            OPTIONAL Vox integration: VoxCommander (or any authorized app) hands us a JSON command
+            (create/read) via this native broadcast. Parsed with :core:ipc — no shared runtime, no
+            NLU here. Guarded by the COMMAND permission above.
+        -->
+        <receiver
+            android:name=".receiver.VoxCommandReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.expenses.permission.COMMAND">
+            <intent-filter>
+                <action android:name="com.voxapps.action.VOX_COMMAND" />
+            </intent-filter>
+            <!-- Capability advertising: Commander reads this at scan time to route the "expenses"
+                 NLU domain here (create/read), with no per-app config on Commander's side. -->
+            <meta-data android:name="com.voxapps.vox.domain" android:value="expenses" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read" />
+            <meta-data android:name="com.voxapps.vox.label" android:value="Expenses" />
+            <meta-data
+                android:name="com.voxapps.vox.nluHint"
+                android:value="If the user names a target category/budget (e.g. &quot;log to groceries&quot;, &quot;pune-o la transport&quot;), put that category name in the category field; otherwise category=null. Put everything else the user said about the purchase (items, vendor, amount, anything mentioned) into the text field verbatim — do not try to extract or compute the amount yourself, that happens separately." />
+        </receiver>
+
+        <!--
+            Generic LLM hook result: Commander delivers an async reply here after parsing a raw
+            spoken utterance (or, in later stages, a category-merge/dedup suggestion). Guarded by the
+            LLM_RESULT permission above — only Commander (same signing key) can deliver it.
+        -->
+        <receiver
+            android:name=".receiver.LlmResultReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.expenses.permission.LLM_RESULT">
+            <intent-filter>
+                <action android:name="com.voxapps.action.LLM_RESULT" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+            OCR-scan result: Vision delivers an async reply here after scanning a receipt Expenses
+            asked it to (the "Scan receipt" entry point). Guarded by the OCR_RESULT permission above —
+            only Vision (same signing key) can deliver it.
+        -->
+        <receiver
+            android:name=".receiver.OcrResultReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.expenses.permission.OCR_RESULT">
+            <intent-filter>
+                <action android:name="com.voxapps.action.OCR_RESULT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- NotificationListenerService for opt-in payment-notification capture (Stage 6) — mirrors
+             vox-commander's MediaSessionListenerService shape. Granting this in system Settings only
+             lets the service exist; onNotificationPosted still ignores everything not in the user's
+             explicit payment-source app allowlist (see NotificationCaptureSettingsTab), so enabling
+             this permission alone processes nothing. -->
+        <service
+            android:name=".receiver.PaymentNotificationListenerService"
+            android:enabled="true"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

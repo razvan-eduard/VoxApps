@@ -1,0 +1,55 @@
+package com.voxapps.expenses.di
+
+import android.content.Context
+import com.voxapps.expenses.data.ExchangeRateRepository
+import com.voxapps.expenses.data.ExpensesDatabase
+import com.voxapps.expenses.data.ExpensesRepository
+import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
+import com.voxapps.expenses.data.preferences.ExpensesSettingsRepositoryImpl
+import com.voxapps.expenses.domain.limits.SpendingLimitAlertRepository
+import com.voxapps.expenses.domain.llm.ExpenseDeduplicationRepository
+import com.voxapps.expenses.domain.llm.PendingCategoryMergeRepository
+import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
+import com.voxapps.expenses.domain.localization.LanguageManager
+import com.voxapps.expenses.state.ExpensesStateManager
+import com.voxapps.expenses.state.SessionManager
+
+/**
+ * Manual DI container for Vox Expenses (mirrors vox-notes' NotesContainer). Owns all singletons and
+ * is constructed once from [com.voxapps.expenses.ExpensesApplication.onCreate].
+ */
+class ExpensesContainer(context: Context) {
+    private val appContext = context.applicationContext
+
+    val settingsRepository: ExpensesSettingsRepository = ExpensesSettingsRepositoryImpl(appContext)
+
+    private val database = ExpensesDatabase.get(appContext)
+    val expensesRepository = ExpensesRepository(
+        database.expenseDao(),
+        database.categoryDao(),
+        database.expenseLineItemDao(),
+        database.spendingLimitDao()
+    )
+
+    val pendingCategoryMergeRepository = PendingCategoryMergeRepository(appContext)
+    val expenseDeduplicationRepository = ExpenseDeduplicationRepository(appContext)
+    val pendingNotificationExpenseRepository = PendingNotificationExpenseRepository(appContext)
+    val exchangeRateRepository = ExchangeRateRepository(appContext)
+    val spendingLimitAlertRepository = SpendingLimitAlertRepository(appContext)
+
+    val sessionManager = SessionManager()
+
+    val expensesStateManager = ExpensesStateManager.getInstance(
+        settingsRepository,
+        expensesRepository,
+        sessionManager,
+        pendingCategoryMergeRepository,
+        expenseDeduplicationRepository,
+        pendingNotificationExpenseRepository,
+        spendingLimitAlertRepository
+    )
+
+    val languageManager = LanguageManager(appContext).also {
+        it.loadLanguage(settingsRepository.getSnapshot().language)
+    }
+}

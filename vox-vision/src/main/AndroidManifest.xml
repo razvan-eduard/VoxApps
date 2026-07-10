@@ -27,8 +27,12 @@
     <!-- Held so Vision can send a generic LLM cleanup request to Commander's hook. -->
     <uses-permission android:name="com.voxapps.commander.permission.LLM_PROCESS" />
 
-    <!-- Held so Vision can deliver an async OCR_RESULT reply back to whichever satellite requested a scan. -->
+    <!-- Held so Vision can deliver an async OCR_RESULT reply back to whichever satellite requested a
+         scan. One line per satellite that can request a scan — Android requires the sender to hold
+         the exact permission name a receiver declares, there's no way to hold "whatever the caller
+         advertises" dynamically. -->
     <uses-permission android:name="com.voxapps.notes.permission.OCR_RESULT" />
+    <uses-permission android:name="com.voxapps.expenses.permission.OCR_RESULT" />
 
     <application
         android:name=".VisionApplication"

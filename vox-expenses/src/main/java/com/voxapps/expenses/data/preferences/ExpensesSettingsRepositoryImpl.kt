@@ -1,0 +1,120 @@
+package com.voxapps.expenses.data.preferences
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+
+class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepository {
+
+    private val dataStore: DataStore<Preferences> = DataStoreProvider.get(appContext)
+
+    private object Keys {
+        val IS_BIOMETRIC_REQUIRED = booleanPreferencesKey("is_biometric_required")
+        val SESSION_TIMEOUT_MINUTES = intPreferencesKey("session_timeout_minutes")
+        val LANGUAGE = stringPreferencesKey("language")
+        val DEFAULT_CURRENCY = stringPreferencesKey("default_currency")
+        val DEFAULT_VOICE_CATEGORY_ID = longPreferencesKey("default_voice_category_id")
+        val VOICE_SAVE_TOAST_ENABLED = booleanPreferencesKey("voice_save_toast_enabled")
+        val AUTO_CREATE_VOICE_CATEGORY = booleanPreferencesKey("auto_create_voice_category")
+        val SCHEDULED_MERGE_INTERVAL = stringPreferencesKey("scheduled_merge_interval")
+        val SCHEDULED_EXPENSE_DEDUP_INTERVAL = stringPreferencesKey("scheduled_expense_dedup_interval")
+        val HOME_CURRENCY = stringPreferencesKey("home_currency")
+        val PAYMENT_SOURCE_PACKAGES = stringSetPreferencesKey("payment_source_packages")
+        val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
+    }
+
+    override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
+        ExpensesSettings(
+            isBiometricRequired = prefs[Keys.IS_BIOMETRIC_REQUIRED] ?: false,
+            sessionTimeoutMinutes = prefs[Keys.SESSION_TIMEOUT_MINUTES] ?: ExpensesSettings.TIMEOUT_30M,
+            language = prefs[Keys.LANGUAGE] ?: defaultDeviceLanguage(),
+            defaultCurrency = prefs[Keys.DEFAULT_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
+            defaultVoiceCategoryId = prefs[Keys.DEFAULT_VOICE_CATEGORY_ID],
+            voiceSaveToastEnabled = prefs[Keys.VOICE_SAVE_TOAST_ENABLED] ?: false,
+            autoCreateVoiceCategory = prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] ?: false,
+            scheduledMergeInterval = prefs[Keys.SCHEDULED_MERGE_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
+            scheduledExpenseDedupInterval = prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
+            homeCurrency = prefs[Keys.HOME_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
+            paymentSourcePackages = prefs[Keys.PAYMENT_SOURCE_PACKAGES] ?: emptySet(),
+            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false
+        )
+    }
+
+    @Volatile private var cachedSnapshot: ExpensesSettings? = null
+
+    init {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            settingsFlow.collect { cachedSnapshot = it }
+        }
+    }
+
+    override fun getSnapshot(): ExpensesSettings =
+        cachedSnapshot ?: runBlocking { settingsFlow.first() }.also { cachedSnapshot = it }
+
+    override suspend fun setBiometricRequired(required: Boolean) {
+        dataStore.edit { it[Keys.IS_BIOMETRIC_REQUIRED] = required }
+    }
+
+    override suspend fun setSessionTimeoutMinutes(minutes: Int) {
+        dataStore.edit { it[Keys.SESSION_TIMEOUT_MINUTES] = minutes }
+    }
+
+    override suspend fun setLanguage(code: String) {
+        dataStore.edit { it[Keys.LANGUAGE] = code }
+    }
+
+    override suspend fun setDefaultCurrency(code: String) {
+        dataStore.edit { it[Keys.DEFAULT_CURRENCY] = code }
+    }
+
+    override suspend fun setDefaultVoiceCategoryId(id: Long?) {
+        dataStore.edit {
+            if (id == null) it.remove(Keys.DEFAULT_VOICE_CATEGORY_ID) else it[Keys.DEFAULT_VOICE_CATEGORY_ID] = id
+        }
+    }
+
+    override suspend fun setVoiceSaveToastEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.VOICE_SAVE_TOAST_ENABLED] = enabled }
+    }
+
+    override suspend fun setAutoCreateVoiceCategory(enabled: Boolean) {
+        dataStore.edit { it[Keys.AUTO_CREATE_VOICE_CATEGORY] = enabled }
+    }
+
+    override suspend fun setScheduledMergeInterval(interval: String) {
+        dataStore.edit { it[Keys.SCHEDULED_MERGE_INTERVAL] = interval }
+    }
+
+    override suspend fun setScheduledExpenseDedupInterval(interval: String) {
+        dataStore.edit { it[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] = interval }
+    }
+
+    override suspend fun setHomeCurrency(code: String) {
+        dataStore.edit { it[Keys.HOME_CURRENCY] = code }
+    }
+
+    override suspend fun setPaymentSourcePackages(packages: Set<String>) {
+        dataStore.edit { it[Keys.PAYMENT_SOURCE_PACKAGES] = packages }
+    }
+
+    override suspend fun setDebugLoggingEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
+    }
+
+    private fun defaultDeviceLanguage(): String =
+        java.util.Locale.getDefault().language.ifBlank { ExpensesSettings.DEFAULT_LANGUAGE }
+}

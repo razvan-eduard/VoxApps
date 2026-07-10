@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.voxapps.notes"
+    namespace = "com.voxapps.expenses"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.voxapps.notes"
+        applicationId = "com.voxapps.expenses"
         minSdk = 29
         targetSdk = 36
         versionCode = 1
@@ -63,16 +63,31 @@ dependencies {
     implementation("androidx.sqlite:sqlite:2.4.0")
     implementation(libs.androidx.security.crypto)
 
-    // Scheduled Auto-Merge Categories (off/daily/weekly/monthly)
+    // Scheduled jobs (category auto-merge, expense dedup, spending-limit checks)
     implementation(libs.androidx.work.runtime.ktx)
 
-    // --- Unit tests (JVM, mirror vox-commander) ---
+    // Exchange-rate lookups at reporting time (Stage 5)
+    implementation(libs.okhttp)
+
+    // --- Unit tests (JVM, mirror vox-notes) ---
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("app.cash.turbine:turbine:1.1.0")
     testImplementation("androidx.test:core:1.7.0")
-    // org.json ships in android.jar at compile time; unit tests need the real implementation
-    // (mirrors :core:ipc, which needed this for the exact same reason).
     testImplementation("org.json:json:20240303")
+}
+
+// Copy external_services.json from repo root into assets (single source of truth in root, mirrors
+// vox-commander's models.json/search_definitions.json/intents.json convention) — Expenses reads this
+// for the exchange-rate API's endpoint shape; the API key itself is stored separately (Settings).
+val copyExternalServicesJson = tasks.register<Copy>("copyExternalServicesJson") {
+    group = "build"
+    description = "Copies external_services.json from repo root into src/main/assets/"
+    from("${project.rootDir}/external_services.json")
+    into("${projectDir}/src/main/assets")
+}
+
+tasks.named("preBuild") {
+    dependsOn(copyExternalServicesJson)
 }
