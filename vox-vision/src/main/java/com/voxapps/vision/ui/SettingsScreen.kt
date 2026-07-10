@@ -19,7 +19,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.vision.di.VisionContainer
 import com.voxapps.vision.data.preferences.VisionSettingsRepository
 import kotlinx.coroutines.launch
@@ -46,11 +46,11 @@ private val SENSITIVITY_LEVELS = listOf("low", "medium", "high")
 fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
     val languageManager = LocalLanguageManager.current
     val zones = remember { container.ocrModelRegistry.zones() }
-    val activeZone by container.settingsRepository.ocrZoneFlow.collectAsState(initial = null)
-    val activeSensitivity by container.settingsRepository.autoTriggerSensitivityFlow.collectAsState(
-        initial = VisionSettingsRepository.DEFAULT_SENSITIVITY
+    val activeZone by container.settingsRepository.ocrZoneFlow.collectAsStateWithLifecycle(initialValue = null)
+    val activeSensitivity by container.settingsRepository.autoTriggerSensitivityFlow.collectAsStateWithLifecycle(
+        initialValue = VisionSettingsRepository.DEFAULT_SENSITIVITY
     )
-    val debugLoggingEnabled by container.settingsRepository.debugLoggingEnabledFlow.collectAsState(initial = false)
+    val debugLoggingEnabled by container.settingsRepository.debugLoggingEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
     var switching by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 

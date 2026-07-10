@@ -34,7 +34,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -175,8 +175,8 @@ fun VisionScreen(
 
     val isRecognizingState = rememberUpdatedState(isRecognizing)
     val engineReadyState = rememberUpdatedState(engineReady)
-    val sensitivitySetting by container.settingsRepository.autoTriggerSensitivityFlow.collectAsState(
-        initial = VisionSettingsRepository.DEFAULT_SENSITIVITY
+    val sensitivitySetting by container.settingsRepository.autoTriggerSensitivityFlow.collectAsStateWithLifecycle(
+        initialValue = VisionSettingsRepository.DEFAULT_SENSITIVITY
     )
     val sensitivityState = rememberUpdatedState(
         when (sensitivitySetting) {
