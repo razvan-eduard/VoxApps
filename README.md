@@ -282,7 +282,7 @@ bank/payment notifications, or entered by hand.
 | UI | Jetpack Compose, Material 3 |
 | STT | Whisper.cpp (GGML, on-device) |
 | Wake Word | Vosk, Picovoice Porcupine, OpenWakeWord (vendored fork, `:core:wakeword`) |
-| NLU | OpenAI API, Gemini Nano (on-device), Local LLM (llama.cpp) |
+| NLU | OpenAI API, Gemini Nano (on-device), Local LLM (MediaPipe GenAI — Qwen 2.5 / Gemma 3) |
 | TTS | Android TextToSpeech, Piper TTS (sherpa-onnx) |
 | Storage | DataStore (preferences), EncryptedSharedPreferences, Room |
 | Media | Spotify App Remote SDK, Spotify Web API, MediaSession API |
@@ -346,7 +346,7 @@ vox-commander/src/main/java/com/voxapps/commander/
 | OpenAI | Cloud | API key |
 | Gemini Cloud | Cloud | API key |
 | Gemini Nano | On-device | Pixel 8+ / compatible device |
-| Local LLM | On-device | llama.cpp model (GGUF) |
+| Local LLM | On-device | MediaPipe GenAI model (Qwen 2.5 / Gemma 3, `.task`) |
 | FastMap | On-device | Regex rules (no ML) |
 
 ### Wake Word Engines
