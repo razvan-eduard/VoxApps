@@ -54,6 +54,7 @@ fun CategorySidebar(
     val languageManager = LocalLanguageManager.current
     var showAdd by remember { mutableStateOf(false) }
     var editingCategory by remember { mutableStateOf<Category?>(null) }
+    var pendingDeleteCategory by remember { mutableStateOf<Category?>(null) }
 
     ModalDrawerSheet {
         Text(
@@ -88,7 +89,7 @@ fun CategorySidebar(
                             IconButton(onClick = { editingCategory = cat }) {
                                 Icon(Icons.Filled.Edit, contentDescription = languageManager.getString("edit_category"))
                             }
-                            IconButton(onClick = { onRemoveCategory(cat) }) {
+                            IconButton(onClick = { pendingDeleteCategory = cat }) {
                                 Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("remove_category"))
                             }
                         }
@@ -125,6 +126,23 @@ fun CategorySidebar(
             onConfirm = { name, color ->
                 onEditCategory(category, name, color)
                 editingCategory = null
+            }
+        )
+    }
+
+    pendingDeleteCategory?.let { category ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteCategory = null },
+            title = { Text(languageManager.getString("delete_category_title")) },
+            text = { Text(languageManager.getString("delete_category_message")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRemoveCategory(category)
+                    pendingDeleteCategory = null
+                }) { Text(languageManager.getString("delete")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteCategory = null }) { Text(languageManager.getString("cancel")) }
             }
         )
     }

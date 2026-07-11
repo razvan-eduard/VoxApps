@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -65,6 +66,7 @@ fun CategoriesSettingsTab(
     val context = LocalContext.current
     var addingNew by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    var pendingDeleteCategory by remember { mutableStateOf<Category?>(null) }
 
     val pendingMapping by stateManager.pendingCategoryMergeMapping.collectAsStateWithLifecycle(initialValue = emptyMap())
     // Resolved against the *current* categories — an entry drops out if either name no longer exists
@@ -93,7 +95,7 @@ fun CategoriesSettingsTab(
                             .background(CategoryColors.fromStored(cat.colorArgb))
                     )
                     Text(cat.name, modifier = Modifier.weight(1f).padding(start = 8.dp))
-                    IconButton(onClick = { stateManager.removeCategory(cat) }) {
+                    IconButton(onClick = { pendingDeleteCategory = cat }) {
                         Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("remove_category"))
                     }
                 }
@@ -232,5 +234,22 @@ fun CategoriesSettingsTab(
                 }
             }
         }
+    }
+
+    pendingDeleteCategory?.let { category ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteCategory = null },
+            title = { Text(languageManager.getString("delete_category_title")) },
+            text = { Text(languageManager.getString("delete_category_message")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    stateManager.removeCategory(category)
+                    pendingDeleteCategory = null
+                }) { Text(languageManager.getString("delete")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteCategory = null }) { Text(languageManager.getString("cancel")) }
+            }
+        )
     }
 }

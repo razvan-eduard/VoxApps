@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +33,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -70,6 +72,7 @@ fun NotesScreen(
 
     var editing by remember { mutableStateOf<EditBuffer?>(null) }
     var showDateSheet by remember { mutableStateOf(false) }
+    var pendingDeleteNote by remember { mutableStateOf<Note?>(null) }
 
     // While editing, back closes the inline editor instead of exiting; at rest, back re-arms the
     // standard double-press-to-exit flow. `enabled` keeps the two mutually exclusive regardless of
@@ -185,7 +188,7 @@ fun NotesScreen(
                                     onTextChange = { editing = editing!!.copy(text = it) },
                                     onCategoryChange = { editing = editing!!.copy(categoryId = it) },
                                     onDone = { commitEdit(editing, stateManager); editing = null },
-                                    onDelete = { stateManager.deleteNote(nwc.note); editing = null }
+                                    onDelete = { pendingDeleteNote = nwc.note }
                                 )
                             } else {
                                 CollapsedNoteCard(
@@ -218,13 +221,23 @@ fun NotesScreen(
                 onCategoryChange = { editing = current.copy(categoryId = it) },
                 onDone = { commitEdit(editing, stateManager); editing = null },
                 onDelete = {
-                    if (current.id != null) {
-                        stateManager.deleteNoteById(current.id)
-                    }
-                    editing = null
+                    pendingDeleteNote = state.notes.firstOrNull { it.note.id == current.id }?.note
                 }
             )
         }
+    }
+
+    pendingDeleteNote?.let { note ->
+        ConfirmDeleteDialog(
+            title = languageManager.getString("delete_note_title"),
+            message = languageManager.getString("delete_note_message"),
+            onConfirm = {
+                stateManager.deleteNote(note)
+                pendingDeleteNote = null
+                editing = null
+            },
+            onDismiss = { pendingDeleteNote = null }
+        )
     }
 
     if (showDateSheet) {
@@ -244,6 +257,22 @@ fun NotesScreen(
             onDismiss = { showDateSheet = false }
         )
     }
+}
+
+@Composable
+private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val languageManager = LocalLanguageManager.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(languageManager.getString("delete")) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
+        }
+    )
 }
 
 /** Local edit buffer for the inline note editor. [id] == null means a new (unsaved) note. */

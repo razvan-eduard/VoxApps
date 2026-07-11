@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -115,6 +116,8 @@ fun ExpenseEditScreen(
     var categoryId by remember { mutableStateOf(existing?.expense?.categoryId) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showDeleteExpenseConfirm by remember { mutableStateOf(false) }
+    var pendingDeleteItemIndex by remember { mutableStateOf<Int?>(null) }
 
     val items = remember {
         mutableStateListOf<LineItemDraft>().apply {
@@ -150,10 +153,7 @@ fun ExpenseEditScreen(
                 },
                 actions = {
                     if (existing != null) {
-                        IconButton(onClick = {
-                            stateManager.deleteExpense(existing.expense)
-                            onDone()
-                        }) {
+                        IconButton(onClick = { showDeleteExpenseConfirm = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
                         }
                     }
@@ -258,7 +258,7 @@ fun ExpenseEditScreen(
                     vatDisplayEnabled = vatDisplayEnabled,
                     languageManager = languageManager,
                     onCommit = { items[index] = it },
-                    onDelete = { items.removeAt(index) }
+                    onDelete = { pendingDeleteItemIndex = index }
                 )
             }
 
@@ -362,6 +362,47 @@ fun ExpenseEditScreen(
             DatePicker(state = datePickerState)
         }
     }
+
+    if (showDeleteExpenseConfirm && existing != null) {
+        ConfirmDeleteDialog(
+            title = languageManager.getString("delete_expense_title"),
+            message = languageManager.getString("delete_expense_message"),
+            onConfirm = {
+                stateManager.deleteExpense(existing.expense)
+                showDeleteExpenseConfirm = false
+                onDone()
+            },
+            onDismiss = { showDeleteExpenseConfirm = false }
+        )
+    }
+
+    pendingDeleteItemIndex?.let { index ->
+        ConfirmDeleteDialog(
+            title = languageManager.getString("delete_item_title"),
+            message = languageManager.getString("delete_item_message"),
+            onConfirm = {
+                items.removeAt(index)
+                pendingDeleteItemIndex = null
+            },
+            onDismiss = { pendingDeleteItemIndex = null }
+        )
+    }
+}
+
+@Composable
+private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val languageManager = LocalLanguageManager.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(languageManager.getString("delete")) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
+        }
+    )
 }
 
 /** Column-label caption row above the line-item cards — mirrors each card's field weights so labels line up. */
