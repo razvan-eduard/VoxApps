@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,7 +43,7 @@ fun GeneralSettingsTab(
 ) {
     val languageManager = LocalLanguageManager.current
     Column(
-        modifier = modifier.padding(16.dp),
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(text = languageManager.getString("general"), style = MaterialTheme.typography.titleMedium)
@@ -167,6 +169,35 @@ fun GeneralSettingsTab(
                 checked = settings.vatDisplayEnabled,
                 onCheckedChange = { stateManager.setVatDisplayEnabled(it) }
             )
+        }
+
+        HorizontalDivider()
+
+        // --- Calendar view (opt-in; changes the primary browsing paradigm) ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("calendar_view"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("calendar_view_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.calendarViewEnabled,
+                onCheckedChange = { stateManager.setCalendarViewEnabled(it) }
+            )
+        }
+
+        if (com.voxapps.expenses.BuildConfig.DEBUG) {
+            HorizontalDivider()
+            Text(languageManager.getString("debug_section"), style = MaterialTheme.typography.labelLarge)
+            androidx.compose.material3.OutlinedButton(
+                onClick = { stateManager.seedDebugTestData() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(languageManager.getString("add_test_data"))
+            }
         }
     }
 }

@@ -55,6 +55,8 @@ class ExpensesStateManager internal constructor(
         val sort: SortMode = SortMode.NEWEST,
         val dateFrom: Long? = null,
         val dateTo: Long? = null,
+        val selectedBank: String? = null,
+        val selectedVendor: String? = null,
         val sessionTick: Int = 0
     )
 
@@ -76,12 +78,18 @@ class ExpensesStateManager internal constructor(
                 ExpensesUiState.Locked
             } else {
                 ExpensesUiState.Unlocked(
-                    expenses = ExpenseFilter.apply(expenses, rt.selectedCategoryId, rt.dateFrom, rt.dateTo, rt.sort),
+                    expenses = ExpenseFilter.apply(
+                        expenses, rt.selectedCategoryId, rt.dateFrom, rt.dateTo, rt.selectedBank, rt.selectedVendor, rt.sort
+                    ),
                     categories = categories,
                     selectedCategoryId = rt.selectedCategoryId,
                     sort = rt.sort,
                     dateFrom = rt.dateFrom,
-                    dateTo = rt.dateTo
+                    dateTo = rt.dateTo,
+                    selectedBank = rt.selectedBank,
+                    selectedVendor = rt.selectedVendor,
+                    availableBanks = expenses.mapNotNull { it.expense.bank }.distinct().sorted(),
+                    availableVendors = expenses.mapNotNull { it.expense.vendor }.distinct().sorted()
                 )
             }
         }.onEach { _uiState.value = it }.launchIn(scope)
@@ -92,6 +100,8 @@ class ExpensesStateManager internal constructor(
     fun setSort(sort: SortMode) = _runtime.update { it.copy(sort = sort) }
     fun setDateFilter(from: Long?, to: Long?) = _runtime.update { it.copy(dateFrom = from, dateTo = to) }
     fun clearDateFilter() = _runtime.update { it.copy(dateFrom = null, dateTo = null) }
+    fun setBankFilter(bank: String?) = _runtime.update { it.copy(selectedBank = bank) }
+    fun setVendorFilter(vendor: String?) = _runtime.update { it.copy(selectedVendor = vendor) }
 
     // --- SETTINGS WRITES (delegate to repo; settingsFlow updates uiState reactively) ---
     fun setBiometricRequired(required: Boolean) { scope.launch { settingsRepo.setBiometricRequired(required) } }
@@ -117,6 +127,12 @@ class ExpensesStateManager internal constructor(
     }
     fun setVatDisplayEnabled(enabled: Boolean) { scope.launch { settingsRepo.setVatDisplayEnabled(enabled) } }
     fun setDecimalSeparator(separator: String) { scope.launch { settingsRepo.setDecimalSeparator(separator) } }
+    fun setCalendarViewEnabled(enabled: Boolean) { scope.launch { settingsRepo.setCalendarViewEnabled(enabled) } }
+    fun seedDebugTestData() {
+        scope.launch {
+            com.voxapps.expenses.domain.debug.DebugDataSeeder.seed(expensesRepo, settingsRepo.getSnapshot().defaultCurrency)
+        }
+    }
 
     // --- SESSION LOCK ---
     /** Called after a successful biometric auth; opens the read window per the timeout setting. */

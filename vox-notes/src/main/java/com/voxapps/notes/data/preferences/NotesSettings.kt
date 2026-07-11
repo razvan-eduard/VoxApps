@@ -21,6 +21,9 @@ import androidx.compose.runtime.Immutable
  *   independent schedules.
  * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output to logcat. Off by default so a
  *   normal install never floods logcat; flip it on only while actively debugging.
+ * - [calendarViewEnabled]: swaps the main screen's chronological list for a month-paged, per-day
+ *   calendar view (see `:core:calendar`). Off by default — it changes the primary browsing
+ *   paradigm, so it's an explicit opt-in rather than a silent default switch.
  */
 @Immutable
 data class NotesSettings(
@@ -33,7 +36,8 @@ data class NotesSettings(
     val language: String = DEFAULT_LANGUAGE,
     val scheduledMergeInterval: String = INTERVAL_OFF,
     val scheduledNoteDedupInterval: String = INTERVAL_OFF,
-    val debugLoggingEnabled: Boolean = false
+    val debugLoggingEnabled: Boolean = false,
+    val calendarViewEnabled: Boolean = false
 ) {
     companion object {
         const val TIMEOUT_30M = 30

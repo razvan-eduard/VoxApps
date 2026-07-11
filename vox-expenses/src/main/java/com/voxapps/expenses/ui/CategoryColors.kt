@@ -18,8 +18,15 @@ object CategoryColors {
         Color(0xFF8D6E63)  // brown
     )
 
-    /** Packed ARGB int widened to Long for storage. */
-    fun toStored(color: Color): Long = color.toArgb().toLong()
+    /**
+     * Packed ARGB int widened to Long for storage — masked to the low 32 bits rather than a plain
+     * `Int.toLong()` widening. Every ARGB color here has its alpha byte set, making [Color.toArgb]
+     * negative as a signed Int32; a plain widening sign-extends that into a huge negative Long that
+     * numerically differs from [CategoryPalette]'s positive Long literals for the exact same color
+     * (e.g. `Color(0xFFEF5350).toArgb().toLong()` != `0xFFEF5350L`), silently breaking every equality
+     * check against them (`unusedOrRandomColor`'s dedup).
+     */
+    fun toStored(color: Color): Long = color.toArgb().toLong() and 0xFFFFFFFFL
 
     /** Reads back a stored ARGB value (mask keeps only the low 32 bits). */
     fun fromStored(argb: Long): Color = Color(argb.toInt())

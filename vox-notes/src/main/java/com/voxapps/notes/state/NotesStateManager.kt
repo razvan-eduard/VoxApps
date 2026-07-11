@@ -99,6 +99,10 @@ class NotesStateManager internal constructor(
         Logger.setEnabled(enabled)
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }
     }
+    fun setCalendarViewEnabled(enabled: Boolean) { scope.launch { settingsRepo.setCalendarViewEnabled(enabled) } }
+    fun seedDebugTestData() {
+        scope.launch { com.voxapps.notes.domain.debug.DebugDataSeeder.seed(notesRepo) }
+    }
 
     // --- SESSION LOCK ---
     /** Called after a successful biometric auth; opens the read window per the timeout setting. */

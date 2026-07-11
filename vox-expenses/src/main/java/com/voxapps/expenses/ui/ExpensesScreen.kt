@@ -1,5 +1,6 @@
 package com.voxapps.expenses.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -19,25 +22,34 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.voxapps.calendar.CalendarView
 import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.ExpensesUiState
+import com.voxapps.expenses.state.SortMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpensesScreen(
     state: ExpensesUiState.Unlocked,
     stateManager: ExpensesStateManager,
+    calendarViewEnabled: Boolean,
+    language: String,
     onAddExpense: () -> Unit,
     onEditExpense: (ExpenseWithDetails) -> Unit,
     onOpenSettings: () -> Unit,
@@ -45,6 +57,12 @@ fun ExpensesScreen(
 ) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
+    var showFilterSheet by remember { mutableStateOf(false) }
+
+    // Amount-sorted order isn't chronological, so it doesn't fit a per-day calendar layout — a
+    // derived rule, no extra persisted state: clearing the sort (the chip's X) automatically
+    // restores the calendar view if the underlying setting is on.
+    val effectiveViewIsCalendar = calendarViewEnabled && !state.isAmountSort
 
     DoubleBackToExitHandler(message = languageManager.getString("press_back_again_to_exit"))
 
@@ -53,6 +71,9 @@ fun ExpensesScreen(
             TopAppBar(
                 title = { Text(languageManager.getString("expenses_title")) },
                 actions = {
+                    IconButton(onClick = { showFilterSheet = true }) {
+                        Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("sort_and_filter"))
+                    }
                     IconButton(onClick = onOpenReports) {
                         Icon(Icons.Filled.Assessment, contentDescription = languageManager.getString("reports_title"))
                     }
@@ -77,16 +98,38 @@ fun ExpensesScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (state.categories.isNotEmpty()) {
+            if (state.categories.isNotEmpty() || state.isAmountSort) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    FilterChip(
-                        selected = state.selectedCategoryId == null,
-                        onClick = { stateManager.setCategoryFilter(null) },
-                        label = { Text(languageManager.getString("all_expenses")) }
-                    )
+                    if (state.categories.isNotEmpty()) {
+                        FilterChip(
+                            selected = state.selectedCategoryId == null,
+                            onClick = { stateManager.setCategoryFilter(null) },
+                            label = { Text(languageManager.getString("all_expenses")) }
+                        )
+                    }
+                    if (state.isAmountSort) {
+                        InputChip(
+                            selected = true,
+                            onClick = {},
+                            label = {
+                                Text(
+                                    languageManager.getString(
+                                        if (state.sort == SortMode.AMOUNT_DESC) "sorted_by_amount_desc" else "sorted_by_amount_asc"
+                                    )
+                                )
+                            },
+                            trailingIcon = {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = languageManager.getString("clear"),
+                                    modifier = Modifier.clickable { stateManager.setSort(SortMode.NEWEST) }
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
@@ -98,6 +141,16 @@ fun ExpensesScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            } else if (effectiveViewIsCalendar) {
+                CalendarView(
+                    items = state.expenses.map(::ExpenseCalendarItem),
+                    modifier = Modifier.fillMaxSize(),
+                    locale = java.util.Locale.forLanguageTag(language),
+                    todayContentDescription = languageManager.getString("today"),
+                    itemContent = { calItem ->
+                        ExpenseCard(expenseWithDetails = calItem.ewd, onClick = { onEditExpense(calItem.ewd) })
+                    }
+                )
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -110,5 +163,31 @@ fun ExpensesScreen(
                 }
             }
         }
+    }
+
+    if (showFilterSheet) {
+        ExpenseFilterSortSheet(
+            sort = state.sort,
+            dateFrom = state.dateFrom,
+            dateTo = state.dateTo,
+            selectedBank = state.selectedBank,
+            selectedVendor = state.selectedVendor,
+            availableBanks = state.availableBanks,
+            availableVendors = state.availableVendors,
+            onApply = { sort, from, to, bank, vendor ->
+                stateManager.setSort(sort)
+                stateManager.setDateFilter(from, to)
+                stateManager.setBankFilter(bank)
+                stateManager.setVendorFilter(vendor)
+                showFilterSheet = false
+            },
+            onClear = {
+                stateManager.clearDateFilter()
+                stateManager.setBankFilter(null)
+                stateManager.setVendorFilter(null)
+                showFilterSheet = false
+            },
+            onDismiss = { showFilterSheet = false }
+        )
     }
 }

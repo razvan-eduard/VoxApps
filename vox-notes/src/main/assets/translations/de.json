@@ -81,5 +81,10 @@
   "apply_selected_button": "Auswahl anwenden",
   "dismiss_all_button": "Alle verwerfen",
   "debug_logging": "Debug-Protokollierung",
-  "debug_logging_desc": "Debug-Informationen ins Logcat schreiben — nur bei der Fehlersuche aktivieren"
+  "debug_logging_desc": "Debug-Informationen ins Logcat schreiben — nur bei der Fehlersuche aktivieren",
+  "calendar_view": "Kalenderansicht",
+  "calendar_view_desc": "Notizen als scrollbaren, monatsweise blätterbaren Kalender statt als einfache Liste durchsuchen",
+  "today": "Heute",
+  "debug_section": "Debug",
+  "add_test_data": "Testdaten hinzufügen"
 }

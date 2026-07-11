@@ -26,4 +26,7 @@ interface ExpensesSettingsRepository {
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
     suspend fun setVatDisplayEnabled(enabled: Boolean)
     suspend fun setDecimalSeparator(separator: String)
+    suspend fun setCalendarViewEnabled(enabled: Boolean)
+    suspend fun setAppCache(json: String)
+    suspend fun clearAppCache()
 }

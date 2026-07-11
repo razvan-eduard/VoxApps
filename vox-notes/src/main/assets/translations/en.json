@@ -81,5 +81,10 @@
   "apply_selected_button": "Apply selected",
   "dismiss_all_button": "Dismiss all",
   "debug_logging": "Debug logging",
-  "debug_logging_desc": "Write debug info to logcat — leave off unless you're troubleshooting an issue"
+  "debug_logging_desc": "Write debug info to logcat — leave off unless you're troubleshooting an issue",
+  "calendar_view": "Calendar view",
+  "calendar_view_desc": "Browse notes as a scrollable, month-paged calendar instead of a plain list",
+  "today": "Today",
+  "debug_section": "Debug",
+  "add_test_data": "Add test data"
 }

@@ -10,6 +10,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.settings.SettingsScreen
@@ -32,6 +33,9 @@ fun ExpensesRoot(
     CompositionLocalProvider(LocalLanguageManager provides container.languageManager) {
         VoxTheme(darkMode = VoxDarkMode.SYSTEM, colored = true) {
             val ui by container.expensesStateManager.uiState.collectAsStateWithLifecycle()
+            val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
+                initialValue = ExpensesSettings()
+            )
             var showSettings by remember { mutableStateOf(false) }
             var showReports by remember { mutableStateOf(false) }
             var editTarget by remember { mutableStateOf<EditTarget?>(null) }
@@ -66,6 +70,8 @@ fun ExpensesRoot(
                         else -> ExpensesScreen(
                             state = state,
                             stateManager = container.expensesStateManager,
+                            calendarViewEnabled = settings.calendarViewEnabled,
+                            language = settings.language,
                             onAddExpense = { editTarget = EditTarget.New },
                             onEditExpense = { editTarget = EditTarget.Existing(it) },
                             onOpenSettings = { showSettings = true },

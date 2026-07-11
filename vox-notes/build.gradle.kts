@@ -30,11 +30,13 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
 dependencies {
     implementation(project(":core:design"))
+    implementation(project(":core:calendar"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
     implementation(project(":core:textmatch"))

@@ -28,6 +28,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -45,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.voxapps.calendar.CalendarView
 import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NoteWithCategory
@@ -58,6 +60,8 @@ import kotlinx.coroutines.launch
 fun NotesScreen(
     state: NotesUiState.Unlocked,
     stateManager: NotesStateManager,
+    calendarViewEnabled: Boolean,
+    language: String,
     onOpenSettings: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
@@ -128,51 +132,98 @@ fun NotesScreen(
         ) { pad ->
             Column(modifier = Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp)) {
                 FilterChipsRow(state = state, stateManager = stateManager)
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // New-note draft editor at the top.
-                    if (editing?.id == null && editing != null) {
-                        item(key = "new-note-editor") {
-                            NoteEditorCard(
-                                title = editing!!.title,
-                                text = editing!!.text,
-                                categoryId = editing!!.categoryId,
-                                categories = state.categories,
-                                onTitleChange = { editing = editing!!.copy(title = it) },
-                                onTextChange = { editing = editing!!.copy(text = it) },
-                                onCategoryChange = { editing = editing!!.copy(categoryId = it) },
-                                onDone = { commitEdit(editing, stateManager); editing = null },
-                                onDelete = { editing = null }
-                            )
-                        }
-                    }
-                    items(state.notes, key = { it.note.id }) { nwc ->
-                        if (editing?.id == nwc.note.id) {
-                            NoteEditorCard(
-                                title = editing!!.title,
-                                text = editing!!.text,
-                                categoryId = editing!!.categoryId,
-                                categories = state.categories,
-                                onTitleChange = { editing = editing!!.copy(title = it) },
-                                onTextChange = { editing = editing!!.copy(text = it) },
-                                onCategoryChange = { editing = editing!!.copy(categoryId = it) },
-                                onDone = { commitEdit(editing, stateManager); editing = null },
-                                onDelete = { stateManager.deleteNote(nwc.note); editing = null }
-                            )
-                        } else {
+                if (calendarViewEnabled) {
+                    CalendarView(
+                        items = state.notes.map(::NoteCalendarItem),
+                        modifier = Modifier.fillMaxSize(),
+                        locale = java.util.Locale.forLanguageTag(language),
+                        todayContentDescription = languageManager.getString("today"),
+                        itemContent = { calItem ->
                             CollapsedNoteCard(
-                                item = nwc,
+                                item = calItem.nwc,
                                 onClick = {
                                     commitEdit(editing, stateManager)
-                                    editing = EditBuffer(nwc.note.id, nwc.note.title.orEmpty(), nwc.note.text, nwc.note.categoryId)
+                                    editing = EditBuffer(
+                                        calItem.nwc.note.id,
+                                        calItem.nwc.note.title.orEmpty(),
+                                        calItem.nwc.note.text,
+                                        calItem.nwc.note.categoryId
+                                    )
                                 }
                             )
+                        }
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // New-note draft editor at the top.
+                        if (editing?.id == null && editing != null) {
+                            item(key = "new-note-editor") {
+                                NoteEditorCard(
+                                    title = editing!!.title,
+                                    text = editing!!.text,
+                                    categoryId = editing!!.categoryId,
+                                    categories = state.categories,
+                                    onTitleChange = { editing = editing!!.copy(title = it) },
+                                    onTextChange = { editing = editing!!.copy(text = it) },
+                                    onCategoryChange = { editing = editing!!.copy(categoryId = it) },
+                                    onDone = { commitEdit(editing, stateManager); editing = null },
+                                    onDelete = { editing = null }
+                                )
+                            }
+                        }
+                        items(state.notes, key = { it.note.id }) { nwc ->
+                            if (editing?.id == nwc.note.id) {
+                                NoteEditorCard(
+                                    title = editing!!.title,
+                                    text = editing!!.text,
+                                    categoryId = editing!!.categoryId,
+                                    categories = state.categories,
+                                    onTitleChange = { editing = editing!!.copy(title = it) },
+                                    onTextChange = { editing = editing!!.copy(text = it) },
+                                    onCategoryChange = { editing = editing!!.copy(categoryId = it) },
+                                    onDone = { commitEdit(editing, stateManager); editing = null },
+                                    onDelete = { stateManager.deleteNote(nwc.note); editing = null }
+                                )
+                            } else {
+                                CollapsedNoteCard(
+                                    item = nwc,
+                                    onClick = {
+                                        commitEdit(editing, stateManager)
+                                        editing = EditBuffer(nwc.note.id, nwc.note.title.orEmpty(), nwc.note.text, nwc.note.categoryId)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+
+    // In calendar view, editing (new or existing note) happens in a bottom sheet instead of an
+    // inline LazyColumn swap — the calendar's day cells have no natural "replace this row" slot.
+    if (calendarViewEnabled && editing != null) {
+        val current = editing!!
+        ModalBottomSheet(onDismissRequest = { editing = null }) {
+            NoteEditorCard(
+                title = current.title,
+                text = current.text,
+                categoryId = current.categoryId,
+                categories = state.categories,
+                onTitleChange = { editing = current.copy(title = it) },
+                onTextChange = { editing = current.copy(text = it) },
+                onCategoryChange = { editing = current.copy(categoryId = it) },
+                onDone = { commitEdit(editing, stateManager); editing = null },
+                onDelete = {
+                    if (current.id != null) {
+                        stateManager.deleteNoteById(current.id)
+                    }
+                    editing = null
+                }
+            )
         }
     }
 

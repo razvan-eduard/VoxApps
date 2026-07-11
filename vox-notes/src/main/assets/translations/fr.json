@@ -81,5 +81,10 @@
   "apply_selected_button": "Appliquer la sélection",
   "dismiss_all_button": "Tout rejeter",
   "debug_logging": "Journalisation de débogage",
-  "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage"
+  "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage",
+  "calendar_view": "Vue calendrier",
+  "calendar_view_desc": "Parcourir les notes sous forme de calendrier défilable, paginé par mois, plutôt qu'une simple liste",
+  "today": "Aujourd'hui",
+  "debug_section": "Débogage",
+  "add_test_data": "Ajouter des données de test"
 }

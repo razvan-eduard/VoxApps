@@ -150,6 +150,7 @@ fun SettingsScreen(
             SettingsPage.NOTIFICATION_CAPTURE -> NotificationCaptureSettingsTab(
                 paymentSourcePackages = settings.paymentSourcePackages,
                 stateManager = stateManager,
+                settingsRepo = settingsRepo,
                 modifier = mod
             )
             SettingsPage.SPENDING_LIMITS -> SpendingLimitsSettingsTab(

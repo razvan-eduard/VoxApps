@@ -81,5 +81,10 @@
   "apply_selected_button": "Aplică selecția",
   "dismiss_all_button": "Respinge tot",
   "debug_logging": "Jurnalizare depanare",
-  "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme"
+  "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme",
+  "calendar_view": "Vizualizare calendar",
+  "calendar_view_desc": "Răsfoiește notițele ca un calendar defilabil, paginat pe luni, în loc de o listă simplă",
+  "today": "Astăzi",
+  "debug_section": "Depanare",
+  "add_test_data": "Adaugă date de test"
 }

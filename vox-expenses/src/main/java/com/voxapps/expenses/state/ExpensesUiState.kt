@@ -22,8 +22,13 @@ sealed interface ExpensesUiState {
         val selectedCategoryId: Long?,
         val sort: SortMode,
         val dateFrom: Long?,
-        val dateTo: Long?
+        val dateTo: Long?,
+        val selectedBank: String? = null,
+        val selectedVendor: String? = null,
+        val availableBanks: List<String> = emptyList(),
+        val availableVendors: List<String> = emptyList()
     ) : ExpensesUiState {
         val isDateFilterActive: Boolean get() = dateFrom != null || dateTo != null
+        val isAmountSort: Boolean get() = sort == SortMode.AMOUNT_ASC || sort == SortMode.AMOUNT_DESC
     }
 }

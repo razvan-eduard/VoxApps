@@ -36,6 +36,12 @@ import androidx.compose.runtime.Immutable
  *   locale (e.g. Romanian) used to silently break `toDoubleOrNull()` round-tripping on any pre-filled
  *   numeric field (Save staying permanently disabled), since Kotlin's numeric parsing is always
  *   period-only regardless of locale. Defaults to period, matching how amounts are stored internally.
+ * - [calendarViewEnabled]: swaps the main screen's chronological list for a month-paged, per-day
+ *   calendar view (see `:core:calendar`). Off by default — explicit opt-in, same rationale as
+ *   vox-notes' equivalent setting.
+ * - [appCacheJson]: persisted JSON snapshot of [com.voxapps.expenses.domain.apps.LauncherAppsCache],
+ *   so the launcher-app scan backing the notification-source picker only runs once ever (first
+ *   launch), not on every app start — mirrors vox-commander's `AppRegistry`/`appCacheJson` pattern.
  */
 @Immutable
 data class ExpensesSettings(
@@ -52,7 +58,9 @@ data class ExpensesSettings(
     val paymentSourcePackages: Set<String> = emptySet(),
     val debugLoggingEnabled: Boolean = false,
     val vatDisplayEnabled: Boolean = false,
-    val decimalSeparator: String = DECIMAL_PERIOD
+    val decimalSeparator: String = DECIMAL_PERIOD,
+    val calendarViewEnabled: Boolean = false,
+    val appCacheJson: String? = null
 ) {
     companion object {
         const val TIMEOUT_30M = 30

@@ -37,6 +37,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val VAT_DISPLAY_ENABLED = booleanPreferencesKey("vat_display_enabled")
         val DECIMAL_SEPARATOR = stringPreferencesKey("decimal_separator")
+        val CALENDAR_VIEW_ENABLED = booleanPreferencesKey("calendar_view_enabled")
+        val APP_CACHE_JSON = stringPreferencesKey("app_cache_json")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -54,7 +56,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             paymentSourcePackages = prefs[Keys.PAYMENT_SOURCE_PACKAGES] ?: emptySet(),
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
             vatDisplayEnabled = prefs[Keys.VAT_DISPLAY_ENABLED] ?: false,
-            decimalSeparator = prefs[Keys.DECIMAL_SEPARATOR] ?: ExpensesSettings.DECIMAL_PERIOD
+            decimalSeparator = prefs[Keys.DECIMAL_SEPARATOR] ?: ExpensesSettings.DECIMAL_PERIOD,
+            calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
+            appCacheJson = prefs[Keys.APP_CACHE_JSON]
         )
     }
 
@@ -125,6 +129,18 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
 
     override suspend fun setDecimalSeparator(separator: String) {
         dataStore.edit { it[Keys.DECIMAL_SEPARATOR] = separator }
+    }
+
+    override suspend fun setCalendarViewEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.CALENDAR_VIEW_ENABLED] = enabled }
+    }
+
+    override suspend fun setAppCache(json: String) {
+        dataStore.edit { it[Keys.APP_CACHE_JSON] = json }
+    }
+
+    override suspend fun clearAppCache() {
+        dataStore.edit { it.remove(Keys.APP_CACHE_JSON) }
     }
 
     private fun defaultDeviceLanguage(): String =

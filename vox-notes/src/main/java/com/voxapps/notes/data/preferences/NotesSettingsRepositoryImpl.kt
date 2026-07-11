@@ -31,6 +31,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val SCHEDULED_MERGE_INTERVAL = stringPreferencesKey("scheduled_merge_interval")
         val SCHEDULED_NOTE_DEDUP_INTERVAL = stringPreferencesKey("scheduled_note_dedup_interval")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
+        val CALENDAR_VIEW_ENABLED = booleanPreferencesKey("calendar_view_enabled")
     }
 
     override val settingsFlow: Flow<NotesSettings> = dataStore.data.map { prefs ->
@@ -43,7 +44,8 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             language = prefs[Keys.LANGUAGE] ?: defaultDeviceLanguage(),
             scheduledMergeInterval = prefs[Keys.SCHEDULED_MERGE_INTERVAL] ?: NotesSettings.INTERVAL_OFF,
             scheduledNoteDedupInterval = prefs[Keys.SCHEDULED_NOTE_DEDUP_INTERVAL] ?: NotesSettings.INTERVAL_OFF,
-            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false
+            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
+            calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false
         )
     }
 
@@ -94,6 +96,10 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
 
     override suspend fun setDebugLoggingEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
+    }
+
+    override suspend fun setCalendarViewEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.CALENDAR_VIEW_ENABLED] = enabled }
     }
 
     private fun defaultDeviceLanguage(): String =

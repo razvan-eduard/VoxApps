@@ -80,6 +80,7 @@ android {
 
 dependencies {
     implementation(project(":core:design"))
+    implementation(project(":core:apppicker"))
     implementation(project(":core:ipc"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

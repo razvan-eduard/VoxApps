@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
+import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.di.NotesContainer
 import com.voxapps.notes.state.NotesUiState
 import com.voxapps.notes.ui.settings.SettingsScreen
@@ -25,6 +26,9 @@ fun NotesRoot(
     CompositionLocalProvider(LocalLanguageManager provides container.languageManager) {
         VoxTheme(darkMode = VoxDarkMode.SYSTEM, colored = true) {
             val ui by container.notesStateManager.uiState.collectAsStateWithLifecycle()
+            val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
+                initialValue = NotesSettings()
+            )
             var showSettings by remember { mutableStateOf(false) }
 
             when (val state = ui) {
@@ -41,6 +45,8 @@ fun NotesRoot(
                         NotesScreen(
                             state = state,
                             stateManager = container.notesStateManager,
+                            calendarViewEnabled = settings.calendarViewEnabled,
+                            language = settings.language,
                             onOpenSettings = { showSettings = true }
                         )
                     }

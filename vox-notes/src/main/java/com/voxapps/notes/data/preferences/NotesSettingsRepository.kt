@@ -21,4 +21,5 @@ interface NotesSettingsRepository {
     suspend fun setScheduledMergeInterval(interval: String)
     suspend fun setScheduledNoteDedupInterval(interval: String)
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
+    suspend fun setCalendarViewEnabled(enabled: Boolean)
 }

@@ -20,15 +20,55 @@ object CategoryPalette {
         0xFF8D6E63L  // brown
     )
 
+    /** Random-hue candidates sampled per call to [unusedOrRandomColor] — the one farthest in hue
+     *  from every existing color wins, so two fresh random colors don't end up looking near-identical
+     *  just by chance. */
+    private const val RANDOM_HUE_CANDIDATES = 24
+
     /**
      * The first preset palette color not already used by [existingColors], or — once all 10 are
-     * taken — a freshly generated color: random hue, fixed saturation/value matching the palette's
-     * vivid, mid-brightness style so it doesn't look out of place next to the presets.
+     * taken — a freshly generated color: fixed saturation/value matching the palette's vivid,
+     * mid-brightness style so it doesn't look out of place next to the presets, with a hue chosen to
+     * be as visually distinct as possible from [existingColors] (farthest-hue-from-nearest-neighbor
+     * among [RANDOM_HUE_CANDIDATES] random samples) rather than a single uniform-random draw, which
+     * could otherwise land right next to an already-used hue.
      */
     fun unusedOrRandomColor(existingColors: List<Long>): Long {
         val used = existingColors.toSet()
         argb.firstOrNull { it !in used }?.let { return it }
-        return hsvToArgb(hue = Random.nextFloat() * 360f, saturation = 0.55f, value = 0.85f)
+
+        val existingHues = existingColors.mapNotNull(::argbToHue)
+        val hue = if (existingHues.isEmpty()) {
+            Random.nextFloat() * 360f
+        } else {
+            (0 until RANDOM_HUE_CANDIDATES)
+                .map { Random.nextFloat() * 360f }
+                .maxBy { candidate -> existingHues.minOf { hueDistance(candidate, it) } }
+        }
+        return hsvToArgb(hue = hue, saturation = 0.55f, value = 0.85f)
+    }
+
+    /** Shortest distance between two hues on the 360°-wraparound color wheel (0..180). */
+    private fun hueDistance(a: Float, b: Float): Float {
+        val diff = kotlin.math.abs(a - b) % 360f
+        return if (diff > 180f) 360f - diff else diff
+    }
+
+    /** Recovers the hue (0..360) from a packed ARGB color; null for grays (undefined hue). */
+    private fun argbToHue(argbColor: Long): Float? {
+        val r = ((argbColor shr 16) and 0xFFL).toInt() / 255f
+        val g = ((argbColor shr 8) and 0xFFL).toInt() / 255f
+        val b = (argbColor and 0xFFL).toInt() / 255f
+        val max = maxOf(r, g, b)
+        val min = minOf(r, g, b)
+        val delta = max - min
+        if (delta == 0f) return null
+        val hue = when (max) {
+            r -> 60f * (((g - b) / delta).mod(6f))
+            g -> 60f * (((b - r) / delta) + 2f)
+            else -> 60f * (((r - g) / delta) + 4f)
+        }
+        return if (hue < 0f) hue + 360f else hue
     }
 
     /** Standard HSV->RGB conversion, packed as an opaque ARGB Long. No Compose dependency. */
