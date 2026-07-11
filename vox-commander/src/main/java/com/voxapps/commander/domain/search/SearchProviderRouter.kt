@@ -70,7 +70,11 @@ object SearchProviderRouter {
 
         val sb = StringBuilder()
         results.forEachIndexed { index, result ->
-            sb.appendLine("${index + 1}. ${result.title}.")
+            // A blank title (e.g. the OpenAI provider's single synthesized answer, which has no
+            // real title) would otherwise speak as a bare "1. " before the actual content.
+            if (result.title.isNotBlank()) {
+                sb.appendLine("${index + 1}. ${result.title}.")
+            }
             if (result.content.isNotBlank()) {
                 sb.appendLine(result.content.trim())
             }

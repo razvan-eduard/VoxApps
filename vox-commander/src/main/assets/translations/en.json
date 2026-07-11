@@ -428,6 +428,7 @@
   "whisper_libs_size": "~20 MB",
   "whisper_engine_label": "Whisper engine libraries",
   "search_section": "Search Providers",
+  "search_provider_uses_shared_key": "Uses the API key from Settings → Models",
   "search_category": "Search Category",
   "search_test_query": "Test Search",
   "search_test_placeholder": "Enter a search query...",

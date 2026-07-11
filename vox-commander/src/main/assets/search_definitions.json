@@ -1,5 +1,5 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "categories": [
     {
       "category": "weather",
@@ -192,6 +192,16 @@
           "extractPath": "query.pages",
           "extractField": "extract",
           "extractMaxChars": 10000
+        },
+        {
+          "name": "OpenAI",
+          "endpoint": "https://api.openai.com/v1/chat/completions",
+          "method": "POST",
+          "requiresLocation": false,
+          "requiresApiKey": true,
+          "usesSharedApiKey": true,
+          "providerType": "openai_chat",
+          "promptTemplate": "Answer the following question concisely and conversationally, suitable for a voice assistant to read aloud. If asked about real-time information such as current weather, sports scores, or breaking news, say you don't have live data instead of guessing: {query}"
         }
       ]
     },
@@ -291,6 +301,16 @@
           "extractPath": "query.pages",
           "extractField": "extract",
           "extractMaxChars": 10000
+        },
+        {
+          "name": "OpenAI",
+          "endpoint": "https://api.openai.com/v1/chat/completions",
+          "method": "POST",
+          "requiresLocation": false,
+          "requiresApiKey": true,
+          "usesSharedApiKey": true,
+          "providerType": "openai_chat",
+          "promptTemplate": "Answer the following question concisely and conversationally, suitable for a voice assistant to read aloud. If asked about real-time information such as current weather, sports scores, or breaking news, say you don't have live data instead of guessing: {query}"
         }
       ]
     }

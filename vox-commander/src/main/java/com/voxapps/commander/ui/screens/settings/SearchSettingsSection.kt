@@ -251,8 +251,14 @@ private fun CategoryNode(
                         val all = SearchProviderRegistry.getProviderNames(categoryName)
                         all.filter { name ->
                             val provider = SearchProviderRegistry.getProvider(categoryName, name)
-                            provider?.requiresApiKey == true &&
-                                settingsRepo.getSearchProviderApiKeySync(name).isNullOrBlank()
+                            when {
+                                // Shared-key providers (e.g. OpenAI) are locked based on the shared
+                                // key actually applied, not the per-provider key store.
+                                provider?.usesSharedApiKey == true -> !provider.hasApiKey()
+                                provider?.requiresApiKey == true ->
+                                    settingsRepo.getSearchProviderApiKeySync(name).isNullOrBlank()
+                                else -> false
+                            }
                         }
                     }
                     if (lockedProviders.isNotEmpty()) {
@@ -344,8 +350,21 @@ private fun ProviderRow(
             }
         }
 
-        // API key field for providers that require it
-        if (provider?.requiresApiKey == true) {
+        // Shared-key providers (e.g. OpenAI) reuse the key already entered in Settings → Models —
+        // no separate field to fill in, just a note explaining where the key comes from.
+        if (provider?.usesSharedApiKey == true) {
+            val languageManager = LocalLanguageManager.current
+            Text(
+                text = languageManager.getString("search_provider_uses_shared_key")
+                    ?: "Uses the API key from Settings → Models",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 48.dp)
+            )
+        }
+
+        // API key field for providers that require their own key
+        if (provider?.requiresApiKey == true && provider?.usesSharedApiKey != true) {
             TextField(
                 value = apiKey,
                 onValueChange = {

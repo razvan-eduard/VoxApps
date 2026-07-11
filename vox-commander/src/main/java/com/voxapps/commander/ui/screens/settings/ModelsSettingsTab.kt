@@ -89,6 +89,7 @@ fun ModelsSettingsTab(
                     onValueChange = {
                         apiKey = it
                         appStateManager.setApiKey(it)
+                        com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(it)
                     },
                     label = { Text(languageManager.getString("api_key")) },
                     modifier = Modifier

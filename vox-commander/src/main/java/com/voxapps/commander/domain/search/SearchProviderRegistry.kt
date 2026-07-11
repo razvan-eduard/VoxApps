@@ -191,10 +191,30 @@ object SearchProviderRegistry {
     fun applyApiKeys(apiKeys: Map<String, String>) {
         for ((_, providerMap) in providersByCategory) {
             for ((name, provider) in providerMap) {
-                provider.setApiKey(apiKeys[name])
+                if (!provider.usesSharedApiKey) provider.setApiKey(apiKeys[name])
             }
         }
         Logger.log("Applied API keys to search providers: ${apiKeys.keys}", TAG)
+    }
+
+    /**
+     * Pushes the shared Settings → Models API key into every provider that opted into reusing it
+     * (`usesSharedApiKey = true` in its JSON definition, e.g. the OpenAI general/knowledge provider)
+     * instead of asking the user to paste the same key a second time into a provider-specific field.
+     * Must be re-called after [rebuildProviders] runs (e.g. after [fetchRemote]), since that replaces
+     * every `DynamicSearchProvider` instance — same reason [applyApiKeys] gets re-called there too.
+     */
+    fun applySharedOpenAiKey(key: String?) {
+        var count = 0
+        for ((_, providerMap) in providersByCategory) {
+            for (provider in providerMap.values) {
+                if (provider.usesSharedApiKey) {
+                    provider.setApiKey(key)
+                    count++
+                }
+            }
+        }
+        Logger.log("Applied shared OpenAI key to $count provider(s)", TAG)
     }
 
     fun getProvider(category: String): DynamicSearchProvider? {
@@ -235,10 +255,12 @@ object SearchProviderRegistry {
         val allNames = getProviderNames(category)
         return allNames.filter { name ->
             val provider = getProvider(category, name)
-            if (provider?.requiresApiKey == true) {
-                settingsRepo?.getSearchProviderApiKeySync(name)?.isNotBlank() == true
-            } else {
-                true
+            when {
+                // A shared-key provider (e.g. OpenAI) never has its own entry in the per-provider key
+                // store — check what was actually applied via applySharedOpenAiKey instead.
+                provider?.usesSharedApiKey == true -> provider.hasApiKey()
+                provider?.requiresApiKey == true -> settingsRepo?.getSearchProviderApiKeySync(name)?.isNotBlank() == true
+                else -> true
             }
         }
     }

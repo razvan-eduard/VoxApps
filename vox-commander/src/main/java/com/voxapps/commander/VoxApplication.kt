@@ -46,6 +46,9 @@ class VoxApplication : Application() {
         com.voxapps.commander.domain.search.SearchProviderRegistry.applyApiKeys(
             container.settingsRepository.getAllSearchProviderApiKeys()
         )
+        com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
+            container.settingsRepository.getApiKeySync()
+        )
 
         // Initialize IntentCatalog (data-driven intent probe catalog) — must be ready
         // before the app scan in SplashLoadingScreen (AppRegistry.init probes against it).
@@ -91,6 +94,9 @@ class VoxApplication : Application() {
             com.voxapps.commander.domain.search.SearchProviderRegistry.fetchRemote(container.settingsRepository, force = true)
             com.voxapps.commander.domain.search.SearchProviderRegistry.applyApiKeys(
                 container.settingsRepository.getAllSearchProviderApiKeys()
+            )
+            com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
+                container.settingsRepository.getApiKeySync()
             )
             // Also fetch the intent catalog from the remote repo (hot-reload)
             com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(container.settingsRepository, force = true)

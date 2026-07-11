@@ -419,6 +419,7 @@
   "whisper_libs_size": "~20 MB",
   "whisper_engine_label": "Biblioteci motor Whisper",
   "search_section": "Furnizori Căutare",
+  "search_provider_uses_shared_key": "Folosește cheia API din Setări → Modele",
   "search_category": "Categoria de Căutare",
   "search_test_query": "Testare Căutare",
   "search_test_placeholder": "Introduceți o căutare...",

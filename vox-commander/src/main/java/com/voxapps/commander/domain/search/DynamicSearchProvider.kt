@@ -44,6 +44,15 @@ data class ProviderDefinition(
     val method: String = "GET",
     val requiresLocation: Boolean = false,
     val requiresApiKey: Boolean = false,
+    // "http" (default) = the generic GET/POST + regex/JSON-scrape path below; "openai_chat" = a
+    // direct OpenAI chat-completion call (see DynamicSearchProvider.searchViaOpenAi) — a single
+    // synthesized answer rather than a list of scraped/API results.
+    val providerType: String = "http",
+    // Instruction sent to the model for an "openai_chat" provider, with a {query} placeholder.
+    val promptTemplate: String? = null,
+    // True = this provider's key comes from the shared Settings → Models API key (reused, not
+    // re-entered) rather than its own per-provider key store — see SearchProviderRegistry.applySharedOpenAiKey.
+    val usesSharedApiKey: Boolean = false,
     val queryTemplate: String? = null,
     val postBodyTemplate: String? = null,
     val responseType: String = "json",
@@ -126,6 +135,7 @@ class DynamicSearchProvider(
     val name: String get() = def.name
     val requiresLocation: Boolean get() = def.requiresLocation
     val requiresApiKey: Boolean get() = def.requiresApiKey
+    val usesSharedApiKey: Boolean get() = def.usesSharedApiKey
     val endpoint: String get() = def.endpoint
 
     private var apiKey: String? = null
@@ -135,6 +145,9 @@ class DynamicSearchProvider(
     fun hasApiKey(): Boolean = !apiKey.isNullOrBlank()
 
     suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {
+        if (def.providerType == "openai_chat") {
+            return@withContext testOpenAiConnection()
+        }
         try {
             val url = if (def.method == "GET" && def.queryTemplate != null) {
                 if (def.requiresLocation) buildUrl("test", 44.43, 26.10)
@@ -157,6 +170,31 @@ class DynamicSearchProvider(
         }
     }
 
+    /** Lightweight authenticated check for an "openai_chat" provider — hits the cheap /v1/models
+     *  listing endpoint with the same key rather than a GET against the chat-completions endpoint
+     *  (which requires POST and would always fail the generic [testConnection] path). */
+    private fun testOpenAiConnection(): Boolean {
+        val key = apiKey
+        if (key.isNullOrBlank()) {
+            Logger.log("$name connection test: no API key", tag)
+            return false
+        }
+        return try {
+            val request = Request.Builder()
+                .url("https://api.openai.com/v1/models")
+                .header("Authorization", "Bearer $key")
+                .get()
+                .build()
+            val response = client.newCall(request).execute()
+            val ok = response.isSuccessful
+            Logger.log("$name connection test: ${if (ok) "OK" else "HTTP ${response.code}"}", tag)
+            ok
+        } catch (e: Exception) {
+            Logger.log("$name connection test failed: ${e.message}", tag)
+            false
+        }
+    }
+
     suspend fun search(query: String, lat: Double? = null, lon: Double? = null, lang: String = "en"): List<SearchResult> =
         withContext(Dispatchers.IO) {
             Logger.log("$name search: query='$query', category='$categoryName', lang='$lang'", tag)
@@ -164,6 +202,10 @@ class DynamicSearchProvider(
             if (requiresLocation && lat == null) {
                 Logger.log("$name requires location but none provided", tag)
                 return@withContext emptyList()
+            }
+
+            if (def.providerType == "openai_chat") {
+                return@withContext searchViaOpenAi(query)
             }
 
             try {
@@ -199,6 +241,62 @@ class DynamicSearchProvider(
                 emptyList()
             }
         }
+
+    /**
+     * A single OpenAI chat-completion call, returned as one synthesized [SearchResult] (title/url
+     * blank, `content` = the model's answer) rather than a list of scraped/API results — this
+     * provider has no real search index behind it, just the model's own training knowledge. Builds
+     * its own request directly rather than going through [buildUrl]/[buildRequest], which are shaped
+     * for the generic GET/POST + regex/JSON-scrape path and have no header-injection hook for the
+     * `Authorization: Bearer` auth OpenAI requires.
+     */
+    private fun searchViaOpenAi(query: String): List<SearchResult> {
+        val key = apiKey
+        if (key.isNullOrBlank()) {
+            Logger.log("$name: no API key configured", tag)
+            return emptyList()
+        }
+        val prompt = (def.promptTemplate ?: "{query}").replace("{query}", query)
+        return try {
+            val messages = org.json.JSONArray().put(
+                org.json.JSONObject().put("role", "user").put("content", prompt)
+            )
+            val bodyJson = org.json.JSONObject()
+                .put("model", "gpt-4o-mini")
+                .put("temperature", 0.3)
+                .put("messages", messages)
+            val request = Request.Builder()
+                .url(def.endpoint)
+                .header("Authorization", "Bearer $key")
+                .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                Logger.log("$name error: HTTP ${response.code}", tag)
+                return emptyList()
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrBlank()) {
+                Logger.log("$name: empty response", tag)
+                return emptyList()
+            }
+            val answer = JsonParser.parseString(responseBody).asJsonObject
+                .getAsJsonArray("choices")
+                ?.firstOrNull()?.asJsonObject
+                ?.getAsJsonObject("message")
+                ?.get("content")?.asString
+                ?.trim()
+            if (answer.isNullOrBlank()) {
+                Logger.log("$name: no answer content in response", tag)
+                emptyList()
+            } else {
+                listOf(SearchResult(title = "", url = "", content = answer, engine = "openai"))
+            }
+        } catch (e: Exception) {
+            Logger.log("$name search failed: ${e.message}", tag)
+            emptyList()
+        }
+    }
 
     private fun formatLang(lang: String): String {
         return when (def.langFormat) {
