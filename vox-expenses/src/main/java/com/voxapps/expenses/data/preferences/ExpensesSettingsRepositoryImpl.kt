@@ -35,6 +35,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val HOME_CURRENCY = stringPreferencesKey("home_currency")
         val PAYMENT_SOURCE_PACKAGES = stringSetPreferencesKey("payment_source_packages")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
+        val VAT_DISPLAY_ENABLED = booleanPreferencesKey("vat_display_enabled")
+        val DECIMAL_SEPARATOR = stringPreferencesKey("decimal_separator")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -50,7 +52,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             scheduledExpenseDedupInterval = prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             homeCurrency = prefs[Keys.HOME_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
             paymentSourcePackages = prefs[Keys.PAYMENT_SOURCE_PACKAGES] ?: emptySet(),
-            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false
+            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
+            vatDisplayEnabled = prefs[Keys.VAT_DISPLAY_ENABLED] ?: false,
+            decimalSeparator = prefs[Keys.DECIMAL_SEPARATOR] ?: ExpensesSettings.DECIMAL_PERIOD
         )
     }
 
@@ -113,6 +117,14 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
 
     override suspend fun setDebugLoggingEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
+    }
+
+    override suspend fun setVatDisplayEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.VAT_DISPLAY_ENABLED] = enabled }
+    }
+
+    override suspend fun setDecimalSeparator(separator: String) {
+        dataStore.edit { it[Keys.DECIMAL_SEPARATOR] = separator }
     }
 
     private fun defaultDeviceLanguage(): String =

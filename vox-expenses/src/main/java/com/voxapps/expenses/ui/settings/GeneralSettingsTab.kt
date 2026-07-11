@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +25,12 @@ import androidx.compose.ui.unit.dp
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
+
+/** Fixed, common-currency list for the "Default currency" picker — not the full ISO 4217 set. */
+private val COMMON_CURRENCIES = listOf(
+    "RON", "EUR", "USD", "GBP", "CHF", "JPY", "CAD", "AUD", "SEK", "NOK",
+    "DKK", "PLN", "CZK", "HUF", "TRY", "CNY", "INR", "BRL"
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,15 +91,47 @@ fun GeneralSettingsTab(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        var currencyText by remember(settings.defaultCurrency) { mutableStateOf(settings.defaultCurrency) }
-        OutlinedTextField(
-            value = currencyText,
-            onValueChange = {
-                currencyText = it.uppercase().take(3)
-                stateManager.setDefaultCurrency(currencyText)
-            },
-            modifier = Modifier.fillMaxWidth()
+        var currencyMenuExpanded by remember { mutableStateOf(false) }
+        Column {
+            OutlinedButton(onClick = { currencyMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(settings.defaultCurrency)
+            }
+            DropdownMenu(expanded = currencyMenuExpanded, onDismissRequest = { currencyMenuExpanded = false }) {
+                COMMON_CURRENCIES.forEach { code ->
+                    DropdownMenuItem(
+                        text = { Text(code) },
+                        onClick = {
+                            stateManager.setDefaultCurrency(code)
+                            currencyMenuExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider()
+
+        // --- Decimal separator (which character amount/quantity/price fields use and expect on the
+        // edit screen — independent of the device's locale, see ExpensesSettings.decimalSeparator) ---
+        Text(languageManager.getString("decimal_separator_label"), style = MaterialTheme.typography.labelLarge)
+        Text(
+            languageManager.getString("decimal_separator_desc"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            val options = listOf(
+                ExpensesSettings.DECIMAL_PERIOD to "decimal_separator_period",
+                ExpensesSettings.DECIMAL_COMMA to "decimal_separator_comma"
+            )
+            options.forEach { (value, labelKey) ->
+                FilterChip(
+                    selected = settings.decimalSeparator == value,
+                    onClick = { stateManager.setDecimalSeparator(value) },
+                    label = { Text(languageManager.getString(labelKey)) }
+                )
+            }
+        }
 
         HorizontalDivider()
 
@@ -108,6 +148,24 @@ fun GeneralSettingsTab(
             Switch(
                 checked = settings.debugLoggingEnabled,
                 onCheckedChange = { stateManager.setDebugLoggingEnabled(it) }
+            )
+        }
+
+        HorizontalDivider()
+
+        // --- VAT breakdown display (per-line-item net/VAT/gross, when a receipt provides it) ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("vat_display"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("vat_display_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.vatDisplayEnabled,
+                onCheckedChange = { stateManager.setVatDisplayEnabled(it) }
             )
         }
     }

@@ -24,4 +24,6 @@ interface ExpensesSettingsRepository {
     suspend fun setHomeCurrency(code: String)
     suspend fun setPaymentSourcePackages(packages: Set<String>)
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
+    suspend fun setVatDisplayEnabled(enabled: Boolean)
+    suspend fun setDecimalSeparator(separator: String)
 }

@@ -9,24 +9,31 @@ import org.json.JSONObject
  * [parse] returns null (discard, don't create a broken expense) if it's missing or unparseable.
  */
 object ExpenseParseResultParser {
-    data class ParsedItem(val name: String, val quantity: Double, val unitPrice: Double)
+    data class ParsedItem(
+        val name: String,
+        val quantity: Double,
+        val unitPrice: Double,
+        val netAmount: Double? = null,
+        val vatAmount: Double? = null,
+        val grossAmount: Double? = null
+    )
 
     data class Parsed(
         val title: String?,
         val totalAmount: Double,
         val currency: String?,
         val vendor: String?,
+        val bank: String?,
         val category: String?,
         val items: List<ParsedItem>
     )
 
+    private fun JSONObject.optNullableDouble(key: String): Double? =
+        if (isNull(key) || !has(key)) null else optDouble(key).takeIf { !it.isNaN() }
+
     fun parse(json: String): Parsed? = try {
         val o = JSONObject(json)
-        val totalAmount = if (o.isNull("totalAmount") || !o.has("totalAmount")) {
-            null
-        } else {
-            o.optDouble("totalAmount").takeIf { !it.isNaN() }
-        } ?: return null
+        val totalAmount = o.optNullableDouble("totalAmount") ?: return null
 
         val itemsArray = o.optJSONArray("items") ?: JSONArray()
         val items = (0 until itemsArray.length()).mapNotNull { i ->
@@ -34,7 +41,14 @@ object ExpenseParseResultParser {
             val name = item.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val quantity = item.optDouble("quantity", 1.0).takeIf { !it.isNaN() } ?: 1.0
             val unitPrice = item.optDouble("unitPrice").takeIf { !it.isNaN() } ?: return@mapNotNull null
-            ParsedItem(name = name, quantity = quantity, unitPrice = unitPrice)
+            ParsedItem(
+                name = name,
+                quantity = quantity,
+                unitPrice = unitPrice,
+                netAmount = item.optNullableDouble("netAmount"),
+                vatAmount = item.optNullableDouble("vatAmount"),
+                grossAmount = item.optNullableDouble("grossAmount")
+            )
         }
 
         Parsed(
@@ -42,6 +56,7 @@ object ExpenseParseResultParser {
             totalAmount = totalAmount,
             currency = o.optString("currency").takeIf { it.isNotBlank() },
             vendor = o.optString("vendor").takeIf { it.isNotBlank() },
+            bank = o.optString("bank").takeIf { it.isNotBlank() },
             category = o.optString("category").takeIf { it.isNotBlank() },
             items = items
         )

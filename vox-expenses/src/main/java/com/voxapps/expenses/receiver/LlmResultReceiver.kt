@@ -46,10 +46,14 @@ class LlmResultReceiver : BroadcastReceiver() {
                 val rawJson = result.rawJson
                 if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
                     Logger.w(TAG, "${result.task} failed: ${result.error}")
+                    // Unconditional (not gated behind voiceSaveToastEnabled) — the only signal the
+                    // user has that the scan/voice command didn't produce an expense.
+                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
                     return
                 }
                 val parsed = ExpenseParseResultParser.parse(rawJson) ?: run {
                     Logger.w(TAG, "${result.task}: could not parse LLM result (no amount?). rawJson=$rawJson")
+                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
                     return
                 }
                 Logger.d(TAG, "${result.task}: creating expense total=${parsed.totalAmount} category=${parsed.category}")
@@ -153,14 +157,22 @@ class LlmResultReceiver : BroadcastReceiver() {
     ) {
         val settings: ExpensesSettings = container.settingsRepository.getSnapshot()
         val items = parsed.items.map {
-            ExpenseLineItem(expenseId = 0, name = it.name, quantity = it.quantity, unitPrice = it.unitPrice)
+            ExpenseLineItem(
+                expenseId = 0,
+                name = it.name,
+                quantity = it.quantity,
+                unitPrice = it.unitPrice,
+                netAmount = it.netAmount,
+                vatAmount = it.vatAmount,
+                grossAmount = it.grossAmount
+            )
         }
         val resolved = container.expensesRepository.addParsedExpense(
             title = parsed.title,
             totalAmount = parsed.totalAmount,
             currencyCode = parsed.currency ?: settings.defaultCurrency,
             vendor = parsed.vendor,
-            bank = null,
+            bank = parsed.bank,
             location = null,
             comments = null,
             dateTime = System.currentTimeMillis(),

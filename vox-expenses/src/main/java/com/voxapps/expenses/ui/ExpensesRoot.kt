@@ -46,6 +46,8 @@ fun ExpensesRoot(
                             existing = (target as? EditTarget.Existing)?.expense,
                             categories = state.categories,
                             defaultCurrency = container.settingsRepository.getSnapshot().defaultCurrency,
+                            vatDisplayEnabled = container.settingsRepository.getSnapshot().vatDisplayEnabled,
+                            decimalSeparator = container.settingsRepository.getSnapshot().decimalSeparator,
                             stateManager = container.expensesStateManager,
                             onDone = { editTarget = null }
                         )

@@ -115,6 +115,8 @@ class ExpensesStateManager internal constructor(
         Logger.setEnabled(enabled)
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }
     }
+    fun setVatDisplayEnabled(enabled: Boolean) { scope.launch { settingsRepo.setVatDisplayEnabled(enabled) } }
+    fun setDecimalSeparator(separator: String) { scope.launch { settingsRepo.setDecimalSeparator(separator) } }
 
     // --- SESSION LOCK ---
     /** Called after a successful biometric auth; opens the read window per the timeout setting. */

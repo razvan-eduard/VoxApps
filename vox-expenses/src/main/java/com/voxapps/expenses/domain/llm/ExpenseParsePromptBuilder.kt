@@ -20,19 +20,21 @@ object ExpenseParsePromptBuilder {
         return """
             The following text is a spoken description of a purchase or expense, transcribed from
             voice and possibly containing recognition noise. Extract it into a structured expense
-            record: infer a short title, the vendor/store name if mentioned, and any individual
-            product line items (name, quantity — default 1 if not stated, unit price). Compute
-            "totalAmount" as the sum of the line items' subtotals if items were extracted, or the
-            single amount mentioned in the text if no items were extracted — only return null for
-            totalAmount if the text genuinely mentions no amount at all. Use "$defaultCurrency" as the
-            currency unless a different one is clearly stated or implied (e.g. by a currency symbol or
-            name). Also suggest a category for this expense based on its content. $categoriesLine If
-            one of the existing categories fits, copy that name verbatim, character-for-character —
-            never invent a new spelling, translation, capitalization, or diacritics for it. Only
-            suggest a new category name if none of the existing ones fit. Respond in the
-            "$languageCode" language. Return ONLY a JSON object of the shape {"title": "...",
-            "totalAmount": 12.5, "currency": "...", "vendor": "...", "category": "...",
+            record: infer a short title, the vendor/store name if mentioned, the bank if one was
+            mentioned (e.g. "paid with my ING card" -> "ING"), and any individual product line items
+            (name, quantity — default 1 if not stated, unit price). Compute "totalAmount" as the sum of
+            the line items' subtotals if items were extracted, or the single amount mentioned in the
+            text if no items were extracted — only return null for totalAmount if the text genuinely
+            mentions no amount at all. Use "$defaultCurrency" as the currency unless a different one is
+            clearly stated or implied (e.g. by a currency symbol or name). Also suggest a category for
+            this expense based on its content. $categoriesLine If one of the existing categories fits,
+            copy that name verbatim, character-for-character — never invent a new spelling,
+            translation, capitalization, or diacritics for it. Only suggest a new category name if none
+            of the existing ones fit. Respond in the "$languageCode" language. Return ONLY a JSON object
+            of the shape {"title": "...", "totalAmount": 12.5, "currency": "...", "vendor": "...",
+            "bank": "...", "category": "...",
             "items": [{"name": "...", "quantity": 1, "unitPrice": 12.5}]}, no prose, no markdown.
+            Omit/null "bank" if no bank was mentioned — never guess one.
 
             Spoken text: $rawText
         """.trimIndent()

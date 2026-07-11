@@ -27,6 +27,15 @@ import androidx.compose.runtime.Immutable
  *   defaults to empty (nothing processed until the user explicitly picks apps), since that service
  *   can otherwise see every notification on the device.
  * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output — off by default.
+ * - [vatDisplayEnabled]: shows the optional per-line-item net/VAT/gross breakdown (see
+ *   `ExpenseLineItem.netAmount`/`vatAmount`/`grossAmount`) on the edit screen — off by default since
+ *   most receipts don't carry this breakdown and it would just be empty, unused fields for most users.
+ * - [decimalSeparator]: which character the amount/quantity/price text fields on the edit screen use
+ *   and expect, app-wide — deliberately NOT derived from the device's default `Locale` (see
+ *   `ExpenseEditScreen.kt`'s `formatDecimal`/`parseDecimalOrNull`): a device set to a comma-decimal
+ *   locale (e.g. Romanian) used to silently break `toDoubleOrNull()` round-tripping on any pre-filled
+ *   numeric field (Save staying permanently disabled), since Kotlin's numeric parsing is always
+ *   period-only regardless of locale. Defaults to period, matching how amounts are stored internally.
  */
 @Immutable
 data class ExpensesSettings(
@@ -41,7 +50,9 @@ data class ExpensesSettings(
     val scheduledExpenseDedupInterval: String = INTERVAL_OFF,
     val homeCurrency: String = DEFAULT_CURRENCY,
     val paymentSourcePackages: Set<String> = emptySet(),
-    val debugLoggingEnabled: Boolean = false
+    val debugLoggingEnabled: Boolean = false,
+    val vatDisplayEnabled: Boolean = false,
+    val decimalSeparator: String = DECIMAL_PERIOD
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -55,5 +66,8 @@ data class ExpensesSettings(
         const val INTERVAL_DAILY = "DAILY"
         const val INTERVAL_WEEKLY = "WEEKLY"
         const val INTERVAL_MONTHLY = "MONTHLY"
+
+        const val DECIMAL_PERIOD = "period"
+        const val DECIMAL_COMMA = "comma"
     }
 }
