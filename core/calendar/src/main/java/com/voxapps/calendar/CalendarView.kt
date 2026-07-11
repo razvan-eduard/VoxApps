@@ -70,6 +70,14 @@ fun <T : CalendarItem> CalendarView(
         }
     }
 
+    // Callers that swap this composable out of composition (e.g. ExpensesRoot replacing
+    // ExpensesScreen with ExpenseEditScreen and back) recreate pagerState/listState from scratch,
+    // which otherwise leaves the day-list parked at its default top-of-month position. Re-run the
+    // today scroll on every fresh mount so the default view is always "today", not day 1.
+    LaunchedEffect(Unit) {
+        navigateToToday()
+    }
+
     Column(modifier = modifier) {
         Box(modifier = Modifier.fillMaxWidth()) {
             MonthYearHeader(
