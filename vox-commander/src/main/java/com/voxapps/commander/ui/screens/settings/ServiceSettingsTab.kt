@@ -237,6 +237,27 @@ fun ServiceSettingsTab(
             )
         }
 
+        // --- COMMON: Reduce sensitivity during music toggle ---
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(languageManager.getString("ww_music_duck_label") ?: "Reduce sensitivity during music")
+                Text(
+                    text = languageManager.getString("ww_music_duck_desc")
+                        ?: "Requires a clearer match while music is playing, to cut ghost triggers from echo residue",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = uiState.wakeWordMusicDuckEnabled,
+                onCheckedChange = { appStateManager.setWakeWordMusicDuckEnabled(it) }
+            )
+        }
+
         // Picovoice AccessKey input (only for engines that require it)
         if (requiresApiKey) {
             Spacer(modifier = Modifier.height(4.dp))

@@ -83,8 +83,13 @@ class WakeWordEngine(
     // (OpenWakeWordEngine.kt) doesn't need to change if the gate ever moves again. 0f = disabled,
     // preserving upstream behavior. See WakeWordSensitivity in the consuming app for how this is
     // derived from the user's sensitivity setting.
-    private val rmsGate: Float = 0f
+    private val rmsGate: Float = 0f,
     // --- VoxCommander patch: RMS silence gate (battery) — end ---
+    // --- VoxCommander patch: configurable audio source (AEC) — forwarding parameter, no logic here ---
+    // Forwarded straight to AudioRecorder (see the "VoxCommander patch" there). MIC preserves
+    // upstream behavior.
+    private val audioSource: Int = android.media.MediaRecorder.AudioSource.MIC
+    // --- VoxCommander patch: configurable audio source (AEC) — end ---
 ) {
 
     companion object {
@@ -92,7 +97,7 @@ class WakeWordEngine(
     }
 
     private val assetManager: AssetManager = context.assets
-    private val audioRecorder = AudioRecorder(context, rmsGate)
+    private val audioRecorder = AudioRecorder(context, rmsGate, audioSource)
     private val modelProcessors = mutableMapOf<WakeWordModel, ModelProcessor>()
     private val detectionCooldowns = mutableMapOf<String, Long>()
     

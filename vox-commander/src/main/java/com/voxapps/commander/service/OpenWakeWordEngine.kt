@@ -36,6 +36,12 @@ class OpenWakeWordEngine(
     private val WARMUP_MS = 1500L
     @Volatile private var listenStartMs = 0L
 
+    // Music/media playback leaks a broadband AEC residual through far more than TTS's own voice does
+    // (platform AEC is speech-band tuned) — require a much higher confidence score before accepting a
+    // detection while any app has the music stream active, to cut ghost triggers without lowering
+    // sensitivity for genuine speech the rest of the time. User-toggleable (wakeWordMusicDuckEnabled).
+    private val MUSIC_PLAYBACK_MIN_SCORE = 0.85f
+
     companion object {
         const val ENGINE_KEY = "wake_openwakeword"
     }
@@ -82,13 +88,26 @@ class OpenWakeWordEngine(
                 )
             )
 
+            // Same AEC toggle already wired into the Vosk/Porcupine engines (see
+            // WakeWordEngine.kt:213-214 in this same package) — without it, this engine scored raw,
+            // un-cancelled mic audio (including the device's own speaker output during TTS/music
+            // playback) with no echo cancellation at all, regardless of the user's setting.
+            val aecEnabled = appStateManager.uiState.value.wakeWordAecEnabled
+            val audioSource = if (aecEnabled) {
+                android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION
+            } else {
+                android.media.MediaRecorder.AudioSource.MIC
+            }
+            Logger.log("OpenWakeWord audio source: ${if (aecEnabled) "VOICE_COMMUNICATION (AEC on)" else "MIC (AEC off)"}", TAG)
+
             engine = WakeWordEngine(
                 context = context,
                 models = models,
                 detectionMode = DetectionMode.SINGLE_BEST,
                 detectionCooldownMs = 2000L,
                 scope = engineScope,
-                rmsGate = WakeWordSensitivity.openWakeWordRmsGate(sensitivity)
+                rmsGate = WakeWordSensitivity.openWakeWordRmsGate(sensitivity),
+                audioSource = audioSource
             )
 
             Logger.log("OpenWakeWord engine initialized successfully", TAG)
@@ -127,6 +146,15 @@ class OpenWakeWordEngine(
                         Logger.log("OpenWakeWord warmup: ignoring detection ${detection.model.name} (score=${detection.score}, ${sinceStart}ms after start)", TAG)
                         return@collect
                     }
+
+                    val musicDuckEnabled = appStateManager.uiState.value.wakeWordMusicDuckEnabled
+                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                    if (musicDuckEnabled && audioManager?.isMusicActive == true && detection.score < MUSIC_PLAYBACK_MIN_SCORE) {
+                        Logger.log("OpenWakeWord: ignoring low-confidence detection during music playback " +
+                            "(score=${detection.score} < $MUSIC_PLAYBACK_MIN_SCORE) — likely AEC residual, not a real wake word", TAG)
+                        return@collect
+                    }
+
                     Logger.log("OpenWakeWord detected: ${detection.model.name} (score=${detection.score})", TAG)
                     onWakeWordDetected()
                 }

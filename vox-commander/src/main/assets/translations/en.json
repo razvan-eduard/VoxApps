@@ -139,6 +139,8 @@
   "command_queue_enabled": "Command Queue (chain commands)",
   "ww_aec_label": "Echo Cancellation (AEC)",
   "ww_aec_desc": "Allows wake word during TTS/music playback",
+  "ww_music_duck_label": "Reduce sensitivity during music",
+  "ww_music_duck_desc": "Requires a clearer match while music is playing, to cut ghost triggers from echo residue",
   "ww_calibrate_title": "Voice Calibration",
   "ww_sensitivity_label": "Wake Word Sensitivity",
   "ww_sensitivity_desc": "Adjust how easily the wake word triggers",

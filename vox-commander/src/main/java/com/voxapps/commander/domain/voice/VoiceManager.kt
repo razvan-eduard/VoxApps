@@ -31,6 +31,14 @@ import java.nio.ByteOrder
 object VoiceManager {
     private const val TAG = Strings.Tags.VOICE_MANAGER
 
+    // Safety net for a listening session whose SpeechRecognizer never delivers a terminal callback
+    // at all (confirmed to happen: a dropped/raced AOSP SpeechRecognizer binder callback left
+    // _isListeningFlow stranded at true forever, with the overlay stuck visible, on-device). Sized
+    // comfortably above the largest configured silence timeout (completeSilence maxes out at 5000ms
+    // on "high" STT sensitivity, see startGoogleSpeechRecognizer) so it never fires during a real,
+    // still-in-progress recognition attempt.
+    private const val LISTENING_WATCHDOG_MS = 15_000L
+
     private var whisperCppEngine: WhisperCppSttEngine? = null
     private var whisperApiEngine: WhisperSttEngine? = null
     private var googleSttEngine: GoogleSttEngine? = null
@@ -131,6 +139,33 @@ object VoiceManager {
     }
 
     private var googleResultCallback: ((String) -> Unit)? = null
+    private var listeningWatchdog: Job? = null
+
+    /** Arms the stuck-listening safety net — call right after a SpeechRecognizer session starts. */
+    private fun armListeningWatchdog() {
+        listeningWatchdog?.cancel()
+        listeningWatchdog = scope.launch {
+            delay(LISTENING_WATCHDOG_MS)
+            // Only fires if nothing else (onError/onResults/manual stop) already cleared listening
+            // state in the meantime — otherwise this would be stale and could wrongly cut off a
+            // brand-new listening session that happened to start right after this one ended.
+            if (_isListeningFlow.value) {
+                Logger.log("Listening watchdog fired — no terminal SpeechRecognizer callback after ${LISTENING_WATCHDOG_MS}ms, forcing cleanup", TAG)
+                updateListeningState(false)
+                abandonListeningAudioFocus()
+                googleResultCallback?.invoke("")
+                googleResultCallback = null
+                speechRecognizer?.destroy()
+                speechRecognizer = null
+            }
+        }
+    }
+
+    /** Cancels the safety net — call from every path that already cleaned up normally. */
+    private fun cancelListeningWatchdog() {
+        listeningWatchdog?.cancel()
+        listeningWatchdog = null
+    }
 
     fun init(
         context: Context,
@@ -210,6 +245,7 @@ object VoiceManager {
     }
 
     fun handleIntentResult(text: String) {
+        cancelListeningWatchdog()
         isListeningFlag.set(false)
         _isListeningFlow.value = false
         abandonListeningAudioFocus()
@@ -259,6 +295,7 @@ object VoiceManager {
                 override fun onEndOfSpeech() {}
                 override fun onError(error: Int) {
                     Logger.log("Google SpeechRecognizer error: $error", TAG)
+                    cancelListeningWatchdog()
                     isListeningFlag.set(false)
                     _isListeningFlow.value = false
                     abandonListeningAudioFocus()
@@ -272,6 +309,7 @@ object VoiceManager {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val text = matches?.firstOrNull() ?: ""
                     Logger.log("Heard via SpeechRecognizer: $text", TAG)
+                    cancelListeningWatchdog()
                     isListeningFlag.set(false)
                     _isListeningFlow.value = false
                     abandonListeningAudioFocus()
@@ -288,9 +326,11 @@ object VoiceManager {
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
             speechRecognizer?.startListening(intent)
+            armListeningWatchdog()
             Logger.log("Google SpeechRecognizer started for language: ${languageCode ?: "auto-detect"}", TAG)
         } catch (e: Exception) {
             Logger.log("Failed to start Google SpeechRecognizer: ${e.message}", TAG)
+            cancelListeningWatchdog()
             isListeningFlag.set(false)
             _isListeningFlow.value = false
             abandonListeningAudioFocus()
@@ -552,8 +592,12 @@ object VoiceManager {
 
     fun stopListening() {
         Logger.log("Manual stop requested", TAG)
-        // Setting isListeningFlag to false will break the loop gracefully 
-        isListeningFlag.set(false)
+        cancelListeningWatchdog()
+        // Must clear _isListeningFlow/VoiceState the same way every other cleanup path does
+        // (onError/onResults/the catch block below all call this) — a bare isListeningFlag.set(false)
+        // here left the overlay (which reads isListeningFlow directly) stranded visible even after
+        // this function ran, since tapping the overlay's own Stop button called exactly this method.
+        updateListeningState(false)
         // Stop Google SpeechRecognizer if active
         speechRecognizer?.let {
             it.stopListening()
@@ -561,6 +605,11 @@ object VoiceManager {
         }
         speechRecognizer = null
         abandonListeningAudioFocus()
+        // Notify whoever called startListening(), same as every other cleanup path (onError/onResults/
+        // the catch block) — otherwise a manual stop leaves that caller waiting on a callback that
+        // never arrives.
+        googleResultCallback?.invoke("")
+        googleResultCallback = null
     }
 
     private fun loadCalibrationProfile() {

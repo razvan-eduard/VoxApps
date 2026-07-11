@@ -59,6 +59,7 @@ interface SettingsRepository {
     suspend fun setPicovoiceAccessKey(key: String?)
     suspend fun setWakeWordSensitivity(sensitivity: String)
     suspend fun setWakeWordAecEnabled(enabled: Boolean)
+    suspend fun setWakeWordMusicDuckEnabled(enabled: Boolean)
     suspend fun setSttSensitivity(sensitivity: String)
 
     // --- OFFLINE FALLBACK ---

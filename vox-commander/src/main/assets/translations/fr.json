@@ -400,5 +400,7 @@
   "vox_apps_third_party": "Tierce",
   "onboarding_permissions_title": "Autorisations",
   "onboarding_permissions_intro": "Accordez-les pour que l'assistant vocal et son micro flottant fonctionnent partout. Vous pourrez les modifier plus tard dans les Réglages.",
-  "continue_button": "Continuer"
+  "continue_button": "Continuer",
+  "ww_music_duck_label": "Réduire la sensibilité pendant la musique",
+  "ww_music_duck_desc": "Exige une correspondance plus nette pendant la lecture de musique, pour réduire les déclenchements fantômes dus au résidu d'écho"
 }

@@ -342,6 +342,10 @@ class AppStateManager private constructor(
         scope.launch { repo.setWakeWordAecEnabled(enabled) }
     }
 
+    fun setWakeWordMusicDuckEnabled(enabled: Boolean) {
+        scope.launch { repo.setWakeWordMusicDuckEnabled(enabled) }
+    }
+
     fun setSttSensitivity(sensitivity: String) {
         scope.launch { repo.setSttSensitivity(sensitivity) }
     }

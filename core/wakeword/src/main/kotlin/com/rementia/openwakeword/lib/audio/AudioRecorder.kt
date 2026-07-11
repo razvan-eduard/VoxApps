@@ -28,8 +28,17 @@ internal class AudioRecorder(
     // classifier, the dominant CPU/battery cost of always-on wake word detection) never even sees
     // silence. 0f preserves upstream behavior (gate disabled). See WakeWordSensitivity in the
     // consuming app for how this is derived from the user's sensitivity setting.
-    private val rmsGate: Float = 0f
+    private val rmsGate: Float = 0f,
     // --- VoxCommander patch: RMS silence gate (battery) — end ---
+    // --- VoxCommander patch: configurable audio source (AEC) — start ---
+    // MIC preserves upstream behavior. The consuming app passes VOICE_COMMUNICATION when the
+    // user's "Echo Cancellation" setting is on, which asks the platform to run its acoustic echo
+    // canceler / noise suppressor on the captured signal — without it, wake-word detection scores
+    // raw, un-cancelled audio, including the device's own speaker output (TTS/music), which is far
+    // more likely to false-trigger on that content. See OpenWakeWordEngine.kt for how this mirrors
+    // the same AEC toggle already wired into the app's other (Vosk/Porcupine) wake-word engines.
+    private val audioSource: Int = MediaRecorder.AudioSource.MIC
+    // --- VoxCommander patch: configurable audio source (AEC) — end ---
 ) {
     
     companion object {
@@ -62,7 +71,7 @@ internal class AudioRecorder(
         val bufferSize = maxOf(minBufferSize, BUFFER_SIZE_IN_SHORTS * 2)
         
         val audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
+            audioSource,
             SAMPLE_RATE,
             CHANNEL_CONFIG,
             AUDIO_FORMAT,

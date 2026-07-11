@@ -400,5 +400,7 @@
   "vox_apps_third_party": "Drittanbieter",
   "onboarding_permissions_title": "Berechtigungen",
   "onboarding_permissions_intro": "Erteile diese, damit der Sprachassistent und sein schwebendes Mikrofon überall funktionieren. Du kannst sie später in den Einstellungen ändern.",
-  "continue_button": "Weiter"
+  "continue_button": "Weiter",
+  "ww_music_duck_label": "Empfindlichkeit bei Musik reduzieren",
+  "ww_music_duck_desc": "Erfordert eine deutlichere Übereinstimmung während Musik läuft, um Fehlauslösungen durch Echo-Reste zu verringern"
 }

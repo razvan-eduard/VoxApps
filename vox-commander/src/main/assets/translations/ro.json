@@ -441,5 +441,7 @@
   "vox_apps_third_party": "Terță parte",
   "onboarding_permissions_title": "Permisiuni",
   "onboarding_permissions_intro": "Acordă-le ca asistentul vocal și microfonul flotant să funcționeze oriunde. Le poți schimba mai târziu în Setări.",
-  "continue_button": "Continuă"
+  "continue_button": "Continuă",
+  "ww_music_duck_label": "Reduce sensibilitatea în timpul muzicii",
+  "ww_music_duck_desc": "Necesită o potrivire mai clară cât timp cântă muzică, pentru a reduce declanșările false din reziduul de ecou"
 }
