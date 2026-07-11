@@ -28,6 +28,7 @@
   "settings": "Setări",
   "general": "General",
   "back": "Înapoi",
+  "press_back_again_to_exit": "Apasă din nou înapoi pentru a ieși",
   "notifications": "Notificări",
   "voice_save_toast": "Notificare la salvarea unei notițe prin voce",
   "voice_save_toast_desc": "Afișează o confirmare (text + categorie) când VoxCommander salvează o notiță",

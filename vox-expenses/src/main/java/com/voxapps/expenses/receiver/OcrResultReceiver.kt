@@ -22,8 +22,10 @@ private const val COMMANDER_PACKAGE = "com.voxapps.commander"
  * Expenses' end of Vision's generic OCR hook: receives the raw scanned text back from Vision (the
  * "Scan receipt" flow) and forwards it to Commander's generic LLM hook for cleanup — the actual
  * expense gets created when that cleanup reply lands in [LlmResultReceiver] (its
- * `LlmTasks.EXPENSE_SCAN_CLEANUP` branch). Mirrors vox-notes' OcrResultReceiver. Guarded by Expenses'
- * own `com.voxapps.expenses.permission.OCR_RESULT` signature permission.
+ * `LlmTasks.EXPENSE_SCAN_CLEANUP` branch). Mirrors vox-notes' OcrResultReceiver. Guarded by the shared
+ * `com.voxapps.vox.permission.OCR_RESULT` signature permission (declared once in `:core:ipc`'s
+ * manifest) — also what makes this receiver discoverable by Vision's dynamic dispatcher (see the
+ * `com.voxapps.vox.ocr.task` meta-data on this receiver in the manifest).
  */
 class OcrResultReceiver : BroadcastReceiver() {
 

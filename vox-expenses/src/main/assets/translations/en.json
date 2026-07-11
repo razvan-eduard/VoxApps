@@ -27,6 +27,7 @@
   "settings": "Settings",
   "general": "General",
   "back": "Back",
+  "press_back_again_to_exit": "Press back again to exit",
   "require_fingerprint": "Require fingerprint to read expenses",
   "require_fingerprint_desc": "Expenses stay encrypted at rest; this gates reading them in the app and via VoxCommander",
   "session_timeout": "Session timeout",

@@ -26,4 +26,6 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
     implementation("androidx.compose.foundation:foundation")
+    // BackHandler, for the shared DoubleBackToExitHandler composable.
+    implementation(libs.androidx.activity.compose)
 }

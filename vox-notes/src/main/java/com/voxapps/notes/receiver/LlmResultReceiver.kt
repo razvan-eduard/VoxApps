@@ -23,7 +23,8 @@ private const val TAG = "LlmResultReceiver"
  * separate from the Room/business logic. No pending-request state: if this process was killed while
  * Commander was mid-call, the result simply arrives whenever the process is next running (or is lost
  * if Notes was uninstalled, which is fine — same fire-and-forget semantics as everywhere else in this
- * contract). Guarded by Notes' own `com.voxapps.notes.permission.LLM_RESULT` signature permission.
+ * contract). Guarded by the shared `com.voxapps.vox.permission.LLM_RESULT` signature permission
+ * (declared once in `:core:ipc`'s manifest).
  */
 class LlmResultReceiver : BroadcastReceiver() {
 

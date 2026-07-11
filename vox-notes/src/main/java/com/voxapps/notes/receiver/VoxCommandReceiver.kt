@@ -22,7 +22,8 @@ import kotlinx.coroutines.withContext
  * - read: refused with a spoken message when biometric is required and the session has expired —
  *   the DB is never touched in that case; otherwise the notes text is returned.
  *
- * Guarded by the `com.voxapps.notes.permission.COMMAND` custom permission (declared in the manifest).
+ * Guarded by the shared `com.voxapps.vox.permission.COMMAND` custom permission (declared once in
+ * `:core:ipc`'s manifest).
  */
 class VoxCommandReceiver : BroadcastReceiver() {
 

@@ -11,32 +11,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
-        Custom permission guarding the cross-app command bus. Any app that wants to send Vox
-        commands to Expenses must hold it. `signature` = only apps signed with the same key (the
-        monorepo apps) qualify.
+        The COMMAND/LLM_RESULT/OCR_RESULT/LLM_PROCESS signature permissions guarding the receivers
+        below are declared once in :core:ipc's own manifest (shared across every Vox app) and folded
+        in here automatically via manifest merger — see VoxIpc.kt's class doc comment. No per-app
+        <permission>/<uses-permission> declarations needed here.
     -->
-    <permission
-        android:name="com.voxapps.expenses.permission.COMMAND"
-        android:protectionLevel="signature" />
-
-    <!--
-        Guards Expenses' own generic-LLM-hook result receiver — only Commander (same signing key) may
-        deliver an async LLM reply here, so a third app can't spoof a fake parsed expense.
-    -->
-    <permission
-        android:name="com.voxapps.expenses.permission.LLM_RESULT"
-        android:protectionLevel="signature" />
-
-    <!-- Held so Expenses can send a generic LLM request to Commander's hook. -->
-    <uses-permission android:name="com.voxapps.commander.permission.LLM_PROCESS" />
-
-    <!--
-        Guards Expenses' OCR-scan result receiver — only Vision (same signing key) may deliver an
-        async scan reply here, so a third app can't spoof fake OCR text into an expense.
-    -->
-    <permission
-        android:name="com.voxapps.expenses.permission.OCR_RESULT"
-        android:protectionLevel="signature" />
 
     <application
         android:name=".ExpensesApplication"
@@ -66,7 +45,7 @@
         <receiver
             android:name=".receiver.VoxCommandReceiver"
             android:exported="true"
-            android:permission="com.voxapps.expenses.permission.COMMAND">
+            android:permission="com.voxapps.vox.permission.COMMAND">
             <intent-filter>
                 <action android:name="com.voxapps.action.VOX_COMMAND" />
             </intent-filter>
@@ -88,7 +67,7 @@
         <receiver
             android:name=".receiver.LlmResultReceiver"
             android:exported="true"
-            android:permission="com.voxapps.expenses.permission.LLM_RESULT">
+            android:permission="com.voxapps.vox.permission.LLM_RESULT">
             <intent-filter>
                 <action android:name="com.voxapps.action.LLM_RESULT" />
             </intent-filter>
@@ -96,16 +75,18 @@
 
         <!--
             OCR-scan result: Vision delivers an async reply here after scanning a receipt Expenses
-            asked it to (the "Scan receipt" entry point). Guarded by the OCR_RESULT permission above —
-            only Vision (same signing key) can deliver it.
+            asked it to (the "Scan receipt" entry point). Guarded by the shared OCR_RESULT permission
+            — only same-signing-key apps can deliver it. The ocr.task meta-data is what Vision's
+            dynamic "send scan to this app" dispatcher discovery reads to build a button.
         -->
         <receiver
             android:name=".receiver.OcrResultReceiver"
             android:exported="true"
-            android:permission="com.voxapps.expenses.permission.OCR_RESULT">
+            android:permission="com.voxapps.vox.permission.OCR_RESULT">
             <intent-filter>
                 <action android:name="com.voxapps.action.OCR_RESULT" />
             </intent-filter>
+            <meta-data android:name="com.voxapps.vox.ocr.task" android:value="EXPENSE_SCAN_CLEANUP" />
         </receiver>
 
         <!-- NotificationListenerService for opt-in payment-notification capture (Stage 6) — mirrors

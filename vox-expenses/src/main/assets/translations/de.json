@@ -27,6 +27,7 @@
   "settings": "Einstellungen",
   "general": "Allgemein",
   "back": "Zurück",
+  "press_back_again_to_exit": "Erneut zurück drücken, um zu beenden",
   "require_fingerprint": "Fingerabdruck zum Lesen der Ausgaben erforderlich",
   "require_fingerprint_desc": "Ausgaben bleiben verschlüsselt gespeichert; dies schützt das Lesen in der App und über VoxCommander",
   "session_timeout": "Sitzungs-Timeout",

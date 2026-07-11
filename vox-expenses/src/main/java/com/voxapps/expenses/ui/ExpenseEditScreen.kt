@@ -1,5 +1,6 @@
 package com.voxapps.expenses.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -71,6 +72,9 @@ fun ExpenseEditScreen(
     onDone: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
+
+    // System back mirrors the top-bar arrow: return to the expense list without saving.
+    BackHandler { onDone() }
 
     var title by remember { mutableStateOf(existing?.expense?.title ?: "") }
     var totalText by remember { mutableStateOf(existing?.expense?.totalAmount?.let { "%.2f".format(it) } ?: "") }

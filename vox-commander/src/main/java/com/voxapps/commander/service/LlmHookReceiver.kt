@@ -11,8 +11,9 @@ import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequest
 
 /**
- * Exported entry point for the generic LLM hook: a first-party satellite (guarded by the signature-
- * level `com.voxapps.commander.permission.LLM_PROCESS` permission) can broadcast
+ * Exported entry point for the generic LLM hook: a first-party satellite (guarded by the shared
+ * signature-level `com.voxapps.vox.permission.LLM_PROCESS` permission, declared once in `:core:ipc`'s
+ * manifest) can broadcast
  * [VoxIpc.ACTION_LLM_PROCESS] with a [VoxLlmRequest] JSON in [VoxIpc.EXTRA_LLM_PAYLOAD] and get a
  * [com.voxapps.ipc.VoxLlmResult] back later via [VoxIpc.ACTION_LLM_RESULT]. Only fast parse/validate
  * work happens here — the actual LLM call (which can take seconds) is delegated to a one-time

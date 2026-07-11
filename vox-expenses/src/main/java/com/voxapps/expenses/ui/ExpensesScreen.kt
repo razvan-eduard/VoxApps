@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
 import com.voxapps.expenses.state.ExpensesStateManager
@@ -44,6 +45,8 @@ fun ExpensesScreen(
 ) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
+
+    DoubleBackToExitHandler(message = languageManager.getString("press_back_again_to_exit"))
 
     Scaffold(
         topBar = {

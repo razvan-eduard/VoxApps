@@ -1,5 +1,6 @@
 package com.voxapps.notes.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NoteWithCategory
 import com.voxapps.notes.domain.llm.ScanRequestSender
@@ -64,6 +66,15 @@ fun NotesScreen(
 
     var editing by remember { mutableStateOf<EditBuffer?>(null) }
     var showDateSheet by remember { mutableStateOf(false) }
+
+    // While editing, back closes the inline editor instead of exiting; at rest, back re-arms the
+    // standard double-press-to-exit flow. `enabled` keeps the two mutually exclusive regardless of
+    // Compose's internal back-callback ordering.
+    BackHandler(enabled = editing != null) { editing = null }
+    DoubleBackToExitHandler(
+        message = languageManager.getString("press_back_again_to_exit"),
+        enabled = editing == null
+    )
 
     ModalNavigationDrawer(
         drawerState = drawerState,

@@ -21,8 +21,8 @@ import kotlinx.coroutines.launch
  * generic-LLM-hook parse request (see [ExpenseParseRequestSender]) — the actual insert happens later
  * in [LlmResultReceiver] once the async reply arrives.
  *
- * Guarded by the `com.voxapps.expenses.permission.COMMAND` custom permission (declared in the
- * manifest).
+ * Guarded by the shared `com.voxapps.vox.permission.COMMAND` custom permission (declared once in
+ * `:core:ipc`'s manifest).
  */
 class VoxCommandReceiver : BroadcastReceiver() {
 

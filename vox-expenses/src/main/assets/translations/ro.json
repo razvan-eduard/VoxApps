@@ -27,6 +27,7 @@
   "settings": "Setări",
   "general": "General",
   "back": "Înapoi",
+  "press_back_again_to_exit": "Apasă din nou înapoi pentru a ieși",
   "require_fingerprint": "Necesită amprentă pentru a citi cheltuielile",
   "require_fingerprint_desc": "Cheltuielile rămân criptate; acest lucru condiționează citirea lor în aplicație și prin VoxCommander",
   "session_timeout": "Timp de expirare sesiune",

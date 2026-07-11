@@ -28,6 +28,7 @@
   "settings": "Settings",
   "general": "General",
   "back": "Back",
+  "press_back_again_to_exit": "Press back again to exit",
   "notifications": "Notifications",
   "voice_save_toast": "Toast when a note is saved by voice",
   "voice_save_toast_desc": "Show a confirmation (text + category) when VoxCommander saves a note",

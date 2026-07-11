@@ -1,5 +1,6 @@
 package com.voxapps.expenses.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +63,10 @@ fun ReportsScreen(
     onBack: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
+
+    // System back mirrors the top-bar arrow: return to the expense list.
+    BackHandler { onBack() }
+
     var period by remember { mutableStateOf(ReportPeriod.MONTH) }
     var loading by remember { mutableStateOf(true) }
     var total by remember { mutableStateOf(0.0) }

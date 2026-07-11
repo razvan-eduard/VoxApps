@@ -27,6 +27,7 @@
   "settings": "Paramètres",
   "general": "Général",
   "back": "Retour",
+  "press_back_again_to_exit": "Appuyez à nouveau sur retour pour quitter",
   "require_fingerprint": "Empreinte digitale requise pour lire les dépenses",
   "require_fingerprint_desc": "Les dépenses restent chiffrées au repos ; ceci conditionne leur lecture dans l'application et via VoxCommander",
   "session_timeout": "Délai d'expiration de session",

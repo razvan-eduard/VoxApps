@@ -28,30 +28,14 @@
         android:protectionLevel="signature"
         android:label="Speak text via VoxCommander TTS" />
 
-    <!-- Custom permission guarding the generic LLM hook (a first-party satellite can ask Commander's
-         selected LLM to process a raw prompt). -->
-    <permission
-        android:name="com.voxapps.commander.permission.LLM_PROCESS"
-        android:protectionLevel="signature"
-        android:label="Send a generic LLM request to VoxCommander" />
-
-    <!-- Held so Commander can send commands to the Notes satellite's command bus. -->
-    <uses-permission android:name="com.voxapps.notes.permission.COMMAND" />
-
-    <!-- Held so Commander can deliver an async LLM hook result back to the Notes satellite. -->
-    <uses-permission android:name="com.voxapps.notes.permission.LLM_RESULT" />
-
-    <!-- Held so Commander's "Vox Apps" discovery can ping the Vision satellite's command bus. -->
-    <uses-permission android:name="com.voxapps.vision.permission.COMMAND" />
-
-    <!-- Held so Commander can deliver an async LLM hook result back to the Vision satellite. -->
-    <uses-permission android:name="com.voxapps.vision.permission.LLM_RESULT" />
-
-    <!-- Held so Commander can send commands to the Expenses satellite's command bus. -->
-    <uses-permission android:name="com.voxapps.expenses.permission.COMMAND" />
-
-    <!-- Held so Commander can deliver an async LLM hook result back to the Expenses satellite. -->
-    <uses-permission android:name="com.voxapps.expenses.permission.LLM_RESULT" />
+    <!--
+        The COMMAND/LLM_RESULT/LLM_PROCESS signature permissions Commander needs to talk to any
+        satellite (and let satellites call its LLM hook) are declared once in :core:ipc's own manifest
+        (shared across every Vox app) and folded in here automatically via manifest merger — see
+        VoxIpc.kt's class doc comment. No per-satellite <uses-permission> lines needed here, for any
+        satellite, ever — this is also what makes it structurally impossible to forget one, unlike the
+        old per-satellite-named scheme.
+    -->
 
     <application
         android:name=".VoxApplication"
@@ -157,7 +141,7 @@
             android:name=".service.LlmHookReceiver"
             android:enabled="true"
             android:exported="true"
-            android:permission="com.voxapps.commander.permission.LLM_PROCESS">
+            android:permission="com.voxapps.vox.permission.LLM_PROCESS">
             <intent-filter>
                 <action android:name="com.voxapps.action.LLM_PROCESS" />
             </intent-filter>

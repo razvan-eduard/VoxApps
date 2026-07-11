@@ -26,8 +26,9 @@ private const val TAG = "LlmResultReceiver"
 
 /**
  * Expenses' end of Commander's generic LLM hook: receives the async [VoxIpc.ACTION_LLM_RESULT] reply
- * and routes it by [VoxLlmResult.task] (mirrors vox-notes' equivalent receiver). Guarded by Expenses'
- * own `com.voxapps.expenses.permission.LLM_RESULT` signature permission.
+ * and routes it by [VoxLlmResult.task] (mirrors vox-notes' equivalent receiver). Guarded by the shared
+ * `com.voxapps.vox.permission.LLM_RESULT` signature permission (declared once in `:core:ipc`'s
+ * manifest).
  *
  * [LlmTasks.EXPENSE_PARSE] (voice) and [LlmTasks.EXPENSE_SCAN_CLEANUP] (OCR) produce the exact same
  * JSON shape — both parsed with [ExpenseParseResultParser] and created via the same

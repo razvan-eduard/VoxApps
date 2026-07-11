@@ -2,6 +2,7 @@ package com.voxapps.vision.ui
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.widget.Toast
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import com.voxapps.logging.Logger
@@ -11,10 +12,11 @@ import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,12 +53,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.vision.data.preferences.VisionSettingsRepository
 import com.voxapps.vision.di.VisionContainer
-import com.voxapps.vision.domain.NoteForwarder
 import com.voxapps.vision.domain.OcrResultSender
-import com.voxapps.vision.domain.llm.OcrCleanupRequestSender
+import com.voxapps.vision.domain.ScanTargetDiscovery
 import com.voxapps.vision.ocr.DocumentCropper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -67,7 +68,6 @@ import kotlinx.coroutines.withContext
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
-import java.util.Locale
 
 /** Consecutive good-framing analysis ticks required before auto-capture fires. */
 private const val STABILITY_THRESHOLD = 3
@@ -76,11 +76,11 @@ private const val STABILITY_THRESHOLD = 3
 private const val ANALYSIS_INTERVAL_MS = 400L
 
 /**
- * Camera capture -> on-device OCR (PaddleOCR via [VisionContainer.ocrEngineForZone]) -> editable
- * text field, standing in front of the same downstream pipeline built earlier: optional LLM cleanup
- * via Commander's generic hook, then either a direct create-note push to Notes (standalone use) or,
- * when [pendingRequest] is set (another satellite asked Vision to scan on its behalf), a reply
- * carrying the raw recognized text.
+ * Camera capture -> on-device OCR (PaddleOCR via [VisionContainer.ocrEngineForZone]) -> editable text
+ * field, then either a reply to whichever satellite asked Vision to scan on its behalf (when
+ * [pendingRequest] is set), or — standalone use — one "send to X" button per installed satellite that
+ * can receive a scan (see [ScanTargetDiscovery]), routing through that satellite's own scan-cleanup
+ * LLM pipeline exactly like the pendingRequest reply does.
  *
  * Capture can be triggered manually (the "Scan" button, kept as a fallback for poor lighting or
  * irregular documents) or automatically: a low-frequency [ImageAnalysis] pass reuses
@@ -107,10 +107,15 @@ fun VisionScreen(
     val scope = rememberCoroutineScope()
     val languageManager = LocalLanguageManager.current
 
+    // Only the standalone case (no caller waiting) uses the double-press-to-exit pattern — when a
+    // satellite launched Vision for a scan, a single back press should return control to it
+    // immediately (the default Activity.finish() behavior), not require a second confirming press.
+    DoubleBackToExitHandler(
+        message = languageManager.getString("press_back_again_to_exit"),
+        enabled = pendingRequest == null
+    )
+
     var rawText by remember { mutableStateOf("") }
-    var title by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("") }
-    var cleanUpWithAi by remember { mutableStateOf(false) }
     var cameraGranted by remember { mutableStateOf(hasCameraPermission()) }
     var isRecognizing by remember { mutableStateOf(false) }
     var liveBounds by remember { mutableStateOf<DocumentCropper.LiveBounds?>(null) }
@@ -163,22 +168,21 @@ fun VisionScreen(
         }
     }
 
-    // Shared by the manual final button and auto-capture's hands-free completion below.
+    // Discovered once — installed apps don't change within a single Activity lifetime.
+    val scanTargets = remember { ScanTargetDiscovery.discover(context) }
+
+    // Shared by the manual final button (pendingRequest case) and auto-capture's hands-free
+    // completion below. Standalone mode has no single "submit" action anymore — the user picks a
+    // destination button instead (see the Column of per-target buttons further down).
     val submit: (String) -> Unit = { text ->
         val trimmed = text.trim()
-        if (trimmed.isNotEmpty()) {
-            if (pendingRequest != null) {
-                OcrResultSender.send(
-                    context,
-                    pendingRequest.sourcePackage,
-                    VoxOcrResult(task = pendingRequest.task, status = VoxOcrResult.STATUS_SUCCESS, rawText = trimmed)
-                )
-                finishActivity()
-            } else if (cleanUpWithAi) {
-                OcrCleanupRequestSender.send(context, trimmed, Locale.getDefault().language)
-            } else {
-                NoteForwarder.send(context, trimmed, title.ifBlank { null }, category.ifBlank { null })
-            }
+        if (trimmed.isNotEmpty() && pendingRequest != null) {
+            OcrResultSender.send(
+                context,
+                pendingRequest.sourcePackage,
+                VoxOcrResult(task = pendingRequest.task, status = VoxOcrResult.STATUS_SUCCESS, rawText = trimmed)
+            )
+            finishActivity()
         }
     }
     val submitState = rememberUpdatedState(submit)
@@ -246,12 +250,12 @@ fun VisionScreen(
                     onRecognizing = { isRecognizing = it },
                     onResult = { text ->
                         rawText = text
-                        // Only the "scan for another satellite" flow has no user-editable fields left
-                        // to fill in (Title/Category are hidden when pendingRequest != null) — so an
-                        // auto-triggered capture there can go straight through and hand control back to
-                        // the caller. Standalone mode still needs a deliberate tap: the user may want to
-                        // add a title/category or toggle "clean up with AI" before saving. Reads the
-                        // live pendingRequestState, not the closure-frozen pendingRequest (see above).
+                        // Only the "scan for another satellite" flow has a single, already-known
+                        // destination — so an auto-triggered capture there can go straight through and
+                        // hand control back to the caller. Standalone mode always needs a deliberate
+                        // tap: there's no way to auto-decide which of N installed targets to send to.
+                        // Reads the live pendingRequestState, not the closure-frozen pendingRequest
+                        // (see above).
                         if (pendingRequestState.value != null) submitState.value(text)
                     }
                 )
@@ -275,7 +279,11 @@ fun VisionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
+                .padding(16.dp)
+                // The recognized-text field grows with its content (noisy OCR output can be many
+                // lines) — without scroll, a long result pushes the destination buttons below the
+                // screen with no way to reach them.
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (pendingRequest != null) {
@@ -346,33 +354,38 @@ fun VisionScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            if (pendingRequest == null) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text(languageManager.getString("title_optional")) },
+            if (pendingRequest != null) {
+                Button(
+                    onClick = { submit(rawText) },
                     modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = category,
-                    onValueChange = { category = it },
-                    label = { Text(languageManager.getString("category_optional")) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row {
-                    Checkbox(checked = cleanUpWithAi, onCheckedChange = { cleanUpWithAi = it })
-                    Text(
-                        languageManager.getString("clean_up_with_ai"),
-                        modifier = Modifier.padding(top = 12.dp)
-                    )
+                ) {
+                    Text(languageManager.getString("send_button"))
                 }
-            }
-
-            Button(
-                onClick = { submit(rawText) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(languageManager.getString(if (pendingRequest != null) "send_button" else "save_to_notes"))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    scanTargets.forEach { target ->
+                        Button(
+                            onClick = {
+                                val trimmed = rawText.trim()
+                                if (trimmed.isNotEmpty()) {
+                                    OcrResultSender.send(
+                                        context, target.packageName,
+                                        VoxOcrResult(task = target.task, status = VoxOcrResult.STATUS_SUCCESS, rawText = trimmed)
+                                    )
+                                    rawText = ""
+                                    Toast.makeText(
+                                        context,
+                                        String.format(languageManager.getString("sent_to_target"), target.label),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(target.label)
+                        }
+                    }
+                }
             }
         }
     }

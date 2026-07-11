@@ -10,11 +10,11 @@ package com.voxapps.ipc
  *  - satellite → Commander (read result): ordered-broadcast `resultData` carrying a [VoxResult] JSON.
  *  - any app → Commander TTS: [ACTION_SPEAK] broadcast carrying text in [EXTRA_QUERY].
  *  - satellite → Commander (generic LLM hook): [ACTION_LLM_PROCESS] broadcast carrying a [VoxLlmRequest]
- *    JSON in [EXTRA_LLM_PAYLOAD], guarded by [LLM_PROCESS_PERMISSION]. Fully asynchronous — Commander
+ *    JSON in [EXTRA_LLM_PAYLOAD], guarded by [PERMISSION_LLM_PROCESS]. Fully asynchronous — Commander
  *    replies later, it does not respond within this broadcast.
  *  - Commander → satellite (LLM result): [ACTION_LLM_RESULT] explicit-intent broadcast (targeted at the
- *    request's `sourcePackage`) carrying a [VoxLlmResult] JSON in [EXTRA_LLM_PAYLOAD], guarded by the
- *    satellite's own [llmResultPermission].
+ *    request's `sourcePackage`) carrying a [VoxLlmResult] JSON in [EXTRA_LLM_PAYLOAD], guarded by
+ *    [PERMISSION_LLM_RESULT].
  *  - satellite → Vision (OCR scan): explicit-intent `startActivity` targeting [VISION_ACTIVITY_CLASS]
  *    (in [VISION_PACKAGE]), carrying a [VoxOcrRequest] JSON in [EXTRA_OCR_PAYLOAD]. Camera capture
  *    needs a live foreground UI; the caller does this from its own foreground UI (e.g. a button tap),
@@ -22,9 +22,16 @@ package com.voxapps.ipc
  *    background-activity-launch restriction there, since that check is evaluated against the
  *    *calling* app's state, not Vision's.
  *  - Vision → satellite (OCR result): [ACTION_OCR_RESULT] explicit-intent broadcast (targeted at the
- *    request's `sourcePackage`) carrying a [VoxOcrResult] JSON in [EXTRA_OCR_PAYLOAD], guarded by the
- *    satellite's own [ocrResultPermission]. Vision only ever returns raw OCR text — classifying it
- *    (note vs. receipt, etc.) is the caller's job via its own follow-up generic-LLM-hook request.
+ *    request's `sourcePackage`) carrying a [VoxOcrResult] JSON in [EXTRA_OCR_PAYLOAD], guarded by
+ *    [PERMISSION_OCR_RESULT]. Vision only ever returns raw OCR text — classifying it (note vs.
+ *    receipt, etc.) is the caller's job via its own follow-up generic-LLM-hook request.
+ *
+ * [PERMISSION_COMMAND]/[PERMISSION_LLM_RESULT]/[PERMISSION_OCR_RESULT]/[PERMISSION_LLM_PROCESS] are
+ * declared (both `<permission>` and the matching `<uses-permission>`) once in this module's own
+ * `AndroidManifest.xml` — manifest merger folds them into every app that depends on `:core:ipc`, so
+ * every Vox app automatically both offers and holds all four, with zero per-app manifest edits ever.
+ * `protectionLevel="signature"` ties the actual grant to "signed with the same developer key", so one
+ * shared name per contract type enforces the identical trust boundary N per-satellite names used to.
  */
 object VoxIpc {
     // --- Actions ---
@@ -72,20 +79,24 @@ object VoxIpc {
      */
     const val META_NLU_HINT = "com.voxapps.vox.nluHint"
 
-    // --- Custom permissions (guard the exported receivers) ---
+    /**
+     * The task-string a satellite's `OcrResultReceiver` advertises via `<meta-data>` — what Vision's
+     * dynamic dispatcher discovery reads to build a "send scan to this app" button, alongside the
+     * standard `queryBroadcastReceivers` capability scan (mirrors [META_DOMAIN] et al.'s pattern, just
+     * scoped to the OCR-result contract instead of the command contract).
+     */
+    const val META_OCR_TASK = "com.voxapps.vox.ocr.task"
+
+    // --- Custom permissions (guard the exported receivers). SPEAK/TRIGGER_VOICE stay Commander-owned
+    // (a different family — TRIGGER_VOICE is deliberately `normal`, for non-Vox external callers like
+    // MacroDroid/Tasker). The four below are shared, declared once in this module's own manifest —
+    // see the class doc comment above.
     const val SPEAK_PERMISSION = "com.voxapps.commander.permission.SPEAK"
 
-    /** The permission a caller must hold to send commands to a satellite package. */
-    fun commandPermission(satellitePackage: String): String = "$satellitePackage.permission.COMMAND"
-
-    /** The permission a caller must hold to send a generic LLM request to Commander. */
-    const val LLM_PROCESS_PERMISSION = "com.voxapps.commander.permission.LLM_PROCESS"
-
-    /** The permission Commander must hold to deliver an async LLM result back to a satellite package. */
-    fun llmResultPermission(satellitePackage: String): String = "$satellitePackage.permission.LLM_RESULT"
-
-    /** The permission Vision must hold to deliver an async OCR result back to a satellite package. */
-    fun ocrResultPermission(satellitePackage: String): String = "$satellitePackage.permission.OCR_RESULT"
+    const val PERMISSION_COMMAND = "com.voxapps.vox.permission.COMMAND"
+    const val PERMISSION_LLM_RESULT = "com.voxapps.vox.permission.LLM_RESULT"
+    const val PERMISSION_OCR_RESULT = "com.voxapps.vox.permission.OCR_RESULT"
+    const val PERMISSION_LLM_PROCESS = "com.voxapps.vox.permission.LLM_PROCESS"
 
     /**
      * Vision's package and pending-scan activity, for satellites that launch Vision's UI directly

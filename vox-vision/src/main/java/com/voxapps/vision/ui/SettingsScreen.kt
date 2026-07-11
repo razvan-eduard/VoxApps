@@ -1,5 +1,6 @@
 package com.voxapps.vision.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,6 +46,9 @@ private val SENSITIVITY_LEVELS = listOf("low", "medium", "high")
 @Composable
 fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
     val languageManager = LocalLanguageManager.current
+
+    // System back mirrors the top-bar arrow: return to the main screen.
+    BackHandler { onBack() }
     val zones = remember { container.ocrModelRegistry.zones() }
     val activeZone by container.settingsRepository.ocrZoneFlow.collectAsStateWithLifecycle(initialValue = null)
     val activeSensitivity by container.settingsRepository.autoTriggerSensitivityFlow.collectAsStateWithLifecycle(

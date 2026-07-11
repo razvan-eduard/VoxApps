@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        Shared signature-level permissions for the Vox IPC contract, declared once here (a module
+        every Vox app already depends on) instead of once per satellite pairing. Manifest merger
+        folds both the <permission> declaration and the matching <uses-permission> into every
+        consuming app automatically — so any app that depends on :core:ipc both offers and holds
+        every permission below, forever, with zero manifest edits. protectionLevel="signature" ties
+        the actual grant to "signed with the same developer key" regardless of the name chosen, which
+        is the same trust boundary the old per-satellite names enforced — this changes bookkeeping,
+        not security.
+    -->
+    <permission android:name="com.voxapps.vox.permission.COMMAND" android:protectionLevel="signature" />
+    <uses-permission android:name="com.voxapps.vox.permission.COMMAND" />
+
+    <permission android:name="com.voxapps.vox.permission.LLM_RESULT" android:protectionLevel="signature" />
+    <uses-permission android:name="com.voxapps.vox.permission.LLM_RESULT" />
+
+    <permission android:name="com.voxapps.vox.permission.OCR_RESULT" android:protectionLevel="signature" />
+    <uses-permission android:name="com.voxapps.vox.permission.OCR_RESULT" />
+
+    <permission android:name="com.voxapps.vox.permission.LLM_PROCESS" android:protectionLevel="signature" />
+    <uses-permission android:name="com.voxapps.vox.permission.LLM_PROCESS" />
+
+</manifest>

@@ -9,10 +9,11 @@ import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
 
 /**
- * Discovery handshake only for now — Vision doesn't consume commands yet (it's a producer of notes
- * via [com.voxapps.vision.domain.NoteForwarder], not a consumer of voice commands). Commander's
- * "Vox Apps" scan pings this to confirm Vision is installed and responding. Guarded by the
- * `com.voxapps.vision.permission.COMMAND` custom permission (declared in the manifest).
+ * Discovery handshake only for now — Vision doesn't consume commands yet (it's an OCR producer,
+ * dispatched via [com.voxapps.vision.domain.ScanTargetDiscovery] and
+ * [com.voxapps.vision.domain.OcrResultSender], not a consumer of voice commands). Commander's "Vox
+ * Apps" scan pings this to confirm Vision is installed and responding. Guarded by the shared
+ * `com.voxapps.vox.permission.COMMAND` custom permission (declared once in `:core:ipc`'s manifest).
  */
 class VisionCommandReceiver : BroadcastReceiver() {
 

@@ -8,32 +8,11 @@
          Needed for the "toast on voice save" setting (the save is headless via broadcast). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!--
-        Custom permission guarding the cross-app command bus. Any app that wants to send Vox
-        commands to Notes must hold it. `signature` = only apps signed with the same key (the
-        monorepo apps) qualify; loosen to `normal` if Commander ships under a different key.
+        The COMMAND/LLM_RESULT/OCR_RESULT/LLM_PROCESS signature permissions guarding the receivers
+        below are declared once in :core:ipc's own manifest (shared across every Vox app) and folded
+        in here automatically via manifest merger — see VoxIpc.kt's class doc comment. No per-app
+        <permission>/<uses-permission> declarations needed here.
     -->
-    <permission
-        android:name="com.voxapps.notes.permission.COMMAND"
-        android:protectionLevel="signature" />
-
-    <!--
-        Guards Notes' own generic-LLM-hook result receiver — only Commander (same signing key) may
-        deliver an async LLM reply here, so a third app can't spoof a fake category-merge suggestion.
-    -->
-    <permission
-        android:name="com.voxapps.notes.permission.LLM_RESULT"
-        android:protectionLevel="signature" />
-
-    <!-- Held so Notes can send a generic LLM request to Commander's hook. -->
-    <uses-permission android:name="com.voxapps.commander.permission.LLM_PROCESS" />
-
-    <!--
-        Guards Notes' OCR-scan result receiver — only Vision (same signing key) may deliver an async
-        scan reply here, so a third app can't spoof fake OCR text into a note.
-    -->
-    <permission
-        android:name="com.voxapps.notes.permission.OCR_RESULT"
-        android:protectionLevel="signature" />
 
     <application
         android:name=".NotesApplication"
@@ -63,7 +42,7 @@
         <receiver
             android:name=".receiver.VoxCommandReceiver"
             android:exported="true"
-            android:permission="com.voxapps.notes.permission.COMMAND">
+            android:permission="com.voxapps.vox.permission.COMMAND">
             <intent-filter>
                 <action android:name="com.voxapps.action.VOX_COMMAND" />
             </intent-filter>
@@ -85,7 +64,7 @@
         <receiver
             android:name=".receiver.LlmResultReceiver"
             android:exported="true"
-            android:permission="com.voxapps.notes.permission.LLM_RESULT">
+            android:permission="com.voxapps.vox.permission.LLM_RESULT">
             <intent-filter>
                 <action android:name="com.voxapps.action.LLM_RESULT" />
             </intent-filter>
@@ -93,16 +72,18 @@
 
         <!--
             OCR-scan result: Vision delivers an async reply here after scanning a document Notes
-            asked it to (the "Scanează o notiță" entry point). Guarded by the OCR_RESULT permission
-            above — only Vision (same signing key) can deliver it.
+            asked it to (the "Scanează o notiță" entry point). Guarded by the shared OCR_RESULT
+            permission — only same-signing-key apps can deliver it. The ocr.task meta-data is what
+            Vision's dynamic "send scan to this app" dispatcher discovery reads to build a button.
         -->
         <receiver
             android:name=".receiver.OcrResultReceiver"
             android:exported="true"
-            android:permission="com.voxapps.notes.permission.OCR_RESULT">
+            android:permission="com.voxapps.vox.permission.OCR_RESULT">
             <intent-filter>
                 <action android:name="com.voxapps.action.OCR_RESULT" />
             </intent-filter>
+            <meta-data android:name="com.voxapps.vox.ocr.task" android:value="NOTE_SCAN_CLEANUP" />
         </receiver>
     </application>
 </manifest>

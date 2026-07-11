@@ -28,6 +28,7 @@
   "settings": "Paramètres",
   "general": "Général",
   "back": "Retour",
+  "press_back_again_to_exit": "Appuyez à nouveau sur retour pour quitter",
   "notifications": "Notifications",
   "voice_save_toast": "Notification lors de l'enregistrement vocal d'une note",
   "voice_save_toast_desc": "Affiche une confirmation (texte + catégorie) quand VoxCommander enregistre une note",

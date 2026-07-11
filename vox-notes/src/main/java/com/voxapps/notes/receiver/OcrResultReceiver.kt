@@ -22,8 +22,8 @@ private const val COMMANDER_PACKAGE = "com.voxapps.commander"
  * Notes' end of Vision's generic OCR hook: receives the raw scanned text back from Vision (the
  * "Scanează o notiță" flow) and forwards it to Commander's generic LLM hook for cleanup — the actual
  * note gets created when that cleanup reply lands in [LlmResultReceiver] (see its
- * `LlmTasks.NOTE_SCAN_CLEANUP` branch). Guarded by Notes' own
- * `com.voxapps.notes.permission.OCR_RESULT` signature permission.
+ * `LlmTasks.NOTE_SCAN_CLEANUP` branch). Guarded by the shared
+ * `com.voxapps.vox.permission.OCR_RESULT` signature permission (declared once in `:core:ipc`).
  */
 class OcrResultReceiver : BroadcastReceiver() {
 
