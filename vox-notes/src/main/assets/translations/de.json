@@ -37,6 +37,7 @@
   "auto_create_voice_category": "Fehlende Kategorien aus Sprache erstellen",
   "auto_create_voice_category_desc": "Wenn du eine nicht vorhandene Kategorie nennst, wird sie (automatisch eingefärbt) erstellt, anstatt zurückzufallen",
   "toast_note_saved": "Notiz gespeichert: %1$s",
+  "scan_save_failed": "Konnte nicht gespeichert werden — bitte erneut versuchen",
   "require_fingerprint": "Fingerabdruck zum Lesen der Notizen erforderlich",
   "require_fingerprint_desc": "Notizen bleiben verschlüsselt gespeichert; dies schützt das Lesen in der App und über VoxCommander",
   "session_timeout": "Sitzungs-Timeout",

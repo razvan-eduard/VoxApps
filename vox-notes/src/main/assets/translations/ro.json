@@ -37,6 +37,7 @@
   "auto_create_voice_category": "Creează automat categoriile lipsă din voce",
   "auto_create_voice_category_desc": "Dacă rostești o categorie care nu există, o creează (colorată automat) în loc să revină la categoria implicită",
   "toast_note_saved": "Notiță salvată: %1$s",
+  "scan_save_failed": "Nu s-a putut salva — încearcă din nou",
   "require_fingerprint": "Necesită amprentă pentru a citi notițele",
   "require_fingerprint_desc": "Notițele rămân criptate; acest lucru condiționează citirea lor în aplicație și prin VoxCommander",
   "session_timeout": "Timp de expirare a sesiunii",

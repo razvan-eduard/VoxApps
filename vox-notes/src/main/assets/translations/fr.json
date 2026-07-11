@@ -37,6 +37,7 @@
   "auto_create_voice_category": "Créer automatiquement les catégories manquantes depuis la voix",
   "auto_create_voice_category_desc": "Si vous mentionnez une catégorie qui n'existe pas, elle est créée (colorée automatiquement) plutôt que d'utiliser la catégorie par défaut",
   "toast_note_saved": "Note enregistrée : %1$s",
+  "scan_save_failed": "Échec de l'enregistrement — veuillez réessayer",
   "require_fingerprint": "Empreinte digitale requise pour lire les notes",
   "require_fingerprint_desc": "Les notes restent chiffrées au repos ; ceci conditionne leur lecture dans l'application et via VoxCommander",
   "session_timeout": "Expiration de session",

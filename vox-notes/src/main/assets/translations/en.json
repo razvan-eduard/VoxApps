@@ -37,6 +37,7 @@
   "auto_create_voice_category": "Create missing categories from voice",
   "auto_create_voice_category_desc": "If you say a category that doesn't exist, create it (auto-colored) instead of falling back",
   "toast_note_saved": "Note saved: %1$s",
+  "scan_save_failed": "Couldn't save — please try again",
   "require_fingerprint": "Require fingerprint to read notes",
   "require_fingerprint_desc": "Notes stay encrypted at rest; this gates reading them in the app and via VoxCommander",
   "session_timeout": "Session timeout",

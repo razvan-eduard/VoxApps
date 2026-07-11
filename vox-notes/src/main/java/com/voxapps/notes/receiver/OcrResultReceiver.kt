@@ -3,6 +3,7 @@ package com.voxapps.notes.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequest
@@ -39,6 +40,11 @@ class OcrResultReceiver : BroadcastReceiver() {
         val rawText = result.rawText
         if (result.status != VoxOcrResult.STATUS_SUCCESS || rawText.isNullOrBlank()) {
             Logger.w(TAG, "Scan failed or empty: ${result.error}")
+            // Unconditional (not gated behind voiceSaveToastEnabled, which is opt-in and off by
+            // default) — a failure toast is the only signal the user has that the scan didn't work,
+            // unlike a success which is also visible as a new list item.
+            val languageManager = (context.applicationContext as NotesApplication).container.languageManager
+            Toast.makeText(context, languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
             return
         }
 

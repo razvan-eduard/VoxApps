@@ -3,6 +3,7 @@ package com.voxapps.notes.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmResult
@@ -59,10 +60,14 @@ class LlmResultReceiver : BroadcastReceiver() {
                 val rawJson = result.rawJson
                 if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
                     Logger.w(TAG, "Note scan cleanup failed: ${result.error}")
+                    // Unconditional (not gated behind voiceSaveToastEnabled) — the only signal the
+                    // user has that the scan didn't produce a note.
+                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
                     return
                 }
                 val cleaned = NoteScanCleanupResultParser.parse(rawJson) ?: run {
                     Logger.w(TAG, "Note scan cleanup: could not parse LLM result. rawJson=$rawJson")
+                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
                     return
                 }
                 Logger.d(TAG, "Note scan cleanup: creating note title=${cleaned.title} category=${cleaned.category}")
