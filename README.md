@@ -15,7 +15,7 @@
 
 ---
 
-> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, and release workflow; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`), **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher), and **`vox-vision`** (a standalone document scanner, `com.voxapps.vision`, camera capture + on-device OCR). A few `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork) are compiled into one or more apps for code reuse — they carry no shared runtime state, just library code. See [Vox Notes](#vox-notes) and [Vox Vision](#vox-vision) below for what those two do; the rest of this README covers `vox-commander`.
+> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, release workflow, and adaptive launcher icon; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`), **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher), **`vox-vision`** (a standalone document scanner, `com.voxapps.vision`, camera capture + on-device OCR), and **`vox-expenses`** (a standalone, encrypted on-device expense tracker, `com.voxapps.expenses`, Room + SQLCipher, voice/receipt/notification-driven capture). A few `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork, `calendar` a shared month-paged agenda view, `apppicker` a shared searchable app-selector card) are compiled into one or more apps for code reuse — they carry no shared runtime state, just library code. See [Vox Notes](#vox-notes), [Vox Vision](#vox-vision), and [Vox Expenses](#vox-expenses) below for what those apps do; the rest of this README covers `vox-commander`.
 
 ## Features
 
@@ -73,7 +73,7 @@ adb shell am start -n com.voxapps.commander/.MainActivity
 
 212 unit tests covering: intent taxonomy, NLU decision map, AppState/AppStateManager, AppSettings (external trigger, return-to-previous-app), model management, search providers, FastMap engine, and more.
 
-> Swap `:vox-commander` for `:vox-notes` or `:vox-vision` in any of the commands above to build/install/test the companion apps instead — each has its own `assembleDebug`/`installDebug`/`testDebugUnitTest` tasks.
+> Swap `:vox-commander` for `:vox-notes`, `:vox-vision`, or `:vox-expenses` in any of the commands above to build/install/test the companion apps instead — each has its own `assembleDebug`/`installDebug`/`testDebugUnitTest` tasks.
 
 ## Download APK
 
@@ -188,8 +188,11 @@ satellite ──VoxLlmRequest{task,promptText}──▶ LlmHookReceiver/Worker (
    └──────────── VoxLlmResult{task,rawJson} ──────────────────┘ (async, explicit intent back to caller)
 ```
 
-Two satellites ship in this repo today: **`vox-notes`** (domain `notes`, actions `create`/`read`) and
-**`vox-vision`** (domain `vision`, a note *producer* rather than a voice-command consumer).
+Three satellites ship in this repo today: **`vox-notes`** (domain `notes`, actions `create`/`read`),
+**`vox-vision`** (domain `vision`, a note/expense *producer* rather than a voice-command consumer), and
+**`vox-expenses`** (domain `expenses`, actions `create`/`read`) — Vision's OCR-cleanup hook can target
+either Notes or Expenses depending on which flow launched the scan (`ocr.task` meta-data on the
+satellite's `OcrResultReceiver`).
 
 ### Vox Notes
 
@@ -206,6 +209,12 @@ through Commander (`create`/`read`) or used entirely on its own.
   clean title/body and a suggested category, then creates the note
 - Editor UI: tap a note's title to expand/collapse it in place (collapse via a dedicated chevron
   above the title, separated from the body by a shaded header)
+- **Calendar view** (optional, off by default) — a month-paged agenda view (shared `:core:calendar`
+  module) instead of the plain chronological list, with a peek into the tail/head of adjacent months
+  and a "Today" button; month/weekday names follow the app's own language setting, not the device locale
+- Category color picker — random colors pick the hue farthest from every existing category instead of
+  a plain random draw, the swatch row scrolls to reach all 10 presets, and the selected swatch gets a
+  clear shadow+ring indicator
 - Multi-language UI (English, Romanian, German, French)
 
 ### Vox Vision
@@ -228,6 +237,42 @@ commands in, only OCR text out.
   above)
 - Works fully standalone (its own launcher icon) or as a **pending-request target** launched directly
   by another satellite for a hands-free "scan → auto-submit" flow
+- Multi-language UI (English, Romanian, German, French)
+
+### Vox Expenses
+
+Standalone, encrypted on-device expense tracker (`com.voxapps.expenses`, Room + SQLCipher). Voice-created
+through Commander (`create`/`read`), scanned from a receipt via Vox Vision, captured automatically from
+bank/payment notifications, or entered by hand.
+
+- **Three capture paths, three prompts** — voice (`ExpenseParsePromptBuilder`), receipt OCR
+  (`ExpenseScanCleanupPromptBuilder` — extracts vendor, bank, per-item net/VAT/gross when printed, and
+  prioritizes the receipt's own printed total over recomputing it from line items), and notification
+  capture (`NotificationExpenseParsePromptBuilder` — a deliberately narrower extraction: title/amount/
+  currency/vendor/category plus an `isPayment` triage flag, since notification text isn't guaranteed to
+  even be a transaction) — all three route through Commander's generic LLM hook, just with different
+  `task` IDs and prompts suited to how much structure each source actually has
+- **Notification capture** — an opt-in `NotificationListenerService` inspects notifications only from
+  apps the user explicitly allowlists (Settings → Notification capture); every candidate expense is a
+  **pending suggestion** the user must approve or dismiss, nothing is ever created automatically. The
+  allowlist picker is a shared `:core:apppicker` card (search + all/user/system filter) backed by a
+  persisted launcher-apps cache — scanned once ever, reloaded from cache on every later launch, with a
+  manual "Rescan Apps" button for when a new app is installed
+- **Line items & VAT** — optional per-item net/VAT/gross breakdown, shown only when enabled (most
+  receipts don't carry this detail); a red warning banner appears if the total doesn't match the sum of
+  line items, without blocking editing
+- **Currency & exchange rates** — a default currency for new expenses, a separate home currency reports
+  convert *into* when expenses mix currencies, and a locale-independent decimal separator setting (comma
+  vs. period) so typed amounts round-trip correctly regardless of device locale
+- **Spending limits** — per-category/per-period budget alerts, checked by a scheduled `WorkManager` job
+  (`SpendingLimitCheckWorker`) and delivered as a system notification
+- **Category auto-merge & expense cleanup** — the same Commander LLM-hook pattern as Vox Notes: auto-merge
+  finds and merges near-duplicate categories, expense cleanup *proposes* duplicate-expense groups for the
+  user to review before anything is deleted; both run on-demand or on a schedule
+- **Calendar view** (optional, off by default) — same shared `:core:calendar` module as Vox Notes, plus
+  bank/vendor filters and an amount ascending/descending sort; sorting by amount isn't chronological, so
+  it temporarily disables the calendar view (a dismissible chip restores it)
+- **Reports** — totals and by-category breakdowns, converted into the home currency
 - Multi-language UI (English, Romanian, German, French)
 
 ## Key Technologies

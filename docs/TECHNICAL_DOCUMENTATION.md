@@ -23,6 +23,7 @@
 17. [Dynamic JSON Configuration](#17-dynamic-json-configuration)
 18. [Dependency Graph](#18-dependency-graph)
 19. [Vox Apps Ecosystem (Cross-App Contract)](#19-vox-apps-ecosystem-cross-app-contract)
+20. [Shared UI Modules (`:core:calendar`, `:core:apppicker`)](#20-shared-ui-modules-corecalendar-coreapppicker)
 
 ---
 
@@ -459,6 +460,8 @@ Fallback handler — launches any app by name or package.
 - **URI templates** — Taken from the matched catalog entries (e.g., a browser `VIEW`/`https` → `https://www.youtube.com/watch?v={query}`).
 
 **The probe catalog is data-driven** — see `IntentCatalog` (`domain/intent/registry/IntentCatalog.kt`), which loads `intents.json` (root → assets → filesDir → remote, hot-reloadable like `models.json`; see §17). A compact hardcoded seed is used only if the asset read fails. The behavioral handlers (§6) stay in code; the catalog only feeds them.
+
+`AppSelectorDropdown.kt` (the domain-app picker UI used by the Default Apps / App Manager / Rules Manager screens) is now a thin wrapper around the shared `:core:apppicker` card component — it keeps Commander-specific concerns (satellite/domain-aware candidate filtering, Spotify OAuth interception) and delegates all rendering (search, all/user/system filter, checkbox+star list) to the shared module. See [§20 Shared UI Modules](#20-shared-ui-modules-corecalendar-coreapppicker).
 
 ### AppResolver (`AppResolver.kt`)
 
@@ -1272,6 +1275,90 @@ receives voice commands (its `VisionCommandReceiver` only answers the discovery 
 | Vision's LLM result receiver | `vox-vision/.../receiver/LlmResultReceiver.kt` |
 | `VisionActivity` (`singleTask` + `onNewIntent`) | `vox-vision/src/main/java/com/voxapps/vision/VisionActivity.kt` |
 | `DocumentCropper` (Otsu live-bounds + strict-quad crop) | `vox-vision/.../ocr/DocumentCropper.kt` |
+
+---
+
+## 20. Shared UI Modules (`:core:calendar`, `:core:apppicker`)
+
+Two more code-reuse-only Gradle modules (same shape as `:core:design`/`:core:wakeword` — no shared
+runtime state, just library code compiled into whichever apps need it) shipped alongside the Vox Apps
+ecosystem work: a calendar/agenda view and a searchable app picker, each consumed by more than one app.
+
+### `:core:calendar`
+
+A month-paged, per-day agenda view (`CalendarView.kt`) built on Compose's `HorizontalPager` — no custom
+paging/fling physics needed, the pager provides deceleration for free. Consumed by both `vox-notes` and
+`vox-expenses` as an opt-in "Calendar view" setting (off by default), replacing their chronological
+`LazyColumn` list.
+
+- **`CalendarItem`** — the only thing the module knows about a caller's data: `id: Any` +
+  `dateTimeMillis: Long`. Each app wraps its own Room-backed model in a `@JvmInline value class`
+  (`NoteCalendarItem`, `ExpenseCalendarItem`) implementing this interface — the module never depends on
+  either app's data classes.
+- **`CalendarDateUtils.bucketByDay()`** — buckets items by day for the *whole* month, including empty
+  days (so scroll position is never ambiguous), and separately computes a small peek window (default 3
+  items) into the tail of the previous month / head of the next — rendered at reduced alpha
+  (`CalendarMonthView`'s `GrayedPeekSection`) and tappable to jump straight to that month+day
+  (`CalendarView.navigateToItem`, via `PagerState.animateScrollToPage` + `LazyListState.animateScrollToItem`).
+- **`MonthYearHeader`** — a fixed, non-scrolling "July 2026"-style label above the day list (month/year
+  is *not* repeated on every day row, unlike a typical calendar list) plus a "Today" `IconButton`
+  (`Icons.Filled.Today`) that jumps back to the current month/day. Both live inside a `Box` (not a
+  `Row`) so the button floats at `Alignment.CenterEnd` without pushing the centered header text off-axis.
+- **`MonthTransitionIndicator`** — a fading center popup naming the month being swiped toward, driven
+  directly by `PagerState.currentPageOffsetFraction` (no separate animation) so it always tracks the
+  live gesture rather than a fixed-duration transition.
+- **Locale**: `CalendarView`/`CalendarMonthView`/`DayHeader`/`MonthYearHeader` all take an explicit
+  `locale: Locale` parameter (default `Locale.getDefault()`) rather than reading `Locale.getDefault()`
+  internally, so a caller can pass its own in-app language setting — matters because the device's system
+  locale and the app's own language setting (each app has its own `LanguageManager`, incompatible
+  between apps, so this module can't own localized strings itself) can differ.
+- **Known limitation** — `CalendarOverscrollPaging.kt` (a `NestedScrollConnection` meant to trigger a
+  month change when overscrolling past the top/bottom of a month, with its own vertical transition) is
+  implemented but **not wired into `CalendarView`** — installing it froze ordinary vertical scrolling
+  entirely on-device (root cause not found). Months currently only change via the pager's own
+  left/right swipe gesture or a peek-item tap. The dead code is left in place as a documented follow-up
+  rather than deleted.
+
+`vox-expenses` additionally layers bank/vendor filters and an amount-ascending/descending sort
+(`ExpenseFilter.kt`, `ExpenseFilterSortSheet.kt`) on top of its list — sorting by amount isn't
+chronological, so it doesn't fit the per-day calendar layout; selecting an amount sort disables the
+calendar view for as long as the sort is active (a dismissible chip lets the user clear it and return).
+
+### `:core:apppicker`
+
+An expandable app-picker card (`AppPickerCard.kt`) — header row summarizing the current selection, tap
+to expand a search box + all/user/system filter dropdown + scrollable list — ported out of
+`vox-commander`'s original `AppSelectorDropdown.kt` (see §7) into a module both `vox-commander` and
+`vox-expenses` now depend on.
+
+- **`AppPickerEntry`** — minimal app-agnostic model (`packageName`, `displayName`, `isSystemApp`).
+  Callers map their own richer type into this: `vox-commander` maps its domain/intent-aware
+  `AppRegistry.AppEntry` (dropping `domains`/`uriTemplates`, which the picker UI doesn't need);
+  `vox-expenses` maps a plain `PackageManager` launcher-app query result.
+- **`AppPickerStrings`** — every UI string the card needs, supplied by the caller from its own
+  `LanguageManager` (each app has its own, mutually incompatible type — the shared module stays free of
+  either app's localization dependency by taking pre-resolved strings instead of a language code).
+- Two overloads: single-select (`selectedPackage: String?`) for `AppManagerTab`/`RulesManagerScreen`,
+  and multi-select-with-optional-default-star (`selectedPackages: List<String>`, `onSetDefault:
+  ((String?) -> Unit)? = null`) for `DefaultAppsTab` and `vox-expenses`' notification-source picker.
+  `onSetDefault = null` omits the star column entirely — the right choice for "which apps' notifications
+  should we inspect for payment info," which has no meaningful "default" concept, unlike "which app
+  plays audio by default."
+- `vox-commander`'s `AppSelectorDropdown.kt` keeps its exact original public signatures (so none of its
+  three call sites needed to change) but is now a thin wrapper: it keeps satellite/domain-aware
+  candidate filtering (`VoxSatelliteRegistry`) and Spotify-OAuth interception locally, maps its richer
+  `AppRegistry.AppEntry` down to `AppPickerEntry`, and delegates all rendering to `AppPickerCard`.
+
+**`vox-expenses`' launcher-apps cache** (`domain/apps/LauncherAppsCache.kt`) — mirrors
+`vox-commander`'s `AppRegistry` cache pattern (§7: scan once, persist as JSON, reload on next launch)
+but is deliberately a much simpler plain object: `vox-expenses`' picker only ever needs a flat launcher-
+app list (`queryIntentActivities(ACTION_MAIN, CATEGORY_LAUNCHER)`), not `AppRegistry`'s per-app
+intent-capability probing, so the scan is cheap enough to run synchronously in `ExpensesContainer`'s
+`init` block (before any UI composes) rather than needing a dedicated splash/progress screen. The
+persisted cache (`ExpensesSettings.appCacheJson`, DataStore-backed) means only the *first-ever* launch
+pays the scan cost; every launch after that just deserializes the cached JSON. A manual "Rescan Apps"
+button in the notification-capture settings screen re-scans on demand (e.g. after installing a new
+banking app) and re-persists the result.
 
 ---
 
