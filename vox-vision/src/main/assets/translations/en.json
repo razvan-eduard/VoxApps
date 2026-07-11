@@ -22,6 +22,10 @@
   "sensitivity_low": "Low (fewer false triggers)",
   "sensitivity_medium": "Medium",
   "sensitivity_high": "High (catches more, may trigger on clutter)",
+  "capture_speed": "Capture speed",
+  "capture_speed_low": "Low (faster, may capture before well-cropped)",
+  "capture_speed_medium": "Medium",
+  "capture_speed_high": "High (waits longer for a well-defined crop)",
   "debug_logging": "Debug logging",
   "debug_logging_desc": "Write debug info to logcat — leave off unless you're troubleshooting an issue"
 }

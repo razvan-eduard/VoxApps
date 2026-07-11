@@ -22,6 +22,10 @@
   "sensitivity_low": "Faible (moins de déclenchements erronés)",
   "sensitivity_medium": "Moyenne",
   "sensitivity_high": "Élevée (détecte plus, peut se déclencher sur du désordre)",
+  "capture_speed": "Vitesse de capture",
+  "capture_speed_low": "Faible (plus rapide, peut capturer avant un bon cadrage)",
+  "capture_speed_medium": "Moyenne",
+  "capture_speed_high": "Élevée (attend plus longtemps un cadrage bien défini)",
   "debug_logging": "Journalisation de débogage",
   "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage"
 }

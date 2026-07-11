@@ -22,6 +22,10 @@
   "sensitivity_low": "Niedrig (weniger Fehlauslösungen)",
   "sensitivity_medium": "Mittel",
   "sensitivity_high": "Hoch (erkennt mehr, kann bei Unordnung auslösen)",
+  "capture_speed": "Aufnahmegeschwindigkeit",
+  "capture_speed_low": "Niedrig (schneller, erfasst evtl. vor gutem Zuschnitt)",
+  "capture_speed_medium": "Mittel",
+  "capture_speed_high": "Hoch (wartet länger auf einen gut definierten Zuschnitt)",
   "debug_logging": "Debug-Protokollierung",
   "debug_logging_desc": "Debug-Informationen ins Logcat schreiben — nur bei der Fehlersuche aktivieren"
 }

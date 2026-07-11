@@ -69,11 +69,23 @@ import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 
-/** Consecutive good-framing analysis ticks required before auto-capture fires. */
-private const val STABILITY_THRESHOLD = 3
-
 /** Throttle for the live framing analysis — running contour detection on every frame is wasteful. */
 private const val ANALYSIS_INTERVAL_MS = 400L
+
+/**
+ * Maps the user's "Capture speed" setting to how many consecutive good-framing analysis ticks are
+ * required before auto-capture fires — separate from [VisionSettingsRepository.autoTriggerSensitivityFlow],
+ * which controls how easily a SINGLE frame counts as "framed" in the first place. At the original
+ * fixed value (3 ticks * 400ms = 1.2s, now "low") capture often fired before the document was
+ * well-cropped/focused, feeding OCR a slightly-off frame and producing garbled text (e.g. a legitimate
+ * item's name coming out as a two-letter fragment) — "high" (7 ticks, ~2.8s) gives the framing more
+ * time to settle first, at the cost of a slower capture.
+ */
+private fun captureStabilityTicks(setting: String): Int = when (setting) {
+    "low" -> 3
+    "high" -> 7
+    else -> 5 // medium / unknown
+}
 
 /**
  * Camera capture -> on-device OCR (PaddleOCR via [VisionContainer.ocrEngineForZone]) -> editable text
@@ -85,12 +97,12 @@ private const val ANALYSIS_INTERVAL_MS = 400L
  * Capture can be triggered manually (the "Scan" button, kept as a fallback for poor lighting or
  * irregular documents) or automatically: a low-frequency [ImageAnalysis] pass reuses
  * [DocumentCropper.hasDocumentQuad] on live preview frames, and once a document-sized quad is found
- * consistently for [STABILITY_THRESHOLD] ticks in a row, capture fires on its own. Auto-capture only
+ * consistently for [captureStabilityTicks] ticks in a row, capture fires on its own. Auto-capture only
  * refills the recognized-text field, same as a manual tap — sending/saving the note is still a
  * deliberate final action, so a document left in frame after a successful auto-scan can't cause a
  * runaway loop of auto-submits (it can still re-trigger a harmless re-scan; the `armed` latch below
  * requires the frame to first go quad-less before arming the next auto-capture, to avoid burning
- * battery re-scanning the same still document every [STABILITY_THRESHOLD] ticks).
+ * battery re-scanning the same still document every [captureStabilityTicks] ticks).
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -207,6 +219,10 @@ fun VisionScreen(
             else -> DocumentCropper.DetectionSensitivity.MEDIUM
         }
     )
+    val stabilitySetting by container.settingsRepository.autoTriggerStabilityFlow.collectAsStateWithLifecycle(
+        initialValue = VisionSettingsRepository.DEFAULT_STABILITY
+    )
+    val stabilityThresholdState = rememberUpdatedState(captureStabilityTicks(stabilitySetting))
 
     LaunchedEffect(cameraController) {
         val stability = intArrayOf(0)
@@ -240,7 +256,7 @@ fun VisionScreen(
                 return@setImageAnalysisAnalyzer
             }
             stability[0]++
-            if (armed[0] && stability[0] >= STABILITY_THRESHOLD) {
+            if (armed[0] && stability[0] >= stabilityThresholdState.value) {
                 armed[0] = false
                 stability[0] = 0
                 liveBounds = null

@@ -22,6 +22,10 @@
   "sensitivity_low": "Scăzută (mai puține declanșări false)",
   "sensitivity_medium": "Medie",
   "sensitivity_high": "Ridicată (detectează mai mult, poate declanșa pe fundal aglomerat)",
+  "capture_speed": "Viteză de captură",
+  "capture_speed_low": "Scăzută (mai rapid, poate captura înainte de decupare bună)",
+  "capture_speed_medium": "Medie",
+  "capture_speed_high": "Ridicată (așteaptă mai mult pentru o decupare bine definită)",
   "debug_logging": "Jurnalizare depanare",
   "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme"
 }

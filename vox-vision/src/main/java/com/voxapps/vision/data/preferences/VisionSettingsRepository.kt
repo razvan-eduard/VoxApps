@@ -18,12 +18,14 @@ class VisionSettingsRepository(context: Context) {
     private object Keys {
         val OCR_ZONE = stringPreferencesKey("ocr_zone")
         val AUTO_TRIGGER_SENSITIVITY = stringPreferencesKey("auto_trigger_sensitivity")
+        val AUTO_TRIGGER_STABILITY = stringPreferencesKey("auto_trigger_stability")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
     }
 
     companion object {
         const val DEFAULT_ZONE = "latin"
         const val DEFAULT_SENSITIVITY = "medium"
+        const val DEFAULT_STABILITY = "medium"
     }
 
     val ocrZoneFlow: Flow<String> = dataStore.data.map { it[Keys.OCR_ZONE] ?: DEFAULT_ZONE }
@@ -43,6 +45,20 @@ class VisionSettingsRepository(context: Context) {
 
     suspend fun setAutoTriggerSensitivity(sensitivity: String) {
         dataStore.edit { it[Keys.AUTO_TRIGGER_SENSITIVITY] = sensitivity }
+    }
+
+    /**
+     * Separate from [autoTriggerSensitivityFlow] — that controls how easily a SINGLE frame counts as
+     * "a document is framed" (contour size threshold); this controls how many CONSECUTIVE good frames
+     * are required before auto-capture actually fires (see [com.voxapps.vision.ui.captureStabilityTicks]).
+     * Low = fires fast but may capture a slightly blurred/not-yet-settled crop; High = waits longer for
+     * a well-defined crop, better OCR quality at the cost of a slower capture.
+     */
+    val autoTriggerStabilityFlow: Flow<String> =
+        dataStore.data.map { it[Keys.AUTO_TRIGGER_STABILITY] ?: DEFAULT_STABILITY }
+
+    suspend fun setAutoTriggerStability(stability: String) {
+        dataStore.edit { it[Keys.AUTO_TRIGGER_STABILITY] = stability }
     }
 
     /** Gates `com.voxapps.logging.Logger` output — off by default so logcat isn't flooded. */

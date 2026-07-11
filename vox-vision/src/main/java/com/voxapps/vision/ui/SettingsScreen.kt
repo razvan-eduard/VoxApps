@@ -35,6 +35,7 @@ import com.voxapps.vision.data.preferences.VisionSettingsRepository
 import kotlinx.coroutines.launch
 
 private val SENSITIVITY_LEVELS = listOf("low", "medium", "high")
+private val STABILITY_LEVELS = listOf("low", "medium", "high")
 
 /**
  * Two picklists: which OCR script/language zone is active (see
@@ -53,6 +54,9 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
     val activeZone by container.settingsRepository.ocrZoneFlow.collectAsStateWithLifecycle(initialValue = null)
     val activeSensitivity by container.settingsRepository.autoTriggerSensitivityFlow.collectAsStateWithLifecycle(
         initialValue = VisionSettingsRepository.DEFAULT_SENSITIVITY
+    )
+    val activeStability by container.settingsRepository.autoTriggerStabilityFlow.collectAsStateWithLifecycle(
+        initialValue = VisionSettingsRepository.DEFAULT_STABILITY
     )
     val debugLoggingEnabled by container.settingsRepository.debugLoggingEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
     var switching by remember { mutableStateOf<String?>(null) }
@@ -116,6 +120,27 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
                 ) {
                     RadioButton(selected = level == activeSensitivity, onClick = null)
                     Text(languageManager.getString("sensitivity_$level"), modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+
+            Text(
+                languageManager.getString("capture_speed"),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 24.dp)
+            )
+            STABILITY_LEVELS.forEach { level ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = level == activeStability,
+                            onClick = { scope.launch { container.settingsRepository.setAutoTriggerStability(level) } }
+                        )
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = level == activeStability, onClick = null)
+                    Text(languageManager.getString("capture_speed_$level"), modifier = Modifier.padding(start = 8.dp))
                 }
             }
 
