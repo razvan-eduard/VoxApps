@@ -86,7 +86,7 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     // Encrypted-at-rest storage: SQLCipher for Room + Keystore-backed passphrase.
-    implementation("net.zetetic:sqlcipher-android:4.6.1")
+    implementation("net.zetetic:sqlcipher-android:4.17.0")
     implementation("androidx.sqlite:sqlite:2.4.0")
     implementation(libs.androidx.security.crypto)
 
