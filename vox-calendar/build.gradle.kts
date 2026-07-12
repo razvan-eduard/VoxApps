@@ -87,7 +87,7 @@ dependencies {
 
     // Encrypted-at-rest storage: SQLCipher for Room + Keystore-backed passphrase.
     implementation("net.zetetic:sqlcipher-android:4.17.0")
-    implementation("androidx.sqlite:sqlite:2.4.0")
+    implementation("androidx.sqlite:sqlite:2.7.0")
     implementation(libs.androidx.security.crypto)
 
     // ICS import/export (Phase 5) — pure-Java, few dependencies, Android-compatible.
