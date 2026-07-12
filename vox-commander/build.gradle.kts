@@ -151,7 +151,7 @@ dependencies {
     // Force ONNX Runtime 1.20.1+ for 16KB page size alignment (required for Android 15+)
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
     // Piper TTS via sherpa-onnx (on-device neural TTS)
-    implementation("com.github.k2-fsa:sherpa-onnx:v1.13.3")
+    implementation("com.github.k2-fsa:sherpa-onnx:v1.13.4")
     // Apache Commons Compress for .tar.bz2 extraction (Piper voice models)
     implementation("org.apache.commons:commons-compress:1.28.0")
     // NewPipe Extractor — YouTube search & video URL parsing (replaces Piped API dependency).
