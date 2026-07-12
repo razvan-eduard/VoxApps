@@ -36,7 +36,7 @@ object ExportImportUtil {
     /** Per-domain record counts for the confirm-before-import summary UI (e.g. "42 notes, 3 categories"). */
     fun summarize(data: JSONObject): Map<String, Int> {
         val counts = mutableMapOf<String, Int>()
-        for (key in listOf("notes", "expenses", "categories", "spendingLimits")) {
+        for (key in listOf("notes", "expenses", "categories", "spendingLimits", "events", "layers")) {
             data.optJSONArray(key)?.let { if (it.length() > 0) counts[key] = it.length() }
         }
         return counts
