@@ -42,7 +42,9 @@ android {
 val autoCompileOpenCv = tasks.register<Exec>("autoCompileOpenCv") {
     group = "build"
     description = "Builds OpenCV (core, imgproc, imgcodecs; arm64-v8a) from source if not already built."
-    commandLine("sh", "${project.rootDir}/scripts/build_opencv_android.sh")
+    // Must run under bash, not sh — CI runners' /bin/sh is dash, which doesn't support the
+    // script's "set -o pipefail" and fails immediately with "Illegal option -o pipefail".
+    commandLine("bash", "${project.rootDir}/scripts/build_opencv_android.sh")
 }
 
 tasks.named("preBuild") {
