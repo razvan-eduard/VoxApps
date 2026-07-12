@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Android 13+ suppresses toasts/notifications from backgrounded apps unless allowed — needed
+         once a headless voice/LLM-created event wants to surface a toast. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        The COMMAND/LLM_RESULT/LLM_PROCESS signature permissions guarding the receivers below are
+        declared once in :core:ipc's own manifest (shared across every Vox app) and folded in here
+        automatically via manifest merger — see VoxIpc.kt's class doc comment. No per-app
+        <permission>/<uses-permission> declarations needed here.
+    -->
+
+    <application
+        android:name=".CalendarApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VoxCalendar">
+
+        <activity
+            android:name=".CalendarActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+
+            <!-- Standalone launcher: works fully without VoxCommander -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            OPTIONAL Vox integration: VoxCommander (or any authorized app) hands us a JSON command
+            (create/read — export/import land in Phase 6) via this native broadcast. Parsed with
+            :core:ipc — no shared runtime, no NLU here.
+        -->
+        <receiver
+            android:name=".receiver.VoxCommandReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.vox.permission.COMMAND">
+            <intent-filter>
+                <action android:name="com.voxapps.action.VOX_COMMAND" />
+            </intent-filter>
+            <!-- Capability advertising: Commander reads this at scan time to route the "calendar"
+                 NLU domain here, with no per-app config on Commander's side. -->
+            <meta-data android:name="com.voxapps.vox.domain" android:value="calendar" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import" />
+            <meta-data android:name="com.voxapps.vox.label" android:value="Calendar" />
+            <meta-data
+                android:name="com.voxapps.vox.nluHint"
+                android:value="If the user names a target calendar (e.g. &quot;add to my Work calendar&quot;, &quot;pe calendarul de acasă&quot;), put that calendar's name in the category field; otherwise category=null. Put everything else the user said about the event or task (title, date, time, location, anything mentioned) into the text field verbatim — do not try to resolve relative dates yourself, that happens separately." />
+        </receiver>
+
+        <!--
+            Generic LLM hook result: Commander delivers an async reply here after parsing a raw
+            spoken utterance into an event/task. Guarded by the LLM_RESULT permission above — only
+            Commander (same signing key) can deliver it.
+        -->
+        <receiver
+            android:name=".receiver.LlmResultReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.vox.permission.LLM_RESULT">
+            <intent-filter>
+                <action android:name="com.voxapps.action.LLM_RESULT" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

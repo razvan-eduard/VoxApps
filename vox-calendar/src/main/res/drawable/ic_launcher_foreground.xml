@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.9429"
+        android:scaleY="0.9429"
+        android:translateX="6.8571"
+        android:translateY="6.8571">
+        <!-- Binding tabs -->
+        <path android:fillColor="#FFFFFF" android:pathData="M 36 14 H 40 A 2 2 0 0 1 42 16 V 28 A 2 2 0 0 1 40 30 H 36 A 2 2 0 0 1 34 28 V 16 A 2 2 0 0 1 36 14 Z"/>
+        <path android:fillColor="#FFFFFF" android:pathData="M 68 14 H 72 A 2 2 0 0 1 74 16 V 28 A 2 2 0 0 1 72 30 H 68 A 2 2 0 0 1 66 28 V 16 A 2 2 0 0 1 68 14 Z"/>
+        <!-- Page body -->
+        <path android:fillColor="#FFFFFF" android:pathData="M 26 22 H 82 A 4 4 0 0 1 86 26 V 84 A 4 4 0 0 1 82 88 H 26 A 4 4 0 0 1 22 84 V 26 A 4 4 0 0 1 26 22 Z"/>
+        <!-- Header strip -->
+        <path android:fillColor="#FFCA28" android:pathData="M 22 26 A 4 4 0 0 1 26 22 H 82 A 4 4 0 0 1 86 26 V 38 H 22 Z"/>
+        <!-- Day-cell grid -->
+        <path android:fillColor="#3949AB" android:pathData="M 30 46 H 40 V 54 H 30 Z"/>
+        <path android:fillColor="#3949AB" android:pathData="M 49 46 H 59 V 54 H 49 Z"/>
+        <path android:fillColor="#3949AB" android:pathData="M 68 46 H 78 V 54 H 68 Z"/>
+        <path android:fillColor="#3949AB" android:pathData="M 30 63 H 40 V 71 H 30 Z"/>
+        <path android:fillColor="#EF5350" android:pathData="M 49 63 H 59 V 71 H 49 Z"/>
+        <path android:fillColor="#3949AB" android:pathData="M 68 63 H 78 V 71 H 68 Z"/>
+    </group>
+</vector>
