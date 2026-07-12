@@ -5,6 +5,7 @@ import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.voxapps.expenses.ExpensesApplication
+import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParsePromptBuilder
 import com.voxapps.ipc.VoxIpc
@@ -44,6 +45,13 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         if (title.isNullOrBlank() && text.isNullOrBlank()) return
 
+        // Deterministic, not a guess: the user explicitly starred this exact package as a bank app.
+        val knownBankName = if (sbn.packageName in settings.bankingSourcePackages) {
+            LauncherAppsCache.cachedApps.find { it.packageName == sbn.packageName }?.displayName
+        } else {
+            null
+        }
+
         Logger.d(TAG, "Captured notification from ${sbn.packageName}, forwarding for LLM triage")
         CoroutineScope(Dispatchers.IO).launch {
             val existingCategories = container.expensesRepository.categories.first().map { it.name }
@@ -52,7 +60,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
                 notificationText = text,
                 existingCategories = existingCategories,
                 defaultCurrency = settings.defaultCurrency,
-                languageCode = settings.language
+                languageCode = settings.language,
+                knownBankName = knownBankName
             )
             val payload = VoxLlmRequest(
                 sourcePackage = packageName,

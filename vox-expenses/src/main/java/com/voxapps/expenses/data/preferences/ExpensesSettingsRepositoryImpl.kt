@@ -34,6 +34,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val SCHEDULED_EXPENSE_DEDUP_INTERVAL = stringPreferencesKey("scheduled_expense_dedup_interval")
         val HOME_CURRENCY = stringPreferencesKey("home_currency")
         val PAYMENT_SOURCE_PACKAGES = stringSetPreferencesKey("payment_source_packages")
+        val BANKING_SOURCE_PACKAGES = stringSetPreferencesKey("banking_source_packages")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val VAT_DISPLAY_ENABLED = booleanPreferencesKey("vat_display_enabled")
         val DECIMAL_SEPARATOR = stringPreferencesKey("decimal_separator")
@@ -54,6 +55,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             scheduledExpenseDedupInterval = prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             homeCurrency = prefs[Keys.HOME_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
             paymentSourcePackages = prefs[Keys.PAYMENT_SOURCE_PACKAGES] ?: emptySet(),
+            bankingSourcePackages = prefs[Keys.BANKING_SOURCE_PACKAGES] ?: emptySet(),
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
             vatDisplayEnabled = prefs[Keys.VAT_DISPLAY_ENABLED] ?: false,
             decimalSeparator = prefs[Keys.DECIMAL_SEPARATOR] ?: ExpensesSettings.DECIMAL_PERIOD,
@@ -116,7 +118,16 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     }
 
     override suspend fun setPaymentSourcePackages(packages: Set<String>) {
-        dataStore.edit { it[Keys.PAYMENT_SOURCE_PACKAGES] = packages }
+        dataStore.edit {
+            it[Keys.PAYMENT_SOURCE_PACKAGES] = packages
+            // A starred (banking) app can't stay starred once it's no longer even allowlisted.
+            val currentBanking = it[Keys.BANKING_SOURCE_PACKAGES] ?: emptySet()
+            it[Keys.BANKING_SOURCE_PACKAGES] = currentBanking.intersect(packages)
+        }
+    }
+
+    override suspend fun setBankingSourcePackages(packages: Set<String>) {
+        dataStore.edit { it[Keys.BANKING_SOURCE_PACKAGES] = packages }
     }
 
     override suspend fun setDebugLoggingEnabled(enabled: Boolean) {
@@ -141,6 +152,32 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
 
     override suspend fun clearAppCache() {
         dataStore.edit { it.remove(Keys.APP_CACHE_JSON) }
+    }
+
+    override suspend fun restoreSettings(settings: ExpensesSettings) {
+        dataStore.edit { prefs ->
+            prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
+            prefs[Keys.SESSION_TIMEOUT_MINUTES] = settings.sessionTimeoutMinutes
+            prefs[Keys.LANGUAGE] = settings.language
+            prefs[Keys.DEFAULT_CURRENCY] = settings.defaultCurrency
+            if (settings.defaultVoiceCategoryId == null) {
+                prefs.remove(Keys.DEFAULT_VOICE_CATEGORY_ID)
+            } else {
+                prefs[Keys.DEFAULT_VOICE_CATEGORY_ID] = settings.defaultVoiceCategoryId
+            }
+            prefs[Keys.VOICE_SAVE_TOAST_ENABLED] = settings.voiceSaveToastEnabled
+            prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] = settings.autoCreateVoiceCategory
+            prefs[Keys.SCHEDULED_MERGE_INTERVAL] = settings.scheduledMergeInterval
+            prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] = settings.scheduledExpenseDedupInterval
+            prefs[Keys.HOME_CURRENCY] = settings.homeCurrency
+            prefs[Keys.PAYMENT_SOURCE_PACKAGES] = settings.paymentSourcePackages
+            prefs[Keys.BANKING_SOURCE_PACKAGES] = settings.bankingSourcePackages
+            prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
+            prefs[Keys.VAT_DISPLAY_ENABLED] = settings.vatDisplayEnabled
+            prefs[Keys.DECIMAL_SEPARATOR] = settings.decimalSeparator
+            prefs[Keys.CALENDAR_VIEW_ENABLED] = settings.calendarViewEnabled
+            // appCacheJson intentionally untouched — see interface doc comment.
+        }
     }
 
     private fun defaultDeviceLanguage(): String =

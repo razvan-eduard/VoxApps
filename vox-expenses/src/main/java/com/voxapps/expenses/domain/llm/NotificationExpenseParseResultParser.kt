@@ -14,7 +14,8 @@ object NotificationExpenseParseResultParser {
         val totalAmount: Double,
         val currency: String?,
         val vendor: String?,
-        val category: String?
+        val category: String?,
+        val bank: String?
     )
 
     fun parse(json: String): Parsed? = try {
@@ -33,7 +34,8 @@ object NotificationExpenseParseResultParser {
                 totalAmount = totalAmount,
                 currency = o.optString("currency").takeIf { it.isNotBlank() },
                 vendor = o.optString("vendor").takeIf { it.isNotBlank() },
-                category = o.optString("category").takeIf { it.isNotBlank() }
+                category = o.optString("category").takeIf { it.isNotBlank() },
+                bank = o.optString("bank").takeIf { it.isNotBlank() }
             )
         }
     } catch (e: Exception) {

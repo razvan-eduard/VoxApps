@@ -18,7 +18,10 @@ data class PendingNotificationExpense(
     val currency: String,
     val vendor: String?,
     val category: String?,
-    val capturedAt: Long
+    val capturedAt: Long,
+    /** Set deterministically when the notification came from a starred (banking) source app —
+     *  see [com.voxapps.expenses.receiver.PaymentNotificationListenerService]. */
+    val bank: String? = null
 )
 
 /**
@@ -72,6 +75,7 @@ class PendingNotificationExpenseRepository(context: Context) {
             o.put("currency", e.currency)
             e.vendor?.let { o.put("vendor", it) }
             e.category?.let { o.put("category", it) }
+            e.bank?.let { o.put("bank", it) }
             o.put("capturedAt", e.capturedAt)
             array.put(o)
         }
@@ -89,6 +93,7 @@ class PendingNotificationExpenseRepository(context: Context) {
                 currency = o.optString("currency"),
                 vendor = if (o.has("vendor")) o.optString("vendor") else null,
                 category = if (o.has("category")) o.optString("category") else null,
+                bank = if (o.has("bank")) o.optString("bank") else null,
                 capturedAt = o.optLong("capturedAt")
             )
         }

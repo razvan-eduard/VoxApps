@@ -121,6 +121,7 @@ class ExpensesStateManager internal constructor(
     }
     fun setHomeCurrency(code: String) { scope.launch { settingsRepo.setHomeCurrency(code) } }
     fun setPaymentSourcePackages(packages: Set<String>) { scope.launch { settingsRepo.setPaymentSourcePackages(packages) } }
+    fun setBankingSourcePackages(packages: Set<String>) { scope.launch { settingsRepo.setBankingSourcePackages(packages) } }
     fun setDebugLoggingEnabled(enabled: Boolean) {
         Logger.setEnabled(enabled)
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }
@@ -260,7 +261,7 @@ class ExpensesStateManager internal constructor(
                 totalAmount = entry.totalAmount,
                 currencyCode = entry.currency,
                 vendor = entry.vendor,
-                bank = null,
+                bank = entry.bank,
                 location = null,
                 comments = null,
                 dateTime = entry.capturedAt,

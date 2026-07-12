@@ -136,6 +136,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 currency = parsed.currency ?: settings.defaultCurrency,
                                 vendor = parsed.vendor,
                                 category = parsed.category,
+                                bank = parsed.bank,
                                 capturedAt = System.currentTimeMillis()
                             )
                         )

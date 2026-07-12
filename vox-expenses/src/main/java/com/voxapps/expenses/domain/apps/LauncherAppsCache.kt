@@ -1,7 +1,6 @@
 package com.voxapps.expenses.domain.apps
 
 import android.content.Context
-import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import com.voxapps.apppicker.AppPickerEntry
@@ -11,13 +10,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * In-memory + persisted cache of launcher apps for [com.voxapps.apppicker.AppPickerCard] callers
- * (currently just the notification-source picker). Scanning is a single `queryIntentActivities`
- * call — unlike vox-commander's [com.voxapps.commander.domain.intent.registry.AppRegistry], there's
- * no per-app intent probing here, so this stays a plain object rather than needing a dedicated splash
- * screen: [ExpensesContainer][com.voxapps.expenses.di.ExpensesContainer] warms it synchronously at
- * app startup (before any UI composes), and the persisted [toJsonCache] copy means even that first
- * scan is skipped on every launch after the first.
+ * In-memory + persisted cache of installed apps for [com.voxapps.apppicker.AppPickerCard] callers
+ * (currently just the notification-source picker). Scanning is a single `getInstalledApplications`
+ * call, same API vox-commander's [com.voxapps.commander.domain.intent.registry.AppRegistry] uses —
+ * unlike that class there's no per-app intent probing here, so this stays a plain object rather than
+ * needing a dedicated splash screen: [ExpensesContainer][com.voxapps.expenses.di.ExpensesContainer]
+ * warms it synchronously at app startup (before any UI composes), and the persisted [toJsonCache]
+ * copy means even that first scan is skipped on every launch after the first.
  */
 object LauncherAppsCache {
 
@@ -33,13 +32,17 @@ object LauncherAppsCache {
     fun scan(context: Context) {
         _scanStatus.value = ScanStatus.SCANNING
         val pm = context.packageManager
-        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        apps = pm.queryIntentActivities(launcherIntent, PackageManager.MATCH_DEFAULT_ONLY)
+        // getInstalledApplications, not queryIntentActivities(MAIN+LAUNCHER): confirmed on-device
+        // that this OEM's package-visibility layer filters intent-resolution queries more
+        // aggressively than raw package enumeration for some apps (banking apps specifically —
+        // Revolut/ING never appeared via queryIntentActivities despite QUERY_ALL_PACKAGES being
+        // granted). Mirrors vox-commander's AppRegistry.init(), which has always worked correctly.
+        apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
             .map {
                 AppPickerEntry(
-                    packageName = it.activityInfo.packageName,
-                    displayName = it.loadLabel(pm).toString(),
-                    isSystemApp = (it.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                    packageName = it.packageName,
+                    displayName = pm.getApplicationLabel(it).toString(),
+                    isSystemApp = (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0
                 )
             }
             .distinctBy { it.packageName }

@@ -51,6 +51,7 @@ import java.util.Date
 @Composable
 fun NotificationCaptureSettingsTab(
     paymentSourcePackages: Set<String>,
+    bankingSourcePackages: Set<String>,
     stateManager: ExpensesStateManager,
     settingsRepo: ExpensesSettingsRepository,
     modifier: Modifier = Modifier
@@ -83,8 +84,10 @@ fun NotificationCaptureSettingsTab(
             defaultAppSummaryFormat = languageManager.getString("default_app_summary"),
             appsSelectedNoDefaultFormat = languageManager.getString("apps_selected_no_default"),
             selected = languageManager.getString("selected"),
-            setAsDefault = languageManager.getString("set_as_default"),
-            removeDefault = languageManager.getString("remove_default")
+            // This screen's star toggle means "this is a bank app", not "the default app" — the
+            // shared AppPickerCard star icon is generic, only the wording passed in here differs.
+            setAsDefault = languageManager.getString("mark_as_bank"),
+            removeDefault = languageManager.getString("unmark_as_bank")
         )
     }
 
@@ -158,8 +161,15 @@ fun NotificationCaptureSettingsTab(
             strings = appPickerStrings,
             modifier = Modifier.fillMaxWidth(),
             label = languageManager.getString("payment_source_apps_label"),
-            defaultPackage = null,
-            onSetDefault = null
+            starredPackages = bankingSourcePackages,
+            onToggleStar = { packageName ->
+                val updated = if (packageName in bankingSourcePackages) {
+                    bankingSourcePackages - packageName
+                } else {
+                    bankingSourcePackages + packageName
+                }
+                stateManager.setBankingSourcePackages(updated)
+            }
         )
 
         if (pendingEntries.isNotEmpty()) {
@@ -175,6 +185,7 @@ fun NotificationCaptureSettingsTab(
                         )
                         Text(
                             formatAmount(entry.totalAmount, entry.currency) +
+                                (entry.bank?.let { " · $it" } ?: "") +
                                 (entry.category?.let { " · $it" } ?: "") +
                                 " · " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.capturedAt)),
                             style = MaterialTheme.typography.bodySmall,

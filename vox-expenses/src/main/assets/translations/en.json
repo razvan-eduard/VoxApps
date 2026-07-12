@@ -153,6 +153,8 @@
   "selected": "Selected",
   "set_as_default": "Set as default",
   "remove_default": "Remove default",
+  "mark_as_bank": "Mark as bank",
+  "unmark_as_bank": "Unmark as bank",
   "rescan_apps": "Rescan Apps",
   "sort_newest": "Newest first",
   "sort_oldest": "Oldest first",

@@ -26,6 +26,10 @@ import androidx.compose.runtime.Immutable
  *   [com.voxapps.expenses.receiver.PaymentNotificationListenerService] is allowed to inspect —
  *   defaults to empty (nothing processed until the user explicitly picks apps), since that service
  *   can otherwise see every notification on the device.
+ * - [bankingSourcePackages]: the subset of [paymentSourcePackages] the user has starred as "this is
+ *   definitely a bank app" — when a captured notification comes from one of these,
+ *   [com.voxapps.expenses.receiver.PaymentNotificationListenerService] tells the LLM that app's
+ *   name authoritatively rather than leaving `bank` to be guessed from raw notification text.
  * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output — off by default.
  * - [vatDisplayEnabled]: shows the optional per-line-item net/VAT/gross breakdown (see
  *   `ExpenseLineItem.netAmount`/`vatAmount`/`grossAmount`) on the edit screen — off by default since
@@ -56,6 +60,7 @@ data class ExpensesSettings(
     val scheduledExpenseDedupInterval: String = INTERVAL_OFF,
     val homeCurrency: String = DEFAULT_CURRENCY,
     val paymentSourcePackages: Set<String> = emptySet(),
+    val bankingSourcePackages: Set<String> = emptySet(),
     val debugLoggingEnabled: Boolean = false,
     val vatDisplayEnabled: Boolean = false,
     val decimalSeparator: String = DECIMAL_PERIOD,

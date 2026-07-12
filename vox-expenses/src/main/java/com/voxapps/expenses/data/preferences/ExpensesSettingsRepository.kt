@@ -23,10 +23,18 @@ interface ExpensesSettingsRepository {
     suspend fun setScheduledExpenseDedupInterval(interval: String)
     suspend fun setHomeCurrency(code: String)
     suspend fun setPaymentSourcePackages(packages: Set<String>)
+    suspend fun setBankingSourcePackages(packages: Set<String>)
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
     suspend fun setVatDisplayEnabled(enabled: Boolean)
     suspend fun setDecimalSeparator(separator: String)
     suspend fun setCalendarViewEnabled(enabled: Boolean)
     suspend fun setAppCache(json: String)
     suspend fun clearAppCache()
+
+    /**
+     * Bulk overwrite, e.g. from a Vox Hub import — writes every portable field in one DataStore edit.
+     * Deliberately never touches [ExpensesSettings.appCacheJson] (an internal cache, not user data;
+     * see its own doc comment) regardless of what [settings] carries for that field.
+     */
+    suspend fun restoreSettings(settings: ExpensesSettings)
 }

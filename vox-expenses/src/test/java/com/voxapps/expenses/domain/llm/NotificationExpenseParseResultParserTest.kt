@@ -16,6 +16,23 @@ class NotificationExpenseParseResultParserTest {
         assertEquals("RON", result.currency)
         assertEquals("Lidl", result.vendor)
         assertEquals("Mancare", result.category)
+        assertNull(result.bank)
+    }
+
+    @Test
+    fun `parses the bank field when the LLM echoes back a known bank name`() {
+        val json = """{"isPayment":true,"title":"Card payment","totalAmount":45.9,"currency":"RON","vendor":"Lidl","category":"Mancare","bank":"Revolut"}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertEquals("Revolut", result.bank)
+    }
+
+    @Test
+    fun `blank bank field is treated as null, same as the other optional fields`() {
+        val json = """{"isPayment":true,"totalAmount":45.9,"bank":""}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertNull(result.bank)
     }
 
     @Test

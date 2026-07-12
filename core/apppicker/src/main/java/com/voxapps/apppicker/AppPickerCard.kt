@@ -134,9 +134,11 @@ fun AppPickerCard(
 }
 
 /**
- * Multi-select variant with optional default-star support. [onSetDefault] `null` omits the star
- * column entirely — the right choice when the selection has no meaningful "default" concept (e.g.
- * "which apps' notifications should we inspect" has no single default app).
+ * Multi-select variant with optional star support — either a single "default" app
+ * ([defaultPackage]/[onSetDefault]) or a set of independently-toggled starred apps
+ * ([starredPackages]/[onToggleStar], e.g. "which of these payment apps are banks"). At most one of
+ * the two star modes should be wired up per call site; leaving both null omits the star column
+ * entirely (the right choice when the selection has no meaningful "starred" concept at all).
  */
 @Composable
 fun AppPickerCard(
@@ -148,7 +150,9 @@ fun AppPickerCard(
     label: String = "Select apps",
     initialFilterMode: String = "all",
     defaultPackage: String? = null,
-    onSetDefault: ((String?) -> Unit)? = null
+    onSetDefault: ((String?) -> Unit)? = null,
+    starredPackages: Set<String> = emptySet(),
+    onToggleStar: ((String) -> Unit)? = null
 ) {
     val selectedApps = apps.filter { it.packageName in selectedPackages }
     val defaultApp = selectedApps.find { it.packageName == defaultPackage }
@@ -201,7 +205,9 @@ fun AppPickerCard(
                     initialFilterMode = initialFilterMode,
                     strings = strings,
                     onToggleApp = onToggleApp,
-                    onSetDefault = onSetDefault
+                    onSetDefault = onSetDefault,
+                    starredPackages = starredPackages,
+                    onToggleStar = onToggleStar
                 )
             }
         }
@@ -297,7 +303,9 @@ private fun AppPickerListMulti(
     initialFilterMode: String,
     strings: AppPickerStrings,
     onToggleApp: (String) -> Unit,
-    onSetDefault: ((String?) -> Unit)?
+    onSetDefault: ((String?) -> Unit)?,
+    starredPackages: Set<String> = emptySet(),
+    onToggleStar: ((String) -> Unit)? = null
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var currentFilter by remember { mutableStateOf(initialFilterMode) }
@@ -346,6 +354,7 @@ private fun AppPickerListMulti(
             filteredApps.forEach { app ->
                 val isSelected = app.packageName in selectedPackages
                 val isDefault = app.packageName == defaultPackage
+                val isStarred = app.packageName in starredPackages
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable { onToggleApp(app.packageName) }.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -355,7 +364,15 @@ private fun AppPickerListMulti(
                         Text(app.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(app.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    if (isSelected && onSetDefault != null) {
+                    if (isSelected && onToggleStar != null) {
+                        IconButton(onClick = { onToggleStar(app.packageName) }) {
+                            Icon(
+                                imageVector = if (isStarred) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                                contentDescription = if (isStarred) strings.removeDefault else strings.setAsDefault,
+                                tint = if (isStarred) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (isSelected && onSetDefault != null) {
                         IconButton(onClick = { onSetDefault(if (isDefault) null else app.packageName) }) {
                             Icon(
                                 imageVector = if (isDefault) Icons.Filled.Star else Icons.Outlined.StarBorder,

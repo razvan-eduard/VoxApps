@@ -153,6 +153,8 @@
   "selected": "Selectat",
   "set_as_default": "Setează ca implicit",
   "remove_default": "Elimină implicit",
+  "mark_as_bank": "Marchează ca bancă",
+  "unmark_as_bank": "Anulează marcarea ca bancă",
   "rescan_apps": "Rescanează aplicații",
   "sort_newest": "Cele mai noi primele",
   "sort_oldest": "Cele mai vechi primele",

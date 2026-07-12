@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Expenses live on-device; the only network use is Stage 5's exchange-rate lookup at
          reporting time (never per-expense), a plain outbound HTTPS GET to exchangerate-api.com. -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Without this, queryIntentActivities() (LauncherAppsCache's notification-source app scan)
+         is silently restricted by Android 11+ package-visibility filtering to a small OS-chosen
+         set of "automatically visible" apps rather than every installed app — mirrors
+         vox-commander's identical declaration for its own app registry/picker. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- Android 13+ suppresses toasts from backgrounded apps unless notifications are allowed.
@@ -53,7 +61,7 @@
             <!-- Capability advertising: Commander reads this at scan time to route the "expenses"
                  NLU domain here (create/read), with no per-app config on Commander's side. -->
             <meta-data android:name="com.voxapps.vox.domain" android:value="expenses" />
-            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Expenses" />
             <meta-data
                 android:name="com.voxapps.vox.nluHint"
