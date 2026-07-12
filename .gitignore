@@ -85,3 +85,9 @@ google-services.json
 # OpenCV build output copied into ppocr-sdk by the autoCompileOpenCv Gradle task — regenerated
 # from vendor/opencv, not source vendor/ppocr-sdk maintains itself.
 /vendor/ppocr-sdk/opencv/
+
+# Release signing keystore — never committed. Decoded from a GitHub Actions secret in CI
+# (RELEASE_KEYSTORE_BASE64); local release builds are unsigned unless you set
+# RELEASE_KEYSTORE_PATH/RELEASE_KEYSTORE_PASSWORD yourself.
+*.jks
+*.keystore

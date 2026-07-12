@@ -15,9 +15,28 @@ android {
         versionName = "0.1"
     }
 
+    // CI-only release signing: RELEASE_KEYSTORE_PATH is only set in the release-*.yml workflows
+    // (decoded from a GitHub Actions secret there), so local `./gradlew assembleRelease` without it
+    // still produces an unsigned APK exactly as before. Vision has no release-vision.yml workflow yet
+    // (unlike its siblings), but this keeps it ready for when one's added.
+    val releaseKeystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
+    signingConfigs {
+        if (releaseKeystorePath != null) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = "vox-vision"
+                keyPassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseKeystorePath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

@@ -86,7 +86,10 @@ git push origin v1.1
 ```
 GitHub Actions will build the APK and publish it as a release automatically.
 
-> **Note**: Release APKs are unsigned. Install via `adb install VoxCommander-v*.apk` or enable "Install unknown apps" on your device.
+> **Note**: Release APKs are signed with a consistent per-app release key (so device updates work
+> seamlessly across versions). Install via `adb install VoxCommander-v*.apk` or enable "Install unknown
+> apps" on your device. Local `./gradlew assembleRelease` builds outside CI are unsigned unless you set
+> `RELEASE_KEYSTORE_PATH`/`RELEASE_KEYSTORE_PASSWORD` yourself.
 
 ### First Run Setup
 
@@ -481,7 +484,12 @@ Enable/disable in Settings → App Manager → External voice trigger toggle.
 
 ## License
 
-This project is for personal use. See individual library licenses for third-party dependencies.
+MIT — see [`LICENSE`](LICENSE). This covers the code in this repository; third-party dependencies keep
+their own licenses (see [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md) for the
+vendored/patched ones). `vox-commander` additionally bundles two proprietary components not covered by
+the MIT license above: the Spotify App Remote SDK (`vox-commander/libs/spotify-app-remote.aar`) and
+Picovoice Porcupine (`ai.picovoice:porcupine-android`) — both closed-source, each under its own vendor
+license.
 
 ## Contributing
 

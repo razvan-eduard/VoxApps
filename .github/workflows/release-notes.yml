@@ -50,8 +50,15 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         run: ./gradlew :vox-notes:testDebugUnitTest --no-daemon
 
+      - name: Decode signing keystore
+        if: steps.check_bump.outputs.changed != 'false'
+        run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+
       - name: Build release APK
         if: steps.check_bump.outputs.changed != 'false'
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
         run: ./gradlew :vox-notes:assembleRelease --no-daemon
 
       - name: Determine version tag
@@ -69,7 +76,7 @@ jobs:
       - name: Rename APK with tag
         if: steps.check_bump.outputs.changed != 'false'
         run: |
-          cp vox-notes/build/outputs/apk/release/vox-notes-release-unsigned.apk \
+          cp vox-notes/build/outputs/apk/release/vox-notes-release.apk \
              VoxNotes-${{ steps.version.outputs.tag }}.apk
 
       - name: Create GitHub Release
