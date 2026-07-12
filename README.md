@@ -15,7 +15,7 @@
 
 ---
 
-> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, release workflow, and adaptive launcher icon; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`), **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher), **`vox-vision`** (a standalone document scanner, `com.voxapps.vision`, camera capture + on-device OCR), and **`vox-expenses`** (a standalone, encrypted on-device expense tracker, `com.voxapps.expenses`, Room + SQLCipher, voice/receipt/notification-driven capture). A few `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork, `calendar` a shared month-paged agenda view, `apppicker` a shared searchable app-selector card) are compiled into one or more apps for code reuse — they carry no shared runtime state, just library code. See [Vox Notes](#vox-notes), [Vox Vision](#vox-vision), and [Vox Expenses](#vox-expenses) below for what those apps do; the rest of this README covers `vox-commander`.
+> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, release workflow, and adaptive launcher icon; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`), **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher), **`vox-vision`** (a standalone document scanner, `com.voxapps.vision`, camera capture + on-device OCR), **`vox-expenses`** (a standalone, encrypted on-device expense tracker, `com.voxapps.expenses`, Room + SQLCipher, voice/receipt/notification-driven capture), **`vox-calendar`** (a standalone, encrypted on-device calendar, `com.voxapps.calendar`, Room + SQLCipher, colored layers + ICS import/export + voice-created events), and **`vox-hub`** (a lightweight, database-free backup/restore utility, `com.voxapps.hub`, that discovers every installed Vox app and exports/imports their data as one JSON file). A few `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork, `calendar` a shared month-paged agenda view, `apppicker` a shared searchable app-selector card) are compiled into one or more apps for code reuse — they carry no shared runtime state, just library code. See [Vox Notes](#vox-notes), [Vox Vision](#vox-vision), [Vox Expenses](#vox-expenses), [Vox Calendar](#vox-calendar), and [Vox Hub](#vox-hub) below for what those apps do; the rest of this README covers `vox-commander`.
 
 ## Features
 
@@ -73,7 +73,7 @@ adb shell am start -n com.voxapps.commander/.MainActivity
 
 212 unit tests covering: intent taxonomy, NLU decision map, AppState/AppStateManager, AppSettings (external trigger, return-to-previous-app), model management, search providers, FastMap engine, and more.
 
-> Swap `:vox-commander` for `:vox-notes`, `:vox-vision`, or `:vox-expenses` in any of the commands above to build/install/test the companion apps instead — each has its own `assembleDebug`/`installDebug`/`testDebugUnitTest` tasks.
+> Swap `:vox-commander` for `:vox-notes`, `:vox-vision`, `:vox-expenses`, `:vox-calendar`, or `:vox-hub` in any of the commands above to build/install/test the companion apps instead — each has its own `assembleDebug`/`installDebug`/`testDebugUnitTest` tasks.
 
 ## Download APK
 
@@ -167,6 +167,10 @@ Each app stays a fully independent product; a user can install any subset.
   the prompt and parsing the result is entirely the caller's concern, so new LLM-backed satellite
   features ship with zero Commander changes. Consumers today: Vox Notes' **Auto-Merge Categories** and
   **Note cleanup** (duplicate detection), and Vox Vision's OCR-text cleanup (see below).
+- **Shared theming** — every app (Commander and all four satellites) renders through the same
+  `:core:design` `VoxTheme` composable and exposes the same user-facing controls in its General
+  settings: a System/Light/Dark picker plus a "Colored (Material You)" toggle for Android 12+ dynamic
+  color, persisted independently per app.
 - **Vox Vision's scan-to-note flow** — a second satellite, `vox-vision` (domain `vision`), turns the
   camera into a document scanner: live brightness/edge detection auto-triggers a capture, OpenCV crops
   it to the detected document, on-device PaddleOCR (`ppocr-sdk`) recognizes the text, then the generic
@@ -188,11 +192,15 @@ satellite ──VoxLlmRequest{task,promptText}──▶ LlmHookReceiver/Worker (
    └──────────── VoxLlmResult{task,rawJson} ──────────────────┘ (async, explicit intent back to caller)
 ```
 
-Three satellites ship in this repo today: **`vox-notes`** (domain `notes`, actions `create`/`read`),
-**`vox-vision`** (domain `vision`, a note/expense *producer* rather than a voice-command consumer), and
-**`vox-expenses`** (domain `expenses`, actions `create`/`read`) — Vision's OCR-cleanup hook can target
-either Notes or Expenses depending on which flow launched the scan (`ocr.task` meta-data on the
-satellite's `OcrResultReceiver`).
+Five satellites ship in this repo today: **`vox-notes`** (domain `notes`, actions `create`/`read`/
+`export`/`import`), **`vox-vision`** (domain `vision`, a note/expense *producer* rather than a
+voice-command consumer), **`vox-expenses`** (domain `expenses`, actions `create`/`read`/`export`/
+`import`), and **`vox-calendar`** (domain `calendar`, actions `create`/`read`/`export`/`import`) —
+Vision's OCR-cleanup hook can target either Notes or Expenses depending on which flow launched the scan
+(`ocr.task` meta-data on the satellite's `OcrResultReceiver`). **`vox-hub`** is a fifth, non-NLU
+satellite: it never registers a `VoxCommandReceiver` domain (nothing to say "hey commander" to), it's a
+pure IPC *client* that calls the other four apps' `export`/`import` actions to build/restore one JSON
+backup file — see [Vox Hub](#vox-hub) below.
 
 ### Vox Notes
 
@@ -274,6 +282,49 @@ bank/payment notifications, or entered by hand.
   it temporarily disables the calendar view (a dismissible chip restores it)
 - **Reports** — totals and by-category breakdowns, converted into the home currency
 - Multi-language UI (English, Romanian, German, French)
+
+### Vox Calendar
+
+Standalone, encrypted on-device calendar (`com.voxapps.calendar`, Kotlin/AGP namespace
+`com.voxapps.calendarapp` to avoid a dex-merge clash with the reused `:core:calendar` module — see its
+own doc comment). Voice-created through Commander (`create`/`read`) or used entirely on its own.
+
+- **Year / Month / Week / Day views** behind a collapsible sidebar; Month reuses the shared
+  `:core:calendar` engine, Week/Day are a new local hour-of-day grid, Year is 12 compact mini-months
+- **Colored, named layers** (e.g. Personal / Work / Moon Calendar) instead of a hierarchical
+  category tree — flat layers plus optional flat tags, each layer independently toggleable and
+  color-coded (random-generation + selection-ring picker mirrors Vox Expenses' category palette)
+- **Natural-language event/task creation via Commander** — "dentist in a week" resolves the date
+  entirely through the LLM (no local date-NLU), picks the right layer by name (exact match → fuzzy
+  match via `:core:textmatch` → configurable default), and works for both timed events and due-date
+  tasks
+- **ICS import/export** (Settings → ICS import/export) via the `biweekly` library — spec-correct
+  interop with Google Calendar/Thunderbird/Apple Calendar, independent of the Hub JSON backup path
+- **Cross-app day-linking** — tapping a day shows that day's Notes and Expenses inline (a day-scoped
+  `OP_READ` extension to the Vox contract) with tap-through to open Notes/Expenses pre-filtered to that
+  day; the reverse direction (Notes/Expenses → open Calendar on a date) uses a plain explicit-intent
+  extra, not the broadcast bus
+- Recurrence is deliberately minimal (none/daily/weekly/monthly/yearly + optional until-date, expanded
+  at read time) — no RRULE engine, no per-occurrence materialized rows, editing a series edits the
+  whole thing
+- Multi-language UI (English, Romanian)
+
+### Vox Hub
+
+A lightweight, database-free backup/restore utility (`com.voxapps.hub`) — not a voice-command
+satellite (it registers no NLU domain), just an IPC *client* over the same `:core:ipc` contract every
+other satellite implements as a server.
+
+- **Zero hardcoded app list** — at launch it calls `VoxAppsDiscovery` to find every installed Vox app
+  that advertises `export`/`import` in its manifest meta-data; a new satellite (like Vox Calendar) shows
+  up automatically with no Hub-side code change
+- **Export** — per-app `settings`/`data`/`both` scope selection, bundles every selected app's exported
+  JSON into one dated file via `ActivityResultContracts.CreateDocument`
+- **Import** — reads a previously exported file, previews a per-app record-count summary before
+  anything is written, and lets the user deselect individual apps; each target app applies its own
+  snapshot-then-replace semantics (existing records for that domain are fully replaced by the import,
+  not merged)
+- Holds no local Room database — the only thing it persists itself is its own theme preference
 
 ## Key Technologies
 

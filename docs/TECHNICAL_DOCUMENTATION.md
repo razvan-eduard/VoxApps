@@ -1102,7 +1102,7 @@ strings locally; nothing forces a dependency.
 | Type | Purpose |
 |------|---------|
 | `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`, `META_NLU_HINT`), permission helpers |
-| `VoxCommand` | Command envelope authored by Commander (`op`, `text?`, `title?`, `category?`, `domain?`) with `toJson()`/`fromJson()` (org.json) |
+| `VoxCommand` | Command envelope authored by Commander (`op`, `text?`, `title?`, `category?`, `domain?`, `exportScope?`, `dateFrom?`, `dateTo?`) with `toJson()`/`fromJson()` (org.json) — `dateFrom`/`dateTo` are an additive pair used only by Vox Calendar's day-scoped `OP_READ` (see below); every other satellite's `OP_READ` ignores them and behaves exactly as before |
 | `VoxResult` | Satellite reply for reads (`ok`, `text`) — the notes payload, or a spoken "locked" message |
 
 ### Capability advertising & discovery (the handshake)
@@ -1258,6 +1258,47 @@ receives voice commands (its `VisionCommandReceiver` only answers the discovery 
   auto-triggered capture skips straight to submission with no manual tap — a manual capture always
   still requires one, since there's no guarantee every field is already correct.
 
+### Vox Calendar (day-linking extension)
+
+`vox-calendar` (`com.voxapps.calendar`, Kotlin/AGP namespace `com.voxapps.calendarapp`) is the fourth
+satellite (domain `calendar`) and the one that stretches the command bus beyond create/read: its
+day-summary sheet needs to show *another* app's data inline, not just its own.
+
+- **Outbound (Calendar → Notes/Expenses)** — tapping a day sends a plain **explicit intent** (not a
+  broadcast) carrying `VoxIpc.EXTRA_SELECTED_DATE`, mirroring how Vision launches its scan request; the
+  target Activity reads the extra in `onCreate` and calls its own already-existing date-filter setter.
+  No new IPC surface — this direction reuses each app's existing UI-filtering code.
+- **Inbound (Calendar reads Notes/Expenses for a day)** — this is what the additive `VoxCommand.dateFrom`/
+  `dateTo` fields exist for: when both are present, `NotesReadResponder`/`ExpensesReadResponder` filter
+  their snapshot to that window (reusing the same `NoteFilter`/`ExpenseFilter` the UI already uses) and
+  return a compact `{"count": N, "items": [{"title","timeMillis"}]}` JSON in `VoxResult.text` instead of
+  the normal human-readable TTS string. Absent dates, `OP_READ` behaves exactly as it did before this
+  feature — the change is purely additive.
+- **ICS import/export** is a separate, non-IPC feature living entirely inside `vox-calendar` (Settings →
+  ICS import/export), via the `net.sf.biweekly:biweekly` library — spec-correct `VEVENT`/`VTODO`/
+  `RRULE` handling without hand-rolling RFC 5545. It shares no code with the Hub JSON export/import path
+  below; the two are deliberately independent formats for independent purposes (interop vs. backup).
+- Voice-created events/tasks ("dentist in a week") go through the same 4-file LLM-prompt pattern Vox
+  Expenses established (prompt builder → request sender → result parser → `LlmResultReceiver`), with
+  layer-name resolution via exact match → `:core:textmatch` fuzzy match → configurable default layer.
+
+### Vox Hub (backup/restore client, not a satellite)
+
+`vox-hub` (`com.voxapps.hub`) is the odd one out: it never implements a `VoxCommandReceiver` and
+registers no NLU domain, so it never appears in Commander's taxonomy or Integrations screen. It's purely
+a **consumer** of the `export`/`import` actions every other satellite already exposes:
+
+- **`VoxAppsDiscovery.discover()`** (the same discovery call Commander itself uses) finds every
+  installed app advertising `export` and/or `import` — Hub has zero hardcoded app list, so a new
+  satellite shows up automatically the moment its manifest meta-data declares those actions.
+- **`VoxDataTransferClient.requestExport(context, pkg, scope)`/`requestImport(context, pkg, json)`**
+  send the same `OP_EXPORT`/`OP_IMPORT` ordered broadcasts a satellite's own `VoxCommandReceiver`
+  already answers — Hub adds no new wire protocol, just a client-side helper.
+  `ExportImportUtil.summarize()` is the one spot with a small hardcoded per-app JSON-key list (for the
+  cosmetic "3 notes, 2 categories"-style import preview) — every other Hub code path is fully generic.
+- Because Hub holds no Room database, its own settings (currently just the shared theme preference) are
+  the only thing it persists locally.
+
 ### Key classes
 
 | Class | Path |
@@ -1275,6 +1316,8 @@ receives voice commands (its `VisionCommandReceiver` only answers the discovery 
 | Vision's LLM result receiver | `vox-vision/.../receiver/LlmResultReceiver.kt` |
 | `VisionActivity` (`singleTask` + `onNewIntent`) | `vox-vision/src/main/java/com/voxapps/vision/VisionActivity.kt` |
 | `DocumentCropper` (Otsu live-bounds + strict-quad crop) | `vox-vision/.../ocr/DocumentCropper.kt` |
+| Day-scoped read + ICS export/import | `vox-calendar/.../receiver/VoxCommandReceiver.kt`, `vox-calendar/.../domain/ics/` |
+| Hub's export/import client | `core/ipc/.../VoxDataTransferClient.kt`, `vox-hub/.../ui/HubScreen.kt` |
 
 ---
 
