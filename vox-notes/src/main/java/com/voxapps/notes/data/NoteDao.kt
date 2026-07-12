@@ -22,6 +22,12 @@ interface NoteDao {
     @Query("SELECT * FROM notes ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<Note>>
 
+    /** One-shot day-scoped read (e.g. Vox Calendar's day-tap summary via VoxCommand.dateFrom/dateTo) —
+     *  a plain SQL range query rather than fetching everything and filtering in memory, since the
+     *  caller only wants one day's worth of records. */
+    @Query("SELECT * FROM notes WHERE createdAt BETWEEN :from AND :to ORDER BY createdAt ASC")
+    suspend fun getForDateRange(from: Long, to: Long): List<Note>
+
     @Insert
     suspend fun insert(note: Note)
 

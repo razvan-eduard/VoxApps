@@ -83,7 +83,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                         // BroadcastReceiver.setResult() — the latter throws "Call while result is
                         // not pending" once called from outside onReceive()'s synchronous window,
                         // which goAsync()'s whole point is to let us do.
-                        pending.setResultData(responder.respond().toJson())
+                        pending.setResultData(responder.respond(command.dateFrom, command.dateTo).toJson())
                     } finally {
                         pending.finish()
                     }

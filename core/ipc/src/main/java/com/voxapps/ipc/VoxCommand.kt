@@ -15,7 +15,14 @@ data class VoxCommand(
     val domain: String? = null,
     /** [VoxIpc.OP_EXPORT] scope: one of [VoxIpc.EXPORT_SCOPE_SETTINGS]/[VoxIpc.EXPORT_SCOPE_DATA]/
      *  [VoxIpc.EXPORT_SCOPE_BOTH]. Null defaults to "both" on the receiving end. */
-    val exportScope: String? = null
+    val exportScope: String? = null,
+    /** Optional day-window bounds (epoch millis, inclusive) for [VoxIpc.OP_READ] — when both are
+     *  present, a satellite that supports day-scoped reads (see [VoxDataTransferClient.requestDayRead])
+     *  returns only records in this window instead of its full snapshot. Additive: satellites that
+     *  don't check these fields are unaffected, and every existing caller that never sets them keeps
+     *  getting the original full-snapshot behavior. */
+    val dateFrom: Long? = null,
+    val dateTo: Long? = null
 ) {
     fun toJson(): String {
         val o = JSONObject()
@@ -26,6 +33,8 @@ data class VoxCommand(
         limit?.let { o.put("limit", it) }
         domain?.let { o.put("domain", it) }
         exportScope?.let { o.put("exportScope", it) }
+        dateFrom?.let { o.put("dateFrom", it) }
+        dateTo?.let { o.put("dateTo", it) }
         return o.toString()
     }
 
@@ -43,7 +52,9 @@ data class VoxCommand(
                     category = o.optStringOrNull("category"),
                     limit = if (o.has("limit")) o.optInt("limit") else null,
                     domain = o.optStringOrNull("domain"),
-                    exportScope = o.optStringOrNull("exportScope")
+                    exportScope = o.optStringOrNull("exportScope"),
+                    dateFrom = if (o.has("dateFrom")) o.optLong("dateFrom") else null,
+                    dateTo = if (o.has("dateTo")) o.optLong("dateTo") else null
                 )
             } catch (e: Exception) {
                 null

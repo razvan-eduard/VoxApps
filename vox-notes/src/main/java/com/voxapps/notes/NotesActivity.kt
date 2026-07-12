@@ -3,6 +3,8 @@ package com.voxapps.notes
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.fragment.app.FragmentActivity
+import com.voxapps.calendar.CalendarDateUtils
+import com.voxapps.ipc.VoxIpc
 import com.voxapps.notes.di.NotesContainer
 import com.voxapps.notes.security.BiometricGate
 import com.voxapps.notes.ui.NotesRoot
@@ -17,6 +19,17 @@ class NotesActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Day-tap-through from another Vox app (e.g. Vox Calendar) — pre-set the existing date filter
+        // to just that day rather than restructuring the filter UI itself.
+        if (intent.hasExtra(VoxIpc.EXTRA_SELECTED_DATE)) {
+            val dayMillis = intent.getLongExtra(VoxIpc.EXTRA_SELECTED_DATE, -1L)
+            if (dayMillis >= 0) {
+                val day = CalendarDateUtils.millisToLocalDate(dayMillis)
+                val from = CalendarDateUtils.startOfDayMillis(day)
+                val to = CalendarDateUtils.startOfDayMillis(day.plusDays(1)) - 1
+                container.notesStateManager.setDateFilter(from, to)
+            }
+        }
         setContent {
             NotesRoot(
                 container = container,

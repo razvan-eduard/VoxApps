@@ -7,9 +7,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import com.voxapps.calendar.CalendarDateUtils
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.security.BiometricGate
 import com.voxapps.expenses.ui.ExpensesRoot
+import com.voxapps.ipc.VoxIpc
 
 /**
  * Hosts the Vox Expenses UI and the biometric prompt (mirrors vox-notes' NotesActivity).
@@ -31,6 +33,17 @@ class ExpensesActivity : FragmentActivity() {
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
             requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        // Day-tap-through from another Vox app (e.g. Vox Calendar) — pre-set the existing date filter
+        // to just that day rather than restructuring the filter UI itself.
+        if (intent.hasExtra(VoxIpc.EXTRA_SELECTED_DATE)) {
+            val dayMillis = intent.getLongExtra(VoxIpc.EXTRA_SELECTED_DATE, -1L)
+            if (dayMillis >= 0) {
+                val day = CalendarDateUtils.millisToLocalDate(dayMillis)
+                val from = CalendarDateUtils.startOfDayMillis(day)
+                val to = CalendarDateUtils.startOfDayMillis(day.plusDays(1)) - 1
+                container.expensesStateManager.setDateFilter(from, to)
+            }
         }
         setContent {
             ExpensesRoot(

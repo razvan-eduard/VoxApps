@@ -20,6 +20,9 @@ class NotesRepository(
     /** One-shot snapshot for the headless read path (Commander IPC). */
     suspend fun notesSnapshot(): List<Note> = noteDao.observeAll().first()
 
+    /** One-shot day-scoped snapshot (Vox Calendar's day-tap summary via Commander IPC). */
+    suspend fun notesForDateRange(from: Long, to: Long): List<Note> = noteDao.getForDateRange(from, to)
+
     // --- NOTES ---
     suspend fun addNote(title: String?, text: String, categoryId: Long?, createdAt: Long) {
         val clean = text.trim()

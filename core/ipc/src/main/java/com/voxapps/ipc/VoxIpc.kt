@@ -49,6 +49,16 @@ object VoxIpc {
     const val EXTRA_LLM_PAYLOAD = "com.voxapps.extra.LLM_PAYLOAD"
     const val EXTRA_OCR_PAYLOAD = "com.voxapps.extra.OCR_PAYLOAD"
 
+    /**
+     * Epoch-millis day to pre-select, carried on a plain explicit-intent `startActivity` (not the
+     * broadcast bus) from one app's day-tap-through to another's main Activity — e.g. Vox Calendar
+     * opening Notes/Expenses scoped to one day. Single source of truth for the extra key so the
+     * sender/receiver apps can't silently drift on the string, even though delivery itself is a
+     * plain Intent, not an [ACTION_COMMAND] broadcast (mirrors [VISION_PACKAGE]'s direct-launch
+     * pattern, not the command/result contract above).
+     */
+    const val EXTRA_SELECTED_DATE = "com.voxapps.extra.SELECTED_DATE"
+
     // --- Command ops ---
     const val OP_CREATE = "create"
     const val OP_READ = "read"

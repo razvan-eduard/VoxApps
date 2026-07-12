@@ -22,6 +22,12 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses ORDER BY dateTime DESC")
     fun observeAll(): Flow<List<Expense>>
 
+    /** One-shot day-scoped read (e.g. Vox Calendar's day-tap summary via VoxCommand.dateFrom/dateTo) —
+     *  a plain SQL range query rather than fetching everything and filtering in memory, since the
+     *  caller only wants one day's worth of records. */
+    @Query("SELECT * FROM expenses WHERE dateTime BETWEEN :from AND :to ORDER BY dateTime ASC")
+    suspend fun getForDateRange(from: Long, to: Long): List<Expense>
+
     @Insert
     suspend fun insert(expense: Expense): Long
 

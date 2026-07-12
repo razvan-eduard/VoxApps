@@ -23,6 +23,9 @@ class ExpensesRepository(
     /** One-shot snapshot for the headless read path (Commander IPC, Stage 2). */
     suspend fun expensesSnapshot(): List<Expense> = expenseDao.observeAll().first()
 
+    /** One-shot day-scoped snapshot (Vox Calendar's day-tap summary via Commander IPC). */
+    suspend fun expensesForDateRange(from: Long, to: Long): List<Expense> = expenseDao.getForDateRange(from, to)
+
     // --- EXPENSES ---
 
     /**

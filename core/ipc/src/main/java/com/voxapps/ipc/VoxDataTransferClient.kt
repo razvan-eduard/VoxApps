@@ -32,6 +32,20 @@ object VoxDataTransferClient {
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
     ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_IMPORT, text = payloadJson), timeoutMs)
 
+    /**
+     * Day-scoped read: reuses the existing [VoxIpc.OP_READ] channel with [VoxCommand.dateFrom]/
+     * [VoxCommand.dateTo] set, rather than a new op — a satellite that doesn't understand day-scoped
+     * reads just ignores the extra fields and returns its normal full-snapshot text. Used by Vox
+     * Calendar's day-tap summary to ask Notes/Expenses for that day's records.
+     */
+    suspend fun requestDayRead(
+        context: Context,
+        packageName: String,
+        dateFrom: Long,
+        dateTo: Long,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_READ, dateFrom = dateFrom, dateTo = dateTo), timeoutMs)
+
     private suspend fun send(context: Context, packageName: String, command: VoxCommand, timeoutMs: Long): VoxResult? {
         val intent = Intent(VoxIpc.ACTION_COMMAND).apply {
             setPackage(packageName)
