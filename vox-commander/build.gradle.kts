@@ -256,3 +256,12 @@ tasks.named("preBuild") {
     dependsOn(copyExternalServicesJson)
 }
 
+// A handful of ViewModel tests use viewModelScope.launch{} (not tied to the test's own TestScope),
+// so a coroutine can still be in flight when that test's own @After tears down Dispatchers.Main —
+// then resume later during a DIFFERENT test class sharing the same JVM and blow up there instead
+// (surfaces as "UncaughtExceptionsBeforeTest" on an unrelated test). Forking a fresh JVM per test
+// class eliminates this whole category of cross-class leakage without auditing every test file.
+tasks.withType<Test> {
+    forkEvery = 1
+}
+

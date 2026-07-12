@@ -9,9 +9,14 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.viewmodels.ModelManagementViewModel
 import io.mockk.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
@@ -32,6 +37,12 @@ class FallbackCleanupTest {
         every { Log.w(any<String>(), any<String>()) } returns 0
         every { Log.e(any<String>(), any<String>()) } returns 0
 
+        // viewModelScope dispatches through Dispatchers.Main.immediate — without pinning it to a
+        // test dispatcher here, clearDefaultOfflineFallback()'s launch{} races against coVerify()
+        // below, riding on whatever Dispatchers.Main happens to be left as by other test classes in
+        // the same JVM fork (flaky in the full suite, invisible when this class runs in isolation).
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+
         context = mockk(relaxed = true)
         settingsRepo = mockk(relaxed = true)
         appStateManager = mockk(relaxed = true)
@@ -50,6 +61,12 @@ class FallbackCleanupTest {
             languageManager,
             context
         )
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+        unmockkAll()
     }
 
     @Test
