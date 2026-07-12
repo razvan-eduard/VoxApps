@@ -87,7 +87,7 @@ dependencies {
     // Encrypted-at-rest storage: SQLCipher for Room + Keystore-backed passphrase.
     // sqlcipher-android (new edition) ships 16 KB-page-aligned native libs (Play requirement).
     implementation("net.zetetic:sqlcipher-android:4.17.0")
-    implementation("androidx.sqlite:sqlite:2.4.0")
+    implementation("androidx.sqlite:sqlite:2.7.0")
     implementation(libs.androidx.security.crypto)
 
     // Scheduled Auto-Merge Categories (off/daily/weekly/monthly)
