@@ -1,11 +1,7 @@
 package com.voxapps.calendarapp
 
-import android.Manifest
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.security.BiometricGate
@@ -13,23 +9,16 @@ import com.voxapps.calendarapp.ui.CalendarRoot
 
 /**
  * Hosts the Vox Calendar UI and the biometric prompt (mirrors vox-expenses' ExpensesActivity).
+ * The POST_NOTIFICATIONS runtime request (needed for a headless voice/LLM-created event's toast) is
+ * now owned by the first-launch onboarding flow (see
+ * [com.voxapps.calendarapp.ui.onboarding.CalendarOnboardingFlow]), not requested unconditionally here.
  */
 class CalendarActivity : FragmentActivity() {
 
     private val container: CalendarContainer by lazy { (application as CalendarApplication).container }
 
-    private val requestNotificationPermission = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { /* no-op: a headless voice/LLM-created event just silently won't toast if denied */ }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
         setContent {
             CalendarRoot(
                 container = container,

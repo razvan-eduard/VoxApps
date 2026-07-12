@@ -34,6 +34,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val CALENDAR_VIEW_ENABLED = booleanPreferencesKey("calendar_view_enabled")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     }
 
     override val settingsFlow: Flow<NotesSettings> = dataStore.data.map { prefs ->
@@ -49,7 +50,8 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
             calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: NotesSettings.THEME_SYSTEM,
-            themeColored = prefs[Keys.THEME_COLORED] ?: true
+            themeColored = prefs[Keys.THEME_COLORED] ?: true,
+            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false
         )
     }
 
@@ -112,6 +114,10 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
 
     override suspend fun setThemeColored(colored: Boolean) {
         dataStore.edit { it[Keys.THEME_COLORED] = colored }
+    }
+
+    override suspend fun setOnboardingCompleted(completed: Boolean) {
+        dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
     override suspend fun restoreSettings(settings: NotesSettings) {

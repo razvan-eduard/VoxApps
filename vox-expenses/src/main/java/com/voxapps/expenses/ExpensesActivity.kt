@@ -1,11 +1,7 @@
 package com.voxapps.expenses
 
-import android.Manifest
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.voxapps.calendar.CalendarDateUtils
 import com.voxapps.expenses.di.ExpensesContainer
@@ -15,25 +11,16 @@ import com.voxapps.ipc.VoxIpc
 
 /**
  * Hosts the Vox Expenses UI and the biometric prompt (mirrors vox-notes' NotesActivity).
+ * The POST_NOTIFICATIONS runtime request (needed for the spending-limit alert and the "voice save"
+ * toast) is now owned by the first-launch onboarding flow (see [com.voxapps.expenses.ui.onboarding.ExpensesOnboardingFlow]),
+ * not requested unconditionally here.
  */
 class ExpensesActivity : FragmentActivity() {
 
     private val container: ExpensesContainer by lazy { (application as ExpensesApplication).container }
 
-    private val requestNotificationPermission = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { /* no-op: a spending-limit alert just silently won't show if denied */ }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Needed on API 33+ for the spending-limit-exceeded alert (Stage 7) — a real Notification,
-        // unlike the "voice save" toast which doesn't require this.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
         // Day-tap-through from another Vox app (e.g. Vox Calendar) — pre-set the existing date filter
         // to just that day rather than restructuring the filter UI itself.
         if (intent.hasExtra(VoxIpc.EXTRA_SELECTED_DATE)) {

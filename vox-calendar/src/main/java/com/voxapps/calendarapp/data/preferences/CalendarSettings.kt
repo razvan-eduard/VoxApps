@@ -14,6 +14,9 @@ import androidx.compose.runtime.Immutable
  * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output — off by default.
  * - [themeDarkMode]/[themeColored]: same theme controls as vox-commander's AppSettings — "SYSTEM"/
  *   "LIGHT"/"DARK" and Material You dynamic color, fed into the shared `:core:design` VoxTheme.
+ * - [onboardingCompleted]: whether the first-launch welcome + permissions flow has been shown.
+ *   Device-local UI state, not portable user data — deliberately excluded from Hub export/import
+ *   (mirrors vox-expenses' `appCacheJson` exclusion rationale).
  */
 @Immutable
 data class CalendarSettings(
@@ -24,7 +27,8 @@ data class CalendarSettings(
     val autoCreateLayer: Boolean = false,
     val debugLoggingEnabled: Boolean = false,
     val themeDarkMode: String = THEME_SYSTEM,
-    val themeColored: Boolean = true
+    val themeColored: Boolean = true,
+    val onboardingCompleted: Boolean = false
 ) {
     companion object {
         const val TIMEOUT_30M = 30

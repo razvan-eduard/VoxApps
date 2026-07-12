@@ -48,6 +48,9 @@ import androidx.compose.runtime.Immutable
  *   launch), not on every app start — mirrors vox-commander's `AppRegistry`/`appCacheJson` pattern.
  * - [themeDarkMode]/[themeColored]: same theme controls as vox-commander's AppSettings — "SYSTEM"/
  *   "LIGHT"/"DARK" and Material You dynamic color, fed into the shared `:core:design` VoxTheme.
+ * - [onboardingCompleted]: whether the first-launch welcome + permissions flow has been shown.
+ *   Device-local UI state, not portable user data — deliberately excluded from Hub export/import,
+ *   same rationale as [appCacheJson].
  */
 @Immutable
 data class ExpensesSettings(
@@ -69,7 +72,8 @@ data class ExpensesSettings(
     val calendarViewEnabled: Boolean = false,
     val appCacheJson: String? = null,
     val themeDarkMode: String = THEME_SYSTEM,
-    val themeColored: Boolean = true
+    val themeColored: Boolean = true,
+    val onboardingCompleted: Boolean = false
 ) {
     companion object {
         const val TIMEOUT_30M = 30

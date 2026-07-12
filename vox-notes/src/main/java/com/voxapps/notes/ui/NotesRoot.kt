@@ -12,6 +12,7 @@ import com.voxapps.design.VoxTheme
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.di.NotesContainer
 import com.voxapps.notes.state.NotesUiState
+import com.voxapps.notes.ui.onboarding.NotesOnboardingFlow
 import com.voxapps.notes.ui.settings.SettingsScreen
 
 /**
@@ -35,27 +36,34 @@ fun NotesRoot(
             },
             colored = settings.themeColored
         ) {
-            val ui by container.notesStateManager.uiState.collectAsStateWithLifecycle()
-            var showSettings by remember { mutableStateOf(false) }
+            if (!settings.onboardingCompleted) {
+                NotesOnboardingFlow(
+                    languageManager = container.languageManager,
+                    stateManager = container.notesStateManager
+                )
+            } else {
+                val ui by container.notesStateManager.uiState.collectAsStateWithLifecycle()
+                var showSettings by remember { mutableStateOf(false) }
 
-            when (val state = ui) {
-                is NotesUiState.Loading -> Unit
-                is NotesUiState.Locked -> AuthGate(onUnlockRequest = onUnlockRequest)
-                is NotesUiState.Unlocked -> {
-                    if (showSettings) {
-                        SettingsScreen(
-                            stateManager = container.notesStateManager,
-                            settingsRepo = container.settingsRepository,
-                            onBack = { showSettings = false }
-                        )
-                    } else {
-                        NotesScreen(
-                            state = state,
-                            stateManager = container.notesStateManager,
-                            calendarViewEnabled = settings.calendarViewEnabled,
-                            language = settings.language,
-                            onOpenSettings = { showSettings = true }
-                        )
+                when (val state = ui) {
+                    is NotesUiState.Loading -> Unit
+                    is NotesUiState.Locked -> AuthGate(onUnlockRequest = onUnlockRequest)
+                    is NotesUiState.Unlocked -> {
+                        if (showSettings) {
+                            SettingsScreen(
+                                stateManager = container.notesStateManager,
+                                settingsRepo = container.settingsRepository,
+                                onBack = { showSettings = false }
+                            )
+                        } else {
+                            NotesScreen(
+                                state = state,
+                                stateManager = container.notesStateManager,
+                                calendarViewEnabled = settings.calendarViewEnabled,
+                                language = settings.language,
+                                onOpenSettings = { showSettings = true }
+                            )
+                        }
                     }
                 }
             }

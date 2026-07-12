@@ -30,6 +30,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     }
 
     override val settingsFlow: Flow<CalendarSettings> = dataStore.data.map { prefs ->
@@ -41,7 +42,8 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             autoCreateLayer = prefs[Keys.AUTO_CREATE_LAYER] ?: false,
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: CalendarSettings.THEME_SYSTEM,
-            themeColored = prefs[Keys.THEME_COLORED] ?: true
+            themeColored = prefs[Keys.THEME_COLORED] ?: true,
+            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false
         )
     }
 
@@ -88,6 +90,10 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
 
     override suspend fun setThemeColored(colored: Boolean) {
         dataStore.edit { it[Keys.THEME_COLORED] = colored }
+    }
+
+    override suspend fun setOnboardingCompleted(completed: Boolean) {
+        dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
     override suspend fun restoreSettings(settings: CalendarSettings) {

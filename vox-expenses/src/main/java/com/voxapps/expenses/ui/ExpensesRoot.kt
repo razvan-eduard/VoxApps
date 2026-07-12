@@ -13,6 +13,7 @@ import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.state.ExpensesUiState
+import com.voxapps.expenses.ui.onboarding.ExpensesOnboardingFlow
 import com.voxapps.expenses.ui.settings.SettingsScreen
 
 private sealed interface EditTarget {
@@ -42,48 +43,55 @@ fun ExpensesRoot(
             },
             colored = settings.themeColored
         ) {
-            val ui by container.expensesStateManager.uiState.collectAsStateWithLifecycle()
-            var showSettings by remember { mutableStateOf(false) }
-            var showReports by remember { mutableStateOf(false) }
-            var editTarget by remember { mutableStateOf<EditTarget?>(null) }
+            if (!settings.onboardingCompleted) {
+                ExpensesOnboardingFlow(
+                    languageManager = container.languageManager,
+                    stateManager = container.expensesStateManager
+                )
+            } else {
+                val ui by container.expensesStateManager.uiState.collectAsStateWithLifecycle()
+                var showSettings by remember { mutableStateOf(false) }
+                var showReports by remember { mutableStateOf(false) }
+                var editTarget by remember { mutableStateOf<EditTarget?>(null) }
 
-            when (val state = ui) {
-                is ExpensesUiState.Loading -> Unit
-                is ExpensesUiState.Locked -> AuthGate(onUnlockRequest = onUnlockRequest)
-                is ExpensesUiState.Unlocked -> {
-                    val target = editTarget
-                    when {
-                        target != null -> ExpenseEditScreen(
-                            existing = (target as? EditTarget.Existing)?.expense,
-                            categories = state.categories,
-                            defaultCurrency = container.settingsRepository.getSnapshot().defaultCurrency,
-                            vatDisplayEnabled = container.settingsRepository.getSnapshot().vatDisplayEnabled,
-                            decimalSeparator = container.settingsRepository.getSnapshot().decimalSeparator,
-                            stateManager = container.expensesStateManager,
-                            onDone = { editTarget = null }
-                        )
-                        showSettings -> SettingsScreen(
-                            stateManager = container.expensesStateManager,
-                            settingsRepo = container.settingsRepository,
-                            exchangeRateRepository = container.exchangeRateRepository,
-                            onBack = { showSettings = false }
-                        )
-                        showReports -> ReportsScreen(
-                            expenses = state.expenses,
-                            homeCurrency = container.settingsRepository.getSnapshot().homeCurrency,
-                            exchangeRateRepository = container.exchangeRateRepository,
-                            onBack = { showReports = false }
-                        )
-                        else -> ExpensesScreen(
-                            state = state,
-                            stateManager = container.expensesStateManager,
-                            calendarViewEnabled = settings.calendarViewEnabled,
-                            language = settings.language,
-                            onAddExpense = { editTarget = EditTarget.New },
-                            onEditExpense = { editTarget = EditTarget.Existing(it) },
-                            onOpenSettings = { showSettings = true },
-                            onOpenReports = { showReports = true }
-                        )
+                when (val state = ui) {
+                    is ExpensesUiState.Loading -> Unit
+                    is ExpensesUiState.Locked -> AuthGate(onUnlockRequest = onUnlockRequest)
+                    is ExpensesUiState.Unlocked -> {
+                        val target = editTarget
+                        when {
+                            target != null -> ExpenseEditScreen(
+                                existing = (target as? EditTarget.Existing)?.expense,
+                                categories = state.categories,
+                                defaultCurrency = container.settingsRepository.getSnapshot().defaultCurrency,
+                                vatDisplayEnabled = container.settingsRepository.getSnapshot().vatDisplayEnabled,
+                                decimalSeparator = container.settingsRepository.getSnapshot().decimalSeparator,
+                                stateManager = container.expensesStateManager,
+                                onDone = { editTarget = null }
+                            )
+                            showSettings -> SettingsScreen(
+                                stateManager = container.expensesStateManager,
+                                settingsRepo = container.settingsRepository,
+                                exchangeRateRepository = container.exchangeRateRepository,
+                                onBack = { showSettings = false }
+                            )
+                            showReports -> ReportsScreen(
+                                expenses = state.expenses,
+                                homeCurrency = container.settingsRepository.getSnapshot().homeCurrency,
+                                exchangeRateRepository = container.exchangeRateRepository,
+                                onBack = { showReports = false }
+                            )
+                            else -> ExpensesScreen(
+                                state = state,
+                                stateManager = container.expensesStateManager,
+                                calendarViewEnabled = settings.calendarViewEnabled,
+                                language = settings.language,
+                                onAddExpense = { editTarget = EditTarget.New },
+                                onEditExpense = { editTarget = EditTarget.Existing(it) },
+                                onOpenSettings = { showSettings = true },
+                                onOpenReports = { showReports = true }
+                            )
+                        }
                     }
                 }
             }

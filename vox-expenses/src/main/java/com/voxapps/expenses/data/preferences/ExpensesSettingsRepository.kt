@@ -32,6 +32,7 @@ interface ExpensesSettingsRepository {
     suspend fun clearAppCache()
     suspend fun setThemeDarkMode(mode: String)
     suspend fun setThemeColored(colored: Boolean)
+    suspend fun setOnboardingCompleted(completed: Boolean)
 
     /**
      * Bulk overwrite, e.g. from a Vox Hub import — writes every portable field in one DataStore edit.

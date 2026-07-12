@@ -41,6 +41,7 @@ dependencies {
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
     implementation(project(":core:textmatch"))
+    implementation(project(":core:onboarding"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

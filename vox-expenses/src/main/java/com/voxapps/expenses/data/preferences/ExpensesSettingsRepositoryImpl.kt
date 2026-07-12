@@ -42,6 +42,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val APP_CACHE_JSON = stringPreferencesKey("app_cache_json")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -64,7 +65,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
             appCacheJson = prefs[Keys.APP_CACHE_JSON],
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: ExpensesSettings.THEME_SYSTEM,
-            themeColored = prefs[Keys.THEME_COLORED] ?: true
+            themeColored = prefs[Keys.THEME_COLORED] ?: true,
+            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false
         )
     }
 
@@ -164,6 +166,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
 
     override suspend fun setThemeColored(colored: Boolean) {
         dataStore.edit { it[Keys.THEME_COLORED] = colored }
+    }
+
+    override suspend fun setOnboardingCompleted(completed: Boolean) {
+        dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
     override suspend fun restoreSettings(settings: ExpensesSettings) {
