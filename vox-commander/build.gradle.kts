@@ -125,7 +125,7 @@ dependencies {
     // Gemini Nano (Google AI Edge) - System LLM SDK
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
     // Porcupine Wake Word Engine (Picovoice)
-    implementation("ai.picovoice:porcupine-android:3.0.2")
+    implementation("ai.picovoice:porcupine-android:4.0.2")
     // OpenWakeWord (fully open-source, ONNX-based wake word detection) — local fork with an RMS
     // silence gate patch (see core/wakeword/NOTICE); pristine upstream kept at
     // vendor/openwakeword-android-kt for sync (scripts/check_openwakeword_version.sh).
