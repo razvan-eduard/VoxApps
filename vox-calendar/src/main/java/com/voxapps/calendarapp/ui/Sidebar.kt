@@ -1,6 +1,7 @@
 package com.voxapps.calendarapp.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -230,13 +231,14 @@ private fun LayerEditDialog(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LayerColors.palette.forEach { color ->
                         val stored = LayerColors.toStored(color)
+                        val isSelected = stored == selectedColor
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(if (isSelected) 40.dp else 32.dp)
                                 .background(color = color, shape = CircleShape)
                                 .then(
-                                    if (stored == selectedColor) {
-                                        Modifier.padding(2.dp)
+                                    if (isSelected) {
+                                        Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
                                     } else {
                                         Modifier
                                     }

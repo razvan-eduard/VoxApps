@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +38,7 @@ import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.state.CalendarViewMode
+import com.voxapps.design.DoubleBackToExitHandler
 import java.text.DateFormat
 import java.time.Instant
 import java.time.ZoneId
@@ -62,11 +64,19 @@ fun CalendarScreen(
     val layerById = remember(state.layers) { state.layers.associateBy { it.id } }
     val locale = Locale.forLanguageTag(language)
     var daySummaryFor by remember { mutableStateOf<Long?>(null) }
+    var sidebarVisible by remember { mutableStateOf(true) }
+
+    DoubleBackToExitHandler(message = languageManager.getString("press_back_again_to_exit"))
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(languageManager.getString("calendar_title")) },
+                navigationIcon = {
+                    IconButton(onClick = { sidebarVisible = !sidebarVisible }) {
+                        Icon(Icons.Filled.Menu, contentDescription = languageManager.getString("toggle_sidebar"))
+                    }
+                },
                 actions = {
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
@@ -88,13 +98,15 @@ fun CalendarScreen(
             )
         }
         Row(modifier = Modifier.padding(padding).fillMaxSize()) {
-            Sidebar(
-                viewMode = state.viewMode,
-                layers = state.layers,
-                availableTags = state.availableTags,
-                selectedTags = state.selectedTags,
-                stateManager = stateManager
-            )
+            if (sidebarVisible) {
+                Sidebar(
+                    viewMode = state.viewMode,
+                    layers = state.layers,
+                    availableTags = state.availableTags,
+                    selectedTags = state.selectedTags,
+                    stateManager = stateManager
+                )
+            }
             Box(modifier = Modifier.fillMaxSize()) {
                 when (state.viewMode) {
                     CalendarViewMode.YEAR -> YearView(
