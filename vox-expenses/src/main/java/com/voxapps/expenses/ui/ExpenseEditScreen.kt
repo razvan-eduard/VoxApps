@@ -1,17 +1,23 @@
 package com.voxapps.expenses.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -21,6 +27,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -34,8 +41,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,7 +56,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,8 +89,11 @@ private fun LineItemDraft.subtotal(useComma: Boolean): Double =
  * total is often correct even when its extracted item list is incomplete or wrong (see
  * [com.voxapps.expenses.domain.llm.ExpenseScanCleanupPromptBuilder]), so silently overwriting one with
  * the other would destroy real data. Instead, when the (committed) items don't sum to the total, the
- * total footer row below the item cards is flagged with a red background — the user decides which is
- * right and edits either one manually.
+ * total row is flagged in error color — the user decides which is right and edits either one manually.
+ *
+ * Fields render as underline-only inline-editable text ([PaperField]/[PaperTapField]) rather than
+ * boxed OutlinedTextFields — same functionality (tap, type, same value/onValueChange wiring), just a
+ * "paper form" look grouped into two shadowed [SectionCard]s (expense details, line items).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -163,128 +170,133 @@ fun ExpenseEditScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text(languageManager.getString("expense_title_optional")) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            item {
-                OutlinedTextField(
-                    value = vendor,
-                    onValueChange = { vendor = it },
-                    label = { Text(languageManager.getString("expense_vendor")) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            item {
-                OutlinedTextField(
-                    value = bank,
-                    onValueChange = { bank = it },
-                    label = { Text(languageManager.getString("expense_bank")) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            item {
-                OutlinedTextField(
-                    value = location,
-                    onValueChange = { location = it },
-                    label = { Text(languageManager.getString("expense_location")) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            item {
-                OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.CalendarMonth, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(dateTime)))
-                }
-            }
-            item {
-                Column {
-                    OutlinedButton(onClick = { categoryMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text(categories.firstOrNull { it.id == categoryId }?.name ?: languageManager.getString("none"))
-                    }
-                    DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text(languageManager.getString("none")) },
-                            onClick = { categoryId = null; categoryMenuExpanded = false }
-                        )
-                        categories.forEach { cat ->
-                            DropdownMenuItem(
-                                text = { Text(cat.name) },
-                                onClick = { categoryId = cat.id; categoryMenuExpanded = false }
+                SectionCard {
+                    SectionTitle(languageManager.getString("expense_details"))
+
+                    PaperField(
+                        label = languageManager.getString("expense_title_optional"),
+                        value = title,
+                        onValueChange = { title = it }
+                    )
+                    PaperField(
+                        label = languageManager.getString("expense_vendor"),
+                        value = vendor,
+                        onValueChange = { vendor = it }
+                    )
+                    PaperField(
+                        label = languageManager.getString("expense_bank"),
+                        value = bank,
+                        onValueChange = { bank = it }
+                    )
+                    PaperField(
+                        label = languageManager.getString("expense_location"),
+                        value = location,
+                        onValueChange = { location = it }
+                    )
+                    PaperTapField(
+                        label = languageManager.getString("expense_date"),
+                        value = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(dateTime)),
+                        onClick = { showDatePicker = true },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Filled.CalendarMonth,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
+                    )
+                    Box {
+                        PaperTapField(
+                            label = languageManager.getString("expense_category"),
+                            value = categories.firstOrNull { it.id == categoryId }?.name ?: languageManager.getString("none"),
+                            onClick = { categoryMenuExpanded = true },
+                            trailingIcon = {
+                                Icon(
+                                    Icons.Filled.ExpandMore,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        )
+                        DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text(languageManager.getString("none")) },
+                                onClick = { categoryId = null; categoryMenuExpanded = false }
+                            )
+                            categories.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(cat.name) },
+                                    onClick = { categoryId = cat.id; categoryMenuExpanded = false }
+                                )
+                            }
+                        }
+                    }
+                    PaperField(
+                        label = languageManager.getString("expense_comments"),
+                        value = comments,
+                        onValueChange = { comments = it },
+                        singleLine = false,
+                        minLines = 2
+                    )
+
+                    val amountColor = if (totalMismatch) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+                        PaperField(
+                            label = languageManager.getString("expense_amount"),
+                            value = totalText,
+                            onValueChange = { totalText = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            valueColor = amountColor,
+                            dividerColor = amountColor.copy(alpha = if (totalMismatch) 1f else 0.4f),
+                            modifier = Modifier.weight(1f)
+                        )
+                        PaperField(
+                            label = languageManager.getString("expense_currency"),
+                            value = currency,
+                            onValueChange = { currency = it.uppercase().take(3) },
+                            modifier = Modifier.weight(0.6f)
+                        )
+                    }
+                    if (totalMismatch) {
+                        Text(
+                            languageManager.getString("expense_total_mismatch"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }
-            item {
-                OutlinedTextField(
-                    value = comments,
-                    onValueChange = { comments = it },
-                    label = { Text(languageManager.getString("expense_comments")) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-            }
-
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp)) }
 
             item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(languageManager.getString("line_items"), style = MaterialTheme.typography.titleMedium)
-                    TextButton(onClick = {
-                        items.add(LineItemDraft("", "1", ""))
-                    }) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
-                        Text(languageManager.getString("add_item"))
+                SectionCard {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        SectionTitle(languageManager.getString("line_items"))
+                        TextButton(onClick = {
+                            items.add(LineItemDraft("", "1", ""))
+                        }) {
+                            Icon(Icons.Filled.Add, contentDescription = null)
+                            Text(languageManager.getString("add_item"))
+                        }
                     }
-                }
-            }
 
-            if (items.isNotEmpty()) {
-                item {
-                    LineItemHeaderRow(vatDisplayEnabled, languageManager)
-                }
-            }
+                    if (items.isNotEmpty()) {
+                        LineItemHeaderRow(vatDisplayEnabled, languageManager)
+                    }
 
-            items(items.size) { index ->
-                LineItemCard(
-                    item = items[index],
-                    vatDisplayEnabled = vatDisplayEnabled,
-                    languageManager = languageManager,
-                    onCommit = { items[index] = it },
-                    onDelete = { pendingDeleteItemIndex = index }
-                )
-            }
-
-            item {
-                val footerBackground = if (totalMismatch) MaterialTheme.colorScheme.errorContainer else Color.Transparent
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(footerBackground)
-                        .padding(if (totalMismatch) 8.dp else 0.dp)
-                ) {
-                    OutlinedTextField(
-                        value = totalText,
-                        onValueChange = { totalText = it },
-                        label = { Text(languageManager.getString("expense_amount")) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        isError = totalMismatch,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = currency,
-                        onValueChange = { currency = it.uppercase().take(3) },
-                        label = { Text(languageManager.getString("expense_currency")) },
-                        modifier = Modifier.weight(0.6f)
-                    )
+                    items.forEachIndexed { index, draftItem ->
+                        LineItemCard(
+                            item = draftItem,
+                            vatDisplayEnabled = vatDisplayEnabled,
+                            languageManager = languageManager,
+                            onCommit = { items[index] = it },
+                            onDelete = { pendingDeleteItemIndex = index }
+                        )
+                    }
                 }
             }
 
@@ -389,6 +401,103 @@ fun ExpenseEditScreen(
     }
 }
 
+/** Shared "paper form" container: soft rounded corners, a faint outline, and a drop shadow. */
+@Composable
+private fun SectionCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, style = MaterialTheme.typography.titleMedium)
+}
+
+/**
+ * Label caption + underline-only editable text — the "paper form" replacement for a boxed
+ * OutlinedTextField. Same value/onValueChange contract, just no filled background or border box;
+ * an empty field shows [label] itself, in a muted tone, until typed into.
+ */
+@Composable
+private fun PaperField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    valueColor: Color = MaterialTheme.colorScheme.primary,
+    dividerColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+) {
+    Column(modifier = modifier) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
+            if (value.isEmpty()) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = valueColor),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                keyboardOptions = keyboardOptions,
+                singleLine = singleLine,
+                minLines = minLines,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        HorizontalDivider(color = dividerColor, thickness = 1.dp)
+    }
+}
+
+/** Same "paper form" look as [PaperField] but for tap-to-open pickers (date, category) instead of typed text. */
+@Composable
+private fun PaperTapField(
+    label: String,
+    value: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailingIcon: @Composable () -> Unit = {}
+) {
+    Column(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+        ) {
+            Text(
+                value,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+            trailingIcon()
+        }
+        Spacer(Modifier.height(4.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), thickness = 1.dp)
+    }
+}
+
 @Composable
 private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val languageManager = LocalLanguageManager.current
@@ -433,8 +542,8 @@ private fun LineItemHeaderRow(
 /**
  * One line item as a card (mirrors [ExpenseCard]'s container style). Tapping the card in display mode
  * enters edit mode with a local draft — keystrokes only touch this draft, never [item] itself, so the
- * total-mismatch calculation (driven by the committed [items] list in the parent) doesn't react until
- * the green check confirms the draft via [onCommit]. The red X discards the draft unchanged.
+ * total-mismatch calculation (driven by the committed [items][LineItemDraft] list in the parent) doesn't
+ * react until the green check confirms the draft via [onCommit]. The red X discards the draft unchanged.
  */
 @Composable
 private fun LineItemCard(
@@ -447,12 +556,13 @@ private fun LineItemCard(
     var isEditing by remember { mutableStateOf(false) }
     var draft by remember(isEditing) { mutableStateOf(item) }
 
-    val cardColors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    val cardColors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
 
     if (!isEditing) {
         Card(
             onClick = { draft = item; isEditing = true },
             colors = cardColors,
+            shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
@@ -479,7 +589,7 @@ private fun LineItemCard(
             }
         }
     } else {
-        Card(colors = cardColors, modifier = Modifier.fillMaxWidth()) {
+        Card(colors = cardColors, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     InlineEditField(
@@ -539,7 +649,7 @@ private fun LineItemCard(
     }
 }
 
-/** A single inline-editable cell: lighter background box (vs. the card's darker container) around a BasicTextField. */
+/** A single inline-editable cell inside a line-item row: colored text over a thin underline, no filled background box. */
 @Composable
 private fun InlineEditField(
     value: String,
@@ -547,18 +657,17 @@ private fun InlineEditField(
     modifier: Modifier = Modifier,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default
 ) {
-    Box(
-        modifier = modifier
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 6.dp, vertical = 6.dp)
-    ) {
+    Column(modifier = modifier) {
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            textStyle = TextStyle.Default.copy(color = MaterialTheme.colorScheme.onSurface),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = keyboardOptions,
+            singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
+        Spacer(Modifier.height(2.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), thickness = 1.dp)
     }
 }
