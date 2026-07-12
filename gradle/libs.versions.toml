@@ -29,7 +29,7 @@ reorderable = "3.1.0"
 work = "2.11.2"
 onnxruntime = "1.21.1"
 opencv = "4.5.3"
-camerax = "1.4.1"
+camerax = "1.6.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
