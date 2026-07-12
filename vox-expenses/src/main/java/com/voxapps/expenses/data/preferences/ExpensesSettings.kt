@@ -46,6 +46,8 @@ import androidx.compose.runtime.Immutable
  * - [appCacheJson]: persisted JSON snapshot of [com.voxapps.expenses.domain.apps.LauncherAppsCache],
  *   so the launcher-app scan backing the notification-source picker only runs once ever (first
  *   launch), not on every app start — mirrors vox-commander's `AppRegistry`/`appCacheJson` pattern.
+ * - [themeDarkMode]/[themeColored]: same theme controls as vox-commander's AppSettings — "SYSTEM"/
+ *   "LIGHT"/"DARK" and Material You dynamic color, fed into the shared `:core:design` VoxTheme.
  */
 @Immutable
 data class ExpensesSettings(
@@ -65,7 +67,9 @@ data class ExpensesSettings(
     val vatDisplayEnabled: Boolean = false,
     val decimalSeparator: String = DECIMAL_PERIOD,
     val calendarViewEnabled: Boolean = false,
-    val appCacheJson: String? = null
+    val appCacheJson: String? = null,
+    val themeDarkMode: String = THEME_SYSTEM,
+    val themeColored: Boolean = true
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -82,5 +86,9 @@ data class ExpensesSettings(
 
         const val DECIMAL_PERIOD = "period"
         const val DECIMAL_COMMA = "comma"
+
+        const val THEME_SYSTEM = "SYSTEM"
+        const val THEME_LIGHT = "LIGHT"
+        const val THEME_DARK = "DARK"
     }
 }

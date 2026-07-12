@@ -14,5 +14,13 @@
   "hub_import_invalid_file": "Couldn't read that file as a Vox export.",
   "hub_status_ok": "Done",
   "hub_status_timeout": "No response",
-  "cancel": "Cancel"
+  "cancel": "Cancel",
+  "settings": "Settings",
+  "back": "Back",
+  "theme_section": "Theme",
+  "theme_system": "System",
+  "theme_light": "Light",
+  "theme_dark": "Dark",
+  "theme_colored": "Colored (Material You)",
+  "theme_colored_desc": "Use system dynamic colors (Android 12+)"
 }

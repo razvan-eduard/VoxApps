@@ -18,6 +18,8 @@ interface CalendarSettingsRepository {
     suspend fun setDefaultLayerId(id: Long?)
     suspend fun setAutoCreateLayer(enabled: Boolean)
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
+    suspend fun setThemeDarkMode(mode: String)
+    suspend fun setThemeColored(colored: Boolean)
 
     /** Bulk overwrite, e.g. from a Vox Hub import — writes every portable field in one DataStore edit. */
     suspend fun restoreSettings(settings: CalendarSettings)

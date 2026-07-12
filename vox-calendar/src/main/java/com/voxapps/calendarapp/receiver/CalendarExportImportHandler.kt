@@ -145,6 +145,8 @@ private fun CalendarSettings.toJson(): JSONObject = JSONObject().apply {
     put("defaultLayerId", defaultLayerId)
     put("autoCreateLayer", autoCreateLayer)
     put("debugLoggingEnabled", debugLoggingEnabled)
+    put("themeDarkMode", themeDarkMode)
+    put("themeColored", themeColored)
 }
 
 private fun JSONObject.toCalendarSettings(): CalendarSettings = CalendarSettings(
@@ -153,7 +155,9 @@ private fun JSONObject.toCalendarSettings(): CalendarSettings = CalendarSettings
     language = optString("language", CalendarSettings.DEFAULT_LANGUAGE),
     defaultLayerId = if (has("defaultLayerId") && !isNull("defaultLayerId")) optLong("defaultLayerId") else null,
     autoCreateLayer = optBoolean("autoCreateLayer", false),
-    debugLoggingEnabled = optBoolean("debugLoggingEnabled", false)
+    debugLoggingEnabled = optBoolean("debugLoggingEnabled", false),
+    themeDarkMode = optString("themeDarkMode", CalendarSettings.THEME_SYSTEM),
+    themeColored = optBoolean("themeColored", true)
 )
 
 private fun CalendarLayer.toJson(): JSONObject = JSONObject().apply {

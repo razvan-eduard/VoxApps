@@ -105,6 +105,8 @@ class CalendarStateManager internal constructor(
         Logger.setEnabled(enabled)
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }
     }
+    fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
+    fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
 
     // --- SESSION LOCK ---
     fun unlock() {

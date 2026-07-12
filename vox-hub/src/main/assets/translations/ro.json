@@ -14,5 +14,13 @@
   "hub_import_invalid_file": "Fișierul nu a putut fi citit ca export Vox.",
   "hub_status_ok": "Finalizat",
   "hub_status_timeout": "Fără răspuns",
-  "cancel": "Anulează"
+  "cancel": "Anulează",
+  "settings": "Setări",
+  "back": "Înapoi",
+  "theme_section": "Temă",
+  "theme_system": "Sistem",
+  "theme_light": "Luminos",
+  "theme_dark": "Întunecat",
+  "theme_colored": "Colorat (Material You)",
+  "theme_colored_desc": "Folosește culorile dinamice ale sistemului (Android 12+)"
 }

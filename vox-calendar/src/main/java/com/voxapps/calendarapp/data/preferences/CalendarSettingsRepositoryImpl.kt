@@ -28,6 +28,8 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val DEFAULT_LAYER_ID = longPreferencesKey("default_layer_id")
         val AUTO_CREATE_LAYER = booleanPreferencesKey("auto_create_layer")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
+        val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
+        val THEME_COLORED = booleanPreferencesKey("theme_colored")
     }
 
     override val settingsFlow: Flow<CalendarSettings> = dataStore.data.map { prefs ->
@@ -37,7 +39,9 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             language = prefs[Keys.LANGUAGE] ?: defaultDeviceLanguage(),
             defaultLayerId = prefs[Keys.DEFAULT_LAYER_ID],
             autoCreateLayer = prefs[Keys.AUTO_CREATE_LAYER] ?: false,
-            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false
+            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
+            themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: CalendarSettings.THEME_SYSTEM,
+            themeColored = prefs[Keys.THEME_COLORED] ?: true
         )
     }
 
@@ -78,6 +82,14 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
     }
 
+    override suspend fun setThemeDarkMode(mode: String) {
+        dataStore.edit { it[Keys.THEME_DARK_MODE] = mode }
+    }
+
+    override suspend fun setThemeColored(colored: Boolean) {
+        dataStore.edit { it[Keys.THEME_COLORED] = colored }
+    }
+
     override suspend fun restoreSettings(settings: CalendarSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -90,6 +102,8 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             }
             prefs[Keys.AUTO_CREATE_LAYER] = settings.autoCreateLayer
             prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
+            prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
+            prefs[Keys.THEME_COLORED] = settings.themeColored
         }
     }
 

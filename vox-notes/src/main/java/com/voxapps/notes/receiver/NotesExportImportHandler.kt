@@ -141,6 +141,8 @@ private fun NotesSettings.toJson(): JSONObject = JSONObject().apply {
     put("scheduledNoteDedupInterval", scheduledNoteDedupInterval)
     put("debugLoggingEnabled", debugLoggingEnabled)
     put("calendarViewEnabled", calendarViewEnabled)
+    put("themeDarkMode", themeDarkMode)
+    put("themeColored", themeColored)
 }
 
 private fun JSONObject.toNotesSettings(): NotesSettings = NotesSettings(
@@ -153,7 +155,9 @@ private fun JSONObject.toNotesSettings(): NotesSettings = NotesSettings(
     scheduledMergeInterval = optString("scheduledMergeInterval", NotesSettings.INTERVAL_OFF),
     scheduledNoteDedupInterval = optString("scheduledNoteDedupInterval", NotesSettings.INTERVAL_OFF),
     debugLoggingEnabled = optBoolean("debugLoggingEnabled", false),
-    calendarViewEnabled = optBoolean("calendarViewEnabled", false)
+    calendarViewEnabled = optBoolean("calendarViewEnabled", false),
+    themeDarkMode = optString("themeDarkMode", NotesSettings.THEME_SYSTEM),
+    themeColored = optBoolean("themeColored", true)
 )
 
 private fun Category.toJson(): JSONObject = JSONObject().apply {

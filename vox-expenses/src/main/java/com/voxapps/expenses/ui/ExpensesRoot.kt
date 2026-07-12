@@ -30,12 +30,19 @@ fun ExpensesRoot(
     container: ExpensesContainer,
     onUnlockRequest: () -> Unit
 ) {
+    val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
+        initialValue = ExpensesSettings()
+    )
     CompositionLocalProvider(LocalLanguageManager provides container.languageManager) {
-        VoxTheme(darkMode = VoxDarkMode.SYSTEM, colored = true) {
+        VoxTheme(
+            darkMode = when (settings.themeDarkMode) {
+                ExpensesSettings.THEME_LIGHT -> VoxDarkMode.LIGHT
+                ExpensesSettings.THEME_DARK -> VoxDarkMode.DARK
+                else -> VoxDarkMode.SYSTEM
+            },
+            colored = settings.themeColored
+        ) {
             val ui by container.expensesStateManager.uiState.collectAsStateWithLifecycle()
-            val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
-                initialValue = ExpensesSettings()
-            )
             var showSettings by remember { mutableStateOf(false) }
             var showReports by remember { mutableStateOf(false) }
             var editTarget by remember { mutableStateOf<EditTarget?>(null) }

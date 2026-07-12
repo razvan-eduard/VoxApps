@@ -22,6 +22,8 @@ interface NotesSettingsRepository {
     suspend fun setScheduledNoteDedupInterval(interval: String)
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
     suspend fun setCalendarViewEnabled(enabled: Boolean)
+    suspend fun setThemeDarkMode(mode: String)
+    suspend fun setThemeColored(colored: Boolean)
 
     /** Bulk overwrite, e.g. from a Vox Hub import — writes every field in one DataStore edit. */
     suspend fun restoreSettings(settings: NotesSettings)

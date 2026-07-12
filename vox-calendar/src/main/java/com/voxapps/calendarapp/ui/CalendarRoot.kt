@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
+import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.ui.settings.SettingsScreen
@@ -29,8 +30,18 @@ fun CalendarRoot(
     container: CalendarContainer,
     onUnlockRequest: () -> Unit
 ) {
+    val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
+        initialValue = CalendarSettings()
+    )
     CompositionLocalProvider(LocalLanguageManager provides container.languageManager) {
-        VoxTheme(darkMode = VoxDarkMode.SYSTEM, colored = true) {
+        VoxTheme(
+            darkMode = when (settings.themeDarkMode) {
+                CalendarSettings.THEME_LIGHT -> VoxDarkMode.LIGHT
+                CalendarSettings.THEME_DARK -> VoxDarkMode.DARK
+                else -> VoxDarkMode.SYSTEM
+            },
+            colored = settings.themeColored
+        ) {
             val ui by container.calendarStateManager.uiState.collectAsStateWithLifecycle()
             var showSettings by remember { mutableStateOf(false) }
             var editTarget by remember { mutableStateOf<EditTarget?>(null) }

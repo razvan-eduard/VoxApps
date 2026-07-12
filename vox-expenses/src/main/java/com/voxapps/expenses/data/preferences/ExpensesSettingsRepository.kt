@@ -30,6 +30,8 @@ interface ExpensesSettingsRepository {
     suspend fun setCalendarViewEnabled(enabled: Boolean)
     suspend fun setAppCache(json: String)
     suspend fun clearAppCache()
+    suspend fun setThemeDarkMode(mode: String)
+    suspend fun setThemeColored(colored: Boolean)
 
     /**
      * Bulk overwrite, e.g. from a Vox Hub import — writes every portable field in one DataStore edit.

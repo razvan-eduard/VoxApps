@@ -23,12 +23,19 @@ fun NotesRoot(
     container: NotesContainer,
     onUnlockRequest: () -> Unit
 ) {
+    val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
+        initialValue = NotesSettings()
+    )
     CompositionLocalProvider(LocalLanguageManager provides container.languageManager) {
-        VoxTheme(darkMode = VoxDarkMode.SYSTEM, colored = true) {
+        VoxTheme(
+            darkMode = when (settings.themeDarkMode) {
+                NotesSettings.THEME_LIGHT -> VoxDarkMode.LIGHT
+                NotesSettings.THEME_DARK -> VoxDarkMode.DARK
+                else -> VoxDarkMode.SYSTEM
+            },
+            colored = settings.themeColored
+        ) {
             val ui by container.notesStateManager.uiState.collectAsStateWithLifecycle()
-            val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
-                initialValue = NotesSettings()
-            )
             var showSettings by remember { mutableStateOf(false) }
 
             when (val state = ui) {

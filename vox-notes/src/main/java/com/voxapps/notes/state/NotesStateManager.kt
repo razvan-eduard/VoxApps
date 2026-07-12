@@ -100,6 +100,8 @@ class NotesStateManager internal constructor(
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }
     }
     fun setCalendarViewEnabled(enabled: Boolean) { scope.launch { settingsRepo.setCalendarViewEnabled(enabled) } }
+    fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
+    fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
     fun seedDebugTestData() {
         scope.launch { com.voxapps.notes.domain.debug.DebugDataSeeder.seed(notesRepo) }
     }

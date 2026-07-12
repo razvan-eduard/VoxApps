@@ -40,6 +40,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val DECIMAL_SEPARATOR = stringPreferencesKey("decimal_separator")
         val CALENDAR_VIEW_ENABLED = booleanPreferencesKey("calendar_view_enabled")
         val APP_CACHE_JSON = stringPreferencesKey("app_cache_json")
+        val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
+        val THEME_COLORED = booleanPreferencesKey("theme_colored")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -60,7 +62,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             vatDisplayEnabled = prefs[Keys.VAT_DISPLAY_ENABLED] ?: false,
             decimalSeparator = prefs[Keys.DECIMAL_SEPARATOR] ?: ExpensesSettings.DECIMAL_PERIOD,
             calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
-            appCacheJson = prefs[Keys.APP_CACHE_JSON]
+            appCacheJson = prefs[Keys.APP_CACHE_JSON],
+            themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: ExpensesSettings.THEME_SYSTEM,
+            themeColored = prefs[Keys.THEME_COLORED] ?: true
         )
     }
 
@@ -154,6 +158,14 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it.remove(Keys.APP_CACHE_JSON) }
     }
 
+    override suspend fun setThemeDarkMode(mode: String) {
+        dataStore.edit { it[Keys.THEME_DARK_MODE] = mode }
+    }
+
+    override suspend fun setThemeColored(colored: Boolean) {
+        dataStore.edit { it[Keys.THEME_COLORED] = colored }
+    }
+
     override suspend fun restoreSettings(settings: ExpensesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -176,6 +188,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.VAT_DISPLAY_ENABLED] = settings.vatDisplayEnabled
             prefs[Keys.DECIMAL_SEPARATOR] = settings.decimalSeparator
             prefs[Keys.CALENDAR_VIEW_ENABLED] = settings.calendarViewEnabled
+            prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
+            prefs[Keys.THEME_COLORED] = settings.themeColored
             // appCacheJson intentionally untouched — see interface doc comment.
         }
     }

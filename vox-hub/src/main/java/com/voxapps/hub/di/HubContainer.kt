@@ -1,13 +1,16 @@
 package com.voxapps.hub.di
 
 import android.content.Context
+import com.voxapps.hub.data.preferences.HubSettingsRepository
+import com.voxapps.hub.data.preferences.HubSettingsRepositoryImpl
 import com.voxapps.hub.domain.localization.LanguageManager
 import java.util.Locale
 
 /**
  * Manual DI container for Vox Hub (mirrors vox-vision's VisionContainer shape). Hub holds no local
- * database or settings — it's a pure IPC client over [com.voxapps.ipc.VoxAppsDiscovery] /
- * [com.voxapps.ipc.VoxDataTransferClient], so there's nothing else to wire here yet.
+ * database — it's a pure IPC client over [com.voxapps.ipc.VoxAppsDiscovery] /
+ * [com.voxapps.ipc.VoxDataTransferClient] — but does persist a small theme preference, see
+ * [HubSettingsRepository].
  */
 class HubContainer(context: Context) {
     private val appContext = context.applicationContext
@@ -15,4 +18,6 @@ class HubContainer(context: Context) {
     val languageManager = LanguageManager(appContext).also {
         it.loadLanguage(Locale.getDefault().language)
     }
+
+    val settingsRepository: HubSettingsRepository = HubSettingsRepositoryImpl(appContext)
 }

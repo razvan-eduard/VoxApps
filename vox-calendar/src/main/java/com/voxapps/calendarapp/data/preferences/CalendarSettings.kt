@@ -12,6 +12,8 @@ import androidx.compose.runtime.Immutable
  *   the spoken layer name doesn't match an existing one — same semantics as vox-expenses' equivalent
  *   voice-category fields.
  * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output — off by default.
+ * - [themeDarkMode]/[themeColored]: same theme controls as vox-commander's AppSettings — "SYSTEM"/
+ *   "LIGHT"/"DARK" and Material You dynamic color, fed into the shared `:core:design` VoxTheme.
  */
 @Immutable
 data class CalendarSettings(
@@ -20,7 +22,9 @@ data class CalendarSettings(
     val language: String = DEFAULT_LANGUAGE,
     val defaultLayerId: Long? = null,
     val autoCreateLayer: Boolean = false,
-    val debugLoggingEnabled: Boolean = false
+    val debugLoggingEnabled: Boolean = false,
+    val themeDarkMode: String = THEME_SYSTEM,
+    val themeColored: Boolean = true
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -28,5 +32,9 @@ data class CalendarSettings(
         const val TIMEOUT_1D = 1440
         const val TIMEOUT_UNLIMITED = -1
         const val DEFAULT_LANGUAGE = "en"
+
+        const val THEME_SYSTEM = "SYSTEM"
+        const val THEME_LIGHT = "LIGHT"
+        const val THEME_DARK = "DARK"
     }
 }

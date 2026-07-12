@@ -68,6 +68,12 @@
   "delete_entry_title": "Delete this entry?",
   "delete_entry_message": "This event or task will be permanently deleted.",
 
+  "theme_section": "Theme",
+  "theme_system": "System",
+  "theme_light": "Light",
+  "theme_dark": "Dark",
+  "theme_colored": "Colored (Material You)",
+  "theme_colored_desc": "Use system dynamic colors (Android 12+)",
   "require_fingerprint": "Require fingerprint to read calendar",
   "require_fingerprint_desc": "Lock the app behind a biometric or device credential prompt",
   "session_timeout": "Session timeout",

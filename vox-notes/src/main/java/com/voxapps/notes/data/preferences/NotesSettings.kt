@@ -24,6 +24,8 @@ import androidx.compose.runtime.Immutable
  * - [calendarViewEnabled]: swaps the main screen's chronological list for a month-paged, per-day
  *   calendar view (see `:core:calendar`). Off by default — it changes the primary browsing
  *   paradigm, so it's an explicit opt-in rather than a silent default switch.
+ * - [themeDarkMode]/[themeColored]: same theme controls as vox-commander's AppSettings — "SYSTEM"/
+ *   "LIGHT"/"DARK" and Material You dynamic color, fed into the shared `:core:design` VoxTheme.
  */
 @Immutable
 data class NotesSettings(
@@ -37,7 +39,9 @@ data class NotesSettings(
     val scheduledMergeInterval: String = INTERVAL_OFF,
     val scheduledNoteDedupInterval: String = INTERVAL_OFF,
     val debugLoggingEnabled: Boolean = false,
-    val calendarViewEnabled: Boolean = false
+    val calendarViewEnabled: Boolean = false,
+    val themeDarkMode: String = THEME_SYSTEM,
+    val themeColored: Boolean = true
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -50,5 +54,9 @@ data class NotesSettings(
         const val INTERVAL_DAILY = "DAILY"
         const val INTERVAL_WEEKLY = "WEEKLY"
         const val INTERVAL_MONTHLY = "MONTHLY"
+
+        const val THEME_SYSTEM = "SYSTEM"
+        const val THEME_LIGHT = "LIGHT"
+        const val THEME_DARK = "DARK"
     }
 }

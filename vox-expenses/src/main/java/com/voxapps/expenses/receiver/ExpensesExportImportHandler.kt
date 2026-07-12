@@ -171,6 +171,8 @@ private fun ExpensesSettings.toJson(): JSONObject = JSONObject().apply {
     put("vatDisplayEnabled", vatDisplayEnabled)
     put("decimalSeparator", decimalSeparator)
     put("calendarViewEnabled", calendarViewEnabled)
+    put("themeDarkMode", themeDarkMode)
+    put("themeColored", themeColored)
     // appCacheJson intentionally excluded — internal cache, not user data.
 }
 
@@ -203,7 +205,9 @@ private fun JSONObject.toExpensesSettings(): ExpensesSettings {
         debugLoggingEnabled = optBoolean("debugLoggingEnabled", false),
         vatDisplayEnabled = optBoolean("vatDisplayEnabled", false),
         decimalSeparator = optString("decimalSeparator", ExpensesSettings.DECIMAL_PERIOD),
-        calendarViewEnabled = optBoolean("calendarViewEnabled", false)
+        calendarViewEnabled = optBoolean("calendarViewEnabled", false),
+        themeDarkMode = optString("themeDarkMode", ExpensesSettings.THEME_SYSTEM),
+        themeColored = optBoolean("themeColored", true)
     )
 }
 

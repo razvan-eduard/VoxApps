@@ -35,6 +35,36 @@ fun GeneralSettingsTab(
     ) {
         Text(text = languageManager.getString("general"), style = MaterialTheme.typography.titleMedium)
 
+        // --- Theme (mirrors vox-commander's General settings) ---
+        Text(languageManager.getString("theme_section"), style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val themeModes = listOf(
+                CalendarSettings.THEME_SYSTEM to "theme_system",
+                CalendarSettings.THEME_LIGHT to "theme_light",
+                CalendarSettings.THEME_DARK to "theme_dark"
+            )
+            themeModes.forEach { (mode, labelKey) ->
+                FilterChip(
+                    selected = settings.themeDarkMode == mode,
+                    onClick = { stateManager.setThemeDarkMode(mode) },
+                    label = { Text(languageManager.getString(labelKey)) }
+                )
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("theme_colored"), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    languageManager.getString("theme_colored_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(checked = settings.themeColored, onCheckedChange = { stateManager.setThemeColored(it) })
+        }
+
+        HorizontalDivider()
+
         // --- Require fingerprint ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
