@@ -223,7 +223,7 @@ fun ServiceSettingsTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(languageManager.getString("ww_aec_label") ?: "Echo Cancellation (AEC)")
                 Text(
                     text = languageManager.getString("ww_aec_desc") ?: "Allows wake word during TTS/music playback",
@@ -231,6 +231,7 @@ fun ServiceSettingsTab(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Spacer(Modifier.width(8.dp))
             Switch(
                 checked = uiState.wakeWordAecEnabled,
                 onCheckedChange = { appStateManager.setWakeWordAecEnabled(it) }
@@ -243,7 +244,7 @@ fun ServiceSettingsTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(languageManager.getString("ww_music_duck_label") ?: "Reduce sensitivity during music")
                 Text(
                     text = languageManager.getString("ww_music_duck_desc")
@@ -252,6 +253,7 @@ fun ServiceSettingsTab(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Spacer(Modifier.width(8.dp))
             Switch(
                 checked = uiState.wakeWordMusicDuckEnabled,
                 onCheckedChange = { appStateManager.setWakeWordMusicDuckEnabled(it) }
