@@ -102,6 +102,25 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         dataStore.edit { it[Keys.CALENDAR_VIEW_ENABLED] = enabled }
     }
 
+    override suspend fun restoreSettings(settings: NotesSettings) {
+        dataStore.edit { prefs ->
+            prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
+            prefs[Keys.SESSION_TIMEOUT_MINUTES] = settings.sessionTimeoutMinutes
+            if (settings.defaultVoiceCategoryId == null) {
+                prefs.remove(Keys.DEFAULT_VOICE_CATEGORY_ID)
+            } else {
+                prefs[Keys.DEFAULT_VOICE_CATEGORY_ID] = settings.defaultVoiceCategoryId
+            }
+            prefs[Keys.VOICE_SAVE_TOAST_ENABLED] = settings.voiceSaveToastEnabled
+            prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] = settings.autoCreateVoiceCategory
+            prefs[Keys.LANGUAGE] = settings.language
+            prefs[Keys.SCHEDULED_MERGE_INTERVAL] = settings.scheduledMergeInterval
+            prefs[Keys.SCHEDULED_NOTE_DEDUP_INTERVAL] = settings.scheduledNoteDedupInterval
+            prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
+            prefs[Keys.CALENDAR_VIEW_ENABLED] = settings.calendarViewEnabled
+        }
+    }
+
     private fun defaultDeviceLanguage(): String =
         java.util.Locale.getDefault().language.ifBlank { NotesSettings.DEFAULT_LANGUAGE }
 }

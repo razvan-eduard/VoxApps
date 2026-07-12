@@ -56,6 +56,19 @@ object VoxIpc {
     /** Handshake used by Commander's "Vox Apps" discovery to verify a satellite responds. */
     const val OP_PING = "ping"
 
+    /**
+     * Vox Hub's data-portability ops. A satellite that advertises these in [META_ACTIONS] replies to
+     * [OP_EXPORT] with its full settings+data as a JSON [VoxResult.text], and accepts the same shape
+     * back via [OP_IMPORT]'s [VoxCommand.text]. See [VoxDataTransferClient].
+     */
+    const val OP_EXPORT = "export"
+    const val OP_IMPORT = "import"
+
+    /** [VoxCommand.exportScope] values — which slice of an app's export payload to include. */
+    const val EXPORT_SCOPE_SETTINGS = "settings"
+    const val EXPORT_SCOPE_DATA = "data"
+    const val EXPORT_SCOPE_BOTH = "both"
+
     // --- Domains ---
     const val DOMAIN_NOTES = "notes"
     const val DOMAIN_VISION = "vision"

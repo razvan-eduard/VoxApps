@@ -1,5 +1,6 @@
 package com.voxapps.commander.domain.integration
 
+import com.voxapps.ipc.VoxAppInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

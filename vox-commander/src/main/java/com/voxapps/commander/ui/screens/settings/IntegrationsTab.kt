@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.filled.Apps
 import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.domain.integration.VoxAppsDiscovery
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.service.SpotifyPkceManager
 import com.voxapps.commander.service.SpotifyRemoteManager

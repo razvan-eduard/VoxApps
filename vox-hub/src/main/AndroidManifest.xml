@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        The COMMAND permission guarding every satellite's receiver is declared once in :core:ipc's
+        own manifest (shared across every Vox app) and folded in here automatically via manifest
+        merger — see VoxIpc.kt's class doc comment. Hub is a pure IPC client (discovers satellites,
+        requests export/import) — it holds no local database and exposes no receiver of its own.
+    -->
+
+    <application
+        android:name=".HubApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VoxHub">
+
+        <activity
+            android:name=".HubActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

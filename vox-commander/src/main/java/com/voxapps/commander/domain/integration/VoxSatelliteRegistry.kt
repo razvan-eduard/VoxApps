@@ -2,6 +2,8 @@ package com.voxapps.commander.domain.integration
 
 import android.content.Context
 import com.voxapps.commander.utils.Logger
+import com.voxapps.ipc.VoxAppInfo
+import com.voxapps.ipc.VoxAppsDiscovery
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

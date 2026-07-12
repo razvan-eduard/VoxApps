@@ -17,6 +17,9 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:logging"))
+    implementation(libs.kotlinx.coroutines.android)
+
     // org.json ships in android.jar at compile time; unit tests need the real implementation
     // (the android.jar stub throws "Stub!"), mirroring vox-commander's test setup.
     testImplementation(libs.junit)

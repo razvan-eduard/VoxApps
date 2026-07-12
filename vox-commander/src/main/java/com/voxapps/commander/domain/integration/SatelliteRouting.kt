@@ -1,5 +1,7 @@
 package com.voxapps.commander.domain.integration
 
+import com.voxapps.ipc.VoxAppInfo
+
 /**
  * Pure decision for "which satellite gets this command" when several apps claim the same domain.
  * No Android dependencies → unit-testable. The hierarchy (highest priority first):

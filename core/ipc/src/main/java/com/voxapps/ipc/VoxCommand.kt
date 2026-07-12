@@ -12,7 +12,10 @@ data class VoxCommand(
     val title: String? = null,
     val category: String? = null,
     val limit: Int? = null,
-    val domain: String? = null
+    val domain: String? = null,
+    /** [VoxIpc.OP_EXPORT] scope: one of [VoxIpc.EXPORT_SCOPE_SETTINGS]/[VoxIpc.EXPORT_SCOPE_DATA]/
+     *  [VoxIpc.EXPORT_SCOPE_BOTH]. Null defaults to "both" on the receiving end. */
+    val exportScope: String? = null
 ) {
     fun toJson(): String {
         val o = JSONObject()
@@ -22,6 +25,7 @@ data class VoxCommand(
         category?.let { o.put("category", it) }
         limit?.let { o.put("limit", it) }
         domain?.let { o.put("domain", it) }
+        exportScope?.let { o.put("exportScope", it) }
         return o.toString()
     }
 
@@ -38,7 +42,8 @@ data class VoxCommand(
                     title = o.optStringOrNull("title"),
                     category = o.optStringOrNull("category"),
                     limit = if (o.has("limit")) o.optInt("limit") else null,
-                    domain = o.optStringOrNull("domain")
+                    domain = o.optStringOrNull("domain"),
+                    exportScope = o.optStringOrNull("exportScope")
                 )
             } catch (e: Exception) {
                 null

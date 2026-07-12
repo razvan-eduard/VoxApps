@@ -146,6 +146,20 @@
                 <action android:name="com.voxapps.action.LLM_PROCESS" />
             </intent-filter>
         </receiver>
+
+        <!-- Vox command bus entry point: lets Vox Hub discover Commander and export its settings
+             (see VoxCommandReceiver's own doc comment for why only ping/export are handled here). -->
+        <receiver
+            android:name=".receiver.VoxCommandReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.vox.permission.COMMAND">
+            <intent-filter>
+                <action android:name="com.voxapps.action.VOX_COMMAND" />
+            </intent-filter>
+            <meta-data android:name="com.voxapps.vox.domain" android:value="commander" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="ping,export" />
+            <meta-data android:name="com.voxapps.vox.label" android:value="Vox Commander" />
+        </receiver>
     </application>
 
 </manifest>

@@ -1,14 +1,11 @@
-package com.voxapps.commander.domain.integration
+package com.voxapps.ipc
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import com.voxapps.commander.utils.Logger
-import com.voxapps.ipc.VoxCommand
-import com.voxapps.ipc.VoxIpc
-import com.voxapps.ipc.VoxResult
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -22,7 +19,7 @@ data class VoxAppInfo(
     val label: String,
     val domain: String?,
     val actions: List<String>,
-    /** True if signed with Commander's own key — a "first-party" satellite that wins routing ties. */
+    /** True if signed with the caller's own key — a "first-party" satellite that wins routing ties. */
     val isFirstParty: Boolean = false,
     /** Optional NLU extraction hint the satellite advertises; injected into the prompt. */
     val nluHint: String? = null
@@ -30,9 +27,10 @@ data class VoxAppInfo(
 
 /**
  * Discovers installed apps that implement the Vox contract (an exported [VoxIpc.ACTION_COMMAND]
- * receiver) and reads their advertised capability from manifest meta-data — no per-app config on
- * Commander. A user's own app that declares the contract self-registers here. [ping] is the live
- * "does it actually respond" check.
+ * receiver) and reads their advertised capability from manifest meta-data — no per-app config on the
+ * caller. A user's own app that declares the contract self-registers here. [ping] is the live
+ * "does it actually respond" check. Shared between vox-commander's "Vox Apps" discovery and Vox Hub's
+ * export/import app list — moved here (from vox-commander) so both can depend on it.
  */
 object VoxAppsDiscovery {
 
@@ -73,7 +71,7 @@ object VoxAppsDiscovery {
 
     /**
      * Live handshake: sends an ordered [VoxIpc.OP_PING] broadcast and waits for the satellite's
-     * `ok` reply. Requires Commander to hold that satellite's COMMAND permission.
+     * `ok` reply. Requires the caller to hold that satellite's COMMAND permission.
      */
     suspend fun ping(context: Context, packageName: String, timeoutMs: Long = 2_000L): Boolean {
         val intent = Intent(VoxIpc.ACTION_COMMAND).apply {
@@ -98,7 +96,7 @@ object VoxAppsDiscovery {
                 )
             }
         } ?: run {
-            Logger.log("Ping to $packageName timed out", "VoxAppsDiscovery")
+            Logger.d("VoxAppsDiscovery", "Ping to $packageName timed out")
             false
         }
     }

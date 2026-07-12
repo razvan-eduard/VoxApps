@@ -1,0 +1,18 @@
+{
+  "hub_title": "Vox Hub",
+  "hub_no_apps_found": "No Vox apps with export/import support found on this device.",
+  "hub_export_section": "Export",
+  "hub_scope_settings": "Settings",
+  "hub_scope_data": "Data",
+  "hub_scope_both": "Both",
+  "hub_export_button": "Export selected",
+  "hub_import_section": "Import",
+  "hub_import_button": "Choose file to import",
+  "hub_import_confirm_title": "Import this data?",
+  "hub_import_apply_button": "Import",
+  "hub_import_no_matching_apps": "This file doesn't match any installed Vox app.",
+  "hub_import_invalid_file": "Couldn't read that file as a Vox export.",
+  "hub_status_ok": "Done",
+  "hub_status_timeout": "No response",
+  "cancel": "Cancel"
+}

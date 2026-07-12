@@ -2,7 +2,7 @@ package com.voxapps.commander.domain.intent.interpreter
 
 import com.google.gson.Gson
 import com.voxapps.commander.data.remote.RemoteModelSchema
-import com.voxapps.commander.domain.integration.VoxAppInfo
+import com.voxapps.ipc.VoxAppInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

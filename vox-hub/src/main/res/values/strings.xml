@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Only the Android-required app label lives here — all other UI text lives in
+         assets/translations/*.json, loaded via LanguageManager (see utils/Strings.kt). -->
+    <string name="app_name">Vox Hub</string>
+</resources>

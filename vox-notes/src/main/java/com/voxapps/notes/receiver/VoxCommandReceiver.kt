@@ -79,7 +79,44 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        setResult(Activity.RESULT_OK, responder.respond().toJson(), null)
+                        // Must use the PendingResult's own setResultData, not the inherited
+                        // BroadcastReceiver.setResult() — the latter throws "Call while result is
+                        // not pending" once called from outside onReceive()'s synchronous window,
+                        // which goAsync()'s whole point is to let us do.
+                        pending.setResultData(responder.respond().toJson())
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            VoxIpc.OP_EXPORT -> {
+                val handler = NotesExportImportHandler(
+                    container.settingsRepository,
+                    container.sessionManager,
+                    container.notesRepository
+                )
+                val pending = goAsync()
+                val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        pending.setResultData(handler.export(scope).toJson())
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            VoxIpc.OP_IMPORT -> {
+                val handler = NotesExportImportHandler(
+                    container.settingsRepository,
+                    container.sessionManager,
+                    container.notesRepository
+                )
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        pending.setResultData(handler.import(command.text.orEmpty()).toJson())
                     } finally {
                         pending.finish()
                     }

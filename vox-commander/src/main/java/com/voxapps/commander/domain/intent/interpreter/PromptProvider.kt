@@ -2,7 +2,7 @@ package com.voxapps.commander.domain.intent.interpreter
 
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.remote.RemoteModelRegistry
-import com.voxapps.commander.domain.integration.VoxAppInfo
+import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.commander.domain.integration.VoxSatelliteRegistry
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
