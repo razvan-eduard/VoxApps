@@ -42,13 +42,27 @@
 -dontwarn ai.onnxruntime.**
 -dontwarn com.k2fsa.sherpa.onnx.**
 
-# Vosk
+# Vosk (and its transitive JNA dependency — org.vosk's own native bridge is built on top of
+# com.sun.jna, not a direct JNI bridge. JNA's Native.initIDs() native method looks up
+# com.sun.jna.Pointer's "peer" field by exact class/field name at class-init time; with no keep rule
+# for it, R8 was free to rename/strip that field, crashing with "UnsatisfiedLinkError: Can't obtain
+# peer field ID for class com.sun.jna.Pointer" the moment org.vosk.Model was ever constructed —
+# confirmed on-device starting the Vosk wake word service. Same class of bug as the ai.onnxruntime
+# and Whisper JNI fixes above: a library whose only "usage" R8 can see statically is a plain field
+# reference, but whose actual consumer is native code doing a lookup by literal name.)
 -keep class org.vosk.** { *; }
 -dontwarn org.vosk.**
+-keep class com.sun.jna.** { *; }
+-dontwarn com.sun.jna.**
 
 # NewPipe Extractor
 -keep class org.schabi.newpipe.** { *; }
 -dontwarn org.schabi.newpipe.**
+
+# Picovoice Porcupine / its android-voice-processor dependency — same class of bug as onnxruntime/
+# Whisper/Vosk above (native libpv_porcupine.so bridge), had zero protection before this rule.
+-keep class ai.picovoice.** { *; }
+-dontwarn ai.picovoice.**
 
 # Gson: the @SerializedName rule below only protects fields, not the class itself — R8's class
 # merging/inlining optimizations can still turn a POJO that's *only* ever reached via

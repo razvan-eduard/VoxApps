@@ -201,6 +201,18 @@ class WakeWordService : Service() {
             val wakeWord = snapshot.wakeWord
             val engineType = snapshot.wakeWordEngineType
 
+            // snapshot.wakeWord is Commander's single global wake-PHRASE setting -- only meaningful
+            // for Vosk, which detects an arbitrary configurable phrase. OpenWakeWord/Porcupine
+            // detect whatever their selected pre-trained model was built for (Alexa, Hey Jarvis,
+            // etc.), so passing the Vosk phrase into their initialize() calls mislabels every
+            // detection under the wrong name (confirmed on-device: OpenWakeWord correctly detected
+            // Alexa with a real score, but logged/displayed as "hi vosk", which read as if the wrong
+            // engine were running at all). Resolve the real model label from the registry instead.
+            fun engineDisplayWakeWord(registryKey: String): String =
+                snapshot.wakeWordModelPath
+                    ?.let { modelId -> com.voxapps.commander.data.remote.RemoteModelRegistry.getModels(registryKey).find { it.id == modelId }?.label }
+                    ?: wakeWord
+
             val engineDisplayName = when (engineType) {
                 "wake_porcupine", "porcupine" -> "Porcupine"
                 "wake_openwakeword", "openwakeword" -> "OpenWakeWord"
@@ -226,7 +238,7 @@ class WakeWordService : Service() {
                 wakeWordEngine = PorcupineWakeWordEngine(this@WakeWordService, settingsRepo, appStateManager) {
                     onWakeWordDetected()
                 }
-                val initialized = wakeWordEngine?.initialize("", wakeWord) ?: false
+                val initialized = wakeWordEngine?.initialize("", engineDisplayWakeWord("wake_porcupine")) ?: false
                 if (initialized) {
                     wakeWordEngine?.startListening()
                     delay(100)
@@ -243,7 +255,7 @@ class WakeWordService : Service() {
                 wakeWordEngine = OpenWakeWordEngine(this@WakeWordService, appStateManager) {
                     onWakeWordDetected()
                 }
-                val initialized = wakeWordEngine?.initialize(modelFileName, wakeWord) ?: false
+                val initialized = wakeWordEngine?.initialize(modelFileName, engineDisplayWakeWord("wake_openwakeword")) ?: false
                 if (initialized) {
                     wakeWordEngine?.startListening()
                     delay(100)
