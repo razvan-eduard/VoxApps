@@ -37,14 +37,22 @@ android {
 
     buildTypes {
         release {
-            // material-icons-extended alone is an ~87MB unshrunk jar (thousands of icon classes);
-            // without R8, every unused one ships in the APK. Shrinking is what actually keeps release
-            // builds under IzzyOnDroid's size guideline — per-ABI splitting wouldn't help here since
-            // the bulk is DEX bytecode, not native libs.
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseKeystorePath != null) {
                 signingConfig = signingConfigs.getByName("release")
+            }
+            packaging {
+                jniLibs {
+                    excludes += setOf(
+                        "lib/arm64-v8a/libonnxruntime.so",
+                        "lib/arm64-v8a/libopencv_core.so",
+                        "lib/arm64-v8a/libopencv_imgproc.so",
+                        "lib/arm64-v8a/libopencv_imgcodecs.so",
+                        "lib/arm64-v8a/libopencv_java4.so"
+                    )
+                }
             }
         }
     }
@@ -81,4 +89,7 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+
+    // DLC native library downloading
+    implementation(libs.okhttp)
 }

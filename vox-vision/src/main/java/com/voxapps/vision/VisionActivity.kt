@@ -25,13 +25,6 @@ import com.voxapps.vision.ui.VisionRoot
  * holds no persisted sensitive data to lock). Also the direct-launch target when another satellite
  * asks Vision to scan on its behalf (see [VoxIpc.VISION_ACTIVITY_CLASS]) — the caller is foreground
  * itself when it does this, so no notification/background-activity-launch detour is needed.
- *
- * If Vision is already running (e.g. left open from a previous standalone session), a repeat launch
- * brings the *existing* instance to front via [onNewIntent] rather than a fresh [onCreate] — confirmed
- * on-device: without overriding onNewIntent (and without `launchMode="singleTask"` in the manifest),
- * the new intent's pending-request extras were silently dropped and the already-running standalone
- * instance just resurfaced unchanged. Pending state is therefore held in Compose state, re-parsed on
- * both onCreate and onNewIntent.
  */
 class VisionActivity : ComponentActivity() {
 

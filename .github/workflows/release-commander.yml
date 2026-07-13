@@ -132,6 +132,15 @@ jobs:
              VoxCommander-${{ steps.version.outputs.tag }}.apk
           echo "apk_path=VoxCommander-${{ steps.version.outputs.tag }}.apk" >> $GITHUB_OUTPUT
 
+      - name: Collect native libraries for DLC
+        if: steps.check_bump.outputs.changed != 'false'
+        run: |
+          # Copy essential libs to a staging folder for upload
+          mkdir -p dlc-libs
+          find vox-commander/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a -name "*.so" \
+            -exec cp {} dlc-libs/ \;
+          ls -R dlc-libs/
+
       - name: Generate CHANGELOG.md
         if: steps.check_bump.outputs.changed != 'false'
         id: changelog
@@ -180,6 +189,7 @@ jobs:
           files: |
             VoxCommander-*.apk
             CHANGELOG.md
+            dlc-libs/*.so
           body_path: CHANGELOG.md
           generate_release_notes: true
           draft: false

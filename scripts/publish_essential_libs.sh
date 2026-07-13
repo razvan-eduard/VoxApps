@@ -15,16 +15,27 @@ log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
 
 # --- CONFIG ---
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TAG="v0.2-beta"
-# Path to stripped release libs after a successful build
-SOURCE_DIR="$PROJECT_ROOT/vox-commander/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a"
+COMMANDER_TAG="v0.2-beta"
+VISION_TAG="vision-v0.1"
 
-ESSENTIAL_LIBS=(
+# Paths to stripped release libs after a successful build
+COMMANDER_SOURCE="$PROJECT_ROOT/vox-commander/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a"
+VISION_SOURCE="$PROJECT_ROOT/vox-vision/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a"
+
+COMMANDER_LIBS=(
     "libonnxruntime.so"
     "libllm_inference_engine_jni.so"
     "libvosk.so"
     "libsherpa-onnx-c-api.so"
     "libsherpa-onnx-jni.so"
+)
+
+VISION_LIBS=(
+    "libonnxruntime.so"
+    "libopencv_core.so"
+    "libopencv_imgproc.so"
+    "libopencv_imgcodecs.so"
+    "libopencv_java4.so"
 )
 
 # --- CHECK PREREQUISITES ---
@@ -38,34 +49,28 @@ if ! gh auth status &> /dev/null; then
     exit 1
 fi
 
-# --- VERIFY SOURCE DIR ---
-if [ ! -d "$SOURCE_DIR" ]; then
-    log_warn "Source directory not found. Building release APK first..."
+# --- PUBLISH COMMANDER LIBS ---
+log_blue "📦 Publishing Commander DLC libs to: $COMMANDER_TAG"
+if [ ! -d "$COMMANDER_SOURCE" ]; then
+    log_warn "Commander source not found. Building..."
     "$PROJECT_ROOT/gradlew" :vox-commander:assembleRelease
 fi
 
-# --- VERIFY LIBS EXIST ---
-for lib in "${ESSENTIAL_LIBS[@]}"; do
-    if [ ! -f "$SOURCE_DIR/$lib" ]; then
-        log_error "Missing: $SOURCE_DIR/$lib. Please run ./gradlew :vox-commander:assembleRelease"
-        exit 1
-    fi
+for lib in "${COMMANDER_LIBS[@]}"; do
+    log_info "Uploading $lib to $COMMANDER_TAG..."
+    gh release upload "$COMMANDER_TAG" "$COMMANDER_SOURCE/$lib" --clobber
 done
 
-log_blue "📦 Publishing Essential DLC libs to GitHub release: $TAG"
-
-# --- ENSURE RELEASE EXISTS ---
-if ! gh release view "$TAG" &> /dev/null; then
-    log_info "Release '$TAG' doesn't exist. Creating it..."
-    gh release create "$TAG" --title "VoxCommander $TAG" --notes "Release $TAG with Essential DLC libraries."
+# --- PUBLISH VISION LIBS ---
+log_blue "📦 Publishing Vision DLC libs to: $VISION_TAG"
+if [ ! -d "$VISION_SOURCE" ]; then
+    log_warn "Vision source not found. Building..."
+    "$PROJECT_ROOT/gradlew" :vox-vision:assembleRelease
 fi
 
-# --- UPLOAD ---
-for lib in "${ESSENTIAL_LIBS[@]}"; do
-    log_info "Uploading $lib..."
-    gh release upload "$TAG" "$SOURCE_DIR/$lib" --clobber
-    log_info "  ✅ $lib uploaded"
+for lib in "${VISION_LIBS[@]}"; do
+    log_info "Uploading $lib to $VISION_TAG..."
+    gh release upload "$VISION_TAG" "$VISION_SOURCE/$lib" --clobber
 done
 
-log_info "🎉 All essential libs published to $TAG"
-log_info "   Apps will now be able to download them on startup."
+log_info "🎉 All essential libs published."

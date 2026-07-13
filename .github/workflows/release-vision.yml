@@ -79,6 +79,13 @@ jobs:
           cp vox-vision/build/outputs/apk/release/vox-vision-release.apk \
              VoxVision-${{ steps.version.outputs.tag }}.apk
 
+      - name: Collect native libraries for DLC
+        if: steps.check_bump.outputs.changed != 'false'
+        run: |
+          mkdir -p dlc-libs
+          find vox-vision/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a -name "*.so" \
+            -exec cp {} dlc-libs/ \;
+
       - name: Create GitHub Release
         if: steps.check_bump.outputs.changed != 'false'
         uses: softprops/action-gh-release@v2
@@ -86,6 +93,7 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           files: |
             VoxVision-*.apk
+            dlc-libs/*.so
           generate_release_notes: true
           draft: false
         env:

@@ -2,6 +2,7 @@ package com.voxapps.vision
 
 import android.app.Application
 import com.voxapps.logging.Logger
+import com.voxapps.vision.data.NativeLibManager
 import com.voxapps.vision.di.VisionContainer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +18,9 @@ class VisionApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = VisionContainer(this)
+
+        // Initialize native libraries (load if present)
+        NativeLibManager.loadAll(this)
 
         // Keep the shared Logger's on/off flag in sync with the persisted Settings toggle.
         container.settingsRepository.debugLoggingEnabledFlow
