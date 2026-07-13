@@ -102,28 +102,9 @@ jobs:
       - name: Determine version tag
         if: steps.check_bump.outputs.changed != 'false'
         id: version
-        run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            # Auto-build from versionCode bump, or a manual workflow_dispatch run on main
-            # (bypasses the check_bump gate above, e.g. to force-rebuild without a version
-            # change) — both cases read versionName from gradle the same way.
-            VERSION_NAME=$(grep 'versionName' vox-commander/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
-            TAG="commander-v${VERSION_NAME}"
-            if echo "$VERSION_NAME" | grep -qiE '-beta|-rc|-alpha'; then
-              IS_PRERELEASE="true"
-            else
-              IS_PRERELEASE="false"
-            fi
-          else
-            TAG="${GITHUB_REF_NAME}"
-            if echo "$TAG" | grep -qiE '-beta|-rc|-alpha'; then
-              IS_PRERELEASE="true"
-            else
-              IS_PRERELEASE="false"
-            fi
-          fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+        uses: ./.github/actions/compute-release-tag
+        with:
+          app-prefix: commander
 
       - name: Strip DLC libs and sign APK
         if: steps.check_bump.outputs.changed != 'false'

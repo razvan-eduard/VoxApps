@@ -1,0 +1,47 @@
+name: Compute release tag
+description: >
+  Single source of truth for this repo's "<app-prefix>-v<versionName>" release tag convention
+  (vision-v0.4, commander-v0.5-beta, etc.) — was previously duplicated as an ~12-line bash block in
+  every release-*.yml. Auto-build (push to main / workflow_dispatch) reads versionName straight from
+  that app's vox-<app-prefix>/build.gradle.kts; a direct tag push passes the pushed tag straight
+  through instead of recomputing it.
+
+inputs:
+  app-prefix:
+    description: >
+      This app's tag prefix — also its module directory name without the "vox-" (e.g. "vision" for
+      vox-vision/build.gradle.kts, tag "vision-v<versionName>"). Change an app's prefix here AND in
+      that workflow's own `on.push.tags` pattern (GitHub Actions can't read trigger patterns from an
+      external file) AND in that app's NativeLibManager.kt/getReleaseTag() if it downloads DLC libs.
+    required: true
+
+outputs:
+  tag:
+    description: The resolved release tag.
+    value: ${{ steps.compute.outputs.tag }}
+  is_prerelease:
+    description: "\"true\" if the version name contains -beta/-rc/-alpha, else \"false\"."
+    value: ${{ steps.compute.outputs.is_prerelease }}
+
+runs:
+  using: composite
+  steps:
+    - id: compute
+      shell: bash
+      run: |
+        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          # Auto-build from a versionCode bump, or a manual workflow_dispatch run on main (bypasses
+          # the caller's own check_bump gate, e.g. to force-rebuild without a version change).
+          VERSION_NAME=$(grep 'versionName' "vox-${{ inputs.app-prefix }}/build.gradle.kts" | sed 's/.*"\(.*\)".*/\1/')
+          TAG="${{ inputs.app-prefix }}-v${VERSION_NAME}"
+        else
+          TAG="${GITHUB_REF_NAME}"
+          VERSION_NAME="$TAG"
+        fi
+        if echo "$VERSION_NAME" | grep -qiE '\-beta|\-rc|\-alpha'; then
+          IS_PRERELEASE="true"
+        else
+          IS_PRERELEASE="false"
+        fi
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
