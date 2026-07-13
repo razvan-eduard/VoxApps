@@ -1,5 +1,6 @@
 package com.voxapps.hub.ui
 
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -46,6 +47,7 @@ import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxIpc
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -76,6 +78,15 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
     var exportStatus by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var exportOk by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
+    // Populated when an export attempt finds apps that never responded even to a ping — offers to
+    // flash just those (not the whole selection) rather than blanket-prompting every time.
+    var showFlashRetryDialog by remember { mutableStateOf(false) }
+    var pendingExportUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingUnreachable by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var pendingResults by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var pendingOkFlags by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var pendingPerDomainJson by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
     var isImporting by remember { mutableStateOf(false) }
     var importPreview by remember { mutableStateOf<ImportPreview?>(null) }
     var selectedForImport by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -90,6 +101,74 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
         selectedForExport = discovered.filter { it.actions.contains("export") }.map { it.packageName }.toSet()
     }
 
+    fun finalizeExport(uri: Uri, perDomainJson: Map<String, String>) {
+        if (perDomainJson.isNotEmpty()) {
+            val document = ExportImportUtil.buildExportDocument(perDomainJson)
+            context.contentResolver.openOutputStream(uri)?.use { it.write(document.toByteArray()) }
+            Toast.makeText(context, languageManager.getString("hub_export_saved_toast"), Toast.LENGTH_SHORT).show()
+        }
+        isExporting = false
+    }
+
+    /**
+     * Flashes only [targetPackages] (not the whole selection) — briefly starts each one's own
+     * launcher activity to clear Android's "stopped" component state (the only way to do so; no
+     * broadcast, including a ping, can), brings Hub back to front, then retries export for just
+     * those apps and merges the result into the export already collected for everyone else.
+     */
+    fun retryUnreachableThenFinalize(
+        uri: Uri,
+        targetPackages: Set<String>,
+        priorResults: Map<String, String>,
+        priorOkFlags: Map<String, Boolean>,
+        priorPerDomainJson: Map<String, String>
+    ) {
+        isExporting = true
+        scope.launch {
+            // Clearing Android's "stopped" flag requires the target app's activity to genuinely
+            // reach RESUMED (visible) state, not merely be started — batching every launch into one
+            // startActivities() call avoids BAL blocking but never lets the non-final entries
+            // actually resume (confirmed via dumpsys: their stopped flag stayed true even though a
+            // process spawned). So each target needs its own startActivity() call with enough delay
+            // to really finish its transition — but a delay much past ~1s makes Hub's own next call
+            // BAL-blocked (confirmed via logcat "Background activity launch blocked!" at 700ms).
+            // 350ms threads that needle: long enough for a real activity transition, short enough to
+            // stay inside Hub's post-tap BAL grace window for every call in the chain.
+            for (pkg in targetPackages) {
+                context.packageManager.getLaunchIntentForPackage(pkg)?.let { intent ->
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    delay(350L)
+                }
+            }
+            context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            }
+            delay(300L)
+
+            val results = priorResults.toMutableMap()
+            val okFlags = priorOkFlags.toMutableMap()
+            val perDomainJson = priorPerDomainJson.toMutableMap()
+            for (app in apps.filter { it.packageName in targetPackages }) {
+                val domain = app.domain ?: app.packageName
+                val result = VoxDataTransferClient.requestExport(context, app.packageName, exportScope)
+                if (result != null && result.ok) {
+                    perDomainJson[domain] = result.text
+                    results[app.packageName] = languageManager.getString("hub_status_ok")
+                    okFlags[app.packageName] = true
+                } else {
+                    results[app.packageName] = result?.text?.takeIf { it.isNotBlank() }
+                        ?: languageManager.getString("hub_status_timeout")
+                    okFlags[app.packageName] = false
+                }
+                exportStatus = results.toMap()
+                exportOk = okFlags.toMap()
+            }
+            finalizeExport(uri, perDomainJson)
+        }
+    }
+
     val createDocumentLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri: Uri? ->
@@ -102,40 +181,56 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
             val results = mutableMapOf<String, String>()
             val okFlags = mutableMapOf<String, Boolean>()
             val perDomainJson = mutableMapOf<String, String>()
+            val unreachable = mutableSetOf<String>()
             for (app in targets) {
                 val domain = app.domain ?: app.packageName
-                // Warm the target app up first: a fully cold process (never launched, or killed by
-                // the OS since) can still be mid-init — Room/SQLCipher opening, DI container wiring —
-                // when the real export request lands, and silently times out instead of answering.
-                // A cheap ping first (with a cold-start-friendly timeout) gives the process a chance
-                // to finish starting before the heavier export request is sent to it.
-                VoxAppsDiscovery.ping(context, app.packageName, timeoutMs = 8_000L)
-                val result = VoxDataTransferClient.requestExport(context, app.packageName, exportScope)
-                if (result != null && result.ok) {
-                    perDomainJson[domain] = result.text
-                    results[app.packageName] = languageManager.getString("hub_status_ok")
-                    okFlags[app.packageName] = true
-                } else {
-                    results[app.packageName] = result?.text?.takeIf { it.isNotBlank() }
-                        ?: languageManager.getString("hub_status_timeout")
+                // Ping first, cheaply, with a cold-start-friendly timeout: a process that's simply
+                // been backgrounded/memory-reclaimed (not explicitly stopped) will wake up and
+                // answer here. If it DOESN'T — genuinely unreachable, e.g. never launched or Force
+                // Stopped — skip the heavier export request entirely (it would just time out too)
+                // and flag it for the flash-retry dialog instead of burning another ~10s on it.
+                val reachable = VoxAppsDiscovery.ping(context, app.packageName, timeoutMs = 8_000L)
+                if (!reachable) {
+                    results[app.packageName] = languageManager.getString("hub_status_timeout")
                     okFlags[app.packageName] = false
+                    unreachable += app.packageName
+                } else {
+                    val result = VoxDataTransferClient.requestExport(context, app.packageName, exportScope)
+                    if (result != null && result.ok) {
+                        perDomainJson[domain] = result.text
+                        results[app.packageName] = languageManager.getString("hub_status_ok")
+                        okFlags[app.packageName] = true
+                    } else {
+                        results[app.packageName] = result?.text?.takeIf { it.isNotBlank() }
+                            ?: languageManager.getString("hub_status_timeout")
+                        okFlags[app.packageName] = false
+                    }
                 }
                 // Update per-app as each one finishes, not just at the very end, so the green
                 // checkmark appears progressively while later apps are still exporting.
                 exportStatus = results.toMap()
                 exportOk = okFlags.toMap()
             }
-            if (perDomainJson.isNotEmpty()) {
-                val document = ExportImportUtil.buildExportDocument(perDomainJson)
-                context.contentResolver.openOutputStream(uri)?.use { it.write(document.toByteArray()) }
-                Toast.makeText(
-                    context,
-                    languageManager.getString("hub_export_saved_toast"),
-                    Toast.LENGTH_SHORT
-                ).show()
+            if (unreachable.isNotEmpty()) {
+                pendingExportUri = uri
+                pendingUnreachable = unreachable
+                pendingResults = results
+                pendingOkFlags = okFlags
+                pendingPerDomainJson = perDomainJson
+                showFlashRetryDialog = true
+                isExporting = false
+            } else {
+                finalizeExport(uri, perDomainJson)
             }
-            isExporting = false
         }
+    }
+
+    fun startExportFlow() {
+        // Includes time-of-day, not just the date — otherwise multiple exports on the same day
+        // collide on filename and the system file picker silently appends "(1)", "(2)", etc.,
+        // which made past backups easy to mix up.
+        val fileName = "vox-export-${SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())}.json"
+        createDocumentLauncher.launch(fileName)
     }
 
     val openDocumentLauncher = rememberLauncherForActivityResult(
@@ -224,13 +319,7 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                     }
                 }
                 Button(
-                    onClick = {
-                        // Includes time-of-day, not just the date — otherwise multiple exports on the
-                        // same day collide on filename and the system file picker silently appends
-                        // "(1)", "(2)", etc., which made past backups easy to mix up.
-                        val fileName = "vox-export-${SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())}.json"
-                        createDocumentLauncher.launch(fileName)
-                    },
+                    onClick = { startExportFlow() },
                     enabled = !isExporting && selectedForExport.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -310,6 +399,45 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
             },
             dismissButton = {
                 TextButton(onClick = { importPreview = null }) { Text(languageManager.getString("cancel")) }
+            }
+        )
+    }
+
+    if (showFlashRetryDialog) {
+        val unreachableLabels = apps
+            .filter { it.packageName in pendingUnreachable }
+            .joinToString(", ") { it.label }
+        AlertDialog(
+            onDismissRequest = {
+                showFlashRetryDialog = false
+                pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson) }
+            },
+            title = { Text(languageManager.getString("hub_prewarm_title")) },
+            text = { Text(String.format(languageManager.getString("hub_prewarm_message"), unreachableLabels)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showFlashRetryDialog = false
+                        val uri = pendingExportUri
+                        if (uri != null) {
+                            retryUnreachableThenFinalize(
+                                uri = uri,
+                                targetPackages = pendingUnreachable,
+                                priorResults = pendingResults,
+                                priorOkFlags = pendingOkFlags,
+                                priorPerDomainJson = pendingPerDomainJson
+                            )
+                        }
+                    }
+                ) { Text(languageManager.getString("hub_prewarm_flash_button")) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showFlashRetryDialog = false
+                        pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson) }
+                    }
+                ) { Text(languageManager.getString("hub_prewarm_skip_button")) }
             }
         )
     }
