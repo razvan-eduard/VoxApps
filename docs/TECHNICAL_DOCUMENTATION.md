@@ -201,10 +201,12 @@ owning the source.
 - **Engine**: `WhisperSttEngine` in `domain/engine/whisper/`
 - **Models**: Downloaded on-demand from HuggingFace (`ggml-tiny.bin`, `ggml-base.bin`, `ggml-small.bin`)
 - **Release builds**: Whisper native libs excluded from APK via AGP's
-  `packaging.jniLibs.excludes` (reliable for this lib), downloaded as DLC. onnxruntime, Vosk,
-  mediapipe-genai, and sherpa-onnx-jni are also DLC'd, but via a different mechanism — a post-build
-  script strips them from the built APK zip directly and re-signs, since AGP's own exclude
-  mechanism is confirmed-unreliable on arm64-v8a for those specific libs (see
+  `packaging.jniLibs.excludes` (reliable for this lib), downloaded as real, user-facing DLC — the
+  model download above is the user-visible part of the same mechanism. onnxruntime, Vosk,
+  mediapipe-genai, and sherpa-onnx-jni are stripped from the APK the same way but aren't DLC in that
+  sense: there's no user choice involved, they're mandatory libraries the app needs to function at
+  all, silently fetched once on first launch — stripped via a post-build script instead of AGP's
+  exclude mechanism, which is confirmed-unreliable on arm64-v8a for those specific libs (see
   `docs/BUILD_TIME_DEPENDENCIES.md`). CI-published release: ~166MB → ~16MB. A plain local
   `assembleRelease` only gets the Whisper reduction (~40MB) since the strip step lives in
   `release-commander.yml`, not Gradle.

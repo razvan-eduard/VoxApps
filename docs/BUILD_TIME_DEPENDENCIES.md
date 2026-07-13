@@ -99,12 +99,16 @@ artifact could cover well.
   after the PR is merged, because CI can only verify "it compiles," never "it still transcribes
   correctly" — that needs an actual on-device sanity check.
 
-### DLC'ing onnxruntime/Vosk/mediapipe-genai/sherpa-onnx (post-build strip, not AGP excludes)
+### Stripping onnxruntime/Vosk/mediapipe-genai/sherpa-onnx (post-build strip, not AGP excludes)
 
 A local `./gradlew :vox-commander:assembleRelease` alone produces a ~40MB APK — only Whisper is
 excluded via AGP. The actual CI-published release gets to ~16MB, because
 `libonnxruntime.so`/`libllm_inference_engine_jni.so`/`libvosk.so`/`libsherpa-onnx-jni.so` are also
-DLC'd, just via a different mechanism than Whisper.
+stripped, just via a different mechanism than Whisper. Deliberately **not** called "DLC" here —
+unlike Whisper's model download (a genuine user choice: pick tiny/base/small in Settings), these are
+mandatory libraries the app can't function without; they're stripped from the APK and silently
+fetched once on first launch with no user involvement, closer to a deferred/lazy asset load than
+downloadable *content*.
 
 This was first attempted with AGP's `packaging.jniLibs.excludes`, same as Whisper, and reverted:
 AGP 9.0.0–9.2.1 (every currently published 9.x release, tested directly) has
@@ -131,7 +135,8 @@ loaded — confirmed via the compiled Java bindings' `loadLibrary` call) only ne
 `libonnxruntime.so` externally, making the other two genuinely unused dead weight.
 
 Vision doesn't have the AGP duplicate-declaration problem (single dependency source) — its
-`NativeLibManager`/`build.gradle.kts` DLC setup for onnxruntime + OpenCV uses AGP's own
+`NativeLibManager`/`build.gradle.kts` strip-and-fetch setup for onnxruntime + OpenCV (same
+mandatory-not-user-facing category as Commander's, above) uses AGP's own
 `packaging.jniLibs.excludes` directly and works reliably, no post-build stripping needed.
 
 **Known gap (planned, not yet done):** `check_whisper.sh` assumes Vulkan headers
