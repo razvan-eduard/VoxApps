@@ -92,6 +92,16 @@ class ModelManagementViewModel(
     private val _downloadingItem = MutableStateFlow<AppModel?>(null)
     val downloadingItem: StateFlow<AppModel?> = _downloadingItem.asStateFlow()
 
+    // Neither DownloadCompleteReceiver nor this class's own progress polling used to check
+    // DownloadManager's COLUMN_STATUS/COLUMN_REASON at all — a failed download (bad URL, network
+    // drop, server error) looked identical to the user as one that just silently never finished:
+    // the progress bar vanished with zero explanation. Confirmed on-device against a real failure
+    // (HuggingFace's Xet CDN backend 403ing every Whisper model file).
+    private val _downloadError = MutableStateFlow<String?>(null)
+    val downloadError: StateFlow<String?> = _downloadError.asStateFlow()
+
+    fun clearDownloadError() { _downloadError.value = null }
+
     private var handledDownloadIds = mutableSetOf<Long>()
 
     private val onDownloadCompleteLocal = object : BroadcastReceiver() {
@@ -312,6 +322,23 @@ class ModelManagementViewModel(
         appStateManager.refreshAll()
     }
 
+    /**
+     * DownloadManager.COLUMN_REASON, when COLUMN_STATUS == STATUS_FAILED, holds either a raw HTTP
+     * status code (400-599, when the server actually responded) or one of the ERROR_* sentinel
+     * constants (>= 1000) for client-side failures — the two ranges never overlap, so a plain
+     * numeric comparison is enough to tell them apart without extra state.
+     */
+    private fun describeDownloadFailure(reason: Int): String = when {
+        reason in 400..599 -> "server error $reason"
+        reason == DownloadManager.ERROR_INSUFFICIENT_SPACE -> "not enough storage space"
+        reason == DownloadManager.ERROR_DEVICE_NOT_FOUND -> "storage not available"
+        reason == DownloadManager.ERROR_HTTP_DATA_ERROR -> "connection dropped"
+        reason == DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "too many redirects"
+        reason == DownloadManager.ERROR_CANNOT_RESUME -> "couldn't resume download"
+        reason == DownloadManager.ERROR_FILE_ERROR -> "local file error"
+        else -> "network error (code $reason)"
+    }
+
     private fun startProgressTracking(id: Long) {
         progressJob?.cancel()
         progressJob = viewModelScope.launch(Dispatchers.IO) {
@@ -323,6 +350,12 @@ class ModelManagementViewModel(
                         val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
                         if (total > 0) _downloadProgress.value = downloaded.toFloat() / total.toFloat()
                         val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                        if (status == DownloadManager.STATUS_FAILED) {
+                            val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                            val modelLabel = _downloadingItem.value?.label ?: "Model"
+                            Logger.log("Download failed: id=$id, reason=$reason", TAG)
+                            _downloadError.value = "$modelLabel download failed: ${describeDownloadFailure(reason)}"
+                        }
                         if (status == DownloadManager.STATUS_SUCCESSFUL || status == DownloadManager.STATUS_FAILED || status == DownloadManager.STATUS_PAUSED) {
                             _downloadProgress.value = null
                             _downloadingItem.value = null

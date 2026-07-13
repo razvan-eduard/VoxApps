@@ -23,6 +23,20 @@ class DownloadCompleteReceiver : BroadcastReceiver() {
         val cursor = downloadManager.query(query)
 
         if (cursor.moveToFirst()) {
+            // A failed download (bad URL, server error, network drop) also fires this broadcast —
+            // it doesn't mean success. Logged here (this receiver has no UI to surface it to; see
+            // ModelManagementViewModel.downloadError for the user-facing side of this same check)
+            // so a silent failure is at least visible in the verbose log instead of just stopping
+            // here with zero trace.
+            val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+            if (statusIndex != -1 && cursor.getInt(statusIndex) != DownloadManager.STATUS_SUCCESSFUL) {
+                val reasonIndex = cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
+                val reason = if (reasonIndex != -1) cursor.getInt(reasonIndex) else -1
+                Logger.log("Download $id did not succeed (status=${cursor.getInt(statusIndex)}, reason=$reason), skipping file handling", TAG)
+                cursor.close()
+                return
+            }
+
             val uriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
             if (uriIndex != -1) {
                 val uriString = cursor.getString(uriIndex)

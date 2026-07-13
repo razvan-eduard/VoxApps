@@ -69,6 +69,13 @@ fun SettingsContent(
     val voskError by modelManagementViewModel.voskError.collectAsStateWithLifecycle()
     
     val vmDownloadingItem by modelManagementViewModel.downloadingItem.collectAsStateWithLifecycle()
+    val downloadError by modelManagementViewModel.downloadError.collectAsStateWithLifecycle()
+    LaunchedEffect(downloadError) {
+        downloadError?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            modelManagementViewModel.clearDownloadError()
+        }
+    }
 
 
     var modelToDelete by remember { mutableStateOf<AppModel?>(null) }
