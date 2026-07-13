@@ -2,45 +2,45 @@
 
 REMOTE="origin"
 
-# Aici ținem minte cuvintele sub formatul |tip:cuvant|tip:cuvant|
+# Track words in the format |type:word|type:word|
 seen_words="|"
 
-# CUVINTE DE IGNORAT pentru ramurile lăsate la deduplicare
+# WORDS TO IGNORE for branch deduplication
 ignore_words=" add added update updated fix fixed remove removed create created implement use move moved clean test better temp force improve improved make "
 
-echo "Sincronizăm cu serverul remote ($REMOTE)..."
+echo "Syncing with remote server ($REMOTE)..."
 git fetch $REMOTE --prune
 echo "-----------------------------------"
-echo "Analizăm branch-urile REMOTE..."
+echo "Analyzing REMOTE branches..."
 echo "-----------------------------------"
 
-# Parcurgem referințele remote în loc de cele locale
+# Iterate over remote references instead of local ones
 git for-each-ref --sort=-committerdate refs/remotes/$REMOTE/ --format='%(refname:short)' | while read -r remote_branch; do
 
-    # 'remote_branch' vine sub forma 'origin/feature/nume'. Extragem doar 'feature/nume'
+    # 'remote_branch' comes as 'origin/feature/name'. Extract only 'feature/name'
     branch="${remote_branch#$REMOTE/}"
 
-    # Sărim peste HEAD-ul remote-ului (ex: origin/HEAD)
+    # Skip remote HEAD (e.g., origin/HEAD)
     if [[ "$branch" == "HEAD" ]]; then continue; fi
 
-    # 1. Verificăm tipul branch-ului
+    # 1. Verify branch type
     if [[ ! "$branch" =~ ^(bugfix|chore|feature|hotfix|refactor)/ ]]; then
         continue
     fi
 
-    # Extragem tipul și descrierea
+    # Extract type and description
     branch_type="${branch%%/*}"
     branch_desc="${branch#*/}"
 
     is_duplicate=0
     matched_reason=""
     
-    # 2. Regulă specială: chore și hotfix se șterg implicit
+    # 2. Special rule: chore and hotfix are deleted by default
     if [[ "$branch_type" == "chore" || "$branch_type" == "hotfix" ]]; then
         is_duplicate=1
-        matched_reason="Tip implicit ($branch_type)"
+        matched_reason="Default type ($branch_type)"
     else
-        # 3. Logica de cuvinte comune pentru bugfix, feature și refactor
+        # 3. Common word logic for bugfix, feature, and refactor
         clean_desc=$(echo "$branch_desc" | tr '[:upper:]' '[:lower:]' | sed 's/[-_]/ /g')
         
         for word in $clean_desc; do
@@ -49,30 +49,30 @@ git for-each-ref --sort=-committerdate refs/remotes/$REMOTE/ --format='%(refname
 
             if [[ "$seen_words" == *"|$branch_type:$word|"* ]]; then
                 is_duplicate=1
-                matched_reason="Cuvânt comun: '$word'"
+                matched_reason="Common word: '$word'"
                 break 
             fi
         done
     fi
 
-    # 4. Executarea acțiunii pe REMOTE
+    # 4. Execute action on REMOTE
     if [ $is_duplicate -eq 1 ]; then
-        # Comanda de ștergere efectivă pe server. 
-        # Este COMENTATĂ pentru siguranță. Șterge '#' pentru a o activa.
+        # Actual deletion command on server.
+        # COMMENTED OUT for safety. Remove '#' to activate.
         
         # if git push $REMOTE --delete "$branch" >/dev/null 2>&1; then
-        #     echo -e "\033[31m[ȘTERS DE PE REMOTE]\033[0m $branch ($matched_reason)"
+        #     echo -e "\033[31m[DELETED FROM REMOTE]\033[0m $branch ($matched_reason)"
         # else
-        #     echo -e "\033[33m[EROARE REMOTE]\033[0m Nu am putut șterge $branch de pe server."
+        #     echo -e "\033[33m[REMOTE ERROR]\033[0m Could not delete $branch from server."
         # fi
         
-        # Linia de mai jos e doar pentru afișare (Dry Run). 
-        # Șterge-o sau comenteaz-o dacă activezi blocul 'if' de mai sus.
-        echo -e "\033[31m[DE ȘTERS REMOTE]\033[0m $branch ($matched_reason)"
+        # Line below is for display only (Dry Run).
+        # Delete or comment it out if you activate the 'if' block above.
+        echo -e "\033[31m[TO BE DELETED FROM REMOTE]\033[0m $branch ($matched_reason)"
     else
-        echo -e "\033[32m[PĂSTRAT REMOTE]\033[0m $branch"
+        echo -e "\033[32m[KEPT ON REMOTE]\033[0m $branch"
         
-        # Salvăm cuvintele
+        # Save words
         clean_desc=$(echo "$branch_desc" | tr '[:upper:]' '[:lower:]' | sed 's/[-_]/ /g')
         for word in $clean_desc; do
             if [ ${#word} -gt 2 ] && [[ ! "$ignore_words" == *" $word "* ]]; then
@@ -83,4 +83,4 @@ git for-each-ref --sort=-committerdate refs/remotes/$REMOTE/ --format='%(refname
 done
 
 echo "-----------------------------------"
-echo "Curățenie remote finalizată."
+echo "Remote cleanup finished."
