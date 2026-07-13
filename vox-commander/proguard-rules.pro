@@ -22,9 +22,15 @@
 -keep interface com.voxapps.ipc.** { *; }
 
 # Sherpa-ONNX / ONNX Runtime
--keep class com.microsoft.onnxruntime.** { *; }
+# The onnxruntime-android AAR's actual Java package is ai.onnxruntime.* (com.microsoft.onnxruntime
+# is just the Maven groupId, not a real package here) -- this rule targeted the wrong name entirely,
+# so R8 was freely renaming ai.onnxruntime.* classes while their native JNI counterpart
+# (libonnxruntime4j_jni.so) does FindClass()/GetMethodID() lookups by hardcoded original class name,
+# aborting with "JNI DETECTED ERROR IN APPLICATION: java_class == null" (confirmed on-device, native
+# tombstone crash starting WakeWordService with the OpenWakeWord engine, which runs ONNX inference).
+-keep class ai.onnxruntime.** { *; }
 -keep class com.k2fsa.sherpa.onnx.** { *; }
--dontwarn com.microsoft.onnxruntime.**
+-dontwarn ai.onnxruntime.**
 -dontwarn com.k2fsa.sherpa.onnx.**
 
 # Vosk

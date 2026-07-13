@@ -79,7 +79,17 @@ object AppRegistry {
         if (json.isNullOrBlank()) return false
         return try {
             val type = TypeToken.getParameterized(List::class.java, AppEntry::class.java).type
-            val cached: List<AppEntry> = gson.fromJson(json, type)
+            val rawCached: List<AppEntry>? = gson.fromJson(json, type)
+            // Gson deserializes via reflection, not Kotlin's constructor — a cache entry from a
+            // different/older schema (missing a field Gson can't fill in) leaves that "non-null"
+            // AppEntry field genuinely null at runtime despite the Kotlin type, which doesn't fail
+            // here (Gson doesn't throw for a missing field) but crashes much later wherever that
+            // entry's packageName/displayName is actually used — confirmed on-device: a corrupt
+            // cached entry reached AppSelectorDropdown -> AppPickerEntry's constructor and crashed
+            // Settings' tab navigation with a NullPointerException. Filtered out here, once, so every
+            // downstream consumer of scannedApps can keep trusting AppEntry's non-null contract.
+            val cached = rawCached?.filter { !it.packageName.isNullOrBlank() && it.displayName != null }
+                ?: emptyList()
             if (cached.isEmpty()) return false
             scannedApps = cached
             installedPackages = cached.map { it.packageName }.toSet()
