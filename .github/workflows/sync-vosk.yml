@@ -37,13 +37,21 @@ jobs:
           TOML_FILE="gradle/libs.versions.toml"
           CURRENT_VERSION=$(grep "^vosk =" "$TOML_FILE" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
 
+          # `|| true` on each grep: this runs under `bash -e` (GitHub Actions' default for `run:`
+          # blocks), so a grep that matches nothing (e.g. JitPack has no such repo — vosk-android is
+          # actually on Maven Central, not JitPack, despite this first attempt — confirmed via
+          # curl: JitPack returns "Repo not found or no token provided", no digits to match) would
+          # otherwise abort the whole step right there with its own exit code, silently skipping the
+          # Maven Central fallback below entirely rather than falling through to it. `head -1` guards
+          # against a response with more than one version-shaped substring (also observed for the
+          # sibling NewPipeExtractor sync script's JitPack response).
           LATEST_VERSION=$(curl -s --connect-timeout 5 --max-time 10 \
             https://jitpack.io/api/builds/com.github.alphacep/vosk-android/latest \
-            | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
+            | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1 || true)
           if [ -z "$LATEST_VERSION" ]; then
             LATEST_VERSION=$(curl -s --connect-timeout 5 --max-time 10 \
               "https://search.maven.org/solrsearch/select?q=g:com.alphacephei+AND+a:vosk-android&rows=50&wt=json" \
-              | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | sort -V | tail -1)
+              | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | sort -V | tail -1 || true)
           fi
 
           echo "current=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
