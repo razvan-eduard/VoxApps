@@ -28,7 +28,7 @@
   "capture_speed_high": "Ridicată (așteaptă mai mult pentru o decupare bine definită)",
   "debug_logging": "Jurnalizare depanare",
   "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme",
-  "splash_loading_engine": "Se descarcă motorul de procesare...",
+  "splash_loading_engine": "Se descarcă componentele motorului de procesare...",
   "splash_engine_ready": "Motor pregătit",
-  "splash_engine_error": "Eroare la încărcare. Verifică conexiunea."
+  "splash_engine_error": "Componentele nu au fost găsite sau nu există conexiune la internet. Verifică rețeaua și reîncearcă."
 }

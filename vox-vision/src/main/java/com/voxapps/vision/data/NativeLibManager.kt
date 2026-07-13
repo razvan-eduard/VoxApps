@@ -42,7 +42,7 @@ object NativeLibManager {
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             "vision-v${pInfo.versionName}"
         } catch (e: Exception) {
-            "vision-v0.1"
+            "vision-v0.3"
         }
     }
 
