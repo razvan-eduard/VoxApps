@@ -30,5 +30,6 @@
   "debug_logging_desc": "Write debug info to logcat — leave off unless you're troubleshooting an issue",
   "splash_loading_engine": "Downloading vision engine components...",
   "splash_engine_ready": "Engine ready",
-  "splash_engine_error": "Engine components not found or no internet. Please check your connection and try again."
+  "splash_engine_error": "Engine components not found or no internet. Please check your connection and try again.",
+  "splash_engine_retry": "Retry"
 }

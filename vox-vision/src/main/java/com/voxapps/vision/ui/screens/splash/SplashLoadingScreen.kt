@@ -106,17 +106,26 @@ fun SplashLoadingScreen(
                 )
             }
 
-            // Native lib error
+            // Native lib error — OpenCV/onnxruntime are genuinely required for Vision's core
+            // features, so this deliberately does NOT let the app through without them (that would
+            // just defer the failure to a confusing crash later); instead it offers a retry so a
+            // transient network failure (e.g. no connectivity on first launch) isn't a dead end.
             AnimatedVisibility(
                 visible = nativeStatus == NativeLibManager.Status.ERROR,
                 enter = fadeIn()
             ) {
-                Text(
-                    text = languageManager.getString("splash_engine_error"),
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = languageManager.getString("splash_engine_error"),
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    TextButton(onClick = { scope.launch { NativeLibManager.init(context) } }) {
+                        Text(languageManager.getString("splash_engine_retry"))
+                    }
+                }
             }
         }
     }

@@ -15,20 +15,25 @@ log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
 
 # --- CONFIG ---
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-COMMANDER_TAG="v0.2-beta"
-VISION_TAG="vision-v0.1"
+
+# Derive tags from each app's versionName at run time (mirrors release-commander.yml/
+# release-vision.yml's own tag computation) instead of hardcoding them — hardcoded tags silently
+# went stale after past version bumps (were pointing at v0.2-beta/vision-v0.1 while the actual
+# current releases were already several versions ahead).
+get_version_name() {
+    grep 'versionName' "$1" | sed 's/.*"\(.*\)".*/\1/'
+}
+COMMANDER_TAG="v$(get_version_name "$PROJECT_ROOT/vox-commander/build.gradle.kts")"
+VISION_TAG="vision-v$(get_version_name "$PROJECT_ROOT/vox-vision/build.gradle.kts")"
 
 # Paths to stripped release libs after a successful build
 COMMANDER_SOURCE="$PROJECT_ROOT/vox-commander/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a"
 VISION_SOURCE="$PROJECT_ROOT/vox-vision/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a"
 
-COMMANDER_LIBS=(
-    "libonnxruntime.so"
-    "libllm_inference_engine_jni.so"
-    "libvosk.so"
-    "libsherpa-onnx-c-api.so"
-    "libsherpa-onnx-jni.so"
-)
+# Empty — AGP 9.0.0-9.2.1 has confirmed-unreliable arm64-v8a native-lib packaging for Commander's
+# dependency set (see vox-commander/build.gradle.kts's release packaging comment). Left empty
+# until a future AGP version fixes this; the upload loop below becomes a no-op.
+COMMANDER_LIBS=()
 
 VISION_LIBS=(
     "libonnxruntime.so"

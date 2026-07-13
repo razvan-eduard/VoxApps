@@ -42,6 +42,24 @@ android {
     }
 
     buildTypes {
+        debug {
+            // core:wakeword and vox-commander both declare onnxruntime-android directly, so their
+            // native libs collide as two sources for the same path — pickFirst avoids a build
+            // failure. Scoped to debug only: release excludes libonnxruntime.so entirely (DLC'd
+            // instead), and a pickFirst for a path that's also excluded silently wins over the
+            // exclude, which was quietly keeping the 28MB lib bundled in "release" despite the
+            // exclude rule below appearing to remove it.
+            packaging {
+                jniLibs {
+                    pickFirsts += setOf(
+                        "lib/arm64-v8a/libonnxruntime.so",
+                        "lib/armeabi-v7a/libonnxruntime.so",
+                        "lib/x86/libonnxruntime.so",
+                        "lib/x86_64/libonnxruntime.so",
+                    )
+                }
+            }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -51,6 +69,16 @@ android {
             }
             // Exclude Whisper native libs from release APK — they're downloaded on demand as DLC.
             // This reduces the APK from ~166MB to ~19MB. Debug builds keep them for normal dev workflow.
+            //
+            // Deliberately NOT also excluding libonnxruntime.so/libonnxruntime4j_jni.so/
+            // libpv_porcupine.so/libsherpa-onnx-cxx-api.so/libjnidispatch.so here, even though
+            // they're real, sizable libs: AGP 9.0.0–9.2.1 (every currently published 9.x release)
+            // has confirmed-unreliable arm64-v8a native-lib packaging behavior for this project's
+            // dependency set — excludes for these either get silently ignored (libonnxruntime.so
+            // stayed bundled despite an exclude rule, even after removing every duplicate-source/
+            // pickFirst candidate cause) or the merge output for the others varies between
+            // otherwise-identical clean builds. Leaving them all bundled trades a larger APK
+            // (~40MB vs the ~30MB IzzyOnDroid guideline) for not depending on that unreliable path.
             packaging {
                 jniLibs {
                     excludes += setOf(
@@ -59,13 +87,7 @@ android {
                         "lib/arm64-v8a/libggml.so",
                         "lib/arm64-v8a/libggml-base.so",
                         "lib/arm64-v8a/libggml-cpu.so",
-                        "lib/arm64-v8a/libomp.so",
-                        // Essential libs moved to DLC to fit under 30MB (IzzyOnDroid)
-                        "lib/arm64-v8a/libonnxruntime.so",
-                        "lib/arm64-v8a/libllm_inference_engine_jni.so",
-                        "lib/arm64-v8a/libvosk.so",
-                        "lib/arm64-v8a/libsherpa-onnx-jni.so",
-                        "lib/arm64-v8a/libsherpa-onnx-c-api.so"
+                        "lib/arm64-v8a/libomp.so"
                     )
                 }
             }
@@ -89,12 +111,6 @@ android {
         }
         jniLibs {
             useLegacyPackaging = true
-            pickFirsts += setOf(
-                "lib/arm64-v8a/libonnxruntime.so",
-                "lib/armeabi-v7a/libonnxruntime.so",
-                "lib/x86/libonnxruntime.so",
-                "lib/x86_64/libonnxruntime.so",
-            )
         }
     }
     androidResources {
@@ -153,9 +169,13 @@ dependencies {
     // OpenWakeWord (fully open-source, ONNX-based wake word detection) — local fork with an RMS
     // silence gate patch (see core/wakeword/NOTICE); pristine upstream kept at
     // vendor/openwakeword-android-kt for sync (scripts/check_openwakeword_version.sh).
+    // core:wakeword already declares onnxruntime-android 1.27.0 (16KB-page-size-aligned, required
+    // for Android 15+) — vox-commander's own source never imports ai.onnxruntime.* directly, so a
+    // second direct declaration here was a redundant duplicate dependency, not a real requirement.
+    // Two sources contributing the same native libs is exactly the kind of ambiguity that made
+    // libonnxruntime.so's arm64-v8a packaging/exclude behavior unreliable (see release excludes
+    // above) — removing the duplicate leaves a single, unambiguous source.
     implementation(project(":core:wakeword"))
-    // Force ONNX Runtime 1.20.1+ for 16KB page size alignment (required for Android 15+)
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
     // Piper TTS via sherpa-onnx (on-device neural TTS)
     implementation("com.github.k2-fsa:sherpa-onnx:v1.13.4")
     // Apache Commons Compress for .tar.bz2 extraction (Piper voice models)

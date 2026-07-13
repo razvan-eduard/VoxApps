@@ -137,14 +137,14 @@ jobs:
         run: |
           # Copy essential libs to a staging folder for upload
           mkdir -p dlc-libs
-          # These are the libs excluded from APK in build.gradle.kts
-          LIBS=(
-            "libonnxruntime.so"
-            "libllm_inference_engine_jni.so"
-            "libvosk.so"
-            "libsherpa-onnx-c-api.so"
-            "libsherpa-onnx-jni.so"
-          )
+          # Must match build.gradle.kts's release packaging excludes and
+          # NativeLibManager.ESSENTIAL_LIBS exactly — currently empty. AGP 9.0.0-9.2.1 has
+          # confirmed-unreliable arm64-v8a native-lib packaging for this project's dependency set
+          # (onnxruntime.so and others either get inconsistently dropped from the merge between
+          # clean builds, or ignore their exclude rule and stay bundled anyway — see
+          # build.gradle.kts's release packaging comment). Left empty until a future AGP version
+          # fixes this; this step becomes a no-op (empty dlc-libs/, nothing uploaded below).
+          LIBS=()
           for lib in "${LIBS[@]}"; do
             find . -path "*/release/*" -name "$lib" | grep arm64-v8a | head -n 1 \
               -exec cp {} dlc-libs/ \;

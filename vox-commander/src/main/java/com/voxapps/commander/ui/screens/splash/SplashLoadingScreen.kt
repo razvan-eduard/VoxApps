@@ -56,7 +56,7 @@ fun SplashLoadingScreen(
 
     val assetsReady = loadStatus != RemoteModelRegistry.LoadStatus.LOADING
     val appsReady = scanStatus == AppRegistry.ScanStatus.DONE
-    val nativeReady = nativeStatus == NativeLibManager.Status.READY || nativeStatus == NativeLibManager.Status.ERROR
+    val nativeReady = nativeStatus == NativeLibManager.Status.READY
 
     // Auto-advance when all critical startup components are ready
     LaunchedEffect(assetsReady, appsReady, nativeReady) {
@@ -221,17 +221,25 @@ fun SplashLoadingScreen(
                 )
             }
 
-            // Native lib error
+            // Native lib error — currently unreachable in practice since ESSENTIAL_LIBS is empty
+            // (see NativeLibManager), but kept ready with a retry affordance rather than a dead-end
+            // hang, in case a future AGP fix lets essential libs be DLC'd again.
             AnimatedVisibility(
                 visible = nativeStatus == NativeLibManager.Status.ERROR,
                 enter = fadeIn()
             ) {
-                Text(
-                    text = "Failed to load engine. Check internet connection.",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Failed to load engine. Check internet connection.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    TextButton(onClick = { scope.launch { NativeLibManager.init(context) } }) {
+                        Text("Retry")
+                    }
+                }
             }
         }
     }

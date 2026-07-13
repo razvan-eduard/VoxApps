@@ -30,5 +30,6 @@
   "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme",
   "splash_loading_engine": "Se descarcă componentele motorului de procesare...",
   "splash_engine_ready": "Motor pregătit",
-  "splash_engine_error": "Componentele nu au fost găsite sau nu există conexiune la internet. Verifică rețeaua și reîncearcă."
+  "splash_engine_error": "Componentele nu au fost găsite sau nu există conexiune la internet. Verifică rețeaua și reîncearcă.",
+  "splash_engine_retry": "Reîncearcă"
 }
