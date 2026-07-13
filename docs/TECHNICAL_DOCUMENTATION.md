@@ -200,7 +200,10 @@ owning the source.
 - **Native library**: `libwhisper.so` (GGML-based, compiled via CMake)
 - **Engine**: `WhisperSttEngine` in `domain/engine/whisper/`
 - **Models**: Downloaded on-demand from HuggingFace (`ggml-tiny.bin`, `ggml-base.bin`, `ggml-small.bin`)
-- **Release builds**: Whisper native libs excluded from APK (~166MB → ~19MB), downloaded as DLC
+- **Release builds**: Whisper native libs excluded from APK (~166MB → ~40MB), downloaded as DLC.
+  Other large native deps (onnxruntime, Vosk, Picovoice, sherpa-onnx) remain bundled rather than
+  also DLC'd — see `docs/BUILD_TIME_DEPENDENCIES.md` for why (a confirmed AGP 9.x arm64-v8a
+  native-lib packaging bug made excluding them unreliable).
 - **Vulkan**: Optional GPU acceleration via `libggml-vulkan.so` (probed at first run, disabled if incompatible)
 
 ### STT Flow

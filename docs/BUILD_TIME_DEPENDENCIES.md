@@ -91,13 +91,36 @@ artifact could cover well.
      project in a broken state.
   6. If an upgrade/force-rebuild actually happened, publishes the new `.so` files as a GitHub Release
      (DLC) via `scripts/publish_whisper_libs.sh` — release builds exclude Whisper's native libs from
-     the APK (~166MB → ~19MB) and download them on demand.
+     the APK (~166MB → ~40MB) and download them on demand.
 - **`autoCompileWhisper`** Gradle task runs this on every `preBuild`.
 - **`.github/workflows/sync-whisper.yml`** — monthly scheduled: bumps the submodule pin to a newer
   stable tag and confirms it still compiles, opening a PR — but deliberately **never** calls
   `publish_whisper_libs.sh` itself. Publishing the production DLC is a manual, human-reviewed step
   after the PR is merged, because CI can only verify "it compiles," never "it still transcribes
   correctly" — that needs an actual on-device sanity check.
+
+### Why only Whisper is DLC'd (not onnxruntime/Vosk/Picovoice/sherpa-onnx)
+
+Commander's release APK is ~40MB, above the ~30MB IzzyOnDroid/F-Droid guideline, because only
+Whisper's native libs are excluded/downloaded on demand — `libonnxruntime.so` (~28MB unstripped),
+Vosk, Picovoice's Porcupine, and sherpa-onnx's native libs all stay bundled in the APK.
+
+This was attempted and reverted. AGP 9.0.0–9.2.1 (every currently published 9.x release, tested
+directly) has confirmed-unreliable arm64-v8a native-lib packaging behavior for this project's
+dependency set: `packaging.jniLibs.excludes` rules for several of these libs either got silently
+ignored (the file stayed bundled despite the exclude) or the merge output for them varied
+between otherwise-identical clean rebuilds — not a naming/config mistake, verified by testing
+across multiple AGP versions and eliminating dependency-conflict/duplicate-declaration causes one
+by one (one genuine bug was found and fixed along the way: `vox-commander` and `core:wakeword` both
+declared `onnxruntime-android` directly, which was itself contributing to the instability — see
+`vox-commander/build.gradle.kts`'s dependencies block). `NativeLibManager.ESSENTIAL_LIBS` in
+`vox-commander/src/main/java/com/voxapps/commander/data/remote/NativeLibManager.kt` is left empty
+until a future AGP release fixes this — a reliable, larger APK beats a smaller one that
+non-deterministically fails to download its own dependencies.
+
+Vision doesn't have this problem (single dependency source, no duplicate declaration) — its
+`NativeLibManager`/`build.gradle.kts` DLC setup for onnxruntime + OpenCV works reliably and stays
+in place.
 
 **Known gap (planned, not yet done):** `check_whisper.sh` assumes Vulkan headers
 (`vulkan-headers`/`spirv-headers`/`shaderc`) are already installed via Homebrew

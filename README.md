@@ -41,7 +41,7 @@
 
 - **Android 10+** (API 29)
 - **arm64-v8a** architecture
-- ~19MB APK (release, without Whisper native libs — downloaded on demand)
+- ~40MB APK (release, without Whisper native libs — downloaded on demand; onnxruntime/Vosk/Picovoice/sherpa-onnx remain bundled — see `docs/BUILD_TIME_DEPENDENCIES.md` for why)
 - Optional: OpenAI API key for cloud NLU, Spotify Client ID for media control
 
 ## Quick Start
