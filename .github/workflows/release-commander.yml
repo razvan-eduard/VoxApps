@@ -3,7 +3,7 @@ name: Build Commander Release APK
 on:
   push:
     tags:
-      - 'v[0-9]*'
+      - 'commander-v[0-9]*'
     branches:
       - main
     paths:
@@ -108,7 +108,7 @@ jobs:
             # (bypasses the check_bump gate above, e.g. to force-rebuild without a version
             # change) — both cases read versionName from gradle the same way.
             VERSION_NAME=$(grep 'versionName' vox-commander/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
-            TAG="v${VERSION_NAME}"
+            TAG="commander-v${VERSION_NAME}"
             if echo "$VERSION_NAME" | grep -qiE '-beta|-rc|-alpha'; then
               IS_PRERELEASE="true"
             else

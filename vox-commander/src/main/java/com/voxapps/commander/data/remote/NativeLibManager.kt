@@ -40,9 +40,9 @@ object NativeLibManager {
     private fun getReleaseTag(context: Context): String {
         return try {
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            "v${pInfo.versionName}"
+            "commander-v${pInfo.versionName}"
         } catch (e: Exception) {
-            "v0.2-beta" // Fallback
+            "commander-v0.5-beta" // Fallback
         }
     }
 

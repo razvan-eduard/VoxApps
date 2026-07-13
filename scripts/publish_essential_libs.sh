@@ -23,7 +23,7 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 get_version_name() {
     grep 'versionName' "$1" | sed 's/.*"\(.*\)".*/\1/'
 }
-COMMANDER_TAG="v$(get_version_name "$PROJECT_ROOT/vox-commander/build.gradle.kts")"
+COMMANDER_TAG="commander-v$(get_version_name "$PROJECT_ROOT/vox-commander/build.gradle.kts")"
 VISION_TAG="vision-v$(get_version_name "$PROJECT_ROOT/vox-vision/build.gradle.kts")"
 
 # Paths to stripped release libs after a successful build
