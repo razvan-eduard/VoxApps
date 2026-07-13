@@ -34,7 +34,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // material-icons-extended alone is an ~87MB unshrunk jar (thousands of icon classes);
+            // without R8, every unused one ships in the APK. Shrinking is what actually keeps release
+            // builds under IzzyOnDroid's size guideline — per-ABI splitting wouldn't help here since
+            // the bulk is DEX bytecode, not native libs.
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseKeystorePath != null) {
                 signingConfig = signingConfigs.getByName("release")
             }

@@ -13,6 +13,10 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1"
+        // Without this, onnxruntime-android ships all 4 ABIs (~73MB combined) even though OpenCV/
+        // PaddleOCR are only ever built for arm64-v8a — mirrors the same restriction Notes/Expenses/
+        // Calendar already apply.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     // CI-only release signing: RELEASE_KEYSTORE_PATH is only set in the release-*.yml workflows
@@ -33,7 +37,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // material-icons-extended alone is an ~87MB unshrunk jar (thousands of icon classes);
+            // without R8, every unused one ships in the APK. Shrinking is what actually keeps release
+            // builds under IzzyOnDroid's size guideline — per-ABI splitting wouldn't help here since
+            // the bulk is DEX bytecode, not native libs.
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseKeystorePath != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
