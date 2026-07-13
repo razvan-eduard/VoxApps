@@ -94,7 +94,7 @@ jobs:
             "libopencv_java4.so"
           )
           for lib in "${LIBS[@]}"; do
-            find vox-vision/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib/arm64-v8a -name "$lib" \
+            find . -path "*/release/*" -name "$lib" | grep arm64-v8a | head -n 1 \
               -exec cp {} dlc-libs/ \;
           done
           ls -lh dlc-libs/

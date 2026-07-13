@@ -12,7 +12,8 @@ import okhttp3.Request
 import java.io.File
 
 /**
- * Manages "Essential DLC" native libraries for VoxVision to fit under 30MB limit.
+ * Manages "Essential DLC" native libraries for VoxVision.
+ * Features atomic downloads and integrity checks to prevent crashes.
  */
 object NativeLibManager {
     private const val TAG = "NativeLibManager"
@@ -42,30 +43,54 @@ object NativeLibManager {
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             "vision-v${pInfo.versionName}"
         } catch (e: Exception) {
-            "vision-v0.3"
+            "vision-v0.3" // Current fallback
         }
     }
 
+    /**
+     * Verifies that all libs are present AND have non-zero size.
+     */
     fun areLibsPresent(context: Context): Boolean {
         val systemDir = File(context.applicationInfo.nativeLibraryDir)
         if (ESSENTIAL_LIBS.all { File(systemDir, it).exists() }) return true
+        
         val libDir = getLibDir(context)
-        return ESSENTIAL_LIBS.all { File(libDir, it).exists() }
+        return ESSENTIAL_LIBS.all { 
+            val f = File(libDir, it)
+            f.exists() && f.length() > 0 
+        }
     }
 
     suspend fun init(context: Context) = withContext(Dispatchers.IO) {
         if (_status.value == Status.READY) return@withContext
         _status.value = Status.CHECKING
+        
         if (areLibsPresent(context)) {
-            loadAll(context)
-            _status.value = Status.READY
-        } else {
-            if (downloadLibs(context)) {
+            try {
                 loadAll(context)
                 _status.value = Status.READY
-            } else {
+            } catch (e: Throwable) {
+                Logger.e(TAG, "Native load failed for existing files: ${e.message}")
+                // Cleanup potentially corrupt files and try redownload
+                getLibDir(context).deleteRecursively()
+                triggerDownload(context)
+            }
+        } else {
+            triggerDownload(context)
+        }
+    }
+
+    private suspend fun triggerDownload(context: Context) {
+        if (downloadLibs(context)) {
+            try {
+                loadAll(context)
+                _status.value = Status.READY
+            } catch (e: Throwable) {
+                Logger.e(TAG, "Native load failed after download: ${e.message}")
                 _status.value = Status.ERROR
             }
+        } else {
+            _status.value = Status.ERROR
         }
     }
 
@@ -74,36 +99,44 @@ object NativeLibManager {
         val libDir = getLibDir(context)
         if (!libDir.exists()) libDir.mkdirs()
 
-        val client = okhttp3.OkHttpClient()
+        val client = OkHttpClient()
         val tag = getReleaseTag(context)
-        var downloaded = 0
+        var completed = 0
 
         for (libName in ESSENTIAL_LIBS) {
             val targetFile = File(libDir, libName)
-            if (targetFile.exists()) {
-                downloaded++
-                _downloadProgress.value = downloaded.toFloat() / ESSENTIAL_LIBS.size
+            val tempFile = File(libDir, "$libName.tmp")
+
+            if (targetFile.exists() && targetFile.length() > 0) {
+                completed++
+                _downloadProgress.value = completed.toFloat() / ESSENTIAL_LIBS.size
                 continue
             }
 
             val url = "$RELEASE_BASE$tag/$libName"
+            Logger.d(TAG, "Downloading $libName from $url")
+
             try {
-                val request = okhttp3.Request.Builder().url(url).build()
+                val request = Request.Builder().url(url).build()
                 client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Logger.e(TAG, "Failed to download $libName: ${response.code}")
-                        return@withContext false
-                    }
+                    if (!response.isSuccessful) return@withContext false
                     response.body?.byteStream()?.use { input ->
-                        targetFile.outputStream().use { output ->
+                        tempFile.outputStream().use { output ->
                             input.copyTo(output)
                         }
                     }
                 }
-                downloaded++
-                _downloadProgress.value = downloaded.toFloat() / ESSENTIAL_LIBS.size
+                
+                if (tempFile.exists() && tempFile.length() > 0) {
+                    tempFile.renameTo(targetFile)
+                    completed++
+                    _downloadProgress.value = completed.toFloat() / ESSENTIAL_LIBS.size
+                } else {
+                    return@withContext false
+                }
             } catch (e: Exception) {
-                targetFile.delete()
+                Logger.e(TAG, "Failed to download $libName: ${e.message}")
+                tempFile.delete()
                 return@withContext false
             }
         }
@@ -113,17 +146,18 @@ object NativeLibManager {
     fun loadAll(context: Context) {
         val systemDir = File(context.applicationInfo.nativeLibraryDir)
         val libDir = getLibDir(context)
+        
         for (libName in ESSENTIAL_LIBS) {
-            try {
-                val systemFile = File(systemDir, libName)
-                if (systemFile.exists()) {
-                    System.loadLibrary(libName.removePrefix("lib").removeSuffix(".so"))
+            val systemFile = File(systemDir, libName)
+            if (systemFile.exists()) {
+                System.loadLibrary(libName.removePrefix("lib").removeSuffix(".so"))
+            } else {
+                val dlcFile = File(libDir, libName)
+                if (dlcFile.exists() && dlcFile.length() > 0) {
+                    System.load(dlcFile.absolutePath)
                 } else {
-                    val dlcFile = File(libDir, libName)
-                    if (dlcFile.exists()) System.load(dlcFile.absolutePath)
+                    throw IllegalStateException("Missing native library: $libName")
                 }
-            } catch (e: Exception) {
-                Logger.e(TAG, "Failed to load $libName: ${e.message}")
             }
         }
     }
