@@ -126,7 +126,14 @@ fun AppManagerTab(
             Spacer(Modifier.width(8.dp))
             Switch(
                 checked = permissionGranted,
-                onCheckedChange = { MediaSessionListenerService.requestPermission(context) }
+                onCheckedChange = {
+                    // Android has no API for an app to revoke its own notification listener
+                    // access — only Settings can do that — so once granted there's nothing useful
+                    // an in-app tap can do. Only navigate to Settings for the "not yet granted"
+                    // direction; tapping an already-granted switch previously reopened Settings
+                    // every time regardless, which just looked like the switch was stuck/broken.
+                    if (!permissionGranted) MediaSessionListenerService.requestPermission(context)
+                }
             )
         }
 
