@@ -56,9 +56,9 @@ fun SplashLoadingScreen(
             verticalArrangement = Arrangement.Center
         ) {
             // Logo (using a placeholder or generic logo if splash_logo missing)
-            // Note: vox-vision doesn't have a specific splash_logo.png yet, using ic_launcher
+            // Logo (using launcher foreground as splash logo for Vision to avoid AdaptiveIcon crash)
             Image(
-                painter = painterResource(id = R.mipmap.ic_launcher),
+                painter = painterResource(id = R.drawable.ic_launcher_foreground),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxWidth(0.6f)
