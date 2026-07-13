@@ -1,0 +1,10 @@
+VoxCommander is an on-device voice assistant for Android. It handles wake word detection, speech-to-text (STT), and natural language understanding (NLU) all locally on your device.
+
+Features:
+- Wake Word Detection: Always-on listening with Vosk, Porcupine, or OpenWakeWord.
+- Speech-to-Text: On-device Whisper.cpp with multilingual support.
+- Natural Language Understanding: Triple AI Brain (Regex -> Primary LLM -> Offline fallback).
+- Intent Routing: Maps commands to system actions or companion Vox apps.
+- Privacy-focused: All processing happens on-device.
+
+VoxCommander is the heart of the VoxApps ecosystem, a collection of independent apps that can be controlled by voice.

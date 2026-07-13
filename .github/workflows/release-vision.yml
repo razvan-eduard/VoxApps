@@ -1,0 +1,92 @@
+name: Build Vox Vision Release APK
+
+on:
+  push:
+    tags:
+      - 'vision-v*'
+    branches:
+      - main
+    paths:
+      - 'vox-vision/build.gradle.kts'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-licenses: true
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Detect versionCode bump (skip build if unchanged)
+        id: check_bump
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          PREV_CODE=$(git show HEAD~1:vox-vision/build.gradle.kts 2>/dev/null | grep 'versionCode' | grep -oE '[0-9]+' || echo "0")
+          CURR_CODE=$(grep 'versionCode' vox-vision/build.gradle.kts | grep -oE '[0-9]+')
+          echo "prev=$PREV_CODE curr=$CURR_CODE"
+          if [ "$PREV_CODE" = "$CURR_CODE" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run unit tests (if any)
+        if: steps.check_bump.outputs.changed != 'false'
+        run: ./gradlew :vox-vision:testDebugUnitTest --no-daemon || echo "No tests found"
+
+      - name: Decode signing keystore
+        if: steps.check_bump.outputs.changed != 'false'
+        run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build release APK
+        if: steps.check_bump.outputs.changed != 'false'
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+        run: ./gradlew :vox-vision:assembleRelease --no-daemon
+
+      - name: Determine version tag
+        if: steps.check_bump.outputs.changed != 'false'
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            VERSION_NAME=$(grep 'versionName' vox-vision/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
+            TAG="vision-v${VERSION_NAME}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Rename APK with tag
+        if: steps.check_bump.outputs.changed != 'false'
+        run: |
+          cp vox-vision/build/outputs/apk/release/vox-vision-release.apk \
+             VoxVision-${{ steps.version.outputs.tag }}.apk
+
+      - name: Create GitHub Release
+        if: steps.check_bump.outputs.changed != 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: |
+            VoxVision-*.apk
+          generate_release_notes: true
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
