@@ -74,6 +74,18 @@ fun GeneralSettingsTab(
                             appStateManager.refreshAll()
                         }
                         com.voxapps.commander.domain.search.SearchProviderRegistry.fetchRemote(settingsRepo, force = true)
+                        // fetchRemote() rebuilds every DynamicSearchProvider instance from scratch,
+                        // so any previously-applied key is gone until these are called again — see
+                        // SearchProviderRegistry.applySharedOpenAiKey's own doc comment. Missing here
+                        // meant the OpenAI general/knowledge provider stayed locked (hasApiKey()
+                        // false) after a manual sync even with a real key configured, until the next
+                        // full app restart re-ran VoxApplication's own copy of this same sequence.
+                        com.voxapps.commander.domain.search.SearchProviderRegistry.applyApiKeys(
+                            settingsRepo.getAllSearchProviderApiKeys()
+                        )
+                        com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
+                            settingsRepo.getApiKeySync()
+                        )
                         com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(settingsRepo, force = true)
                     }
                 }) {
