@@ -64,9 +64,31 @@ object CommanderExportHandler {
         return gson.toJson(portable)
     }
 
-    /** Returns `null` if [json] isn't valid [AppSettings] JSON (e.g. a corrupt/foreign import file). */
+    /**
+     * Returns `null` if [json] isn't valid [AppSettings] JSON (e.g. a corrupt/foreign import file).
+     *
+     * Gson deserializes via reflection, not Kotlin's constructor — a JSON field that's absent or
+     * explicitly `null` leaves the corresponding Kotlin property genuinely `null` at runtime,
+     * bypassing [AppSettings]' non-null default entirely (confirmed the hard way: an older/foreign
+     * export missing `searchProviderApiKeys` crashed [SettingsRepositoryImpl.restoreImportedSettings]
+     * with a NullPointerException iterating a "non-null" map). Every collection-typed field is
+     * coalesced back to its safe empty default here, once, so no caller has to re-derive this.
+     */
     fun parsePortableSettings(json: String): AppSettings? = try {
-        gson.fromJson(json, AppSettings::class.java)
+        gson.fromJson(json, AppSettings::class.java)?.let { parsed ->
+            parsed.copy(
+                engineModelSelections = parsed.engineModelSelections ?: emptyMap(),
+                downloadedModelIds = parsed.downloadedModelIds ?: emptySet(),
+                customModelPaths = parsed.customModelPaths ?: emptyMap(),
+                defaultAppPackages = parsed.defaultAppPackages ?: emptyMap(),
+                domainAppPackages = parsed.domainAppPackages ?: emptyMap(),
+                customDomains = parsed.customDomains ?: emptyList(),
+                domainAppFilters = parsed.domainAppFilters ?: emptyMap(),
+                searchProviderApiKeys = parsed.searchProviderApiKeys ?: emptyMap(),
+                returnAfterActionApps = parsed.returnAfterActionApps ?: emptyList(),
+                appAliasRules = parsed.appAliasRules ?: emptyList()
+            )
+        }
     } catch (e: JsonSyntaxException) {
         null
     }
