@@ -219,7 +219,9 @@ val autoCheckVosk = tasks.register<Exec>("autoCheckVosk") {
     group = "verification"
     description = "Verifică dacă a apărut o versiune mai nouă de Vosk pe JitPack."
 
-    commandLine("sh", "${project.rootDir}/scripts/check_vosk_version.sh")
+    // bash, not sh: the script is a bash script (uses ==, [[ ]]) — same class of bug as the
+    // build_opencv_android.sh fix (sh on Ubuntu runners is dash, which doesn't support these).
+    commandLine("bash", "${project.rootDir}/scripts/check_vosk_version.sh")
 }
 
 // Înregistrează o sarcină de execuție pentru verificarea versiunii NewPipeExtractor
@@ -227,7 +229,9 @@ val autoCheckNewPipeExtractor = tasks.register<Exec>("autoCheckNewPipeExtractor"
     group = "verification"
     description = "Verifică dacă a apărut o versiune mai nouă de NewPipeExtractor pe JitPack."
 
-    commandLine("sh", "${project.rootDir}/scripts/check_newpipe_extractor_version.sh")
+    // bash, not sh: the script uses [[ ]] (same class of bug as the build_opencv_android.sh fix —
+    // sh on Ubuntu runners is dash, which doesn't support bashisms like [[ ]]).
+    commandLine("bash", "${project.rootDir}/scripts/check_newpipe_extractor_version.sh")
 }
 
 // Verifică dacă fork-ul local OpenWakeWord (core/wakeword) a rămas în urma tag-urilor upstream
