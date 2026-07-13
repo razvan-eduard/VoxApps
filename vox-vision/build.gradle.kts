@@ -11,8 +11,8 @@ android {
         applicationId = "com.voxapps.vision"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3"
+        versionCode = 4
+        versionName = "0.4"
         // Without this, onnxruntime-android ships all 4 ABIs (~73MB combined) even though OpenCV/
         // PaddleOCR are only ever built for arm64-v8a — mirrors the same restriction Notes/Expenses/
         // Calendar already apply.
@@ -50,7 +50,21 @@ android {
                         "lib/arm64-v8a/libopencv_core.so",
                         "lib/arm64-v8a/libopencv_imgproc.so",
                         "lib/arm64-v8a/libopencv_imgcodecs.so",
-                        "lib/arm64-v8a/libopencv_java4.so"
+                        // OpenCV 5.0 split geometric algorithms out of imgproc into a new
+                        // opencv_geometry module (which itself needs opencv_flann) — both are
+                        // pure transitive runtime deps now, confirmed via `readelf -d`:
+                        // imgproc's NEEDED includes libopencv_geometry.so -> libopencv_flann.so.
+                        "lib/arm64-v8a/libopencv_geometry.so",
+                        "lib/arm64-v8a/libopencv_flann.so",
+                        // libopencv_java5.so's own NEEDED entries (readelf -d) list these three
+                        // directly, even with calib3d/features2d disabled at build time — OpenCV
+                        // 5's java bindings link them unconditionally, no APIs of ours use them.
+                        "lib/arm64-v8a/libopencv_features.so",
+                        "lib/arm64-v8a/libopencv_ptcloud.so",
+                        "lib/arm64-v8a/libopencv_stereo.so",
+                        // .so name encodes OpenCV's major version (java4 for 4.x, java5 for 5.x —
+                        // see scripts/build_opencv_android.sh).
+                        "lib/arm64-v8a/libopencv_java5.so"
                     )
                 }
             }

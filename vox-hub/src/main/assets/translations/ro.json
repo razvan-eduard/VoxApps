@@ -5,6 +5,8 @@
   "hub_scope_settings": "Setări",
   "hub_scope_data": "Date",
   "hub_scope_both": "Ambele",
+  "hub_include_secrets": "Include cheile API",
+  "hub_include_secrets_warning": "Atenție: fișierul exportat va conține cheile tale API în text simplu. Păstrează-l într-un loc sigur — oricine are fișierul poate folosi acele chei.",
   "hub_export_button": "Exportă selectate",
   "hub_import_section": "Import",
   "hub_import_button": "Alege fișierul de importat",

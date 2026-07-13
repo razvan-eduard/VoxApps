@@ -74,6 +74,9 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
     var apps by remember { mutableStateOf<List<VoxAppInfo>>(emptyList()) }
     var selectedForExport by remember { mutableStateOf<Set<String>>(emptySet()) }
     var exportScope by remember { mutableStateOf(VoxIpc.EXPORT_SCOPE_BOTH) }
+    // Off by default — an explicit opt-in, since the exported file becomes a plaintext secrets
+    // bundle the moment this is on (see hub_include_secrets_warning).
+    var includeSecrets by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
     var exportStatus by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var exportOk by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
@@ -152,7 +155,7 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
             val perDomainJson = priorPerDomainJson.toMutableMap()
             for (app in apps.filter { it.packageName in targetPackages }) {
                 val domain = app.domain ?: app.packageName
-                val result = VoxDataTransferClient.requestExport(context, app.packageName, exportScope)
+                val result = VoxDataTransferClient.requestExport(context, app.packageName, exportScope, includeSecrets)
                 if (result != null && result.ok) {
                     perDomainJson[domain] = result.text
                     results[app.packageName] = languageManager.getString("hub_status_ok")
@@ -195,7 +198,7 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                     okFlags[app.packageName] = false
                     unreachable += app.packageName
                 } else {
-                    val result = VoxDataTransferClient.requestExport(context, app.packageName, exportScope)
+                    val result = VoxDataTransferClient.requestExport(context, app.packageName, exportScope, includeSecrets)
                     if (result != null && result.ok) {
                         perDomainJson[domain] = result.text
                         results[app.packageName] = languageManager.getString("hub_status_ok")
@@ -317,6 +320,21 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                             Text(languageManager.getString(labelKey), style = MaterialTheme.typography.bodySmall)
                         }
                     }
+                }
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = includeSecrets,
+                        onCheckedChange = { includeSecrets = it }
+                    )
+                    Text(languageManager.getString("hub_include_secrets"), style = MaterialTheme.typography.bodySmall)
+                }
+                if (includeSecrets) {
+                    Text(
+                        languageManager.getString("hub_include_secrets_warning"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
                 }
                 Button(
                     onClick = { startExportFlow() },

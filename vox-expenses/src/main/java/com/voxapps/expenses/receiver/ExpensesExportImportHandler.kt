@@ -1,7 +1,9 @@
 package com.voxapps.expenses.receiver
 
+import android.content.Context
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.Expense
+import com.voxapps.expenses.data.ExchangeRateApiKeyStore
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.SpendingLimit
@@ -21,11 +23,12 @@ import org.json.JSONObject
  * touches the DB.
  */
 class ExpensesExportImportHandler(
+    private val context: Context,
     private val settingsRepo: ExpensesSettingsRepository,
     private val sessionManager: SessionManager,
     private val expensesRepo: ExpensesRepository
 ) {
-    suspend fun export(scope: String = VoxIpc.EXPORT_SCOPE_BOTH): VoxResult {
+    suspend fun export(scope: String = VoxIpc.EXPORT_SCOPE_BOTH, includeSecrets: Boolean = false): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
@@ -34,6 +37,12 @@ class ExpensesExportImportHandler(
         val json = JSONObject()
         if (scope != VoxIpc.EXPORT_SCOPE_DATA) {
             json.put("settings", settings.toJson())
+            // The exchange-rate API key is a real secret, kept entirely outside ExpensesSettings/
+            // DataStore (see ExchangeRateApiKeyStore's own doc comment) — only included when the
+            // user explicitly opts in from Hub's export screen.
+            if (includeSecrets) {
+                ExchangeRateApiKeyStore.get(context)?.let { json.put("exchangeRateApiKey", it) }
+            }
         }
         if (scope != VoxIpc.EXPORT_SCOPE_SETTINGS) {
             val categories = expensesRepo.categories.first()
@@ -59,6 +68,9 @@ class ExpensesExportImportHandler(
         }
 
         root.optJSONObject("settings")?.let { settingsRepo.restoreSettings(it.toExpensesSettings()) }
+        // Only present if the export was made with includeSecrets on — absent means "leave the
+        // current on-device key alone", same semantics as Commander's secret fields.
+        root.optStringOrNull("exchangeRateApiKey")?.let { ExchangeRateApiKeyStore.set(context, it) }
 
         val existingCategories = expensesRepo.categories.first()
         val nameToId = existingCategories.associate { it.name.lowercase() to it.id }.toMutableMap()

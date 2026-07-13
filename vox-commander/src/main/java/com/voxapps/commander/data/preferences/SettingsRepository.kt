@@ -17,6 +17,19 @@ interface SettingsRepository {
      */
     val settingsFlow: Flow<AppSettings>
 
+    /**
+     * Bulk-applies every field of [imported] EXCEPT raw local paths (wakeWordModelPath/
+     * customModelPaths) and pure caches/probe results (modelsJsonCache/appCacheJson/
+     * downloadedModelIds/the vulkan flags/geminiIncompatible/wakeWordProfileJson) — those are always
+     * left alone since they were never present in an exported snapshot to begin with. Secrets
+     * (apiKey/geminiApiKey/picovoiceAccessKey/searchProviderApiKeys) are applied only where
+     * [imported] actually carries a value (non-null / non-empty) — an export made without
+     * `includeSecrets` leaves them at their [AppSettings] defaults, so the current on-device value is
+     * preserved rather than cleared; an export made with it overwrites them. Used by Vox Hub's import
+     * flow ([com.voxapps.commander.receiver.VoxCommandReceiver]'s `OP_IMPORT`).
+     */
+    suspend fun restoreImportedSettings(imported: AppSettings)
+
     // --- SYNCHRONOUS READS (for non-coroutine consumers during migration) ---
     fun getSettingsSnapshot(): AppSettings
     fun getApiKeySync(): String?

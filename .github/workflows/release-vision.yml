@@ -90,17 +90,14 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         run: |
           mkdir -p dlc-libs
-          LIBS=(
-            "libonnxruntime.so"
-            "libopencv_core.so"
-            "libopencv_imgproc.so"
-            "libopencv_imgcodecs.so"
-            "libopencv_java4.so"
-          )
-          for lib in "${LIBS[@]}"; do
-            find . -path "*/release/*" -name "$lib" | grep arm64-v8a | head -n 1 \
-              -exec cp {} dlc-libs/ \;
-          done
+          # Copied straight from vox-vision/src/main/jniLibs/arm64-v8a — the location
+          # scripts/build_opencv_android.sh writes to directly (see its VISION_JNI_DIR comment) —
+          # rather than searched for in AGP's build/intermediates or the packaged APK. AGP 9.x does
+          # not reliably propagate arm64-v8a native libs through its own merge/packaging pipeline for
+          # this module (same class of issue as vox-commander's DLC excludes, confirmed via extensive
+          # local testing), so intermediates may not actually contain them even though the final
+          # release APK correctly excludes them either way.
+          cp vox-vision/src/main/jniLibs/arm64-v8a/*.so dlc-libs/
           ls -lh dlc-libs/
 
       - name: Create GitHub Release

@@ -83,6 +83,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
 
             VoxIpc.OP_EXPORT -> {
                 val handler = ExpensesExportImportHandler(
+                    context.applicationContext,
                     container.settingsRepository,
                     container.sessionManager,
                     container.expensesRepository
@@ -91,7 +92,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        pending.setResultData(handler.export(scope).toJson())
+                        pending.setResultData(handler.export(scope, command.includeSecrets).toJson())
                     } finally {
                         pending.finish()
                     }
@@ -100,6 +101,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
 
             VoxIpc.OP_IMPORT -> {
                 val handler = ExpensesExportImportHandler(
+                    context.applicationContext,
                     container.settingsRepository,
                     container.sessionManager,
                     container.expensesRepository

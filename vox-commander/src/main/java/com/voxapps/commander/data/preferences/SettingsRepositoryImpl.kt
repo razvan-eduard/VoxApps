@@ -386,6 +386,98 @@ class SettingsRepositoryImpl(
         }
     }
 
+    override suspend fun restoreImportedSettings(imported: AppSettings) {
+        // Secrets only round-trip if the export actually carried them (includeSecrets was on) —
+        // absent/default means "not part of this import", not "clear it".
+        imported.apiKey?.let { setApiKey(it) }
+        imported.geminiApiKey?.let { setGeminiApiKey(it) }
+        for ((provider, key) in imported.searchProviderApiKeys) {
+            setSearchProviderApiKey(provider, key)
+        }
+
+        dataStore.edit { prefs ->
+            imported.picovoiceAccessKey?.let { prefs[Keys.PICOVOICE_ACCESS_KEY] = it }
+
+            prefs[Keys.LANGUAGE] = imported.language
+            prefs[Keys.VOICE_LANGUAGE] = imported.voiceLanguage
+            prefs[Keys.VOICE_LANGUAGE_AUTO_DETECT] = imported.voiceLanguageAutoDetect
+            prefs[Keys.MODEL_FILTER_LANG] = imported.modelFilterLang
+
+            prefs[Keys.VOICE_PROCESSOR] = imported.voiceProcessor
+            imported.activeVoiceModelId?.let { prefs[Keys.ACTIVE_VOICE_MODEL_ID] = it }
+                ?: prefs.remove(Keys.ACTIVE_VOICE_MODEL_ID)
+
+            prefs[Keys.AI_PROCESSOR] = imported.aiProcessor
+            imported.activeIntentModelId?.let { prefs[Keys.ACTIVE_INTENT_MODEL_ID] = it }
+                ?: prefs.remove(Keys.ACTIVE_INTENT_MODEL_ID)
+            prefs[Keys.CLOUD_INTELLIGENCE_ENABLED] = imported.cloudIntelligenceEnabled
+
+            prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON] = gson.toJson(imported.engineModelSelections)
+
+            prefs[Keys.WAKE_WORD] = imported.wakeWord
+            prefs[Keys.WAKE_WORD_ENABLED] = imported.wakeWordEnabled
+            prefs[Keys.COMMAND_QUEUE_ENABLED] = imported.commandQueueEnabled
+            prefs[Keys.WAKE_WORD_ENGINE_TYPE] = imported.wakeWordEngineType
+            prefs[Keys.WAKE_WORD_SENSITIVITY] = imported.wakeWordSensitivity
+            prefs[Keys.WAKE_WORD_AEC_ENABLED] = imported.wakeWordAecEnabled
+            prefs[Keys.WAKE_WORD_MUSIC_DUCK_ENABLED] = imported.wakeWordMusicDuckEnabled
+            prefs[Keys.STT_SENSITIVITY] = imported.sttSensitivity
+
+            prefs[Keys.OFFLINE_FALLBACK_TIMEOUT] = imported.offlineFallbackTimeout
+            prefs[Keys.DEFAULT_OFFLINE_MODEL] = imported.defaultOfflineModel
+            imported.defaultVoiceFallbackProcessor?.let { prefs[Keys.DEFAULT_VOICE_FALLBACK_PROCESSOR] = it }
+                ?: prefs.remove(Keys.DEFAULT_VOICE_FALLBACK_PROCESSOR)
+            imported.defaultVoiceFallbackModel?.let { prefs[Keys.DEFAULT_VOICE_FALLBACK_MODEL] = it }
+                ?: prefs.remove(Keys.DEFAULT_VOICE_FALLBACK_MODEL)
+            imported.defaultIntentFallbackProcessor?.let { prefs[Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR] = it }
+                ?: prefs.remove(Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR)
+            imported.defaultIntentFallbackModel?.let { prefs[Keys.DEFAULT_INTENT_FALLBACK_MODEL] = it }
+                ?: prefs.remove(Keys.DEFAULT_INTENT_FALLBACK_MODEL)
+
+            prefs[Keys.LOG_LEVEL] = imported.logLevel
+            prefs[Keys.VERBOSE_LOGGING_ENABLED] = imported.verboseLoggingEnabled
+            prefs[Keys.THEME_DARK_MODE] = imported.themeDarkMode
+            prefs[Keys.THEME_COLORED] = imported.themeColored
+
+            prefs[Keys.EXPERIMENTAL_VULKAN_ENABLED] = imported.experimentalVulkanEnabled
+
+            prefs[Keys.WHISPER_SYSTEM_ENABLED] = imported.isWhisperSystemEnabled
+
+            prefs[Keys.MODEL_REPO_BASE_URL] = imported.modelRepoBaseUrl
+
+            prefs[Keys.DEFAULT_APP_PACKAGES_JSON] = gson.toJson(imported.defaultAppPackages)
+            prefs[Keys.DOMAIN_APP_PACKAGES_JSON] = gson.toJson(imported.domainAppPackages)
+            prefs[Keys.CUSTOM_DOMAINS_JSON] = gson.toJson(imported.customDomains)
+            prefs[Keys.DOMAIN_APP_FILTERS_JSON] = gson.toJson(imported.domainAppFilters)
+
+            imported.spotifyClientId?.let { prefs[Keys.SPOTIFY_CLIENT_ID] = it } ?: prefs.remove(Keys.SPOTIFY_CLIENT_ID)
+            imported.pipedApiUrl?.let { prefs[Keys.PIPED_API_URL] = it } ?: prefs.remove(Keys.PIPED_API_URL)
+            imported.pipedRegion?.let { prefs[Keys.PIPED_REGION] = it } ?: prefs.remove(Keys.PIPED_REGION)
+            prefs[Keys.YOUTUBE_URL_ENGINE] = imported.youtubeUrlEngine
+            prefs[Keys.RETURN_AFTER_ACTION_APPS_JSON] = gson.toJson(imported.returnAfterActionApps)
+            prefs[Keys.EXTERNAL_TRIGGER_ENABLED] = imported.externalTriggerEnabled
+
+            prefs[Keys.DOWNLOAD_PREFERENCE] = imported.downloadPreference
+
+            prefs[Keys.TTS_ENABLED] = imported.ttsEnabled
+            prefs[Keys.TTS_ENGINE_TYPE] = imported.ttsEngineType
+            prefs[Keys.TTS_SPEECH_RATE] = imported.ttsSpeechRate
+            prefs[Keys.TTS_PITCH] = imported.ttsPitch
+            prefs[Keys.TTS_AUDIO_FOCUS_MODE] = imported.ttsAudioFocusMode
+            prefs[Keys.OVERLAY_TEXT_SIZE] = imported.overlayTextSize
+
+            prefs[Keys.APP_ALIAS_RULES_JSON] = gson.toJson(imported.appAliasRules)
+
+            imported.manualLocationLat?.let { prefs[Keys.MANUAL_LOCATION_LAT] = it.toString() }
+                ?: prefs.remove(Keys.MANUAL_LOCATION_LAT)
+            imported.manualLocationLon?.let { prefs[Keys.MANUAL_LOCATION_LON] = it.toString() }
+                ?: prefs.remove(Keys.MANUAL_LOCATION_LON)
+
+            prefs[Keys.FIRST_LAUNCH_COMPLETED] = imported.firstLaunchCompleted
+            prefs[Keys.TUTORIAL_COMPLETED] = imported.tutorialCompleted
+        }
+    }
+
     override fun getSettingsSnapshot(): AppSettings =
         cachedSnapshot ?: runBlocking { settingsFlow.first() }.also { cachedSnapshot = it }
 

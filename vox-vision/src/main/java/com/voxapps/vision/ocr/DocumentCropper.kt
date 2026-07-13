@@ -9,6 +9,7 @@ import org.opencv.core.MatOfPoint
 import org.opencv.core.MatOfPoint2f
 import org.opencv.core.Point
 import org.opencv.core.Size
+import org.opencv.geometry.Geometry
 import org.opencv.imgproc.Imgproc
 import kotlin.math.hypot
 import kotlin.math.max
@@ -93,10 +94,10 @@ object DocumentCropper {
             Imgproc.findContours(thresholded, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
 
             val imageArea = gray.rows().toDouble() * gray.cols().toDouble()
-            val largest = contours.maxByOrNull { Imgproc.contourArea(it) } ?: return null
-            if (Imgproc.contourArea(largest) / imageArea < sensitivity.minAreaFraction) return null
+            val largest = contours.maxByOrNull { Geometry.contourArea(it) } ?: return null
+            if (Geometry.contourArea(largest) / imageArea < sensitivity.minAreaFraction) return null
 
-            val rect = Imgproc.boundingRect(largest)
+            val rect = Geometry.boundingRect(largest)
             val width = gray.cols().toFloat()
             val height = gray.rows().toFloat()
             return LiveBounds(
@@ -124,11 +125,11 @@ object DocumentCropper {
             Imgproc.findContours(dilated, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
 
             val imageArea = gray.rows().toDouble() * gray.cols().toDouble()
-            val topCandidates = contours.sortedByDescending { Imgproc.contourArea(it) }.take(5)
+            val topCandidates = contours.sortedByDescending { Geometry.contourArea(it) }.take(5)
             Logger.d(
                 "DocumentCropper",
                 "size=${gray.cols()}x${gray.rows()} contours=${contours.size} " +
-                    "topAreaFraction=${topCandidates.firstOrNull()?.let { Imgproc.contourArea(it) / imageArea }}"
+                    "topAreaFraction=${topCandidates.firstOrNull()?.let { Geometry.contourArea(it) / imageArea }}"
             )
             return topCandidates.firstNotNullOfOrNull { contour -> quadCorners(contour, imageArea, minAreaFraction) }
         } finally {
@@ -139,13 +140,13 @@ object DocumentCropper {
 
     /** Returns the 4 ordered corners of [contour] if it approximates a large-enough quadrilateral. */
     private fun quadCorners(contour: MatOfPoint, imageArea: Double, minAreaFraction: Double): Array<Point>? {
-        if (Imgproc.contourArea(contour) < imageArea * minAreaFraction) return null
+        if (Geometry.contourArea(contour) < imageArea * minAreaFraction) return null
 
         val contour2f = MatOfPoint2f(*contour.toArray())
         val approx2f = MatOfPoint2f()
         try {
-            val perimeter = Imgproc.arcLength(contour2f, true)
-            Imgproc.approxPolyDP(contour2f, approx2f, 0.02 * perimeter, true)
+            val perimeter = Geometry.arcLength(contour2f, true)
+            Geometry.approxPolyDP(contour2f, approx2f, 0.02 * perimeter, true)
             val points = approx2f.toArray()
             if (points.size != 4) return null
             return orderCorners(points)
@@ -176,7 +177,7 @@ object DocumentCropper {
         val dst = MatOfPoint2f(
             Point(0.0, 0.0), Point(width, 0.0), Point(width, height), Point(0.0, height)
         )
-        val transform = Imgproc.getPerspectiveTransform(src, dst)
+        val transform = Geometry.getPerspectiveTransform(src, dst)
         val warped = Mat()
         try {
             Imgproc.warpPerspective(rgba, warped, transform, Size(width, height))

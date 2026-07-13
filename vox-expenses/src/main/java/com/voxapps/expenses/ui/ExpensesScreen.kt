@@ -42,6 +42,7 @@ import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.state.SortMode
+import com.voxapps.ipc.VoxAppsDiscovery
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +59,9 @@ fun ExpensesScreen(
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     var showFilterSheet by remember { mutableStateOf(false) }
+    // Scan always forwards through Commander's LLM hook for cleanup (no direct-save fallback) —
+    // hidden entirely rather than offered and silently failing if Commander isn't installed.
+    val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
 
     // Amount-sorted order isn't chronological, so it doesn't fit a per-day calendar layout — a
     // derived rule, no extra persisted state: clearing the sort (the chip's X) automatically
@@ -85,12 +89,14 @@ fun ExpensesScreen(
         },
         floatingActionButton = {
             Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                ExtendedFloatingActionButton(
-                    onClick = { ExpenseScanRequestSender.send(context) },
-                    icon = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
-                    text = { Text(languageManager.getString("scan_receipt")) },
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
+                if (commanderInstalled) {
+                    ExtendedFloatingActionButton(
+                        onClick = { ExpenseScanRequestSender.send(context) },
+                        icon = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
+                        text = { Text(languageManager.getString("scan_receipt")) },
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
                 FloatingActionButton(onClick = onAddExpense) {
                     Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_expense"))
                 }

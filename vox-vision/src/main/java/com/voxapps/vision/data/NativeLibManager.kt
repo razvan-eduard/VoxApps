@@ -20,12 +20,25 @@ object NativeLibManager {
     private const val LIB_DIR_NAME = "native_libs"
     private const val RELEASE_BASE = "https://github.com/razvan-eduard/VoxApps/releases/download/"
 
+    // Order matters: loadAll() below uses System.load() (not loadLibrary()), which — unlike the
+    // dynamic linker's own dependency resolution — requires each lib's dependencies to already be
+    // loaded first. Chain (confirmed via `readelf -d`): core -> flann -> geometry -> imgproc ->
+    // imgcodecs -> {features, ptcloud, stereo} -> java5. All six after core/imgcodecs are OpenCV
+    // 5.0+ additions — java5's own NEEDED entries list libopencv_features.so/ptcloud.so/stereo.so
+    // directly (OpenCV 5's java bindings link them unconditionally, even with calib3d/features2d
+    // disabled at build time), which is easy to miss since nothing in this app calls their APIs.
+    // Absent in OpenCV 4.x, where opencv_java4.so had no such deps.
     val ESSENTIAL_LIBS = listOf(
         "libonnxruntime.so",
         "libopencv_core.so",
+        "libopencv_flann.so",
+        "libopencv_geometry.so",
         "libopencv_imgproc.so",
         "libopencv_imgcodecs.so",
-        "libopencv_java4.so"
+        "libopencv_features.so",
+        "libopencv_ptcloud.so",
+        "libopencv_stereo.so",
+        "libopencv_java5.so"
     )
 
     private val _status = MutableStateFlow<Status>(Status.IDLE)

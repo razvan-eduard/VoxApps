@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import com.paddle.ocr.EngineConfig
 import com.paddle.ocr.PaddleOCR
 import com.paddle.ocr.PaddleOCRConfig
-import com.paddle.ocr.util.OpenCVUtils
 
 /**
  * Thin wrapper around the vendored `com.paddle.ocr.PaddleOCR`, pointed at the runtime-downloaded
@@ -22,13 +21,15 @@ class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
     suspend fun release() = paddleOcr.release()
 
     companion object {
-        private var openCvInitialized = false
-
         suspend fun create(context: Context, downloader: VisionModelDownloader): OcrEngine {
-            if (!openCvInitialized) {
-                if (!OpenCVUtils.init(context)) error("Failed to initialize OpenCV native library")
-                openCvInitialized = true
-            }
+            // No OpenCVUtils.init()/System.loadLibrary() call here deliberately: vox-vision's release
+            // build excludes these libs from the APK (see build.gradle.kts's packaging.jniLibs.excludes)
+            // and downloads them as DLC instead — NativeLibManager.loadAll() already System.load()s
+            // libopencv_java5.so (and its full dependency chain) by absolute path before the splash
+            // screen ever navigates here (gated on NativeLibManager.Status.READY). A second
+            // System.loadLibrary("opencv_java5") call would search the APK's own (deliberately empty)
+            // native lib dir and always throw UnsatisfiedLinkError, even though the library is already
+            // loaded and its JNI bindings already registered.
             val paddleOcr = PaddleOCR.create(
                 context = context,
                 config = PaddleOCRConfig(recScoreThresh = 0.0f, recBatchSize = 1),

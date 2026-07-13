@@ -16,6 +16,9 @@ data class VoxCommand(
     /** [VoxIpc.OP_EXPORT] scope: one of [VoxIpc.EXPORT_SCOPE_SETTINGS]/[VoxIpc.EXPORT_SCOPE_DATA]/
      *  [VoxIpc.EXPORT_SCOPE_BOTH]. Null defaults to "both" on the receiving end. */
     val exportScope: String? = null,
+    /** [VoxIpc.OP_EXPORT]: whether to include real secrets (API keys) that are stripped by
+     *  default — an explicit opt-in from Hub's export screen, off unless the user ticks it. */
+    val includeSecrets: Boolean = false,
     /** Optional day-window bounds (epoch millis, inclusive) for [VoxIpc.OP_READ] — when both are
      *  present, a satellite that supports day-scoped reads (see [VoxDataTransferClient.requestDayRead])
      *  returns only records in this window instead of its full snapshot. Additive: satellites that
@@ -33,6 +36,7 @@ data class VoxCommand(
         limit?.let { o.put("limit", it) }
         domain?.let { o.put("domain", it) }
         exportScope?.let { o.put("exportScope", it) }
+        if (includeSecrets) o.put("includeSecrets", true)
         dateFrom?.let { o.put("dateFrom", it) }
         dateTo?.let { o.put("dateTo", it) }
         return o.toString()
@@ -53,6 +57,7 @@ data class VoxCommand(
                     limit = if (o.has("limit")) o.optInt("limit") else null,
                     domain = o.optStringOrNull("domain"),
                     exportScope = o.optStringOrNull("exportScope"),
+                    includeSecrets = o.optBoolean("includeSecrets", false),
                     dateFrom = if (o.has("dateFrom")) o.optLong("dateFrom") else null,
                     dateTo = if (o.has("dateTo")) o.optLong("dateTo") else null
                 )

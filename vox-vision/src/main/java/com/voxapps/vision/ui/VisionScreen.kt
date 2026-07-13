@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.vision.data.preferences.VisionSettingsRepository
 import com.voxapps.vision.di.VisionContainer
@@ -180,8 +181,13 @@ fun VisionScreen(
         }
     }
 
-    // Discovered once — installed apps don't change within a single Activity lifetime.
-    val scanTargets = remember { ScanTargetDiscovery.discover(context) }
+    // Discovered once — installed apps don't change within a single Activity lifetime. Every
+    // scan target's OcrResultReceiver unconditionally forwards to Commander's LLM hook for cleanup
+    // (no direct-save fallback), so without Commander installed there's nothing a "send to X" tap
+    // could actually accomplish — hidden entirely rather than offered and silently failing.
+    val scanTargets = remember {
+        if (VoxAppsDiscovery.isCommanderInstalled(context)) ScanTargetDiscovery.discover(context) else emptyList()
+    }
 
     // Shared by the manual final button (pendingRequest case) and auto-capture's hands-free
     // completion below. Standalone mode has no single "submit" action anymore — the user picks a

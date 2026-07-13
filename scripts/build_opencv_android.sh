@@ -1,11 +1,21 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# Builds OpenCV (core, imgproc, imgcodecs only — all vendor/ppocr-sdk actually uses) from source for
-# arm64-v8a, producing libopencv_java4.so, consumed directly by vendor/ppocr-sdk (see its
-# build.gradle.kts). Replaces the stale, unmaintained com.quickbirdstudios:opencv:4.5.3 Maven
-# dependency (last published 2021-09-15), whose prebuilt native library fails to dlopen on modern
-# Android (missing Bionic libc symbol __sfp_handle_exceptions).
+# Builds OpenCV (core, imgproc, imgcodecs, plus their transitive runtime deps — see below) from
+# source for arm64-v8a, producing libopencv_java<N>.so (N = OpenCV's major version — 4 for the 4.x
+# line, 5 for 5.x; this script doesn't hardcode it, see JNI_SO below), consumed directly by
+# vendor/ppocr-sdk (see its build.gradle.kts). Replaces the stale, unmaintained
+# com.quickbirdstudios:opencv:4.5.3 Maven dependency (last published 2021-09-15), whose prebuilt
+# native library fails to dlopen on modern Android (missing Bionic libc symbol
+# __sfp_handle_exceptions).
+#
+# OpenCV 5.0 split geometric algorithms out of imgproc into a new opencv_geometry module, which
+# itself depends on opencv_flann — both must stay enabled (confirmed via `cmake --debug-output`:
+# disabling flann cascades to geometry disabled -> imgproc disabled -> java disabled entirely) even
+# though nothing here calls flann/geometry APIs directly; they're pure transitive runtime deps now
+# (confirmed via `readelf -d`: imgproc's NEEDED includes libopencv_geometry.so, which needs
+# libopencv_flann.so). OpenCV 5.0 also requires C++17 for imgproc's warp_kernels.simd.hpp (uses
+# `if constexpr`/`std::conditional_t`) — the previous C++11 pin fails to compile it.
 #
 # Invokes CMake directly (not OpenCV's own platforms/android/build_sdk.py wrapper, whose BUILD_LIST
 # restriction interacts badly with the "world" combined-module path it takes for --shared builds).
@@ -17,6 +27,26 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OPENCV_DIR="$PROJECT_ROOT/vendor/opencv"
 BUILD_DIR="$PROJECT_ROOT/vendor/opencv-android-build"
 OUTPUT_DIR="$PROJECT_ROOT/vendor/ppocr-sdk/opencv"
+# vox-vision consumes vendor/ppocr-sdk's compiled classes (org.opencv.* Java API) via a normal
+# project() dependency, but AGP does NOT reliably package these arm64-v8a native libs into
+# vox-vision's final APK — confirmed via two separate, independently-reproducing failures: (1)
+# vox-vision's own mergeDebugJniLibFolders/mergeReleaseJniLibFolders produce a completely empty
+# output for vendor/ppocr-sdk's jniLibs.srcDirs()-sourced libs even in a from-scratch clean build
+# with zero other changes (predates any OpenCV 5.0 work, reproduces with the untouched original
+# script/commit); (2) even placed directly in vox-vision's OWN src/main/jniLibs/<ABI> (bypassing
+# ppocr-sdk propagation entirely), the merge step still silently drops them before the final
+# stripDebugDebugSymbols/packageDebug stage. This is the same general class of AGP 9.x
+# arm64-v8a-specific native-lib packaging unreliability documented for vox-commander's DLC excludes
+# (see vox-commander/build.gradle.kts) — libonnxruntime.so from the onnxruntime-android AAR shows
+# the identical symptom here too (present for armeabi-v7a/x86/x86_64, silently missing for
+# arm64-v8a specifically). Rather than depend on that broken propagation, this script writes the
+# compiled .so files directly into vox-vision's own default jniLibs source set
+# (src/main/jniLibs/<ABI> is auto-discovered by AGP, no jniLibs.srcDirs() declaration needed), and
+# scripts/inject_vision_native_libs.sh inserts them into the already-built debug APK zip directly
+# (since even placing them in the source set doesn't survive AGP's own merge/strip pipeline) — same
+# "don't trust AGP, place the files ourselves" approach already used for vox-commander's DLC
+# stripping (scripts/strip_dlc_libs.sh).
+VISION_JNI_DIR="$PROJECT_ROOT/vox-vision/src/main/jniLibs"
 
 ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$(find "$ANDROID_HOME/ndk" -maxdepth 1 -type d -name "[0-9]*" | sort -V | tail -1)}"
@@ -32,7 +62,8 @@ fi
 BUILT_COMMIT_FILE="$OUTPUT_DIR/.built-commit"
 CURRENT_COMMIT="$(git -C "$OPENCV_DIR" rev-parse HEAD)"
 
-if [ -f "$OUTPUT_DIR/libs/arm64-v8a/libopencv_java4.so" ] && [ -d "$OUTPUT_DIR/java/org" ]; then
+if ls "$OUTPUT_DIR"/libs/arm64-v8a/libopencv_java*.so >/dev/null 2>&1 && [ -d "$OUTPUT_DIR/java/org" ] \
+    && ls "$VISION_JNI_DIR"/arm64-v8a/libopencv_java*.so >/dev/null 2>&1; then
     if [ -f "$BUILT_COMMIT_FILE" ] && [ "$(cat "$BUILT_COMMIT_FILE")" = "$CURRENT_COMMIT" ]; then
         echo "OpenCV already built at $OUTPUT_DIR for commit $CURRENT_COMMIT — skipping."
         exit 0
@@ -53,7 +84,7 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
-echo "Configuring OpenCV (arm64-v8a, core+imgproc+imgcodecs+java)..."
+echo "Configuring OpenCV (arm64-v8a, core+imgproc+imgcodecs+java, +geometry+flann as transitive deps)..."
 cmake -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
     -DANDROID_ABI="arm64-v8a" \
@@ -67,12 +98,13 @@ cmake -G Ninja \
     -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_DOCS=OFF -DBUILD_ANDROID_EXAMPLES=OFF \
     -DBUILD_JAVA=ON -DBUILD_opencv_java=ON \
     -DBUILD_opencv_imgproc=ON -DBUILD_opencv_imgcodecs=ON \
+    -DBUILD_opencv_flann=ON \
     -DBUILD_opencv_video=OFF -DBUILD_opencv_videoio=OFF -DBUILD_opencv_photo=OFF \
-    -DBUILD_opencv_flann=OFF -DBUILD_opencv_calib3d=OFF -DBUILD_opencv_features2d=OFF -DBUILD_opencv_objdetect=OFF \
+    -DBUILD_opencv_calib3d=OFF -DBUILD_opencv_features2d=OFF -DBUILD_opencv_objdetect=OFF \
     -DBUILD_opencv_dnn=OFF -DBUILD_opencv_gapi=OFF -DBUILD_opencv_ml=OFF -DBUILD_opencv_highgui=OFF \
     -DBUILD_opencv_stitching=OFF \
     -DWITH_OPENCL=OFF -DWITH_IPP=OFF \
-    -DCMAKE_CXX_STANDARD=11 -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+    -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON \
     "$OPENCV_DIR"
 
 echo "Building gen_opencv_java_source (JNI codegen) first..."
@@ -81,27 +113,59 @@ ninja -j1 gen_opencv_java_source
 echo "Building the rest..."
 # BUILD_ANDROID_PROJECTS=ON also builds a bundled internal Gradle sub-project (an Android Studio
 # sample/AAR wrapper) that can fail on Kotlin/JDK toolchain mismatches unrelated to what we actually
-# need — the real libopencv_java4.so and Java sources are produced by plain ninja targets *before*
+# need — the real libopencv_java<N>.so and Java sources are produced by plain ninja targets *before*
 # that sub-project even starts, so a failure there is tolerated and verified against explicitly below.
 ninja || echo "ninja reported a failure (likely OpenCV's bundled Gradle sub-project, not the native build) — verifying required artifacts below regardless."
 
-JNI_SO="$(find "$BUILD_DIR" -path "*/jni/arm64-v8a/libopencv_java4.so" -print -quit)"
+# Filename encodes the OpenCV major version (libopencv_java4.so for 4.x, libopencv_java5.so for
+# 5.x) — found dynamically rather than hardcoded so a future submodule bump within the same major
+# version doesn't need this script edited again.
+JNI_SO="$(find "$BUILD_DIR" -path "*/jni/arm64-v8a/libopencv_java*.so" -print -quit)"
 JAVA_SRC_DIR="$BUILD_DIR/modules/java_bindings_generator/gen/java/org"
 if [ -z "$JNI_SO" ] || [ ! -d "$JAVA_SRC_DIR" ]; then
-    echo "ERROR: libopencv_java4.so or Java bindings source not produced. Check $BUILD_DIR for build logs."
+    echo "ERROR: libopencv_java*.so or Java bindings source not produced. Check $BUILD_DIR for build logs."
     exit 1
 fi
+JNI_SO_NAME="$(basename "$JNI_SO")"
+echo "Built: $JNI_SO_NAME"
 
 mkdir -p "$OUTPUT_DIR/libs/arm64-v8a"
-cp "$JNI_SO" "$OUTPUT_DIR/libs/arm64-v8a/libopencv_java4.so"
-# libopencv_java4.so is built with BUILD_SHARED_LIBS=ON, so it dynamically links against the
+rm -f "$OUTPUT_DIR/libs/arm64-v8a/libopencv_java"*.so
+cp "$JNI_SO" "$OUTPUT_DIR/libs/arm64-v8a/$JNI_SO_NAME"
+# libopencv_java<N>.so is built with BUILD_SHARED_LIBS=ON, so it dynamically links against the
 # per-module shared libraries at runtime instead of having them statically linked in — all of them
-# must ship in jniLibs too, or dlopen fails at first use with "library ... not found".
-for mod in core imgproc imgcodecs; do
-    cp "$BUILD_DIR/lib/arm64-v8a/libopencv_${mod}.so" "$OUTPUT_DIR/libs/arm64-v8a/"
+# must ship in jniLibs too, or dlopen fails at first use with "library ... not found". geometry,
+# flann, features, ptcloud, and stereo are OpenCV 5.0+ additions (confirmed via `readelf -d
+# libopencv_java5.so`: NEEDED includes all of these, even with calib3d/features2d disabled above —
+# OpenCV 5's java bindings link them unconditionally; absent in OpenCV 4.x, where this loop's set
+# was sufficient) — `cp -f` with a glob so a build against an older OpenCV commit that doesn't
+# produce them doesn't fail the whole script.
+for mod in core imgproc imgcodecs geometry flann features ptcloud stereo; do
+    cp -f "$BUILD_DIR/lib/arm64-v8a/libopencv_${mod}.so" "$OUTPUT_DIR/libs/arm64-v8a/" 2>/dev/null || true
 done
 STRIP_BIN="$TOOLCHAIN_DIR/bin/llvm-strip"
 [ -x "$STRIP_BIN" ] && "$STRIP_BIN" --strip-unneeded "$OUTPUT_DIR/libs/arm64-v8a/"*.so
+
+# Also copy directly into vox-vision's own jniLibs source set — see the VISION_JNI_DIR comment near
+# the top of this script for why this duplication exists (AGP doesn't reliably propagate a local
+# library module's jniLibs.srcDirs() through to a consuming app module here).
+mkdir -p "$VISION_JNI_DIR/arm64-v8a"
+rm -f "$VISION_JNI_DIR/arm64-v8a/libopencv_"*.so
+cp "$OUTPUT_DIR/libs/arm64-v8a/"libopencv_*.so "$VISION_JNI_DIR/arm64-v8a/"
+
+# libonnxruntime.so hits the same arm64-v8a AGP packaging bug (see the VISION_JNI_DIR comment) even
+# though it comes from a normal Maven AAR, not jniLibs.srcDirs() — extracted directly from the AAR
+# already sitting in Gradle's module cache (resolved as part of vendor/ppocr-sdk's own dependency
+# graph) rather than hardcoding a path, since the cache's per-artifact hash directory isn't stable.
+ONNXRUNTIME_VERSION="$(grep '^onnxruntime ' "$PROJECT_ROOT/gradle/libs.versions.toml" | sed 's/.*"\(.*\)".*/\1/')"
+ONNXRUNTIME_AAR="$(find "$HOME/.gradle/caches/modules-2/files-2.1/com.microsoft.onnxruntime/onnxruntime-android/$ONNXRUNTIME_VERSION" \
+    -iname "onnxruntime-android-*.aar" -print -quit 2>/dev/null)"
+if [ -n "$ONNXRUNTIME_AAR" ]; then
+    rm -f "$VISION_JNI_DIR/arm64-v8a/libonnxruntime.so"
+    unzip -o -j "$ONNXRUNTIME_AAR" "jni/arm64-v8a/libonnxruntime.so" -d "$VISION_JNI_DIR/arm64-v8a" >/dev/null
+else
+    echo "WARNING: onnxruntime-android AAR not found in Gradle cache for version $ONNXRUNTIME_VERSION — run a build that resolves vendor/ppocr-sdk's dependencies first, then re-run this script." >&2
+fi
 
 rm -rf "$OUTPUT_DIR/java"
 mkdir -p "$OUTPUT_DIR/java"
@@ -122,5 +186,6 @@ fi
 echo "$CURRENT_COMMIT" > "$BUILT_COMMIT_FILE"
 
 echo "OpenCV build complete (commit $CURRENT_COMMIT):"
-echo "  $OUTPUT_DIR/libs/arm64-v8a/libopencv_java4.so"
+echo "  $OUTPUT_DIR/libs/arm64-v8a/$JNI_SO_NAME"
 echo "  $OUTPUT_DIR/java/org/ (Java bindings source)"
+echo "  $VISION_JNI_DIR/arm64-v8a/ (same .so files, direct copy for vox-vision)"

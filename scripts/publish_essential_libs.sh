@@ -28,7 +28,11 @@ VISION_TAG="vision-v$(get_version_name "$PROJECT_ROOT/vox-vision/build.gradle.kt
 
 # Paths to stripped release libs after a successful build
 COMMANDER_SOURCE="$PROJECT_ROOT/vox-commander/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a"
-VISION_SOURCE="$PROJECT_ROOT/vox-vision/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a"
+# Copied straight from where scripts/build_opencv_android.sh writes them (its VISION_JNI_DIR), not
+# from a build/intermediates path — AGP 9.x doesn't reliably propagate arm64-v8a native libs through
+# its own merge/packaging pipeline for this module (same issue class as Commander's DLC excludes,
+# confirmed via extensive testing), so intermediates may not actually contain them.
+VISION_SOURCE="$PROJECT_ROOT/vox-vision/src/main/jniLibs/arm64-v8a"
 
 # These are stripped from the release APK zip directly (scripts/strip_dlc_libs.sh /
 # release-commander.yml), not via AGP's packaging.jniLibs.excludes — that's unreliable on
@@ -43,12 +47,19 @@ COMMANDER_LIBS=(
     "libsherpa-onnx-jni.so"
 )
 
+# geometry/flann/features/ptcloud/stereo are OpenCV 5.0+ additions (see NativeLibManager.kt for the
+# full dependency chain, confirmed via `readelf -d`); java4 renamed java5 in the same bump.
 VISION_LIBS=(
     "libonnxruntime.so"
     "libopencv_core.so"
+    "libopencv_flann.so"
+    "libopencv_geometry.so"
     "libopencv_imgproc.so"
     "libopencv_imgcodecs.so"
-    "libopencv_java4.so"
+    "libopencv_features.so"
+    "libopencv_ptcloud.so"
+    "libopencv_stereo.so"
+    "libopencv_java5.so"
 )
 
 # --- CHECK PREREQUISITES ---

@@ -52,6 +52,7 @@ import com.voxapps.calendar.CalendarView
 import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NoteWithCategory
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.notes.domain.llm.ScanRequestSender
 import com.voxapps.notes.state.NotesStateManager
 import com.voxapps.notes.state.NotesUiState
@@ -112,8 +113,14 @@ fun NotesScreen(
                     },
                     actions = {
                         val context = LocalContext.current
-                        IconButton(onClick = { ScanRequestSender.send(context) }) {
-                            Icon(Icons.Filled.DocumentScanner, contentDescription = languageManager.getString("scan_note"))
+                        // Scan always forwards through Commander's LLM hook for cleanup (no
+                        // direct-save fallback) — hidden entirely rather than offered and silently
+                        // failing if Commander isn't installed.
+                        val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+                        if (commanderInstalled) {
+                            IconButton(onClick = { ScanRequestSender.send(context) }) {
+                                Icon(Icons.Filled.DocumentScanner, contentDescription = languageManager.getString("scan_note"))
+                            }
                         }
                         IconButton(onClick = { showDateSheet = true }) {
                             Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("sort_and_filter"))

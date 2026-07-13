@@ -14,9 +14,10 @@ import kotlinx.coroutines.launch
 
 /**
  * Commander's own entry point on the Vox command bus (mirrors vox-notes'/vox-expenses'
- * VoxCommandReceiver) — lets Vox Hub discover Commander too and export its settings. Commander
- * doesn't consume [VoxIpc.OP_CREATE]/[VoxIpc.OP_READ] (it's the orchestrator that sends those to
- * satellites, not a domain-owning satellite itself), so only ping/export are handled.
+ * VoxCommandReceiver) — lets Vox Hub discover Commander too and export/import its settings.
+ * Commander doesn't consume [VoxIpc.OP_CREATE]/[VoxIpc.OP_READ] (it's the orchestrator that sends
+ * those to satellites, not a domain-owning satellite itself), so only ping/export/import are
+ * handled.
  *
  * Guarded by the shared `com.voxapps.vox.permission.COMMAND` custom permission (declared once in
  * `:core:ipc`'s manifest).
@@ -39,12 +40,38 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val settings = container.settingsRepository.getSettingsSnapshot()
-                        val json = CommanderExportHandler.buildExportJson(settings)
+                        val json = CommanderExportHandler.buildExportJson(
+                            settings,
+                            includeSecrets = command.includeSecrets,
+                            searchProviderApiKeys = if (command.includeSecrets) {
+                                container.settingsRepository.getAllSearchProviderApiKeys()
+                            } else {
+                                emptyMap()
+                            }
+                        )
                         // Must use the PendingResult's own setResultData, not the inherited
                         // BroadcastReceiver.setResult() — the latter throws "Call while result is
                         // not pending" once called from outside onReceive()'s synchronous window,
                         // which goAsync()'s whole point is to let us do.
                         pending.setResultData(VoxResult(ok = true, text = json).toJson())
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            VoxIpc.OP_IMPORT -> {
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val imported = CommanderExportHandler.parsePortableSettings(command.text.orEmpty())
+                        val result = if (imported != null) {
+                            container.settingsRepository.restoreImportedSettings(imported)
+                            VoxResult(ok = true, text = "Settings imported")
+                        } else {
+                            VoxResult(ok = false, text = "Invalid import payload")
+                        }
+                        pending.setResultData(result.toJson())
                     } finally {
                         pending.finish()
                     }

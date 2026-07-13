@@ -11,8 +11,8 @@ android {
         applicationId = "com.voxapps.hub"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4"
+        versionCode = 5
+        versionName = "0.5"
     }
 
     // CI-only release signing: RELEASE_KEYSTORE_PATH is only set in the release-*.yml workflows

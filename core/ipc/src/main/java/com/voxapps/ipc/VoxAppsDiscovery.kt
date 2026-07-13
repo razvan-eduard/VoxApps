@@ -34,6 +34,22 @@ data class VoxAppInfo(
  */
 object VoxAppsDiscovery {
 
+    const val COMMANDER_PACKAGE = "com.voxapps.commander"
+
+    /**
+     * Every satellite's OCR-scan-cleanup and voice-parse flows (Vision's "send to X", Notes'/
+     * Expenses' "Scan" entry points) unconditionally forward through Commander's generic LLM hook —
+     * there's no direct-save fallback. Callers use this to hide those entry points entirely rather
+     * than let the user hit a silent dead end (the broadcast to a missing package just goes nowhere,
+     * no crash, no error).
+     */
+    fun isCommanderInstalled(context: Context): Boolean = try {
+        context.packageManager.getApplicationInfo(COMMANDER_PACKAGE, 0)
+        true
+    } catch (e: PackageManager.NameNotFoundException) {
+        false
+    }
+
     fun discover(context: Context): List<VoxAppInfo> {
         val pm = context.packageManager
         val intent = Intent(VoxIpc.ACTION_COMMAND)

@@ -5,6 +5,8 @@
   "hub_scope_settings": "Settings",
   "hub_scope_data": "Data",
   "hub_scope_both": "Both",
+  "hub_include_secrets": "Include API keys",
+  "hub_include_secrets_warning": "Warning: the exported file will contain your API keys in plain text. Keep it somewhere secure — anyone with the file can use those keys.",
   "hub_export_button": "Export selected",
   "hub_import_section": "Import",
   "hub_import_button": "Choose file to import",
