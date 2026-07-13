@@ -1,0 +1,12 @@
+VoxExpenses is a standalone, encrypted on-device expense tracker. It offers multiple ways to capture expenses while keeping your financial data private.
+
+Features:
+- Triple Capture Path: Log expenses via voice (VoxCommander), receipt scanning (VoxVision), or notification capture from bank apps.
+- Encrypted Storage: Secured with Room, SQLCipher, and Keystore-backed passphrases.
+- Notification Capture: Opt-in service to suggest expenses from payment notifications (user-approved).
+- Spending Limits: Category-based budget alerts and period tracking.
+- Smart Cleanup: LLM-backed category merging and duplicate expense detection.
+- Reports: Visual breakdowns and home-currency conversion.
+- Calendar View: Integrated month-paged agenda view for your spending.
+
+Part of the VoxApps ecosystem. No cloud sync, no tracking.

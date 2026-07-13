@@ -1,0 +1,10 @@
+VoxHub is a lightweight backup and restore utility for the VoxApps ecosystem. It allows you to manage the data for all your installed Vox apps in one place.
+
+Features:
+- Universal Discovery: Automatically finds every installed Vox app that supports the backup contract.
+- Unified Backup: Bundles settings and data from multiple apps into a single, dated JSON file.
+- Selective Import: Preview record counts and choose which apps to restore.
+- App Wake-up: Automatically wakes up "stopped" apps to ensure they respond to backup requests.
+- Database-free: A lightweight utility that stays out of the way until you need it.
+
+Note: VoxHub does not store your data itself; it acts as a coordinator for the other apps in the VoxApps suite.

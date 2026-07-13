@@ -1,0 +1,11 @@
+VoxVision turns your phone into a privacy-first document scanner. It handles everything on-device, from edge detection to text recognition.
+
+Features:
+- Smart Capture: Live document edge detection and auto-capture with configurable sensitivity.
+- Precise Cropping: Perspective correction and cropping via OpenCV.
+- On-device OCR: Text recognition powered by PaddleOCR, running entirely locally.
+- Voice App Integration: Forwards cleaned OCR text to VoxNotes or VoxExpenses.
+- Hands-free flow: Support for "scan -> auto-submit" requests from companion apps.
+- No cloud dependencies: Your documents never leave your device.
+
+Part of the VoxApps ecosystem. Works standalone or as a provider for other Vox apps.
