@@ -90,9 +90,14 @@ object NativeLibManager {
             try {
                 val request = okhttp3.Request.Builder().url(url).build()
                 client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@withContext false
+                    if (!response.isSuccessful) {
+                        Logger.e(TAG, "Failed to download $libName: ${response.code}")
+                        return@withContext false
+                    }
                     response.body?.byteStream()?.use { input ->
-                        targetFile.outputStream().use { output -> input.copyTo(output) }
+                        targetFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
                     }
                 }
                 downloaded++

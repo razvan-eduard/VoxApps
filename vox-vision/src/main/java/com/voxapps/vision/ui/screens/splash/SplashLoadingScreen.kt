@@ -37,10 +37,8 @@ fun SplashLoadingScreen(
         }
     }
 
-    val nativeReady = nativeStatus == NativeLibManager.Status.READY || nativeStatus == NativeLibManager.Status.ERROR
-
-    LaunchedEffect(nativeReady) {
-        if (nativeReady) {
+    LaunchedEffect(nativeStatus) {
+        if (nativeStatus == NativeLibManager.Status.READY) {
             delay(800)
             onFinished()
         }
