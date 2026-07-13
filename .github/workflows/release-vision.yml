@@ -86,8 +86,18 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         run: |
           mkdir -p dlc-libs
-          find vox-vision/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a -name "*.so" \
-            -exec cp {} dlc-libs/ \;
+          LIBS=(
+            "libonnxruntime.so"
+            "libopencv_core.so"
+            "libopencv_imgproc.so"
+            "libopencv_imgcodecs.so"
+            "libopencv_java4.so"
+          )
+          for lib in "${LIBS[@]}"; do
+            find vox-vision/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib/arm64-v8a -name "$lib" \
+              -exec cp {} dlc-libs/ \;
+          done
+          ls -lh dlc-libs/
 
       - name: Create GitHub Release
         if: steps.check_bump.outputs.changed != 'false'
