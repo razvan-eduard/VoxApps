@@ -11,6 +11,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,8 +97,16 @@ fun AppManagerTab(
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
         // --- SECTION 3: Media Session Permission (moved from DefaultAppsTab) ---
-        val hasMediaSessionPermission = remember { MediaSessionListenerService.isPermissionGranted(context) }
-        var permissionGranted by remember { mutableStateOf(hasMediaSessionPermission) }
+        // Notification listener access can only be granted via the system Settings screen (no
+        // in-app permission dialog exists for it), so the check has to re-run when this screen
+        // resumes — the old `remember { ... }` with no key ran isPermissionGranted() exactly once
+        // on first composition and never again, meaning the switch stayed stuck at whatever it read
+        // that first time (usually "off") no matter what the user did in Settings afterward, and
+        // tapping it just kept reopening Settings instead of ever reflecting the real state.
+        var permissionGranted by remember { mutableStateOf(MediaSessionListenerService.isPermissionGranted(context)) }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+            permissionGranted = MediaSessionListenerService.isPermissionGranted(context)
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
