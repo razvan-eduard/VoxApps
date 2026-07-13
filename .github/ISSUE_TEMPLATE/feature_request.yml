@@ -1,0 +1,51 @@
+name: ✨ Feature Request
+description: Suggest a new idea or improvement for the VoxApps ecosystem.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: app
+    attributes:
+      label: Target App
+      description: Which app should this feature be added to?
+      options:
+        - vox-commander
+        - vox-notes
+        - vox-expenses
+        - vox-calendar
+        - vox-vision
+        - vox-hub
+        - Global Ecosystem
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: A clear and concise description of what you want to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Use Case / Problem
+      description: Is your feature request related to a problem? Please describe.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or features you've considered.
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Validation
+      options:
+        - label: I understand that this is a personal project and features are added based on availability.
+          required: true

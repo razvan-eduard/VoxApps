@@ -1,0 +1,77 @@
+name: 🐛 Bug Report
+description: Report a problem you found in one of the Vox apps.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: dropdown
+    id: app
+    attributes:
+      label: Affected App
+      description: Which app in the ecosystem is having the issue?
+      options:
+        - vox-commander
+        - vox-notes
+        - vox-expenses
+        - vox-calendar
+        - vox-vision
+        - vox-hub
+        - core (IPC/Design/etc)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Tell us how to see the bug ourselves.
+      placeholder: |
+        1. Open '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened? (Include error messages if possible)
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device & OS
+      description: e.g. Pixel 8, Android 14
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (Logcat)
+      description: Please paste any relevant logs here. Wrap them in code blocks!
+      render: shell
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Validation
+      options:
+        - label: I have checked that this issue is not a duplicate.
+          required: true

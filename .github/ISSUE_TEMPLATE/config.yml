@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/razvan-eduard/VoxApps/issues/new
+    about: If you have a general question and not a bug/feature, feel free to open a regular issue here.
