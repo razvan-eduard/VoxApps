@@ -21,6 +21,15 @@
 -keep class com.voxapps.ipc.** { *; }
 -keep interface com.voxapps.ipc.** { *; }
 
+# Whisper.cpp JNI bridge: native-lib.cpp's JNIEXPORT functions are named
+# Java_com_whispercpp_whisper_WhisperLib_00024Companion_* — JNI's automatic native-method linking
+# matches by this exact literal class name, so if R8 renames WhisperLib (completely unprotected
+# before this rule), every native call (initContext/fullTranscribe/getTextSegment/...) would fail
+# with UnsatisfiedLinkError at runtime. Same class of bug as the ai.onnxruntime fix below, just not
+# yet triggered/reported since it only surfaces when actually transcribing audio.
+-keep class com.whispercpp.whisper.WhisperLib { *; }
+-keep class com.whispercpp.whisper.WhisperLib$Companion { *; }
+
 # Sherpa-ONNX / ONNX Runtime
 # The onnxruntime-android AAR's actual Java package is ai.onnxruntime.* (com.microsoft.onnxruntime
 # is just the Maven groupId, not a real package here) -- this rule targeted the wrong name entirely,
