@@ -96,10 +96,16 @@ jobs:
         if: steps.versions.outputs.has_update == 'true'
         run: chmod +x gradlew
 
+      # -x autoCompileWhisper etc.: these preBuild-wired tasks are unrelated to what this workflow
+      # is verifying (that vox-commander still compiles/passes tests against the new Vosk version).
+      # autoCompileWhisper in particular needs NDK/CMake/Vulkan setup this workflow doesn't install
+      # (unlike release-commander.yml) — same exclusion sync-openwakeword.yml already uses.
       - name: Compile + run unit tests
         if: steps.versions.outputs.has_update == 'true'
         run: |
-          ./gradlew :vox-commander:assembleDebug :vox-commander:testDebugUnitTest --no-daemon
+          ./gradlew :vox-commander:compileDebugKotlin :vox-commander:testDebugUnitTest \
+                    -x autoCompileWhisper -x autoCheckVosk -x autoCheckNewPipeExtractor -x autoCheckOpenWakeWord \
+                    --no-daemon
 
       - name: Commit and push
         if: steps.versions.outputs.has_update == 'true'
