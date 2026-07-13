@@ -1,5 +1,6 @@
 package com.voxapps.hub.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,6 +39,11 @@ fun HubSettingsScreen(
     val languageManager = LocalLanguageManager.current
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = HubSettings())
     val scope = rememberCoroutineScope()
+
+    // Without this, the system back gesture/button falls through to the Activity's default
+    // behavior (no back stack, single Activity) and closes the app instead of returning to the
+    // main screen — matches the same fix already applied in vox-notes'/vox-expenses' SettingsScreen.
+    BackHandler(onBack = onBack)
 
     Scaffold(
         topBar = {

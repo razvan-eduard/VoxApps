@@ -1,6 +1,7 @@
 package com.voxapps.hub.ui
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -36,8 +37,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.hub.domain.ExportImportUtil
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
@@ -54,6 +57,9 @@ private data class ImportPreview(
     val summaries: Map<String, Map<String, Int>>
 )
 
+/** Matches the "Granted" success color used in the shared onboarding permission rows. */
+private val SuccessGreen = Color(0xFF2E7D32)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HubScreen(onOpenSettings: () -> Unit = {}) {
@@ -61,11 +67,14 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    DoubleBackToExitHandler(message = languageManager.getString("press_back_again_to_exit"))
+
     var apps by remember { mutableStateOf<List<VoxAppInfo>>(emptyList()) }
     var selectedForExport by remember { mutableStateOf<Set<String>>(emptySet()) }
     var exportScope by remember { mutableStateOf(VoxIpc.EXPORT_SCOPE_BOTH) }
     var isExporting by remember { mutableStateOf(false) }
     var exportStatus by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var exportOk by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
     var isImporting by remember { mutableStateOf(false) }
     var importPreview by remember { mutableStateOf<ImportPreview?>(null) }
@@ -88,24 +97,42 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
         val targets = apps.filter { it.packageName in selectedForExport && it.actions.contains("export") }
         isExporting = true
         exportStatus = emptyMap()
+        exportOk = emptyMap()
         scope.launch {
             val results = mutableMapOf<String, String>()
+            val okFlags = mutableMapOf<String, Boolean>()
             val perDomainJson = mutableMapOf<String, String>()
             for (app in targets) {
                 val domain = app.domain ?: app.packageName
+                // Warm the target app up first: a fully cold process (never launched, or killed by
+                // the OS since) can still be mid-init — Room/SQLCipher opening, DI container wiring —
+                // when the real export request lands, and silently times out instead of answering.
+                // A cheap ping first (with a cold-start-friendly timeout) gives the process a chance
+                // to finish starting before the heavier export request is sent to it.
+                VoxAppsDiscovery.ping(context, app.packageName, timeoutMs = 8_000L)
                 val result = VoxDataTransferClient.requestExport(context, app.packageName, exportScope)
                 if (result != null && result.ok) {
                     perDomainJson[domain] = result.text
                     results[app.packageName] = languageManager.getString("hub_status_ok")
+                    okFlags[app.packageName] = true
                 } else {
                     results[app.packageName] = result?.text?.takeIf { it.isNotBlank() }
                         ?: languageManager.getString("hub_status_timeout")
+                    okFlags[app.packageName] = false
                 }
+                // Update per-app as each one finishes, not just at the very end, so the green
+                // checkmark appears progressively while later apps are still exporting.
+                exportStatus = results.toMap()
+                exportOk = okFlags.toMap()
             }
-            exportStatus = results
             if (perDomainJson.isNotEmpty()) {
                 val document = ExportImportUtil.buildExportDocument(perDomainJson)
                 context.contentResolver.openOutputStream(uri)?.use { it.write(document.toByteArray()) }
+                Toast.makeText(
+                    context,
+                    languageManager.getString("hub_export_saved_toast"),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
             isExporting = false
         }
@@ -167,9 +194,17 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                                 }
                             )
                             Column {
-                                Text(app.label)
+                                val ok = exportOk[app.packageName] == true
+                                Text(
+                                    app.label,
+                                    color = if (ok) SuccessGreen else MaterialTheme.colorScheme.onSurface
+                                )
                                 exportStatus[app.packageName]?.let {
-                                    Text(it, style = MaterialTheme.typography.labelSmall)
+                                    Text(
+                                        it,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (ok) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
@@ -190,7 +225,10 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                 }
                 Button(
                     onClick = {
-                        val fileName = "vox-export-${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}.json"
+                        // Includes time-of-day, not just the date — otherwise multiple exports on the
+                        // same day collide on filename and the system file picker silently appends
+                        // "(1)", "(2)", etc., which made past backups easy to mix up.
+                        val fileName = "vox-export-${SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())}.json"
                         createDocumentLauncher.launch(fileName)
                     },
                     enabled = !isExporting && selectedForExport.isNotEmpty(),
@@ -255,6 +293,8 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                             for ((domain, data) in targets) {
                                 val app = apps.firstOrNull { it.domain == domain }
                                 if (app == null) continue
+                                // Same cold-start warm-up as export — see its comment above.
+                                VoxAppsDiscovery.ping(context, app.packageName, timeoutMs = 8_000L)
                                 val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString())
                                 results[domain] = if (result != null && result.ok) {
                                     result.text
