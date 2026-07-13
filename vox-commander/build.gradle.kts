@@ -68,17 +68,19 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
             // Exclude Whisper native libs from release APK — they're downloaded on demand as DLC.
-            // This reduces the APK from ~166MB to ~19MB. Debug builds keep them for normal dev workflow.
+            // This reduces the APK from ~166MB to ~40MB. Debug builds keep them for normal dev workflow.
             //
-            // Deliberately NOT also excluding libonnxruntime.so/libonnxruntime4j_jni.so/
-            // libpv_porcupine.so/libsherpa-onnx-cxx-api.so/libjnidispatch.so here, even though
-            // they're real, sizable libs: AGP 9.0.0–9.2.1 (every currently published 9.x release)
-            // has confirmed-unreliable arm64-v8a native-lib packaging behavior for this project's
-            // dependency set — excludes for these either get silently ignored (libonnxruntime.so
-            // stayed bundled despite an exclude rule, even after removing every duplicate-source/
-            // pickFirst candidate cause) or the merge output for the others varies between
-            // otherwise-identical clean builds. Leaving them all bundled trades a larger APK
-            // (~40MB vs the ~30MB IzzyOnDroid guideline) for not depending on that unreliable path.
+            // Other large DLC'd libs (onnxruntime, Vosk, mediapipe-genai, sherpa-onnx) are
+            // deliberately NOT excluded here via packaging.jniLibs.excludes, even though they're
+            // real and sizable: AGP 9.0.0–9.2.1 (every currently published 9.x release) has
+            // confirmed-unreliable arm64-v8a native-lib packaging behavior for this project's
+            // dependency set — excludes for these either get silently ignored or the merge output
+            // varies between otherwise-identical clean builds (see docs/BUILD_TIME_DEPENDENCIES.md
+            // for the full investigation). Instead, release-commander.yml strips them directly from
+            // the already-built APK zip (scripts/strip_dlc_libs.sh) — a plain file operation that
+            // isn't subject to AGP's merge-time bug — then re-signs. Local `assembleRelease` runs
+            // (this file alone) therefore still produce a fully-bundled ~40MB APK; the ~16MB
+            // stripped+DLC'd APK only exists as a CI release artifact.
             packaging {
                 jniLibs {
                     excludes += setOf(

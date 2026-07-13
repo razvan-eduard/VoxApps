@@ -200,10 +200,14 @@ owning the source.
 - **Native library**: `libwhisper.so` (GGML-based, compiled via CMake)
 - **Engine**: `WhisperSttEngine` in `domain/engine/whisper/`
 - **Models**: Downloaded on-demand from HuggingFace (`ggml-tiny.bin`, `ggml-base.bin`, `ggml-small.bin`)
-- **Release builds**: Whisper native libs excluded from APK (~166MB → ~40MB), downloaded as DLC.
-  Other large native deps (onnxruntime, Vosk, Picovoice, sherpa-onnx) remain bundled rather than
-  also DLC'd — see `docs/BUILD_TIME_DEPENDENCIES.md` for why (a confirmed AGP 9.x arm64-v8a
-  native-lib packaging bug made excluding them unreliable).
+- **Release builds**: Whisper native libs excluded from APK via AGP's
+  `packaging.jniLibs.excludes` (reliable for this lib), downloaded as DLC. onnxruntime, Vosk,
+  mediapipe-genai, and sherpa-onnx-jni are also DLC'd, but via a different mechanism — a post-build
+  script strips them from the built APK zip directly and re-signs, since AGP's own exclude
+  mechanism is confirmed-unreliable on arm64-v8a for those specific libs (see
+  `docs/BUILD_TIME_DEPENDENCIES.md`). CI-published release: ~166MB → ~16MB. A plain local
+  `assembleRelease` only gets the Whisper reduction (~40MB) since the strip step lives in
+  `release-commander.yml`, not Gradle.
 - **Vulkan**: Optional GPU acceleration via `libggml-vulkan.so` (probed at first run, disabled if incompatible)
 
 ### STT Flow

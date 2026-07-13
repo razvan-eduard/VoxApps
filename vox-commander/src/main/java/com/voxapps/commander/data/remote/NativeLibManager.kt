@@ -22,16 +22,20 @@ object NativeLibManager {
     // Base URL for the native libraries. Pointing to the main repo releases.
     private const val RELEASE_BASE = "https://github.com/razvan-eduard/VoxApps/releases/download/"
 
-    // Libraries that are excluded from APK and must be downloaded — must match build.gradle.kts's
-    // release packaging excludes exactly. Empty for now: AGP 9.0.0–9.2.1 (every currently published
-    // 9.x release) has confirmed-unreliable arm64-v8a native-lib packaging behavior for this
-    // project's dependency set (onnxruntime.so, onnxruntime4j_jni.so, pv_porcupine.so,
-    // sherpa-onnx-cxx-api.so, jnidispatch.so all either get silently excluded from the merge
-    // inconsistently between clean builds, or ignore their exclude rule and stay bundled anyway —
-    // see build.gradle.kts's release packaging comment for the full investigation). With this
-    // empty, `areLibsPresent()` is vacuously true and `init()` completes as READY immediately,
-    // making this whole mechanism inert until a future AGP version fixes the packaging bug.
-    val ESSENTIAL_LIBS = emptyList<String>()
+    // Libraries stripped from the release APK zip post-build (see
+    // scripts/strip_dlc_libs.sh / release-commander.yml) rather than via AGP's
+    // packaging.jniLibs.excludes, which proved unreliable on arm64-v8a for this dependency set
+    // (see build.gradle.kts's release packaging comment / docs/BUILD_TIME_DEPENDENCIES.md for the
+    // investigation) — plain zip removal sidesteps that bug entirely. Order matters:
+    // libsherpa-onnx-jni.so's only external NEEDED entry is libonnxruntime.so (confirmed via
+    // readelf), so onnxruntime must load first; libllm_inference_engine_jni.so and libvosk.so are
+    // self-contained (only system libs), so their position relative to each other doesn't matter.
+    val ESSENTIAL_LIBS = listOf(
+        "libonnxruntime.so",
+        "libllm_inference_engine_jni.so",
+        "libvosk.so",
+        "libsherpa-onnx-jni.so"
+    )
 
     private fun getReleaseTag(context: Context): String {
         return try {

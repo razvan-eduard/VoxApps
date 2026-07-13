@@ -41,7 +41,7 @@
 
 - **Android 10+** (API 29)
 - **arm64-v8a** architecture
-- ~40MB APK (release, without Whisper native libs — downloaded on demand; onnxruntime/Vosk/Picovoice/sherpa-onnx remain bundled — see `docs/BUILD_TIME_DEPENDENCIES.md` for why)
+- ~16MB APK (CI-published release — Whisper, onnxruntime, Vosk, mediapipe-genai, and sherpa-onnx native libs all downloaded on demand; see `docs/BUILD_TIME_DEPENDENCIES.md` for how). A local `./gradlew assembleRelease` alone produces a ~40MB fully-bundled APK — the extra stripping only happens in `release-commander.yml`.
 - Optional: OpenAI API key for cloud NLU, Spotify Client ID for media control
 
 ## Quick Start

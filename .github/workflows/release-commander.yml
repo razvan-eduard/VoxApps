@@ -34,10 +34,10 @@ jobs:
         with:
           accept-android-licenses: true
 
-      - name: Install NDK and CMake
+      - name: Install NDK, CMake, and build-tools (for zipalign/apksigner)
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1" "build-tools;36.0.0"
 
       - name: Symlink SDK for whisper build script
         run: |
@@ -93,13 +93,11 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
 
-      - name: Build release APK
+      - name: Build release APK (unsigned — signed after DLC stripping below)
         if: steps.check_bump.outputs.changed != 'false'
         run: ./gradlew :vox-commander:assembleRelease --no-daemon
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
-          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
 
       - name: Determine version tag
         if: steps.check_bump.outputs.changed != 'false'
@@ -127,32 +125,40 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
 
-      - name: Rename APK with tag
+      - name: Strip DLC libs and sign APK
+        if: steps.check_bump.outputs.changed != 'false'
+        run: |
+          # AGP's packaging.jniLibs.excludes is unreliable on arm64-v8a for this dependency set
+          # (see build.gradle.kts's release packaging comment / docs/BUILD_TIME_DEPENDENCIES.md), so
+          # instead of asking AGP to exclude these at merge time, the APK is built fully bundled and
+          # these libs are stripped directly from the built zip — a plain, deterministic file
+          # operation that isn't subject to that bug.
+          MERGED_LIBS_DIR="vox-commander/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib/arm64-v8a"
+
+          # sherpa-onnx ships two alternate native entry points; only sherpa-onnx-jni.so is
+          # actually used (confirmed via readelf: its only external NEEDED lib is libonnxruntime.so,
+          # and the Java bindings' compiled classes reference "sherpa-onnx-jni" via loadLibrary — not
+          # "-c-api" or "-cxx-api"). Those two are dead weight — stripped, never uploaded/downloaded.
+          zip -d vox-commander/build/outputs/apk/release/vox-commander-release-unsigned.apk \
+            "lib/arm64-v8a/libsherpa-onnx-c-api.so" \
+            "lib/arm64-v8a/libsherpa-onnx-cxx-api.so"
+
+          bash scripts/strip_dlc_libs.sh \
+            vox-commander/build/outputs/apk/release/vox-commander-release-unsigned.apk \
+            VoxCommander-${{ steps.version.outputs.tag }}.apk \
+            "$RUNNER_TEMP/release.jks" \
+            "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
+            vox-commander \
+            dlc-libs \
+            "$MERGED_LIBS_DIR" \
+            libonnxruntime.so libllm_inference_engine_jni.so libvosk.so libsherpa-onnx-jni.so
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+
+      - name: Set APK path output
         if: steps.check_bump.outputs.changed != 'false'
         id: rename
-        run: |
-          cp vox-commander/build/outputs/apk/release/vox-commander-release.apk \
-             VoxCommander-${{ steps.version.outputs.tag }}.apk
-          echo "apk_path=VoxCommander-${{ steps.version.outputs.tag }}.apk" >> $GITHUB_OUTPUT
-
-      - name: Collect native libraries for DLC
-        if: steps.check_bump.outputs.changed != 'false'
-        run: |
-          # Copy essential libs to a staging folder for upload
-          mkdir -p dlc-libs
-          # Must match build.gradle.kts's release packaging excludes and
-          # NativeLibManager.ESSENTIAL_LIBS exactly — currently empty. AGP 9.0.0-9.2.1 has
-          # confirmed-unreliable arm64-v8a native-lib packaging for this project's dependency set
-          # (onnxruntime.so and others either get inconsistently dropped from the merge between
-          # clean builds, or ignore their exclude rule and stay bundled anyway — see
-          # build.gradle.kts's release packaging comment). Left empty until a future AGP version
-          # fixes this; this step becomes a no-op (empty dlc-libs/, nothing uploaded below).
-          LIBS=()
-          for lib in "${LIBS[@]}"; do
-            find . -path "*/release/*" -name "$lib" | grep arm64-v8a | head -n 1 \
-              -exec cp {} dlc-libs/ \;
-          done
-          ls -lh dlc-libs/
+        run: echo "apk_path=VoxCommander-${{ steps.version.outputs.tag }}.apk" >> $GITHUB_OUTPUT
 
       - name: Generate CHANGELOG.md
         if: steps.check_bump.outputs.changed != 'false'

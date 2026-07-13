@@ -30,10 +30,18 @@ VISION_TAG="vision-v$(get_version_name "$PROJECT_ROOT/vox-vision/build.gradle.kt
 COMMANDER_SOURCE="$PROJECT_ROOT/vox-commander/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a"
 VISION_SOURCE="$PROJECT_ROOT/vox-vision/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a"
 
-# Empty — AGP 9.0.0-9.2.1 has confirmed-unreliable arm64-v8a native-lib packaging for Commander's
-# dependency set (see vox-commander/build.gradle.kts's release packaging comment). Left empty
-# until a future AGP version fixes this; the upload loop below becomes a no-op.
-COMMANDER_LIBS=()
+# These are stripped from the release APK zip directly (scripts/strip_dlc_libs.sh /
+# release-commander.yml), not via AGP's packaging.jniLibs.excludes — that's unreliable on
+# arm64-v8a for this dependency set (see vox-commander/build.gradle.kts's release packaging
+# comment). libsherpa-onnx-c-api.so/libsherpa-onnx-cxx-api.so are deliberately excluded from this
+# list — they're unused dead weight (only libsherpa-onnx-jni.so is actually loaded), stripped from
+# the APK but never uploaded/downloaded.
+COMMANDER_LIBS=(
+    "libonnxruntime.so"
+    "libllm_inference_engine_jni.so"
+    "libvosk.so"
+    "libsherpa-onnx-jni.so"
+)
 
 VISION_LIBS=(
     "libonnxruntime.so"

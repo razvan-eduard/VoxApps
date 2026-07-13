@@ -91,7 +91,7 @@ artifact could cover well.
      project in a broken state.
   6. If an upgrade/force-rebuild actually happened, publishes the new `.so` files as a GitHub Release
      (DLC) via `scripts/publish_whisper_libs.sh` — release builds exclude Whisper's native libs from
-     the APK (~166MB → ~40MB) and download them on demand.
+     the APK via AGP's `packaging.jniLibs.excludes` (reliable for this lib) and download them on demand.
 - **`autoCompileWhisper`** Gradle task runs this on every `preBuild`.
 - **`.github/workflows/sync-whisper.yml`** — monthly scheduled: bumps the submodule pin to a newer
   stable tag and confirms it still compiles, opening a PR — but deliberately **never** calls
@@ -99,28 +99,40 @@ artifact could cover well.
   after the PR is merged, because CI can only verify "it compiles," never "it still transcribes
   correctly" — that needs an actual on-device sanity check.
 
-### Why only Whisper is DLC'd (not onnxruntime/Vosk/Picovoice/sherpa-onnx)
+### DLC'ing onnxruntime/Vosk/mediapipe-genai/sherpa-onnx (post-build strip, not AGP excludes)
 
-Commander's release APK is ~40MB, above the ~30MB IzzyOnDroid/F-Droid guideline, because only
-Whisper's native libs are excluded/downloaded on demand — `libonnxruntime.so` (~28MB unstripped),
-Vosk, Picovoice's Porcupine, and sherpa-onnx's native libs all stay bundled in the APK.
+A local `./gradlew :vox-commander:assembleRelease` alone produces a ~40MB APK — only Whisper is
+excluded via AGP. The actual CI-published release gets to ~16MB, because
+`libonnxruntime.so`/`libllm_inference_engine_jni.so`/`libvosk.so`/`libsherpa-onnx-jni.so` are also
+DLC'd, just via a different mechanism than Whisper.
 
-This was attempted and reverted. AGP 9.0.0–9.2.1 (every currently published 9.x release, tested
-directly) has confirmed-unreliable arm64-v8a native-lib packaging behavior for this project's
-dependency set: `packaging.jniLibs.excludes` rules for several of these libs either got silently
-ignored (the file stayed bundled despite the exclude) or the merge output for them varied
-between otherwise-identical clean rebuilds — not a naming/config mistake, verified by testing
+This was first attempted with AGP's `packaging.jniLibs.excludes`, same as Whisper, and reverted:
+AGP 9.0.0–9.2.1 (every currently published 9.x release, tested directly) has
+confirmed-unreliable arm64-v8a native-lib packaging behavior for this project's dependency set —
+excludes for these libs either got silently ignored (a file stayed bundled despite the exclude) or
+the merge output for them varied between otherwise-identical clean rebuilds. Verified by testing
 across multiple AGP versions and eliminating dependency-conflict/duplicate-declaration causes one
 by one (one genuine bug was found and fixed along the way: `vox-commander` and `core:wakeword` both
-declared `onnxruntime-android` directly, which was itself contributing to the instability — see
-`vox-commander/build.gradle.kts`'s dependencies block). `NativeLibManager.ESSENTIAL_LIBS` in
-`vox-commander/src/main/java/com/voxapps/commander/data/remote/NativeLibManager.kt` is left empty
-until a future AGP release fixes this — a reliable, larger APK beats a smaller one that
-non-deterministically fails to download its own dependencies.
+declared `onnxruntime-android` directly, contributing to the instability — see
+`vox-commander/build.gradle.kts`'s dependencies block).
 
-Vision doesn't have this problem (single dependency source, no duplicate declaration) — its
-`NativeLibManager`/`build.gradle.kts` DLC setup for onnxruntime + OpenCV works reliably and stays
-in place.
+Instead, **`scripts/strip_dlc_libs.sh`** (invoked from `release-commander.yml`'s "Strip DLC libs
+and sign APK" step) sidesteps AGP's merge-time exclude entirely: the release APK is built fully
+bundled (reliable — the libs always end up there correctly), then the script removes the target
+`.so` entries directly from the already-built APK zip (plain `zip -d`, not subject to the AGP bug),
+`zipalign`s, and re-signs with `apksigner` — since editing a signed zip invalidates its signature,
+signing has to happen after stripping, not as part of the normal Gradle build. The stripped files
+are staged from `merged_native_libs` (built, but never told to exclude anything) and uploaded to
+the release for `NativeLibManager` to fetch, same as before.
+
+`libsherpa-onnx-c-api.so` and `libsherpa-onnx-cxx-api.so` are also stripped but never
+uploaded/downloaded — confirmed via `readelf -d` that `libsherpa-onnx-jni.so` (the one actually
+loaded — confirmed via the compiled Java bindings' `loadLibrary` call) only needs
+`libonnxruntime.so` externally, making the other two genuinely unused dead weight.
+
+Vision doesn't have the AGP duplicate-declaration problem (single dependency source) — its
+`NativeLibManager`/`build.gradle.kts` DLC setup for onnxruntime + OpenCV uses AGP's own
+`packaging.jniLibs.excludes` directly and works reliably, no post-build stripping needed.
 
 **Known gap (planned, not yet done):** `check_whisper.sh` assumes Vulkan headers
 (`vulkan-headers`/`spirv-headers`/`shaderc`) are already installed via Homebrew
