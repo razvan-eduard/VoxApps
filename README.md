@@ -77,19 +77,20 @@ adb shell am start -n com.voxapps.commander/.MainActivity
 
 ## Download APK
 
-Pre-built APKs are available on the [Releases page](https://github.com/razvan-eduard/VoxApps/releases). Each release is built automatically via GitHub Actions.
+Pre-built APKs are available on the [Releases page](https://github.com/razvan-eduard/VoxApps/releases), tagged per app (`commander-v0.5-beta`, `vision-v0.4`, `expenses-v0.5`, `notes-v0.6`, `hub-v0.5`, `calendar-v0.3`, ...). Each release is built automatically via GitHub Actions — normally triggered by bumping that app's `versionCode`/`versionName` in its `build.gradle.kts` and pushing to `main`; a direct push of a matching tag (e.g. `git push origin vision-v0.5`) or a manual `workflow_dispatch` run also work. See `.github/actions/compute-release-tag` for the shared tag-naming logic.
 
-To create a new release:
-```bash
-git tag v1.1
-git push origin v1.1
-```
-GitHub Actions will build the APK and publish it as a release automatically.
-
-> **Note**: Release APKs are signed with a consistent per-app release key (so device updates work
-> seamlessly across versions). Install via `adb install VoxCommander-v*.apk` or enable "Install unknown
-> apps" on your device. Local `./gradlew assembleRelease` builds outside CI are unsigned unless you set
-> `RELEASE_KEYSTORE_PATH`/`RELEASE_KEYSTORE_PASSWORD` yourself.
+> **Note**: All six apps share the **same release signing certificate** (one `vox-apps` alias inside
+> the shared `RELEASE_KEYSTORE_PATH` keystore, not a per-app alias) — this is load-bearing, not just
+> convenience: the cross-app `:core:ipc` contract relies on signature-level custom permissions
+> (`com.voxapps.vox.permission.*`) and a first-party routing check
+> (`PackageManager.checkSignatures()`, see [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md)'s
+> routing hierarchy), both of which require every app to be signed with the identical certificate. If
+> you ever add a new app to this monorepo, sign it with that same `vox-apps` alias, not a new one — a
+> distinct alias (even in the same keystore file) is a distinct, unrelated key pair, which breaks
+> both mechanisms silently and only surfaces as `INSTALL_FAILED_DUPLICATE_PERMISSION` when installing
+> release builds of multiple apps side by side. Install via `adb install VoxCommander-v*.apk` or enable
+> "Install unknown apps" on your device. Local `./gradlew assembleRelease` builds outside CI are
+> unsigned unless you set `RELEASE_KEYSTORE_PATH`/`RELEASE_KEYSTORE_PASSWORD` yourself.
 
 ### First Run Setup
 

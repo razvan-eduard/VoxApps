@@ -1193,6 +1193,10 @@ When several apps advertise the same domain (e.g. Vox Notes **and** a third-part
    into `resolvedApp` before the handler runs, so it's honored automatically.
 3. **First-party** — a candidate with `isFirstParty == true` (same signing key as Commander). Vox Notes
    beats a third-party alternative **silently** — signature-based, so it can't be spoofed by app name.
+   Requires every first-party app to actually share one release signing certificate (see the README's
+   "Download APK" section) — this went silently unenforced for a while (each app used its own distinct
+   keyAlias within the shared keystore file, which are unrelated key pairs), so this check quietly
+   always returned `false` between apps in release builds until that was fixed.
 4. **Single third-party** — exactly one candidate → route to it.
 5. **2+ third-party, no star** — route to the first discovered and flag `ambiguous` (logged). A spoken
    "which app?" disambiguation that persists the choice as a star is a planned follow-up.
