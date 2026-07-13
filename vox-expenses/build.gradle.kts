@@ -26,7 +26,13 @@ android {
             create("release") {
                 storeFile = file(releaseKeystorePath)
                 storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
-                keyAlias = "vox-expenses"
+                // Shared across every vox-* app so their signature-level custom permissions
+                // (com.voxapps.vox.permission.*) and first-party IPC routing check
+                // (PackageManager.checkSignatures()) actually match in release builds — each app
+                // previously used its own distinct per-app alias, which are unrelated keys even
+                // within the same keystore file, breaking both mechanisms silently until release
+                // APKs were installed side-by-side for the first time.
+                keyAlias = "vox-apps"
                 keyPassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
             }
         }
