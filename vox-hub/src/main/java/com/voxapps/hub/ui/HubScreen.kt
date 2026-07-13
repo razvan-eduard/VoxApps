@@ -96,6 +96,14 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
     var importStatus by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var importError by remember { mutableStateOf<String?>(null) }
 
+    // Same flash-retry mechanism as export (see showFlashRetryDialog below) — a domain's app that's
+    // never been opened or was Force Stopped won't even answer a ping, so import for it needs the
+    // same "open it once to clear Android's stopped state, then retry" offer.
+    var showImportFlashRetryDialog by remember { mutableStateOf(false) }
+    var pendingImportUnreachable by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var pendingImportTargets by remember { mutableStateOf<Map<String, JSONObject>>(emptyMap()) }
+    var pendingImportResults by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
     LaunchedEffect(Unit) {
         val discovered = VoxAppsDiscovery.discover(context).filter {
             it.actions.contains("export") || it.actions.contains("import")
@@ -169,6 +177,53 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                 exportOk = okFlags.toMap()
             }
             finalizeExport(uri, perDomainJson)
+        }
+    }
+
+    fun finalizeImport(results: Map<String, String>) {
+        importStatus = results
+        isImporting = false
+    }
+
+    /**
+     * Flashes only [targetPackages] (not the whole selection), same as [retryUnreachableThenFinalize]
+     * above, then retries import for just the domains backed by those packages and merges the result
+     * into what already succeeded for everyone else.
+     */
+    fun retryImportUnreachableThenFinalize(
+        targetPackages: Set<String>,
+        targets: Map<String, JSONObject>,
+        priorResults: Map<String, String>
+    ) {
+        isImporting = true
+        scope.launch {
+            // Same BAL-grace-window-tuned flash sequence as export — see its comment above.
+            for (pkg in targetPackages) {
+                context.packageManager.getLaunchIntentForPackage(pkg)?.let { intent ->
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    delay(350L)
+                }
+            }
+            context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            }
+            delay(300L)
+
+            val results = priorResults.toMutableMap()
+            for ((domain, data) in targets) {
+                val app = apps.firstOrNull { it.domain == domain } ?: continue
+                if (app.packageName !in targetPackages) continue
+                val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString())
+                results[domain] = if (result != null && result.ok) {
+                    result.text
+                } else {
+                    result?.text?.takeIf { it.isNotBlank() } ?: languageManager.getString("hub_status_timeout")
+                }
+                importStatus = results.toMap()
+            }
+            finalizeImport(results)
         }
     }
 
@@ -397,20 +452,36 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                         isImporting = true
                         scope.launch {
                             val results = mutableMapOf<String, String>()
+                            val unreachable = mutableSetOf<String>()
                             for ((domain, data) in targets) {
                                 val app = apps.firstOrNull { it.domain == domain }
                                 if (app == null) continue
-                                // Same cold-start warm-up as export — see its comment above.
-                                VoxAppsDiscovery.ping(context, app.packageName, timeoutMs = 8_000L)
-                                val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString())
-                                results[domain] = if (result != null && result.ok) {
-                                    result.text
+                                // Same "ping first, flag genuinely unreachable apps instead of just
+                                // timing out on the real request" pattern as export — see its comment
+                                // above.
+                                val reachable = VoxAppsDiscovery.ping(context, app.packageName, timeoutMs = 8_000L)
+                                if (!reachable) {
+                                    results[domain] = languageManager.getString("hub_status_timeout")
+                                    unreachable += app.packageName
                                 } else {
-                                    result?.text?.takeIf { it.isNotBlank() } ?: languageManager.getString("hub_status_timeout")
+                                    val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString())
+                                    results[domain] = if (result != null && result.ok) {
+                                        result.text
+                                    } else {
+                                        result?.text?.takeIf { it.isNotBlank() } ?: languageManager.getString("hub_status_timeout")
+                                    }
                                 }
+                                importStatus = results.toMap()
                             }
-                            importStatus = results
-                            isImporting = false
+                            if (unreachable.isNotEmpty()) {
+                                pendingImportUnreachable = unreachable
+                                pendingImportTargets = targets
+                                pendingImportResults = results
+                                showImportFlashRetryDialog = true
+                                isImporting = false
+                            } else {
+                                finalizeImport(results)
+                            }
                         }
                     }
                 ) { Text(languageManager.getString("hub_import_apply_button")) }
@@ -454,6 +525,40 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                     onClick = {
                         showFlashRetryDialog = false
                         pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson) }
+                    }
+                ) { Text(languageManager.getString("hub_prewarm_skip_button")) }
+            }
+        )
+    }
+
+    if (showImportFlashRetryDialog) {
+        val unreachableLabels = apps
+            .filter { it.packageName in pendingImportUnreachable }
+            .joinToString(", ") { it.label }
+        AlertDialog(
+            onDismissRequest = {
+                showImportFlashRetryDialog = false
+                finalizeImport(pendingImportResults)
+            },
+            title = { Text(languageManager.getString("hub_prewarm_title")) },
+            text = { Text(String.format(languageManager.getString("hub_prewarm_message"), unreachableLabels)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showImportFlashRetryDialog = false
+                        retryImportUnreachableThenFinalize(
+                            targetPackages = pendingImportUnreachable,
+                            targets = pendingImportTargets,
+                            priorResults = pendingImportResults
+                        )
+                    }
+                ) { Text(languageManager.getString("hub_prewarm_flash_button")) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showImportFlashRetryDialog = false
+                        finalizeImport(pendingImportResults)
                     }
                 ) { Text(languageManager.getString("hub_prewarm_skip_button")) }
             }
