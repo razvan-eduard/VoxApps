@@ -8,6 +8,7 @@ on:
       - main
     paths:
       - 'vox-commander/build.gradle.kts'
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -104,8 +105,10 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            # Auto-build from versionCode bump: read versionName from gradle
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            # Auto-build from versionCode bump, or a manual workflow_dispatch run on main
+            # (bypasses the check_bump gate above, e.g. to force-rebuild without a version
+            # change) — both cases read versionName from gradle the same way.
             VERSION_NAME=$(grep 'versionName' vox-commander/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
             TAG="v${VERSION_NAME}"
             if echo "$VERSION_NAME" | grep -qiE '-beta|-rc|-alpha'; then
