@@ -59,7 +59,13 @@ android {
                         "lib/arm64-v8a/libggml.so",
                         "lib/arm64-v8a/libggml-base.so",
                         "lib/arm64-v8a/libggml-cpu.so",
-                        "lib/arm64-v8a/libomp.so"
+                        "lib/arm64-v8a/libomp.so",
+                        // Essential libs moved to DLC to fit under 30MB (IzzyOnDroid)
+                        "lib/arm64-v8a/libonnxruntime.so",
+                        "lib/arm64-v8a/libllm_inference_engine_jni.so",
+                        "lib/arm64-v8a/libvosk.so",
+                        "lib/arm64-v8a/libsherpa-onnx-jni.so",
+                        "lib/arm64-v8a/libsherpa-onnx-c-api.so"
                     )
                 }
             }

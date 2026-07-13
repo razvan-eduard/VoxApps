@@ -1,6 +1,7 @@
 package com.voxapps.commander
 
 import android.app.Application
+import com.voxapps.commander.data.remote.NativeLibManager
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.di.AppContainer
 import com.voxapps.commander.service.SpotifyPkceManager
@@ -40,6 +41,9 @@ class VoxApplication : Application() {
         
         // Initialize RemoteModelRegistry with app context (for assets/filesDir access)
         RemoteModelRegistry.init(this)
+
+        // Load essential native libraries (if already downloaded)
+        NativeLibManager.loadAll(this)
 
         // Initialize SearchProviderRegistry with app context
         com.voxapps.commander.domain.search.SearchProviderRegistry.init(this)
