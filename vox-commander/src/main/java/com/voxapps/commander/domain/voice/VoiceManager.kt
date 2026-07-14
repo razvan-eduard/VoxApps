@@ -267,9 +267,9 @@ object VoiceManager {
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 // Adjust silence timeouts based on STT sensitivity
                 val (completeSilence, possiblyCompleteSilence, minLength) = when (cachedSttSensitivity) {
-                    "low" -> Triple(1500L, 1500L, 3000L)   // cuts off faster — less sensitive
+                    "low" -> Triple(1000L, 1000L, 2000L)   // Faster cut-off
                     "high" -> Triple(5000L, 5000L, 8000L)  // waits longer — more sensitive
-                    else -> Triple(3000L, 3000L, 5000L)    // medium
+                    else -> Triple(2000L, 2000L, 3000L)    // Medium (Reduced from 3s/5s)
                 }
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, completeSilence)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, possiblyCompleteSilence)
@@ -280,11 +280,17 @@ object VoiceManager {
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {
                     // SpeechRecognizer returns dB (typically 0-10)
+                    // Visual Noise Gate: ignore very quiet background noise (dB <= 2.5)
+                    if (rmsdB < 2.5f) {
+                        _volumeFlow.value = 0f
+                        return
+                    }
+                    
                     // Use calibrated noise floor if available, otherwise default based on sensitivity
                     val baseThreshold = when (cachedSttSensitivity) {
-                        "low" -> 3f
-                        "high" -> 1f
-                        else -> 2f
+                        "low" -> 3.5f
+                        "high" -> 1.5f
+                        else -> 2.5f
                     }
                     val silenceThreshold = if (calibratedNoiseFloor > 0f) calibratedNoiseFloor * 20f else baseThreshold
                     val normalized = if (rmsdB < silenceThreshold) 0f
