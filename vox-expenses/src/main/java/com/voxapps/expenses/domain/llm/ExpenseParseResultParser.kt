@@ -48,6 +48,13 @@ object ExpenseParseResultParser {
         return null
     }
 
+    private fun JSONObject.optCleanString(key: String): String? {
+        if (isNull(key) || !has(key)) return null
+        val s = optString(key)
+        if (s == "null" || s.isBlank()) return null
+        return s
+    }
+
     fun parse(json: String): Parsed? = try {
         val o = JSONObject(json)
         val totalAmount = o.optNullableDouble("totalAmount") ?: return null
@@ -55,7 +62,7 @@ object ExpenseParseResultParser {
         val itemsArray = o.optJSONArray("items") ?: JSONArray()
         val items = (0 until itemsArray.length()).mapNotNull { i ->
             val item = itemsArray.optJSONObject(i) ?: return@mapNotNull null
-            val name = item.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val name = item.optCleanString("name") ?: return@mapNotNull null
             val quantity = item.optDouble("quantity", 1.0).takeIf { !it.isNaN() } ?: 1.0
             val unitPrice = item.optDouble("unitPrice").takeIf { !it.isNaN() } ?: return@mapNotNull null
             ParsedItem(
@@ -69,12 +76,12 @@ object ExpenseParseResultParser {
         }
 
         Parsed(
-            title = o.optString("title").takeIf { it.isNotBlank() },
+            title = o.optCleanString("title"),
             totalAmount = totalAmount,
-            currency = o.optString("currency").takeIf { it.isNotBlank() },
-            vendor = o.optString("vendor").takeIf { it.isNotBlank() },
-            bank = o.optString("bank").takeIf { it.isNotBlank() },
-            category = o.optString("category").takeIf { it.isNotBlank() },
+            currency = o.optCleanString("currency"),
+            vendor = o.optCleanString("vendor"),
+            bank = o.optCleanString("bank"),
+            category = o.optCleanString("category"),
             items = items
         )
     } catch (e: Exception) {
