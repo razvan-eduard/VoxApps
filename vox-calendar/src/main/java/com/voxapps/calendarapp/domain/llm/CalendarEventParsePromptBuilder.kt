@@ -3,12 +3,10 @@ package com.voxapps.calendarapp.domain.llm
 import java.time.LocalDate
 
 /**
- * Builds the prompt sent to Commander's generic LLM hook to turn a raw spoken/typed utterance
- * (passed through verbatim by Commander's NLU as `text` — see the satellite's `nluHint`) into a
- * structured calendar entry. Mirrors vox-expenses' `ExpenseParsePromptBuilder` in shape. No dedicated
- * date-NLU utility exists anywhere in this repo — relative-date resolution ("in a week", "next
- * Monday") is left entirely to the LLM, given today's date as context, consistent with Commander's own
- * pure-LLM NLU philosophy.
+ * Language-agnostic semantic prompt builder for spoken/typed calendar requests.
+ * Uses semantic role labeling (verb, object, temporal role, target) before mapping
+ * to calendar fields. Relative-date resolution is left entirely to the LLM, given
+ * today's date as context (no dedicated date-NLU utility exists in this repo).
  */
 object CalendarEventParsePromptBuilder {
     fun build(
@@ -22,27 +20,64 @@ object CalendarEventParsePromptBuilder {
         } else {
             "Existing calendars: ${existingLayers.joinToString(", ")}."
         }
-        return """
-            The following text is a spoken or typed request to add something to a calendar, possibly
-            containing recognition noise. Today's date is $today (YYYY-MM-DD). Extract it into a
-            structured calendar entry: infer a short title, and decide whether it's an "EVENT" (has a
-            specific time or duration) or a "TASK" (a to-do with a due date, no specific time).
-            Resolve any relative date/time phrases ("tomorrow", "in a week", "next Monday", "at 3pm")
-            into an absolute date and, if a time was mentioned, an absolute time, using today's date
-            above as the reference point. If no time was mentioned, set "allDay" to true and omit the
-            time fields. If an end date/time was mentioned, include "endDate"/"endTime"; otherwise omit
-            them. $layersLine If the user explicitly names a target calendar (e.g. "add to my Work
-            calendar", "pe calendarul de acasă"), copy that calendar's name verbatim,
-            character-for-character — never invent a new spelling, translation, capitalization, or
-            diacritics for it; set "layer" to null if no calendar was named, rather than guessing one.
-            Also suggest 0-3 short cross-cutting tags based on the content (e.g. "Medical", "Bills") —
-            return an empty array if nothing fits. Respond in the "$languageCode" language for the
-            title only; keep all dates/times in the exact formats specified below. Return ONLY a JSON
-            object of the shape {"title": "...", "type": "EVENT"|"TASK", "startDate": "YYYY-MM-DD",
-            "startTime": "HH:mm"|null, "endDate": "YYYY-MM-DD"|null, "endTime": "HH:mm"|null,
-            "allDay": true|false, "layer": "..."|null, "tags": ["..."]}, no prose, no markdown.
 
-            Request: $rawText
+        return """
+            You are a semantic parser for spoken calendar requests. Do NOT guess dates or times.
+            First decompose the sentence into its semantic roles, THEN map those roles to calendar
+            fields. Meaning drives the resolution, not the other way around. Today is $today (YYYY-MM-DD).
+
+            STEP 1 — SEMANTIC ROLE LABELING:
+            For the sentence, identify these roles (language-agnostic):
+              - PREDICATE (verb): the intended action (meet, call, remind, pay). Confirms an entry.
+              - THEME (object): WHAT the entry is about — becomes the title.
+              - TEMPORAL EXPRESSION: the time phrase, and CRUCIALLY its role:
+                  * SCHEDULED (event): happens at a specific clock time or spans a duration.
+                  * DUE (task): an obligation to complete by a date, with no specific time.
+                and its ANCHOR:
+                  * RELATIVE ("tomorrow", "in a week", "next Monday") — resolve against Today.
+                  * ABSOLUTE ("March 3", "on the 15th") — take as stated.
+                and its BOUNDEDNESS:
+                  * POINT (single moment/day) vs INTERVAL (has an explicit end).
+              - TARGET (optional): the calendar/layer explicitly named, if any.
+
+            STEP 2 — MAP ROLES TO FIELDS:
+              - THEME -> title
+              - TEMPORAL EXPRESSION:
+                  * SCHEDULED -> type = "EVENT", startTime set, allDay = false
+                  * DUE       -> type = "TASK", time fields omitted, allDay = true
+                  * RELATIVE  -> resolve against Today BEFORE emitting startDate (NEVER emit unresolved)
+                  * INTERVAL  -> include endDate/endTime; POINT -> omit them
+              - TARGET -> layer = named calendar copied verbatim (NEVER translate/re-spell), else null
+
+            STEP 3 — TIME RESOLUTION (only after roles are fixed):
+              - Resolve every relative phrase relative to Today ($today).
+              - NEVER emit a time that was not spoken; DATE-ONLY implies allDay = true.
+
+            STEP 4 — TAGGING & CALENDAR: $layersLine Copy an existing calendar name exactly if the user
+              named one, else set layer to null. Also suggest 0-3 short cross-cutting tags
+              (e.g. "Medical", "Bills") based on content, or an empty array if nothing fits.
+
+            ABSTRACT REASONING PATTERN (schema, not a literal case):
+              Given any utterance of the form:
+                [PREDICATE] [THEME] [TEMPORAL-EXPRESSION] [TARGET?]
+              Resolve roles independently of specific words:
+                - If TEMPORAL-EXPRESSION carries a CLOCK-TIME or DURATION
+                      => type := EVENT; startTime := resolved time; allDay := false.
+                - Else (DATE-ONLY)
+                      => type := TASK; allDay := true; time fields omitted.
+                - If ANCHOR is RELATIVE => resolve against Today before emitting startDate.
+                - If BOUNDEDNESS is INTERVAL => emit endDate/endTime; else omit.
+              Invariant: an unspoken time is NEVER fabricated, and a RELATIVE date is NEVER emitted unresolved.
+
+            TECHNICAL CONSTRAINTS:
+            - Respond in language: "$languageCode" (title only; dates/times use the formats below).
+            - Output: Return ONLY raw JSON. No text, no markdown, no role labels.
+            - Format: {"title": "...", "type": "EVENT"|"TASK", "startDate": "YYYY-MM-DD",
+              "startTime": "HH:mm"|null, "endDate": "YYYY-MM-DD"|null, "endTime": "HH:mm"|null,
+              "allDay": true|false, "layer": "..."|null, "tags": ["..."]}
+
+            INPUT TEXT:
+            $rawText
         """.trimIndent()
     }
 }

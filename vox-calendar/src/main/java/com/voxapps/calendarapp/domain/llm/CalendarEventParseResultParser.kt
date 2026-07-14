@@ -28,21 +28,21 @@ object CalendarEventParseResultParser {
 
     fun parse(json: String, zoneId: ZoneId = ZoneId.systemDefault()): Parsed? = try {
         val o = JSONObject(json)
-        val title = o.optString("title").takeIf { it.isNotBlank() } ?: return null
-        val startDate = o.optString("startDate").takeIf { it.isNotBlank() }?.let(::parseDate) ?: return null
+        val title = o.optCleanString("title") ?: return null
+        val startDate = o.optCleanString("startDate")?.let(::parseDate) ?: return null
         val allDay = o.optBoolean("allDay", true)
-        val startTime = if (allDay) null else o.optString("startTime").takeIf { it.isNotBlank() }?.let(::parseTime)
+        val startTime = if (allDay) null else o.optCleanString("startTime")?.let(::parseTime)
         val startMillis = toMillis(startDate, startTime, zoneId)
 
-        val endMillis = o.optString("endDate").takeIf { it.isNotBlank() }?.let(::parseDate)?.let { endDate ->
-            val endTime = if (allDay) null else o.optString("endTime").takeIf { it.isNotBlank() }?.let(::parseTime)
+        val endMillis = o.optCleanString("endDate")?.let(::parseDate)?.let { endDate ->
+            val endTime = if (allDay) null else o.optCleanString("endTime")?.let(::parseTime)
             toMillis(endDate, endTime, zoneId)
         }
 
         val type = if (o.optString("type").uppercase() == "TASK") CalendarEntryType.TASK else CalendarEntryType.EVENT
 
         val tagsArray = o.optJSONArray("tags") ?: JSONArray()
-        val tags = (0 until tagsArray.length()).mapNotNull { i -> tagsArray.optString(i).takeIf { it.isNotBlank() } }
+        val tags = (0 until tagsArray.length()).mapNotNull { i -> tagsArray.optString(i).takeIf { it.isNotBlank() && it != "null" } }
 
         Parsed(
             title = title,
@@ -50,11 +50,18 @@ object CalendarEventParseResultParser {
             startMillis = startMillis,
             endMillis = endMillis,
             allDay = allDay,
-            layer = o.optString("layer").takeIf { it.isNotBlank() },
+            layer = o.optCleanString("layer"),
             tags = tags
         )
     } catch (e: Exception) {
         null
+    }
+
+    private fun JSONObject.optCleanString(key: String): String? {
+        if (isNull(key) || !has(key)) return null
+        val s = optString(key)
+        if (s == "null" || s.isBlank()) return null
+        return s
     }
 
     private fun parseDate(s: String): LocalDate? = try { LocalDate.parse(s) } catch (e: DateTimeParseException) { null }
