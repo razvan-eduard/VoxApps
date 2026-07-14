@@ -40,13 +40,22 @@ fun DayView(
     val zoneId = ZoneId.systemDefault()
     val date = remember(selectedDateMillis) { Instant.ofEpochMilli(selectedDateMillis).atZone(zoneId).toLocalDate() }
     val layerById = remember(layers) { layers.associateBy { it.id } }
+    
+    // Filter items belonging to the selected date
     val dayItems = remember(items, date) {
         items.filter { Instant.ofEpochMilli(it.occurrenceStartMillis).atZone(zoneId).toLocalDate() == date }
     }
+
+    // Industry standard: Separate All-Day context from the timed grid
+    val (allDayEvents, timedEvents) = remember(dayItems) {
+        dayItems.partition { it.entryWithTags.entry.allDay }
+    }
+
     val today = LocalDate.now()
     val languageManager = LocalLanguageManager.current
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // 1. Pinned Date Header
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -61,7 +70,20 @@ fun DayView(
                 Icon(Icons.Filled.Summarize, contentDescription = languageManager.getString("day_summary_title"))
             }
         }
+
+        // 2. Pinned All-Day Pane (Only visible if items exist)
+        if (allDayEvents.isNotEmpty()) {
+            AllDayEventsPane(
+                events = allDayEvents,
+                layerById = layerById,
+                onItemClick = onItemClick
+            )
+            HorizontalDivider(thickness = 0.5.dp)
+        }
+
         HorizontalDivider()
+
+        // 3. Scrollable Timed Grid
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -71,7 +93,7 @@ fun DayView(
             HourAxisLabels(modifier = Modifier.width(HOUR_LABEL_WIDTH))
             DayColumn(
                 date = date,
-                items = dayItems,
+                items = timedEvents, // Grid only shows timed events
                 layerById = layerById,
                 onItemClick = onItemClick,
                 modifier = Modifier.weight(1f)
