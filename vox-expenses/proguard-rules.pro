@@ -10,3 +10,8 @@
 # this is Tink's well-known standard R8 warning, not a real missing dependency.
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn javax.annotation.**
+
+# IPC & Service Entry Points
+# Prevent R8 from renaming or stripping receivers and services needed for cross-app IPC.
+-keep class com.voxapps.**.receiver.** { *; }
+-keep class com.voxapps.**.service.** { *; }
