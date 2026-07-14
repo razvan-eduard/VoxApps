@@ -27,7 +27,7 @@ class CalendarEventParsePromptBuilderTest {
         )
         assertTrue(prompt.contains("Personal"))
         assertTrue(prompt.contains("Work"))
-        assertTrue(prompt.contains("never invent a new spelling"))
+        assertTrue(prompt.contains("NEVER translate/re-spell"))
     }
 
     @Test
