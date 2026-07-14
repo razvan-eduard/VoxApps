@@ -18,9 +18,9 @@ object WakeWordSensitivity {
 
     /** OpenWakeWord ONNX score threshold. Lower = more sensitive. */
     fun openWakeWordThreshold(setting: String?): Float = when (setting) {
-        HIGH -> 0.3f
+        HIGH -> 0.25f
         LOW -> 0.7f
-        else -> 0.5f // medium / unknown
+        else -> 0.5f // medium / unknown (Restored to 0.5 after R8 stabilization)
     }
 
     /** Porcupine sensitivity param (0..1). Higher = more sensitive. */
@@ -44,8 +44,8 @@ object WakeWordSensitivity {
      * aggressively (more battery saved) at the risk of clipping a soft utterance.
      */
     fun openWakeWordRmsGate(setting: String?): Float = when (setting) {
-        HIGH -> 0.006f
-        LOW -> 0.02f
-        else -> 0.01f // medium / unknown
+        HIGH -> 0.01f
+        LOW -> 0.04f
+        else -> 0.025f // medium / unknown (Hardened to 0.025 to block table/mousepad friction)
     }
 }

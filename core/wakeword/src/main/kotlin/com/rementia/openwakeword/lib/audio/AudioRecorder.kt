@@ -83,6 +83,8 @@ internal class AudioRecorder(
         }
         
         val audioBuffer = ShortArray(BUFFER_SIZE_IN_SHORTS)
+        var lastSpeechMs = 0L
+        val TAIL_DURATION_MS = 1500L
         
         try {
             audioRecord.startRecording()
@@ -91,6 +93,7 @@ internal class AudioRecorder(
                 val readCount = audioRecord.read(audioBuffer, 0, audioBuffer.size)
                 
                 if (readCount > 0) {
+                    val now = android.os.SystemClock.elapsedRealtime()
                     // --- VoxCommander patch: RMS silence gate (battery) — start ---
                     if (rmsGate > 0f) {
                         var energy = 0f
@@ -98,8 +101,28 @@ internal class AudioRecorder(
                             val normalized = audioBuffer[i] / 32768.0f
                             energy += normalized * normalized
                         }
-                        val rms = kotlin.math.sqrt(energy / readCount)
-                        if (rms < rmsGate) continue // silence — skip conversion + emit entirely
+                        val rms = kotlin.math.sqrt(energy.toDouble() / readCount).toFloat()
+                        
+                        // Log RMS occasionally (approx every 1s of audio) to see levels
+                        if (java.util.Random().nextInt(100) == 0) {
+                            android.util.Log.v("AudioRecorder", "RMS: ${String.format(java.util.Locale.US, "%.6f", rms)} (Gate: $rmsGate)")
+                        }
+
+                        if (rms >= rmsGate) {
+                            lastSpeechMs = now
+                        } else {
+                            // Current buffer is silent. Should we drop it or emit zeros (tail)?
+                            val inTailPeriod = (now - lastSpeechMs) < TAIL_DURATION_MS
+                            if (inTailPeriod) {
+                                // Emit zeros to keep the AI window moving for 1.5s after speech ends.
+                                // This prevents "trapping" the wake word in the AI's incomplete memory.
+                                emit(FloatArray(readCount) { 0f })
+                                continue
+                            } else {
+                                // Sustained silence: drop entirely to save battery.
+                                continue
+                            }
+                        }
                     }
                     // --- VoxCommander patch: RMS silence gate (battery) — end ---
 

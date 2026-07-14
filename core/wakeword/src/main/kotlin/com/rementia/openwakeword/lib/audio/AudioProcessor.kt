@@ -53,7 +53,10 @@ internal class AudioProcessor(
         streamingFeatures(audioBuffer)
         val features = getFeatures(16, -1)
         val score = modelRunner.predictWakeWord(features)
-        Log.d(TAG, "Wake word prediction score: ${String.format("%.5f", score)}")
+        // Log every score above 0.05 to see "near misses" in logs
+        if (score > 0.05f) {
+            Log.d(TAG, "Wake word prediction score: ${String.format(Locale.US, "%.5f", score)}")
+        }
         return score
     }
     

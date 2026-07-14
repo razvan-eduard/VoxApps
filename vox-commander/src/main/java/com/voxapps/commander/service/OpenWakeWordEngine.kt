@@ -33,7 +33,7 @@ class OpenWakeWordEngine(
     // Priming window after each start(): OpenWakeWord's mel/embedding feature buffers aren't
     // filled yet, so the first inferences emit spurious high scores. Ignoring detections during
     // this window prevents a self-triggering loop (detect → command → re-arm → instant re-detect).
-    private val WARMUP_MS = 1500L
+    private val WARMUP_MS = 1000L // Reduced from 1500ms to catch early valid detections
     @Volatile private var listenStartMs = 0L
 
     // Music/media playback leaks a broadband AEC residual through far more than TTS's own voice does
@@ -149,13 +149,15 @@ class OpenWakeWordEngine(
 
                     val musicDuckEnabled = appStateManager.uiState.value.wakeWordMusicDuckEnabled
                     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
-                    if (musicDuckEnabled && audioManager?.isMusicActive == true && detection.score < MUSIC_PLAYBACK_MIN_SCORE) {
-                        Logger.log("OpenWakeWord: ignoring low-confidence detection during music playback " +
-                            "(score=${detection.score} < $MUSIC_PLAYBACK_MIN_SCORE) — likely AEC residual, not a real wake word", TAG)
+                    val isMusicActive = audioManager?.isMusicActive == true
+                    
+                    if (musicDuckEnabled && isMusicActive && detection.score < MUSIC_PLAYBACK_MIN_SCORE) {
+                        Logger.log("OpenWakeWord: IGNORED detection during music playback " +
+                            "(score=${detection.score} < $MUSIC_PLAYBACK_MIN_SCORE) — model=${detection.model.name}", TAG)
                         return@collect
                     }
 
-                    Logger.log("OpenWakeWord detected: ${detection.model.name} (score=${detection.score})", TAG)
+                    Logger.log("OpenWakeWord: ACCEPTED detection: ${detection.model.name} (score=${detection.score}, threshold=${detection.model.threshold}, musicActive=$isMusicActive)", TAG)
                     onWakeWordDetected()
                 }
             }

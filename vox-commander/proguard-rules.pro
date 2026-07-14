@@ -64,6 +64,17 @@
 -keep class ai.picovoice.** { *; }
 -dontwarn ai.picovoice.**
 
+# IPC & Service Entry Points
+# Prevent R8 from renaming or stripping receivers and services needed for cross-app IPC.
+-keep class com.voxapps.**.receiver.** { *; }
+-keep class com.voxapps.**.service.** { *; }
+
+# OpenWakeWord (Numerical Stability)
+# Completely disable optimizations for this package to prevent precision loss.
+-keep class com.rementia.openwakeword.** { *; }
+-dontwarn com.rementia.openwakeword.**
+-dontoptimize
+
 # Gson: the @SerializedName rule below only protects fields, not the class itself — R8's class
 # merging/inlining optimizations can still turn a POJO that's *only* ever reached via
 # gson.fromJson(json, X::class.java) reflection (invisible to R8's static analysis) into something
