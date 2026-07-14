@@ -28,8 +28,20 @@ object ExpenseParseResultParser {
         val items: List<ParsedItem>
     )
 
-    private fun JSONObject.optNullableDouble(key: String): Double? =
-        if (isNull(key) || !has(key)) null else optDouble(key).takeIf { !it.isNaN() }
+    private fun JSONObject.optNullableDouble(key: String): Double? {
+        if (isNull(key) || !has(key)) return null
+        val value = opt(key) ?: return null
+        if (value is Double) return value
+        if (value is Int) return value.toDouble()
+        if (value is Long) return value.toDouble()
+        if (value is String) {
+            // Handle European formats: replace comma with period ONLY if surrounded by digits
+            // (e.g. "12,50" -> "12.50", but "Lidl, SRL" remains unchanged)
+            val cleaned = value.replace(Regex("(\\d),(\\d)"), "$1.$2")
+            return cleaned.toDoubleOrNull()
+        }
+        return null
+    }
 
     fun parse(json: String): Parsed? = try {
         val o = JSONObject(json)
