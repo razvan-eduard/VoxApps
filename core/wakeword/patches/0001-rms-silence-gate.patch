@@ -1,6 +1,6 @@
 --- a/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt
 +++ b/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt
-@@ -20,7 +20,16 @@
+@@ -20,7 +20,25 @@
   * Emits audio buffers as a Flow for processing.
   */
  internal class AudioRecorder(
@@ -13,15 +13,43 @@
 +    // classifier, the dominant CPU/battery cost of always-on wake word detection) never even sees
 +    // silence. 0f preserves upstream behavior (gate disabled). See WakeWordSensitivity in the
 +    // consuming app for how this is derived from the user's sensitivity setting.
-+    private val rmsGate: Float = 0f
++    private val rmsGate: Float = 0f,
 +    // --- VoxCommander patch: RMS silence gate (battery) — end ---
++    // --- VoxCommander patch: configurable audio source (AEC) — start ---
++    // MIC preserves upstream behavior. The consuming app passes VOICE_COMMUNICATION when the
++    // user's "Echo Cancellation" setting is on, which asks the platform to run its acoustic echo
++    // canceler / noise suppressor on the captured signal — without it, wake-word detection scores
++    // raw, un-cancelled audio, including the device's own speaker output (TTS/music), which is far
++    // more likely to false-trigger on that content. See OpenWakeWordEngine.kt for how this mirrors
++    // the same AEC toggle already wired into the app's other (Vosk/Porcupine) wake-word engines.
++    private val audioSource: Int = MediaRecorder.AudioSource.MIC
++    // --- VoxCommander patch: configurable audio source (AEC) — end ---
  ) {
      
      companion object {
-@@ -73,6 +82,18 @@
+@@ -53,7 +71,7 @@
+         val bufferSize = maxOf(minBufferSize, BUFFER_SIZE_IN_SHORTS * 2)
+         
+         val audioRecord = AudioRecord(
+-            MediaRecorder.AudioSource.MIC,
++            audioSource,
+             SAMPLE_RATE,
+             CHANNEL_CONFIG,
+             AUDIO_FORMAT,
+@@ -65,6 +83,8 @@
+         }
+         
+         val audioBuffer = ShortArray(BUFFER_SIZE_IN_SHORTS)
++        var lastSpeechMs = 0L
++        val TAIL_DURATION_MS = 1500L
+         
+         try {
+             audioRecord.startRecording()
+@@ -73,6 +93,39 @@
                  val readCount = audioRecord.read(audioBuffer, 0, audioBuffer.size)
                  
                  if (readCount > 0) {
++                    val now = android.os.SystemClock.elapsedRealtime()
 +                    // --- VoxCommander patch: RMS silence gate (battery) — start ---
 +                    if (rmsGate > 0f) {
 +                        var energy = 0f
@@ -29,8 +57,28 @@
 +                            val normalized = audioBuffer[i] / 32768.0f
 +                            energy += normalized * normalized
 +                        }
-+                        val rms = kotlin.math.sqrt(energy / readCount)
-+                        if (rms < rmsGate) continue // silence — skip conversion + emit entirely
++                        val rms = kotlin.math.sqrt(energy.toDouble() / readCount).toFloat()
++                        
++                        // Log RMS occasionally (approx every 1s of audio) to see levels
++                        if (java.util.Random().nextInt(100) == 0) {
++                            android.util.Log.v("AudioRecorder", "RMS: ${String.format(java.util.Locale.US, "%.6f", rms)} (Gate: $rmsGate)")
++                        }
++
++                        if (rms >= rmsGate) {
++                            lastSpeechMs = now
++                        } else {
++                            // Current buffer is silent. Should we drop it or emit zeros (tail)?
++                            val inTailPeriod = (now - lastSpeechMs) < TAIL_DURATION_MS
++                            if (inTailPeriod) {
++                                // Emit zeros to keep the AI window moving for 1.5s after speech ends.
++                                // This prevents "trapping" the wake word in the AI's incomplete memory.
++                                emit(FloatArray(readCount) { 0f })
++                                continue
++                            } else {
++                                // Sustained silence: drop entirely to save battery.
++                                continue
++                            }
++                        }
 +                    }
 +                    // --- VoxCommander patch: RMS silence gate (battery) — end ---
 +
