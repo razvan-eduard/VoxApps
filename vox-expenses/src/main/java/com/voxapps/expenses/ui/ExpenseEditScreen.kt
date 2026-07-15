@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -46,6 +48,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -54,21 +59,32 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import me.saket.telephoto.zoomable.coil.ZoomableAsyncImage
+import me.saket.telephoto.zoomable.rememberZoomableImageState
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.state.ExpensesStateManager
+import java.io.File
 import java.text.DateFormat
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
 import java.util.Date
 
-/** Green isn't a Material3 color role — a fixed swatch reads clearly as "confirm" regardless of theme. */
 private val ConfirmGreen = Color(0xFF4CAF50)
 
 private data class LineItemDraft(
@@ -83,18 +99,6 @@ private data class LineItemDraft(
 private fun LineItemDraft.subtotal(useComma: Boolean): Double =
     (parseDecimalOrNull(quantityText, useComma) ?: 0.0) * (parseDecimalOrNull(unitPriceText, useComma) ?: 0.0)
 
-/**
- * Add/edit screen for a single expense. Only [totalText] is mandatory to save — everything else is
- * optional. The total is NEVER force-recomputed from line items — an LLM-parsed receipt's printed
- * total is often correct even when its extracted item list is incomplete or wrong (see
- * [com.voxapps.expenses.domain.llm.ExpenseScanCleanupPromptBuilder]), so silently overwriting one with
- * the other would destroy real data. Instead, when the (committed) items don't sum to the total, the
- * total row is flagged in error color — the user decides which is right and edits either one manually.
- *
- * Fields render as underline-only inline-editable text ([PaperField]/[PaperTapField]) rather than
- * boxed OutlinedTextFields — same functionality (tap, type, same value/onValueChange wiring), just a
- * "paper form" look grouped into two shadowed [SectionCard]s (expense details, line items).
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseEditScreen(
@@ -109,7 +113,6 @@ fun ExpenseEditScreen(
     val languageManager = LocalLanguageManager.current
     val useComma = decimalSeparator == ExpensesSettings.DECIMAL_COMMA
 
-    // System back mirrors the top-bar arrow: return to the expense list without saving.
     BackHandler { onDone() }
 
     var title by remember { mutableStateOf(existing?.expense?.title ?: "") }
@@ -123,6 +126,7 @@ fun ExpenseEditScreen(
     var categoryId by remember { mutableStateOf(existing?.expense?.categoryId) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
     var showDeleteExpenseConfirm by remember { mutableStateOf(false) }
     var pendingDeleteItemIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -143,8 +147,6 @@ fun ExpenseEditScreen(
         }
     }
 
-    // Only committed item values count toward the sum — a row mid-edit (local draft, not yet
-    // confirmed via the row's check icon) doesn't move this until confirmed.
     val itemsSum = items.sumOf { it.subtotal(useComma) }
     val totalMismatch = items.isNotEmpty() &&
         (parseDecimalOrNull(totalText, useComma)?.let { kotlin.math.abs(it - itemsSum) > 0.01 } ?: false)
@@ -172,6 +174,13 @@ fun ExpenseEditScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            val imageName = existing?.expense?.receiptImageName
+            if (!imageName.isNullOrBlank()) {
+                item {
+                    ReceiptImage(imageName)
+                }
+            }
+
             item {
                 SectionCard {
                     SectionTitle(languageManager.getString("expense_details"))
@@ -203,6 +212,19 @@ fun ExpenseEditScreen(
                         trailingIcon = {
                             Icon(
                                 Icons.Filled.CalendarMonth,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    )
+                    PaperTapField(
+                        label = languageManager.getString("expense_time"),
+                        value = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(dateTime)),
+                        onClick = { showTimePicker = true },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Filled.AccessTime,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp)
@@ -363,7 +385,11 @@ fun ExpenseEditScreen(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { dateTime = it }
+                    datePickerState.selectedDateMillis?.let { selectedDateMillis ->
+                        val selectedDate = Instant.ofEpochMilli(selectedDateMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                        val currentTime = Instant.ofEpochMilli(dateTime).atZone(ZoneId.systemDefault()).toLocalTime()
+                        dateTime = LocalDateTime.of(selectedDate, currentTime).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    }
                     showDatePicker = false
                 }) { Text(languageManager.getString("apply")) }
             },
@@ -373,6 +399,32 @@ fun ExpenseEditScreen(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    if (showTimePicker) {
+        val initialTime = Instant.ofEpochMilli(dateTime).atZone(ZoneId.systemDefault()).toLocalTime()
+        val timePickerState = rememberTimePickerState(
+            initialHour = initialTime.hour,
+            initialMinute = initialTime.minute,
+            is24Hour = true
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val currentDate = Instant.ofEpochMilli(dateTime).atZone(ZoneId.systemDefault()).toLocalDate()
+                    val selectedTime = LocalTime.of(timePickerState.hour, timePickerState.minute)
+                    dateTime = LocalDateTime.of(currentDate, selectedTime).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    showTimePicker = false
+                }) { Text(languageManager.getString("apply")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text(languageManager.getString("cancel")) }
+            },
+            text = {
+                TimePicker(state = timePickerState)
+            }
+        )
     }
 
     if (showDeleteExpenseConfirm && existing != null) {
@@ -401,7 +453,6 @@ fun ExpenseEditScreen(
     }
 }
 
-/** Shared "paper form" container: soft rounded corners, a faint outline, and a drop shadow. */
 @Composable
 private fun SectionCard(
     modifier: Modifier = Modifier,
@@ -427,11 +478,66 @@ private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium)
 }
 
-/**
- * Label caption + underline-only editable text — the "paper form" replacement for a boxed
- * OutlinedTextField. Same value/onValueChange contract, just no filled background or border box;
- * an empty field shows [label] itself, in a muted tone, until typed into.
- */
+@Composable
+fun ReceiptImage(imageName: String) {
+    val context = LocalContext.current
+    val languageManager = LocalLanguageManager.current
+    val imageFile = remember(imageName) {
+        File(File(context.filesDir, "receipts"), imageName)
+    }
+
+    if (imageFile.exists()) {
+        var expanded by remember { mutableStateOf(true) }
+        
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expanded = !expanded }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ReceiptLong,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = languageManager.getString("receipt_photo"),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse" else "Expand"
+                    )
+                }
+
+                if (expanded) {
+                    Box(modifier = Modifier.fillMaxWidth().height(450.dp)) {
+                        ZoomableAsyncImage(
+                            model = imageFile,
+                            contentDescription = "Receipt Image",
+                            state = rememberZoomableImageState(),
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun PaperField(
     label: String,
@@ -470,7 +576,6 @@ private fun PaperField(
     }
 }
 
-/** Same "paper form" look as [PaperField] but for tap-to-open pickers (date, category) instead of typed text. */
 @Composable
 private fun PaperTapField(
     label: String,
@@ -514,7 +619,6 @@ private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () ->
     )
 }
 
-/** Column-label caption row above the line-item cards — mirrors each card's field weights so labels line up. */
 @Composable
 private fun LineItemHeaderRow(
     vatDisplayEnabled: Boolean,
@@ -539,12 +643,6 @@ private fun LineItemHeaderRow(
     }
 }
 
-/**
- * One line item as a card (mirrors [ExpenseCard]'s container style). Tapping the card in display mode
- * enters edit mode with a local draft — keystrokes only touch this draft, never [item] itself, so the
- * total-mismatch calculation (driven by the committed [items][LineItemDraft] list in the parent) doesn't
- * react until the green check confirms the draft via [onCommit]. The red X discards the draft unchanged.
- */
 @Composable
 private fun LineItemCard(
     item: LineItemDraft,
@@ -649,7 +747,6 @@ private fun LineItemCard(
     }
 }
 
-/** A single inline-editable cell inside a line-item row: colored text over a thin underline, no filled background box. */
 @Composable
 private fun InlineEditField(
     value: String,

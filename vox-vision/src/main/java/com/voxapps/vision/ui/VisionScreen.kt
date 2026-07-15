@@ -17,12 +17,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FlashAuto
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -54,6 +59,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.voxapps.design.DoubleBackToExitHandler
+import androidx.core.content.FileProvider
+import java.io.File
+import java.util.UUID
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.vision.data.preferences.VisionSettingsRepository
@@ -129,6 +137,17 @@ fun VisionScreen(
     )
 
     var rawText by remember { mutableStateOf("") }
+    var lastScannedUri by remember { mutableStateOf<String?>(null) }
+    
+    val flashSetting by container.settingsRepository.flashModeFlow.collectAsStateWithLifecycle(
+        initialValue = VisionSettingsRepository.DEFAULT_FLASH
+    )
+    val flashMode = when (flashSetting) {
+        "on" -> ImageCapture.FLASH_MODE_ON
+        "off" -> ImageCapture.FLASH_MODE_OFF
+        else -> ImageCapture.FLASH_MODE_AUTO
+    }
+
     var cameraGranted by remember { mutableStateOf(hasCameraPermission()) }
     var isRecognizing by remember { mutableStateOf(false) }
     var liveBounds by remember { mutableStateOf<DocumentCropper.LiveBounds?>(null) }
@@ -146,6 +165,7 @@ fun VisionScreen(
     // already starts empty).
     LaunchedEffect(pendingRequest) {
         rawText = ""
+        lastScannedUri = null
     }
 
     // Pre-warms the OCR engine (and, as a side effect, the OpenCV native lib) as soon as the camera
@@ -166,6 +186,7 @@ fun VisionScreen(
     val cameraController = remember {
         LifecycleCameraController(context).apply {
             setEnabledUseCases(CameraController.IMAGE_CAPTURE or CameraController.IMAGE_ANALYSIS)
+            imageCaptureFlashMode = flashMode
             // Default analysis resolution (640x480) is too coarse for the document edges to form one
             // continuous contour against a cluttered background — confirmed on-device: the largest
             // contour found topped out around 3-4% of the frame, well under the detection threshold,
@@ -192,13 +213,18 @@ fun VisionScreen(
     // Shared by the manual final button (pendingRequest case) and auto-capture's hands-free
     // completion below. Standalone mode has no single "submit" action anymore — the user picks a
     // destination button instead (see the Column of per-target buttons further down).
-    val submit: (String) -> Unit = { text ->
+    val submit: (String, String?) -> Unit = { text, imageUri ->
         val trimmed = text.trim()
-        if (trimmed.isNotEmpty() && pendingRequest != null) {
+        if ((trimmed.isNotEmpty() || imageUri != null) && pendingRequest != null) {
             OcrResultSender.send(
                 context,
                 pendingRequest.sourcePackage,
-                VoxOcrResult(task = pendingRequest.task, status = VoxOcrResult.STATUS_SUCCESS, rawText = trimmed)
+                VoxOcrResult(
+                    task = pendingRequest.task,
+                    status = VoxOcrResult.STATUS_SUCCESS,
+                    rawText = trimmed.takeIf { it.isNotEmpty() } ?: "Image scan",
+                    imageUri = imageUri
+                )
             )
             finishActivity()
         }
@@ -230,6 +256,10 @@ fun VisionScreen(
     )
     val stabilityThresholdState = rememberUpdatedState(captureStabilityTicks(stabilitySetting))
 
+    LaunchedEffect(flashMode) {
+        cameraController.imageCaptureFlashMode = flashMode
+    }
+
     LaunchedEffect(cameraController) {
         val stability = intArrayOf(0)
         val armed = booleanArrayOf(true)
@@ -237,9 +267,11 @@ fun VisionScreen(
         cameraController.setImageAnalysisAnalyzer(ContextCompat.getMainExecutor(context)) { image ->
             val now = System.currentTimeMillis()
             if (!engineReadyState.value || isRecognizingState.value ||
+                pendingRequestState.value == null || // Don't auto-capture in manual/standalone mode
                 now - lastAnalysisAt[0] < ANALYSIS_INTERVAL_MS
             ) {
                 image.close()
+                if (pendingRequestState.value == null) liveBounds = null
                 return@setImageAnalysisAnalyzer
             }
             lastAnalysisAt[0] = now
@@ -270,15 +302,16 @@ fun VisionScreen(
                 captureAndRecognize(
                     context, scope, cameraController, container,
                     onRecognizing = { isRecognizing = it },
-                    onResult = { text ->
+                    onResult = { text, imageUri ->
                         rawText = text
+                        lastScannedUri = imageUri
                         // Only the "scan for another satellite" flow has a single, already-known
                         // destination — so an auto-triggered capture there can go straight through and
                         // hand control back to the caller. Standalone mode always needs a deliberate
                         // tap: there's no way to auto-decide which of N installed targets to send to.
                         // Reads the live pendingRequestState, not the closure-frozen pendingRequest
                         // (see above).
-                        if (pendingRequestState.value != null) submitState.value(text)
+                        if (pendingRequestState.value != null) submitState.value(text, imageUri)
                     }
                 )
             }
@@ -290,6 +323,21 @@ fun VisionScreen(
             TopAppBar(
                 title = { Text(languageManager.getString("app_name")) },
                 actions = {
+                    IconButton(onClick = {
+                        val next = when (flashSetting) {
+                            "auto" -> "on"
+                            "on" -> "off"
+                            else -> "auto"
+                        }
+                        scope.launch { container.settingsRepository.setFlashMode(next) }
+                    }) {
+                        val icon = when (flashSetting) {
+                            "on" -> Icons.Filled.FlashOn
+                            "off" -> Icons.Filled.FlashOff
+                            else -> Icons.Filled.FlashAuto
+                        }
+                        Icon(icon, contentDescription = "Flash mode")
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
                     }
@@ -301,11 +349,7 @@ fun VisionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
-                // The recognized-text field grows with its content (noisy OCR output can be many
-                // lines) — without scroll, a long result pushes the destination buttons below the
-                // screen with no way to reach them.
-                .verticalScroll(rememberScrollState()),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (pendingRequest != null) {
@@ -320,7 +364,7 @@ fun VisionScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(320.dp)
+                        .weight(1f) // Fills available vertical space
                         .clip(RoundedCornerShape(16.dp))
                         .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
                 ) {
@@ -348,65 +392,65 @@ fun VisionScreen(
                         }
                     }
                 }
-                Button(
-                    onClick = {
-                        captureAndRecognize(
-                            context, scope, cameraController, container,
-                            onRecognizing = { isRecognizing = it },
-                            onResult = { rawText = it }
-                        )
-                    },
-                    enabled = !isRecognizing,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (isRecognizing) {
-                        CircularProgressIndicator(modifier = Modifier.height(20.dp))
-                    } else {
-                        Text(languageManager.getString("scan_button"))
-                    }
-                }
             } else {
                 Text(languageManager.getString("camera_permission_required"))
             }
 
-            OutlinedTextField(
-                value = rawText,
-                onValueChange = { rawText = it },
-                label = { Text(languageManager.getString("scan_stub_label")) },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            if (pendingRequest != null) {
-                Button(
-                    onClick = { submit(rawText) },
-                    modifier = Modifier.fillMaxWidth()
+            // [Manual Mode Only] Action buttons and result text
+            if (pendingRequest == null) {
+                // Horizontal row for Send buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(languageManager.getString("send_button"))
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     scanTargets.forEach { target ->
                         Button(
                             onClick = {
-                                val trimmed = rawText.trim()
-                                if (trimmed.isNotEmpty()) {
-                                    OcrResultSender.send(
-                                        context, target.packageName,
-                                        VoxOcrResult(task = target.task, status = VoxOcrResult.STATUS_SUCCESS, rawText = trimmed)
-                                    )
-                                    rawText = ""
-                                    Toast.makeText(
-                                        context,
-                                        String.format(languageManager.getString("sent_to_target"), target.label),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
+                                captureAndRecognize(
+                                    context, scope, cameraController, container,
+                                    onRecognizing = { isRecognizing = it },
+                                    onResult = { text, imageUri ->
+                                        val trimmed = text.trim()
+                                        OcrResultSender.send(
+                                            context, target.packageName,
+                                            VoxOcrResult(
+                                                task = target.task,
+                                                status = VoxOcrResult.STATUS_SUCCESS,
+                                                rawText = trimmed.takeIf { it.isNotEmpty() } ?: "Image scan",
+                                                imageUri = imageUri
+                                            )
+                                        )
+                                        rawText = trimmed
+                                        lastScannedUri = imageUri
+                                        Toast.makeText(
+                                            context,
+                                            String.format(languageManager.getString("sent_to_target"), target.label),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                )
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            enabled = !isRecognizing,
+                            modifier = Modifier.weight(1f) // Equal width for both buttons
                         ) {
-                            Text(target.label)
+                            if (isRecognizing) {
+                                CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text(target.label, maxLines = 1)
+                            }
                         }
                     }
+                }
+
+                // OCR Text result at the bottom, scrollable area if it gets long
+                Box(modifier = Modifier.heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
+                    OutlinedTextField(
+                        value = rawText,
+                        onValueChange = { rawText = it },
+                        label = { Text(languageManager.getString("scan_stub_label")) },
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = false
+                    )
                 }
             }
         }
@@ -423,7 +467,7 @@ private fun captureAndRecognize(
     cameraController: LifecycleCameraController,
     container: VisionContainer,
     onRecognizing: (Boolean) -> Unit,
-    onResult: (String) -> Unit
+    onResult: (String, String?) -> Unit
 ) {
     Logger.d("VisionScreen", "Scan tapped")
     onRecognizing(true)
@@ -437,16 +481,31 @@ private fun captureAndRecognize(
                 scope.launch {
                     try {
                         val zone = currentZoneOrDefault(container)
-                        // ocrEngineForZone() loads the OpenCV native library as a side effect
-                        // (OcrEngine.create()) — DocumentCropper needs that done first.
                         val engine = container.ocrEngineForZone(zone)
                         val cropped = withContext(Dispatchers.IO) { DocumentCropper.crop(bitmap) }
+                        
+                        // Save image synchronously to internal cache for sharing via FileProvider
+                        val imageUri = withContext(Dispatchers.IO) {
+                            try {
+                                val cacheDir = File(context.cacheDir, "receipts").apply { mkdirs() }
+                                val file = File(cacheDir, "rec_${java.util.UUID.randomUUID()}.jpg")
+                                java.io.FileOutputStream(file).use { out ->
+                                    cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+                                }
+                                FileProvider.getUriForFile(context, "com.voxapps.vision.fileprovider", file).toString()
+                            } catch (e: Exception) {
+                                Logger.e("VisionScreen", "Failed to save image", e)
+                                null
+                            }
+                        }
+
                         Logger.d("VisionScreen", "Recognizing with zone=$zone")
                         val text = engine.recognize(cropped)
                         Logger.d("VisionScreen", "Recognized text: $text")
-                        onResult(text)
+                        onResult(text, imageUri)
                     } catch (t: Throwable) {
                         Logger.e("VisionScreen", "Recognition failed", t)
+                        onResult("", null)
                     } finally {
                         onRecognizing(false)
                     }
@@ -456,6 +515,7 @@ private fun captureAndRecognize(
             override fun onError(exception: ImageCaptureException) {
                 Logger.e("VisionScreen", "Capture failed", exception)
                 onRecognizing(false)
+                onResult("", null)
             }
         }
     )

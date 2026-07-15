@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -167,6 +170,24 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
+        // --- Calendar view (opt-in; changes the primary browsing paradigm) ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("calendar_view"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("calendar_view_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.calendarViewEnabled,
+                onCheckedChange = { stateManager.setCalendarViewEnabled(it) }
+            )
+        }
+
+        HorizontalDivider()
+
         // --- Debug logging (off by default; only turn on while actively debugging) ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
@@ -183,39 +204,63 @@ fun GeneralSettingsTab(
             )
         }
 
-        HorizontalDivider()
-
-        // --- VAT breakdown display (per-line-item net/VAT/gross, when a receipt provides it) ---
+        // --- Debug Toasts ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("vat_display"), style = MaterialTheme.typography.bodyLarge)
+                Text(languageManager.getString("debug_toasts"), style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    languageManager.getString("vat_display_desc"),
+                    languageManager.getString("debug_toasts_desc"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Switch(
-                checked = settings.vatDisplayEnabled,
-                onCheckedChange = { stateManager.setVatDisplayEnabled(it) }
+                checked = settings.debugToastsEnabled,
+                onCheckedChange = { stateManager.setDebugToastsEnabled(it) }
             )
         }
 
         HorizontalDivider()
 
-        // --- Calendar view (opt-in; changes the primary browsing paradigm) ---
+        // --- Danger Zone: Delete All ---
+        var showDeleteAllConfirm by remember { mutableStateOf(false) }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("calendar_view"), style = MaterialTheme.typography.bodyLarge)
+                Text(languageManager.getString("delete_all_expenses"), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
                 Text(
-                    languageManager.getString("calendar_view_desc"),
+                    languageManager.getString("delete_all_expenses_desc"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Switch(
-                checked = settings.calendarViewEnabled,
-                onCheckedChange = { stateManager.setCalendarViewEnabled(it) }
+            androidx.compose.material3.Button(
+                onClick = { showDeleteAllConfirm = true },
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text(languageManager.getString("delete"))
+            }
+        }
+
+        if (showDeleteAllConfirm) {
+            AlertDialog(
+                onDismissRequest = { showDeleteAllConfirm = false },
+                title = { Text(languageManager.getString("delete_all_confirm_title")) },
+                text = { Text(languageManager.getString("delete_all_confirm_message")) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = {
+                            stateManager.deleteAllExpenses()
+                            showDeleteAllConfirm = false
+                        }
+                    ) {
+                        Text(languageManager.getString("delete"), color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { showDeleteAllConfirm = false }) {
+                        Text(languageManager.getString("cancel"))
+                    }
+                }
             )
         }
 

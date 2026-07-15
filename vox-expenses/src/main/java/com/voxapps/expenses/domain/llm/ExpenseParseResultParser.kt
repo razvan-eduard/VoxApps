@@ -25,6 +25,8 @@ object ExpenseParseResultParser {
         val vendor: String?,
         val bank: String?,
         val category: String?,
+        val date: String?, // YYYY-MM-DD format
+        val time: String?, // HH:mm format
         val items: List<ParsedItem>
     )
 
@@ -63,8 +65,8 @@ object ExpenseParseResultParser {
         val items = (0 until itemsArray.length()).mapNotNull { i ->
             val item = itemsArray.optJSONObject(i) ?: return@mapNotNull null
             val name = item.optCleanString("name") ?: return@mapNotNull null
-            val quantity = item.optDouble("quantity", 1.0).takeIf { !it.isNaN() } ?: 1.0
-            val unitPrice = item.optDouble("unitPrice").takeIf { !it.isNaN() } ?: return@mapNotNull null
+            val quantity = item.optNullableDouble("quantity") ?: 1.0
+            val unitPrice = item.optNullableDouble("unitPrice") ?: return@mapNotNull null
             ParsedItem(
                 name = name,
                 quantity = quantity,
@@ -82,6 +84,8 @@ object ExpenseParseResultParser {
             vendor = o.optCleanString("vendor"),
             bank = o.optCleanString("bank"),
             category = o.optCleanString("category"),
+            date = o.optCleanString("date"),
+            time = o.optCleanString("time"),
             items = items
         )
     } catch (e: Exception) {

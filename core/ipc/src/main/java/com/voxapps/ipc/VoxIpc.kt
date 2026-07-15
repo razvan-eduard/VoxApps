@@ -59,6 +59,12 @@ object VoxIpc {
      */
     const val EXTRA_SELECTED_DATE = "com.voxapps.extra.SELECTED_DATE"
 
+    /**
+     * ID of a specific record to open for editing (e.g. following a successful scan or a recovery
+     * flow). Used by satellite apps to deep-link into their own editor screens.
+     */
+    const val EXTRA_EXPENSE_ID = "com.voxapps.extra.EXPENSE_ID"
+
     // --- Command ops ---
     const val OP_CREATE = "create"
     const val OP_READ = "read"

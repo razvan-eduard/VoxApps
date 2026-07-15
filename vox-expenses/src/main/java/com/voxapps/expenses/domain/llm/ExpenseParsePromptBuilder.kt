@@ -62,7 +62,10 @@ object ExpenseParsePromptBuilder {
             - Default currency: "$defaultCurrency".
             - Output: Return ONLY raw JSON. No text, no markdown, no role labels.
             - Format: {"title": "...", "totalAmount": 100.0, "currency": "...", "vendor": "...", 
-              "category": "...", "items": [{"name": "...", "quantity": 10.0, "unitPrice": 10.0}]}
+              "category": "...", "date": "YYYY-MM-DD", "time": "HH:mm", 
+              "items": [{"name": "...", "quantity": 10.0, "unitPrice": 10.0}]}
+            - Extract "date" (YYYY-MM-DD) and "time" (HH:mm, 24h) if mentioned. 
+              If not mentioned, leave as null.
 
             INPUT TEXT:
             $rawText

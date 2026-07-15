@@ -2,6 +2,7 @@ package com.voxapps.expenses.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -15,6 +16,7 @@ import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.onboarding.ExpensesOnboardingFlow
 import com.voxapps.expenses.ui.settings.SettingsScreen
+import kotlinx.coroutines.flow.first
 
 private sealed interface EditTarget {
     data object New : EditTarget
@@ -29,6 +31,7 @@ private sealed interface EditTarget {
 @Composable
 fun ExpensesRoot(
     container: ExpensesContainer,
+    initialExpenseId: Long? = null,
     onUnlockRequest: () -> Unit
 ) {
     val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
@@ -53,6 +56,18 @@ fun ExpensesRoot(
                 var showSettings by remember { mutableStateOf(false) }
                 var showReports by remember { mutableStateOf(false) }
                 var editTarget by remember { mutableStateOf<EditTarget?>(null) }
+
+                // Automatically trigger editing flow if an expense ID was passed in the intent.
+                // Re-runs whenever initialExpenseId changes (though it usually only happens once on launch).
+                LaunchedEffect(initialExpenseId) {
+                    if (initialExpenseId != null) {
+                        val expense = container.expensesRepository.expensesWithDetails.first()
+                            .firstOrNull { it.expense.id == initialExpenseId }
+                        if (expense != null) {
+                            editTarget = EditTarget.Existing(expense)
+                        }
+                    }
+                }
 
                 when (val state = ui) {
                     is ExpensesUiState.Loading -> Unit

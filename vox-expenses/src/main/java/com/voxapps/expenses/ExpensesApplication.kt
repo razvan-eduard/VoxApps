@@ -32,11 +32,15 @@ class ExpensesApplication : Application() {
 
         // Apply the persisted debug-logging flag immediately, then keep it in sync with any later
         // Settings toggle (mirrors vox-notes' NotesApplication).
-        Logger.setEnabled(container.settingsRepository.getSnapshot().debugLoggingEnabled)
+        Logger.setEnabled(settingsSnapshot.debugLoggingEnabled)
+        Logger.setToastsEnabled(settingsSnapshot.debugToastsEnabled, this)
         container.settingsRepository.settingsFlow
-            .map { it.debugLoggingEnabled }
+            .map { it.debugLoggingEnabled to it.debugToastsEnabled }
             .distinctUntilChanged()
-            .onEach { Logger.setEnabled(it) }
+            .onEach { (logging, toasts) -> 
+                Logger.setEnabled(logging)
+                Logger.setToastsEnabled(toasts, this)
+            }
             .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Default))
     }
 }

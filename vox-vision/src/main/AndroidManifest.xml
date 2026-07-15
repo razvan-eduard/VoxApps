@@ -33,6 +33,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Satellite scan request: launched explicitly by Expenses/Notes -->
+            <intent-filter>
+                <action android:name="com.voxapps.action.OCR_REQUEST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!--
@@ -51,5 +57,15 @@
             <meta-data android:name="com.voxapps.vox.actions" android:value="ping" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Vision" />
         </receiver>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.voxapps.vision.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

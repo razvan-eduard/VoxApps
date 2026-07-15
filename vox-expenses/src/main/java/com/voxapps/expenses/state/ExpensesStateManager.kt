@@ -33,12 +33,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/**
- * Reactive state hub for Vox Expenses (mirrors vox-notes' NotesStateManager). Combines persisted
- * settings + Room flows + ephemeral runtime (filters + session tick) into a single [uiState] that is
- * either [ExpensesUiState.Locked] or [ExpensesUiState.Unlocked]. Persistence is delegated to
- * [ExpensesRepository]; the biometric session lives in [SessionManager].
- */
 class ExpensesStateManager internal constructor(
     private val settingsRepo: ExpensesSettingsRepository,
     private val expensesRepo: ExpensesRepository,
@@ -95,7 +89,6 @@ class ExpensesStateManager internal constructor(
         }.onEach { _uiState.value = it }.launchIn(scope)
     }
 
-    // --- FILTERS ---
     fun setCategoryFilter(categoryId: Long?) = _runtime.update { it.copy(selectedCategoryId = categoryId) }
     fun setSort(sort: SortMode) = _runtime.update { it.copy(sort = sort) }
     fun setDateFilter(from: Long?, to: Long?) = _runtime.update { it.copy(dateFrom = from, dateTo = to) }
@@ -103,7 +96,6 @@ class ExpensesStateManager internal constructor(
     fun setBankFilter(bank: String?) = _runtime.update { it.copy(selectedBank = bank) }
     fun setVendorFilter(vendor: String?) = _runtime.update { it.copy(selectedVendor = vendor) }
 
-    // --- SETTINGS WRITES (delegate to repo; settingsFlow updates uiState reactively) ---
     fun setBiometricRequired(required: Boolean) { scope.launch { settingsRepo.setBiometricRequired(required) } }
     fun setSessionTimeoutMinutes(minutes: Int) { scope.launch { settingsRepo.setSessionTimeoutMinutes(minutes) } }
     fun setLanguage(code: String) { scope.launch { settingsRepo.setLanguage(code) } }
@@ -129,6 +121,7 @@ class ExpensesStateManager internal constructor(
     fun setVatDisplayEnabled(enabled: Boolean) { scope.launch { settingsRepo.setVatDisplayEnabled(enabled) } }
     fun setDecimalSeparator(separator: String) { scope.launch { settingsRepo.setDecimalSeparator(separator) } }
     fun setCalendarViewEnabled(enabled: Boolean) { scope.launch { settingsRepo.setCalendarViewEnabled(enabled) } }
+    fun setDebugToastsEnabled(enabled: Boolean) { scope.launch { settingsRepo.setDebugToastsEnabled(enabled) } }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
     fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }
@@ -138,8 +131,6 @@ class ExpensesStateManager internal constructor(
         }
     }
 
-    // --- SESSION LOCK ---
-    /** Called after a successful biometric auth; opens the read window per the timeout setting. */
     fun unlock() {
         sessionManager.markUnlocked()
         bumpSession()
@@ -150,12 +141,10 @@ class ExpensesStateManager internal constructor(
         bumpSession()
     }
 
-    /** Force a re-evaluation of lock state (e.g. on app foreground) so an expired session re-locks. */
     fun recheckLock() = bumpSession()
 
     private fun bumpSession() = _runtime.update { it.copy(sessionTick = it.sessionTick + 1) }
 
-    // --- EXPENSE CRUD (delegated) ---
     fun addExpense(
         title: String?,
         totalAmount: Double,
@@ -166,11 +155,12 @@ class ExpensesStateManager internal constructor(
         dateTime: Long,
         comments: String?,
         categoryId: Long?,
-        items: List<ExpenseLineItem>
+        items: List<ExpenseLineItem>,
+        imageName: String? = null
     ) {
         scope.launch {
             expensesRepo.addExpense(
-                title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, categoryId, items
+                title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, categoryId, items, imageName
             )
         }
     }
@@ -182,7 +172,10 @@ class ExpensesStateManager internal constructor(
     fun deleteExpense(expense: Expense) { scope.launch { expensesRepo.deleteExpense(expense) } }
     fun deleteExpenseById(id: Long) { scope.launch { expensesRepo.deleteExpenseById(id) } }
 
-    // --- CATEGORY CRUD (delegated) ---
+    fun deleteAllExpenses() {
+        scope.launch { expensesRepo.deleteAllExpenses() }
+    }
+
     fun addCategory(name: String, colorArgb: Long) {
         val position = (uiStateCategories()).size
         scope.launch { expensesRepo.addCategory(name, colorArgb, position, System.currentTimeMillis()) }
@@ -200,20 +193,13 @@ class ExpensesStateManager internal constructor(
     private fun uiStateCategories(): List<Category> =
         (_uiState.value as? ExpensesUiState.Unlocked)?.categories ?: emptyList()
 
-    /**
-     * Fires the Auto-Merge Categories request for exactly [categoryNames] (the caller decides which
-     * categories to include). The scheduled job gathers all category names itself and calls this with
-     * the full list.
-     */
     fun requestCategoryAutoMerge(context: Context, categoryNames: List<String>) {
         val language = settingsRepo.getSnapshot().language
         CategoryMergeRequestSender.send(context, categoryNames, language)
     }
 
-    /** Reactive pending-suggestion stream for the category-merge review UI in Settings. */
     val pendingCategoryMergeMapping: Flow<Map<String, String>> = pendingCategoryMergeRepo.pendingMappingFlow
 
-    /** User approved (a subset of) the proposed category-merge mapping — apply it, then clear it. */
     fun approveCategoryMerge(mapping: Map<String, String>) {
         scope.launch {
             expensesRepo.applyCategoryMerge(mapping)
@@ -221,12 +207,10 @@ class ExpensesStateManager internal constructor(
         }
     }
 
-    /** User dismissed the category-merge suggestion without applying anything. */
     fun dismissCategoryMerge() {
         scope.launch { pendingCategoryMergeRepo.clearPendingMapping() }
     }
 
-    /** Fires the expense-deduplication request for every current expense. */
     fun requestExpenseDeduplication(context: Context) {
         scope.launch {
             val expenses = expensesRepo.expenses.first().map {
@@ -236,10 +220,8 @@ class ExpensesStateManager internal constructor(
         }
     }
 
-    /** Reactive pending-suggestion stream for the expense-dedup review UI in Settings. */
     val pendingExpenseDuplicateGroups: Flow<List<DuplicateGroup>> = expenseDeduplicationRepo.pendingGroupsFlow
 
-    /** User approved (a subset of) the proposed groups — apply them, then clear the pending set. */
     fun approveExpenseDeduplication(groups: List<DuplicateGroup>) {
         scope.launch {
             expensesRepo.applyExpenseDeduplication(groups)
@@ -247,15 +229,12 @@ class ExpensesStateManager internal constructor(
         }
     }
 
-    /** User dismissed the expense-dedup suggestion without applying anything. */
     fun dismissExpenseDeduplication() {
         scope.launch { expenseDeduplicationRepo.clearPendingGroups() }
     }
 
-    /** Reactive pending stream for the notification-capture review UI in Settings. */
     val pendingNotificationExpenses: Flow<List<PendingNotificationExpense>> = pendingNotificationExpenseRepo.pendingFlow
 
-    /** User approved one captured notification — create the real expense, then remove it from pending. */
     fun approveNotificationExpense(entry: PendingNotificationExpense) {
         scope.launch {
             val settings = settingsRepo.getSnapshot()
@@ -276,17 +255,14 @@ class ExpensesStateManager internal constructor(
         }
     }
 
-    /** User dismissed one captured notification without creating anything. */
     fun dismissNotificationExpense(id: Long) {
         scope.launch { pendingNotificationExpenseRepo.removePending(setOf(id)) }
     }
 
-    /** User dismissed every pending notification-derived expense at once. */
     fun dismissAllNotificationExpenses() {
         scope.launch { pendingNotificationExpenseRepo.clearAll() }
     }
 
-    // --- SPENDING LIMITS (delegated) ---
     val spendingLimits: Flow<List<SpendingLimit>> = expensesRepo.spendingLimits
 
     fun addSpendingLimit(categoryId: Long?, amountHomeCurrency: Double, period: String) {

@@ -3,8 +3,11 @@ package com.voxapps.commander.service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import com.voxapps.commander.R
 import com.voxapps.commander.VoxApplication
 import com.voxapps.commander.domain.intent.RawPromptOutcome
 import com.voxapps.commander.domain.intent.interpreter.NluIntentParser
@@ -20,10 +23,8 @@ import com.voxapps.ipc.VoxLlmResult
  * ([NluIntentParser.cleanGenericOutput]) to the LLM's raw output, never validating or understanding
  * the `task`-specific shape the caller expects.
  *
- * Runs as a WorkManager job rather than a plain `Service` — on-device testing showed a plain,
- * non-foreground `Service` started from a `BroadcastReceiver` can be silently blocked from ever
- * running by OEM/Doze background-execution restrictions when Commander has no visible UI. WorkManager
- * goes through the system `JobScheduler`, which is specifically exempted from that restriction.
+ * Runs as a WorkManager job with expedited priority and foreground execution to ensure Honor's
+ * background management doesn't block it.
  */
 class LlmHookWorker(
     context: Context,
@@ -31,6 +32,17 @@ class LlmHookWorker(
 ) : CoroutineWorker(context, params) {
 
     private val TAG = "LlmHookWorker"
+
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val container = (applicationContext as VoxApplication).container
+        val title = container.languageManager.getString("notif_llm_processing")
+        val notification = NotificationCompat.Builder(applicationContext, "service")
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle(title)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        return ForegroundInfo(105, notification)
+    }
 
     override suspend fun doWork(): Result {
         val request = VoxLlmRequest.fromJson(inputData.getString(VoxIpc.EXTRA_LLM_PAYLOAD))
@@ -57,7 +69,7 @@ class LlmHookWorker(
                 )
             }
             replyToSource(request.sourcePackage, result)
-            Logger.log("LlmHookWorker: replied with status=${result.status}", TAG)
+            Logger.log("LlmHookWorker: replied with status=${result.status} [Error: ${result.error}]", TAG)
             Result.success()
         } catch (e: Exception) {
             Logger.log("LlmHookWorker: processing failed: ${e.message}", TAG)

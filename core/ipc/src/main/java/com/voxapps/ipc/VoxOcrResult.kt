@@ -3,14 +3,14 @@ package com.voxapps.ipc
 import org.json.JSONObject
 
 /**
- * Vision's async reply to a [VoxOcrRequest] — mirrors [VoxLlmResult]'s shape exactly. [rawText] is
- * the raw OCR output only; Vision never classifies or cleans it up (that's the caller's job, done by
- * sending its own follow-up request to Commander's generic LLM hook with its own task/prompt).
+ * Vision's async reply to a [VoxOcrRequest]. [imageUri] allows passing a reference to the saved
+ * receipt image without bloating the IPC payload.
  */
 data class VoxOcrResult(
     val task: String,
     val status: String,
     val rawText: String? = null,
+    val imageUri: String? = null,
     val error: String? = null
 ) {
     fun toJson(): String {
@@ -18,6 +18,7 @@ data class VoxOcrResult(
         o.put("task", task)
         o.put("status", status)
         rawText?.let { o.put("rawText", it) }
+        imageUri?.let { o.put("imageUri", it) }
         error?.let { o.put("error", it) }
         return o.toString()
     }
@@ -36,6 +37,7 @@ data class VoxOcrResult(
                     task = task,
                     status = status,
                     rawText = o.optStringOrNull("rawText"),
+                    imageUri = o.optStringOrNull("imageUri"),
                     error = o.optStringOrNull("error")
                 )
             } catch (e: Exception) {

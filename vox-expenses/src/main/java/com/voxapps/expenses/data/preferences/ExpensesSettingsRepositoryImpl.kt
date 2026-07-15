@@ -39,6 +39,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val VAT_DISPLAY_ENABLED = booleanPreferencesKey("vat_display_enabled")
         val DECIMAL_SEPARATOR = stringPreferencesKey("decimal_separator")
         val CALENDAR_VIEW_ENABLED = booleanPreferencesKey("calendar_view_enabled")
+        val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
         val APP_CACHE_JSON = stringPreferencesKey("app_cache_json")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
@@ -63,6 +64,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             vatDisplayEnabled = prefs[Keys.VAT_DISPLAY_ENABLED] ?: false,
             decimalSeparator = prefs[Keys.DECIMAL_SEPARATOR] ?: ExpensesSettings.DECIMAL_PERIOD,
             calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
+            debugToastsEnabled = prefs[Keys.DEBUG_TOASTS_ENABLED] ?: false,
             appCacheJson = prefs[Keys.APP_CACHE_JSON],
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: ExpensesSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
@@ -152,6 +154,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.CALENDAR_VIEW_ENABLED] = enabled }
     }
 
+    override suspend fun setDebugToastsEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.DEBUG_TOASTS_ENABLED] = enabled }
+    }
+
     override suspend fun setAppCache(json: String) {
         dataStore.edit { it[Keys.APP_CACHE_JSON] = json }
     }
@@ -194,6 +200,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.VAT_DISPLAY_ENABLED] = settings.vatDisplayEnabled
             prefs[Keys.DECIMAL_SEPARATOR] = settings.decimalSeparator
             prefs[Keys.CALENDAR_VIEW_ENABLED] = settings.calendarViewEnabled
+            prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
             // appCacheJson intentionally untouched — see interface doc comment.

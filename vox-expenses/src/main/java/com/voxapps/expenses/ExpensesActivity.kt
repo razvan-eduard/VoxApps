@@ -1,5 +1,6 @@
 package com.voxapps.expenses
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.fragment.app.FragmentActivity
@@ -35,8 +36,24 @@ class ExpensesActivity : FragmentActivity() {
         setContent {
             ExpensesRoot(
                 container = container,
+                initialExpenseId = intent.getLongExtra(VoxIpc.EXTRA_EXPENSE_ID, -1L).takeIf { it >= 0 },
                 onUnlockRequest = ::promptUnlock
             )
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // Re-run the date filter logic if a new intent arrives (e.g. fresh tap from Calendar).
+        if (intent.hasExtra(VoxIpc.EXTRA_SELECTED_DATE)) {
+            val dayMillis = intent.getLongExtra(VoxIpc.EXTRA_SELECTED_DATE, -1L)
+            if (dayMillis >= 0) {
+                val day = CalendarDateUtils.millisToLocalDate(dayMillis)
+                val from = CalendarDateUtils.startOfDayMillis(day)
+                val to = CalendarDateUtils.startOfDayMillis(day.plusDays(1)) - 1
+                container.expensesStateManager.setDateFilter(from, to)
+            }
         }
     }
 

@@ -18,6 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material3.Icon
 import com.voxapps.expenses.data.ExpenseWithDetails
 import java.text.DateFormat
 import java.util.Date
@@ -46,12 +49,22 @@ fun ExpenseCard(expenseWithDetails: ExpenseWithDetails, onClick: () -> Unit) {
                     text = expense.title?.takeIf { it.isNotBlank() } ?: expense.vendor ?: "—",
                     style = MaterialTheme.typography.bodyLarge
                 )
-                Text(
-                    text = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(expense.dateTime)) +
-                        (category?.let { " · ${it.name}" } ?: ""),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!expense.receiptImageName.isNullOrBlank()) {
+                        Icon(
+                            Icons.Filled.Image,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp).padding(end = 4.dp)
+                        )
+                    }
+                    Text(
+                        text = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(expense.dateTime)) +
+                            (category?.let { " · ${it.name}" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             Text(
                 text = formatAmount(expense.totalAmount, expense.currencyCode),

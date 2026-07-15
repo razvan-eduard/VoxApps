@@ -104,6 +104,9 @@ dependencies {
     // Scheduled jobs (category auto-merge, expense dedup, spending-limit checks)
     implementation(libs.androidx.work.runtime.ktx)
 
+    // Zoomable image support for receipt inspection
+    implementation("me.saket.telephoto:zoomable-image-coil:0.19.0")
+
     // Exchange-rate lookups at reporting time (Stage 5)
     implementation(libs.okhttp)
 

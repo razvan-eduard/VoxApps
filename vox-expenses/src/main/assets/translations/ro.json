@@ -18,6 +18,7 @@
   "all_expenses": "Toate cheltuielile",
   "add_expense": "Adaugă cheltuială",
   "edit_expense": "Editează cheltuiala",
+  "receipt_photo": "Poză bon",
   "new_expense": "Cheltuială nouă",
   "no_expenses_yet": "Nicio cheltuială încă. Apasă + pentru a adăuga una.",
   "expense_details": "Detalii cheltuială",
@@ -30,6 +31,7 @@
   "expense_location": "Locație",
   "expense_comments": "Comentarii",
   "expense_date": "Data",
+  "expense_time": "Ora",
   "expense_category": "Categorie",
   "expense_total_mismatch": "Nu se potrivește cu totalul produselor",
   "line_items": "Produse",
@@ -76,6 +78,8 @@
   "decimal_separator_comma": "Virgulă (1234,56)",
   "debug_logging": "Jurnalizare depanare",
   "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme",
+  "debug_toasts": "Notificări depanare",
+  "debug_toasts_desc": "Afișează ferestre pop-up pe ecran pentru evenimente de sistem și sarcini de fundal",
   "vat_display": "Detaliere TVA",
   "vat_display_desc": "Afișează și editează sumele fără TVA/TVA/total pe fiecare produs, când sunt furnizate de bon",
   "locked_title": "Cheltuielile sunt blocate",
@@ -194,5 +198,9 @@
   "calendar_view_desc": "Răsfoiește cheltuielile ca un calendar defilabil, paginat pe luni, în loc de o listă simplă",
   "today": "Astăzi",
   "debug_section": "Depanare",
-  "add_test_data": "Adaugă date de test"
+  "add_test_data": "Adaugă date de test",
+  "delete_all_expenses": "Șterge toate cheltuielile",
+  "delete_all_expenses_desc": "Elimină definitiv toate înregistrările de cheltuieli de pe acest dispozitiv",
+  "delete_all_confirm_title": "Ștergi TOATE cheltuielile?",
+  "delete_all_confirm_message": "Această acțiune va șterge definitiv orice înregistrare de cheltuială și produs. Acțiunea nu poate fi anulată."
 }

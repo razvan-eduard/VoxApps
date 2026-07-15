@@ -22,7 +22,11 @@ class OpenAiInterpreter(
 ) : AssistantEngine {
 
     private val TAG = Strings.Tags.OPENAI_INTERPRETER
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? = withContext(Dispatchers.IO) {
         val apiKey = settingsRepo.getApiKeySync()

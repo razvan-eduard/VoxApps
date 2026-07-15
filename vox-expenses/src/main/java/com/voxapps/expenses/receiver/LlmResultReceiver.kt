@@ -14,6 +14,7 @@ import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
+import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.logging.Logger
@@ -21,18 +22,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private const val TAG = "LlmResultReceiver"
 
 /**
- * Expenses' end of Commander's generic LLM hook: receives the async [VoxIpc.ACTION_LLM_RESULT] reply
- * and routes it by [VoxLlmResult.task] (mirrors vox-notes' equivalent receiver). Guarded by the shared
- * `com.voxapps.vox.permission.LLM_RESULT` signature permission (declared once in `:core:ipc`'s
- * manifest).
- *
- * [LlmTasks.EXPENSE_PARSE] (voice) and [LlmTasks.EXPENSE_SCAN_CLEANUP] (OCR) produce the exact same
- * JSON shape — both parsed with [ExpenseParseResultParser] and created via the same
- * [createExpenseFromParsed] path, rather than duplicating that logic per source.
+ * Handles async replies from Commander's LLM hook. Extracts the physical receipt image name
+ * from the task metadata (Task:ImageName) to ensure the file is linked to the final record.
  */
 class LlmResultReceiver : BroadcastReceiver() {
 
@@ -41,26 +41,44 @@ class LlmResultReceiver : BroadcastReceiver() {
         val result = VoxLlmResult.fromJson(intent.getStringExtra(VoxIpc.EXTRA_LLM_PAYLOAD)) ?: return
         val container = (context.applicationContext as ExpensesApplication).container
 
-        when (result.task) {
+        // Recover task and optional physical asset name (format "TASK:IMAGE_NAME")
+        val taskParts = result.task.split(":")
+        val baseTask = taskParts[0]
+        val storedImageName = taskParts.getOrNull(1)
+
+        android.util.Log.println(android.util.Log.ASSERT, TAG, "LLM result: status=${result.status} task=${result.task} baseTask=$baseTask imageName=$storedImageName")
+        if (result.rawJson != null) {
+            android.util.Log.println(android.util.Log.ASSERT, TAG, "LLM rawJson length: ${result.rawJson!!.length}")
+        }
+
+        when (baseTask) {
             LlmTasks.EXPENSE_PARSE, LlmTasks.EXPENSE_SCAN_CLEANUP -> {
                 val rawJson = result.rawJson
-                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
-                    Logger.w(TAG, "${result.task} failed: ${result.error}")
-                    // Unconditional (not gated behind voiceSaveToastEnabled) — the only signal the
-                    // user has that the scan/voice command didn't produce an expense.
-                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
-                    return
-                }
-                val parsed = ExpenseParseResultParser.parse(rawJson) ?: run {
-                    Logger.w(TAG, "${result.task}: could not parse LLM result (no amount?). rawJson=$rawJson")
-                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
-                    return
-                }
-                Logger.d(TAG, "${result.task}: creating expense total=${parsed.totalAmount} category=${parsed.category}")
+                val isSuccess = result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null
+                val parsed = if (isSuccess) ExpenseParseResultParser.parse(rawJson!!) else null
+                
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        createExpenseFromParsed(context.applicationContext, container, parsed)
+                        if (parsed != null) {
+                            createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName)
+                        } else if (baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && storedImageName != null) {
+                            // Recovery flow: LLM failed but we have a physical receipt image.
+                            // Create a "stub" record so the user doesn't lose the photo and open it.
+                            Logger.w(TAG, "LLM failed for scan, entering recovery mode for $storedImageName. Error: ${result.error}")
+                            val id = createStubExpense(container, storedImageName)
+                            withContext(Dispatchers.Main) {
+                                val errorMsg = result.error ?: "Unknown parsing error"
+                                Toast.makeText(context, "${container.languageManager.getString("manual_review_required")} ($errorMsg)", Toast.LENGTH_LONG).show()
+                            }
+                            launchExpensesForEdit(context.applicationContext, id)
+                        } else {
+                            Logger.w(TAG, "${result.task} failed and no recovery possible. Error: ${result.error}")
+                            withContext(Dispatchers.Main) {
+                                val errorMsg = result.error ?: container.languageManager.getString("scan_save_failed")
+                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                            }
+                        }
                     } finally {
                         pending.finish()
                     }
@@ -69,17 +87,8 @@ class LlmResultReceiver : BroadcastReceiver() {
 
             LlmTasks.CATEGORY_DEDUPLICATION -> {
                 val rawJson = result.rawJson
-                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
-                    Logger.w(TAG, "Category auto-merge failed: ${result.error}")
-                    return
-                }
-                val mapping = CategoryMergeMappingParser.parse(rawJson) ?: run {
-                    Logger.w(TAG, "Category auto-merge: could not parse LLM mapping. rawJson=$rawJson")
-                    return
-                }
-                // Deliberately NOT applied here, unlike vox-notes — merging expense categories can
-                // reshuffle real financial data/reporting, so the suggestion is stored for review.
-                Logger.d(TAG, "Category auto-merge: storing ${mapping.size} proposed mapping(s) for review")
+                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) return
+                val mapping = CategoryMergeMappingParser.parse(rawJson) ?: return
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
@@ -92,15 +101,8 @@ class LlmResultReceiver : BroadcastReceiver() {
 
             LlmTasks.EXPENSE_DEDUPLICATION -> {
                 val rawJson = result.rawJson
-                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
-                    Logger.w(TAG, "Expense deduplication failed: ${result.error}")
-                    return
-                }
-                val groups = ExpenseDeduplicationResultParser.parse(rawJson) ?: run {
-                    Logger.w(TAG, "Expense deduplication: could not parse LLM result. rawJson=$rawJson")
-                    return
-                }
-                Logger.d(TAG, "Expense deduplication: storing ${groups.size} proposed group(s) for review")
+                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) return
+                val groups = ExpenseDeduplicationResultParser.parse(rawJson) ?: return
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
@@ -113,17 +115,8 @@ class LlmResultReceiver : BroadcastReceiver() {
 
             LlmTasks.NOTIFICATION_EXPENSE_PARSE -> {
                 val rawJson = result.rawJson
-                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
-                    Logger.w(TAG, "Notification expense parse failed: ${result.error}")
-                    return
-                }
-                // A null result here just as often means "the LLM correctly said this wasn't a
-                // payment" as it does a genuine parse failure — either way, nothing to review.
-                val parsed = NotificationExpenseParseResultParser.parse(rawJson) ?: run {
-                    Logger.d(TAG, "Notification expense parse: not a payment or unparseable, discarding")
-                    return
-                }
-                Logger.d(TAG, "Notification expense parse: storing 1 pending entry for review")
+                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) return
+                val parsed = NotificationExpenseParseResultParser.parse(rawJson) ?: return
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
@@ -145,8 +138,6 @@ class LlmResultReceiver : BroadcastReceiver() {
                     }
                 }
             }
-
-            // Future LLM-backed features add a branch here — zero Commander/:core:ipc changes needed.
             else -> Logger.d(TAG, "Ignoring unknown LLM task: ${result.task}")
         }
     }
@@ -154,7 +145,8 @@ class LlmResultReceiver : BroadcastReceiver() {
     private suspend fun createExpenseFromParsed(
         appContext: Context,
         container: ExpensesContainer,
-        parsed: ExpenseParseResultParser.Parsed
+        parsed: ExpenseParseResultParser.Parsed,
+        imageName: String?
     ) {
         val settings: ExpensesSettings = container.settingsRepository.getSnapshot()
         val items = parsed.items.map {
@@ -168,7 +160,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                 grossAmount = it.grossAmount
             )
         }
-        val resolved = container.expensesRepository.addParsedExpense(
+        val newExpenseId = container.expensesRepository.addParsedExpense(
             title = parsed.title,
             totalAmount = parsed.totalAmount,
             currencyCode = parsed.currency ?: settings.defaultCurrency,
@@ -176,19 +168,87 @@ class LlmResultReceiver : BroadcastReceiver() {
             bank = parsed.bank,
             location = null,
             comments = null,
-            dateTime = System.currentTimeMillis(),
+            dateTime = mergeDateTime(parsed.date, parsed.time),
             spokenCategory = parsed.category,
             defaultCategoryId = settings.defaultVoiceCategoryId,
             autoCreate = settings.autoCreateVoiceCategory,
-            items = items
+            items = items,
+            imageName = imageName
         )
-        if (settings.voiceSaveToastEnabled) {
+
+        if (newExpenseId > 0 && settings.voiceSaveToastEnabled) {
             val label = parsed.title?.takeIf { it.isNotBlank() } ?: parsed.vendor ?: parsed.totalAmount.toString()
             val template = container.languageManager.getString("toast_expense_saved")
-            val msg = String.format(template, label) + (resolved.name?.let { " · $it" } ?: "")
+            val msg = if (template.contains("%1\$s") || template.contains("%s")) {
+                try { String.format(template, label) } catch (e: Exception) { "$template $label" }
+            } else {
+                "$template: $label"
+            }
+
             withContext(Dispatchers.Main) {
                 Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
             }
+        } else if (newExpenseId <= 0) {
+            Logger.e(TAG, "Failed to save parsed expense to database. ID: $newExpenseId")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(appContext, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_LONG).show()
+            }
         }
+    }
+
+    private suspend fun createStubExpense(
+        container: ExpensesContainer,
+        imageName: String
+    ): Long {
+        val settings = container.settingsRepository.getSnapshot()
+        // Stub: 0.0 amount is valid but needs manual entry.
+        return container.expensesRepository.addExpense(
+            title = container.languageManager.getString("manual_review_required"),
+            totalAmount = 0.0,
+            currencyCode = settings.defaultCurrency,
+            vendor = null,
+            bank = null,
+            location = null,
+            dateTime = System.currentTimeMillis(),
+            comments = "LLM parsing failed for this scan.",
+            categoryId = null,
+            imageName = imageName
+        )
+    }
+
+    private fun launchExpensesForEdit(context: Context, expenseId: Long) {
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra(VoxIpc.EXTRA_EXPENSE_ID, expenseId)
+        }
+        if (intent != null) {
+            context.startActivity(intent)
+        }
+    }
+
+    private fun mergeDateTime(dateStr: String?, timeStr: String?): Long {
+        val now = LocalDateTime.now()
+        
+        val date = try {
+            if (dateStr != null) {
+                val d = LocalDate.parse(dateStr, DateTimeFormatter.ISO_LOCAL_DATE)
+                // Hard validation: no future dates
+                if (d.isAfter(now.toLocalDate())) now.toLocalDate() else d
+            } else now.toLocalDate()
+        } catch (e: Exception) {
+            now.toLocalDate()
+        }
+        
+        val time = try {
+            if (timeStr != null) {
+                val t = LocalTime.parse(timeStr, DateTimeFormatter.ofPattern("HH:mm"))
+                // Hard validation: if today, no future time
+                if (date == now.toLocalDate() && t.isAfter(now.toLocalTime())) now.toLocalTime() else t
+            } else now.toLocalTime()
+        } catch (e: Exception) {
+            now.toLocalTime()
+        }
+
+        return LocalDateTime.of(date, time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
 }

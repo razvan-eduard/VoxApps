@@ -18,6 +18,7 @@
   "all_expenses": "All expenses",
   "add_expense": "Add expense",
   "edit_expense": "Edit expense",
+  "receipt_photo": "Receipt photo",
   "new_expense": "New expense",
   "no_expenses_yet": "No expenses yet. Tap + to add one.",
   "expense_details": "Expense details",
@@ -30,6 +31,7 @@
   "expense_location": "Location",
   "expense_comments": "Comments",
   "expense_date": "Date",
+  "expense_time": "Time",
   "expense_category": "Category",
   "expense_total_mismatch": "Doesn't match line items total",
   "line_items": "Line items",
@@ -76,6 +78,8 @@
   "decimal_separator_comma": "Comma (1234,56)",
   "debug_logging": "Debug logging",
   "debug_logging_desc": "Write debug info to logcat — leave off unless you're troubleshooting an issue",
+  "debug_toasts": "Debug toasts",
+  "debug_toasts_desc": "Show on-screen popups for system events and background tasks",
   "vat_display": "VAT breakdown",
   "vat_display_desc": "Show and edit per-item net/VAT/gross amounts when a receipt provides them",
   "locked_title": "Expenses are locked",
@@ -194,5 +198,9 @@
   "calendar_view_desc": "Browse expenses as a scrollable, month-paged calendar instead of a plain list",
   "today": "Today",
   "debug_section": "Debug",
-  "add_test_data": "Add test data"
+  "add_test_data": "Add test data",
+  "delete_all_expenses": "Delete all expenses",
+  "delete_all_expenses_desc": "Permanently remove all expense records from this device",
+  "delete_all_confirm_title": "Delete ALL expenses?",
+  "delete_all_confirm_message": "This will permanently delete every expense record and line item. This action cannot be undone."
 }

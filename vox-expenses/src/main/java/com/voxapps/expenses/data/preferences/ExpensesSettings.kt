@@ -70,6 +70,7 @@ data class ExpensesSettings(
     val vatDisplayEnabled: Boolean = false,
     val decimalSeparator: String = DECIMAL_PERIOD,
     val calendarViewEnabled: Boolean = false,
+    val debugToastsEnabled: Boolean = false,
     val appCacheJson: String? = null,
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,

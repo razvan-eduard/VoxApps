@@ -50,7 +50,10 @@ class VisionActivity : ComponentActivity() {
                         pendingRequest = pendingState,
                         hasCameraPermission = ::hasCameraPermission,
                         requestCameraPermission = ::requestCameraPermission,
-                        finishActivity = { finish() }
+                        finishActivity = {
+                            pendingState = null // Clear state before finishing
+                            finish()
+                        }
                     )
                 }
             }

@@ -49,14 +49,14 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher"
             android:label="@string/app_name"
             android:launchMode="singleTop"
             android:theme="@style/Theme.VoxCommander.Splash"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- Digital Assistant intent - may give priority to SpeechRecognizer -->
