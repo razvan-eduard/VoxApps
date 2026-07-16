@@ -24,12 +24,20 @@ class ExpensesReadResponder(
 ) {
     suspend fun respond(dateFrom: Long? = null, dateTo: Long? = null): VoxResult {
         val settings = settingsRepo.getSnapshot()
+        
+        // Fix: If biometric is NOT required, the record is NEVER locked.
+        // Previously, an expired session could block access even if the user turned off biometrics.
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
-        if (locked) return VoxResult(ok = false, text = LOCKED_MESSAGE)
+            
+        if (locked) {
+            com.voxapps.logging.Logger.d("ExpensesReadResponder", "Read request BLOCKED (Biometric Lock)")
+            return VoxResult(ok = false, text = LOCKED_MESSAGE)
+        }
 
         if (dateFrom != null && dateTo != null) {
             val expenses = expensesRepo.expensesForDateRange(dateFrom, dateTo)
+            com.voxapps.logging.Logger.d("ExpensesReadResponder", "Read request SUCCESS (Date Range: $dateFrom - $dateTo, Found: ${expenses.size})")
             val items = JSONArray()
             expenses.forEach { expense ->
                 items.put(

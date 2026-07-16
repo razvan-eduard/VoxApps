@@ -24,8 +24,11 @@ class NotesReadResponder(
 ) {
     suspend fun respond(dateFrom: Long? = null, dateTo: Long? = null): VoxResult {
         val settings = settingsRepo.getSnapshot()
+
+        // Fix: If biometric is NOT required, the record is NEVER locked.
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
+
         if (locked) return VoxResult(ok = false, text = LOCKED_MESSAGE)
 
         if (dateFrom != null && dateTo != null) {
