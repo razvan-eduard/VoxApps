@@ -19,9 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Icon
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import java.text.DateFormat
 import java.util.Date
 
@@ -55,6 +57,14 @@ fun ExpenseCard(expenseWithDetails: ExpenseWithDetails, onClick: () -> Unit) {
                             Icons.Filled.Image,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp).padding(end = 4.dp)
+                        )
+                    }
+                    if (expense.isStub || ExpenseAmountMismatch.isGrossMismatch(expense.totalAmount, expenseWithDetails.items.sumOf { it.quantity * it.unitPrice })) {
+                        Icon(
+                            Icons.Filled.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(14.dp).padding(end = 4.dp)
                         )
                     }

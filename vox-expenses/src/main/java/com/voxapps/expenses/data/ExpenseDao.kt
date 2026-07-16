@@ -22,6 +22,10 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses ORDER BY dateTime DESC")
     fun observeAll(): Flow<List<Expense>>
 
+    @Transaction
+    @Query("SELECT * FROM expenses WHERE id = :id")
+    suspend fun getWithDetailsById(id: Long): ExpenseWithDetails?
+
     /** One-shot day-scoped read (e.g. Vox Calendar's day-tap summary via VoxCommand.dateFrom/dateTo) —
      *  a plain SQL range query rather than fetching everything and filtering in memory, since the
      *  caller only wants one day's worth of records. */
@@ -44,6 +48,19 @@ interface ExpenseDao {
 
     @Query("DELETE FROM expenses WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM expenses WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
+
+    /** Read the receipt filename before a delete-by-id, since the row won't exist to query afterwards. */
+    @Query("SELECT receiptImageName FROM expenses WHERE id = :id AND receiptImageName IS NOT NULL")
+    suspend fun getReceiptImageName(id: Long): String?
+
+    @Query("SELECT receiptImageName FROM expenses WHERE id IN (:ids) AND receiptImageName IS NOT NULL")
+    suspend fun getReceiptImageNames(ids: List<Long>): List<String>
+
+    @Query("SELECT receiptImageName FROM expenses WHERE receiptImageName IS NOT NULL")
+    suspend fun getAllReceiptImageNames(): List<String>
 
     @Update
     suspend fun update(expense: Expense)

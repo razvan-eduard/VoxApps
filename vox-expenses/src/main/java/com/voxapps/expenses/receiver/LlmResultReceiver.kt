@@ -41,10 +41,12 @@ class LlmResultReceiver : BroadcastReceiver() {
         val result = VoxLlmResult.fromJson(intent.getStringExtra(VoxIpc.EXTRA_LLM_PAYLOAD)) ?: return
         val container = (context.applicationContext as ExpensesApplication).container
 
-        // Recover task and optional physical asset name (format "TASK:IMAGE_NAME")
+        // Recover task and optional physical asset name (format "TASK:IMAGE_NAME" or, for a stub
+        // retry, "TASK:IMAGE_NAME:RETRY_OF_EXPENSE_ID").
         val taskParts = result.task.split(":")
         val baseTask = taskParts[0]
         val storedImageName = taskParts.getOrNull(1)
+        val retryOfExpenseId = taskParts.getOrNull(2)?.toLongOrNull()
 
         android.util.Log.println(android.util.Log.ASSERT, TAG, "LLM result: status=${result.status} task=${result.task} baseTask=$baseTask imageName=$storedImageName")
         if (result.rawJson != null) {
@@ -60,8 +62,21 @@ class LlmResultReceiver : BroadcastReceiver() {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        if (parsed != null) {
+                        if (parsed != null && retryOfExpenseId != null) {
+                            // Retry succeeded: update the existing stub row in place rather than
+                            // inserting a new one (which would duplicate the expense and orphan
+                            // the original stub).
+                            updateExpenseFromRetry(context.applicationContext, container, parsed, retryOfExpenseId)
+                        } else if (parsed != null) {
                             createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName)
+                        } else if (baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && retryOfExpenseId != null) {
+                            // Retry failed again — a stub row already exists for this id, leave it
+                            // as-is (isStub stays true) so it can be retried again later.
+                            Logger.w(TAG, "Retry LLM cleanup failed for expense $retryOfExpenseId. Error: ${result.error}")
+                            withContext(Dispatchers.Main) {
+                                val errorMsg = result.error ?: "Unknown parsing error"
+                                Toast.makeText(context, "${container.languageManager.getString("manual_review_required")} ($errorMsg)", Toast.LENGTH_LONG).show()
+                            }
                         } else if (baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && storedImageName != null) {
                             // Recovery flow: LLM failed but we have a physical receipt image.
                             // Create a "stub" record so the user doesn't lose the photo and open it.
@@ -176,6 +191,14 @@ class LlmResultReceiver : BroadcastReceiver() {
             imageName = imageName
         )
 
+        if (newExpenseId > 0 && parsed.itemsSumMismatch) {
+            Logger.w(
+                TAG,
+                "Items sum mismatch for expense $newExpenseId: totalAmount=${parsed.totalAmount} " +
+                    "itemsSum=${parsed.items.sumOf { it.quantity * it.unitPrice }}"
+            )
+        }
+
         if (newExpenseId > 0 && settings.voiceSaveToastEnabled) {
             val label = parsed.title?.takeIf { it.isNotBlank() } ?: parsed.vendor ?: parsed.totalAmount.toString()
             val template = container.languageManager.getString("toast_expense_saved")
@@ -196,6 +219,54 @@ class LlmResultReceiver : BroadcastReceiver() {
         }
     }
 
+    private suspend fun updateExpenseFromRetry(
+        appContext: Context,
+        container: ExpensesContainer,
+        parsed: ExpenseParseResultParser.Parsed,
+        expenseId: Long
+    ) {
+        val existing = container.expensesRepository.getExpenseById(expenseId)
+        if (existing == null) {
+            Logger.e(TAG, "Retry target expense $expenseId no longer exists")
+            return
+        }
+        val settings: ExpensesSettings = container.settingsRepository.getSnapshot()
+        val items = parsed.items.map {
+            ExpenseLineItem(
+                expenseId = expenseId,
+                name = it.name,
+                quantity = it.quantity,
+                unitPrice = it.unitPrice,
+                netAmount = it.netAmount,
+                vatAmount = it.vatAmount,
+                grossAmount = it.grossAmount
+            )
+        }
+        val updated = existing.expense.copy(
+            title = parsed.title?.trim()?.takeIf { it.isNotEmpty() } ?: existing.expense.title,
+            totalAmount = parsed.totalAmount,
+            currencyCode = parsed.currency ?: settings.defaultCurrency,
+            vendor = parsed.vendor,
+            bank = parsed.bank,
+            dateTime = mergeDateTime(parsed.date, parsed.time),
+            comments = null,
+            isStub = false
+        )
+        container.expensesRepository.updateExpense(updated, items)
+
+        if (parsed.itemsSumMismatch) {
+            Logger.w(
+                TAG,
+                "Items sum mismatch for retried expense $expenseId: totalAmount=${parsed.totalAmount} " +
+                    "itemsSum=${parsed.items.sumOf { it.quantity * it.unitPrice }}"
+            )
+        }
+
+        withContext(Dispatchers.Main) {
+            Toast.makeText(appContext, container.languageManager.getString("toast_expense_saved"), Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private suspend fun createStubExpense(
         container: ExpensesContainer,
         imageName: String
@@ -212,7 +283,8 @@ class LlmResultReceiver : BroadcastReceiver() {
             dateTime = System.currentTimeMillis(),
             comments = "LLM parsing failed for this scan.",
             categoryId = null,
-            imageName = imageName
+            imageName = imageName,
+            isStub = true
         )
     }
 

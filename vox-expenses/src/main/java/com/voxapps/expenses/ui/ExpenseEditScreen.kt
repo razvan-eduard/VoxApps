@@ -27,9 +27,11 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -56,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,12 +74,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.saket.telephoto.zoomable.coil.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
+import android.widget.Toast
+import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
+import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
 import com.voxapps.expenses.state.ExpensesStateManager
+import kotlinx.coroutines.launch
 import java.io.File
 import java.text.DateFormat
 import java.time.Instant
@@ -149,7 +157,7 @@ fun ExpenseEditScreen(
 
     val itemsSum = items.sumOf { it.subtotal(useComma) }
     val totalMismatch = items.isNotEmpty() &&
-        (parseDecimalOrNull(totalText, useComma)?.let { kotlin.math.abs(it - itemsSum) > 0.01 } ?: false)
+        (parseDecimalOrNull(totalText, useComma)?.let { ExpenseAmountMismatch.isMismatch(it, itemsSum) } ?: false)
 
     Scaffold(
         topBar = {
@@ -175,6 +183,11 @@ fun ExpenseEditScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             val imageName = existing?.expense?.receiptImageName
+            if (existing?.expense?.isStub == true) {
+                item {
+                    StubRetryBanner(expenseId = existing.expense.id, imageName = imageName, onDone = onDone)
+                }
+            }
             if (!imageName.isNullOrBlank()) {
                 item {
                     ReceiptImage(imageName)
@@ -350,7 +363,8 @@ fun ExpenseEditScreen(
                                     location = location,
                                     dateTime = dateTime,
                                     comments = comments,
-                                    categoryId = categoryId
+                                    categoryId = categoryId,
+                                    isStub = false
                                 ),
                                 lineItems
                             )
@@ -476,6 +490,60 @@ private fun SectionCard(
 @Composable
 private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium)
+}
+
+@Composable
+private fun StubRetryBanner(expenseId: Long, imageName: String?, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val languageManager = LocalLanguageManager.current
+    val scope = rememberCoroutineScope()
+    var retrying by remember { mutableStateOf(false) }
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.ErrorOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    languageManager.getString("manual_review_required"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+            Button(
+                enabled = !retrying,
+                onClick = {
+                    val rawTextFile = imageName?.let {
+                        File(File(context.filesDir, "receipts"), it.substringBeforeLast('.') + ".txt")
+                    }
+                    val rawText = rawTextFile?.takeIf { it.exists() }?.readText()
+                    if (imageName == null || rawText.isNullOrBlank()) {
+                        Toast.makeText(context, languageManager.getString("retry_cleanup_no_saved_text"), Toast.LENGTH_LONG).show()
+                        return@Button
+                    }
+                    retrying = true
+                    val container = (context.applicationContext as ExpensesApplication).container
+                    scope.launch {
+                        ExpenseScanCleanupRequestSender.send(context, container, rawText, imageName, retryOfExpenseId = expenseId)
+                    }
+                    Toast.makeText(context, languageManager.getString("retrying_scan"), Toast.LENGTH_SHORT).show()
+                    onDone()
+                }
+            ) {
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(languageManager.getString("retry_cleanup"))
+            }
+        }
+    }
 }
 
 @Composable

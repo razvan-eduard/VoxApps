@@ -50,13 +50,26 @@ object ExpenseScanCleanupPromptBuilder {
             
             $instructionBlock
 
-            Extract it into a structured expense record: infer a short title, the vendor/store name, 
-            the bank if one is printed (e.g. the card-issuing or acquiring bank shown on a POS/card slip, 
-            such as "ING BANK"), and the individual product line items (name, quantity — default 1 if not 
-            stated, unit price) if clearly present. If a line item's net amount (fără TVA), VAT amount, 
-            and gross/total amount are ALL separately printed for that line, also include them as 
-            "netAmount", "vatAmount", "grossAmount" on that item — but only when the document actually 
+            Extract it into a structured expense record: infer a short title, the vendor/store name,
+            the bank if one is printed (e.g. the card-issuing or acquiring bank shown on a POS/card slip,
+            such as "ING BANK"), and the individual product line items (name, quantity — default 1 if not
+            stated, unit price) if clearly present. If a line item's net amount (fără TVA), VAT amount,
+            and gross/total amount are ALL separately printed for that line, also include them as
+            "netAmount", "vatAmount", "grossAmount" on that item — but only when the document actually
             shows this breakdown explicitly; never compute or estimate these yourself, leave them null otherwise.
+
+            LINE-ITEM PRICE RULE: for each item, the printed price is either DISTRIBUTIVE (the per-unit price
+            of ONE item — e.g. a line reading "1 BUC X 33.99" or "3 X 5.00", where the number after the
+            multiplication marker IS the value of one unit) or CUMULATIVE (a line/subtotal amount covering the
+            whole printed quantity, with no separate per-unit figure shown). Decide which applies to EACH line
+            independently:
+              - DISTRIBUTIVE: copy that number into "unitPrice" exactly as printed. NEVER divide it by quantity
+                — a distributive price already IS the per-unit value.
+              - CUMULATIVE: divide that amount by the item's quantity to get "unitPrice" (quantity * unitPrice
+                must reconstruct the printed line amount). Only do this when no distributive per-unit price is
+                printed at all for that line.
+            This rule governs each line item's "unitPrice" ONLY — it does not apply to "totalAmount" (see the
+            rule for that field below, which always prefers the receipt's own printed total).
 
             For "totalAmount": ALWAYS prefer the receipt's own printed/stated total (the actual total
             amount charged, however labeled — "Total", "Total de plată", "TOTAL LEI", etc.) over any
@@ -65,6 +78,8 @@ object ExpenseScanCleanupPromptBuilder {
             itself is read correctly. Only compute totalAmount as the sum of the line items' subtotals
             if the receipt genuinely shows no total anywhere. Only return null for totalAmount if the
             receipt shows neither a total nor any items with prices at all.
+            (The line-item DISTRIBUTIVE/CUMULATIVE rule above is separate and does not override this —
+            always prefer the printed total here.)
 
             Use "$defaultCurrency" as the currency unless a different one is clearly printed on the
             receipt. Also suggest a category for this expense based on its content. $categoriesLine 

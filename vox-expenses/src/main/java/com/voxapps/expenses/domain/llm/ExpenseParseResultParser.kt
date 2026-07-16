@@ -28,7 +28,10 @@ object ExpenseParseResultParser {
         val date: String?, // YYYY-MM-DD format
         val time: String?, // HH:mm format
         val items: List<ParsedItem>
-    )
+    ) {
+        val itemsSumMismatch: Boolean =
+            ExpenseAmountMismatch.isGrossMismatch(totalAmount, items.sumOf { it.quantity * it.unitPrice })
+    }
 
     private fun JSONObject.optNullableDouble(key: String): Double? {
         if (isNull(key) || !has(key)) return null

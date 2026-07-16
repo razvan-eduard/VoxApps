@@ -156,11 +156,12 @@ class ExpensesStateManager internal constructor(
         comments: String?,
         categoryId: Long?,
         items: List<ExpenseLineItem>,
-        imageName: String? = null
+        imageName: String? = null,
+        isStub: Boolean = false
     ) {
         scope.launch {
             expensesRepo.addExpense(
-                title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, categoryId, items, imageName
+                title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, categoryId, items, imageName, isStub
             )
         }
     }

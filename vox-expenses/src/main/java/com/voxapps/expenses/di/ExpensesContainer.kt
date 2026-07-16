@@ -33,7 +33,8 @@ class ExpensesContainer(context: Context) {
         database.expenseDao(),
         database.categoryDao(),
         database.expenseLineItemDao(),
-        database.spendingLimitDao()
+        database.spendingLimitDao(),
+        appContext
     )
 
     val pendingCategoryMergeRepository = PendingCategoryMergeRepository(appContext)

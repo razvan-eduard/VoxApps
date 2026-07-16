@@ -1,7 +1,9 @@
 package com.voxapps.expenses.domain.llm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExpenseParseResultParserTest {
@@ -69,5 +71,19 @@ class ExpenseParseResultParserTest {
     @Test
     fun `malformed json returns null`() {
         assertNull(ExpenseParseResultParser.parse("{ not json"))
+    }
+
+    @Test
+    fun `itemsSumMismatch is false when items roughly sum to the total`() {
+        val json = """{"totalAmount":9.99,"items":[{"name":"paine","quantity":3,"unitPrice":3.33}]}"""
+        val result = ExpenseParseResultParser.parse(json)!!
+        assertFalse(result.itemsSumMismatch)
+    }
+
+    @Test
+    fun `itemsSumMismatch is true when the total grossly exceeds the items sum`() {
+        val json = """{"totalAmount":101.97,"items":[{"name":"paine","quantity":1,"unitPrice":33.99}]}"""
+        val result = ExpenseParseResultParser.parse(json)!!
+        assertTrue(result.itemsSumMismatch)
     }
 }

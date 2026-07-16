@@ -1,10 +1,12 @@
 package com.voxapps.expenses.data
 
+import android.content.Context
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import java.io.File
 
 /**
  * Single write point over the Room DAOs.
@@ -13,7 +15,8 @@ class ExpensesRepository(
     private val expenseDao: ExpenseDao,
     private val categoryDao: CategoryDao,
     private val lineItemDao: ExpenseLineItemDao,
-    private val spendingLimitDao: SpendingLimitDao
+    private val spendingLimitDao: SpendingLimitDao,
+    private val appContext: Context
 ) {
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
     val expensesWithDetails: Flow<List<ExpenseWithDetails>> = expenseDao.observeExpensesWithDetails()
@@ -21,6 +24,8 @@ class ExpensesRepository(
     val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll()
 
     suspend fun expensesSnapshot(): List<Expense> = expenseDao.observeAll().first()
+
+    suspend fun getExpenseById(id: Long): ExpenseWithDetails? = expenseDao.getWithDetailsById(id)
 
     suspend fun expensesForDateRange(from: Long, to: Long): List<Expense> = expenseDao.getForDateRange(from, to)
 
@@ -35,7 +40,8 @@ class ExpensesRepository(
         comments: String?,
         categoryId: Long?,
         items: List<ExpenseLineItem> = emptyList(),
-        imageName: String? = null
+        imageName: String? = null,
+        isStub: Boolean = false
     ): Long {
         return try {
             val id = expenseDao.insert(
@@ -49,7 +55,8 @@ class ExpensesRepository(
                     dateTime = dateTime,
                     comments = comments?.trim()?.takeIf { it.isNotEmpty() },
                     categoryId = categoryId,
-                    receiptImageName = imageName
+                    receiptImageName = imageName,
+                    isStub = isStub
                 )
             )
             if (id > 0) {
@@ -75,11 +82,38 @@ class ExpensesRepository(
         }
     }
 
-    suspend fun deleteExpense(expense: Expense) = expenseDao.delete(expense)
+    suspend fun deleteExpense(expense: Expense) {
+        expenseDao.delete(expense)
+        deleteReceiptFiles(listOfNotNull(expense.receiptImageName))
+    }
 
-    suspend fun deleteExpenseById(id: Long) = expenseDao.deleteById(id)
+    suspend fun deleteExpenseById(id: Long) {
+        val imageName = expenseDao.getReceiptImageName(id)
+        expenseDao.deleteById(id)
+        deleteReceiptFiles(listOfNotNull(imageName))
+    }
 
-    suspend fun deleteAllExpenses() = expenseDao.deleteAll()
+    suspend fun deleteAllExpenses() {
+        val imageNames = expenseDao.getAllReceiptImageNames()
+        expenseDao.deleteAll()
+        deleteReceiptFiles(imageNames)
+    }
+
+    /** Best-effort cleanup: a file-delete failure never blocks/rolls back the DB delete — an orphan
+     *  file is a far cheaper failure mode than a stuck delete. Also removes the sibling raw-OCR-text
+     *  file staged for stub-expense retry, if any. */
+    private fun deleteReceiptFiles(names: List<String>) {
+        if (names.isEmpty()) return
+        val receiptsDir = File(appContext.filesDir, "receipts")
+        for (name in names) {
+            try {
+                File(receiptsDir, name).delete()
+                File(receiptsDir, name.substringBeforeLast('.') + ".txt").delete()
+            } catch (e: Exception) {
+                Logger.w("ExpensesRepository", "Failed to delete receipt file(s) for $name", e)
+            }
+        }
+    }
 
     suspend fun addParsedExpense(
         title: String?,
@@ -145,11 +179,10 @@ class ExpensesRepository(
     }
 
     suspend fun applyExpenseDeduplication(groups: List<DuplicateGroup>) {
-        for (group in groups) {
-            for (duplicateId in group.duplicateIds) {
-                if (duplicateId == group.keepId) continue
-                expenseDao.deleteById(duplicateId)
-            }
-        }
+        val idsToDelete = groups.flatMap { g -> g.duplicateIds.filter { it != g.keepId } }.distinct()
+        if (idsToDelete.isEmpty()) return
+        val imageNames = expenseDao.getReceiptImageNames(idsToDelete)
+        expenseDao.deleteByIds(idsToDelete)
+        deleteReceiptFiles(imageNames)
     }
 }

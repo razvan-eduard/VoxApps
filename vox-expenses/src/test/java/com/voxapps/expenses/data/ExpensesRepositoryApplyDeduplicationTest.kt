@@ -1,6 +1,7 @@
 package com.voxapps.expenses.data
 
 import com.voxapps.expenses.domain.llm.DuplicateGroup
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -21,28 +22,27 @@ class ExpensesRepositoryApplyDeduplicationTest {
         categoryDao = mockk(relaxed = true)
         lineItemDao = mockk(relaxed = true)
         spendingLimitDao = mockk(relaxed = true)
-        repository = ExpensesRepository(expenseDao, categoryDao, lineItemDao, spendingLimitDao)
+        coEvery { expenseDao.getReceiptImageNames(any()) } returns emptyList()
+        repository = ExpensesRepository(expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true))
     }
 
     @Test
-    fun `deletes every duplicate id except keepId`() = runTest {
+    fun `deletes every duplicate id except keepId in one bulk call`() = runTest {
         repository.applyExpenseDeduplication(listOf(DuplicateGroup(keepId = 12, duplicateIds = listOf(7, 9))))
 
-        coVerify(exactly = 1) { expenseDao.deleteById(7) }
-        coVerify(exactly = 1) { expenseDao.deleteById(9) }
-        coVerify(exactly = 0) { expenseDao.deleteById(12) }
+        coVerify(exactly = 1) { expenseDao.getReceiptImageNames(listOf(7, 9)) }
+        coVerify(exactly = 1) { expenseDao.deleteByIds(listOf(7, 9)) }
     }
 
     @Test
     fun `does not delete keepId even if redundantly listed as its own duplicate`() = runTest {
         repository.applyExpenseDeduplication(listOf(DuplicateGroup(keepId = 12, duplicateIds = listOf(12, 7))))
 
-        coVerify(exactly = 1) { expenseDao.deleteById(7) }
-        coVerify(exactly = 0) { expenseDao.deleteById(12) }
+        coVerify(exactly = 1) { expenseDao.deleteByIds(listOf(7)) }
     }
 
     @Test
-    fun `applies multiple independent groups`() = runTest {
+    fun `applies multiple independent groups as one flattened bulk delete`() = runTest {
         repository.applyExpenseDeduplication(
             listOf(
                 DuplicateGroup(keepId = 1, duplicateIds = listOf(2)),
@@ -50,17 +50,14 @@ class ExpensesRepositoryApplyDeduplicationTest {
             )
         )
 
-        coVerify(exactly = 1) { expenseDao.deleteById(2) }
-        coVerify(exactly = 1) { expenseDao.deleteById(11) }
-        coVerify(exactly = 1) { expenseDao.deleteById(12) }
-        coVerify(exactly = 0) { expenseDao.deleteById(1) }
-        coVerify(exactly = 0) { expenseDao.deleteById(10) }
+        coVerify(exactly = 1) { expenseDao.deleteByIds(listOf(2, 11, 12)) }
     }
 
     @Test
     fun `empty groups list deletes nothing`() = runTest {
         repository.applyExpenseDeduplication(emptyList())
 
-        coVerify(exactly = 0) { expenseDao.deleteById(any()) }
+        coVerify(exactly = 0) { expenseDao.deleteByIds(any()) }
+        coVerify(exactly = 0) { expenseDao.getReceiptImageNames(any()) }
     }
 }
