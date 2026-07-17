@@ -114,5 +114,18 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- Grants Hub temporary read access to a zipped bundle of receipt photos during export
+             (see VoxResult.attachmentUri) — mirrors vox-vision's identical FileProvider setup for
+             the same reason (sharing a locally-built file across app processes). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.voxapps.expenses.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

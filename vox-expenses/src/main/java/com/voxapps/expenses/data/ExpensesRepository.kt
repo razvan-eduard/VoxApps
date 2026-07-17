@@ -41,7 +41,8 @@ class ExpensesRepository(
         categoryId: Long?,
         items: List<ExpenseLineItem> = emptyList(),
         imageName: String? = null,
-        isStub: Boolean = false
+        isStub: Boolean = false,
+        createdAt: Long = System.currentTimeMillis()
     ): Long {
         return try {
             val id = expenseDao.insert(
@@ -56,7 +57,8 @@ class ExpensesRepository(
                     comments = comments?.trim()?.takeIf { it.isNotEmpty() },
                     categoryId = categoryId,
                     receiptImageName = imageName,
-                    isStub = isStub
+                    isStub = isStub,
+                    createdAt = createdAt
                 )
             )
             if (id > 0) {
@@ -162,8 +164,15 @@ class ExpensesRepository(
         categoryDao.delete(category)
     }
 
-    suspend fun addSpendingLimit(categoryId: Long?, amountHomeCurrency: Double, period: String): Long =
-        spendingLimitDao.insert(SpendingLimit(categoryId = categoryId, amountHomeCurrency = amountHomeCurrency, period = period))
+    suspend fun addSpendingLimit(
+        categoryId: Long?,
+        amountHomeCurrency: Double,
+        period: String,
+        createdAt: Long = System.currentTimeMillis()
+    ): Long =
+        spendingLimitDao.insert(
+            SpendingLimit(categoryId = categoryId, amountHomeCurrency = amountHomeCurrency, period = period, createdAt = createdAt)
+        )
 
     suspend fun deleteSpendingLimit(limit: SpendingLimit) = spendingLimitDao.delete(limit)
 

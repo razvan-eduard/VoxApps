@@ -26,11 +26,19 @@ object ExportImportUtil {
         return root.toString(2)
     }
 
-    /** Returns domain -> that app's sub-object, ready to hand to [com.voxapps.ipc.VoxDataTransferClient.requestImport]. */
+    /** Returns domain -> that app's sub-object, ready to hand to [com.voxapps.ipc.VoxDataTransferClient.requestImport].
+     *  Also injects the outer wrapper's `exported_at` into each per-domain object — it would
+     *  otherwise be discarded here and never reach a satellite's import() call, which needs it to
+     *  distinguish "existed at export time, safe to replace" from "created after export, must
+     *  survive" (see ExpensesExportImportHandler/NotesExportImportHandler's createdAt-filtered
+     *  delete). */
     fun parseImportDocument(text: String): Map<String, JSONObject> {
         val root = JSONObject(text)
+        val exportedAt = root.optLong("exported_at", 0L)
         val appsObj = root.optJSONObject("apps") ?: return emptyMap()
-        return appsObj.keys().asSequence().associateWith { appsObj.getJSONObject(it) }
+        return appsObj.keys().asSequence().associateWith { key ->
+            appsObj.getJSONObject(key).apply { put("exported_at", exportedAt) }
+        }
     }
 
     /** Per-domain record counts for the confirm-before-import summary UI (e.g. "42 notes, 3 categories"). */

@@ -19,6 +19,10 @@ data class VoxCommand(
     /** [VoxIpc.OP_EXPORT]: whether to include real secrets (API keys) that are stripped by
      *  default — an explicit opt-in from Hub's export screen, off unless the user ticks it. */
     val includeSecrets: Boolean = false,
+    /** [VoxIpc.OP_EXPORT]: whether to bundle receipt-photo files (Expenses only, today) alongside
+     *  the JSON payload, returned via [VoxResult.attachmentUri] — an explicit opt-in from Hub's
+     *  export screen, off unless the user ticks it. Satellites without photos simply ignore this. */
+    val includePhotos: Boolean = false,
     /** Optional day-window bounds (epoch millis, inclusive) for [VoxIpc.OP_READ] — when both are
      *  present, a satellite that supports day-scoped reads (see [VoxDataTransferClient.requestDayRead])
      *  returns only records in this window instead of its full snapshot. Additive: satellites that
@@ -37,6 +41,7 @@ data class VoxCommand(
         domain?.let { o.put("domain", it) }
         exportScope?.let { o.put("exportScope", it) }
         if (includeSecrets) o.put("includeSecrets", true)
+        if (includePhotos) o.put("includePhotos", true)
         dateFrom?.let { o.put("dateFrom", it) }
         dateTo?.let { o.put("dateTo", it) }
         return o.toString()
@@ -58,6 +63,7 @@ data class VoxCommand(
                     domain = o.optStringOrNull("domain"),
                     exportScope = o.optStringOrNull("exportScope"),
                     includeSecrets = o.optBoolean("includeSecrets", false),
+                    includePhotos = o.optBoolean("includePhotos", false),
                     dateFrom = if (o.has("dateFrom")) o.optLong("dateFrom") else null,
                     dateTo = if (o.has("dateTo")) o.optLong("dateTo") else null
                 )

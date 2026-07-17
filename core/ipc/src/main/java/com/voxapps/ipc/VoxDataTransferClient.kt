@@ -23,10 +23,11 @@ object VoxDataTransferClient {
         packageName: String,
         scope: String = VoxIpc.EXPORT_SCOPE_BOTH,
         includeSecrets: Boolean = false,
+        includePhotos: Boolean = false,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
     ): VoxResult? = send(
         context, packageName,
-        VoxCommand(op = VoxIpc.OP_EXPORT, exportScope = scope, includeSecrets = includeSecrets),
+        VoxCommand(op = VoxIpc.OP_EXPORT, exportScope = scope, includeSecrets = includeSecrets, includePhotos = includePhotos),
         timeoutMs
     )
 

@@ -138,4 +138,16 @@ object VoxIpc {
      */
     const val VISION_PACKAGE = "com.voxapps.vision"
     const val VISION_ACTIVITY_CLASS = "com.voxapps.vision.VisionActivity"
+
+    /**
+     * Vox Hub's package name, for satellites that need to grant it read access to an export/import
+     * attachment URI directly (see [VoxResult.attachmentUri]) — a standalone
+     * [android.content.Context.grantUriPermission] call, independent of any Intent, since
+     * export/import replies travel as ordered-broadcast `resultData` rather than a fresh Intent
+     * (see [VoxDataTransferClient]), so the usual Intent-ClipData permission-grant path doesn't
+     * apply here. Hardcoded rather than threaded through [VoxCommand] because [OP_EXPORT]/
+     * [OP_IMPORT] are Hub-exclusive today — no other caller issues them — mirroring
+     * [VISION_PACKAGE]'s role as the other hardcoded well-known-package constant in this file.
+     */
+    const val HUB_PACKAGE = "com.voxapps.hub"
 }

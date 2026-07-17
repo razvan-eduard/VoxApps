@@ -28,5 +28,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Grants Expenses temporary read access to a receipts zip staged here after extracting it
+             from a picked import bundle (see HubScreen's readExportDocument) — the reverse direction
+             of the same FileProvider mechanism Expenses uses to hand Hub photos on export. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.voxapps.hub.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

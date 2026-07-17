@@ -7,6 +7,7 @@
   "hub_scope_both": "Les deux",
   "hub_include_secrets": "Inclure les clés API",
   "hub_include_secrets_warning": "Attention : le fichier exporté contiendra vos clés API en texte brut. Conservez-le en lieu sûr — toute personne possédant le fichier peut utiliser ces clés.",
+  "hub_include_receipt_photos": "Inclure les photos de reçus",
   "hub_export_button": "Exporter la sélection",
   "hub_import_section": "Import",
   "hub_import_button": "Choisir le fichier à importer",

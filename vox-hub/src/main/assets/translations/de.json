@@ -7,6 +7,7 @@
   "hub_scope_both": "Beides",
   "hub_include_secrets": "API-Schlüssel einschließen",
   "hub_include_secrets_warning": "Warnung: Die exportierte Datei enthält Ihre API-Schlüssel im Klartext. Bewahren Sie sie an einem sicheren Ort auf — jeder mit der Datei kann diese Schlüssel verwenden.",
+  "hub_include_receipt_photos": "Belegfotos einschließen",
   "hub_export_button": "Auswahl exportieren",
   "hub_import_section": "Import",
   "hub_import_button": "Datei zum Importieren auswählen",

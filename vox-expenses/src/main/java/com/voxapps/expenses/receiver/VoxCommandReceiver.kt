@@ -92,7 +92,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        pending.setResultData(handler.export(scope, command.includeSecrets).toJson())
+                        pending.setResultData(handler.export(scope, command.includeSecrets, command.includePhotos).toJson())
                     } finally {
                         pending.finish()
                     }

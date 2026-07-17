@@ -20,7 +20,8 @@ data class SpendingLimit(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val categoryId: Long? = null,
     val amountHomeCurrency: Double,
-    val period: String
+    val period: String,
+    val createdAt: Long = System.currentTimeMillis()
 ) {
     companion object {
         const val PERIOD_WEEKLY = "WEEKLY"

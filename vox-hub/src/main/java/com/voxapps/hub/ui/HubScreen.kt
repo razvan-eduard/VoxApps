@@ -41,18 +41,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.hub.domain.ExportImportUtil
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.logging.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+
+private const val TAG = "HubScreen"
 
 private data class ImportPreview(
     val perDomain: Map<String, JSONObject>,
@@ -77,6 +90,8 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
     // Off by default — an explicit opt-in, since the exported file becomes a plaintext secrets
     // bundle the moment this is on (see hub_include_secrets_warning).
     var includeSecrets by remember { mutableStateOf(false) }
+    // Off by default — a photo history can be large and slower to export/import than plain JSON.
+    var includeReceiptPhotos by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
     var exportStatus by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var exportOk by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
@@ -89,6 +104,10 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
     var pendingResults by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var pendingOkFlags by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var pendingPerDomainJson by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    // Populated only for domains (today, just "expenses") whose export() call returned a
+    // VoxResult.attachmentUri — a FileProvider URI to a zip of receipt photos, bundled into the
+    // final export zip as a nested "expenses-receipts.zip" entry.
+    var pendingPerDomainAttachmentUri by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     var isImporting by remember { mutableStateOf(false) }
     var importPreview by remember { mutableStateOf<ImportPreview?>(null) }
@@ -112,10 +131,30 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
         selectedForExport = discovered.filter { it.actions.contains("export") }.map { it.packageName }.toSet()
     }
 
-    fun finalizeExport(uri: Uri, perDomainJson: Map<String, String>) {
+    fun finalizeExport(uri: Uri, perDomainJson: Map<String, String>, perDomainAttachmentUri: Map<String, String>) {
         if (perDomainJson.isNotEmpty()) {
             val document = ExportImportUtil.buildExportDocument(perDomainJson)
-            context.contentResolver.openOutputStream(uri)?.use { it.write(document.toByteArray()) }
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                ZipOutputStream(out).use { zos ->
+                    zos.putNextEntry(ZipEntry("export.json"))
+                    zos.write(document.toByteArray())
+                    zos.closeEntry()
+                    // "expenses" is the only domain that ever populates attachmentUri today —
+                    // matches ExportImportUtil.summarize()'s existing convention of hardcoding known
+                    // domain literals rather than a shared constant.
+                    perDomainAttachmentUri["expenses"]?.let { attachUriString ->
+                        try {
+                            context.contentResolver.openInputStream(Uri.parse(attachUriString))?.use { input ->
+                                zos.putNextEntry(ZipEntry("expenses-receipts.zip"))
+                                input.copyTo(zos)
+                                zos.closeEntry()
+                            }
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Failed to bundle receipt photos into export zip", e)
+                        }
+                    }
+                }
+            }
             Toast.makeText(context, languageManager.getString("hub_export_saved_toast"), Toast.LENGTH_SHORT).show()
         }
         isExporting = false
@@ -132,7 +171,8 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
         targetPackages: Set<String>,
         priorResults: Map<String, String>,
         priorOkFlags: Map<String, Boolean>,
-        priorPerDomainJson: Map<String, String>
+        priorPerDomainJson: Map<String, String>,
+        priorPerDomainAttachmentUri: Map<String, String>
     ) {
         isExporting = true
         scope.launch {
@@ -161,11 +201,17 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
             val results = priorResults.toMutableMap()
             val okFlags = priorOkFlags.toMutableMap()
             val perDomainJson = priorPerDomainJson.toMutableMap()
+            val perDomainAttachmentUri = priorPerDomainAttachmentUri.toMutableMap()
             for (app in apps.filter { it.packageName in targetPackages }) {
                 val domain = app.domain ?: app.packageName
-                val result = VoxDataTransferClient.requestExport(context, app.packageName, exportScope, includeSecrets)
+                val result = VoxDataTransferClient.requestExport(
+                    context, app.packageName, exportScope, includeSecrets,
+                    includePhotos = includeReceiptPhotos,
+                    timeoutMs = if (includeReceiptPhotos) 30_000L else 10_000L
+                )
                 if (result != null && result.ok) {
                     perDomainJson[domain] = result.text
+                    result.attachmentUri?.let { perDomainAttachmentUri[domain] = it }
                     results[app.packageName] = languageManager.getString("hub_status_ok")
                     okFlags[app.packageName] = true
                 } else {
@@ -176,7 +222,7 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                 exportStatus = results.toMap()
                 exportOk = okFlags.toMap()
             }
-            finalizeExport(uri, perDomainJson)
+            finalizeExport(uri, perDomainJson, perDomainAttachmentUri)
         }
     }
 
@@ -228,7 +274,7 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
     }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
+        ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         val targets = apps.filter { it.packageName in selectedForExport && it.actions.contains("export") }
@@ -239,6 +285,7 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
             val results = mutableMapOf<String, String>()
             val okFlags = mutableMapOf<String, Boolean>()
             val perDomainJson = mutableMapOf<String, String>()
+            val perDomainAttachmentUri = mutableMapOf<String, String>()
             val unreachable = mutableSetOf<String>()
             for (app in targets) {
                 val domain = app.domain ?: app.packageName
@@ -253,9 +300,14 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                     okFlags[app.packageName] = false
                     unreachable += app.packageName
                 } else {
-                    val result = VoxDataTransferClient.requestExport(context, app.packageName, exportScope, includeSecrets)
+                    val result = VoxDataTransferClient.requestExport(
+                        context, app.packageName, exportScope, includeSecrets,
+                        includePhotos = includeReceiptPhotos,
+                        timeoutMs = if (includeReceiptPhotos) 30_000L else 10_000L
+                    )
                     if (result != null && result.ok) {
                         perDomainJson[domain] = result.text
+                        result.attachmentUri?.let { perDomainAttachmentUri[domain] = it }
                         results[app.packageName] = languageManager.getString("hub_status_ok")
                         okFlags[app.packageName] = true
                     } else {
@@ -275,10 +327,11 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                 pendingResults = results
                 pendingOkFlags = okFlags
                 pendingPerDomainJson = perDomainJson
+                pendingPerDomainAttachmentUri = perDomainAttachmentUri
                 showFlashRetryDialog = true
                 isExporting = false
             } else {
-                finalizeExport(uri, perDomainJson)
+                finalizeExport(uri, perDomainJson, perDomainAttachmentUri)
             }
         }
     }
@@ -287,8 +340,47 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
         // Includes time-of-day, not just the date — otherwise multiple exports on the same day
         // collide on filename and the system file picker silently appends "(1)", "(2)", etc.,
         // which made past backups easy to mix up.
-        val fileName = "vox-export-${SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())}.json"
+        val fileName = "vox-export-${SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())}.zip"
         createDocumentLauncher.launch(fileName)
+    }
+
+    /**
+     * Tries reading [uri] as a zip containing "export.json" (+ optionally "expenses-receipts.zip");
+     * falls back to treating the whole file as raw JSON text if it's not a valid zip, or is a zip
+     * with no "export.json" entry — this is what makes old (pre-zip) plain-JSON export files still
+     * importable. When a receipts-zip entry is found, its bytes are staged into Hub's own cache and
+     * Expenses is granted read access immediately, so the returned URI is usable as soon as the
+     * "expenses" domain's import request is sent later in the flow.
+     */
+    suspend fun readExportDocument(uri: Uri): Pair<String, Uri?> = withContext(Dispatchers.IO) {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: throw IllegalStateException("empty file")
+        var documentText: String? = null
+        var receiptsZipUri: Uri? = null
+        try {
+            ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    when (entry.name) {
+                        "export.json" -> documentText = zis.readBytes().decodeToString()
+                        "expenses-receipts.zip" -> {
+                            val stagedDir = File(context.cacheDir, "imports").apply { mkdirs() }
+                            val stagedFile = File(stagedDir, "import_receipts_${UUID.randomUUID()}.zip")
+                            FileOutputStream(stagedFile).use { fos -> zis.copyTo(fos) }
+                            val staged = FileProvider.getUriForFile(context, "com.voxapps.hub.fileprovider", stagedFile)
+                            apps.firstOrNull { it.domain == "expenses" }?.packageName?.let { pkg ->
+                                context.grantUriPermission(pkg, staged, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            receiptsZipUri = staged
+                        }
+                    }
+                    entry = zis.nextEntry
+                }
+            }
+        } catch (e: Exception) {
+            documentText = null
+        }
+        (documentText ?: bytes.decodeToString()) to receiptsZipUri
     }
 
     val openDocumentLauncher = rememberLauncherForActivityResult(
@@ -298,9 +390,13 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
         importError = null
         scope.launch {
             try {
-                val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                    ?: throw IllegalStateException("empty file")
+                val (text, receiptsZipUri) = readExportDocument(uri)
                 val perDomain = ExportImportUtil.parseImportDocument(text)
+                // Single mutation, visible from every later consumer of this same JSONObject
+                // instance (importPreview.perDomain, the confirm loop's targets, and the flash-retry
+                // path's pendingImportTargets) — avoids injecting this at multiple requestImport
+                // call sites where it could drift out of sync.
+                receiptsZipUri?.let { rz -> perDomain["expenses"]?.put("receiptsZipUri", rz.toString()) }
                 // Only offer domains that are both in the file AND currently installed/discovered.
                 val available = perDomain.filterKeys { domain -> apps.any { it.domain == domain && it.actions.contains("import") } }
                 if (available.isEmpty()) {
@@ -391,6 +487,13 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = includeReceiptPhotos,
+                        onCheckedChange = { includeReceiptPhotos = it }
+                    )
+                    Text(languageManager.getString("hub_include_receipt_photos"), style = MaterialTheme.typography.bodySmall)
+                }
                 Button(
                     onClick = { startExportFlow() },
                     enabled = !isExporting && selectedForExport.isNotEmpty(),
@@ -409,7 +512,7 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                     Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp))
                 }
                 OutlinedButton(
-                    onClick = { openDocumentLauncher.launch(arrayOf("application/json")) },
+                    onClick = { openDocumentLauncher.launch(arrayOf("application/zip", "application/json", "*/*")) },
                     enabled = !isImporting,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 ) {
@@ -499,7 +602,7 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
         AlertDialog(
             onDismissRequest = {
                 showFlashRetryDialog = false
-                pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson) }
+                pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson, pendingPerDomainAttachmentUri) }
             },
             title = { Text(languageManager.getString("hub_prewarm_title")) },
             text = { Text(String.format(languageManager.getString("hub_prewarm_message"), unreachableLabels)) },
@@ -514,7 +617,8 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                                 targetPackages = pendingUnreachable,
                                 priorResults = pendingResults,
                                 priorOkFlags = pendingOkFlags,
-                                priorPerDomainJson = pendingPerDomainJson
+                                priorPerDomainJson = pendingPerDomainJson,
+                                priorPerDomainAttachmentUri = pendingPerDomainAttachmentUri
                             )
                         }
                     }
@@ -524,7 +628,7 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
                 TextButton(
                     onClick = {
                         showFlashRetryDialog = false
-                        pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson) }
+                        pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson, pendingPerDomainAttachmentUri) }
                     }
                 ) { Text(languageManager.getString("hub_prewarm_skip_button")) }
             }

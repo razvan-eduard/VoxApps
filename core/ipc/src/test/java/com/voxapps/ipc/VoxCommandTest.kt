@@ -1,6 +1,7 @@
 package com.voxapps.ipc
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -41,5 +42,28 @@ class VoxCommandTest {
         val parsed = VoxResult.fromJson(locked.toJson())!!
         assertTrue(!parsed.ok)
         assertEquals("Notele sunt blocate.", parsed.text)
+    }
+
+    @Test
+    fun `VoxResult round-trips with an attachmentUri`() {
+        val withAttachment = VoxResult(ok = true, text = "{}", attachmentUri = "content://com.voxapps.expenses.fileprovider/exports/x.zip")
+        val parsed = VoxResult.fromJson(withAttachment.toJson())!!
+        assertEquals("content://com.voxapps.expenses.fileprovider/exports/x.zip", parsed.attachmentUri)
+    }
+
+    @Test
+    fun `VoxResult backward compat - old payload without attachmentUri parses with null`() {
+        val parsed = VoxResult.fromJson("""{"ok":true,"text":"x"}""")!!
+        assertNull(parsed.attachmentUri)
+    }
+
+    @Test
+    fun `includePhotos round-trips true and is omitted when false`() {
+        val withPhotos = VoxCommand(op = VoxIpc.OP_EXPORT, includePhotos = true)
+        assertTrue(VoxCommand.fromJson(withPhotos.toJson())!!.includePhotos)
+
+        val withoutPhotos = VoxCommand(op = VoxIpc.OP_EXPORT)
+        assertFalse(VoxCommand.fromJson(withoutPhotos.toJson())!!.includePhotos)
+        assertFalse(withoutPhotos.toJson().contains("includePhotos"))
     }
 }

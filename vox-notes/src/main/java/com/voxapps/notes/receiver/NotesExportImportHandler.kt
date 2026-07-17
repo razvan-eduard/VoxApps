@@ -67,6 +67,12 @@ class NotesExportImportHandler(
 
         root.optJSONObject("settings")?.let { settingsRepo.restoreSettings(it.toNotesSettings()) }
 
+        // Injected by Hub's ExportImportUtil.parseImportDocument() from the outer export document's
+        // timestamp. Defaults to 0L (never true against any real createdAt) so a payload missing
+        // this field fails safe by deleting nothing, rather than reverting to "delete everything
+        // that existed at import time".
+        val exportedAt = root.optLong("exported_at", 0L)
+
         val existingCategories = notesRepo.categories.first()
         val nameToId = existingCategories.associate { it.name.lowercase() to it.id }.toMutableMap()
         val importedIdToLocalId = mutableMapOf<Long, Long?>()
@@ -97,10 +103,12 @@ class NotesExportImportHandler(
         if (root.has("notes")) {
             // Replace, not merge: importing a notes payload is a restore of that snapshot, not a
             // merge with whatever's already on this device — so instead of per-note duplicate
-            // detection, snapshot the pre-existing note ids, insert every imported note, then
-            // delete exactly the ids that existed before the import. Categories are untouched here
-            // (they already merge safely by name above).
-            val preExistingNoteIds = notesRepo.notesSnapshot().map { it.id }
+            // detection, snapshot the pre-existing notes, insert every imported note, then delete
+            // only the pre-existing ones that plausibly existed when the export was taken
+            // (createdAt <= exportedAt) — anything created on this device after the backup, but
+            // before this import ran, is presumed unrelated to the restore and must survive.
+            // Categories are untouched here (they already merge safely by name above).
+            val preExistingNotes = notesRepo.notesSnapshot()
 
             val importedNotes = root.optJSONArray("notes") ?: JSONArray()
             for (i in 0 until importedNotes.length()) {
@@ -114,12 +122,14 @@ class NotesExportImportHandler(
                     title = title,
                     text = text,
                     categoryId = categoryId,
+                    // Preserved from the source device, never re-stamped to "now" — see the
+                    // exportedAt comment above for why that would silently undo this fix.
                     createdAt = n.optLong("createdAt", System.currentTimeMillis())
                 )
                 notesCreated++
             }
 
-            preExistingNoteIds.forEach { notesRepo.deleteNoteById(it) }
+            preExistingNotes.filter { it.createdAt <= exportedAt }.forEach { notesRepo.deleteNoteById(it.id) }
         }
 
         return VoxResult(
