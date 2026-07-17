@@ -83,7 +83,14 @@ internal class AudioRecorder(
         }
         
         val audioBuffer = ShortArray(BUFFER_SIZE_IN_SHORTS)
-        var lastSpeechMs = 0L
+        // Seeded to "now", not 0L: this flow re-executes from scratch on every start()/re-arm (it's
+        // a cold Flow), so a 0L seed made every session's lead-in silence fall outside the tail
+        // window below (now - 0 is always huge) and get dropped outright — a real gap in the stream
+        // that left AudioProcessor's continuous internal buffers either frozen on their construction-
+        // time placeholder (first-ever start) or stale (later re-arms) until the first loud buffer
+        // spliced discontinuously onto them. Seeding to "now" means the lead-in is treated as tail
+        // period from the first buffer, so it gets zero-emitted (kept continuous) instead of dropped.
+        var lastSpeechMs = android.os.SystemClock.elapsedRealtime()
         val TAIL_DURATION_MS = 1500L
         
         try {
