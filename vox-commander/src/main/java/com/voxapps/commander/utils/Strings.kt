@@ -36,6 +36,20 @@ object Strings {
         const val OPENAI = "OPENAI"
         const val GEMINI_NATIVE = "GEMINI_NATIVE"
         const val GEMINI_CLOUD = "GEMINI_CLOUD"
+
+        /**
+         * Cloud processors that accept image input today. [GEMINI_NATIVE] ("Gemini Nano") is
+         * deliberately excluded — it's on-device, not cloud, and [LlmHookEngineSelector] already
+         * special-cases it as unimplemented for even plain text raw prompts, so it can't be multimodal
+         * yet either. [OPENAI]/[GEMINI_CLOUD] each have exactly one fixed model id (GPT-4o-mini,
+         * Gemini 1.5 Flash — see [Models]), so this is a flat set, not a per-model lookup; there's no
+         * variance to model here yet. Neither is in `models.json` (see the class comment above), so
+         * unlike local engines' `capabilities` list, this has to be a hardcoded set — kept here
+         * alongside the processor ids it describes, mirroring how
+         * [com.voxapps.commander.data.remote.RemoteModelRegistry.isMultimodal] checks this set first,
+         * then falls back to `models.json` for JSON-defined local engines.
+         */
+        val MULTIMODAL_CAPABLE = setOf(OPENAI, GEMINI_CLOUD)
     }
 
     object Routes {

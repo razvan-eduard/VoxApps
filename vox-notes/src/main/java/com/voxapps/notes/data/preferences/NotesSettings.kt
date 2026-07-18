@@ -45,7 +45,13 @@ data class NotesSettings(
     val calendarViewEnabled: Boolean = false,
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,
-    val onboardingCompleted: Boolean = false
+    val onboardingCompleted: Boolean = false,
+    /** Off by default — attaching a photo costs real LLM tokens on top of the free OCR text a scan
+     *  already provides. Only takes effect when Vision's own "send photo to AI" setting also
+     *  provided a downscaled copy — this is the per-satellite half of that decision, not a
+     *  standalone override (mirrors vox-expenses' identical toggle; Notes has no retry mechanism so
+     *  there's no separate on-retry variant here). */
+    val attachPhotoOnScan: Boolean = false
 ) {
     companion object {
         const val TIMEOUT_30M = 30

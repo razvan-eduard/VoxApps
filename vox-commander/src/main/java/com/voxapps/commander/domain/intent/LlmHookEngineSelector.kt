@@ -23,7 +23,13 @@ class LlmHookEngineSelector(
     private val geminiNanoEngine: AssistantEngine,
     private val settingsRepo: SettingsRepository
 ) {
-    suspend fun run(promptText: String): RawPromptOutcome {
+    /**
+     * [imageUri] is forwarded as-is to whichever engine is selected — only engines that report
+     * multimodal support (see [RemoteModelRegistry.isMultimodal]) do anything with it; the caller is
+     * expected to have already checked capability before setting this (e.g. via the
+     * [com.voxapps.ipc.VoxCapabilityClient] query), not rely on this call to gate it.
+     */
+    suspend fun run(promptText: String, imageUri: String? = null): RawPromptOutcome {
         val snapshot = settingsRepo.getSettingsSnapshot()
         val processor = snapshot.aiProcessor
         val cloudOk = snapshot.cloudIntelligenceEnabled
@@ -31,12 +37,12 @@ class LlmHookEngineSelector(
         return when (processor) {
             Strings.AiProcessors.OPENAI -> {
                 if (!cloudOk) RawPromptOutcome.Error("Cloud intelligence disabled")
-                else openAiEngine.rawPrompt(promptText)?.let { RawPromptOutcome.Success(it) }
+                else openAiEngine.rawPrompt(promptText, imageUri)?.let { RawPromptOutcome.Success(it) }
                     ?: RawPromptOutcome.Error("OpenAI request failed (check API key)")
             }
             Strings.AiProcessors.GEMINI_CLOUD -> {
                 if (!cloudOk) RawPromptOutcome.Error("Cloud intelligence disabled")
-                else geminiCloudEngine.rawPrompt(promptText)?.let { RawPromptOutcome.Success(it) }
+                else geminiCloudEngine.rawPrompt(promptText, imageUri)?.let { RawPromptOutcome.Success(it) }
                     ?: RawPromptOutcome.Error("Gemini Cloud request failed (check API key)")
             }
             Strings.AiProcessors.GEMINI_NATIVE -> {
@@ -47,7 +53,7 @@ class LlmHookEngineSelector(
             }
             else -> {
                 if (RemoteModelRegistry.isLlmEngine(processor)) {
-                    localLlmEngine.rawPrompt(promptText)?.let { RawPromptOutcome.Success(it) }
+                    localLlmEngine.rawPrompt(promptText, imageUri)?.let { RawPromptOutcome.Success(it) }
                         ?: RawPromptOutcome.Error("Local model unavailable (not downloaded or failed to load)")
                 } else {
                     RawPromptOutcome.Error("No LLM engine configured")

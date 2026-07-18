@@ -84,6 +84,8 @@
   "debug_logging_desc": "Debug-Informationen ins Logcat schreiben — nur bei der Fehlersuche aktivieren",
   "calendar_view": "Kalenderansicht",
   "calendar_view_desc": "Notizen als scrollbaren, monatsweise blätterbaren Kalender statt als einfache Liste durchsuchen",
+  "attach_photo_on_scan": "Foto beim Scannen anhängen",
+  "attach_photo_on_scan_desc": "Sendet das gescannte Foto zusammen mit dem erkannten Text an die KI (erfordert auch Visions Einstellung „Foto an KI senden“ und eine multimodale Engine)",
   "today": "Heute",
   "debug_section": "Debug",
   "add_test_data": "Testdaten hinzufügen"

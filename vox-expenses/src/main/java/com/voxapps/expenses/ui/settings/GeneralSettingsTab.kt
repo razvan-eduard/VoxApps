@@ -188,6 +188,44 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
+        // --- Attach photo to AI on scan (opt-in; costs real LLM tokens on top of free OCR text,
+        // and only takes effect when Vision's own "send photo to AI" setting also provided one). ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("attach_photo_on_scan"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("attach_photo_on_scan_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.attachPhotoOnScan,
+                onCheckedChange = { stateManager.setAttachPhotoOnScan(it) }
+            )
+        }
+
+        HorizontalDivider()
+
+        // --- Attach photo to AI on retry (separate from scan-time — retry re-sends already-staged
+        // OCR text after a failed parse, a distinct and less frequent code path). ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("attach_photo_on_retry"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("attach_photo_on_retry_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.attachPhotoOnRetry,
+                onCheckedChange = { stateManager.setAttachPhotoOnRetry(it) }
+            )
+        }
+
+        HorizontalDivider()
+
         // --- Debug logging (off by default; only turn on while actively debugging) ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {

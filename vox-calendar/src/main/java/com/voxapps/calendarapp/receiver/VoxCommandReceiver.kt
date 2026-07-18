@@ -5,10 +5,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.calendarapp.domain.llm.CalendarEventParsePromptBuilder
 import com.voxapps.calendarapp.domain.llm.CalendarEventParseRequestSender
+import com.voxapps.calendarapp.domain.llm.GeneratedParsedSchema
+import com.voxapps.calendarapp.domain.llm.LlmTasks
 import com.voxapps.ipc.VoxCommand
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
+import com.voxapps.ipc.VoxSatelliteSchema
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -59,6 +63,29 @@ class VoxCommandReceiver : BroadcastReceiver() {
                             existingLayers = layerNames,
                             languageCode = settings.language
                         )
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            VoxIpc.OP_GET_SCHEMA -> {
+                // See the collapsed voice-command plan: Commander fetches and caches this once
+                // (Integrations' Refresh button), not per voice command.
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val settings = container.settingsRepository.getSnapshot()
+                        val layerNames = container.calendarRepository.layers.first().map { it.name }
+                        val schema = VoxSatelliteSchema(
+                            needsExtractionPass = true,
+                            promptTemplate = CalendarEventParsePromptBuilder.buildTemplate(
+                                layerNames, settings.language
+                            ),
+                            fieldSchemaVersion = GeneratedParsedSchema.VERSION,
+                            taskId = LlmTasks.CALENDAR_EVENT_PARSE
+                        )
+                        pending.setResultData(VoxResult(ok = true, text = schema.toJson()).toJson())
                     } finally {
                         pending.finish()
                     }

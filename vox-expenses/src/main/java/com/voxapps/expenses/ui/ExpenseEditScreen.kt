@@ -83,6 +83,7 @@ import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
+import com.voxapps.expenses.domain.llm.MultimodalAttachmentResolver
 import com.voxapps.expenses.state.ExpensesStateManager
 import kotlinx.coroutines.launch
 import java.io.File
@@ -532,7 +533,15 @@ private fun StubRetryBanner(expenseId: Long, imageName: String?, onDone: () -> U
                     retrying = true
                     val container = (context.applicationContext as ExpensesApplication).container
                     scope.launch {
-                        ExpenseScanCleanupRequestSender.send(context, container, rawText, imageName, retryOfExpenseId = expenseId)
+                        // Same staged AI copy OcrResultReceiver already prepared for the original scan
+                        // (if Vision's own setting produced one) — gated on its own attachPhotoOnRetry
+                        // toggle, separate from attachPhotoOnScan (see ExpensesSettings' doc comments
+                        // for why retry is treated as a distinct decision).
+                        val attachOnRetry = container.settingsRepository.getSnapshot().attachPhotoOnRetry
+                        val attachmentUri = MultimodalAttachmentResolver.resolve(context, imageName, attachOnRetry)
+                        ExpenseScanCleanupRequestSender.send(
+                            context, container, rawText, imageName, retryOfExpenseId = expenseId, attachmentUri = attachmentUri
+                        )
                     }
                     Toast.makeText(context, languageManager.getString("retrying_scan"), Toast.LENGTH_SHORT).show()
                     onDone()

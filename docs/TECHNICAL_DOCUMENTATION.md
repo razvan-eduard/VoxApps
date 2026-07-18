@@ -1110,9 +1110,10 @@ strings locally; nothing forces a dependency.
 
 | Type | Purpose |
 |------|---------|
-| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`, `META_NLU_HINT`), permission helpers |
+| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`, `ACTION_SCHEMA_CHANGED`, `ACTION_CAPABILITY_QUERY`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`, `OP_GET_SCHEMA`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`, `META_NLU_HINT`), permission helpers |
 | `VoxCommand` | Command envelope authored by Commander (`op`, `text?`, `title?`, `category?`, `domain?`, `exportScope?`, `dateFrom?`, `dateTo?`) with `toJson()`/`fromJson()` (org.json) — `dateFrom`/`dateTo` are an additive pair used only by Vox Calendar's day-scoped `OP_READ` (see below); every other satellite's `OP_READ` ignores them and behaves exactly as before |
-| `VoxResult` | Satellite reply for reads (`ok`, `text`) — the notes payload, or a spoken "locked" message |
+| `VoxResult` | Satellite reply for reads (`ok`, `text`) — the notes payload, or a spoken "locked" message; also the `OP_GET_SCHEMA` reply's envelope (`text` carries a `VoxSatelliteSchema` JSON — see [Collapsed satellite extraction flow](#collapsed-satellite-extraction-flow-voxsatelliteschema) below) |
+| `VoxSatelliteSchema` | A satellite's extraction contract: `needsExtractionPass`, `promptTemplate` (with an `{{INPUT}}` placeholder), `fieldSchemaVersion`, `taskId` — see below |
 
 ### Capability advertising & discovery (the handshake)
 
@@ -1246,6 +1247,143 @@ satellite ──VoxLlmRequest{sourcePackage,task,promptText}──▶ LlmHookRec
 satellite  ◀── VoxLlmResult{task,status,rawJson} ── explicit intent, signature-checked ┘
 ```
 
+### Collapsed satellite extraction flow (`VoxSatelliteSchema`)
+
+Voice commands to a satellite with a real structured schema (Expenses, Calendar) need **two** LLM
+calls: Commander's own classification call (produces the anatomy-based `NluIntent` — see
+[§4](#4-natural-language-understanding-nlu)), then a domain-specific *extraction* pass that resolves
+things the classification call can't (e.g. Expenses' distributive-vs-cumulative price disambiguation,
+which needs the satellite's own category list and reasoning rules loaded to resolve correctly). Notes
+is the exception — its schema is simple enough that the classification call's own output already
+satisfies it, so it never needs a second pass.
+
+Earlier, this second call happened via a 3-broadcast round trip per command: Commander →
+satellite (`VOX_COMMAND`, carrying only `logicalSubject`, discarding the rest of the anatomy) →
+satellite → Commander (`ACTION_LLM_PROCESS`, a **freshly built** prompt, unrelated in structure to the
+first call's output) → Commander → satellite (`ACTION_LLM_RESULT`). Each hop is real IPC cost, worse
+when the satellite process isn't already running. This is now collapsed:
+
+- **The satellite declares its own contract.** `VoxIpc.OP_GET_SCHEMA` (same request-response channel
+  as `OP_PING`/`OP_EXPORT`/`OP_IMPORT`) returns a `VoxSatelliteSchema`: `needsExtractionPass` (required,
+  never defaulted — a missing value is a malformed-contract error state, not silently treated as
+  `false`), `promptTemplate` (the satellite's full, self-owned prompt text — reasoning rules + field
+  schema + current dynamic context all pre-interpolated, with exactly one `{{INPUT}}` placeholder),
+  `fieldSchemaVersion` (see KSP-generated schema below), and `taskId` (the satellite's own
+  `LlmTasks` constant, so Commander can stamp the right value on the eventual `VoxLlmResult` without
+  knowing anything about the satellite's task-naming scheme).
+- **Fetched proactively, cached, never per-command.** Integrations → Vox Apps gets a **Refresh**
+  button per satellite (alongside the existing Test/ping button) that calls `VoxSatelliteRegistry
+  .refreshSchema()` — a Hub-style flash-retry (launch the satellite's own activity via
+  `FLAG_ACTIVITY_NEW_TASK` to clear Android's "stopped" state, then retry) if the satellite isn't
+  immediately reachable. The result is cached in `VoxSatelliteRegistry` (DataStore-backed, survives
+  process death) and used for **every** subsequent voice command — no TTL, no automatic
+  re-fetch, manual-refresh-only by design. The reason this is worth doing proactively rather than
+  per-command isn't raw IPC latency (usually fine) — it's that these satellites are background
+  companion apps normally launched *by* voice command rather than kept open, so the common case for a
+  cold command is the satellite process being dead; without a cache, every such command would pay the
+  flash-retry cost **on the voice-command hot path**.
+- **Warm-cache dispatch.** `SatelliteHandler.create()` reads the cached schema; if
+  `needsExtractionPass` is `false` (or no cache exists yet — first-run falls back to today's
+  unmodified `VOX_COMMAND`/`OP_CREATE` flow, self-served by the satellite exactly as before), nothing
+  changes. If `true`, Commander substitutes `NluIntent.toDecompositionText()` (the *full* anatomy —
+  action/subject/modifiers/context/target — not just `logicalSubject`, fixing the earlier
+  handoff-drops-most-of-the-decomposition problem) into `schema.promptTemplate`, runs the extraction
+  call itself via `LlmHookEngineSelector`, and delivers the result via the **same**
+  `ACTION_LLM_RESULT`/`VoxLlmResult` wire shape the generic LLM hook already used — so a satellite's
+  existing `LlmResultReceiver` needs zero changes to consume it. Net effect on a warm-cache command:
+  zero live IPC for the extraction step itself, one fire-and-forget delivery broadcast at the end
+  (which doesn't need flash-retry — it's the same kind of explicit broadcast that already worked
+  without it, flash-retry is only for the Refresh button's synchronous fetch).
+- **Satellite-initiated cache correction.** The one exception to manual-only refresh: if a satellite's
+  own dynamic context changes as a side effect of normal use (e.g. Expenses auto-creating a category
+  from a voice command, or a user editing categories in Expenses' own UI), the cached prompt template
+  is now wrong. Rather than Commander guessing at the new state, the satellite pushes a corrected
+  `VoxSatelliteSchema` via `VoxIpc.ACTION_SCHEMA_CHANGED` (fire-and-forget, the one
+  satellite-initiated broadcast in this whole contract — everywhere else Commander initiates) the
+  instant the mutation commits; `SchemaChangedReceiver` auto-applies it to the cache immediately. A
+  precise, verified-event push, not a poll or timer.
+- **KSP-generated field schema.** `ExpenseParsePromptBuilder`/`CalendarEventParsePromptBuilder`'s
+  field-listing prose used to be hand-typed and could silently drift out of sync with the actual
+  parser (`ExpenseParseResultParser.Parsed`, etc). A new `@VoxExtractionSchema(version)` annotation
+  (`:core:schema-annotations`) plus a KSP `SymbolProcessor` (`:core:schema-processor`) generates a
+  `Generated<ClassName>Schema` object — `VERSION`/`FIELD_SCHEMA_JSON` — from the annotated class's
+  *primary constructor parameters only* (deliberately not `getAllProperties()`, which would also pick
+  up computed fields like `Parsed.itemsSumMismatch`), recursing into nested data classes and `List<T>`
+  element types. `fieldSchemaVersion` mirrors `models.json`'s `schema_version` bump convention —
+  informational only, shown in Integrations for debugging, never drives invalidation. Applied
+  uniformly to all three satellites' output shapes (`ExpenseParseResultParser.Parsed`,
+  `CalendarEventParseResultParser.Parsed`, and Notes' `Note` — the last one exists purely for
+  uniformity, since `needsExtractionPass = false` means it's never actually used on the wire).
+
+```
+Warm cache:
+Commander (call #1: classification, in-process)
+   │ needsExtractionPass? (from cached VoxSatelliteSchema)
+   ├─ false (Notes) ──────────────────────────────────▶ VOX_COMMAND/OP_CREATE (unchanged)
+   └─ true (Expenses/Calendar)
+        │ schema.buildPrompt(intent.toDecompositionText())
+        ▼
+      Commander (call #2: extraction, in-process, via LlmHookEngineSelector)
+        │
+        ▼
+      ACTION_LLM_RESULT{task,status,rawJson} ──▶ satellite's existing LlmResultReceiver
+
+Refresh (Integrations button, not per-command):
+Commander ──OP_GET_SCHEMA (request-response, flash-retry if unreachable)──▶ satellite
+   ◀── VoxSatelliteSchema{needsExtractionPass,promptTemplate,fieldSchemaVersion,taskId} ──┘
+   (cached in VoxSatelliteRegistry, DataStore-backed)
+
+Satellite-initiated correction (the one push in this contract):
+satellite ──ACTION_SCHEMA_CHANGED{VoxSatelliteSchema}──▶ SchemaChangedReceiver (auto-applies)
+```
+
+### Multimodal photo attachment (receipt/document scans)
+
+Independent of the voice-command flow above: Expenses' and Notes' *scan* flows (Vision OCR → generic
+LLM hook cleanup) can now attach the actual photo alongside the OCR text when the configured engine
+supports images — additive, not a replacement. Skipping OCR entirely in favor of the photo was
+considered and rejected: multimodal image-reading beating OCR+text on dense receipt/document text is
+an unvalidated assumption, and a raw photo is strictly more data leaving the device (and more cloud
+vision tokens — OpenAI/Gemini price images by pixel-dimension tiling, not JPEG quality or color depth)
+than OCR-extracted text. So OCR always runs; the photo, when enabled, is one more input on the same
+single LLM call — never a second call.
+
+- **Capability declaration.** `RemoteModelRegistry.isMultimodal(processor)` checks a hardcoded set for
+  the two cloud processors that are actually multimodal today (OpenAI, Gemini Cloud — Gemini *Native*
+  is on-device and not yet implemented for the LLM hook at all, so it's excluded), falling back to
+  `hasCapability(engineKey, "multimodal")` for JSON-defined local engines (none declare it yet). A new
+  generic `VoxIpc.ACTION_CAPABILITY_QUERY` (ordered broadcast, `CapabilityQueryReceiver` on
+  Commander's side, `VoxCapabilityClient.isMultimodal()` client-side) exposes this to any first-party
+  app — deliberately separate from `VoxSatelliteSchema`/`OP_GET_SCHEMA`, since this is global Commander
+  engine state, not per-satellite data.
+- **Resolution, not quality, is what controls token cost.** Vision's Settings gets two new
+  preferences: **"Send photo to AI"** (off by default — real token cost on top of free local OCR) and
+  **"Photo detail for AI"** (Low/Medium/High → 768/1024/1536px long edge). Only resolution changes
+  LLM token cost for an attached image; JPEG compression quality and color depth don't factor into
+  either OpenAI's or Gemini's tiling-based image tokenization, so neither is exposed as a
+  cost-relevant setting. When "Send photo to AI" is on, capture produces a **second**, separately
+  downscaled JPEG (`downscaleToLongEdge`) alongside the existing full-resolution one, and both are
+  handed back via a new `VoxOcrResult.aiImageUri` field (kept distinct from `imageUri`, which stays
+  full-resolution for the receipt/record display a human might view later).
+- **Per-satellite opt-in.** Expenses gets two independent toggles — "Attach photo on scan" and
+  "Attach photo on retry" (retry re-sends already-staged OCR text after a failed parse without
+  re-scanning; a separate toggle since it's a distinct, less frequent code path) — both off by
+  default. Notes gets one ("Attach photo on scan"; it has no stub/retry mechanism at all, confirmed by
+  tracing its code, not assumed). `VoxLlmRequest` gained an `attachmentUri` field the satellite fills
+  in only after its own toggle is on *and* Vision actually provided a downscaled copy; `LlmHookWorker`
+  forwards it to `LlmHookEngineSelector.run(promptText, imageUri)`, which threads it to whichever
+  engine is selected — `OpenAiInterpreter`/`GeminiCloudInterpreter` attach it (base64 data URI for
+  OpenAI's chat-completions format, `content { image(bitmap) }` for the Gemini SDK), every other
+  engine implementation ignores the parameter.
+- **Cross-app URI grants require a local copy, not a re-grant.** A plain read grant on someone else's
+  FileProvider URI (e.g. what Vision grants Notes/Expenses for `aiImageUri`) can't be re-granted
+  onward to a third app (Commander) — only the URI's actual owner can grant it to an arbitrary
+  package. So Expenses/Notes always copy the granted image into their own storage (Expenses:
+  `filesDir/receipts/<name>_ai.jpg`, persisted so a later retry can reuse it without re-invoking
+  Vision; Notes: a short-lived `cacheDir/ai_scans/` copy, since it has no retry mechanism to serve)
+  before re-sharing it via their own FileProvider. Notes never had a FileProvider before this feature
+  and needed one added from scratch.
+
 ### Vox Vision (OCR satellite)
 
 `vox-vision` (`com.voxapps.vision`) is the second satellite in this repo — unlike Vox Notes, it never
@@ -1270,6 +1408,12 @@ receives voice commands (its `VisionCommandReceiver` only answers the discovery 
   as a create command. When launched as a pending-request target (`hint`/`task` present), an
   auto-triggered capture skips straight to submission with no manual tap — a manual capture always
   still requires one, since there's no guarantee every field is already correct.
+- **Multimodal photo attachment** (Settings → "Send photo to AI" + "Photo detail for AI") — off by
+  default. When on, capture also produces a downscaled JPEG (`downscaleToLongEdge`, 768/1024/1536px
+  by detail level) alongside the existing full-resolution one, handed back to the caller as
+  `VoxOcrResult.aiImageUri` in addition to the existing `imageUri` — see [Multimodal photo attachment]
+  (#multimodal-photo-attachment-receiptdocument-scans) above for the full flow and why resolution
+  (not JPEG quality) is the only setting that actually affects LLM token cost.
 
 ### Vox Calendar (day-linking extension)
 
@@ -1319,16 +1463,24 @@ a **consumer** of the `export`/`import` actions every other satellite already ex
 | `VoxIpc` / `VoxCommand` / `VoxResult` | `core/ipc/src/main/java/com/voxapps/ipc/` |
 | `VoxLlmRequest` / `VoxLlmResult` | `core/ipc/src/main/java/com/voxapps/ipc/` |
 | `VoxOcrRequest` / `VoxOcrResult` | `core/ipc/src/main/java/com/voxapps/ipc/` |
-| `VoxAppsDiscovery` / `VoxAppInfo` / `VoxSatelliteRegistry` | `domain/integration/` |
+| `VoxSatelliteSchema` | `core/ipc/src/main/java/com/voxapps/ipc/VoxSatelliteSchema.kt` |
+| `VoxCapabilityClient` (multimodal capability query) | `core/ipc/src/main/java/com/voxapps/ipc/VoxCapabilityClient.kt` |
+| `VoxAppsDiscovery` / `VoxAppInfo` / `VoxSatelliteRegistry` (schema cache) | `domain/integration/` |
+| `SchemaChangedReceiver` (satellite push) / `CapabilityQueryReceiver` | `domain/integration/`, `service/` |
 | `SatelliteRouting` (pure decision) | `domain/integration/SatelliteRouting.kt` |
-| `SatelliteHandler` (dispatch) | `domain/intent/handler/SatelliteHandler.kt` |
+| `SatelliteHandler` (dispatch, collapsed extraction call) | `domain/intent/handler/SatelliteHandler.kt` |
+| `NluIntent.toDecompositionText()` (full anatomy, not just `logicalSubject`) | `domain/intent/model/NluIntent.kt` |
 | `PromptProvider.buildSatelliteHints()` (nluHint → prompt) | `domain/intent/interpreter/PromptProvider.kt` |
 | `TtsHookReceiver` / `TtsHookService` | `service/` |
 | `LlmHookReceiver` / `LlmHookWorker` / `LlmHookEngineSelector` | `service/`, `domain/intent/` |
+| `ImageAttachmentUtil` (reads/base64-encodes an attached image) | `domain/intent/interpreter/ImageAttachmentUtil.kt` |
+| `@VoxExtractionSchema` / KSP `SymbolProcessor` (generated field schema) | `core/schema-annotations/`, `core/schema-processor/` |
 | Satellite receiver (Notes) | `vox-notes/.../receiver/VoxCommandReceiver.kt` |
 | Vision's LLM result receiver | `vox-vision/.../receiver/LlmResultReceiver.kt` |
 | `VisionActivity` (`singleTask` + `onNewIntent`) | `vox-vision/src/main/java/com/voxapps/vision/VisionActivity.kt` |
 | `DocumentCropper` (Otsu live-bounds + strict-quad crop) | `vox-vision/.../ocr/DocumentCropper.kt` |
+| `downscaleToLongEdge` (AI-attachment photo resize) | `vox-vision/.../ui/VisionScreen.kt` |
+| `MultimodalAttachmentResolver` (Expenses' scan/retry photo-attach gate) | `vox-expenses/.../domain/llm/MultimodalAttachmentResolver.kt` |
 | Day-scoped read + ICS export/import | `vox-calendar/.../receiver/VoxCommandReceiver.kt`, `vox-calendar/.../domain/ics/` |
 | Hub's export/import client | `core/ipc/.../VoxDataTransferClient.kt`, `vox-hub/.../ui/HubScreen.kt` |
 

@@ -1,5 +1,6 @@
 package com.voxapps.commander.domain.intent.interpreter
 
+import android.content.Context
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.voxapps.commander.data.preferences.SettingsRepository
@@ -15,6 +16,7 @@ import kotlinx.coroutines.withContext
  * Model: gemini-1.5-flash (fast, cost-effective for intent extraction).
  */
 class GeminiCloudInterpreter(
+    private val appContext: Context,
     private val settingsRepo: SettingsRepository
 ) : AssistantEngine {
 
@@ -52,15 +54,19 @@ class GeminiCloudInterpreter(
         null
     }
 
-    override suspend fun rawPrompt(promptText: String): String? = withContext(Dispatchers.IO) {
+    override suspend fun rawPrompt(promptText: String, imageUri: String?): String? = withContext(Dispatchers.IO) {
         val apiKey = settingsRepo.getSettingsSnapshot().geminiApiKey
         if (apiKey.isNullOrBlank()) {
             Logger.log("Gemini API key not set — cannot use Gemini Cloud (rawPrompt)", TAG)
             return@withContext null
         }
         val model = GenerativeModel(modelName = Strings.Models.GEMINI_1_5_FLASH, apiKey = apiKey)
+        val bitmap = imageUri?.let { ImageAttachmentUtil.readBitmap(appContext, it) }
         try {
-            model.generateContent(content { text(promptText) }).text
+            model.generateContent(content {
+                text(promptText)
+                bitmap?.let { image(it) }
+            }).text
         } catch (e: Exception) {
             Logger.log("Gemini Cloud rawPrompt failed: ${e.message}", TAG)
             null

@@ -69,6 +69,8 @@ dependencies {
     implementation(project(":core:apppicker"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
+    implementation(project(":core:schema-annotations"))
+    ksp(project(":core:schema-processor"))
     implementation(project(":core:textmatch"))
     implementation(project(":core:onboarding"))
     implementation(libs.androidx.core.ktx)

@@ -108,6 +108,8 @@
   "debug_logging_desc": "Write debug info to logcat — leave off unless you're troubleshooting an issue",
   "calendar_view": "Calendar view",
   "calendar_view_desc": "Browse notes as a scrollable, month-paged calendar instead of a plain list",
+  "attach_photo_on_scan": "Attach photo on scan",
+  "attach_photo_on_scan_desc": "Send the scanned photo to the AI alongside the recognized text (needs Vision's \"send photo to AI\" setting on too, and a multimodal engine configured)",
   "today": "Today",
   "debug_section": "Debug",
   "add_test_data": "Add test data"

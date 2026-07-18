@@ -1,5 +1,6 @@
 package com.voxapps.commander.domain.intent.interpreter
 
+import android.content.Context
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.utils.Logger
@@ -18,6 +19,7 @@ import org.json.JSONObject
  * High intelligence, requires internet and API key.
  */
 class OpenAiInterpreter(
+    private val appContext: Context,
     private val settingsRepo: SettingsRepository
 ) : AssistantEngine {
 
@@ -44,23 +46,37 @@ class OpenAiInterpreter(
         NluIntentParser.parse(content)
     }
 
-    override suspend fun rawPrompt(promptText: String): String? = withContext(Dispatchers.IO) {
+    override suspend fun rawPrompt(promptText: String, imageUri: String?): String? = withContext(Dispatchers.IO) {
         val apiKey = settingsRepo.getApiKeySync()
         if (apiKey.isNullOrBlank()) {
             Logger.log("OpenAI API Key is missing (rawPrompt)", TAG)
             return@withContext null
         }
-        sendChatCompletion(apiKey, systemPrompt = null, userPrompt = promptText, forceJson = false)
+        sendChatCompletion(apiKey, systemPrompt = null, userPrompt = promptText, forceJson = false, imageUri = imageUri)
     }
 
-    /** Shared "send prompt, get raw text" call used by both [processCommand] and [rawPrompt]. */
-    private fun sendChatCompletion(apiKey: String, systemPrompt: String?, userPrompt: String, forceJson: Boolean): String? {
+    /** Shared "send prompt, get raw text" call used by both [processCommand] and [rawPrompt]. [imageUri],
+     *  when present, is attached as an additional `image_url` content part on the user message —
+     *  requires Commander to already hold a granted read permission on it (the caller's job). */
+    private fun sendChatCompletion(
+        apiKey: String, systemPrompt: String?, userPrompt: String, forceJson: Boolean, imageUri: String? = null
+    ): String? {
+        val userContent: Any = imageUri?.let { ImageAttachmentUtil.readAsBase64DataUri(appContext, it) }?.let { dataUri ->
+            JSONArray().apply {
+                put(JSONObject().apply { put("type", "text"); put("text", userPrompt) })
+                put(JSONObject().apply {
+                    put("type", "image_url")
+                    put("image_url", JSONObject().apply { put("url", dataUri) })
+                })
+            }
+        } ?: userPrompt
+
         val jsonBody = JSONObject().apply {
             put("model", Strings.Models.GPT_4O_MINI)
             put("temperature", 0.0) // Match precision
             put("messages", JSONArray().apply {
                 systemPrompt?.let { put(JSONObject().apply { put("role", "system"); put("content", it) }) }
-                put(JSONObject().apply { put("role", "user"); put("content", userPrompt) })
+                put(JSONObject().apply { put("role", "user"); put("content", userContent) })
             })
             if (forceJson) put("response_format", JSONObject().apply { put("type", "json_object") })
         }

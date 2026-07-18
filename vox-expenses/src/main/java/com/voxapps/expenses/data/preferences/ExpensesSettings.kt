@@ -74,7 +74,16 @@ data class ExpensesSettings(
     val appCacheJson: String? = null,
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,
-    val onboardingCompleted: Boolean = false
+    val onboardingCompleted: Boolean = false,
+    /** Off by default — attaching a photo costs real LLM tokens on top of the free OCR text a scan
+     *  already provides. Only takes effect when Vision's own "send photo to AI" setting also
+     *  provided a downscaled copy — this is the per-satellite half of that decision, not a
+     *  standalone override. See [attachPhotoOnRetry] for the separate retry-specific toggle. */
+    val attachPhotoOnScan: Boolean = false,
+    /** Separate from [attachPhotoOnScan] since retry (re-sending already-staged OCR text after a
+     *  failed parse) is a distinct, less frequent code path — a user might want the photo attached
+     *  on a fresh scan but not want it re-sent every retry, or vice versa. */
+    val attachPhotoOnRetry: Boolean = false
 ) {
     companion object {
         const val TIMEOUT_30M = 30

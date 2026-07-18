@@ -2,11 +2,17 @@ package com.voxapps.calendarapp
 
 import android.app.Application
 import com.voxapps.calendarapp.di.CalendarContainer
+import com.voxapps.calendarapp.domain.llm.CalendarEventParsePromptBuilder
+import com.voxapps.calendarapp.domain.llm.GeneratedParsedSchema
+import com.voxapps.calendarapp.domain.llm.LlmTasks
+import com.voxapps.ipc.VoxDataTransferClient
+import com.voxapps.ipc.VoxSatelliteSchema
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -27,5 +33,23 @@ class CalendarApplication : Application() {
             .distinctUntilChanged()
             .onEach { Logger.setEnabled(it) }
             .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Default))
+
+        // Push a corrected schema to Commander's cache the instant our own calendar list changes —
+        // see vox-expenses' ExpensesApplication for the full reasoning (mirrors it exactly).
+        container.calendarRepository.layers
+            .drop(1)
+            .map { it.map { l -> l.name } }
+            .distinctUntilChanged()
+            .onEach { layerNames ->
+                val settings = container.settingsRepository.getSnapshot()
+                val schema = VoxSatelliteSchema(
+                    needsExtractionPass = true,
+                    promptTemplate = CalendarEventParsePromptBuilder.buildTemplate(layerNames, settings.language),
+                    fieldSchemaVersion = GeneratedParsedSchema.VERSION,
+                    taskId = LlmTasks.CALENDAR_EVENT_PARSE
+                )
+                VoxDataTransferClient.pushSchemaChanged(this, schema)
+            }
+            .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.IO))
     }
 }

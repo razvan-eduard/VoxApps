@@ -159,7 +159,10 @@ class LocalLlmInterpreter(
         }
     }
 
-    override suspend fun rawPrompt(promptText: String): String? = withContext(Dispatchers.IO) {
+    override suspend fun rawPrompt(promptText: String, imageUri: String?): String? = withContext(Dispatchers.IO) {
+        // MediaPipe GenAI on-device models aren't multimodal-capable today — imageUri is always null
+        // here (RemoteModelRegistry.isMultimodal never reports true for a local engine unless it
+        // declares "multimodal" in models.json, which none currently do), silently ignored otherwise.
         isProcessing = true
         try {
             setupLlm()

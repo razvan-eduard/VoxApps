@@ -213,7 +213,7 @@ fun VisionScreen(
     // Shared by the manual final button (pendingRequest case) and auto-capture's hands-free
     // completion below. Standalone mode has no single "submit" action anymore — the user picks a
     // destination button instead (see the Column of per-target buttons further down).
-    val submit: (String, String?) -> Unit = { text, imageUri ->
+    val submit: (String, String?, String?) -> Unit = { text, imageUri, aiImageUri ->
         val trimmed = text.trim()
         if ((trimmed.isNotEmpty() || imageUri != null) && pendingRequest != null) {
             OcrResultSender.send(
@@ -223,7 +223,8 @@ fun VisionScreen(
                     task = pendingRequest.task,
                     status = VoxOcrResult.STATUS_SUCCESS,
                     rawText = trimmed.takeIf { it.isNotEmpty() } ?: "Image scan",
-                    imageUri = imageUri
+                    imageUri = imageUri,
+                    aiImageUri = aiImageUri
                 )
             )
             finishActivity()
@@ -302,7 +303,7 @@ fun VisionScreen(
                 captureAndRecognize(
                     context, scope, cameraController, container,
                     onRecognizing = { isRecognizing = it },
-                    onResult = { text, imageUri ->
+                    onResult = { text, imageUri, aiImageUri ->
                         rawText = text
                         lastScannedUri = imageUri
                         // Only the "scan for another satellite" flow has a single, already-known
@@ -311,7 +312,7 @@ fun VisionScreen(
                         // tap: there's no way to auto-decide which of N installed targets to send to.
                         // Reads the live pendingRequestState, not the closure-frozen pendingRequest
                         // (see above).
-                        if (pendingRequestState.value != null) submitState.value(text, imageUri)
+                        if (pendingRequestState.value != null) submitState.value(text, imageUri, aiImageUri)
                     }
                 )
             }
@@ -409,7 +410,7 @@ fun VisionScreen(
                                 captureAndRecognize(
                                     context, scope, cameraController, container,
                                     onRecognizing = { isRecognizing = it },
-                                    onResult = { text, imageUri ->
+                                    onResult = { text, imageUri, aiImageUri ->
                                         val trimmed = text.trim()
                                         OcrResultSender.send(
                                             context, target.packageName,
@@ -417,7 +418,8 @@ fun VisionScreen(
                                                 task = target.task,
                                                 status = VoxOcrResult.STATUS_SUCCESS,
                                                 rawText = trimmed.takeIf { it.isNotEmpty() } ?: "Image scan",
-                                                imageUri = imageUri
+                                                imageUri = imageUri,
+                                                aiImageUri = aiImageUri
                                             )
                                         )
                                         rawText = trimmed
@@ -467,7 +469,7 @@ private fun captureAndRecognize(
     cameraController: LifecycleCameraController,
     container: VisionContainer,
     onRecognizing: (Boolean) -> Unit,
-    onResult: (String, String?) -> Unit
+    onResult: (String, String?, String?) -> Unit
 ) {
     Logger.d("VisionScreen", "Scan tapped")
     onRecognizing(true)
@@ -499,13 +501,37 @@ private fun captureAndRecognize(
                             }
                         }
 
+                        // Separate, deliberately smaller copy for LLM attachment — off by default
+                        // (see VisionSettingsRepository.sendPhotoToAiFlow's doc comment) since it
+                        // costs real tokens on top of the free text above. Downscaled to the user's
+                        // configured "photo detail" resolution — that's the only thing that actually
+                        // reduces LLM image-token cost (JPEG quality/color depth don't factor into
+                        // OpenAI/Gemini's tile-based image tokenization, only pixel dimensions do).
+                        val aiImageUri = withContext(Dispatchers.IO) {
+                            if (!container.settingsRepository.sendPhotoToAiFlow.first()) return@withContext null
+                            try {
+                                val detail = container.settingsRepository.photoDetailForAiFlow.first()
+                                val targetLongEdge = VisionSettingsRepository.targetLongEdgePx(detail)
+                                val scaled = downscaleToLongEdge(cropped, targetLongEdge)
+                                val cacheDir = File(context.cacheDir, "receipts").apply { mkdirs() }
+                                val file = File(cacheDir, "ai_${java.util.UUID.randomUUID()}.jpg")
+                                java.io.FileOutputStream(file).use { out ->
+                                    scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+                                }
+                                FileProvider.getUriForFile(context, "com.voxapps.vision.fileprovider", file).toString()
+                            } catch (e: Exception) {
+                                Logger.e("VisionScreen", "Failed to prepare AI-attachment image", e)
+                                null
+                            }
+                        }
+
                         Logger.d("VisionScreen", "Recognizing with zone=$zone")
                         val text = engine.recognize(cropped)
                         Logger.d("VisionScreen", "Recognized text: $text")
-                        onResult(text, imageUri)
+                        onResult(text, imageUri, aiImageUri)
                     } catch (t: Throwable) {
                         Logger.e("VisionScreen", "Recognition failed", t)
-                        onResult("", null)
+                        onResult("", null, null)
                     } finally {
                         onRecognizing(false)
                     }
@@ -515,10 +541,21 @@ private fun captureAndRecognize(
             override fun onError(exception: ImageCaptureException) {
                 Logger.e("VisionScreen", "Capture failed", exception)
                 onRecognizing(false)
-                onResult("", null)
+                onResult("", null, null)
             }
         }
     )
+}
+
+/** Scales [bitmap] down so its longer edge is [targetLongEdge]px, preserving aspect ratio. A no-op
+ *  (returns [bitmap] unchanged) if it's already at or below that size — never upscales. */
+private fun downscaleToLongEdge(bitmap: android.graphics.Bitmap, targetLongEdge: Int): android.graphics.Bitmap {
+    val longEdge = maxOf(bitmap.width, bitmap.height)
+    if (longEdge <= targetLongEdge) return bitmap
+    val scale = targetLongEdge.toFloat() / longEdge
+    val targetWidth = (bitmap.width * scale).toInt().coerceAtLeast(1)
+    val targetHeight = (bitmap.height * scale).toInt().coerceAtLeast(1)
+    return android.graphics.Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
 }
 
 private fun imageProxyToBitmap(image: ImageProxy): android.graphics.Bitmap {

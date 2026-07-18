@@ -39,12 +39,26 @@ object OcrResultSender {
         result.imageUri?.let { uriString ->
             try {
                 val uri = uriString.toUri()
-                // Explicitly grant read permission to the target app. This is more reliable for 
+                // Explicitly grant read permission to the target app. This is more reliable for
                 // cross-app broadcasts than relying solely on FLAG_GRANT_READ_URI_PERMISSION.
                 context.grantUriPermission(sourcePackage, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 intent.clipData = android.content.ClipData.newRawUri("receipt_image", uri)
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to grant permission for URI: $uriString", e)
+            }
+        }
+        // Same grant, for the separate (smaller, AI-attachment-only) copy — added as a second
+        // ClipData item rather than replacing the one above, since both URIs need their own grant
+        // and ClipData only exposes permissions for URIs it actually contains.
+        result.aiImageUri?.let { uriString ->
+            try {
+                val uri = uriString.toUri()
+                context.grantUriPermission(sourcePackage, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                val item = android.content.ClipData.Item(uri)
+                if (intent.clipData != null) intent.clipData!!.addItem(item)
+                else intent.clipData = android.content.ClipData.newRawUri("ai_image", uri)
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to grant permission for AI image URI: $uriString", e)
             }
         }
             

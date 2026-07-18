@@ -358,6 +358,15 @@ object RemoteModelRegistry {
         return capability in (cachedSchema?.engines?.get(engineKey)?.capabilities ?: emptyList())
     }
 
+    /**
+     * Whether [processor] (an `aiProcessor` setting value — either a hardcoded cloud constant from
+     * [Strings.AiProcessors] or a `models.json`-defined local engine key) accepts image input. Mirrors
+     * the same hardcoded-cloud-first, JSON-fallback duality [LlmHookEngineSelector]/[IntentDecisionMap]
+     * already use to *select* an engine, rather than inventing a new lookup shape for capability.
+     */
+    fun isMultimodal(processor: String): Boolean =
+        processor in Strings.AiProcessors.MULTIMODAL_CAPABLE || hasCapability(processor, "multimodal")
+
     fun getDefaultWakeWordEngineKey(): String {
         return cachedSchema?.engines?.entries
             ?.firstOrNull { it.value.is_default_wake_word }?.key

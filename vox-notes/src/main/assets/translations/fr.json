@@ -84,6 +84,8 @@
   "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage",
   "calendar_view": "Vue calendrier",
   "calendar_view_desc": "Parcourir les notes sous forme de calendrier défilable, paginé par mois, plutôt qu'une simple liste",
+  "attach_photo_on_scan": "Joindre la photo lors du scan",
+  "attach_photo_on_scan_desc": "Envoyer la photo scannée avec le texte reconnu à l'IA (nécessite aussi le réglage «envoyer la photo à l'IA» de Vision et un moteur multimodal configuré)",
   "today": "Aujourd'hui",
   "debug_section": "Débogage",
   "add_test_data": "Ajouter des données de test"

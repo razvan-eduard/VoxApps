@@ -8,6 +8,7 @@ import android.widget.Toast
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
 import com.voxapps.expenses.domain.llm.LlmTasks
+import com.voxapps.expenses.domain.llm.MultimodalAttachmentResolver
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.logging.Logger
@@ -51,7 +52,12 @@ class OcrResultReceiver : BroadcastReceiver() {
             try {
                 // Synchronously stage the physical receipt image if provided, plus a sibling
                 // .txt file with the raw OCR text — this lets a failed-parse stub expense retry
-                // the LLM cleanup later without physically rescanning the paper receipt.
+                // the LLM cleanup later without physically rescanning the paper receipt. Also stages
+                // Vision's separate, already-downscaled AI-attachment copy (result.aiImageUri) as a
+                // second sibling file whenever Vision's own "send photo to AI" setting provided one —
+                // staged unconditionally (regardless of our own attachPhotoOnScan/attachPhotoOnRetry
+                // toggles) so a later retry can still use it even if the retry toggle gets turned on
+                // after this scan.
                 var storedImageName: String? = null
                 result.imageUri?.let { uriString ->
                     try {
@@ -67,12 +73,32 @@ class OcrResultReceiver : BroadcastReceiver() {
                         }
                         File(receiptsDir, fileName.substringBeforeLast('.') + ".txt").writeText(rawText)
                         storedImageName = fileName
+
+                        result.aiImageUri?.let { aiUriString ->
+                            try {
+                                val aiUri = Uri.parse(aiUriString)
+                                val aiTargetFile = File(receiptsDir, MultimodalAttachmentResolver.aiCopyFileName(fileName))
+                                context.contentResolver.openInputStream(aiUri)?.use { input ->
+                                    FileOutputStream(aiTargetFile).use { output -> input.copyTo(output) }
+                                }
+                            } catch (e: Exception) {
+                                Logger.e(TAG, "Failed to stage AI-attachment image from URI: $aiUriString", e)
+                            }
+                        }
                     } catch (e: Exception) {
                         Logger.e(TAG, "Failed to stage receipt image from URI: $uriString", e)
                     }
                 }
 
-                ExpenseScanCleanupRequestSender.send(context, container, rawText, storedImageName)
+                // OCR text is always sent regardless (see the collapsed voice-command plan: skipping
+                // OCR traded away an unvalidated accuracy assumption for a real cost, so it stays as
+                // the deterministic prior). The photo is an *additional* attachment, gated on this
+                // app's own attachPhotoOnScan toggle (checked here) as well as Commander's engine
+                // actually being multimodal (checked inside resolve()).
+                val settings = container.settingsRepository.getSnapshot()
+                val attachmentUri = MultimodalAttachmentResolver.resolve(context, storedImageName, settings.attachPhotoOnScan)
+
+                ExpenseScanCleanupRequestSender.send(context, container, rawText, storedImageName, attachmentUri = attachmentUri)
             } finally {
                 pending.finish()
             }

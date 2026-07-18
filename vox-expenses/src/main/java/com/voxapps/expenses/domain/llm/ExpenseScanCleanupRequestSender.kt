@@ -20,7 +20,22 @@ private const val COMMANDER_PACKAGE = "com.voxapps.commander"
  * inserting a new one.
  */
 object ExpenseScanCleanupRequestSender {
-    suspend fun send(context: Context, container: ExpensesContainer, rawText: String, imageName: String?, retryOfExpenseId: Long? = null) {
+    /**
+     * [attachmentUri] optionally attaches the staged receipt image alongside the OCR text — only
+     * meaningful when the caller already confirmed Commander's configured engine is multimodal (see
+     * [com.voxapps.ipc.VoxCapabilityClient.isMultimodal]) and has granted Commander read access to it
+     * (the caller's job; see [com.voxapps.expenses.receiver.OcrResultReceiver]). OCR always runs and
+     * is always sent regardless — this is additive, not a replacement (see the collapsed
+     * voice-command plan's multimodal section for why skipping OCR isn't done here).
+     */
+    suspend fun send(
+        context: Context,
+        container: ExpensesContainer,
+        rawText: String,
+        imageName: String?,
+        retryOfExpenseId: Long? = null,
+        attachmentUri: String? = null
+    ) {
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val settings = container.settingsRepository.getSnapshot()
 
@@ -43,10 +58,11 @@ object ExpenseScanCleanupRequestSender {
                 preParsedDate = preParsed.date,
                 preParsedTime = preParsed.time
             ),
-            data = emptyList()
+            data = emptyList(),
+            attachmentUri = attachmentUri
         ).toJson()
 
-        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for scan cleanup (retryOfExpenseId=$retryOfExpenseId)")
+        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for scan cleanup (retryOfExpenseId=$retryOfExpenseId, multimodal=${attachmentUri != null})")
         context.sendBroadcast(
             Intent(VoxIpc.ACTION_LLM_PROCESS)
                 .setPackage(COMMANDER_PACKAGE)

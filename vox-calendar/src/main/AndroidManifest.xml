@@ -50,7 +50,7 @@
             <!-- Capability advertising: Commander reads this at scan time to route the "calendar"
                  NLU domain here, with no per-app config on Commander's side. -->
             <meta-data android:name="com.voxapps.vox.domain" android:value="calendar" />
-            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import,get_schema" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Calendar" />
             <meta-data
                 android:name="com.voxapps.vox.nluHint"

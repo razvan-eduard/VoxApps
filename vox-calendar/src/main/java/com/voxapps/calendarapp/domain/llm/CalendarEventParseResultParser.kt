@@ -1,6 +1,7 @@
 package com.voxapps.calendarapp.domain.llm
 
 import com.voxapps.calendarapp.data.CalendarEntryType
+import com.voxapps.schema.VoxExtractionSchema
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -16,6 +17,7 @@ import java.time.format.DateTimeParseException
  * don't create a broken entry) if either is missing or unparseable.
  */
 object CalendarEventParseResultParser {
+    @VoxExtractionSchema(version = 1)
     data class Parsed(
         val title: String,
         val type: CalendarEntryType,

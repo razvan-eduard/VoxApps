@@ -41,6 +41,25 @@ data class NluIntent(
     val uriTemplate: String? = null,
     val mediaControlType: String? = null
 ) {
+    /**
+     * Serializes the full anatomy (not just [logicalSubject]) for a satellite's extraction pass —
+     * see the collapsed voice-command plan. Previously only [logicalSubject] survived the handoff to
+     * a satellite's second LLM call, silently discarding [actionVerb]/[modifiers]/[contextWords] this
+     * call already computed, forcing the satellite to re-derive them from a flattened string. This is
+     * the substitution text for [com.voxapps.ipc.VoxSatelliteSchema.buildPrompt].
+     */
+    fun toDecompositionText(): String = buildString {
+        appendLine("action: $actionVerb")
+        logicalSubject?.takeIf { it.isNotBlank() }?.let { appendLine("subject: $it") }
+        if (modifiers.isNotEmpty()) appendLine("modifiers: ${modifiers.joinToString(", ")}")
+        if (contextWords.isNotEmpty()) appendLine("context: ${contextWords.joinToString(", ")}")
+        // Some satellites reuse `category` for an explicitly-named target (e.g. Calendar's "target
+        // calendar" hint) rather than a search/routing category — forwarded verbatim like every other
+        // anatomy field so the satellite's extraction pass sees it, instead of only surviving on the
+        // old fallback path that folded it into a literal string by hand.
+        category?.takeIf { it.isNotBlank() }?.let { appendLine("target: $it") }
+    }.trim()
+
     companion object {
         const val EXTRA_MESSAGE_BODY = "message_body"
     }

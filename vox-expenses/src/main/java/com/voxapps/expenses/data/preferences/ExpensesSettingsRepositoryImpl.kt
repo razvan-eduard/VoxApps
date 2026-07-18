@@ -44,6 +44,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
+        val ATTACH_PHOTO_ON_RETRY = booleanPreferencesKey("attach_photo_on_retry")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -68,7 +70,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             appCacheJson = prefs[Keys.APP_CACHE_JSON],
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: ExpensesSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
-            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false
+            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+            attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
+            attachPhotoOnRetry = prefs[Keys.ATTACH_PHOTO_ON_RETRY] ?: false
         )
     }
 
@@ -178,6 +182,14 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
+    override suspend fun setAttachPhotoOnScan(enabled: Boolean) {
+        dataStore.edit { it[Keys.ATTACH_PHOTO_ON_SCAN] = enabled }
+    }
+
+    override suspend fun setAttachPhotoOnRetry(enabled: Boolean) {
+        dataStore.edit { it[Keys.ATTACH_PHOTO_ON_RETRY] = enabled }
+    }
+
     override suspend fun restoreSettings(settings: ExpensesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -203,6 +215,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
+            prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
+            prefs[Keys.ATTACH_PHOTO_ON_RETRY] = settings.attachPhotoOnRetry
             // appCacheJson intentionally untouched — see interface doc comment.
         }
     }

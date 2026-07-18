@@ -8,6 +8,7 @@ import android.widget.Toast
 import com.voxapps.ipc.VoxCommand
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
+import com.voxapps.ipc.VoxSatelliteSchema
 import com.voxapps.notes.NotesApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +67,14 @@ class VoxCommandReceiver : BroadcastReceiver() {
                         pending.finish()
                     }
                 }
+            }
+
+            VoxIpc.OP_GET_SCHEMA -> {
+                // Notes' voice flow has no extraction prompt builder at all — the raw transcript IS
+                // the note body, category comes straight from Commander's own classification call.
+                // needsExtractionPass=false, declared explicitly rather than left as a Commander-side
+                // implicit default (see the collapsed voice-command plan, section 1b/6a).
+                setResult(Activity.RESULT_OK, VoxResult(ok = true, text = VoxSatelliteSchema(needsExtractionPass = false).toJson()).toJson(), null)
             }
 
             VoxIpc.OP_READ -> {

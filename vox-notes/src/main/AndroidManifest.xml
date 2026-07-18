@@ -50,7 +50,7 @@
             <!-- Capability advertising: Commander reads this at scan time to route the "notes" NLU
                  domain here (create/read), with no per-app config on Commander's side. -->
             <meta-data android:name="com.voxapps.vox.domain" android:value="notes" />
-            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import,get_schema" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Notes" />
             <meta-data
                 android:name="com.voxapps.vox.nluHint"
@@ -86,5 +86,18 @@
             </intent-filter>
             <meta-data android:name="com.voxapps.vox.ocr.task" android:value="NOTE_SCAN_CLEANUP" />
         </receiver>
+
+        <!-- Grants Commander temporary read access to the AI-attachment photo copy staged from
+             Vision's OCR result (see VoxLlmRequest.attachmentUri) — only used when this app's own
+             "attach photo on scan" setting is on and Vision provided a downscaled copy. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.voxapps.notes.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

@@ -35,6 +35,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
     }
 
     override val settingsFlow: Flow<NotesSettings> = dataStore.data.map { prefs ->
@@ -51,7 +52,8 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: NotesSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
-            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false
+            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+            attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false
         )
     }
 
@@ -120,6 +122,10 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
+    override suspend fun setAttachPhotoOnScan(enabled: Boolean) {
+        dataStore.edit { it[Keys.ATTACH_PHOTO_ON_SCAN] = enabled }
+    }
+
     override suspend fun restoreSettings(settings: NotesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -138,6 +144,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             prefs[Keys.CALENDAR_VIEW_ENABLED] = settings.calendarViewEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
+            prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
         }
     }
 

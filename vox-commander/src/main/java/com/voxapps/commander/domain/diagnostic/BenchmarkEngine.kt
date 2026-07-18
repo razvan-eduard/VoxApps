@@ -280,7 +280,7 @@ class BenchmarkEngine(
 
     private suspend fun runOpenAiIntentBenchmark() {
         try {
-            val engine = OpenAiInterpreter(settingsRepo)
+            val engine = OpenAiInterpreter(context, settingsRepo)
             val start = System.currentTimeMillis()
             val result = engine.processCommand(INTENT_TEST_COMMAND)
             val end = System.currentTimeMillis()

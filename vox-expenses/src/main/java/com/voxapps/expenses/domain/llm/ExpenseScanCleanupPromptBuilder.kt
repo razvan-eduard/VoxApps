@@ -63,11 +63,11 @@ object ExpenseScanCleanupPromptBuilder {
             multiplication marker IS the value of one unit) or CUMULATIVE (a line/subtotal amount covering the
             whole printed quantity, with no separate per-unit figure shown). Decide which applies to EACH line
             independently:
-              - DISTRIBUTIVE: copy that number into "unitPrice" exactly as printed. NEVER divide it by quantity
-                — a distributive price already IS the per-unit value.
+              - DISTRIBUTIVE: copy that number into "unitPrice" exactly as printed.
               - CUMULATIVE: divide that amount by the item's quantity to get "unitPrice" (quantity * unitPrice
                 must reconstruct the printed line amount). Only do this when no distributive per-unit price is
                 printed at all for that line.
+            ${DistributiveCumulativeRule.INVARIANT}
             This rule governs each line item's "unitPrice" ONLY — it does not apply to "totalAmount" (see the
             rule for that field below, which always prefers the receipt's own printed total).
 

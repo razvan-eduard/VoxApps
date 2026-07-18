@@ -26,6 +26,12 @@
   "capture_speed_low": "Faible (plus rapide, peut capturer avant un bon cadrage)",
   "capture_speed_medium": "Moyenne",
   "capture_speed_high": "Élevée (attend plus longtemps un cadrage bien défini)",
+  "send_photo_to_ai": "Envoyer la photo à l'IA",
+  "send_photo_to_ai_desc": "Joindre la photo scannée avec le texte reconnu lorsqu'un moteur IA multimodal est configuré — désactivé par défaut car cela coûte des jetons supplémentaires",
+  "photo_detail_for_ai": "Détail photo pour l'IA",
+  "photo_detail_low": "Faible (le plus petit, le moins cher)",
+  "photo_detail_medium": "Moyen",
+  "photo_detail_high": "Élevé (le plus grand, le plus cher)",
   "debug_logging": "Journalisation de débogage",
   "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage"
 }

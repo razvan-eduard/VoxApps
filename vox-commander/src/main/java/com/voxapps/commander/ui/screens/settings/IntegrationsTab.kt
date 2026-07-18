@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.filled.Apps
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.ipc.VoxIpc
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.service.SpotifyPkceManager
 import com.voxapps.commander.service.SpotifyRemoteManager
@@ -287,6 +288,9 @@ private fun VoxAppsSection(languageManager: LanguageManager) {
     val apps by com.voxapps.commander.domain.integration.VoxSatelliteRegistry.apps.collectAsStateWithLifecycle()
     // packageName -> "testing" | "ok" | "fail"
     val pingStatus = remember { mutableStateMapOf<String, String>() }
+    // packageName -> "refreshing" | "ok" | "fail" for the schema cache Refresh button.
+    val schemaStatus = remember { mutableStateMapOf<String, String>() }
+    val schemaCache by com.voxapps.commander.domain.integration.VoxSatelliteRegistry.schemaCache.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) { com.voxapps.commander.domain.integration.VoxSatelliteRegistry.refresh(context) }
@@ -335,6 +339,11 @@ private fun VoxAppsSection(languageManager: LanguageManager) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         val status = pingStatus[app.packageName]
+                        // Only apps that actually advertise get_schema support (Expenses/Calendar/
+                        // Notes) get the Refresh button and schema status line — Vision, e.g., only
+                        // advertises "ping" (it's an OCR producer, not a satellite), so it has nothing
+                        // to fetch here and showing a failing Refresh button for it is misleading.
+                        val supportsSchema = app.actions.contains(VoxIpc.OP_GET_SCHEMA)
                         Box(
                             modifier = Modifier.size(10.dp).clip(CircleShape).background(
                                 when (status) {
@@ -385,6 +394,20 @@ private fun VoxAppsSection(languageManager: LanguageManager) {
                                     }
                                 )
                             }
+                            // Debugging aid only (per the plan: informational, never drives
+                            // invalidation) — shows whether a cached extraction contract exists and
+                            // its KSP-generated schema version.
+                            val cached = schemaCache[app.packageName]
+                            val schemaLabel = if (!supportsSchema) null else when (schemaStatus[app.packageName]) {
+                                "refreshing" -> languageManager.getString("vox_apps_schema_refreshing") ?: "Refreshing schema…"
+                                "fail" -> languageManager.getString("vox_apps_schema_fail") ?: "Schema refresh failed"
+                                else -> cached?.let {
+                                    if (it.needsExtractionPass) "schema v${it.fieldSchemaVersion} • 2-pass" else "schema cached • 1-pass"
+                                }
+                            }
+                            schemaLabel?.let {
+                                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                         if (status == "testing") {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -397,6 +420,22 @@ private fun VoxAppsSection(languageManager: LanguageManager) {
                                 }
                             }) {
                                 Text(languageManager.getString("vox_apps_test") ?: "Test")
+                            }
+                        }
+                        if (supportsSchema) {
+                            if (schemaStatus[app.packageName] == "refreshing") {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                TextButton(onClick = {
+                                    schemaStatus[app.packageName] = "refreshing"
+                                    scope.launch {
+                                        val schema = com.voxapps.commander.domain.integration.VoxSatelliteRegistry
+                                            .refreshSchema(context, app.packageName)
+                                        schemaStatus[app.packageName] = if (schema != null) "ok" else "fail"
+                                    }
+                                }) {
+                                    Text(languageManager.getString("vox_apps_refresh") ?: "Refresh")
+                                }
                             }
                         }
                     }

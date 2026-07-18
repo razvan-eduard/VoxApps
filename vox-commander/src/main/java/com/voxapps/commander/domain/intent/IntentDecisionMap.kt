@@ -110,5 +110,5 @@ class IntentDecisionMap(
 
     // Not applicable — this class is the NLU-specific L1->L2->L3 cascade orchestrator. The generic
     // LLM hook (satellite raw-prompt requests) uses the dedicated, non-cascading LlmHookEngineSelector.
-    override suspend fun rawPrompt(promptText: String): String? = null
+    override suspend fun rawPrompt(promptText: String, imageUri: String?): String? = null
 }

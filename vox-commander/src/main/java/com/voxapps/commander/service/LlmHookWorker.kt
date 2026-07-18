@@ -55,7 +55,7 @@ class LlmHookWorker(
         val container = (applicationContext as VoxApplication).container
 
         return try {
-            val outcome = container.llmHookEngineSelector.run(request.promptText)
+            val outcome = container.llmHookEngineSelector.run(request.promptText, request.attachmentUri)
             val result = when (outcome) {
                 is RawPromptOutcome.Success -> VoxLlmResult(
                     task = request.task,

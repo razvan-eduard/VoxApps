@@ -161,6 +161,28 @@
             <meta-data android:name="com.voxapps.vox.actions" android:value="ping,export,import" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Vox Commander" />
         </receiver>
+
+        <!-- Satellite-initiated push: a satellite's own dynamic context (categories, etc.) changed,
+             so the cached schema in VoxSatelliteRegistry needs correcting immediately. -->
+        <receiver
+            android:name=".domain.integration.SchemaChangedReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.vox.permission.SCHEMA_CHANGED">
+            <intent-filter>
+                <action android:name="com.voxapps.action.SCHEMA_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Any first-party app can synchronously ask which capabilities Commander's currently-
+             configured engine has (e.g. Vision, before deciding whether to attach a scanned photo). -->
+        <receiver
+            android:name=".service.CapabilityQueryReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.vox.permission.CAPABILITY_QUERY">
+            <intent-filter>
+                <action android:name="com.voxapps.action.CAPABILITY_QUERY" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

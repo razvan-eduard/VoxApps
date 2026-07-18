@@ -1,5 +1,6 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.schema.VoxExtractionSchema
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -18,6 +19,7 @@ object ExpenseParseResultParser {
         val grossAmount: Double? = null
     )
 
+    @VoxExtractionSchema(version = 1)
     data class Parsed(
         val title: String?,
         val totalAmount: Double,

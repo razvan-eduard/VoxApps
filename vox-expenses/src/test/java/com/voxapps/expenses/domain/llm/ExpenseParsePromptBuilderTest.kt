@@ -1,9 +1,29 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.ipc.VoxSatelliteSchema
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExpenseParsePromptBuilderTest {
+
+    @Test
+    fun `buildTemplate carries the input placeholder instead of a literal utterance`() {
+        val template = ExpenseParsePromptBuilder.buildTemplate(
+            existingCategories = listOf("Mancare"), defaultCurrency = "RON", languageCode = "ro"
+        )
+        assertTrue(template.contains(VoxSatelliteSchema.INPUT_PLACEHOLDER))
+        assertTrue(template.contains("Mancare"))
+    }
+
+    @Test
+    fun `VoxSatelliteSchema buildPrompt substitutes the template's placeholder correctly`() {
+        val template = ExpenseParsePromptBuilder.buildTemplate(emptyList(), "RON", "ro")
+        val schema = VoxSatelliteSchema(needsExtractionPass = true, promptTemplate = template)
+        val prompt = schema.buildPrompt("action: buy\nsubject: 3 apples for 6 lei")
+        assertTrue(prompt.contains("action: buy"))
+        assertFalse(prompt.contains(VoxSatelliteSchema.INPUT_PLACEHOLDER))
+    }
 
     @Test
     fun `includes the raw text, default currency, and language`() {

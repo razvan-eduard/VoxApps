@@ -55,10 +55,10 @@ class AppContainer(context: Context) {
 
     // --- INTENT ENGINES ---
     private val l1Engine = FastMapEngine(fastMapDao)
-    private val l2Engine = OpenAiInterpreter(settingsRepository)
+    private val l2Engine = OpenAiInterpreter(appContext, settingsRepository)
     val localLlmInterpreter = LocalLlmInterpreter(appContext, settingsRepository, modelDownloader)
     val geminiNanoInterpreter = GeminiNanoInterpreter(appContext, settingsRepository)
-    val geminiCloudInterpreter = GeminiCloudInterpreter(settingsRepository)
+    val geminiCloudInterpreter = GeminiCloudInterpreter(appContext, settingsRepository)
     val masterIntentEngine = IntentDecisionMap(l1Engine, l2Engine, localLlmInterpreter, geminiNanoInterpreter, geminiCloudInterpreter, settingsRepository)
     val llmHookEngineSelector = com.voxapps.commander.domain.intent.LlmHookEngineSelector(
         openAiEngine = l2Engine,

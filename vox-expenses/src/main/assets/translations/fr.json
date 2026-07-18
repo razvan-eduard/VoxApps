@@ -164,6 +164,10 @@
   "all_vendors": "Tous les marchands",
   "calendar_view": "Vue calendrier",
   "calendar_view_desc": "Parcourir les dépenses sous forme de calendrier défilable, paginé par mois, plutôt qu'une simple liste",
+  "attach_photo_on_scan": "Joindre la photo lors du scan",
+  "attach_photo_on_scan_desc": "Envoyer la photo du reçu avec le texte reconnu à l'IA (nécessite aussi le réglage «envoyer la photo à l'IA» de Vision et un moteur multimodal configuré)",
+  "attach_photo_on_retry": "Joindre la photo lors de la nouvelle tentative",
+  "attach_photo_on_retry_desc": "Envoyer aussi la photo lors d'une nouvelle tentative après un échec, pas seulement au premier essai",
   "today": "Aujourd'hui",
   "debug_section": "Débogage",
   "add_test_data": "Ajouter des données de test"

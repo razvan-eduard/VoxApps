@@ -25,13 +25,27 @@ package com.voxapps.ipc
  *    request's `sourcePackage`) carrying a [VoxOcrResult] JSON in [EXTRA_OCR_PAYLOAD], guarded by
  *    [PERMISSION_OCR_RESULT]. Vision only ever returns raw OCR text — classifying it (note vs.
  *    receipt, etc.) is the caller's job via its own follow-up generic-LLM-hook request.
+ *  - Commander → satellite (schema fetch): [OP_GET_SCHEMA] over the same [ACTION_COMMAND]/
+ *    [PERMISSION_COMMAND] request-response channel as ping/export/import — the satellite replies with
+ *    a [VoxSatelliteSchema] JSON in [VoxResult.text]. Proactively fetched from Commander's Integrations
+ *    screen and cached; not called per voice command (see [VoxDataTransferClient.requestSchema]).
+ *  - satellite → Commander (schema changed, push): [ACTION_SCHEMA_CHANGED] explicit-intent broadcast,
+ *    fire-and-forget, carrying a fresh [VoxSatelliteSchema] JSON in [EXTRA_SCHEMA_PAYLOAD], guarded by
+ *    [PERMISSION_SCHEMA_CHANGED]. The only satellite-initiated broadcast in this contract — fired the
+ *    instant a satellite's own dynamic context (categories, etc.) changes, so Commander's cache never
+ *    needs a TTL or a poll to stay correct.
+ *  - any first-party app → Commander (capability query): [ACTION_CAPABILITY_QUERY] ordered broadcast,
+ *    request-response like [VoxAppsDiscovery.ping], guarded by [PERMISSION_CAPABILITY_QUERY]. Global
+ *    Commander engine state (e.g. "is the configured engine multimodal"), not per-satellite data — kept
+ *    separate from [OP_GET_SCHEMA] on purpose.
  *
- * [PERMISSION_COMMAND]/[PERMISSION_LLM_RESULT]/[PERMISSION_OCR_RESULT]/[PERMISSION_LLM_PROCESS] are
- * declared (both `<permission>` and the matching `<uses-permission>`) once in this module's own
- * `AndroidManifest.xml` — manifest merger folds them into every app that depends on `:core:ipc`, so
- * every Vox app automatically both offers and holds all four, with zero per-app manifest edits ever.
- * `protectionLevel="signature"` ties the actual grant to "signed with the same developer key", so one
- * shared name per contract type enforces the identical trust boundary N per-satellite names used to.
+ * [PERMISSION_COMMAND]/[PERMISSION_LLM_RESULT]/[PERMISSION_OCR_RESULT]/[PERMISSION_LLM_PROCESS]/
+ * [PERMISSION_SCHEMA_CHANGED]/[PERMISSION_CAPABILITY_QUERY] are declared (both `<permission>` and the
+ * matching `<uses-permission>`) once in this module's own `AndroidManifest.xml` — manifest merger
+ * folds them into every app that depends on `:core:ipc`, so every Vox app automatically both offers
+ * and holds all of them, with zero per-app manifest edits ever. `protectionLevel="signature"` ties the
+ * actual grant to "signed with the same developer key", so one shared name per contract type enforces
+ * the identical trust boundary N per-satellite names used to.
  */
 object VoxIpc {
     // --- Actions ---
@@ -42,12 +56,26 @@ object VoxIpc {
     const val ACTION_LLM_RESULT = "com.voxapps.action.LLM_RESULT"
     const val ACTION_OCR_RESULT = "com.voxapps.action.OCR_RESULT"
 
+    /** Satellite → Commander, fire-and-forget push. See class doc comment. */
+    const val ACTION_SCHEMA_CHANGED = "com.voxapps.action.SCHEMA_CHANGED"
+
+    /** Any first-party app → Commander, ordered-broadcast request-response. See class doc comment. */
+    const val ACTION_CAPABILITY_QUERY = "com.voxapps.action.CAPABILITY_QUERY"
+
     // --- Extras ---
     const val EXTRA_PAYLOAD = "com.voxapps.extra.PAYLOAD"
     const val EXTRA_RESULT = "com.voxapps.extra.RESULT"
     const val EXTRA_QUERY = "com.voxapps.extra.QUERY"
     const val EXTRA_LLM_PAYLOAD = "com.voxapps.extra.LLM_PAYLOAD"
     const val EXTRA_OCR_PAYLOAD = "com.voxapps.extra.OCR_PAYLOAD"
+    const val EXTRA_SCHEMA_PAYLOAD = "com.voxapps.extra.SCHEMA_PAYLOAD"
+
+    /**
+     * The sender's own package name, carried explicitly in [ACTION_SCHEMA_CHANGED]'s extras — a plain
+     * broadcast doesn't reliably expose the caller's identity (same reason [VoxLlmRequest.sourcePackage]
+     * exists), so the satellite must state who it is rather than Commander inferring it from the intent.
+     */
+    const val EXTRA_SOURCE_PACKAGE = "com.voxapps.extra.SOURCE_PACKAGE"
 
     /**
      * Epoch-millis day to pre-select, carried on a plain explicit-intent `startActivity` (not the
@@ -79,6 +107,14 @@ object VoxIpc {
      */
     const val OP_EXPORT = "export"
     const val OP_IMPORT = "import"
+
+    /**
+     * A satellite's contract for the collapsed voice-command extraction flow: whether it needs a
+     * second LLM pass, and — if so — the cacheable [VoxSatelliteSchema] to run it with. Same
+     * request-response channel as [OP_PING]/[OP_EXPORT]/[OP_IMPORT]; the reply's [VoxResult.text] is
+     * a [VoxSatelliteSchema] JSON. See [VoxDataTransferClient.requestSchema].
+     */
+    const val OP_GET_SCHEMA = "get_schema"
 
     /** [VoxCommand.exportScope] values — which slice of an app's export payload to include. */
     const val EXPORT_SCOPE_SETTINGS = "settings"
@@ -126,6 +162,8 @@ object VoxIpc {
     const val PERMISSION_LLM_RESULT = "com.voxapps.vox.permission.LLM_RESULT"
     const val PERMISSION_OCR_RESULT = "com.voxapps.vox.permission.OCR_RESULT"
     const val PERMISSION_LLM_PROCESS = "com.voxapps.vox.permission.LLM_PROCESS"
+    const val PERMISSION_SCHEMA_CHANGED = "com.voxapps.vox.permission.SCHEMA_CHANGED"
+    const val PERMISSION_CAPABILITY_QUERY = "com.voxapps.vox.permission.CAPABILITY_QUERY"
 
     /**
      * Vision's package and pending-scan activity, for satellites that launch Vision's UI directly

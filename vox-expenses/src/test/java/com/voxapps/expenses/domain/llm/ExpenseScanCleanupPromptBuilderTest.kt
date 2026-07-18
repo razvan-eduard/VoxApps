@@ -33,7 +33,10 @@ class ExpenseScanCleanupPromptBuilderTest {
 
         assertTrue(prompt.contains("DISTRIBUTIVE"))
         assertTrue(prompt.contains("CUMULATIVE"))
-        assertTrue(prompt.contains("NEVER divide it by quantity"))
+        // The invariant now comes from the shared DistributiveCumulativeRule (see
+        // ExpenseParsePromptBuilder, which teaches the identical rule for spoken utterances) rather
+        // than being hand-copied text local to this builder.
+        assertTrue(prompt.contains(DistributiveCumulativeRule.INVARIANT))
         assertTrue(prompt.contains("does not apply to \"totalAmount\""))
     }
 

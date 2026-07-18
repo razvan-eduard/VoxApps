@@ -39,6 +39,22 @@ object VoxDataTransferClient {
     ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_IMPORT, text = payloadJson), timeoutMs)
 
     /**
+     * Fetches a satellite's [VoxSatelliteSchema] — its call-count contract, prompt template, and
+     * schema version — over the same request-response channel as [requestExport]/[requestImport].
+     * Called from Commander's Integrations "Refresh" button (proactive, cached), not per voice
+     * command. Returns null on timeout, unreachable satellite, or a malformed/missing-contract reply.
+     */
+    suspend fun requestSchema(
+        context: Context,
+        packageName: String,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    ): VoxSatelliteSchema? {
+        val result = send(context, packageName, VoxCommand(op = VoxIpc.OP_GET_SCHEMA), timeoutMs)
+        if (result?.ok != true) return null
+        return VoxSatelliteSchema.fromJson(result.text)
+    }
+
+    /**
      * Day-scoped read: reuses the existing [VoxIpc.OP_READ] channel with [VoxCommand.dateFrom]/
      * [VoxCommand.dateTo] set, rather than a new op — a satellite that doesn't understand day-scoped
      * reads just ignores the extra fields and returns its normal full-snapshot text. Used by Vox
@@ -51,6 +67,21 @@ object VoxDataTransferClient {
         dateTo: Long,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
     ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_READ, dateFrom = dateFrom, dateTo = dateTo), timeoutMs)
+
+    /**
+     * Fire-and-forget push: a satellite calls this the instant its own dynamic context (categories,
+     * currency, language, or equivalent) changes, so Commander's cache is corrected immediately
+     * instead of waiting for a manual Refresh. Not a request-response — no reply is expected or
+     * awaited. See [VoxIpc.ACTION_SCHEMA_CHANGED].
+     */
+    fun pushSchemaChanged(context: Context, schema: VoxSatelliteSchema) {
+        val intent = Intent(VoxIpc.ACTION_SCHEMA_CHANGED).apply {
+            setPackage(VoxAppsDiscovery.COMMANDER_PACKAGE)
+            putExtra(VoxIpc.EXTRA_SCHEMA_PAYLOAD, schema.toJson())
+            putExtra(VoxIpc.EXTRA_SOURCE_PACKAGE, context.packageName)
+        }
+        context.sendBroadcast(intent)
+    }
 
     private suspend fun send(context: Context, packageName: String, command: VoxCommand, timeoutMs: Long): VoxResult? {
         val intent = Intent(VoxIpc.ACTION_COMMAND).apply {

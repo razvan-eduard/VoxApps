@@ -5,10 +5,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.voxapps.expenses.ExpensesApplication
+import com.voxapps.expenses.domain.llm.ExpenseParsePromptBuilder
 import com.voxapps.expenses.domain.llm.ExpenseParseRequestSender
+import com.voxapps.expenses.domain.llm.GeneratedParsedSchema
+import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.ipc.VoxCommand
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
+import com.voxapps.ipc.VoxSatelliteSchema
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -53,6 +57,31 @@ class VoxCommandReceiver : BroadcastReceiver() {
                             defaultCurrency = settings.defaultCurrency,
                             languageCode = settings.language
                         )
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            VoxIpc.OP_GET_SCHEMA -> {
+                // See the collapsed voice-command plan: Commander fetches and caches this once
+                // (Integrations' Refresh button), not per voice command. needsExtractionPass=true
+                // because a raw utterance needs real distributive/cumulative-price reasoning that
+                // Commander's own classification call isn't positioned to resolve.
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val settings = container.settingsRepository.getSnapshot()
+                        val categoryNames = container.expensesRepository.categories.first().map { it.name }
+                        val schema = VoxSatelliteSchema(
+                            needsExtractionPass = true,
+                            promptTemplate = ExpenseParsePromptBuilder.buildTemplate(
+                                categoryNames, settings.defaultCurrency, settings.language
+                            ),
+                            fieldSchemaVersion = GeneratedParsedSchema.VERSION,
+                            taskId = LlmTasks.EXPENSE_PARSE
+                        )
+                        pending.setResultData(VoxResult(ok = true, text = schema.toJson()).toJson())
                     } finally {
                         pending.finish()
                     }

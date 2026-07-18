@@ -1,12 +1,30 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.ipc.VoxSatelliteSchema
+
 /**
  * Language-agnostic semantic prompt builder for spoken expenses.
  * Uses semantic role labeling (verb, subject, object, quantity, price role)
  * before mapping to expense fields.
  */
 object ExpenseParsePromptBuilder {
-    fun build(rawText: String, existingCategories: List<String>, defaultCurrency: String, languageCode: String): String {
+    /**
+     * Today's self-contained call: builds a fully-rendered prompt with [rawText] baked in. Used by
+     * the fallback path (no cached [VoxSatelliteSchema] yet) — Expenses still self-serves via its own
+     * generic-LLM-hook request in that case, exactly as before.
+     */
+    fun build(rawText: String, existingCategories: List<String>, defaultCurrency: String, languageCode: String): String =
+        buildPrompt(rawText, existingCategories, defaultCurrency, languageCode)
+
+    /**
+     * The cacheable version: same prompt, but with [VoxSatelliteSchema.INPUT_PLACEHOLDER] in place of
+     * a literal utterance — this is what [VoxIpc.OP_GET_SCHEMA] returns for Commander to cache and
+     * later substitute into per-command, entirely locally (see the collapsed voice-command plan).
+     */
+    fun buildTemplate(existingCategories: List<String>, defaultCurrency: String, languageCode: String): String =
+        buildPrompt(VoxSatelliteSchema.INPUT_PLACEHOLDER, existingCategories, defaultCurrency, languageCode)
+
+    private fun buildPrompt(inputText: String, existingCategories: List<String>, defaultCurrency: String, languageCode: String): String {
         val categoriesLine = if (existingCategories.isEmpty()) {
             "No categories exist yet."
         } else {
@@ -55,7 +73,7 @@ object ExpenseParsePromptBuilder {
               Then, and only then:
                       subtotal := QUANTITY * unitPrice   (when unitPrice known)
                       totalAmount := sum(subtotals)      (else the cumulative PRICE)
-              Invariant: a DISTRIBUTIVE PRICE is NEVER divided by QUANTITY.
+              ${DistributiveCumulativeRule.INVARIANT}
 
             TECHNICAL CONSTRAINTS:
             - Respond in language: "$languageCode".
@@ -68,7 +86,7 @@ object ExpenseParsePromptBuilder {
               If not mentioned, leave as null.
 
             INPUT TEXT:
-            $rawText
+            $inputText
         """.trimIndent()
     }
 }

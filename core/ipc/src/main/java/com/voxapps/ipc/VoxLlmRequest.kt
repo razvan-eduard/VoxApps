@@ -11,12 +11,19 @@ import org.json.JSONObject
  * (Commander's actual instructions must already be folded into [promptText] by the caller).
  * [sourcePackage] is required because a plain broadcast doesn't reliably expose the caller's identity —
  * Commander uses it as the explicit-intent target for the async [VoxLlmResult] reply.
+ *
+ * [attachmentUri] optionally carries a content:// URI (the caller must have granted Commander read
+ * access, e.g. via [android.content.Context.grantUriPermission]) to an image to attach alongside
+ * [promptText] — only meaningful when the caller already confirmed Commander's configured engine is
+ * multimodal (see `VoxCapabilityClient.isMultimodal`); ignored otherwise. Currently only used by
+ * Expenses' receipt-scan flow.
  */
 data class VoxLlmRequest(
     val sourcePackage: String,
     val task: String,
     val promptText: String,
-    val data: List<String> = emptyList()
+    val data: List<String> = emptyList(),
+    val attachmentUri: String? = null
 ) {
     fun toJson(): String {
         val o = JSONObject()
@@ -24,6 +31,7 @@ data class VoxLlmRequest(
         o.put("task", task)
         o.put("promptText", promptText)
         o.put("data", JSONArray(data))
+        attachmentUri?.let { o.put("attachmentUri", it) }
         return o.toString()
     }
 
@@ -42,7 +50,10 @@ data class VoxLlmRequest(
                 } else {
                     emptyList()
                 }
-                VoxLlmRequest(sourcePackage = sourcePackage, task = task, promptText = promptText, data = data)
+                VoxLlmRequest(
+                    sourcePackage = sourcePackage, task = task, promptText = promptText, data = data,
+                    attachmentUri = o.optStringOrNull("attachmentUri")
+                )
             } catch (e: Exception) {
                 null
             }

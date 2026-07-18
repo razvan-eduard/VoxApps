@@ -77,6 +77,13 @@ class VoxApplication : Application() {
         // Initialize Spotify PKCE manager and load persisted tokens
         SpotifyPkceManager.init(container.settingsRepository)
 
+        // Hydrate the satellite schema cache from disk so it survives process death — must happen
+        // before any voice command can be routed, so the collapsed-path cache is trusted immediately
+        // rather than looking cold for the app's first command after every restart.
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            com.voxapps.commander.domain.integration.VoxSatelliteRegistry.loadSchemaCacheFromDisk(this@VoxApplication)
+        }
+
         // Reconcile the persisted "downloaded" flags with disk truth. The green/on-device
         // indicator is a DataStore set that never gets recomputed, so it drifts when files are
         // deleted externally or an extraction was hollow. Runs in its OWN coroutine, decoupled

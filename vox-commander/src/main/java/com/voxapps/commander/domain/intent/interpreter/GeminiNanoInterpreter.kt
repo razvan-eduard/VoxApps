@@ -49,7 +49,7 @@ class GeminiNanoInterpreter(
         null
     }
 
-    override suspend fun rawPrompt(promptText: String): String? {
+    override suspend fun rawPrompt(promptText: String, imageUri: String?): String? {
         // On-device Gemini Nano inference isn't implemented yet (see processCommand) — the LLM hook
         // special-cases this engine for a clearer error message rather than relying on this null.
         return null

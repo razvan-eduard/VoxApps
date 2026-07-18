@@ -23,4 +23,10 @@
     <permission android:name="com.voxapps.vox.permission.LLM_PROCESS" android:protectionLevel="signature" />
     <uses-permission android:name="com.voxapps.vox.permission.LLM_PROCESS" />
 
+    <permission android:name="com.voxapps.vox.permission.SCHEMA_CHANGED" android:protectionLevel="signature" />
+    <uses-permission android:name="com.voxapps.vox.permission.SCHEMA_CHANGED" />
+
+    <permission android:name="com.voxapps.vox.permission.CAPABILITY_QUERY" android:protectionLevel="signature" />
+    <uses-permission android:name="com.voxapps.vox.permission.CAPABILITY_QUERY" />
+
 </manifest>

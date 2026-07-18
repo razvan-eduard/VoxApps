@@ -21,6 +21,8 @@ class VisionSettingsRepository(context: Context) {
         val AUTO_TRIGGER_STABILITY = stringPreferencesKey("auto_trigger_stability")
         val FLASH_MODE = stringPreferencesKey("flash_mode")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
+        val SEND_PHOTO_TO_AI = booleanPreferencesKey("send_photo_to_ai")
+        val PHOTO_DETAIL_FOR_AI = stringPreferencesKey("photo_detail_for_ai")
     }
 
     companion object {
@@ -28,6 +30,21 @@ class VisionSettingsRepository(context: Context) {
         const val DEFAULT_SENSITIVITY = "medium"
         const val DEFAULT_STABILITY = "medium"
         const val DEFAULT_FLASH = "auto"
+        const val DEFAULT_PHOTO_DETAIL = "medium"
+
+        /**
+         * Long-edge target pixels for each [photoDetailForAiFlow] level — the only thing that
+         * actually reduces LLM token cost for an attached photo (OpenAI/Gemini tokenize images by
+         * pixel-dimension tiling; JPEG compression quality and color depth don't factor in, only
+         * resolution does). Bounded so "Low" still comfortably fits a receipt's line-item text —
+         * going lower would save a little more but risks making the photo useless to the model,
+         * which defeats the point of attaching it at all.
+         */
+        fun targetLongEdgePx(detail: String): Int = when (detail) {
+            "high" -> 1536
+            "low" -> 768
+            else -> 1024 // "medium"
+        }
     }
 
     val ocrZoneFlow: Flow<String> = dataStore.data.map { it[Keys.OCR_ZONE] ?: DEFAULT_ZONE }
@@ -75,5 +92,26 @@ class VisionSettingsRepository(context: Context) {
 
     suspend fun setDebugLoggingEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
+    }
+
+    /**
+     * Off by default — attaching a photo costs real LLM tokens on top of the (free, local) OCR text
+     * this app already provides, so it's an opt-in, not an opt-out. When off, this app never prepares
+     * or offers an AI-attachment copy at all (see [com.voxapps.vision.ui.captureAndRecognize]) —
+     * downstream consumers (Expenses/Notes) never receive one to attach regardless of their own
+     * per-satellite toggles.
+     */
+    val sendPhotoToAiFlow: Flow<Boolean> = dataStore.data.map { it[Keys.SEND_PHOTO_TO_AI] ?: false }
+
+    suspend fun setSendPhotoToAi(enabled: Boolean) {
+        dataStore.edit { it[Keys.SEND_PHOTO_TO_AI] = enabled }
+    }
+
+    /** "high" | "medium" | "low" — see [targetLongEdgePx] for what each maps to and why. */
+    val photoDetailForAiFlow: Flow<String> =
+        dataStore.data.map { it[Keys.PHOTO_DETAIL_FOR_AI] ?: DEFAULT_PHOTO_DETAIL }
+
+    suspend fun setPhotoDetailForAi(detail: String) {
+        dataStore.edit { it[Keys.PHOTO_DETAIL_FOR_AI] = detail }
     }
 }

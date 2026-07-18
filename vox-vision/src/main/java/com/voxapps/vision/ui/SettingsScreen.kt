@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 
 private val SENSITIVITY_LEVELS = listOf("low", "medium", "high")
 private val STABILITY_LEVELS = listOf("low", "medium", "high")
+private val PHOTO_DETAIL_LEVELS = listOf("low", "medium", "high")
 
 /**
  * Two picklists: which OCR script/language zone is active (see
@@ -59,6 +60,10 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
         initialValue = VisionSettingsRepository.DEFAULT_STABILITY
     )
     val debugLoggingEnabled by container.settingsRepository.debugLoggingEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
+    val sendPhotoToAi by container.settingsRepository.sendPhotoToAiFlow.collectAsStateWithLifecycle(initialValue = false)
+    val photoDetailForAi by container.settingsRepository.photoDetailForAiFlow.collectAsStateWithLifecycle(
+        initialValue = VisionSettingsRepository.DEFAULT_PHOTO_DETAIL
+    )
     var switching by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -141,6 +146,49 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
                 ) {
                     RadioButton(selected = level == activeStability, onClick = null)
                     Text(languageManager.getString("capture_speed_$level"), modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(top = 24.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("send_photo_to_ai"), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        languageManager.getString("send_photo_to_ai_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = sendPhotoToAi,
+                    onCheckedChange = { scope.launch { container.settingsRepository.setSendPhotoToAi(it) } }
+                )
+            }
+
+            if (sendPhotoToAi) {
+                Text(
+                    languageManager.getString("photo_detail_for_ai"),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+                PHOTO_DETAIL_LEVELS.forEach { level ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = level == photoDetailForAi,
+                                onClick = { scope.launch { container.settingsRepository.setPhotoDetailForAi(level) } }
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = level == photoDetailForAi, onClick = null)
+                        Text(languageManager.getString("photo_detail_$level"), modifier = Modifier.padding(start = 8.dp))
+                    }
                 }
             }
 

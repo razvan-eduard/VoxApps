@@ -160,6 +160,14 @@ Each app stays a fully independent product; a user can install any subset.
   `create` (fire-and-forget) or `read` (ordered broadcast → the satellite returns text → Commander
   **speaks it with the TTS hook**, reusing all of Commander's TTS settings). Plaintext over Binder;
   encryption at rest stays the satellite's concern.
+- **Collapsed extraction contract** — a satellite with a real structured schema (Vox Expenses, Vox
+  Calendar) declares a `VoxSatelliteSchema` (`OP_GET_SCHEMA`: does it need a second, domain-specific
+  LLM pass after Commander's own classification call, and if so, its self-owned prompt template).
+  Fetched proactively from **Settings → Integrations** (a **Refresh** button, cached, manual-only —
+  never per voice command) rather than the older 3-broadcast-per-command dance; a satellite pushes a
+  correction the instant its own dynamic context changes (e.g. a new category), so the cache stays
+  right without polling. See [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md)'s
+  "Collapsed satellite extraction flow" for the full design.
 - **Routing when several apps claim a domain** — deterministic hierarchy:
   ① app named in the utterance → ② user **star** (Settings → Default Apps) → ③ **first-party**
   (signed with Commander's own key, `checkSignatures == SIGNATURE_MATCH`) → ④ single third-party →
@@ -190,6 +198,12 @@ Each app stays a fully independent product; a user can install any subset.
   explicit-intent launch rather than a broadcast, because Android's background-activity-launch
   restriction is evaluated against the *calling* app's foreground state, not Vision's, so this needs no
   notification-tap workaround.
+- **Multimodal photo attachment** (opt-in, off by default) — Vision can attach a separately downscaled
+  copy of the scanned photo alongside the OCR text when the configured LLM engine supports images
+  (Settings → "Send photo to AI" + "Photo detail for AI" resolution picker); Vox Expenses and Vox Notes
+  each have their own toggle to actually use it for their scan flow. OCR always still runs — the photo
+  is an additional input on the same single LLM call, never a second call, and resolution (not JPEG
+  quality) is the only thing that actually changes LLM token cost for an attached image.
 
 ```
 Commander ──VoxCommand{op,text,domain}──▶ satellite VoxCommandReceiver
@@ -232,6 +246,9 @@ through Commander (`create`/`read`) or used entirely on its own.
 - Category color picker — random colors pick the hue farthest from every existing category instead of
   a plain random draw, the swatch row scrolls to reach all 10 presets, and the selected swatch gets a
   clear shadow+ring indicator
+- **Attach photo on scan** (Settings, off by default) — sends the scanned photo to the AI alongside
+  the OCR text when Vision provided one and the configured engine supports images; Notes has no
+  retry/stub mechanism, so unlike Vox Expenses there's no separate on-retry toggle
 - Multi-language UI (English, Romanian, German, French)
 
 ### Vox Vision
@@ -254,6 +271,9 @@ commands in, only OCR text out.
   above)
 - Works fully standalone (its own launcher icon) or as a **pending-request target** launched directly
   by another satellite for a hands-free "scan → auto-submit" flow
+- **"Send photo to AI" + "Photo detail for AI"** (Settings, off by default) — opt-in multimodal photo
+  attachment for satellites that support it; resolution (Low/Medium/High, 768/1024/1536px) is the only
+  control that affects LLM token cost, not JPEG quality
 - Multi-language UI (English, Romanian, German, French)
 
 ### Vox Expenses
@@ -290,6 +310,10 @@ bank/payment notifications, or entered by hand.
   bank/vendor filters and an amount ascending/descending sort; sorting by amount isn't chronological, so
   it temporarily disables the calendar view (a dismissible chip restores it)
 - **Reports** — totals and by-category breakdowns, converted into the home currency
+- **Attach photo on scan / on retry** (Settings, off by default, independent toggles) — sends the
+  receipt photo to the AI alongside the OCR text when Vision provided one and the configured engine
+  supports images; retry (re-sending already-staged OCR text after a failed parse) is a separate
+  toggle since it's a distinct, less frequent path
 - Multi-language UI (English, Romanian, German, French)
 
 ### Vox Calendar

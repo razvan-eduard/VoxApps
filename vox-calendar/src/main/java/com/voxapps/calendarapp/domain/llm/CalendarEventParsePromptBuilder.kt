@@ -1,5 +1,6 @@
 package com.voxapps.calendarapp.domain.llm
 
+import com.voxapps.ipc.VoxSatelliteSchema
 import java.time.LocalDate
 
 /**
@@ -9,11 +10,31 @@ import java.time.LocalDate
  * today's date as context (no dedicated date-NLU utility exists in this repo).
  */
 object CalendarEventParsePromptBuilder {
+    /**
+     * Today's self-contained call: builds a fully-rendered prompt with [rawText] baked in. Used by
+     * the fallback path (no cached [VoxSatelliteSchema] yet) — Calendar still self-serves via its own
+     * generic-LLM-hook request in that case, exactly as before.
+     */
     fun build(
         rawText: String,
         existingLayers: List<String>,
         languageCode: String,
         today: LocalDate = LocalDate.now()
+    ): String = buildPrompt(rawText, existingLayers, languageCode, today)
+
+    /**
+     * The cacheable version: same prompt, but with [VoxSatelliteSchema.INPUT_PLACEHOLDER] in place of
+     * a literal utterance — this is what [com.voxapps.ipc.VoxIpc.OP_GET_SCHEMA] returns for Commander
+     * to cache and later substitute into per-command, entirely locally.
+     */
+    fun buildTemplate(existingLayers: List<String>, languageCode: String, today: LocalDate = LocalDate.now()): String =
+        buildPrompt(VoxSatelliteSchema.INPUT_PLACEHOLDER, existingLayers, languageCode, today)
+
+    private fun buildPrompt(
+        rawText: String,
+        existingLayers: List<String>,
+        languageCode: String,
+        today: LocalDate
     ): String {
         val layersLine = if (existingLayers.isEmpty()) {
             "No calendars exist yet."
