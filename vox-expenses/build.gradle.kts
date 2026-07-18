@@ -116,7 +116,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation("app.cash.turbine:turbine:1.1.0")
+    testImplementation("app.cash.turbine:turbine:1.2.1")
     testImplementation("androidx.test:core:1.7.0")
     testImplementation("org.json:json:20240303")
 }

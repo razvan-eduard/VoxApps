@@ -110,7 +110,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation("app.cash.turbine:turbine:1.1.0")
+    testImplementation("app.cash.turbine:turbine:1.2.1")
     testImplementation("androidx.test:core:1.7.0")
     // org.json ships in android.jar at compile time; unit tests need the real implementation
     // (mirrors :core:ipc, which needed this for the exact same reason).
