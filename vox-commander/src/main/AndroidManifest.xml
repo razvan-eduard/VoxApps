@@ -71,6 +71,16 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="voxcommander" android:host="spotify" android:pathPrefix="/callback" />
             </intent-filter>
+            <!-- Shared OAuth redirect URI for declarative API integrations (ApiIntegrationRegistry).
+                 Registered once, ever — every future OAuth-based service reuses this and routes
+                 through OAuth2Manager's `state`-param service resolution, needing zero new manifest
+                 entries per service. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="voxcommander" android:host="oauth" android:pathPrefix="/callback" />
+            </intent-filter>
         </activity>
         
         <service

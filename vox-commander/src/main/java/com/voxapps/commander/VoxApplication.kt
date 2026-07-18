@@ -4,7 +4,7 @@ import android.app.Application
 import com.voxapps.commander.data.remote.NativeLibManager
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.di.AppContainer
-import com.voxapps.commander.service.SpotifyPkceManager
+import com.voxapps.commander.service.OAuth2Manager
 import com.voxapps.commander.utils.LogLevel
 import com.voxapps.commander.utils.Logger
 import com.voxapps.commander.utils.LoggingFlags
@@ -58,6 +58,9 @@ class VoxApplication : Application() {
         // before the app scan in SplashLoadingScreen (AppRegistry.init probes against it).
         com.voxapps.commander.domain.intent.registry.IntentCatalog.init(this)
 
+        // Initialize ApiIntegrationRegistry (declarative per-service API definitions, e.g. Spotify).
+        com.voxapps.commander.domain.intent.registry.ApiIntegrationRegistry.init(this)
+
         // Initialize network monitor for realtime connectivity tracking
         NetworkMonitor.init(this)
 
@@ -74,8 +77,9 @@ class VoxApplication : Application() {
             }
         }
 
-        // Initialize Spotify PKCE manager and load persisted tokens
-        SpotifyPkceManager.init(container.settingsRepository)
+        // Initialize the generic OAuth2 manager and load Spotify's persisted tokens
+        OAuth2Manager.init(container.settingsRepository)
+        OAuth2Manager.loadPersisted("spotify")
 
         // Hydrate the satellite schema cache from disk so it survives process death — must happen
         // before any voice command can be routed, so the collapsed-path cache is trusted immediately

@@ -55,8 +55,9 @@ class AudioIntentHandler : IntentHandler {
     private fun playSearch(context: Context, intent: NluIntent, resolvedApp: AppRegistry.AppEntry?, query: String): Boolean {
         val pkg = resolvedApp?.packageName
 
-        // 1. For Spotify, try Web API first (uses PKCE token for direct playback)
-        if (SpotifyPlaybackHelper.tryPlaySearch(context, pkg ?: "", query, waitMs = 3000)) {
+        // 1. Try a loaded declarative API integration first (uses its OAuth token for direct
+        //    playback via the service's own API — e.g. Spotify's Web API today).
+        if (AudioPlaybackHelpers.tryApiIntegrationPlaySearch(context, pkg ?: "", query, waitMs = 3000)) {
             return true
         }
 
@@ -83,7 +84,7 @@ class AudioIntentHandler : IntentHandler {
                     Logger.log("NewPipe search failed: ${e.message}", TAG)
                 }
             } else {
-                if (SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) {
+                if (AudioPlaybackHelpers.pipedPlayDirect(context, pkg, query)) {
                     Logger.log("playSearch via Piped API succeeded for $pkg", TAG)
                     return true
                 }

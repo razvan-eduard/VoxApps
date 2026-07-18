@@ -41,16 +41,16 @@ class GenericLaunchHandler : IntentHandler {
         return when (action) {
             MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH -> playFromSearch(context, pkg, query)
             Intent.ACTION_VIEW -> {
-                if (!query.isNullOrBlank() && SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) return true
+                if (!query.isNullOrBlank() && AudioPlaybackHelpers.pipedPlayDirect(context, pkg, query)) return true
                 viewSearch(context, pkg, resolvedApp, query, intent.uriTemplate)
             }
             Intent.ACTION_WEB_SEARCH -> webSearch(context, pkg, query)
             Intent.ACTION_SEARCH -> {
-                if (!query.isNullOrBlank() && SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) return true
+                if (!query.isNullOrBlank() && AudioPlaybackHelpers.pipedPlayDirect(context, pkg, query)) return true
                 browserSearch(context, pkg, resolvedApp, query)
             }
             else -> {
-                if (!query.isNullOrBlank() && SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) return true
+                if (!query.isNullOrBlank() && AudioPlaybackHelpers.pipedPlayDirect(context, pkg, query)) return true
                 // Generic: try to fire the action with query as SearchManager.QUERY extra
                 fireGenericAction(context, pkg, action, query)
             }
@@ -70,10 +70,10 @@ class GenericLaunchHandler : IntentHandler {
         }
 
         // 0. Try Piped API direct play first (works for any app that handles youtu.be URLs)
-        if (SpotifyPlaybackHelper.pipedPlayDirect(context, pkg, query)) return true
+        if (AudioPlaybackHelpers.pipedPlayDirect(context, pkg, query)) return true
 
-        // 1. For Spotify, try Web API first (uses PKCE token)
-        if (SpotifyPlaybackHelper.tryPlaySearch(context, pkg, query)) return true
+        // 1. Try a loaded declarative API integration (e.g. Spotify's Web API via its OAuth token)
+        if (AudioPlaybackHelpers.tryApiIntegrationPlaySearch(context, pkg, query)) return true
 
         // 2. Try intent with EXTRA_MEDIA_FOCUS (artist)
         val playIntent = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {

@@ -53,8 +53,9 @@ VoxApplication.onCreate()
     → RemoteModelRegistry (parse models.json)
     → SearchProviderRegistry (parse search_definitions.json)
     → IntentCatalog (parse intents.json — before the AppRegistry probe scan)
-    → SpotifyRemoteManager (set client ID)
-    → SpotifyPkceManager (load persisted tokens)
+    → ApiIntegrationRegistry (parse api_integrations.json — declarative per-service API defs)
+    → SpotifyRemoteManager (set client ID; App Remote SDK, separate from the API integration below)
+    → OAuth2Manager (init + load Spotify's persisted tokens)
     → NewPipeExtractorHelper.warmUp() (if newpipe engine selected)
     → PipedSearchHelper.useNewPipe flag set
     → reconcileDownloadedModels() (clear stale on-device flags vs disk)
@@ -405,7 +406,9 @@ Handles `domain=audio` with actions: play, pause, stop, next, prev.
 
 **Play search fallback chain:**
 
-1. **Spotify Web API** — If target is Spotify and PKCE authorized, search + play via Web API (no UI)
+1. **Declarative API integration** (`AudioPlaybackHelpers.tryApiIntegrationPlaySearch`) — If the resolved
+   app has a loaded, authorized `ApiIntegration` (§6a) declaring a `play_track` capability, search + play
+   via that service's own API (no UI). Spotify ships as the first integration today.
 2. **MEDIA_PLAY_FROM_SEARCH** — Android standard media search intent
 3. **YouTube search** (NewPipe or Piped) — Resolves query to videoId, launches `youtu.be/{id}` in target app
 4. **URI template** — Uses app's `uriTemplate` with query substitution
@@ -502,23 +505,102 @@ When user says "play Scorpions on YouTube", and alias rule maps "youtube" → `c
 
 ## 8. Media & Audio Integration
 
-### Spotify
+### Declarative API Integration Engine
+
+Controlling an external app's own service API (search a catalog, start playback via that service's
+*backend*, not just a local intent) is defined entirely in `api_integrations.json` (repo root, copied
+into assets — same convention as `intents.json`/`models.json`) and executed by two generic engines.
+Adding a new OAuth-based service (Deezer, Tidal, ...) needs **zero new Kotlin** — just a new entry in
+the JSON, as long as it fits the capability-slot model below.
+
+#### Capability slots (`ApiIntegrationRegistry.kt`)
+
+Every service definition fills in only the slots it actually supports out of a fixed set:
+`search_track`, `search_album`, `search_artist`, `play_track`, `play_album`, `pause`, `next`, `prev`,
+`stop`. An **absent** slot isn't an error — it means "no override, fall back to the existing generic
+mechanism" (the `AudioIntentHandler` fallback chain in §6, or `MediaSessionListenerService` for
+transport controls). This mirrors `ITtsEngine`'s "fixed interface, silent no-op for unsupported parts"
+pattern already used elsewhere in this codebase.
+
+A slot's value is one of:
+- `api_call` — one authenticated HTTP request (`method`/`path`/`body`/`response_path`).
+- `api_sequence` — an ordered list of steps for slots needing more than one request (Spotify's
+  `play_track`: search → list devices → pick one → transfer → play). Step modifiers
+  (`optional`, `stop_on_success`, `retry`, `delay_before_ms`) let a purely declarative sequence
+  reproduce real retry/fallback behavior — e.g. Spotify's device-transfer call is fire-and-forget
+  (`optional: true`), the play call waits 500ms then retries once after 2s (`delay_before_ms`/`retry`)
+  before falling through to a device-less play call, exactly matching the original hand-written flow.
+- `device_select` (step type only) — generic version of the old device-preference heuristic:
+  `prefer: [{field, equals}, ...]` predicates tried in order, first match wins, else first item.
+- `deep_link` — a URI template (reuses `intents.json`'s substitution mechanism), no auth. This is how
+  a service with no remote-play API (e.g. Deezer) would express playback: resolve an ID via a real API
+  search call, then hand off to the installed app via deep link.
+
+```json
+"play_track": {
+  "type": "api_sequence",
+  "steps": [
+    { "capability": "search_track" },
+    { "type": "api_call", "method": "GET", "path": "/me/player/devices", "response_path": "devices", "as": "devices", "optional": true },
+    { "type": "device_select", "from": "devices", "prefer": [{"field": "type", "equals": "Smartphone"}], "id_field": "id", "as": "device_id", "optional": true },
+    { "type": "api_call", "method": "PUT", "path": "/me/player", "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}", "optional": true },
+    { "type": "api_call", "method": "PUT", "path": "/me/player/play?device_id={device_id}", "body": "{\"uris\":[\"{search_track.result}\"]}", "delay_before_ms": 500, "retry": {"times": 1, "delay_ms": 2000}, "stop_on_success": true },
+    { "type": "api_call", "method": "PUT", "path": "/me/player/play", "body": "{\"uris\":[\"{search_track.result}\"]}" }
+  ]
+}
+```
+
+Placeholders (`{query}`, `{token}`, `{device_id}`, `{search_track.result}`) are substituted before each
+request — URL-encoded in `path`, JSON-escaped in `body`. Response values are extracted via a small
+dot/bracket JSON-path walker (`tracks.items[0].uri`, `devices`).
+
+#### `DeclarativeApiExecutor.kt`
+
+Runs one named capability: dispatches `api_call`/`api_sequence`/`deep_link`, walks JSON response paths,
+and reuses plain `HttpURLConnection` helpers (no external HTTP library). `search_album`/`search_artist`/
+`play_album` are defined for Spotify (using `context_uri` instead of `uris`, per Spotify's real API) but
+**not yet reachable from voice** — `NluIntent` has no media-type signal to distinguish "play the album
+X" from "play X", so dispatch always requests `play_track` today. See the `NluIntent` TODO in §5.
+
+#### `OAuth2Manager.kt`
+
+Generic OAuth2 Authorization-Code(+PKCE) client, parameterized per service (`auth.type` in JSON:
+`oauth2_pkce` — no client secret, e.g. Spotify; `oauth2_authorization_code` — wants a client secret,
+e.g. Deezer's confidential-client flow). Tokens are stored in `EncryptedSharedPreferences`, keyed by
+service id (`"${serviceId}_access_token"` etc — Spotify's pre-existing `spotify_access_token` keys
+already matched this format, so no migration was needed).
+
+**Shared OAuth redirect URI**: every service's `redirect_uri` can be the same literal string
+(`voxcommander://oauth/callback`, one manifest `<intent-filter>`, registered once ever) because service
+identity travels through the standard OAuth2 `state` parameter (`state=<serviceId>:<nonce>`, the nonce
+doubling as CSRF protection) instead of the URI itself. `MainActivity.handleOAuthRedirect()` resolves
+the target service from `state` regardless of which host actually caught the redirect — Spotify keeps
+using its own pre-existing `voxcommander://spotify/callback` manifest entry (unchanged, so no existing
+Spotify Developer Dashboard config needs updating), but still round-trips through the same `state`
+mechanism, proving it end-to-end without requiring a second service to exist yet.
+
+#### Spotify (`api_integrations.json`, id `"spotify"`)
+
+The first — and so far only — integration. Search/play migrated fully onto the generic engine described
+above (`AudioPlaybackHelpers.tryApiIntegrationPlaySearch()`); `SpotifyPkceManager.kt`/`SpotifyWebApi.kt`
+were deleted once the migration was verified against real Spotify playback (search → device discovery →
+transfer → play, matching the original hand-written retry sequence). Client ID storage is not yet
+generalized — `AudioPlaybackHelpers.clientIdFor()` still reads Spotify's client id via
+`SpotifyRemoteManager.getClientId()` specifically; generalizing that (and adding a second service) is
+deferred, real follow-on work.
 
 #### Spotify App Remote SDK (`SpotifyRemoteManager.kt`)
+
+Separate from the API integration above — a persistent, stateful SDK connection with push-based
+callbacks, which can't be expressed as a declarative REST endpoint regardless of schema design. Out of
+scope for the declarative engine; used independently for `AppSelectorDropdown`'s OAuth-nudge dialog and
+kept exactly as it was.
 
 - Uses Spotify's App Remote SDK (`spotify-app-remote.aar`)
 - Connection requires Spotify app installed on device
 - `connect()` — blocking, 30s timeout (internal use)
 - `connectAsync()` — non-blocking, 60s timeout (UI use, for OAuth)
 - Once connected: `playSearch()`, `playUri()`, `resume()`, `pause()`, `skipNext()`, `skipPrevious()`
-
-#### Spotify Web API (`SpotifyWebApi.kt` + `SpotifyPkceManager.kt`)
-
-- PKCE OAuth flow — no client secret needed
-- Tokens stored in `EncryptedSharedPreferences`
-- `SpotifyPkceManager.isAuthorized` — true if refresh token exists (persists across restarts)
-- `SpotifyWebApi.playSearch()` — search track + play on active device (no UI shown)
-- Token refresh handled automatically via `getValidAccessToken()`
 
 ### YouTube / LibreTube
 

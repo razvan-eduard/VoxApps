@@ -27,7 +27,7 @@ import com.voxapps.commander.ui.screens.onboarding.TutorialScreen
 import com.voxapps.commander.ui.screens.splash.SplashLoadingScreen
 import com.voxapps.commander.ui.theme.VoxCommanderTheme
 import com.voxapps.commander.ui.LocalLanguageManager
-import com.voxapps.commander.service.SpotifyPkceManager
+import com.voxapps.commander.service.OAuth2Manager
 import com.voxapps.commander.domain.localization.TutorialManager
 import com.voxapps.commander.utils.Logger
 import com.voxapps.commander.utils.Strings
@@ -113,8 +113,8 @@ class MainActivity : ComponentActivity() {
         appContainer.languageManager.loadLanguage(appContainer.settingsRepository.getSettingsSnapshot().language)
         Logger.log("MainActivity: Language loaded: ${appContainer.settingsRepository.getSettingsSnapshot().language}")
 
-        // Handle Spotify PKCE redirect if app was launched via deep link (cold start)
-        handleSpotifyRedirect(intent)
+        // Handle OAuth redirect if app was launched via deep link (cold start)
+        handleOAuthRedirect(intent)
 
         // Google Voice Intent launcher (lifecycle-bound, must live in the Activity)
         voiceIntentLauncher = VoiceIntentLauncher(this) { result ->
@@ -326,14 +326,28 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleSpotifyRedirect(intent)
+        handleOAuthRedirect(intent)
     }
 
-    private fun handleSpotifyRedirect(intent: android.content.Intent) {
+    /**
+     * Handles an OAuth redirect from either a service's own dedicated host (e.g. Spotify's
+     * `voxcommander://spotify/callback`, kept so its existing manifest entry never needs to
+     * change) or the shared `voxcommander://oauth/callback` every future service can register
+     * once and reuse. [OAuth2Manager] resolves which service via the `state` query parameter in
+     * both cases — `fallbackServiceId` only matters if `state` is ever missing.
+     */
+    private fun handleOAuthRedirect(intent: android.content.Intent) {
         val uri = intent.data ?: return
-        if (uri.scheme == "voxcommander" && uri.host == "spotify") {
-            Logger.log("MainActivity: Spotify PKCE redirect received: $uri")
-            SpotifyPkceManager.handleRedirect(uri)
+        if (uri.scheme != "voxcommander") return
+        when (uri.host) {
+            "spotify" -> {
+                Logger.log("MainActivity: OAuth redirect received (spotify host): $uri")
+                OAuth2Manager.handleRedirect(uri, fallbackServiceId = "spotify")
+            }
+            "oauth" -> {
+                Logger.log("MainActivity: OAuth redirect received (shared host): $uri")
+                OAuth2Manager.handleRedirect(uri)
+            }
         }
     }
 

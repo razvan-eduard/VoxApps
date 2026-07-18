@@ -26,7 +26,7 @@
 - **Intent Routing** — Unified `NluIntent` → `IntentHandler` pipeline with per-domain app resolution
 - **App Management** — Default apps per domain, app aliases, custom domains, return-to-previous-app
 - **Vox Apps ecosystem** — Companion apps (e.g. Vox Notes) self-register their voice capabilities via the `:core:ipc` contract; Commander discovers them at warmup, adds their domains to the NLU, and routes commands over a local JSON bus (create/read → spoken back via TTS)
-- **Media Control** — Spotify (Web API + App Remote), YouTube search via Piped API or NewPipe Extractor, playback on any selected app (LibreTube, NewPipe, etc.), media session control
+- **Media Control** — Declarative API integration engine (`api_integrations.json`): search/play/pause/next/prev for any service defined entirely in JSON (OAuth2 + REST), zero per-service Kotlin — Spotify ships as the first integration; YouTube search via Piped API or NewPipe Extractor; playback on any selected app (LibreTube, NewPipe, etc.); media session control
 - **Text-to-Speech** — Android TTS or Piper TTS (on-device neural voices via sherpa-onnx)
 - **Search** — Web search via DuckDuckGo, Wikipedia, Google News, GNews, WeatherAPI, Open-Meteo
 - **Navigation** — Waze, Google Maps deep linking
@@ -369,7 +369,7 @@ other satellite implements as a server.
 | NLU | OpenAI API, Gemini Nano (on-device), Local LLM (MediaPipe GenAI — Qwen 2.5 / Gemma 3) |
 | TTS | Android TextToSpeech, Piper TTS (sherpa-onnx) |
 | Storage | DataStore (preferences), EncryptedSharedPreferences, Room |
-| Media | Spotify App Remote SDK, Spotify Web API, MediaSession API |
+| Media | Spotify App Remote SDK, declarative API integration engine (`api_integrations.json`, OAuth2 + REST — Spotify is the first service), MediaSession API |
 | YouTube | NewPipe Extractor (on-device), Piped API (cloud) |
 | Navigation | Waze, Google Maps (geo: deep links) |
 | Search | DuckDuckGo, Wikipedia, Google News, WeatherAPI |
@@ -394,6 +394,7 @@ vox-commander/src/main/java/com/voxapps/commander/
 │   │   ├── model/NluIntent.kt   # Universal intent data class
 │   │   ├── taxonomy/            # IntentTaxonomy (domains, actions)
 │   │   ├── registry/AppRegistry # App scanning, URI templates
+│   │   ├── registry/ApiIntegrationRegistry # Declarative per-service API defs (api_integrations.json)
 │   │   ├── resolver/AppResolver # App resolution with aliases + defaults
 │   │   ├── router/IntentRouter  # Central dispatcher
 │   │   └── handler/             # Audio, Navigation, System, Messaging, Search
@@ -403,9 +404,9 @@ vox-commander/src/main/java/com/voxapps/commander/
 ├── service/
 │   ├── WakeWordService.kt       # Foreground service, always-on listening
 │   ├── WakeWordEngine.kt        # Vosk wake word with template + voice print
-│   ├── SpotifyRemoteManager.kt  # Spotify App Remote SDK wrapper
-│   ├── SpotifyPkceManager.kt    # Spotify PKCE OAuth flow
-│   ├── SpotifyWebApi.kt         # Spotify Web API (search, play, devices)
+│   ├── SpotifyRemoteManager.kt  # Spotify App Remote SDK wrapper (out-of-band, separate from below)
+│   ├── OAuth2Manager.kt         # Generic per-service OAuth2 (PKCE/auth-code) client
+│   ├── DeclarativeApiExecutor.kt # Generic declarative-REST executor (api_call/api_sequence/deep_link)
 │   └── MediaSessionListenerService.kt
 ├── state/
 │   ├── AppState.kt              # Global UI state

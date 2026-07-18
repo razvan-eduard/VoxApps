@@ -146,15 +146,15 @@ interface SettingsRepository {
     // --- DOWNLOAD PREFERENCE ---
     suspend fun setDownloadPreference(preference: String)
 
-    // --- SPOTIFY PKCE TOKENS ---
-    fun getSpotifyAccessTokenSync(): String?
-    fun getSpotifyRefreshTokenSync(): String?
-    fun getSpotifyTokenExpirySync(): Long
-    suspend fun setSpotifyTokens(accessToken: String?, refreshToken: String?, expiry: Long)
+    // --- DECLARATIVE API INTEGRATION OAUTH TOKENS (keyed by service id, e.g. "spotify") ---
+    fun getServiceAccessTokenSync(serviceId: String): String?
+    fun getServiceRefreshTokenSync(serviceId: String): String?
+    fun getServiceTokenExpirySync(serviceId: String): Long
+    suspend fun setServiceTokens(serviceId: String, accessToken: String?, refreshToken: String?, expiry: Long)
 
-    // --- SPOTIFY DEVICE ID ---
-    fun getSpotifyDeviceIdSync(): String?
-    suspend fun setSpotifyDeviceId(deviceId: String?)
+    // --- DECLARATIVE API INTEGRATION DEVICE ID (keyed by service id) ---
+    fun getServiceDeviceIdSync(serviceId: String): String?
+    suspend fun setServiceDeviceId(serviceId: String, deviceId: String?)
 
     // --- TTS ---
     suspend fun setTtsEnabled(enabled: Boolean)

@@ -282,6 +282,15 @@ val copyExternalServicesJson = tasks.register<Copy>("copyExternalServicesJson") 
     into("${projectDir}/src/main/assets")
 }
 
+// Copy api_integrations.json from repo root into assets (single source of truth in root) — the
+// declarative per-service API definitions consumed by ApiIntegrationRegistry/DeclarativeApiExecutor.
+val copyApiIntegrationsJson = tasks.register<Copy>("copyApiIntegrationsJson") {
+    group = "build"
+    description = "Copies api_integrations.json from repo root into app/src/main/assets/"
+    from("${project.rootDir}/api_integrations.json")
+    into("${projectDir}/src/main/assets")
+}
+
 // Forțează procesul de build al aplicației să ruleze aceste scripturi chiar la început
 tasks.named("preBuild") {
     dependsOn(autoCompileWhisper)
@@ -292,6 +301,7 @@ tasks.named("preBuild") {
     dependsOn(copySearchDefinitions)
     dependsOn(copyIntentsJson)
     dependsOn(copyExternalServicesJson)
+    dependsOn(copyApiIntegrationsJson)
 }
 
 // A handful of ViewModel tests use viewModelScope.launch{} (not tied to the test's own TestScope),

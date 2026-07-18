@@ -137,7 +137,7 @@ fun AppSelectorDropdown(
         selectedPackage = selectedPackage,
         onAppSelected = { entry ->
             val app = entry?.let { e -> allApps.find { it.packageName == e.packageName } }
-            if (app?.packageName == com.voxapps.commander.utils.PackageNames.SPOTIFY && !com.voxapps.commander.service.SpotifyPkceManager.isAuthorized) {
+            if (app?.packageName == com.voxapps.commander.utils.PackageNames.SPOTIFY && !com.voxapps.commander.service.OAuth2Manager.isAuthorized("spotify")) {
                 spotifyOAuthAction = { onAppSelected(app) }
                 showSpotifyOAuthDialog = true
             } else {
@@ -201,7 +201,7 @@ fun AppSelectorDropdown(
         apps = allApps.map { it.toPickerEntry() },
         selectedPackages = selectedPackages,
         onToggleApp = { pkg ->
-            if (pkg == com.voxapps.commander.utils.PackageNames.SPOTIFY && pkg !in selectedPackages && !com.voxapps.commander.service.SpotifyPkceManager.isAuthorized) {
+            if (pkg == com.voxapps.commander.utils.PackageNames.SPOTIFY && pkg !in selectedPackages && !com.voxapps.commander.service.OAuth2Manager.isAuthorized("spotify")) {
                 spotifyOAuthAction = { onToggleApp(pkg) }
                 showSpotifyOAuthDialog = true
             } else {

@@ -898,25 +898,27 @@ class SettingsRepositoryImpl(
         return result
     }
 
-    // --- SPOTIFY PKCE TOKENS (stored in encrypted prefs) ---
-    override fun getSpotifyAccessTokenSync(): String? = encryptedPrefs.getString("spotify_access_token", null)
-    override fun getSpotifyRefreshTokenSync(): String? = encryptedPrefs.getString("spotify_refresh_token", null)
-    override fun getSpotifyTokenExpirySync(): Long = encryptedPrefs.getLong("spotify_token_expiry", 0)
+    // --- DECLARATIVE API INTEGRATION OAUTH TOKENS (stored in encrypted prefs, keyed by service id).
+    // Key format "${serviceId}_access_token" etc matches the pre-existing "spotify_access_token"
+    // naming exactly, so Spotify's already-persisted tokens keep working with zero migration. ---
+    override fun getServiceAccessTokenSync(serviceId: String): String? = encryptedPrefs.getString("${serviceId}_access_token", null)
+    override fun getServiceRefreshTokenSync(serviceId: String): String? = encryptedPrefs.getString("${serviceId}_refresh_token", null)
+    override fun getServiceTokenExpirySync(serviceId: String): Long = encryptedPrefs.getLong("${serviceId}_token_expiry", 0)
 
-    override suspend fun setSpotifyTokens(accessToken: String?, refreshToken: String?, expiry: Long) {
+    override suspend fun setServiceTokens(serviceId: String, accessToken: String?, refreshToken: String?, expiry: Long) {
         encryptedPrefs.edit().apply {
-            if (accessToken != null) putString("spotify_access_token", accessToken) else remove("spotify_access_token")
-            if (refreshToken != null) putString("spotify_refresh_token", refreshToken) else remove("spotify_refresh_token")
-            putLong("spotify_token_expiry", expiry)
+            if (accessToken != null) putString("${serviceId}_access_token", accessToken) else remove("${serviceId}_access_token")
+            if (refreshToken != null) putString("${serviceId}_refresh_token", refreshToken) else remove("${serviceId}_refresh_token")
+            putLong("${serviceId}_token_expiry", expiry)
         }.apply()
     }
 
-    // --- SPOTIFY DEVICE ID (stored in encrypted prefs) ---
-    override fun getSpotifyDeviceIdSync(): String? = encryptedPrefs.getString("spotify_device_id", null)
+    // --- DECLARATIVE API INTEGRATION DEVICE ID (stored in encrypted prefs, keyed by service id) ---
+    override fun getServiceDeviceIdSync(serviceId: String): String? = encryptedPrefs.getString("${serviceId}_device_id", null)
 
-    override suspend fun setSpotifyDeviceId(deviceId: String?) {
+    override suspend fun setServiceDeviceId(serviceId: String, deviceId: String?) {
         encryptedPrefs.edit().apply {
-            if (deviceId != null) putString("spotify_device_id", deviceId) else remove("spotify_device_id")
+            if (deviceId != null) putString("${serviceId}_device_id", deviceId) else remove("${serviceId}_device_id")
         }.apply()
     }
 

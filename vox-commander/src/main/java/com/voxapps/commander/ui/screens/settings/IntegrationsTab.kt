@@ -33,8 +33,11 @@ import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.commander.domain.localization.LanguageManager
-import com.voxapps.commander.service.SpotifyPkceManager
+import com.voxapps.commander.domain.intent.registry.ApiIntegrationRegistry
+import com.voxapps.commander.service.OAuth2Manager
+import com.voxapps.commander.service.OAuthConfig
 import com.voxapps.commander.service.SpotifyRemoteManager
+import com.voxapps.commander.utils.PackageNames
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,12 +51,25 @@ fun IntegrationsTab(
         val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var spotifyConnected by remember { mutableStateOf(SpotifyPkceManager.isAuthorized) }
+    val spotifyIntegration = remember { ApiIntegrationRegistry.forPackage(PackageNames.SPOTIFY) }
+    var spotifyConnected by remember { mutableStateOf(OAuth2Manager.isAuthorized("spotify")) }
     var spotifyClientId by remember { mutableStateOf(settingsRepo.getSpotifyClientIdSync() ?: "") }
     var isConnecting by remember { mutableStateOf(false) }
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var showSetupDialog by remember { mutableStateOf(false) }
     var connectError by remember { mutableStateOf<String?>(null) }
+
+    fun spotifyOAuthConfig(): OAuthConfig? {
+        val auth = spotifyIntegration?.auth ?: return null
+        return OAuthConfig(
+            serviceId = spotifyIntegration.id,
+            authorizeUrl = auth.authorizeUrl,
+            tokenUrl = auth.tokenUrl,
+            redirectUri = auth.redirectUri,
+            scopes = auth.scopes,
+            usePkce = auth.type == "oauth2_pkce"
+        )
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -175,11 +191,12 @@ fun IntegrationsTab(
                     // Red "Connect" button → opens setup dialog
                     Button(
                         onClick = {
-                            if (spotifyClientId.isNotBlank()) {
+                            val config = spotifyOAuthConfig()
+                            if (spotifyClientId.isNotBlank() && config != null) {
                                 // Already has Client ID, start PKCE OAuth flow
                                 isConnecting = true
                                 connectError = null
-                                SpotifyPkceManager.startAuthFlow(context, spotifyClientId) { ok, errorMsg ->
+                                OAuth2Manager.startAuthFlow(context, config, spotifyClientId) { ok, errorMsg ->
                                     isConnecting = false
                                     spotifyConnected = ok
                                     if (!ok) {
@@ -230,7 +247,7 @@ fun IntegrationsTab(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        SpotifyPkceManager.logout()
+                        OAuth2Manager.logout("spotify")
                         SpotifyRemoteManager.disconnect()
                         spotifyConnected = false
                         showDisconnectDialog = false
@@ -262,7 +279,13 @@ fun IntegrationsTab(
                     SpotifyRemoteManager.setClientId(clientId)
                     isConnecting = true
                     connectError = null
-                    SpotifyPkceManager.startAuthFlow(context, clientId) { ok, errorMsg ->
+                    val config = spotifyOAuthConfig()
+                    if (config == null) {
+                        isConnecting = false
+                        connectError = languageManager.getString("spotify_connect_failed")
+                        return@launch
+                    }
+                    OAuth2Manager.startAuthFlow(context, config, clientId) { ok, errorMsg ->
                         isConnecting = false
                         spotifyConnected = ok
                         if (!ok) {

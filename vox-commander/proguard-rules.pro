@@ -109,3 +109,10 @@
 -keep class com.voxapps.commander.domain.search.CategoryDefinition { *; }
 -keep class com.voxapps.commander.domain.search.ProviderDefinition { *; }
 -keep class com.voxapps.commander.domain.search.FieldMapping { *; }
+-keep class com.voxapps.commander.domain.intent.registry.ApiIntegrationsSchema { *; }
+-keep class com.voxapps.commander.domain.intent.registry.ApiIntegration { *; }
+-keep class com.voxapps.commander.domain.intent.registry.AuthDef { *; }
+-keep class com.voxapps.commander.domain.intent.registry.CapabilitySlot { *; }
+-keep class com.voxapps.commander.domain.intent.registry.SequenceStep { *; }
+-keep class com.voxapps.commander.domain.intent.registry.RetryDef { *; }
+-keep class com.voxapps.commander.domain.intent.registry.PreferRule { *; }
