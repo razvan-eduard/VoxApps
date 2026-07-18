@@ -507,6 +507,9 @@ Enable/disable in Settings → App Manager → External voice trigger toggle.
 
 - [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md) — deep-dive on `vox-commander`'s
   architecture, wake word/STT/NLU/TTS engines, intent routing, and the cross-app Vox contract.
+- [`docs/SATELLITE_APP_GUIDE.md`](docs/SATELLITE_APP_GUIDE.md) — hands-on developer guide for building
+  a new satellite app: Gradle/manifest setup, the full `:core:ipc` contract reference, the generic LLM
+  hook, collapsed extraction (`@VoxExtractionSchema`/KSP), the security model, and a debugging checklist.
 - [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md) — monorepo-wide reference for
   every native/ML dependency that's vendored, patched, or compiled from source at build time (Vosk,
   Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk) — what gets fetched, how patches are kept as

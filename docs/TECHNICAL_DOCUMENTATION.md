@@ -1184,6 +1184,11 @@ VoxCommander doubles as a **local plugin hub** ("micro-OS for offline plugins"):
 apps declare voice capabilities and Commander routes commands to them. There is **no runtime coupling**
 — each app is an independent product; the only shared artifact is a **contracts-only** library.
 
+> This section covers the architecture from Commander's (the consumer's) side. For a hands-on,
+> copy-pasteable "build a new satellite from scratch" tutorial — Gradle setup, manifest snippets,
+> a complete `VoxCommandReceiver` example, and a debugging checklist — see
+> [`docs/SATELLITE_APP_GUIDE.md`](SATELLITE_APP_GUIDE.md).
+
 ### The contract module (`:core:ipc`)
 
 A tiny Android library (`com.voxapps.ipc`) with **no logic** — just the wire protocol, compiled into
