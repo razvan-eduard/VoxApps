@@ -768,6 +768,84 @@ fun ServiceSettingsTab(
         }
 
         if (uiState.ttsEnabled) {
+            // --- TTS ENGINE PICKLIST (same pattern as the wake-word engine picker above) ---
+            Text(
+                text = languageManager.getString("tts_engine_title") ?: "TTS Engine",
+                style = MaterialTheme.typography.labelLarge
+            )
+            Text(
+                text = languageManager.getString("tts_engine_desc")
+                    ?: "Piper runs fully on-device with a neural voice, but needs a voice model downloaded below for your language — falls back to the Android engine automatically if none is available.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val ttsEngines = remember(uiState.availableModels) {
+                RemoteModelRegistry.getEngineKeysByType("tts")
+            }
+            val currentTtsEngineKey = uiState.ttsEngineType
+
+            Box {
+                var ttsEngineExpanded by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = { ttsEngineExpanded = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        if (currentTtsEngineKey == "android") languageManager.getString("tts_engine_android") ?: "Android (system default)"
+                        else RemoteModelRegistry.getEngineLabel(currentTtsEngineKey, languageManager)
+                    )
+                }
+                DropdownMenu(
+                    expanded = ttsEngineExpanded,
+                    onDismissRequest = { ttsEngineExpanded = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(languageManager.getString("tts_engine_android") ?: "Android (system default)") },
+                        onClick = { appStateManager.setTtsEngineType("android"); ttsEngineExpanded = false }
+                    )
+                    ttsEngines.forEach { engKey ->
+                        DropdownMenuItem(
+                            text = { Text(RemoteModelRegistry.getEngineLabel(engKey, languageManager)) },
+                            onClick = { appStateManager.setTtsEngineType(engKey); ttsEngineExpanded = false }
+                        )
+                    }
+                }
+            }
+
+            // --- PIPER VOICE MODELS (only relevant once Piper is selected) ---
+            if (currentTtsEngineKey == "piper_tts") {
+                val piperModels = remember(refreshTrigger) {
+                    RemoteModelRegistry.getModels("piper_tts")
+                }
+                if (piperModels.isNotEmpty()) {
+                    EngineModelSection(
+                        title = languageManager.getString("tts_voice_models") ?: "Piper voice models",
+                        settingsRepo = settingsRepo,
+                        appStateManager = appStateManager,
+                        groups = remember(piperModels, refreshTrigger) {
+                            listOf(DropdownGroup(languageManager.getString("available_models_header") ?: "AVAILABLE MODELS", piperModels))
+                        },
+                        selectedItem = null,
+                        itemLabel = { "${it.label} (${it.sizeDescription})" },
+                        modelIdProvider = { it.id },
+                        onItemSelected = { _, _ -> },
+                        onDownloadRequest = { model -> onDownloadRequest(model) },
+                        onDeleteRequest = { model -> onDeleteRequest(model) },
+                        onCancelDownload = onCancelDownload,
+                        downloadProgress = downloadProgress,
+                        downloadingItem = downloadingItem,
+                        currentProcessor = "piper_tts",
+                        // TTS isn't part of the STT/NLU fallback cascade (Strings.FallbackCategories
+                        // only has "voice"/"intent") — no fallback concept applies here.
+                        showFallback = false,
+                        refreshTrigger = refreshTrigger
+                    )
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
             // Speech Rate Slider
             Text(
                 text = (languageManager.getString("tts_speech_rate_label") ?: "Speech rate") + ": ${"%.1f".format(uiState.ttsSpeechRate)}x",

@@ -322,6 +322,10 @@ class AppStateManager private constructor(
         }
     }
 
+    fun setTtsEngineType(engineType: String) {
+        scope.launch { repo.setTtsEngineType(engineType) }
+    }
+
     fun setPicovoiceAccessKey(key: String?) {
         scope.launch { repo.setPicovoiceAccessKey(key) }
     }
