@@ -147,6 +147,7 @@ class SettingsRepositoryImpl(
         val TTS_PITCH = floatPreferencesKey("tts_pitch")
         val TTS_AUDIO_FOCUS_MODE = stringPreferencesKey("tts_audio_focus_mode")
         val OVERLAY_TEXT_SIZE = floatPreferencesKey("overlay_text_size")
+        val PIPER_VOICE_MODEL_ID = stringPreferencesKey("piper_voice_model_id")
 
         // App Aliases
         val APP_ALIAS_RULES_JSON = stringPreferencesKey("app_alias_rules_json")
@@ -365,6 +366,7 @@ class SettingsRepositoryImpl(
             ttsPitch = prefs[Keys.TTS_PITCH] ?: 1.0f,
             ttsAudioFocusMode = prefs[Keys.TTS_AUDIO_FOCUS_MODE] ?: "duck",
             overlayTextSize = prefs[Keys.OVERLAY_TEXT_SIZE] ?: 1.0f,
+            piperVoiceModelId = prefs[Keys.PIPER_VOICE_MODEL_ID],
             appAliasRules = parseAppAliasRules(prefs[Keys.APP_ALIAS_RULES_JSON]),
             manualLocationLat = prefs[Keys.MANUAL_LOCATION_LAT]?.toDoubleOrNull(),
             manualLocationLon = prefs[Keys.MANUAL_LOCATION_LON]?.toDoubleOrNull(),
@@ -465,6 +467,7 @@ class SettingsRepositoryImpl(
             prefs[Keys.TTS_PITCH] = imported.ttsPitch
             prefs[Keys.TTS_AUDIO_FOCUS_MODE] = imported.ttsAudioFocusMode
             prefs[Keys.OVERLAY_TEXT_SIZE] = imported.overlayTextSize
+            imported.piperVoiceModelId?.let { prefs[Keys.PIPER_VOICE_MODEL_ID] = it } ?: prefs.remove(Keys.PIPER_VOICE_MODEL_ID)
 
             prefs[Keys.APP_ALIAS_RULES_JSON] = gson.toJson(imported.appAliasRules)
 
@@ -941,6 +944,12 @@ class SettingsRepositoryImpl(
 
     override suspend fun setTtsAudioFocusMode(mode: String) {
         dataStore.edit { it[Keys.TTS_AUDIO_FOCUS_MODE] = mode }
+    }
+
+    override suspend fun setPiperVoiceModelId(id: String?) {
+        dataStore.edit {
+            if (id != null) it[Keys.PIPER_VOICE_MODEL_ID] = id else it.remove(Keys.PIPER_VOICE_MODEL_ID)
+        }
     }
 
     override suspend fun setOverlayTextSize(size: Float) {

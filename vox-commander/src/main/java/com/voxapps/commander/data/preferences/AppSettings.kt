@@ -124,6 +124,9 @@ data class AppSettings(
     val ttsPitch: Float = 1.0f,
     val ttsAudioFocusMode: String = "duck", // "none", "duck", "pause"
     val overlayTextSize: Float = 1.0f, // multiplier for overlay text size
+    /** The user's explicitly picked Piper voice model id (e.g. "vits-piper-en_US-lessac-medium").
+     *  null = no explicit pick yet, PiperTtsEngine falls back to its own on-disk heuristic. */
+    val piperVoiceModelId: String? = null,
 
     // --- APP ALIASES ---
     val appAliasRules: List<AppAliasRule> = emptyList(),

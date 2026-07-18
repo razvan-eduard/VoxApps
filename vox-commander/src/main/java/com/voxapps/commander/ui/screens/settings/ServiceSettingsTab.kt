@@ -50,7 +50,7 @@ fun ServiceSettingsTab(
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     downloadedColor: Color,
-    onDownloadRequest: (AppModel) -> Unit,
+    onDownloadModel: (String, String, String?) -> Unit,
     onDeleteRequest: (AppModel) -> Unit,
     onCancelDownload: () -> Unit,
     downloadProgress: Float?,
@@ -63,6 +63,31 @@ fun ServiceSettingsTab(
     val serviceLoadingState by appStateManager.serviceLoadingState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showDeleteProfileDialog by remember { mutableStateOf(false) }
+
+    // --- DOWNLOAD GUARD STATE (mirrors VoiceEnginesSubTab/IntentEnginesSubTab's own copy of this
+    // pattern — wake-word and Piper voice downloads went straight through with no metered check
+    // at all before this, unlike every other model picker in the app) ---
+    var showMeteredWarning by remember { mutableStateOf(false) }
+    var showWifiOnlyBlocked by remember { mutableStateOf(false) }
+    var pendingDownloadSize by remember { mutableStateOf("") }
+    var pendingDownloadAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    fun requestDownload(model: AppModel, code: String?) {
+        val downloadAction = { onDownloadModel(model.id, model.engineType, code) }
+        val isMetered = com.voxapps.commander.utils.NetworkMonitor.isMetered
+        when {
+            uiState.downloadPreference == "wifi_only" && isMetered -> {
+                pendingDownloadSize = model.sizeDescription
+                showWifiOnlyBlocked = true
+            }
+            isMetered -> {
+                pendingDownloadSize = model.sizeDescription
+                pendingDownloadAction = downloadAction
+                showMeteredWarning = true
+            }
+            else -> downloadAction()
+        }
+    }
 
     ServiceLoadingDialog(state = serviceLoadingState)
 
@@ -635,7 +660,7 @@ fun ServiceSettingsTab(
                         appStateManager.setWakeWord(model.label)
                     }
                 },
-                onDownloadRequest = { model -> onDownloadRequest(model) },
+                onDownloadRequest = { model -> requestDownload(model, model.langCode ?: uiState.modelFilterLang) },
                 onDeleteRequest = { model -> onDeleteRequest(model) },
                 onCancelDownload = onCancelDownload,
                 downloadProgress = downloadProgress,
@@ -826,11 +851,13 @@ fun ServiceSettingsTab(
                         groups = remember(piperModels, refreshTrigger) {
                             listOf(DropdownGroup(languageManager.getString("available_models_header") ?: "AVAILABLE MODELS", piperModels))
                         },
-                        selectedItem = null,
+                        selectedItem = remember(piperModels, uiState.piperVoiceModelId) {
+                            piperModels.find { it.id == uiState.piperVoiceModelId }
+                        },
                         itemLabel = { "${it.label} (${it.sizeDescription})" },
                         modelIdProvider = { it.id },
-                        onItemSelected = { _, _ -> },
-                        onDownloadRequest = { model -> onDownloadRequest(model) },
+                        onItemSelected = { model, _ -> appStateManager.setPiperVoiceModelId(model.id) },
+                        onDownloadRequest = { model -> requestDownload(model, model.langCode ?: uiState.modelFilterLang) },
                         onDeleteRequest = { model -> onDeleteRequest(model) },
                         onCancelDownload = onCancelDownload,
                         downloadProgress = downloadProgress,
@@ -929,6 +956,41 @@ fun ServiceSettingsTab(
             }
         }
     } // end else (TTS sub-tab)
+
+    // --- DOWNLOAD GUARD DIALOGS (wake-word + Piper voice models) ---
+    if (showMeteredWarning) {
+        AlertDialog(
+            onDismissRequest = { showMeteredWarning = false },
+            title = { Text(languageManager.getString("metered_warning_title")) },
+            text = { Text(languageManager.getString("metered_warning_msg").format(pendingDownloadSize)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMeteredWarning = false
+                    pendingDownloadAction?.invoke()
+                    pendingDownloadAction = null
+                }) {
+                    Text(languageManager.getString("metered_warning_continue"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMeteredWarning = false; pendingDownloadAction = null }) {
+                    Text(languageManager.getString("cancel_button"))
+                }
+            }
+        )
+    }
+    if (showWifiOnlyBlocked) {
+        AlertDialog(
+            onDismissRequest = { showWifiOnlyBlocked = false },
+            title = { Text(languageManager.getString("wifi_only_blocked_title")) },
+            text = { Text(languageManager.getString("wifi_only_blocked_msg").format(pendingDownloadSize)) },
+            confirmButton = {
+                TextButton(onClick = { showWifiOnlyBlocked = false }) {
+                    Text(languageManager.getString("ok_button"))
+                }
+            }
+        )
+    }
 }
 
 @Composable

@@ -198,7 +198,7 @@ fun SettingsContent(
                                         onStartService = { WakeWordService.startService(context) },
                                         onStopService = { WakeWordService.stopService(context) },
                                         downloadedColor = downloadedColor,
-                                        onDownloadRequest = { model -> onDownloadModel(model.id, model.engineType, "en") },
+                                        onDownloadModel = onDownloadModel,
                                         onDeleteRequest = { model -> modelToDelete = model as? AppModel; showDeleteConfirmDialog = true },
                                         onCancelDownload = onCancelDownload,
                                         downloadProgress = downloadProgress,

@@ -58,6 +58,7 @@ data class AppState(
     val ttsPitch: Float,
     val ttsAudioFocusMode: String,
     val overlayTextSize: Float,
+    val piperVoiceModelId: String? = null,
     val appAliasRules: List<com.voxapps.commander.data.preferences.AppAliasRule> = emptyList(),
     
     // --- API SETTINGS ---
@@ -199,6 +200,7 @@ data class AppState(
                 ttsPitch = settings.ttsPitch,
                 ttsAudioFocusMode = settings.ttsAudioFocusMode,
                 overlayTextSize = settings.overlayTextSize,
+                piperVoiceModelId = settings.piperVoiceModelId,
                 appAliasRules = settings.appAliasRules,
                 apiKey = settings.apiKey,
                 geminiApiKey = settings.geminiApiKey,
@@ -255,6 +257,7 @@ data class AppState(
             ttsPitch = 1.0f,
             ttsAudioFocusMode = "duck",
             overlayTextSize = 1.0f,
+            piperVoiceModelId = null,
             appAliasRules = emptyList(),
             apiKey = null,
             geminiApiKey = null,

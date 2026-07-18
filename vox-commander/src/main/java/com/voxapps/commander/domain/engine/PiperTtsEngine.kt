@@ -45,6 +45,12 @@ class PiperTtsEngine : ITtsEngine {
     private var speakJob: Job? = null
     private var stopped = false
 
+    /** The user's explicitly picked voice model directory name (e.g.
+     *  "vits-piper-en_US-lessac-medium"), set by [com.voxapps.commander.domain.voice.TtsManager]
+     *  before [initialize]. When set and present on disk, this wins over [findVoiceDir]'s
+     *  language-only heuristic — that heuristic is only a fallback for "no explicit pick yet". */
+    var preferredVoiceId: String? = null
+
     // Retained for lazy reload after releaseForMemoryPressure()
     private var storedContext: Context? = null
     @Volatile private var isSpeakingNow = false
@@ -63,9 +69,13 @@ class PiperTtsEngine : ITtsEngine {
             return false
         }
 
+        // Prefer the user's explicit pick if it's actually on disk — the language-based heuristic
+        // below is only a fallback for "nothing explicitly selected yet".
+        val preferredDir = preferredVoiceId?.let { File(rootDir, it) }?.takeIf { it.exists() }
+
         // Piper voice directories are named like "vits-piper-en_US-amy-low"
         val langKey = language.substringBefore("_").lowercase()
-        val voiceDir = findVoiceDir(rootDir, langKey)
+        val voiceDir = preferredDir ?: findVoiceDir(rootDir, langKey)
 
         if (voiceDir == null || !voiceDir.exists()) {
             Logger.log("No Piper voice model found for language '$langKey' in $rootDir", TAG)
@@ -286,7 +296,9 @@ class PiperTtsEngine : ITtsEngine {
         val allMatches = (piperDirs + exactMatch).distinctBy { it.name }
         if (allMatches.isEmpty()) return null
 
-        // Prefer "low" quality (smaller, faster) for on-device
-        return allMatches.minByOrNull { it.name.contains("low") } ?: allMatches.first()
+        // Prefer "low" quality (smaller, faster) for on-device, then "medium", then whatever's left.
+        return allMatches.firstOrNull { it.name.contains("low") }
+            ?: allMatches.firstOrNull { it.name.contains("medium") }
+            ?: allMatches.first()
     }
 }

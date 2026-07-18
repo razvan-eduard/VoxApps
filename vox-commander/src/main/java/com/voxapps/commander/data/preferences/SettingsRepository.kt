@@ -163,6 +163,7 @@ interface SettingsRepository {
     suspend fun setTtsPitch(pitch: Float)
     suspend fun setTtsAudioFocusMode(mode: String)
     suspend fun setOverlayTextSize(size: Float)
+    suspend fun setPiperVoiceModelId(id: String?)
 
     // --- APP ALIASES ---
     suspend fun setAppAliasRules(rules: List<AppAliasRule>)

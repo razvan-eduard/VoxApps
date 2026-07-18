@@ -395,6 +395,10 @@ class AppStateManager private constructor(
         scope.launch { repo.setOverlayTextSize(size) }
     }
 
+    fun setPiperVoiceModelId(id: String?) {
+        scope.launch { repo.setPiperVoiceModelId(id) }
+    }
+
     fun setAppAliasRules(rules: List<com.voxapps.commander.data.preferences.AppAliasRule>) {
         scope.launch { repo.setAppAliasRules(rules) }
     }
