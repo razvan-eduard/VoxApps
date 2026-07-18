@@ -91,7 +91,7 @@ dependencies {
     // See vox-expenses/vox-notes' identical comment: forces a current fragment version so the
     // biometric prompt's registerForActivityResult doesn't crash against the modern
     // ActivityResultRegistry pulled in by the Compose stack.
-    implementation("androidx.fragment:fragment-ktx:1.8.5")
+    implementation("androidx.fragment:fragment-ktx:1.8.9")
 
     // Room + KSP
     implementation(libs.androidx.room.runtime)
