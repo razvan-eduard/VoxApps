@@ -24,6 +24,10 @@ import androidx.compose.runtime.Immutable
  * @param intentAction    Android intent action to fire (used by FastMap rules). null = handler decides.
  * @param uriTemplate     URI template for ACTION_VIEW intents (from FastMap rule or probe).
  * @param mediaControlType How media keys are sent: "active_session" (default), "default_app", "audio_button".
+ * @param mediaType        For domain="audio"/action="play" only: "track" (default), "album", or "artist" —
+ *                          distinguishes "play the album X"/"play the artist X" from a plain track request.
+ *                          null is treated as "track". Not populated by FastMap rules (user-authored rules
+ *                          have no notion of this); only the LLM interpreters set it.
  */
 @Immutable
 data class NluIntent(
@@ -39,7 +43,8 @@ data class NluIntent(
     val extras: Map<String, String> = emptyMap(),
     val intentAction: String? = null,
     val uriTemplate: String? = null,
-    val mediaControlType: String? = null
+    val mediaControlType: String? = null,
+    val mediaType: String? = null
 ) {
     /**
      * Serializes the full anatomy (not just [logicalSubject]) for a satellite's extraction pass —

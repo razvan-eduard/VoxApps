@@ -57,7 +57,7 @@ class AudioIntentHandler : IntentHandler {
 
         // 1. Try a loaded declarative API integration first (uses its OAuth token for direct
         //    playback via the service's own API — e.g. Spotify's Web API today).
-        if (AudioPlaybackHelpers.tryApiIntegrationPlaySearch(context, pkg ?: "", query, waitMs = 3000)) {
+        if (AudioPlaybackHelpers.tryApiIntegrationPlaySearch(context, pkg ?: "", query, intent.mediaType, waitMs = 3000)) {
             return true
         }
 

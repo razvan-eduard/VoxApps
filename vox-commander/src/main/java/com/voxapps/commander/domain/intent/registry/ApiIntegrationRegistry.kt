@@ -45,22 +45,34 @@ data class CapabilitySlot(
     val body: String? = null,
     @SerializedName("response_path") val responsePath: String? = null,
     @SerializedName("uri_template") val uriTemplate: String? = null,
-    val steps: List<SequenceStep>? = null
+    val steps: List<SequenceStep>? = null,
+    // Extra named extractions from the same response, alongside the primary response_path — e.g.
+    // search_track's primary result is the track URI, but play_track's queueing step also needs
+    // that track's artist id from the SAME search response, without a second HTTP call.
+    val extract: Map<String, String>? = null
 )
 
 /**
  * One step of an `api_sequence` slot. Either a `capability` reference (invoke another slot and
- * store its result) or a `type`-dispatched step (`api_call` / `device_select`).
+ * store its result) or a `type`-dispatched step (`api_call` / `device_select` / `queue_array`).
  *
- * `optional`/`stop_on_success`/`retry`/`delay_before_ms` exist specifically to let a purely
- * declarative sequence reproduce real, already-shipped retry/fallback behavior (Spotify's
- * device-transfer dance ignores the transfer call's own result, waits before the first play
- * attempt, and retries once after a longer delay before falling back to a device-less play call)
- * without hardcoding that behavior into the executor.
+ * `optional`/`group`/`retry`/`delay_before_ms` exist specifically to let a purely declarative
+ * sequence reproduce real, already-shipped retry/fallback behavior. Steps sharing the same
+ * `group` are tried in order as alternatives — the first to succeed satisfies the whole group
+ * (later members are skipped, but the sequence continues to steps *after* the group); the group
+ * only aborts the sequence if its LAST member fails and isn't `optional`. E.g. Spotify's
+ * device-transfer dance ignores the transfer call's own result (`optional: true`), then tries
+ * play-on-device (with a retry) and play-without-a-device as two `group: "play"` alternatives —
+ * whichever succeeds lets the sequence continue on to queue a few more tracks afterward.
+ *
+ * `queue_array` fields (`from`/`uriField`/`limit`/`skip`/`queuePath`) implement "queue a few more
+ * items from an array a prior step fetched" — e.g. play_track queueing an artist's other top
+ * tracks after the requested one starts playing, since Spotify's real Recommendations endpoint is
+ * deprecated (Nov 2024) and unavailable to new apps; top-tracks is the honest, still-live substitute.
  */
 data class SequenceStep(
     val capability: String? = null,
-    val type: String? = null, // api_call | device_select
+    val type: String? = null, // api_call | device_select | queue_array
     val method: String? = null,
     val path: String? = null,
     val body: String? = null,
@@ -70,9 +82,14 @@ data class SequenceStep(
     @SerializedName("id_field") val idField: String? = null,
     val `as`: String? = null,
     val optional: Boolean = false,
-    @SerializedName("stop_on_success") val stopOnSuccess: Boolean = false,
+    val group: String? = null,
     @SerializedName("delay_before_ms") val delayBeforeMs: Long = 0,
-    val retry: RetryDef? = null
+    val retry: RetryDef? = null,
+    // queue_array only:
+    @SerializedName("uri_field") val uriField: String? = null,
+    val limit: Int = 0,
+    val skip: String? = null,
+    @SerializedName("queue_path") val queuePath: String? = null
 )
 
 data class RetryDef(val times: Int = 0, @SerializedName("delay_ms") val delayMs: Long = 0)

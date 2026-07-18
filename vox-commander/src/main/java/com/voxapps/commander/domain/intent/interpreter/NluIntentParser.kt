@@ -136,6 +136,7 @@ object NluIntentParser {
             obj.get("confidence").asFloat
         } else 1.0f
         val extras = obj.getSafeMap("extras")
+        val mediaType = obj.getSafeString("media_type").ifBlank { null }
 
         if (domain.isBlank() && action.isBlank()) {
             Logger.log("LLM returned null domain and action — treating as no intent", TAG)
@@ -152,7 +153,8 @@ object NluIntentParser {
             targetApp = targetApp,
             category = category,
             confidence = confidence,
-            extras = extras
+            extras = extras,
+            mediaType = mediaType
         )
     }
 
@@ -187,6 +189,11 @@ object NluIntentParser {
             ?: parameters["album"]
         val category = parameters["category"]
         val mediaControlType = parameters["mediaControlType"]
+        val mediaType = when {
+            !parameters["album"].isNullOrBlank() -> "album"
+            !parameters["artist"].isNullOrBlank() && parameters["track"].isNullOrBlank() -> "artist"
+            else -> null
+        }
         val extras = parameters.filterKeys { it != "query" && it != "artist" && it != "track" && it != "album" && it != "destination" && it != "contact" && it != "category" && it != "mediaControlType" }
 
         return NluIntent(
@@ -198,7 +205,8 @@ object NluIntentParser {
             category = category,
             confidence = confidence,
             extras = extras,
-            mediaControlType = mediaControlType
+            mediaControlType = mediaControlType,
+            mediaType = mediaType
         )
     }
 
@@ -248,10 +256,16 @@ object NluIntentParser {
         val action = mapped?.action ?: actionType
         val targetApp = mapped?.targetApp
 
-        val logicalSubject = obj.get("artist")?.takeIf { !it.isJsonNull }?.asString
-            ?: obj.get("track")?.takeIf { !it.isJsonNull }?.asString
-            ?: obj.get("album")?.takeIf { !it.isJsonNull }?.asString
+        val albumVal = obj.get("album")?.takeIf { !it.isJsonNull }?.asString
+        val artistVal = obj.get("artist")?.takeIf { !it.isJsonNull }?.asString
+        val trackVal = obj.get("track")?.takeIf { !it.isJsonNull }?.asString
+        val logicalSubject = artistVal ?: trackVal ?: albumVal
             ?: obj.get("destination")?.takeIf { !it.isJsonNull }?.asString
+        val mediaType = when {
+            !albumVal.isNullOrBlank() -> "album"
+            !artistVal.isNullOrBlank() && trackVal.isNullOrBlank() -> "artist"
+            else -> null
+        }
 
         return NluIntent(
             actionVerb = action,
@@ -259,7 +273,8 @@ object NluIntentParser {
             domain = domain,
             action = action,
             targetApp = targetApp,
-            confidence = 1.0f
+            confidence = 1.0f,
+            mediaType = mediaType
         )
     }
 }

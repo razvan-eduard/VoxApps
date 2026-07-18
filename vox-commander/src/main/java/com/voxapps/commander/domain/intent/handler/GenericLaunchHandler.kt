@@ -39,7 +39,7 @@ class GenericLaunchHandler : IntentHandler {
 
         // Try the specified intent action
         return when (action) {
-            MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH -> playFromSearch(context, pkg, query)
+            MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH -> playFromSearch(context, pkg, query, intent.mediaType)
             Intent.ACTION_VIEW -> {
                 if (!query.isNullOrBlank() && AudioPlaybackHelpers.pipedPlayDirect(context, pkg, query)) return true
                 viewSearch(context, pkg, resolvedApp, query, intent.uriTemplate)
@@ -64,7 +64,7 @@ class GenericLaunchHandler : IntentHandler {
      * 3. Fallback: plain intent
      * 4. Last resort: just launch the app
      */
-    private fun playFromSearch(context: Context, pkg: String, query: String?): Boolean {
+    private fun playFromSearch(context: Context, pkg: String, query: String?, mediaType: String? = null): Boolean {
         if (query.isNullOrBlank()) {
             return launchApp(context, pkg)
         }
@@ -73,7 +73,7 @@ class GenericLaunchHandler : IntentHandler {
         if (AudioPlaybackHelpers.pipedPlayDirect(context, pkg, query)) return true
 
         // 1. Try a loaded declarative API integration (e.g. Spotify's Web API via its OAuth token)
-        if (AudioPlaybackHelpers.tryApiIntegrationPlaySearch(context, pkg, query)) return true
+        if (AudioPlaybackHelpers.tryApiIntegrationPlaySearch(context, pkg, query, mediaType)) return true
 
         // 2. Try intent with EXTRA_MEDIA_FOCUS (artist)
         val playIntent = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {

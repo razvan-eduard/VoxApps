@@ -31,32 +31,54 @@ object DeclarativeApiExecutor {
         val slot = integration.capabilities[capabilityName] ?: return null
         val vars = mutableMapOf<String, Any?>("token" to token)
         if (query != null) vars["query"] = query
-        return runSlot(integration, slot, token, vars)
+        return runSlot(integration, slot, token, vars).primary
     }
 
-    private fun runSlot(integration: ApiIntegration, slot: CapabilitySlot, token: String, vars: MutableMap<String, Any?>): String? {
+    /**
+     * A slot's primary result plus any extra named [CapabilitySlot.extract] values pulled from the
+     * same response (e.g. search_track's primary result is the track URI; play_track's queueing
+     * step also needs that track's artist id from the SAME search response, without a second call).
+     */
+    private data class SlotOutcome(val primary: String?, val extras: Map<String, Any?> = emptyMap())
+
+    private fun runSlot(integration: ApiIntegration, slot: CapabilitySlot, token: String, vars: MutableMap<String, Any?>): SlotOutcome {
         return when (slot.type) {
-            "api_call" -> executeApiCall(integration, slot.method ?: "GET", slot.path, slot.body, slot.responsePath, token, vars)?.let { (result, _) -> result?.toString() }
-            "api_sequence" -> runSequence(integration, slot.steps.orEmpty(), token, vars)
-            "deep_link" -> slot.uriTemplate?.let { substituteForPath(it, vars) }
+            "api_call" -> {
+                val call = executeApiCall(integration, slot.method ?: "GET", slot.path, slot.body, slot.responsePath, token, vars)
+                    ?: return SlotOutcome(null)
+                val (result, raw) = call
+                val extras = if (!slot.extract.isNullOrEmpty()) {
+                    val root = try { JSONObject(raw) } catch (e: Exception) { null }
+                    if (root != null) slot.extract.mapValues { (_, path) -> extractPath(root, path) } else emptyMap()
+                } else emptyMap()
+                SlotOutcome(result?.toString(), extras)
+            }
+            "api_sequence" -> SlotOutcome(runSequence(integration, slot.steps.orEmpty(), token, vars))
+            "deep_link" -> SlotOutcome(slot.uriTemplate?.let { substituteForPath(it, vars) })
             else -> {
                 Logger.log("Unknown capability slot type: ${slot.type}", TAG)
-                null
+                SlotOutcome(null)
             }
         }
     }
 
     private fun runSequence(integration: ApiIntegration, steps: List<SequenceStep>, token: String, vars: MutableMap<String, Any?>): String? {
         var finalResult: String? = null
+        val succeededGroups = mutableSetOf<String>()
 
-        for (step in steps) {
+        for ((index, step) in steps.withIndex()) {
+            val group = step.group
+            if (group != null && group in succeededGroups) continue // an earlier alternative already satisfied this group
+
             if (step.delayBeforeMs > 0) Thread.sleep(step.delayBeforeMs)
 
             if (step.capability != null) {
                 val referenced = integration.capabilities[step.capability] ?: return null
-                val result = runSlot(integration, referenced, token, vars) ?: return null
-                vars["${step.capability}.result"] = result
-                finalResult = result
+                val outcome = runSlot(integration, referenced, token, vars)
+                if (outcome.primary == null) return null
+                vars["${step.capability}.result"] = outcome.primary
+                outcome.extras.forEach { (key, value) -> vars["${step.capability}.$key"] = value }
+                finalResult = outcome.primary
                 continue
             }
 
@@ -73,20 +95,30 @@ object DeclarativeApiExecutor {
                     }
                     // optional device_select with no match: leave device_id unset and fall through —
                     // later steps that reference {device_id} will fail harmlessly (empty placeholder)
-                    // and, if marked optional/stop_on_success themselves, the sequence still reaches
-                    // its device-less final fallback step, same as the original hardcoded chain.
+                    // and, if marked optional themselves, the sequence still reaches its device-less
+                    // final fallback step, same as the original hardcoded chain.
                 }
                 "api_call" -> {
                     val result = runApiCallStepWithRetry(integration, step, token, vars)
                     if (result != null) {
                         step.`as`?.let { vars[it] = result }
                         finalResult = result.toString()
-                        if (step.stopOnSuccess) return finalResult
-                    } else if (!step.optional && !step.stopOnSuccess) {
-                        Logger.log("DeclarativeApiExecutor: required step failed, aborting sequence", TAG)
-                        return null
+                        group?.let { succeededGroups.add(it) }
+                    } else {
+                        // A grouped step's failure only aborts the sequence if it's the LAST
+                        // alternative in its group (no more members follow) and isn't optional —
+                        // otherwise the next step in the same group gets a chance to succeed instead.
+                        val isLastOfGroup = group == null || steps.drop(index + 1).none { it.group == group }
+                        if (!step.optional && isLastOfGroup) {
+                            Logger.log("DeclarativeApiExecutor: required step failed, aborting sequence", TAG)
+                            return null
+                        }
                     }
-                    // optional or stop_on_success steps: a failure just falls through to the next step
+                }
+                "queue_array" -> {
+                    // Best-effort, never fails the sequence — queueing extra tracks is a nice-to-have,
+                    // not something that should undo an already-successful play.
+                    runQueueArray(integration, step, token, vars)
                 }
                 else -> {
                     Logger.log("Unknown sequence step type: ${step.type}", TAG)
@@ -136,6 +168,40 @@ object DeclarativeApiExecutor {
             is Boolean -> actual == expected
             else -> actual?.toString() == expected?.toString()
         }
+    }
+
+    /**
+     * Queues up to [SequenceStep.limit] items from a prior step's stored [SequenceStep.from] array
+     * (e.g. an artist's top tracks), skipping [SequenceStep.skip] (typically the track just played)
+     * and posting each remaining item's [SequenceStep.uriField] value to [SequenceStep.queuePath].
+     * Best-effort: an individual item failing to queue doesn't stop the rest.
+     */
+    private fun runQueueArray(integration: ApiIntegration, step: SequenceStep, token: String, vars: Map<String, Any?>) {
+        val fromKey = step.from ?: return
+        val array = vars[fromKey] as? JSONArray ?: return
+        val queuePath = step.queuePath ?: return
+        val uriField = step.uriField ?: "uri"
+        val limit = if (step.limit > 0) step.limit else 4
+        val method = step.method ?: "POST"
+        val skipValue = step.skip?.let { resolvePlaceholder(it, vars) }
+
+        var queued = 0
+        for (i in 0 until array.length()) {
+            if (queued >= limit) break
+            val item = array.optJSONObject(i) ?: continue
+            val uri = item.optString(uriField).takeIf { it.isNotBlank() } ?: continue
+            if (uri == skipValue) continue
+
+            val path = queuePath.replace("{item}", URLEncoder.encode(uri, "UTF-8"))
+            val url = integration.baseUrl.trimEnd('/') + path
+            if (httpRequest(method, url, token, null) != null) queued++
+        }
+    }
+
+    /** Resolves a template that's expected to be a single `{key}` placeholder to its raw var value. */
+    private fun resolvePlaceholder(template: String, vars: Map<String, Any?>): String? {
+        val match = placeholderRegex.matchEntire(template) ?: return template
+        return vars[match.groupValues[1]]?.toString()
     }
 
     /** Executes one HTTP call. Returns (extractedOrRawResult, rawResponseBody) or null on failure. */

@@ -22,14 +22,19 @@ object AudioPlaybackHelpers {
     private const val TAG = "AudioPlaybackHelpers"
 
     /**
-     * Tries to search-and-play [query] via [pkg]'s declarative API integration (if one is loaded,
-     * authorized, and declares a `play_track` capability). Returns false — falling through to the
-     * generic chain — for any app without a matching, authorized integration.
+     * Tries to search-and-play [query] via [pkg]'s declarative API integration (if one is loaded
+     * and authorized). [mediaType] ("track"/"album"/"artist", from [com.voxapps.commander.domain.intent.model.NluIntent.mediaType])
+     * selects the `play_track`/`play_album`/`play_artist` capability slot; falls back to
+     * `play_track` if the service has no dedicated slot for the requested media type (a partial
+     * match beats failing outright). Returns false — falling through to the generic chain — for
+     * any app without a matching, authorized integration or with neither slot defined.
      */
-    fun tryApiIntegrationPlaySearch(context: Context, pkg: String, query: String, waitMs: Long = 0): Boolean {
+    fun tryApiIntegrationPlaySearch(context: Context, pkg: String, query: String, mediaType: String? = null, waitMs: Long = 0): Boolean {
         val integration = ApiIntegrationRegistry.forPackage(pkg) ?: return false
         val auth = integration.auth ?: return false
-        if (!integration.capabilities.containsKey("play_track")) return false
+        val capabilityName = "play_${mediaType ?: "track"}".takeIf { integration.capabilities.containsKey(it) }
+            ?: "play_track".takeIf { integration.capabilities.containsKey(it) }
+            ?: return false
         if (!OAuth2Manager.isAuthorized(integration.id)) return false
 
         val clientId = clientIdFor(integration.id) ?: return false
@@ -48,12 +53,12 @@ object AudioPlaybackHelpers {
             }
         }
 
-        val result = DeclarativeApiExecutor.run(integration, "play_track", token, query)
+        val result = DeclarativeApiExecutor.run(integration, capabilityName, token, query)
         if (result != null) {
-            Logger.log("playSearch via ${integration.id} declarative API succeeded", TAG)
+            Logger.log("playSearch via ${integration.id}.$capabilityName declarative API succeeded", TAG)
             return true
         }
-        Logger.log("${integration.id} declarative API play_track failed, falling back to intent", TAG)
+        Logger.log("${integration.id}.$capabilityName declarative API failed, falling back to intent", TAG)
         return false
     }
 
