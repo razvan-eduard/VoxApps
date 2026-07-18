@@ -10,23 +10,31 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.apppicker.AppPickerCard
 import com.voxapps.apppicker.AppPickerStrings
@@ -52,6 +60,7 @@ import java.util.Date
 fun NotificationCaptureSettingsTab(
     paymentSourcePackages: Set<String>,
     bankingSourcePackages: Set<String>,
+    autoAcceptNotificationExpenses: Boolean,
     stateManager: ExpensesStateManager,
     settingsRepo: ExpensesSettingsRepository,
     modifier: Modifier = Modifier
@@ -62,6 +71,21 @@ fun NotificationCaptureSettingsTab(
 
     var accessGranted by remember {
         mutableStateOf(NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName))
+    }
+
+    // The OS grant happens in system Settings (deep-linked below), not a normal runtime dialog, so
+    // there's no ActivityResult callback to catch the change — re-checking on ON_RESUME (fires when
+    // the user backs out of system Settings back into this screen) keeps the button's status accurate
+    // without a manual "re-check" action.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                accessGranted = NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // LauncherAppsCache is warmed synchronously in ExpensesContainer's init, before any UI composes —
@@ -101,27 +125,16 @@ fun NotificationCaptureSettingsTab(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Text(
-            if (accessGranted) languageManager.getString("notification_access_granted")
-            else languageManager.getString("notification_access_not_granted"),
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (accessGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-        )
-        OutlinedButton(
+        Button(
             onClick = {
                 context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (accessGranted) Color(0xFF4CAF50) else Color(0xFFF44336)
+            ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(languageManager.getString("grant_notification_access_button"))
-        }
-        Button(
-            onClick = {
-                accessGranted = NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(languageManager.getString("recheck_access_button"))
+            Text(languageManager.getString("grant_notification_access_button"), color = Color.White)
         }
 
         HorizontalDivider()
@@ -171,6 +184,23 @@ fun NotificationCaptureSettingsTab(
                 stateManager.setBankingSourcePackages(updated)
             }
         )
+
+        HorizontalDivider()
+
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("auto_accept_notification_expenses_label"), style = MaterialTheme.typography.labelLarge)
+                Text(
+                    languageManager.getString("auto_accept_notification_expenses_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = autoAcceptNotificationExpenses,
+                onCheckedChange = { stateManager.setAutoAcceptNotificationExpenses(it) }
+            )
+        }
 
         if (pendingEntries.isNotEmpty()) {
             HorizontalDivider()

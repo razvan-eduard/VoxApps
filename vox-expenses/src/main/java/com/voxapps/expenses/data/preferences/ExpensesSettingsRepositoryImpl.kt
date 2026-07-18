@@ -35,6 +35,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val HOME_CURRENCY = stringPreferencesKey("home_currency")
         val PAYMENT_SOURCE_PACKAGES = stringSetPreferencesKey("payment_source_packages")
         val BANKING_SOURCE_PACKAGES = stringSetPreferencesKey("banking_source_packages")
+        val AUTO_ACCEPT_NOTIFICATION_EXPENSES = booleanPreferencesKey("auto_accept_notification_expenses")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val VAT_DISPLAY_ENABLED = booleanPreferencesKey("vat_display_enabled")
         val DECIMAL_SEPARATOR = stringPreferencesKey("decimal_separator")
@@ -62,6 +63,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             homeCurrency = prefs[Keys.HOME_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
             paymentSourcePackages = prefs[Keys.PAYMENT_SOURCE_PACKAGES] ?: emptySet(),
             bankingSourcePackages = prefs[Keys.BANKING_SOURCE_PACKAGES] ?: emptySet(),
+            autoAcceptNotificationExpenses = prefs[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] ?: false,
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
             vatDisplayEnabled = prefs[Keys.VAT_DISPLAY_ENABLED] ?: false,
             decimalSeparator = prefs[Keys.DECIMAL_SEPARATOR] ?: ExpensesSettings.DECIMAL_PERIOD,
@@ -142,6 +144,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.BANKING_SOURCE_PACKAGES] = packages }
     }
 
+    override suspend fun setAutoAcceptNotificationExpenses(enabled: Boolean) {
+        dataStore.edit { it[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] = enabled }
+    }
+
     override suspend fun setDebugLoggingEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
     }
@@ -208,6 +214,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.HOME_CURRENCY] = settings.homeCurrency
             prefs[Keys.PAYMENT_SOURCE_PACKAGES] = settings.paymentSourcePackages
             prefs[Keys.BANKING_SOURCE_PACKAGES] = settings.bankingSourcePackages
+            prefs[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] = settings.autoAcceptNotificationExpenses
             prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
             prefs[Keys.VAT_DISPLAY_ENABLED] = settings.vatDisplayEnabled
             prefs[Keys.DECIMAL_SEPARATOR] = settings.decimalSeparator

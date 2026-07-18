@@ -150,6 +150,7 @@ fun SettingsScreen(
             SettingsPage.NOTIFICATION_CAPTURE -> NotificationCaptureSettingsTab(
                 paymentSourcePackages = settings.paymentSourcePackages,
                 bankingSourcePackages = settings.bankingSourcePackages,
+                autoAcceptNotificationExpenses = settings.autoAcceptNotificationExpenses,
                 stateManager = stateManager,
                 settingsRepo = settingsRepo,
                 modifier = mod

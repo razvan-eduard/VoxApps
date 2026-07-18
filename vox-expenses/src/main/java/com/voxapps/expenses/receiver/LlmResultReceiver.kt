@@ -136,18 +136,37 @@ class LlmResultReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val settings = container.settingsRepository.getSnapshot()
-                        container.pendingNotificationExpenseRepository.addPending(
-                            PendingNotificationExpense(
-                                id = System.nanoTime(),
+                        if (settings.autoAcceptNotificationExpenses) {
+                            // Same insert path as ExpensesStateManager.approveNotificationExpense —
+                            // skips the pending-review queue entirely. It's still a normal, editable
+                            // expense row afterward, just created without an explicit Approve tap.
+                            container.expensesRepository.addParsedExpense(
                                 title = parsed.title,
                                 totalAmount = parsed.totalAmount,
-                                currency = parsed.currency ?: settings.defaultCurrency,
+                                currencyCode = parsed.currency ?: settings.defaultCurrency,
                                 vendor = parsed.vendor,
-                                category = parsed.category,
                                 bank = parsed.bank,
-                                capturedAt = System.currentTimeMillis()
+                                location = null,
+                                comments = null,
+                                dateTime = System.currentTimeMillis(),
+                                spokenCategory = parsed.category,
+                                defaultCategoryId = settings.defaultVoiceCategoryId,
+                                autoCreate = settings.autoCreateVoiceCategory
                             )
-                        )
+                        } else {
+                            container.pendingNotificationExpenseRepository.addPending(
+                                PendingNotificationExpense(
+                                    id = System.nanoTime(),
+                                    title = parsed.title,
+                                    totalAmount = parsed.totalAmount,
+                                    currency = parsed.currency ?: settings.defaultCurrency,
+                                    vendor = parsed.vendor,
+                                    category = parsed.category,
+                                    bank = parsed.bank,
+                                    capturedAt = System.currentTimeMillis()
+                                )
+                            )
+                        }
                     } finally {
                         pending.finish()
                     }

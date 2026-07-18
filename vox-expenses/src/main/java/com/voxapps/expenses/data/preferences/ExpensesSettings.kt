@@ -30,6 +30,10 @@ import androidx.compose.runtime.Immutable
  *   definitely a bank app" — when a captured notification comes from one of these,
  *   [com.voxapps.expenses.receiver.PaymentNotificationListenerService] tells the LLM that app's
  *   name authoritatively rather than leaving `bank` to be guessed from raw notification text.
+ * - [autoAcceptNotificationExpenses]: off by default — when on, a notification-derived expense that
+ *   parses successfully is inserted straight away (same as manual/voice entry, editable afterward)
+ *   instead of sitting in the pending-review queue for an explicit Approve tap. See
+ *   [com.voxapps.expenses.receiver.LlmResultReceiver]'s `NOTIFICATION_EXPENSE_PARSE` handling.
  * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output — off by default.
  * - [vatDisplayEnabled]: shows the optional per-line-item net/VAT/gross breakdown (see
  *   `ExpenseLineItem.netAmount`/`vatAmount`/`grossAmount`) on the edit screen — off by default since
@@ -66,6 +70,7 @@ data class ExpensesSettings(
     val homeCurrency: String = DEFAULT_CURRENCY,
     val paymentSourcePackages: Set<String> = emptySet(),
     val bankingSourcePackages: Set<String> = emptySet(),
+    val autoAcceptNotificationExpenses: Boolean = false,
     val debugLoggingEnabled: Boolean = false,
     val vatDisplayEnabled: Boolean = false,
     val decimalSeparator: String = DECIMAL_PERIOD,
