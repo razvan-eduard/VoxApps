@@ -15,7 +15,7 @@
 
 ---
 
-> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, release workflow, and adaptive launcher icon; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`), **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher), **`vox-vision`** (a standalone document scanner, `com.voxapps.vision`, camera capture + on-device OCR), **`vox-expenses`** (a standalone, encrypted on-device expense tracker, `com.voxapps.expenses`, Room + SQLCipher, voice/receipt/notification-driven capture), **`vox-calendar`** (a standalone, encrypted on-device calendar, `com.voxapps.calendar`, Room + SQLCipher, colored layers + ICS import/export + voice-created events), and **`vox-hub`** (a lightweight, database-free backup/restore utility, `com.voxapps.hub`, that discovers every installed Vox app and exports/imports their data as one JSON file). A few `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork, `calendar` a shared month-paged agenda view, `apppicker` a shared searchable app-selector card) are compiled into one or more apps for code reuse — they carry no shared runtime state, just library code. See [Vox Notes](#vox-notes), [Vox Vision](#vox-vision), [Vox Expenses](#vox-expenses), [Vox Calendar](#vox-calendar), and [Vox Hub](#vox-hub) below for what those apps do; the rest of this README covers `vox-commander`.
+> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, release workflow, and adaptive launcher icon; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`), **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher), **`vox-vision`** (a standalone document scanner, `com.voxapps.vision`, camera capture + on-device OCR), **`vox-expenses`** (a standalone, encrypted on-device expense tracker, `com.voxapps.expenses`, Room + SQLCipher, voice/receipt/notification-driven capture), **`vox-calendar`** (a standalone, encrypted on-device calendar, `com.voxapps.calendar`, Room + SQLCipher, colored layers + ICS import/export + voice-created events), and **`vox-hub`** (a lightweight, database-free backup/restore utility, `com.voxapps.hub`, that discovers every installed Vox app and exports/imports their data as one JSON file). Ten `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork, `calendar` a shared month-paged agenda view, `apppicker` a shared searchable app-selector card, `logging` a shared logger, `onboarding` shared first-launch welcome/permissions screens, `textmatch` fuzzy category/layer matching, `schema-annotations`/`schema-processor` a KSP-based prompt-schema-versioning pair — see [`docs/SATELLITE_APP_GUIDE.md`](docs/SATELLITE_APP_GUIDE.md) §6) are compiled into one or more apps for code reuse — they carry no shared runtime state, just library code. See [Vox Notes](#vox-notes), [Vox Vision](#vox-vision), [Vox Expenses](#vox-expenses), [Vox Calendar](#vox-calendar), and [Vox Hub](#vox-hub) below for what those apps do; the rest of this README covers `vox-commander`.
 
 ## Features
 
@@ -28,11 +28,13 @@
 - **Vox Apps ecosystem** — Companion apps (e.g. Vox Notes) self-register their voice capabilities via the `:core:ipc` contract; Commander discovers them at warmup, adds their domains to the NLU, and routes commands over a local JSON bus (create/read → spoken back via TTS)
 - **Media Control** — Declarative API integration engine (`api_integrations.json`): search/play/pause/next/prev for any service defined entirely in JSON (OAuth2 + REST), zero per-service Kotlin — Spotify ships as the first integration; YouTube search via Piped API or NewPipe Extractor; playback on any selected app (LibreTube, NewPipe, etc.); media session control
 - **Text-to-Speech** — Android TTS or Piper TTS (on-device neural voices via sherpa-onnx)
-- **Search** — Web search via DuckDuckGo, Wikipedia, Google News, GNews, WeatherAPI, Open-Meteo
+- **Barge-in** — `ConversationHandler`/`ConversationStateMachine` keep the wake word engine active while
+  TTS is speaking, so saying the wake word again interrupts the response instead of waiting it out
+- **Search** — Web search via DuckDuckGo, Wikipedia, Google News, GNews, Currents API, NewsAPI, WeatherAPI, Open-Meteo
 - **Navigation** — Waze, Google Maps deep linking
 - **Messaging** — WhatsApp, Telegram, SMS via `ACTION_SEND`
 - **System Controls** — Volume, WiFi, Bluetooth, GPS toggles
-- **Multi-language** — English, Romanian, and extensible via `LanguageManager`
+- **Multi-language** — English, Romanian, German, French, and extensible via `LanguageManager`
 - **Overlay UI** — Floating voice overlay with transcription and status
 - **Model Downloads** — On-demand DLC for Whisper models, Piper voices, wake word models
 - **Settings** — Compose-based settings with 7 tabs (General, App Manager, Services, Integrations, Models, Advanced, Permissions)
@@ -76,7 +78,7 @@ adb shell am start -n com.voxapps.commander/.MainActivity
 ./gradlew :vox-commander:connectedAndroidTest
 ```
 
-212 unit tests covering: intent taxonomy, NLU decision map, AppState/AppStateManager, AppSettings (external trigger, return-to-previous-app), model management, search providers, FastMap engine, and more.
+320 unit tests covering: intent taxonomy, NLU decision map, AppState/AppStateManager, AppSettings (external trigger, return-to-previous-app), model management, search providers, FastMap engine, and more.
 
 > Swap `:vox-commander` for `:vox-notes`, `:vox-vision`, `:vox-expenses`, `:vox-calendar`, or `:vox-hub` in any of the commands above to build/install/test the companion apps instead — each has its own `assembleDebug`/`installDebug`/`testDebugUnitTest` tasks.
 
@@ -184,7 +186,7 @@ Each app stays a fully independent product; a user can install any subset.
   the prompt and parsing the result is entirely the caller's concern, so new LLM-backed satellite
   features ship with zero Commander changes. Consumers today: Vox Notes' **Auto-Merge Categories** and
   **Note cleanup** (duplicate detection), and Vox Vision's OCR-text cleanup (see below).
-- **Shared theming** — every app (Commander and all four satellites) renders through the same
+- **Shared theming** — every app (Commander and all five satellites) renders through the same
   `:core:design` `VoxTheme` composable and exposes the same user-facing controls in its General
   settings: a System/Light/Dark picker plus a "Colored (Material You)" toggle for Android 12+ dynamic
   color, persisted independently per app.
@@ -372,7 +374,7 @@ other satellite implements as a server.
 | Media | Spotify App Remote SDK, declarative API integration engine (`api_integrations.json`, OAuth2 + REST — Spotify is the first service), MediaSession API |
 | YouTube | NewPipe Extractor (on-device), Piped API (cloud) |
 | Navigation | Waze, Google Maps (geo: deep links) |
-| Search | DuckDuckGo, Wikipedia, Google News, WeatherAPI |
+| Search | DuckDuckGo, Wikipedia, Google News, GNews, Currents API, NewsAPI, WeatherAPI, Open-Meteo |
 
 ## Project Structure
 
@@ -470,13 +472,15 @@ VoxCommander uses external JSON files for extensible configuration. These ship i
 | File | Purpose | Location |
 |------|---------|----------|
 | `models.json` | AI/ML model definitions (Whisper, Vosk, Piper TTS, OpenWakeWord, Porcupine keywords, local LLM), NLU prompt template, engine metadata + capabilities | Repo root → copied to assets at build time |
-| `search_definitions.json` | Search provider definitions (DuckDuckGo, Wikipedia, Google News, GNews, WeatherAPI, Open-Meteo) — categories, endpoints, API key requirements, response parsers | Repo root → copied to assets at build time |
+| `search_definitions.json` | Search provider definitions (DuckDuckGo, Wikipedia, Google News, GNews, Currents API, NewsAPI, WeatherAPI, Open-Meteo) — categories, endpoints, API key requirements, response parsers | Repo root → copied to assets at build time |
 | `intents.json` | Capability manifest: the NLU `taxonomy` (domains/actions vocabulary) + the catalog of Android intents probed per app (action, probe URI, URI template, domain mapping) — the data behind "arbitrary dynamic intent to any app" | Repo root → copied to assets at build time |
 | `normalization.json` | 3-layer text normalization rules per language (abbreviations, regex interceptors, cleanup) — corrects STT output before NLU processing | `vox-commander/src/main/assets/normalization.json` |
+| `api_integrations.json` | Declarative per-service external-API definitions (OAuth2 + REST — Spotify is the first integration; zero per-service Kotlin needed for a new one) consumed by `ApiIntegrationRegistry`/`DeclarativeApiExecutor` — see [`docs/SATELLITE_APP_GUIDE.md`](docs/SATELLITE_APP_GUIDE.md) for the closest analogous pattern. Asset-only, no remote hot-reload (unlike the four above) | Repo root → copied to assets at build time |
+| `external_services.json` | Third-party service definitions (currently just `exchangerate_api` for Vox Expenses' currency conversion) — asset-only, no remote hot-reload. Actually consumed by **Vox Expenses**, not Commander; Commander carries its own copy only for build-time consistency with the other JSON files above | Repo root → copied to assets in both `vox-commander` and `vox-expenses` at build time |
 
 **How it works:**
-- At build time, `copyModelsJson`, `copySearchDefinitions`, and `copyIntentsJson` Gradle tasks copy the JSON from repo root into `assets/`
-- At runtime, the app checks the remote repo (`modelRepoBaseUrl` setting) for newer versions and downloads them if the schema version is higher (never downgrading below the bundled copy)
+- At build time, `copyModelsJson`/`copySearchDefinitions`/`copyIntentsJson`/`copyApiIntegrationsJson`/`copyExternalServicesJson` Gradle tasks copy each JSON from repo root into `assets/`
+- At runtime, `models.json`/`search_definitions.json`/`intents.json`/`normalization.json` check the remote repo (`modelRepoBaseUrl` setting) for newer versions and download them if the schema version is higher (never downgrading below the bundled copy); `api_integrations.json`/`external_services.json` are asset-only today, no remote-refresh layer
 - Adding a new model, search provider, or probeable intent = just update the JSON, no code changes required
 
 ### External Voice Trigger
@@ -511,10 +515,11 @@ Enable/disable in Settings → App Manager → External voice trigger toggle.
   a new satellite app: Gradle/manifest setup, the full `:core:ipc` contract reference, the generic LLM
   hook, collapsed extraction (`@VoxExtractionSchema`/KSP), the security model, and a debugging checklist.
 - [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md) — monorepo-wide reference for
-  every native/ML dependency that's vendored, patched, or compiled from source at build time (Vosk,
-  Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk) — what gets fetched, how patches are kept as
-  real diffs, how each stays in sync with upstream via a weekly `sync-*.yml` workflow, and which one
-  (`sync-vosk.yml`) is judged safe enough to auto-merge on green.
+  every native/ML dependency that's a binary version-check or vendored/patched/compiled from source at
+  build time (Vosk, NewPipe Extractor, Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk) — what
+  gets fetched, how patches are kept as real diffs, how each stays in sync with upstream via a
+  `sync-*.yml` workflow (weekly for most, monthly for Whisper.cpp), and which two (`sync-vosk.yml` and
+  `sync-newpipe-extractor.yml`) are judged safe enough to auto-merge on green.
 
 ## License
 

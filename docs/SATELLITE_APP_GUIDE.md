@@ -7,10 +7,7 @@ letting the user create/read its data by voice and get its data spoken back via 
 
 If you want the architecture overview instead of a build-it tutorial, see
 [`docs/TECHNICAL_DOCUMENTATION.md` §19](TECHNICAL_DOCUMENTATION.md#19-vox-apps-ecosystem-cross-app-contract)
-and the README's "Vox Apps ecosystem" section. **Note:** both of those documents contain one stale
-example (per-app permission names like `com.voxapps.notes.permission.COMMAND`) — the real,
-current permission names are the shared `com.voxapps.vox.permission.*` ones documented below.
-This guide is the up-to-date, load-bearing reference.
+and the README's "Vox Apps ecosystem" section.
 
 There is **no shared runtime state** between VoxCommander and a satellite. Everything crosses
 process boundaries as JSON inside `Intent` extras over Android's native broadcast/activity

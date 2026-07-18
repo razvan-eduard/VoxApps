@@ -283,6 +283,6 @@ Across Pattern B dependencies:
 - **`check_whisper.sh`**'s Homebrew dependency detection (Vulkan headers) doesn't yet install Homebrew
   or the required formulae if missing — see the Whisper.cpp section above. Deliberately deferred.
 
-All five dependencies now have a scheduled sync workflow, and the one identified staleness-detection
+All six dependencies now have a scheduled sync workflow, and the one identified staleness-detection
 bug (OpenCV's build script skipping a rebuild purely because output existed, regardless of whether it
 matched the pinned commit) has been fixed — see the OpenCV section above.

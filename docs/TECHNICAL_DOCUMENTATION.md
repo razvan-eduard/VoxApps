@@ -123,7 +123,7 @@ All three wake engines are defined in `models.json` (`wake_vosk`, `wake_openwake
 #### OpenWakeWord (`OpenWakeWordEngine.kt`)
 
 - Fully open-source, ONNX-based wake word detection. Models are `wake_openwakeword` entries in `models.json` (bundled in `assets/openwakeword/`).
-- **Startup warmup** — Detections in the first 1.5 s after each `start()` are ignored. Right after `start()` the mel/embedding feature buffers aren't primed and emit spurious high scores; without this guard the detect → command → re-arm cycle self-triggers into a loop.
+- **Startup warmup** — Detections in the first 1.0 s after each `start()` are ignored. Right after `start()` the mel/embedding feature buffers aren't primed and emit spurious high scores; without this guard the detect → command → re-arm cycle self-triggers into a loop.
 - **Vendored + patched fork (`:core:wakeword`)** — no longer consumed as the `xyz.rementia:openwakeword`
   JitPack artifact. Upstream runs full ONNX inference (mel-spectrogram → embedding → classifier) on
   *every* ~80 ms audio buffer, including silence — the dominant CPU/battery cost of always-on wake word
@@ -136,7 +136,7 @@ The low/medium/high **Wake Word Sensitivity** setting maps to a per-engine thres
 
 | Setting | OpenWakeWord (score ≥ threshold) | Porcupine (`setSensitivities`) | Vosk template DTW |
 |---------|------|------|------|
-| high | 0.3 (easier) | 0.7 (more sensitive) | 0.35 |
+| high | 0.25 (easier) | 0.7 (more sensitive) | 0.35 |
 | medium | 0.5 | 0.5 | 0.45 |
 | low | 0.7 (stricter) | 0.3 (less sensitive) | 0.55 |
 
@@ -301,7 +301,8 @@ data class NluIntent(
     val extras: Map<String, String>,  // additional params (e.g. message_body)
     val intentAction: String?,        // Android intent action (FastMap)
     val uriTemplate: String?,         // URI template (FastMap or probe)
-    val mediaControlType: String?     // "active_session", "default_app", "audio_button"
+    val mediaControlType: String?,    // "active_session", "default_app", "audio_button"
+    val mediaType: String?            // "track" (default)/"album"/"artist" — audio+play only, LLM-set
 )
 ```
 
@@ -407,8 +408,10 @@ Handles `domain=audio` with actions: play, pause, stop, next, prev.
 **Play search fallback chain:**
 
 1. **Declarative API integration** (`AudioPlaybackHelpers.tryApiIntegrationPlaySearch`) — If the resolved
-   app has a loaded, authorized `ApiIntegration` (§6a) declaring a `play_track` capability, search + play
-   via that service's own API (no UI). Spotify ships as the first integration today.
+   app has a loaded, authorized `ApiIntegration` (§8) declaring a `play_${mediaType ?: "track"}`
+   capability, search + play via that service's own API (no UI), falling back to `play_track` if the
+   service has no dedicated slot for the requested media type. Spotify ships as the first integration
+   today.
 2. **MEDIA_PLAY_FROM_SEARCH** — Android standard media search intent
 3. **YouTube search** (NewPipe or Piped) — Resolves query to videoId, launches `youtu.be/{id}` in target app
 4. **URI template** — Uses app's `uriTemplate` with query substitution
@@ -523,15 +526,23 @@ transport controls). This mirrors `ITtsEngine`'s "fixed interface, silent no-op 
 pattern already used elsewhere in this codebase.
 
 A slot's value is one of:
-- `api_call` — one authenticated HTTP request (`method`/`path`/`body`/`response_path`).
+- `api_call` — one authenticated HTTP request (`method`/`path`/`body`/`response_path`, plus an
+  optional `extract` map for pulling extra named values out of the same response — e.g. `search_track`
+  also extracts the track's `artist_id` alongside its primary URI result, without a second HTTP call).
 - `api_sequence` — an ordered list of steps for slots needing more than one request (Spotify's
-  `play_track`: search → list devices → pick one → transfer → play). Step modifiers
-  (`optional`, `stop_on_success`, `retry`, `delay_before_ms`) let a purely declarative sequence
-  reproduce real retry/fallback behavior — e.g. Spotify's device-transfer call is fire-and-forget
-  (`optional: true`), the play call waits 500ms then retries once after 2s (`delay_before_ms`/`retry`)
-  before falling through to a device-less play call, exactly matching the original hand-written flow.
+  `play_track`: search → list devices → pick one → transfer → play → queue a few more of the artist's
+  top tracks). Step modifiers (`optional`, `group`, `retry`, `delay_before_ms`) let a purely
+  declarative sequence reproduce real retry/fallback behavior — e.g. Spotify's device-transfer call is
+  fire-and-forget (`optional: true`); the device-targeted play call and the device-less fallback play
+  call share `group: "play"` so the first to succeed satisfies the whole group and the sequence
+  continues on to the queueing steps afterward, rather than the whole sequence returning early.
 - `device_select` (step type only) — generic version of the old device-preference heuristic:
   `prefer: [{field, equals}, ...]` predicates tried in order, first match wins, else first item.
+- `queue_array` (step type only) — best-effort, never fails the sequence: queues up to `limit` items
+  from a prior step's stored array (skipping one matching value, e.g. the track just played) via
+  `queue_path`. Used by `play_track` to queue a few of the played track's artist's other top tracks —
+  Spotify's real Recommendations endpoint was deprecated in November 2024 and is unavailable to new
+  apps, so top-tracks is the honest, still-live substitute.
 - `deep_link` — a URI template (reuses `intents.json`'s substitution mechanism), no auth. This is how
   a service with no remote-play API (e.g. Deezer) would express playback: resolve an ID via a real API
   search call, then hand off to the installed app via deep link.
@@ -544,8 +555,10 @@ A slot's value is one of:
     { "type": "api_call", "method": "GET", "path": "/me/player/devices", "response_path": "devices", "as": "devices", "optional": true },
     { "type": "device_select", "from": "devices", "prefer": [{"field": "type", "equals": "Smartphone"}], "id_field": "id", "as": "device_id", "optional": true },
     { "type": "api_call", "method": "PUT", "path": "/me/player", "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}", "optional": true },
-    { "type": "api_call", "method": "PUT", "path": "/me/player/play?device_id={device_id}", "body": "{\"uris\":[\"{search_track.result}\"]}", "delay_before_ms": 500, "retry": {"times": 1, "delay_ms": 2000}, "stop_on_success": true },
-    { "type": "api_call", "method": "PUT", "path": "/me/player/play", "body": "{\"uris\":[\"{search_track.result}\"]}" }
+    { "type": "api_call", "group": "play", "method": "PUT", "path": "/me/player/play?device_id={device_id}", "body": "{\"uris\":[\"{search_track.result}\"]}", "delay_before_ms": 500, "retry": {"times": 1, "delay_ms": 2000} },
+    { "type": "api_call", "group": "play", "method": "PUT", "path": "/me/player/play", "body": "{\"uris\":[\"{search_track.result}\"]}" },
+    { "type": "api_call", "method": "GET", "path": "/artists/{search_track.artist_id}/top-tracks", "response_path": "tracks", "as": "top_tracks", "optional": true },
+    { "type": "queue_array", "from": "top_tracks", "uri_field": "uri", "limit": 4, "skip": "{search_track.result}", "queue_path": "/me/player/queue?uri={item}", "method": "POST", "optional": true }
   ]
 }
 ```
@@ -558,9 +571,12 @@ dot/bracket JSON-path walker (`tracks.items[0].uri`, `devices`).
 
 Runs one named capability: dispatches `api_call`/`api_sequence`/`deep_link`, walks JSON response paths,
 and reuses plain `HttpURLConnection` helpers (no external HTTP library). `search_album`/`search_artist`/
-`play_album` are defined for Spotify (using `context_uri` instead of `uris`, per Spotify's real API) but
-**not yet reachable from voice** — `NluIntent` has no media-type signal to distinguish "play the album
-X" from "play X", so dispatch always requests `play_track` today. See the `NluIntent` TODO in §5.
+`play_album`/`play_artist` are defined for Spotify (`play_album`/`play_artist` use `context_uri` instead
+of `uris`, per Spotify's real API) and **are reachable from voice**: `NluIntent.mediaType` (§4) carries
+the LLM-detected "track"/"album"/"artist" signal, and `AudioPlaybackHelpers.tryApiIntegrationPlaySearch`
+dispatches to the matching `play_${mediaType}` capability (falling back to `play_track` if a service has
+no dedicated slot for the requested type) — so "play the album Nevermind" correctly resolves to
+`play_album`, not `play_track`.
 
 #### `OAuth2Manager.kt`
 
@@ -614,7 +630,7 @@ kept exactly as it was.
 #### NewPipe Extractor (`NewPipeExtractorHelper.kt`)
 
 - On-device YouTube parsing (no external API)
-- Uses `com.github.teamnewpipe:NewPipeExtractor:v0.24.8`
+- Uses `com.github.teamnewpipe:NewPipeExtractor:v0.26.3`
 - `OkHttpDownloader` — custom `Downloader` implementation using OkHttp
 - `warmUp()` — pre-fetches `base.js` (YouTube's player JavaScript) to cache Rhino JS engine output. First query is slow (5-10s), subsequent queries are fast.
 - `searchAndPlay()` — searches YouTube, gets first video result, launches `youtu.be/{id}`
@@ -660,6 +676,12 @@ interface ITtsEngine {
 - Voice models downloaded on-demand (`.onnx` + `.tokens` files)
 - Higher quality than Android TTS
 - Models stored in app files directory
+- **Voice selection (`piperVoiceModelId`)** — the user's explicit pick from the Piper voice picker in
+  Settings, persisted like the STT/wake-word active-model settings. `TtsManager` tracks which voice id
+  the live engine instance was actually built with and rebuilds it when the setting changes;
+  `PiperTtsEngine.preferredVoiceId` (set by `TtsManager` before `initialize()`) wins over the engine's
+  own language-only fallback heuristic (which prefers a "low" quality voice for the current language if
+  nothing was ever explicitly selected).
 
 ### Audio Focus (`ttsAudioFocusMode`)
 
@@ -719,7 +741,7 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 | Offline Fallback | `offlineFallbackTimeout`, `defaultOfflineModel`, fallback processors/models |
 | Default Apps | `defaultAppPackages`, `domainAppPackages`, `customDomains`, `domainAppFilters` |
 | Media | `spotifyClientId`, `pipedApiUrl`, `pipedRegion`, `youtubeUrlEngine`, `returnAfterActionApps` |
-| TTS | `ttsEnabled`, `ttsEngineType`, `ttsSpeechRate`, `ttsPitch`, `ttsAudioFocusMode` |
+| TTS | `ttsEnabled`, `ttsEngineType`, `ttsSpeechRate`, `ttsPitch`, `ttsAudioFocusMode`, `piperVoiceModelId` |
 | Aliases | `appAliasRules` |
 | Location | `manualLocationLat`, `manualLocationLon` |
 | Vulkan | `vulkanIncompatible`, `vulkanProbeDone`, `experimentalVulkanEnabled` |
@@ -1135,23 +1157,23 @@ tasks.named("preBuild") {
 | Material 3 | (via BOM) | Design system |
 | Vosk Android | (via libs.versions) | Wake word + STT |
 | Whisper.cpp | (submodule, CMake) | On-device STT |
-| sherpa-onnx | v1.13.3 (JitPack) | Piper TTS |
+| sherpa-onnx | v1.13.4 (JitPack) | Piper TTS |
 | MediaPipe GenAI | (via libs.versions) | Local LLM (llama.cpp) |
 | Google Generative AI | 0.9.0 | Gemini Nano |
-| Picovoice Porcupine | 3.0.2 | Wake word engine |
+| Picovoice Porcupine | 4.0.2 | Wake word engine |
 | OpenWakeWord | v0.1.5 (rementia, vendored fork — `:core:wakeword`) | Wake word engine, RMS silence-gate patched |
-| ONNX Runtime | 1.22.0 | ML inference for OpenWakeWord |
+| ONNX Runtime | 1.27.0 | ML inference for OpenWakeWord |
 | Spotify App Remote | (local AAR) | Spotify media control |
-| NewPipe Extractor | v0.24.8 (JitPack) | YouTube search/parsing |
+| NewPipe Extractor | v0.26.3 (JitPack) | YouTube search/parsing |
 | OkHttp | (via libs.versions) | HTTP client |
 | Retrofit | (via libs.versions) | API client |
 | Gson | (via libs.versions) | JSON serialization |
 | DataStore Preferences | (via libs.versions) | Settings storage |
 | Security Crypto | (via libs.versions) | Encrypted preferences |
 | Room | (via libs.versions) | FastMap rules database |
-| Apache Commons Compress | 1.26.1 | Piper model extraction (.tar.bz2) |
-| ProcessPhoenix | 2.1.2 | App restart |
-| Browser | 1.8.0 | Chrome Custom Tabs (Spotify OAuth) |
+| Apache Commons Compress | 1.28.0 | Piper model extraction (.tar.bz2) |
+| ProcessPhoenix | 3.0.0 | App restart |
+| Browser | 1.10.0 | Chrome Custom Tabs (Spotify OAuth) |
 
 ### Build Tasks
 
@@ -1197,7 +1219,7 @@ strings locally; nothing forces a dependency.
 
 | Type | Purpose |
 |------|---------|
-| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`, `ACTION_SCHEMA_CHANGED`, `ACTION_CAPABILITY_QUERY`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`, `OP_GET_SCHEMA`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`, `META_NLU_HINT`), permission helpers |
+| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`, `ACTION_LLM_PROCESS`, `ACTION_LLM_RESULT`, `ACTION_OCR_RESULT`, `ACTION_SCHEMA_CHANGED`, `ACTION_CAPABILITY_QUERY`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`, `OP_GET_SCHEMA`, `OP_EXPORT`, `OP_IMPORT`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`, `META_NLU_HINT`, `META_OCR_TASK`), the six shared `com.voxapps.vox.permission.*` constants |
 | `VoxCommand` | Command envelope authored by Commander (`op`, `text?`, `title?`, `category?`, `domain?`, `exportScope?`, `dateFrom?`, `dateTo?`) with `toJson()`/`fromJson()` (org.json) — `dateFrom`/`dateTo` are an additive pair used only by Vox Calendar's day-scoped `OP_READ` (see below); every other satellite's `OP_READ` ignores them and behaves exactly as before |
 | `VoxResult` | Satellite reply for reads (`ok`, `text`) — the notes payload, or a spoken "locked" message; also the `OP_GET_SCHEMA` reply's envelope (`text` carries a `VoxSatelliteSchema` JSON — see [Collapsed satellite extraction flow](#collapsed-satellite-extraction-flow-voxsatelliteschema) below) |
 | `VoxSatelliteSchema` | A satellite's extraction contract: `needsExtractionPass`, `promptTemplate` (with an `{{INPUT}}` placeholder), `fieldSchemaVersion`, `taskId` — see below |
@@ -1205,12 +1227,13 @@ strings locally; nothing forces a dependency.
 ### Capability advertising & discovery (the handshake)
 
 A satellite declares an **exported** `BroadcastReceiver` for `ACTION_COMMAND`, guarded by a
-`signature`-level custom permission (`<pkg>.permission.COMMAND`), with `<meta-data>` describing what
-it handles:
+`signature`-level custom permission (`com.voxapps.vox.permission.COMMAND` — shared across every Vox
+app, declared once in `:core:ipc`'s own manifest and folded in via manifest merger, not a per-app
+name), with `<meta-data>` describing what it handles:
 
 ```xml
 <receiver android:name=".receiver.VoxCommandReceiver" android:exported="true"
-          android:permission="com.voxapps.notes.permission.COMMAND">
+          android:permission="com.voxapps.vox.permission.COMMAND">
     <intent-filter><action android:name="com.voxapps.action.VOX_COMMAND"/></intent-filter>
     <meta-data android:name="com.voxapps.vox.domain"   android:value="notes"/>
     <meta-data android:name="com.voxapps.vox.actions"  android:value="create,read"/>
@@ -1303,8 +1326,8 @@ understand what the feature is. That's the generic LLM hook — a second, parall
 command bus but carrying opaque prompt/result payloads instead of structured notes data:
 
 - **Request** — a satellite broadcasts `VoxIpc.ACTION_LLM_PROCESS` with a `VoxLlmRequest{sourcePackage,
-  task, promptText, data}` JSON in `EXTRA_LLM_PAYLOAD`, guarded by the signature-level
-  `com.voxapps.commander.permission.LLM_PROCESS` permission. `task` and `promptText` are entirely
+  task, promptText, data}` JSON in `EXTRA_LLM_PAYLOAD`, guarded by the signature-level, shared
+  `com.voxapps.vox.permission.LLM_PROCESS` permission. `task` and `promptText` are entirely
   owned by the caller — Commander never parses or validates them.
 - **`LlmHookReceiver`** does only fast parse/validate work, then hands off to a one-time
   **`LlmHookWorker`** (`WorkManager`, not a plain `Service`) — on-device testing showed a plain
