@@ -68,6 +68,7 @@ dependencies {
     implementation(project(":core:calendar"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
+    implementation(project(":core:datahygiene"))
     implementation(project(":core:textmatch"))
     implementation(project(":core:schema-annotations"))
     ksp(project(":core:schema-processor"))

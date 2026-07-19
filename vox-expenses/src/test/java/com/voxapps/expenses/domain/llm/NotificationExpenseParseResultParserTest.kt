@@ -36,6 +36,34 @@ class NotificationExpenseParseResultParserTest {
     }
 
     @Test
+    fun `a genuine JSON null vendor is treated as null, not the literal string null`() {
+        // Regression test: org.json's JSONObject stores a JSON null as the JSONObject.NULL sentinel,
+        // whose toString() is literally "null" -- a bare optString(key) call stringifies that
+        // sentinel into the text "null" instead of recognizing it as absent. This is exactly what
+        // corrupted a real on-device expense's Vendor field before optCleanString() was used here.
+        val json = """{"isPayment":true,"totalAmount":45.9,"vendor":null}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertNull(result.vendor)
+    }
+
+    @Test
+    fun `the literal string null as a vendor value is also treated as null`() {
+        val json = """{"isPayment":true,"totalAmount":45.9,"vendor":"null"}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertNull(result.vendor)
+    }
+
+    @Test
+    fun `a punctuation-only vendor value is treated as null`() {
+        val json = """{"isPayment":true,"totalAmount":45.9,"vendor":"."}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertNull(result.vendor)
+    }
+
+    @Test
     fun `isPayment false returns null (discard silently)`() {
         assertNull(NotificationExpenseParseResultParser.parse("""{"isPayment":false}"""))
     }

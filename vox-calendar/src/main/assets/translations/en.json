@@ -81,6 +81,9 @@
   "recurrence_yearly": "Yearly",
   "delete_entry_title": "Delete this entry?",
   "delete_entry_message": "This event or task will be permanently deleted.",
+  "cleanup_confirm_title": "Clean up before saving?",
+  "cleanup_confirm_message": "Some fields contain only symbols or the text \"null\". Auto-clean removes them, or cancel to fix them yourself.",
+  "auto_clean": "Auto-clean",
 
   "theme_section": "Theme",
   "theme_system": "System",

@@ -85,4 +85,30 @@ class CalendarEventParseResultParserTest {
         assertEquals(22, end.dayOfMonth)
         assertEquals(0, end.hour)
     }
+
+    @Test
+    fun `a genuine JSON null layer is treated as null, not the literal string null`() {
+        val json = """{"title":"Dentist","type":"EVENT","startDate":"2026-07-19","allDay":true,"layer":null,"tags":[]}"""
+        val result = CalendarEventParseResultParser.parse(json, zone)!!
+        assertNull(result.layer)
+    }
+
+    @Test
+    fun `a case-insensitive literal null layer is discarded, closing the weak local guard bug`() {
+        val json = """{"title":"Dentist","type":"EVENT","startDate":"2026-07-19","allDay":true,"layer":"Null","tags":[]}"""
+        val result = CalendarEventParseResultParser.parse(json, zone)!!
+        assertNull(result.layer)
+    }
+
+    @Test
+    fun `a case-insensitive literal NULL title is discarded and the whole parse fails`() {
+        val json = """{"title":"NULL","type":"EVENT","startDate":"2026-07-19","allDay":true,"tags":[]}"""
+        assertNull(CalendarEventParseResultParser.parse(json, zone))
+    }
+
+    @Test
+    fun `a punctuation-only title is discarded and the whole parse fails`() {
+        val json = """{"title":"...","type":"EVENT","startDate":"2026-07-19","allDay":true,"tags":[]}"""
+        assertNull(CalendarEventParseResultParser.parse(json, zone))
+    }
 }

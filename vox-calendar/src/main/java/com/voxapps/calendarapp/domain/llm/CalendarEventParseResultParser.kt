@@ -1,6 +1,7 @@
 package com.voxapps.calendarapp.domain.llm
 
 import com.voxapps.calendarapp.data.CalendarEntryType
+import com.voxapps.datahygiene.optCleanString
 import com.voxapps.schema.VoxExtractionSchema
 import org.json.JSONArray
 import org.json.JSONObject
@@ -57,13 +58,6 @@ object CalendarEventParseResultParser {
         )
     } catch (e: Exception) {
         null
-    }
-
-    private fun JSONObject.optCleanString(key: String): String? {
-        if (isNull(key) || !has(key)) return null
-        val s = optString(key)
-        if (s == "null" || s.isBlank()) return null
-        return s
     }
 
     private fun parseDate(s: String): LocalDate? = try { LocalDate.parse(s) } catch (e: DateTimeParseException) { null }

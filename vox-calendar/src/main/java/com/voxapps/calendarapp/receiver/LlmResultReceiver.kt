@@ -7,6 +7,7 @@ import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarEventParseResultParser
 import com.voxapps.calendarapp.domain.llm.LlmTasks
+import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.logging.Logger
@@ -60,9 +61,10 @@ class LlmResultReceiver : BroadcastReceiver() {
         parsed: CalendarEventParseResultParser.Parsed
     ) {
         val settings = container.settingsRepository.getSnapshot()
+        // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard.
         container.calendarRepository.addParsedEntry(
             type = parsed.type,
-            title = parsed.title,
+            title = FieldCleaner.cleanRequired(parsed.title, parsed.title, "title", "CalendarEntry"),
             description = null,
             location = null,
             startMillis = parsed.startMillis,

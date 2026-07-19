@@ -15,6 +15,7 @@ import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
+import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.logging.Logger
@@ -136,20 +137,26 @@ class LlmResultReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val settings = container.settingsRepository.getSnapshot()
+                        // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard —
+                        // this is the only guard for fields not sourced from raw JSON.
+                        val cleanTitle = FieldCleaner.clean(parsed.title, "title", "NotificationExpense")
+                        val cleanVendor = FieldCleaner.clean(parsed.vendor, "vendor", "NotificationExpense")
+                        val cleanBank = FieldCleaner.clean(parsed.bank, "bank", "NotificationExpense")
+                        val cleanCategory = FieldCleaner.clean(parsed.category, "category", "NotificationExpense")
                         if (settings.autoAcceptNotificationExpenses) {
                             // Same insert path as ExpensesStateManager.approveNotificationExpense —
                             // skips the pending-review queue entirely. It's still a normal, editable
                             // expense row afterward, just created without an explicit Approve tap.
                             container.expensesRepository.addParsedExpense(
-                                title = parsed.title,
+                                title = cleanTitle,
                                 totalAmount = parsed.totalAmount,
                                 currencyCode = parsed.currency ?: settings.defaultCurrency,
-                                vendor = parsed.vendor,
-                                bank = parsed.bank,
+                                vendor = cleanVendor,
+                                bank = cleanBank,
                                 location = null,
                                 comments = null,
                                 dateTime = System.currentTimeMillis(),
-                                spokenCategory = parsed.category,
+                                spokenCategory = cleanCategory,
                                 defaultCategoryId = settings.defaultVoiceCategoryId,
                                 autoCreate = settings.autoCreateVoiceCategory
                             )
@@ -157,12 +164,12 @@ class LlmResultReceiver : BroadcastReceiver() {
                             container.pendingNotificationExpenseRepository.addPending(
                                 PendingNotificationExpense(
                                     id = System.nanoTime(),
-                                    title = parsed.title,
+                                    title = cleanTitle,
                                     totalAmount = parsed.totalAmount,
                                     currency = parsed.currency ?: settings.defaultCurrency,
-                                    vendor = parsed.vendor,
-                                    category = parsed.category,
-                                    bank = parsed.bank,
+                                    vendor = cleanVendor,
+                                    category = cleanCategory,
+                                    bank = cleanBank,
                                     capturedAt = System.currentTimeMillis()
                                 )
                             )
@@ -194,16 +201,18 @@ class LlmResultReceiver : BroadcastReceiver() {
                 grossAmount = it.grossAmount
             )
         }
+        // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard — this is the
+        // only guard for fields not sourced from raw JSON.
         val newExpenseId = container.expensesRepository.addParsedExpense(
-            title = parsed.title,
+            title = FieldCleaner.clean(parsed.title, "title", "Expense"),
             totalAmount = parsed.totalAmount,
             currencyCode = parsed.currency ?: settings.defaultCurrency,
-            vendor = parsed.vendor,
-            bank = parsed.bank,
+            vendor = FieldCleaner.clean(parsed.vendor, "vendor", "Expense"),
+            bank = FieldCleaner.clean(parsed.bank, "bank", "Expense"),
             location = null,
             comments = null,
             dateTime = mergeDateTime(parsed.date, parsed.time),
-            spokenCategory = parsed.category,
+            spokenCategory = FieldCleaner.clean(parsed.category, "category", "Expense"),
             defaultCategoryId = settings.defaultVoiceCategoryId,
             autoCreate = settings.autoCreateVoiceCategory,
             items = items,

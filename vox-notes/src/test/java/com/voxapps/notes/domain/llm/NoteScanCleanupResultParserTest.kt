@@ -38,4 +38,25 @@ class NoteScanCleanupResultParserTest {
     fun `malformed json returns null`() {
         assertNull(NoteScanCleanupResultParser.parse("{ not json"))
     }
+
+    @Test
+    fun `a genuine JSON null title is treated as null, not the literal string null`() {
+        val json = """{"title":null,"category":"y","text":"Some text"}"""
+        val result = NoteScanCleanupResultParser.parse(json)
+        assertNull(result?.title)
+    }
+
+    @Test
+    fun `a literal null string title is discarded, closing the previously-unguarded bug`() {
+        val json = """{"title":"null","category":"y","text":"Some text"}"""
+        val result = NoteScanCleanupResultParser.parse(json)
+        assertNull(result?.title)
+    }
+
+    @Test
+    fun `a punctuation-only category is discarded`() {
+        val json = """{"title":"x","category":".","text":"Some text"}"""
+        val result = NoteScanCleanupResultParser.parse(json)
+        assertNull(result?.category)
+    }
 }

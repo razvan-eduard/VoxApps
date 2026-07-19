@@ -59,11 +59,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.CalendarEntry
+import com.voxapps.calendarapp.data.CalendarEntrySanitizer
 import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.RecurrenceFrequency
 import com.voxapps.calendarapp.state.CalendarStateManager
+import com.voxapps.datahygiene.RecordSource
+import com.voxapps.datahygiene.SaveDecision
+import com.voxapps.datahygiene.decideForSave
 import java.text.DateFormat
 import java.time.Instant
 import java.time.LocalDate
@@ -113,6 +117,28 @@ fun EntryEditScreen(
     var showUntilDatePicker by remember { mutableStateOf(false) }
     var recurrenceMenuExpanded by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var pendingCleanup by remember { mutableStateOf<Pair<CalendarEntry, List<String>>?>(null) }
+
+    fun saveEntry(entry: CalendarEntry, entryTags: List<String>) {
+        if (existing != null) {
+            stateManager.updateEntry(entry, entryTags)
+        } else {
+            stateManager.addEntry(
+                type = entry.type,
+                title = entry.title,
+                description = entry.description,
+                location = entry.location,
+                startMillis = entry.startMillis,
+                endMillis = entry.endMillis,
+                allDay = entry.allDay,
+                completed = entry.completed,
+                recurrenceFrequency = entry.recurrenceFrequency,
+                recurrenceUntilMillis = entry.recurrenceUntilMillis,
+                layerId = entry.layerId,
+                tags = entryTags
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -304,39 +330,36 @@ fun EntryEditScreen(
                 Button(
                     onClick = {
                         val effectiveEnd = if (type == CalendarEntryType.EVENT) endMillis else null
-                        if (existing != null) {
-                            stateManager.updateEntry(
-                                existing.entry.copy(
-                                    type = type,
-                                    title = title.trim(),
-                                    description = description,
-                                    location = location,
-                                    startMillis = startMillis,
-                                    endMillis = effectiveEnd,
-                                    allDay = allDay,
-                                    completed = completed,
-                                    recurrenceFrequency = recurrence,
-                                    recurrenceUntilMillis = recurrenceUntilMillis
-                                ),
-                                tags.toList()
-                            )
-                        } else {
-                            stateManager.addEntry(
-                                type = type,
-                                title = title.trim(),
-                                description = description,
-                                location = location,
-                                startMillis = startMillis,
-                                endMillis = effectiveEnd,
-                                allDay = allDay,
-                                completed = completed,
-                                recurrenceFrequency = recurrence,
-                                recurrenceUntilMillis = recurrenceUntilMillis,
-                                layerId = existing?.entry?.layerId ?: defaultLayer.id,
-                                tags = tags.toList()
-                            )
+                        val base = existing?.entry ?: CalendarEntry(
+                            uid = java.util.UUID.randomUUID().toString(),
+                            type = type,
+                            title = title,
+                            startMillis = startMillis,
+                            layerId = defaultLayer.id,
+                            createdAt = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
+                        )
+                        val candidate = base.copy(
+                            type = type,
+                            title = title.trim(),
+                            description = description,
+                            location = location,
+                            startMillis = startMillis,
+                            endMillis = effectiveEnd,
+                            allDay = allDay,
+                            completed = completed,
+                            recurrenceFrequency = recurrence,
+                            recurrenceUntilMillis = recurrenceUntilMillis
+                        )
+                        when (val decision = CalendarEntrySanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
+                            is SaveDecision.Proceed -> {
+                                saveEntry(decision.record, tags.toList())
+                                onDone()
+                            }
+                            is SaveDecision.ConfirmCleanup -> {
+                                pendingCleanup = decision.original to tags.toList()
+                            }
                         }
-                        onDone()
                     },
                     enabled = title.isNotBlank(),
                     modifier = Modifier.fillMaxWidth()
@@ -400,6 +423,26 @@ fun EntryEditScreen(
                 showUntilDatePicker = false
             },
             languageManager = languageManager
+        )
+    }
+
+    pendingCleanup?.let { (entry, entryTags) ->
+        AlertDialog(
+            onDismissRequest = { pendingCleanup = null },
+            title = { Text(languageManager.getString("cleanup_confirm_title")) },
+            text = { Text(languageManager.getString("cleanup_confirm_message")) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        saveEntry(CalendarEntrySanitizer.sanitize(entry), entryTags)
+                        pendingCleanup = null
+                        onDone()
+                    }
+                ) { Text(languageManager.getString("auto_clean")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCleanup = null }) { Text(languageManager.getString("cancel")) }
+            }
         )
     }
 

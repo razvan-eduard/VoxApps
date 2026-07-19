@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import com.voxapps.logging.Logger
+import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.notes.NotesApplication
@@ -77,10 +78,11 @@ class LlmResultReceiver : BroadcastReceiver() {
                         val settings = container.settingsRepository.getSnapshot()
                         // Same category resolution voice notes already use: match an existing
                         // category case-insensitively, else fall back to the default / auto-create.
+                        // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard.
                         container.notesRepository.addVoiceNote(
-                            title = cleaned.title,
+                            title = FieldCleaner.clean(cleaned.title, "title", "Note"),
                             text = cleaned.text,
-                            spokenCategory = cleaned.category,
+                            spokenCategory = FieldCleaner.clean(cleaned.category, "category", "Note"),
                             defaultCategoryId = settings.defaultVoiceCategoryId,
                             autoCreate = settings.autoCreateVoiceCategory,
                             createdAt = System.currentTimeMillis()

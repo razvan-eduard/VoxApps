@@ -49,8 +49,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendar.CalendarView
+import com.voxapps.datahygiene.RecordSource
+import com.voxapps.datahygiene.SaveDecision
+import com.voxapps.datahygiene.decideForSave
 import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.notes.data.Note
+import com.voxapps.notes.data.NoteSanitizer
 import com.voxapps.notes.data.NoteWithCategory
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.notes.domain.llm.ScanRequestSender
@@ -74,6 +78,7 @@ fun NotesScreen(
     var editing by remember { mutableStateOf<EditBuffer?>(null) }
     var showDateSheet by remember { mutableStateOf(false) }
     var pendingDeleteNote by remember { mutableStateOf<Note?>(null) }
+    var pendingNoteCleanup by remember { mutableStateOf<PendingNoteCleanup?>(null) }
 
     // While editing, back closes the inline editor instead of exiting; at rest, back re-arms the
     // standard double-press-to-exit flow. `enabled` keeps the two mutually exclusive regardless of
@@ -179,7 +184,10 @@ fun NotesScreen(
                                     onTitleChange = { editing = editing!!.copy(title = it) },
                                     onTextChange = { editing = editing!!.copy(text = it) },
                                     onCategoryChange = { editing = editing!!.copy(categoryId = it) },
-                                    onDone = { commitEdit(editing, stateManager); editing = null },
+                                    onDone = {
+                                        val cleanup = commitEdit(editing, stateManager, confirmCleanup = true)
+                                        if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
+                                    },
                                     onDelete = { editing = null }
                                 )
                             }
@@ -194,7 +202,10 @@ fun NotesScreen(
                                     onTitleChange = { editing = editing!!.copy(title = it) },
                                     onTextChange = { editing = editing!!.copy(text = it) },
                                     onCategoryChange = { editing = editing!!.copy(categoryId = it) },
-                                    onDone = { commitEdit(editing, stateManager); editing = null },
+                                    onDone = {
+                                        val cleanup = commitEdit(editing, stateManager, confirmCleanup = true)
+                                        if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
+                                    },
                                     onDelete = { pendingDeleteNote = nwc.note }
                                 )
                             } else {
@@ -226,12 +237,35 @@ fun NotesScreen(
                 onTitleChange = { editing = current.copy(title = it) },
                 onTextChange = { editing = current.copy(text = it) },
                 onCategoryChange = { editing = current.copy(categoryId = it) },
-                onDone = { commitEdit(editing, stateManager); editing = null },
+                onDone = {
+                    val cleanup = commitEdit(editing, stateManager, confirmCleanup = true)
+                    if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
+                },
                 onDelete = {
                     pendingDeleteNote = state.notes.firstOrNull { it.note.id == current.id }?.note
                 }
             )
         }
+    }
+
+    pendingNoteCleanup?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { pendingNoteCleanup = null },
+            title = { Text(languageManager.getString("cleanup_confirm_title")) },
+            text = { Text(languageManager.getString("cleanup_confirm_message")) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        saveNote(pending.id, NoteSanitizer.sanitize(pending.note), stateManager)
+                        pendingNoteCleanup = null
+                        editing = null
+                    }
+                ) { Text(languageManager.getString("auto_clean")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingNoteCleanup = null }) { Text(languageManager.getString("cancel")) }
+            }
+        )
     }
 
     pendingDeleteNote?.let { note ->
@@ -285,17 +319,42 @@ private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () ->
 /** Local edit buffer for the inline note editor. [id] == null means a new (unsaved) note. */
 private data class EditBuffer(val id: Long?, val title: String, val text: String, val categoryId: Long?)
 
-/** Persist an edit buffer: create/update when it has content, delete an emptied existing note. */
-private fun commitEdit(buf: EditBuffer?, stateManager: NotesStateManager) {
-    if (buf == null) return
+/** A dirty save the user needs to accept auto-clean or cancel to fix manually. */
+private data class PendingNoteCleanup(val id: Long?, val note: Note)
+
+/**
+ * Persist an edit buffer: create/update when it has content, delete an emptied existing note.
+ * [confirmCleanup] gates a dirty title behind a confirm dialog (used by the editor's explicit "Done"
+ * action) vs. silently auto-cleaning (used when an editor is implicitly flushed by switching away —
+ * interrupting that with a modal about the note being left behind would be surprising). Returns a
+ * [PendingNoteCleanup] iff confirmation is needed (caller must decide what to do); null means the
+ * buffer was fully handled (saved, deleted, or was empty).
+ */
+private fun commitEdit(buf: EditBuffer?, stateManager: NotesStateManager, confirmCleanup: Boolean = false): PendingNoteCleanup? {
+    if (buf == null) return null
     val title = buf.title.trim().ifBlank { null }
     val text = buf.text.trim()
     val empty = title == null && text.isEmpty()
-    when {
-        buf.id == null -> if (!empty) stateManager.addNote(title, text, buf.categoryId)
-        empty -> stateManager.deleteNoteById(buf.id)
-        else -> stateManager.updateNoteFields(buf.id, title, text, buf.categoryId)
+    if (empty) {
+        if (buf.id != null) stateManager.deleteNoteById(buf.id)
+        return null
     }
+    val candidate = Note(id = buf.id ?: 0, title = title, text = text, createdAt = System.currentTimeMillis(), categoryId = buf.categoryId)
+    if (!confirmCleanup) {
+        saveNote(buf.id, NoteSanitizer.sanitize(candidate), stateManager)
+        return null
+    }
+    return when (val decision = NoteSanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
+        is SaveDecision.Proceed -> {
+            saveNote(buf.id, decision.record, stateManager)
+            null
+        }
+        is SaveDecision.ConfirmCleanup -> PendingNoteCleanup(buf.id, decision.original)
+    }
+}
+
+private fun saveNote(id: Long?, note: Note, stateManager: NotesStateManager) {
+    if (id == null) stateManager.addNote(note.title, note.text, note.categoryId) else stateManager.updateNoteFields(id, note.title, note.text, note.categoryId)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

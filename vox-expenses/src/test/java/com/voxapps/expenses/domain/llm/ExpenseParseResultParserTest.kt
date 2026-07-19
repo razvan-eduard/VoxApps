@@ -40,6 +40,27 @@ class ExpenseParseResultParserTest {
     }
 
     @Test
+    fun `a genuine JSON null vendor is treated as null, not the literal string null`() {
+        val json = """{"totalAmount":5.0,"vendor":null,"items":[]}"""
+        val result = ExpenseParseResultParser.parse(json)!!
+        assertNull(result.vendor)
+    }
+
+    @Test
+    fun `the literal string null as a vendor value is also treated as null`() {
+        val json = """{"totalAmount":5.0,"vendor":"null","items":[]}"""
+        val result = ExpenseParseResultParser.parse(json)!!
+        assertNull(result.vendor)
+    }
+
+    @Test
+    fun `a punctuation-only bank value is treated as null`() {
+        val json = """{"totalAmount":5.0,"bank":";","items":[]}"""
+        val result = ExpenseParseResultParser.parse(json)!!
+        assertNull(result.bank)
+    }
+
+    @Test
     fun `item missing unitPrice is dropped`() {
         val json = """{"totalAmount":5.0,"items":[{"name":"paine"},{"name":"lapte","unitPrice":5.0}]}"""
         val result = ExpenseParseResultParser.parse(json)!!

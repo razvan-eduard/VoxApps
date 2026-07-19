@@ -1,5 +1,6 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.datahygiene.optCleanString
 import com.voxapps.schema.VoxExtractionSchema
 import org.json.JSONArray
 import org.json.JSONObject
@@ -53,13 +54,6 @@ object ExpenseParseResultParser {
         }
 
         return null
-    }
-
-    private fun JSONObject.optCleanString(key: String): String? {
-        if (isNull(key) || !has(key)) return null
-        val s = optString(key)
-        if (s == "null" || s.isBlank()) return null
-        return s
     }
 
     fun parse(json: String): Parsed? = try {

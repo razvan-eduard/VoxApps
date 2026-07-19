@@ -79,12 +79,16 @@ import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
+import com.voxapps.expenses.data.ExpenseSanitizer
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
 import com.voxapps.expenses.domain.llm.MultimodalAttachmentResolver
 import com.voxapps.expenses.state.ExpensesStateManager
+import com.voxapps.datahygiene.RecordSource
+import com.voxapps.datahygiene.SaveDecision
+import com.voxapps.datahygiene.decideForSave
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.DateFormat
@@ -107,6 +111,8 @@ private data class LineItemDraft(
 
 private fun LineItemDraft.subtotal(useComma: Boolean): Double =
     (parseDecimalOrNull(quantityText, useComma) ?: 0.0) * (parseDecimalOrNull(unitPriceText, useComma) ?: 0.0)
+
+private data class PendingCleanup(val expense: Expense, val items: List<ExpenseLineItem>)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -138,6 +144,26 @@ fun ExpenseEditScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     var showDeleteExpenseConfirm by remember { mutableStateOf(false) }
     var pendingDeleteItemIndex by remember { mutableStateOf<Int?>(null) }
+    var pendingCleanup by remember { mutableStateOf<PendingCleanup?>(null) }
+
+    fun saveExpense(expense: Expense, lineItems: List<ExpenseLineItem>) {
+        if (existing != null) {
+            stateManager.updateExpense(expense, lineItems)
+        } else {
+            stateManager.addExpense(
+                title = expense.title,
+                totalAmount = expense.totalAmount,
+                currencyCode = expense.currencyCode,
+                vendor = expense.vendor,
+                bank = expense.bank,
+                location = expense.location,
+                dateTime = expense.dateTime,
+                comments = expense.comments,
+                categoryId = expense.categoryId,
+                items = lineItems
+            )
+        }
+    }
 
     val items = remember {
         mutableStateListOf<LineItemDraft>().apply {
@@ -353,37 +379,27 @@ fun ExpenseEditScreen(
                                     grossAmount = parseDecimalOrNull(it.grossAmountText, useComma)
                                 )
                             }
-                        if (existing != null) {
-                            stateManager.updateExpense(
-                                existing.expense.copy(
-                                    title = title,
-                                    totalAmount = total,
-                                    currencyCode = currency.ifBlank { defaultCurrency },
-                                    vendor = vendor,
-                                    bank = bank,
-                                    location = location,
-                                    dateTime = dateTime,
-                                    comments = comments,
-                                    categoryId = categoryId,
-                                    isStub = false
-                                ),
-                                lineItems
-                            )
-                        } else {
-                            stateManager.addExpense(
-                                title = title,
-                                totalAmount = total,
-                                currencyCode = currency.ifBlank { defaultCurrency },
-                                vendor = vendor,
-                                bank = bank,
-                                location = location,
-                                dateTime = dateTime,
-                                comments = comments,
-                                categoryId = categoryId,
-                                items = lineItems
-                            )
+                        val candidate = (existing?.expense ?: Expense(totalAmount = total, currencyCode = currency, dateTime = dateTime)).copy(
+                            title = title,
+                            totalAmount = total,
+                            currencyCode = currency.ifBlank { defaultCurrency },
+                            vendor = vendor,
+                            bank = bank,
+                            location = location,
+                            dateTime = dateTime,
+                            comments = comments,
+                            categoryId = categoryId,
+                            isStub = false
+                        )
+                        when (val decision = ExpenseSanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
+                            is SaveDecision.Proceed -> {
+                                saveExpense(decision.record, lineItems)
+                                onDone()
+                            }
+                            is SaveDecision.ConfirmCleanup -> {
+                                pendingCleanup = PendingCleanup(decision.original, lineItems)
+                            }
                         }
-                        onDone()
                     },
                     enabled = parseDecimalOrNull(totalText, useComma) != null,
                     modifier = Modifier.fillMaxWidth()
@@ -452,6 +468,17 @@ fun ExpenseEditScreen(
                 onDone()
             },
             onDismiss = { showDeleteExpenseConfirm = false }
+        )
+    }
+
+    pendingCleanup?.let { pending ->
+        ConfirmCleanupDialog(
+            onConfirm = {
+                saveExpense(ExpenseSanitizer.sanitize(pending.expense), pending.items)
+                pendingCleanup = null
+                onDone()
+            },
+            onDismiss = { pendingCleanup = null }
         )
     }
 
@@ -689,6 +716,22 @@ private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () ->
         text = { Text(message) },
         confirmButton = {
             TextButton(onClick = onConfirm) { Text(languageManager.getString("delete")) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
+        }
+    )
+}
+
+@Composable
+private fun ConfirmCleanupDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val languageManager = LocalLanguageManager.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(languageManager.getString("cleanup_confirm_title")) },
+        text = { Text(languageManager.getString("cleanup_confirm_message")) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(languageManager.getString("auto_clean")) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }

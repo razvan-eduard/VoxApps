@@ -1,5 +1,6 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.datahygiene.optCleanString
 import org.json.JSONObject
 
 /**
@@ -30,12 +31,12 @@ object NotificationExpenseParseResultParser {
             } ?: return null
 
             Parsed(
-                title = o.optString("title").takeIf { it.isNotBlank() },
+                title = o.optCleanString("title"),
                 totalAmount = totalAmount,
-                currency = o.optString("currency").takeIf { it.isNotBlank() },
-                vendor = o.optString("vendor").takeIf { it.isNotBlank() },
-                category = o.optString("category").takeIf { it.isNotBlank() },
-                bank = o.optString("bank").takeIf { it.isNotBlank() }
+                currency = o.optCleanString("currency"),
+                vendor = o.optCleanString("vendor"),
+                category = o.optCleanString("category"),
+                bank = o.optCleanString("bank")
             )
         }
     } catch (e: Exception) {

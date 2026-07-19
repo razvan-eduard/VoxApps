@@ -1,5 +1,6 @@
 package com.voxapps.notes.domain.llm
 
+import com.voxapps.datahygiene.optCleanString
 import org.json.JSONObject
 
 /**
@@ -14,8 +15,8 @@ object NoteScanCleanupResultParser {
     fun parse(json: String): Cleaned? = try {
         val o = JSONObject(json)
         val text = o.optString("text").takeIf { it.isNotBlank() } ?: return null
-        val title = o.optString("title").takeIf { it.isNotBlank() }
-        val category = o.optString("category").takeIf { it.isNotBlank() }
+        val title = o.optCleanString("title")
+        val category = o.optCleanString("category")
         Cleaned(title = title, category = category, text = text)
     } catch (e: Exception) {
         null
