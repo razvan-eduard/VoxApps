@@ -1,17 +1,19 @@
 name: Sync OpenWakeword Fork
 
 # core/wakeword vendors + locally patches xyz.rementia/openwakeword-android-kt (see
-# core/wakeword/NOTICE). The RMS silence gate patch is maintained as a real, storable diff
-# (core/wakeword/patches/0001-rms-silence-gate.patch — regenerate with
-# scripts/regen_openwakeword_patch.sh whenever the patch itself changes).
+# core/wakeword/NOTICE). Local patches are maintained as real, storable diffs under
+# core/wakeword/patches/ — one per patched file (0001-rms-silence-gate.patch for
+# AudioRecorder.kt, 0002-wakeword-engine-params.patch for WakeWordEngine.kt — regenerate both
+# with scripts/regen_openwakeword_patch.sh whenever either patch itself changes).
 #
 # When a new upstream tag appears, this workflow: bumps the pristine vendor/openwakeword-android-kt
-# submodule, re-vendors ALL sources into core/wakeword, and tries to `git apply` the stored patch.
-#   - If it applies cleanly AND the module still compiles + tests pass -> opens a PR that's already
+# submodule, re-vendors ALL sources into core/wakeword, and tries to `git apply` every stored patch.
+#   - If all apply cleanly AND the module still compiles + tests pass -> opens a PR that's already
 #     ready to review/approve (the common case — nothing for a human to hand-merge).
-#   - If the patch conflicts (upstream changed the exact patched region) -> opens a PR with the
-#     conflicting hunk attached, clearly marked as needing a manual merge.
-#   - If it applies but something else broke -> opens a PR with the build/test failure attached.
+#   - If any patch conflicts (upstream changed the exact patched region) -> opens a PR with the
+#     conflicting hunk(s) attached, clearly marked as needing a manual merge — the other patch(es)
+#     still apply independently, so only the conflicting file needs hand-merging.
+#   - If all apply but something else broke -> opens a PR with the build/test failure attached.
 # Never auto-merges — always a PR for review.
 
 on:
@@ -77,18 +79,25 @@ jobs:
 
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      - name: Apply the RMS silence gate patch
+      - name: Apply local patches
         if: steps.versions.outputs.has_update == 'true'
         id: apply
         run: |
-          if git apply --check core/wakeword/patches/0001-rms-silence-gate.patch 2>/tmp/apply-reject.txt; then
-            git apply core/wakeword/patches/0001-rms-silence-gate.patch
-            echo "status=clean" >> "$GITHUB_OUTPUT"
-          else
-            echo "status=conflict" >> "$GITHUB_OUTPUT"
-            echo "Patch did not apply — see reject details below:"
-            cat /tmp/apply-reject.txt
-          fi
+          rm -f /tmp/apply-reject-*.txt
+          STATUS="clean"
+          for PATCH_FILE in core/wakeword/patches/*.patch; do
+            NAME="$(basename "$PATCH_FILE")"
+            if git apply --check "$PATCH_FILE" 2>"/tmp/apply-reject-$NAME.txt"; then
+              git apply "$PATCH_FILE"
+              rm -f "/tmp/apply-reject-$NAME.txt"
+              echo "✅ $NAME applied cleanly"
+            else
+              echo "❌ $NAME did not apply — see reject details below:"
+              cat "/tmp/apply-reject-$NAME.txt"
+              STATUS="conflict"
+            fi
+          done
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
         if: steps.versions.outputs.has_update == 'true'
@@ -146,19 +155,21 @@ jobs:
             echo "Upstream [Re-MENTIA/openwakeword-android-kt](https://github.com/Re-MENTIA/openwakeword-android-kt) released \`${{ steps.versions.outputs.latest_tag }}\` (we were pinned at \`${{ steps.versions.outputs.current_tag || steps.versions.outputs.current_sha }}\`)."
             echo ""
             if [ "$APPLY_STATUS" == "clean" ] && [ "$BUILD_STATUS" == "pass" ]; then
-              echo "**✅ Patch applied automatically. Compiles and unit tests pass.** All sources are re-vendored and the RMS silence gate patch (core/wakeword/patches/0001-rms-silence-gate.patch) is already re-applied — nothing left to hand-merge. Please review the diff and approve."
+              echo "**✅ All local patches applied automatically. Compiles and unit tests pass.** All sources are re-vendored and every patch under core/wakeword/patches/ is already re-applied — nothing left to hand-merge. Please review the diff and approve."
             elif [ "$APPLY_STATUS" == "clean" ] && [ "$BUILD_STATUS" == "fail" ]; then
-              echo "**⚠️ Patch applied textually, but the build/tests failed** — something else in this release broke compatibility. Log tail:"
+              echo "**⚠️ Patches applied textually, but the build/tests failed** — something else in this release broke compatibility. Log tail:"
               echo '```'
               tail -c 8000 /tmp/build.log 2>/dev/null || echo "(log unavailable)"
               echo '```'
             else
-              echo "**⚠️ Manual merge needed** — the RMS silence gate patch no longer applies cleanly (upstream changed the same lines in AudioRecorder.kt). All other files are already re-vendored. Reject details:"
+              echo "**⚠️ Manual merge needed** — one or more local patches no longer apply cleanly (upstream changed the same lines). All other files/patches are already re-vendored/re-applied independently. Reject details:"
               echo '```'
-              cat /tmp/apply-reject.txt 2>/dev/null || echo "(reject details unavailable)"
+              for f in /tmp/apply-reject-*.txt; do
+                [ -s "$f" ] && { echo "--- $(basename "$f")"; cat "$f"; }
+              done
               echo '```'
               echo ""
-              echo "After resolving, regenerate the patch file with \`./scripts/regen_openwakeword_patch.sh\`."
+              echo "After resolving, regenerate the patch file(s) with \`./scripts/regen_openwakeword_patch.sh\`."
             fi
           } > /tmp/pr-body.md
 

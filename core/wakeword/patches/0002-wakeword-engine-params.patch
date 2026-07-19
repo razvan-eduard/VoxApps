@@ -1,0 +1,51 @@
+--- a/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/WakeWordEngine.kt
++++ b/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/WakeWordEngine.kt
+@@ -76,15 +76,33 @@
+     private val models: List<WakeWordModel>,
+     private val detectionMode: DetectionMode = DetectionMode.SINGLE_BEST,
+     private val detectionCooldownMs: Long = 2000L,
+-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
++    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
++    // --- VoxCommander patch: RMS silence gate (battery) — forwarding parameter, no logic here ---
++    // Forwarded straight to AudioRecorder, which is the only place that acts on it (see the
++    // "VoxCommander patch" there). Kept on this public constructor so the consuming app's call site
++    // (OpenWakeWordEngine.kt) doesn't need to change if the gate ever moves again. 0f = disabled,
++    // preserving upstream behavior. See WakeWordSensitivity in the consuming app for how this is
++    // derived from the user's sensitivity setting.
++    private val rmsGate: Float = 0f,
++    // --- VoxCommander patch: RMS silence gate (battery) — end ---
++    // --- VoxCommander patch: adaptive noise-floor margin (battery in noisy environments) — forwarding parameter, no logic here ---
++    // Forwarded straight to AudioRecorder, which is the only place that acts on it (see the
++    // "VoxCommander patch" there). See WakeWordSensitivity.noiseGateMargin() in the consuming app.
++    private val noiseGateMargin: Float = 2.0f,
++    // --- VoxCommander patch: adaptive noise-floor margin (battery in noisy environments) — end ---
++    // --- VoxCommander patch: configurable audio source (AEC) — forwarding parameter, no logic here ---
++    // Forwarded straight to AudioRecorder (see the "VoxCommander patch" there). MIC preserves
++    // upstream behavior.
++    private val audioSource: Int = android.media.MediaRecorder.AudioSource.MIC
++    // --- VoxCommander patch: configurable audio source (AEC) — end ---
+ ) {
+-    
++
+     companion object {
+         private const val TAG = "WakeWordEngine"
+     }
+-    
++
+     private val assetManager: AssetManager = context.assets
+-    private val audioRecorder = AudioRecorder(context)
++    private val audioRecorder = AudioRecorder(context, rmsGate, noiseGateMargin, audioSource)
+     private val modelProcessors = mutableMapOf<WakeWordModel, ModelProcessor>()
+     private val detectionCooldowns = mutableMapOf<String, Long>()
+     
+@@ -183,6 +201,10 @@
+         recordingJob = scope.launch {
+             audioRecorder.startRecording()
+                 .collect { audioBuffer ->
++                    // The RMS silence gate lives in AudioRecorder (see "VoxCommander patch" there) —
++                    // it never emits a below-threshold buffer, so every buffer reaching this point
++                    // already warrants full ONNX inference.
++
+                     // Process all models in parallel and collect results
+                     val detectionResults = models.mapIndexed { index, model ->
+                         async {

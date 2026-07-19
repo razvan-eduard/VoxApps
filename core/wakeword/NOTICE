@@ -5,20 +5,27 @@ Copyright 2024 Rementia
 https://github.com/Re-MENTIA/openwakeword-android-kt (Apache License, Version 2.0)
 
 Forked at tag v0.1.5 (commit 24a3517e1e97670daae1ab3e76cb4b2bc48cbd17) into
-core/wakeword/src/main/kotlin. Local patch: an RMS silence gate in audio/AudioRecorder.kt that
-drops buffers below an energy floor before they are ever converted or emitted, so WakeWordEngine's
-ONNX inference (mel-spectrogram + embedding + classifier) never runs on silence — the dominant
-CPU/battery cost of always-on wake word detection (see the "VoxCommander patch" markers in that
-file). The pristine upstream source is kept as a git submodule at vendor/openwakeword-android-kt.
+core/wakeword/src/main/kotlin. Local patches (see the "VoxCommander patch" markers in each file):
+- audio/AudioRecorder.kt: an RMS silence gate that drops buffers below an energy floor before they
+  are ever converted or emitted, so WakeWordEngine's ONNX inference (mel-spectrogram + embedding +
+  classifier) never runs on silence — the dominant CPU/battery cost of always-on wake word
+  detection — plus an adaptive noise-floor margin (AdaptiveNoiseGate, from :core:audio) so that gate
+  keeps working in a sustained noisy environment instead of degrading to "always open" once ambient
+  RMS sits above a fixed floor.
+- WakeWordEngine.kt: forwards the RMS gate floor, adaptive-margin, and configurable audio source
+  (AEC) constructor parameters through to AudioRecorder, and a comment noting the gate's invariant.
 
-The patch itself is maintained as a real, storable diff at
-core/wakeword/patches/0001-rms-silence-gate.patch (regenerate with
-scripts/regen_openwakeword_patch.sh whenever the patch changes). On an upstream release, the
-scheduled sync-openwakeword.yml workflow re-vendors the sources and auto-applies this patch file —
-opening a PR that's already merged + compiled + tested in the common case. It only needs a manual
-merge if the patch genuinely conflicts (upstream changed the same lines), in which case the PR says
-so explicitly with the reject details attached. scripts/check_openwakeword_version.sh runs the same
-"would it still apply?" check locally, non-destructively.
+The pristine upstream source is kept as a git submodule at vendor/openwakeword-android-kt.
+
+Each patch is maintained as a real, storable diff under core/wakeword/patches/ (0001-rms-silence-
+gate.patch for AudioRecorder.kt, 0002-wakeword-engine-params.patch for WakeWordEngine.kt —
+regenerate both with scripts/regen_openwakeword_patch.sh whenever either patch changes). On an
+upstream release, the scheduled sync-openwakeword.yml workflow re-vendors the sources and
+auto-applies every patch file — opening a PR that's already merged + compiled + tested in the
+common case. It only needs a manual merge if a patch genuinely conflicts (upstream changed the same
+lines), in which case the PR says so explicitly with the reject details attached, for that patch
+specifically — the other one still applies independently. scripts/check_openwakeword_version.sh
+runs the same "would it still apply?" check locally, non-destructively.
 
 That library in turn includes software developed by:
 

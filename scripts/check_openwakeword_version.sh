@@ -17,12 +17,13 @@ SUBMODULE_DIR="$PROJECT_ROOT/vendor/openwakeword-android-kt"
 UPSTREAM_URL="https://github.com/Re-MENTIA/openwakeword-android-kt.git"
 
 # Unlike Vosk (consumed as an unmodified binary artifact), OpenWakeWord is vendored as source into
-# core/wakeword with a local patch (RMS silence gate — see core/wakeword/NOTICE), maintained as a
-# real diff at core/wakeword/patches/0001-rms-silence-gate.patch. When a new upstream tag appears,
-# the scheduled CI workflow (.github/workflows/sync-openwakeword.yml) re-vendors the sources and
-# tries to auto-apply that patch — a PR arrives already merged/tested in the common case, and only
-# needs manual work if the patch genuinely conflicts. This script does the same "would it still
-# apply?" dry-run locally, non-destructively (the working tree is left untouched either way).
+# core/wakeword with local patches (RMS silence gate + adaptive noise-floor margin in
+# AudioRecorder.kt, constructor-param forwarding in WakeWordEngine.kt — see core/wakeword/NOTICE),
+# each maintained as a real diff under core/wakeword/patches/. When a new upstream tag appears, the
+# scheduled CI workflow (.github/workflows/sync-openwakeword.yml) re-vendors the sources and tries
+# to auto-apply every patch — a PR arrives already merged/tested in the common case, and only needs
+# manual work if a patch genuinely conflicts. This script does the same "would it still apply?"
+# dry-run locally, non-destructively (the working tree is left untouched either way).
 
 if [ ! -e "$SUBMODULE_DIR/.git" ]; then
     log_warn "⚠️ vendor/openwakeword-android-kt submodule not initialized — skipping check."
@@ -54,40 +55,47 @@ fi
 if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
     log_warn "🚀 UPDATE AVAILABLE: ${CURRENT_TAG:-$CURRENT_SHA} -> $LATEST_TAG"
 
-    # Non-destructive dry-run: fetch the new tag's AudioRecorder.kt content (object database only,
-    # no working-tree checkout), swap it in temporarily, try the patch, then always restore.
-    REL_PATH="core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt"
-    PATCH_FILE="$PROJECT_ROOT/core/wakeword/patches/0001-rms-silence-gate.patch"
-    NEW_PRISTINE=$(mktemp)
-
+    # Non-destructive dry-run per patched file: fetch the new tag's content (object database only,
+    # no working-tree checkout), swap it in temporarily, try that file's patch, then always restore.
     git -C "$SUBMODULE_DIR" fetch --tags --quiet 2>/dev/null
-    UPSTREAM_BLOB=$(git -C "$SUBMODULE_DIR" ls-tree "$LATEST_TAG" -- \
-        "wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt" \
-        2>/dev/null | awk '{print $3}')
-    if [ -n "$UPSTREAM_BLOB" ] && git -C "$SUBMODULE_DIR" cat-file -p "$UPSTREAM_BLOB" > "$NEW_PRISTINE" 2>/dev/null; then
 
-        cp "$PROJECT_ROOT/$REL_PATH" /tmp/oww_check_backup.kt
-        cp "$NEW_PRISTINE" "$PROJECT_ROOT/$REL_PATH"
+    PATCHES=(
+        "core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt:core/wakeword/patches/0001-rms-silence-gate.patch"
+        "core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/WakeWordEngine.kt:core/wakeword/patches/0002-wakeword-engine-params.patch"
+    )
 
-        if (cd "$PROJECT_ROOT" && git apply --check "$PATCH_FILE" 2>/dev/null); then
-            log_info "✅ The RMS gate patch would still apply cleanly against $LATEST_TAG."
+    for ENTRY in "${PATCHES[@]}"; do
+        REL_PATH="${ENTRY%%:*}"
+        PATCH_FILE="$PROJECT_ROOT/${ENTRY##*:}"
+        UPSTREAM_SUBPATH="wakeword/${REL_PATH#core/wakeword/}"
+        NEW_PRISTINE=$(mktemp)
+
+        UPSTREAM_BLOB=$(git -C "$SUBMODULE_DIR" ls-tree "$LATEST_TAG" -- "$UPSTREAM_SUBPATH" 2>/dev/null | awk '{print $3}')
+        if [ -n "$UPSTREAM_BLOB" ] && git -C "$SUBMODULE_DIR" cat-file -p "$UPSTREAM_BLOB" > "$NEW_PRISTINE" 2>/dev/null; then
+            BACKUP="/tmp/oww_check_backup_$(basename "$REL_PATH").kt"
+            cp "$PROJECT_ROOT/$REL_PATH" "$BACKUP"
+            cp "$NEW_PRISTINE" "$PROJECT_ROOT/$REL_PATH"
+
+            if (cd "$PROJECT_ROOT" && git apply --check "$PATCH_FILE" 2>/dev/null); then
+                log_info "✅ $(basename "$PATCH_FILE") would still apply cleanly against $LATEST_TAG."
+            else
+                log_warn "⚠️ $(basename "$PATCH_FILE") would CONFLICT against $LATEST_TAG — manual merge needed."
+            fi
+
+            cp "$BACKUP" "$PROJECT_ROOT/$REL_PATH"
+            rm -f "$BACKUP"
         else
-            log_warn "⚠️ The RMS gate patch would CONFLICT against $LATEST_TAG — manual merge needed."
+            log_warn "⚠️ Could not fetch $(basename "$REL_PATH") at $LATEST_TAG to dry-run its patch."
         fi
-
-        cp /tmp/oww_check_backup.kt "$PROJECT_ROOT/$REL_PATH"
-        rm -f /tmp/oww_check_backup.kt
-    else
-        log_warn "⚠️ Could not fetch AudioRecorder.kt at $LATEST_TAG to dry-run the patch."
-    fi
-    rm -f "$NEW_PRISTINE"
+        rm -f "$NEW_PRISTINE"
+    done
 
     echo -e "\nThis is a ${YELLOW}vendored + patched${NC} fork. To update:"
     echo "  1. cd vendor/openwakeword-android-kt && git checkout $LATEST_TAG && cd -"
     echo "  2. git add vendor/openwakeword-android-kt   # re-pin the submodule"
-    echo "  3. Re-vendor core/wakeword/src/main/kotlin from the submodule, then re-apply"
-    echo "     core/wakeword/patches/0001-rms-silence-gate.patch (git apply it)."
-    echo "  4. If it conflicts, resolve by hand, then run ./scripts/regen_openwakeword_patch.sh"
+    echo "  3. Re-vendor core/wakeword/src/main/kotlin from the submodule, then re-apply every"
+    echo "     patch under core/wakeword/patches/ (git apply each)."
+    echo "  4. If any conflicts, resolve by hand, then run ./scripts/regen_openwakeword_patch.sh"
     echo -e "  5. Rebuild + retest before committing.\n"
     echo "(The scheduled sync-openwakeword.yml workflow does all of this automatically and opens a PR —"
     echo " already merged+tested in the common case, or clearly flagged if it needs manual attention.)"
