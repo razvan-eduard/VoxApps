@@ -184,6 +184,7 @@ dependencies {
     // libonnxruntime.so's arm64-v8a packaging/exclude behavior unreliable (see release excludes
     // above) — removing the duplicate leaves a single, unambiguous source.
     implementation(project(":core:wakeword"))
+    implementation(project(":core:audio"))
     // Piper TTS via sherpa-onnx (on-device neural TTS)
     implementation("com.github.k2-fsa:sherpa-onnx:v1.13.4")
     // Apache Commons Compress for .tar.bz2 extraction (Piper voice models)

@@ -6,6 +6,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.core.content.ContextCompat
+import com.voxapps.audio.AdaptiveNoiseGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -30,6 +31,14 @@ internal class AudioRecorder(
     // consuming app for how this is derived from the user's sensitivity setting.
     private val rmsGate: Float = 0f,
     // --- VoxCommander patch: RMS silence gate (battery) — end ---
+    // --- VoxCommander patch: adaptive noise-floor margin (battery in noisy environments) — start ---
+    // How far above the *live* ambient noise floor (not [rmsGate]'s fixed constant) a buffer's RMS
+    // must sit before it counts as signal — see AdaptiveNoiseGate. [rmsGate] still sets the floor
+    // this can never drop below, preserving quiet-room behavior exactly; this margin is what keeps
+    // the gate actually closing in a sustained noisy room, where a fixed threshold stops helping at
+    // all. See WakeWordSensitivity.noiseGateMargin() in the consuming app.
+    private val noiseGateMargin: Float = 2.0f,
+    // --- VoxCommander patch: adaptive noise-floor margin (battery in noisy environments) — end ---
     // --- VoxCommander patch: configurable audio source (AEC) — start ---
     // MIC preserves upstream behavior. The consuming app passes VOICE_COMMUNICATION when the
     // user's "Echo Cancellation" setting is on, which asks the platform to run its acoustic echo
@@ -92,13 +101,17 @@ internal class AudioRecorder(
         // period from the first buffer, so it gets zero-emitted (kept continuous) instead of dropped.
         var lastSpeechMs = android.os.SystemClock.elapsedRealtime()
         val TAIL_DURATION_MS = 1500L
-        
+        // Fresh per start()/re-arm, same reasoning as lastSpeechMs above — a stale rolling noise-
+        // floor estimate from a previous session (a different room, a different time of day)
+        // shouldn't bias this one.
+        val noiseGate = AdaptiveNoiseGate(minThreshold = rmsGate, marginMultiplier = noiseGateMargin)
+
         try {
             audioRecord.startRecording()
-            
+
             while (coroutineContext.isActive) {
                 val readCount = audioRecord.read(audioBuffer, 0, audioBuffer.size)
-                
+
                 if (readCount > 0) {
                     val now = android.os.SystemClock.elapsedRealtime()
                     // --- VoxCommander patch: RMS silence gate (battery) — start ---
@@ -109,13 +122,14 @@ internal class AudioRecorder(
                             energy += normalized * normalized
                         }
                         val rms = kotlin.math.sqrt(energy.toDouble() / readCount).toFloat()
-                        
+                        val effectiveThreshold = noiseGate.effectiveThreshold(rms, now)
+
                         // Log RMS occasionally (approx every 1s of audio) to see levels
                         if (java.util.Random().nextInt(100) == 0) {
-                            android.util.Log.v("AudioRecorder", "RMS: ${String.format(java.util.Locale.US, "%.6f", rms)} (Gate: $rmsGate)")
+                            android.util.Log.v("AudioRecorder", "RMS: ${String.format(java.util.Locale.US, "%.6f", rms)} (Gate: $rmsGate, Effective: ${String.format(java.util.Locale.US, "%.6f", effectiveThreshold)})")
                         }
 
-                        if (rms >= rmsGate) {
+                        if (rms >= effectiveThreshold) {
                             lastSpeechMs = now
                         } else {
                             // Current buffer is silent. Should we drop it or emit zeros (tail)?

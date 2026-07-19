@@ -85,6 +85,11 @@ class WakeWordEngine(
     // derived from the user's sensitivity setting.
     private val rmsGate: Float = 0f,
     // --- VoxCommander patch: RMS silence gate (battery) — end ---
+    // --- VoxCommander patch: adaptive noise-floor margin (battery in noisy environments) — forwarding parameter, no logic here ---
+    // Forwarded straight to AudioRecorder, which is the only place that acts on it (see the
+    // "VoxCommander patch" there). See WakeWordSensitivity.noiseGateMargin() in the consuming app.
+    private val noiseGateMargin: Float = 2.0f,
+    // --- VoxCommander patch: adaptive noise-floor margin (battery in noisy environments) — end ---
     // --- VoxCommander patch: configurable audio source (AEC) — forwarding parameter, no logic here ---
     // Forwarded straight to AudioRecorder (see the "VoxCommander patch" there). MIC preserves
     // upstream behavior.
@@ -97,7 +102,7 @@ class WakeWordEngine(
     }
 
     private val assetManager: AssetManager = context.assets
-    private val audioRecorder = AudioRecorder(context, rmsGate, audioSource)
+    private val audioRecorder = AudioRecorder(context, rmsGate, noiseGateMargin, audioSource)
     private val modelProcessors = mutableMapOf<WakeWordModel, ModelProcessor>()
     private val detectionCooldowns = mutableMapOf<String, Long>()
     

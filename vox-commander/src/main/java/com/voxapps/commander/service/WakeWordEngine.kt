@@ -5,6 +5,8 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.SystemClock
+import com.voxapps.audio.AdaptiveNoiseGate
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.voice.VoiceFeatureExtractor
 import com.voxapps.commander.domain.voice.WakeWordProfile
@@ -247,6 +249,16 @@ class WakeWordEngine(
         var consecutiveErrors = 0 // Anti CPU Burn logic
         consecutiveSilentFrames = 0
 
+        // Fresh per listenLoop() call (mirrors consecutiveSilentFrames' reset above) — a stale
+        // rolling noise-floor estimate from a previous session shouldn't bias this one.
+        // voiceRmsThreshold already folds in calibration (see startListening()); this gate handles
+        // *live* drift above that floor for the rest of the session, so a sustained noisy room
+        // doesn't leave the gate stuck open running full Vosk decode nonstop.
+        val noiseGate = AdaptiveNoiseGate(
+            minThreshold = voiceRmsThreshold,
+            marginMultiplier = WakeWordSensitivity.noiseGateMargin(appStateManager.uiState.value.wakeWordSensitivity)
+        )
+
         while (isListening) {
             val currentAudioRecord = audioRecord ?: break
             if (currentAudioRecord.state != AudioRecord.STATE_INITIALIZED) break
@@ -269,8 +281,9 @@ class WakeWordEngine(
                 // --- VAD: Bandpass filter + RMS on voice band ---
                 vadFilter.process(shortBuffer, filteredBuffer, samplesRead)
                 val voiceRms = calculateFilteredRms(filteredBuffer, samplesRead)
+                val effectiveThreshold = noiseGate.effectiveThreshold(voiceRms, SystemClock.elapsedRealtime())
 
-                if (voiceRms < voiceRmsThreshold) {
+                if (voiceRms < effectiveThreshold) {
                     // Silence in voice band
                     consecutiveSilentFrames++
 

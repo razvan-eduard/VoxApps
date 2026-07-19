@@ -46,7 +46,20 @@ class WakeWordSensitivityTest {
             assertEquals(0.5f, WakeWordSensitivity.porcupineSensitivity(bad))
             assertEquals(0.45f, WakeWordSensitivity.voskTemplateThreshold(bad))
             assertEquals(0.025f, WakeWordSensitivity.openWakeWordRmsGate(bad))
+            assertEquals(2.0f, WakeWordSensitivity.noiseGateMargin(bad))
         }
+    }
+
+    @Test
+    fun `noise gate margin - higher sensitivity means a smaller margin above the noise floor`() {
+        val high = WakeWordSensitivity.noiseGateMargin("high")
+        val medium = WakeWordSensitivity.noiseGateMargin("medium")
+        val low = WakeWordSensitivity.noiseGateMargin("low")
+        assertEquals(1.5f, high)
+        assertEquals(2.0f, medium)
+        assertEquals(3.0f, low)
+        // high sensitivity opens the gate closer to ambient level, so the margin must be smaller
+        assertTrue("high margin must be smaller than low", high < low)
     }
 
     @Test

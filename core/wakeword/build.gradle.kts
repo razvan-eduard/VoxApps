@@ -26,6 +26,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:audio"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     // Matches the version vox-commander itself depends on (Piper/sherpa-onnx) — same artifact,

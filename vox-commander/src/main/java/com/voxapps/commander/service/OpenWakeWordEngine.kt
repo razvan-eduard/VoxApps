@@ -107,6 +107,7 @@ class OpenWakeWordEngine(
                 detectionCooldownMs = 2000L,
                 scope = engineScope,
                 rmsGate = WakeWordSensitivity.openWakeWordRmsGate(sensitivity),
+                noiseGateMargin = WakeWordSensitivity.noiseGateMargin(sensitivity),
                 audioSource = audioSource
             )
 

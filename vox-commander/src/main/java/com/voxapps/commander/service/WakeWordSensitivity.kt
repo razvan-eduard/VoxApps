@@ -48,4 +48,21 @@ object WakeWordSensitivity {
         LOW -> 0.04f
         else -> 0.025f // medium / unknown (Hardened to 0.025 to block table/mousepad friction)
     }
+
+    /**
+     * Margin above the live, rolling ambient-noise-floor estimate (see [com.voxapps.audio
+     * .AdaptiveNoiseGate]) a frame's RMS must clear before either wake-word engine treats it as
+     * signal worth running full inference/decode on. This is the same underlying question as the
+     * gates above ("how permissive should triggering be"), just answered for the pre-inference
+     * gate stage instead of the post-inference score/similarity stage — reused rather than a
+     * separate "noise floor" setting so the user only ever tunes one knob. Lower = gate opens
+     * closer to ambient level (more responsive, less battery saved in noise); higher = needs to
+     * stand out further above ambient before inference even runs (more battery saved, more likely
+     * to miss a soft utterance in a loud room).
+     */
+    fun noiseGateMargin(setting: String?): Float = when (setting) {
+        HIGH -> 1.5f
+        LOW -> 3.0f
+        else -> 2.0f // medium / unknown
+    }
 }
