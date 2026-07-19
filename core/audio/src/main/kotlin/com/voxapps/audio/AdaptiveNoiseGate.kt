@@ -13,6 +13,12 @@ package com.voxapps.audio
  * window is time-based, not frame-count-based, so it means the same thing regardless of how often
  * the caller calls in.
  *
+ * Deliberately allocation-free per call (primitive `LongArray`/`FloatArray` ring buffers, no boxed
+ * `Pair`/`List`) — this runs on every single audio frame (tens of times a second) inside an
+ * always-on background service for hours at a stretch, so per-call GC churn is a real, measurable
+ * cost, not a rounding error. The ring buffer only allocates on the rare occasion it needs to grow
+ * past its initial capacity (sized generously enough that steady-state operation shouldn't).
+ *
  * @param minThreshold Calibrated/default floor — the effective threshold never drops below this,
  *   preserving each engine's existing quiet-room behavior.
  * @param marginMultiplier How far above the tracked noise floor the effective threshold sits.
@@ -33,25 +39,66 @@ class AdaptiveNoiseGate(
     private val windowMs: Long = 3000L,
     private val floorPercentile: Float = 0.2f
 ) {
-    private val samples = ArrayDeque<Pair<Long, Float>>()
+    private var timestamps = LongArray(INITIAL_CAPACITY)
+    private var values = FloatArray(INITIAL_CAPACITY)
+    private var scratch = FloatArray(INITIAL_CAPACITY) // reused for the percentile sort
+    private var head = 0
+    private var count = 0
 
     /** Feeds one frame's RMS energy and its timestamp; returns this frame's effective threshold. */
     fun effectiveThreshold(rms: Float, nowMs: Long): Float {
-        samples.addLast(nowMs to rms)
-        while (samples.isNotEmpty() && nowMs - samples.first().first > windowMs) {
-            samples.removeFirst()
-        }
-        val floor = percentile(samples, floorPercentile)
+        push(nowMs, rms)
+        evictOlderThan(nowMs - windowMs)
+        val floor = percentile(floorPercentile)
         return (floor * marginMultiplier).coerceIn(minThreshold, maxThreshold)
     }
 
     /** Convenience: true if [rms] should be treated as signal (gate open) at time [nowMs]. */
     fun isSignal(rms: Float, nowMs: Long): Boolean = rms >= effectiveThreshold(rms, nowMs)
 
-    private fun percentile(values: ArrayDeque<Pair<Long, Float>>, p: Float): Float {
-        if (values.isEmpty()) return 0f
-        val sorted = values.map { it.second }.sorted()
-        val index = (p * (sorted.size - 1)).toInt().coerceIn(0, sorted.size - 1)
-        return sorted[index]
+    private fun push(nowMs: Long, rms: Float) {
+        if (count == timestamps.size) grow()
+        val tail = (head + count) % timestamps.size
+        timestamps[tail] = nowMs
+        values[tail] = rms
+        count++
+    }
+
+    private fun evictOlderThan(cutoffMs: Long) {
+        while (count > 0 && timestamps[head] < cutoffMs) {
+            head = (head + 1) % timestamps.size
+            count--
+        }
+    }
+
+    private fun grow() {
+        val newCapacity = timestamps.size * 2
+        val newTimestamps = LongArray(newCapacity)
+        val newValues = FloatArray(newCapacity)
+        for (i in 0 until count) {
+            val src = (head + i) % timestamps.size
+            newTimestamps[i] = timestamps[src]
+            newValues[i] = values[src]
+        }
+        timestamps = newTimestamps
+        values = newValues
+        scratch = FloatArray(newCapacity)
+        head = 0
+    }
+
+    private fun percentile(p: Float): Float {
+        if (count == 0) return 0f
+        for (i in 0 until count) {
+            scratch[i] = values[(head + i) % values.size]
+        }
+        java.util.Arrays.sort(scratch, 0, count)
+        val index = (p * (count - 1)).toInt().coerceIn(0, count - 1)
+        return scratch[index]
+    }
+
+    private companion object {
+        // Comfortably covers a 3s window even at an aggressive ~10ms/frame (300 samples) without
+        // ever needing to grow in the common case; grow() is a correct fallback for anything faster.
+        const val INITIAL_CAPACITY = 256
     }
 }

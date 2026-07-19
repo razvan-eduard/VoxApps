@@ -99,4 +99,35 @@ class AdaptiveNoiseGateTest {
         assertFalse(gate.isSignal(rms = 0.001f, nowMs = 0L))
         assertTrue(gate.isSignal(rms = 0.05f, nowMs = 80L))
     }
+
+    @Test
+    fun `ring buffer growth beyond initial capacity does not corrupt the estimate`() {
+        // A short frame interval over the window forces the internal ring buffer to grow past its
+        // initial capacity (256) — this must not lose or corrupt samples relative to a normal run.
+        val gate = AdaptiveNoiseGate(minThreshold = 0.01f, marginMultiplier = 2.0f, windowMs = 3000L, maxThreshold = 1f)
+        var t = 0L
+        var threshold = 0f
+        repeat(500) { // 500 frames at 5ms apart = 2500ms of coverage, well past the 256-sample capacity
+            threshold = gate.effectiveThreshold(rms = 0.05f, nowMs = t)
+            t += 5
+        }
+        assertEquals(0.1f, threshold, 0.01f) // ~0.05 floor * 2.0 margin, same as the non-grown case
+    }
+
+    @Test
+    fun `old samples still evict correctly after ring buffer growth`() {
+        val gate = AdaptiveNoiseGate(minThreshold = 0.01f, marginMultiplier = 2.0f, windowMs = 1000L, maxThreshold = 1f)
+        var t = 0L
+        repeat(400) { // forces growth well before the window is even full
+            gate.effectiveThreshold(rms = 0.5f, nowMs = t)
+            t += 5
+        }
+        t += 2000L // well past the window
+        var threshold = 0f
+        repeat(50) {
+            threshold = gate.effectiveThreshold(rms = 0.001f, nowMs = t)
+            t += 5
+        }
+        assertEquals(0.01f, threshold, 0.0001f)
+    }
 }
