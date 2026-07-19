@@ -33,5 +33,9 @@
   "photo_detail_medium": "Moyen",
   "photo_detail_high": "Élevé (le plus grand, le plus cher)",
   "debug_logging": "Journalisation de débogage",
-  "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage"
+  "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage",
+  "splash_engine_error": "Composants du moteur introuvables ou pas de connexion internet. Vérifiez votre connexion et réessayez.",
+  "splash_engine_ready": "Moteur prêt",
+  "splash_engine_retry": "Réessayer",
+  "splash_loading_engine": "Téléchargement des composants du moteur de vision..."
 }

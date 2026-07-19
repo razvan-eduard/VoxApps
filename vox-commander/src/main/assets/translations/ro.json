@@ -239,7 +239,7 @@
   "content_desc_listening": "Ascultare",
   "stop_recording_button": "Oprește Înregistrarea",
   "delete_default_fallback_warning": "Această setare va fi resetată.",
-  "delete_active_wake_word_warning": "Atenție: Sunteți pe cale să ștergeți modelul Wake Word activ. Serviciul va fi oprit.",
+  "delete_active_wakeword_warning": "Atenție: Sunteți pe cale să ștergeți modelul Wake Word activ. Serviciul va fi oprit.",
   "model_not_present": "Modelul selectat nu este prezent pe dispozitiv",
   "ww_listening_for": "Ascult pentru '%s'...",
   "ww_paused_app_listening": "Wake Word în pauză (Aplicația ascultă)",
@@ -451,5 +451,12 @@
   "onboarding_permissions_intro": "Acordă-le ca asistentul vocal și microfonul flotant să funcționeze oriunde. Le poți schimba mai târziu în Setări.",
   "continue_button": "Continuă",
   "ww_music_duck_label": "Reduce sensibilitatea în timpul muzicii",
-  "ww_music_duck_desc": "Necesită o potrivire mai clară cât timp cântă muzică, pentru a reduce declanșările false din reziduul de ecou"
+  "ww_music_duck_desc": "Necesită o potrivire mai clară cât timp cântă muzică, pentru a reduce declanșările false din reziduul de ecou",
+  "add_new_fast_trigger": "Adaugă un declanșator rapid nou",
+  "cleanup_unused_msg": "Aceasta va elimina toate modelele descărcate care nu sunt selectate în prezent ca active sau de rezervă. Această acțiune este definitivă.",
+  "cleanup_unused_title": "Curăță modelele",
+  "overlay_text_preview": "Așa va arăta textul suprapus în timpul vorbirii.",
+  "overlay_text_size_label": "Dimensiune text suprapus",
+  "ww_aec_desc": "Permite detectarea cuvântului de trezire în timpul redării TTS/muzicii",
+  "ww_aec_label": "Anulare ecou (AEC)"
 }

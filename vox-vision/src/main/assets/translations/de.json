@@ -33,5 +33,9 @@
   "photo_detail_medium": "Mittel",
   "photo_detail_high": "Hoch (am größten, teuersten)",
   "debug_logging": "Debug-Protokollierung",
-  "debug_logging_desc": "Debug-Informationen ins Logcat schreiben — nur bei der Fehlersuche aktivieren"
+  "debug_logging_desc": "Debug-Informationen ins Logcat schreiben — nur bei der Fehlersuche aktivieren",
+  "splash_engine_error": "Engine-Komponenten nicht gefunden oder keine Internetverbindung. Bitte überprüfe deine Verbindung und versuche es erneut.",
+  "splash_engine_ready": "Engine bereit",
+  "splash_engine_retry": "Erneut versuchen",
+  "splash_loading_engine": "Vision-Engine-Komponenten werden heruntergeladen..."
 }
