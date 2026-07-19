@@ -1698,33 +1698,42 @@ investigation, the same bug class existed independently in vox-calendar's `Calen
 vox-notes' `NoteScanCleanupResultParser` (no guard at all) — both fixed as part of this module landing.
 
 **`FieldCleaner`** — the one shared predicate: `clean(value, fieldName?, recordLabel?)` trims and
-discards to `null` if the value is blank, the literal string `"null"` (case-insensitive), or pure
-punctuation/whitespace with no letters or digits; `cleanRequired(value, fallback, ...)` is the same
-predicate for a non-nullable field, coercing to `fallback` instead of `null`; `isDirty(value)` is true
-only when a field has real garbage content that `clean` would discard — not just because it's blank —
-so a manual-UI confirm dialog (below) never fires on a routine empty field.
+discards to `null` if the value is blank, **exactly** the literal string `"null"` (case-insensitive,
+whole-string match — a sentence merely containing the word "null", e.g. "Null Island", is left alone),
+or pure punctuation/whitespace with no letters or digits; `cleanRequired(value, fallback, ...)` is the
+same predicate for a non-nullable field, coercing to `fallback` instead of `null`; `isDirty(value)` is
+true only when a field has real garbage content that `clean` would discard — not just because it's
+blank — so a manual-UI confirm dialog (below) never fires on a routine empty field. `dirtyValue(value)`
+returns the actual offending trimmed text (or `null` if the field is fine) — this is what lets a
+confirm dialog show the specific value that's wrong instead of a generic message.
 
 **`optCleanString`** — a `JSONObject` extension (`optCleanString(key, fieldName, recordLabel)`)
 delegating to `FieldCleaner.clean`, replacing every satellite's own ad-hoc null-string guard at the
 JSON-parsing boundary.
 
-**`RecordSanitizer<T>`** — the per-entity contract (`sanitize(record): T`, `isDirty(record): Boolean`)
-each satellite implements once per data class it wants covered (`ExpenseSanitizer`,
-`CalendarEntrySanitizer`, `NoteSanitizer`). **`RecordSource`** (`LLM` / `HUB_IMPORT` / `MANUAL_UI`) and
-the shared **`decideForSave(record, source)`** extension function encode the actual policy so it's
-never reimplemented per app:
+**`RecordSanitizer<T>`** — the per-entity contract (`sanitize(record): T`,
+`dirtyFields(record): List<DirtyField>`) each satellite implements once per data class it wants
+covered (`ExpenseSanitizer`, `CalendarEntrySanitizer`, `NoteSanitizer`). `DirtyField(fieldKey, value)`
+pairs a field identifier with its actual offending text. **`RecordSource`** (`LLM` / `HUB_IMPORT` /
+`MANUAL_UI`) and the shared **`decideForSave(record, source)`** extension function encode the actual
+policy so it's never reimplemented per app:
 
 | `RecordSource` | Behavior |
 |---|---|
 | `LLM` | Always sanitized, always proceeds — no human in the loop to ask. |
 | `HUB_IMPORT` | Always proceeds untouched — another install's already-validated data; rewriting it on import would be its own bug. |
-| `MANUAL_UI` | Proceeds untouched if clean; if `isDirty()`, returns `SaveDecision.ConfirmCleanup` instead of saving, so the calling screen can show "auto-clean or cancel and fix it yourself" before committing. |
+| `MANUAL_UI` | Proceeds untouched if clean; if `dirtyFields` is non-empty, returns `SaveDecision.ConfirmCleanup` (carrying that list) instead of saving, so the calling screen can show "auto-clean or cancel and fix it yourself" before committing. |
 
 Gating always happens in the **caller** (the LLM-result receiver, or the edit screen's Save handler),
 never inside the shared repository's `add*`/`update*` methods — those are called by both manual saves
 and Hub import with no way to distinguish the two internally, so sanitizing there would incorrectly
 rewrite imported data too. Each app's existing inline `?.trim()?.takeIf { it.isNotEmpty() }` cleanup
 inside the repository stays as-is and is unrelated to this stricter guard.
+
+Each app's manual-UI confirm dialog renders the `ConfirmCleanup.dirtyFields` list directly — one line
+per dirty field, the field's localized label followed by the actual offending raw text (e.g. `null`
+or `.`) highlighted in red via a Compose `AnnotatedString`/`SpanStyle`, rather than a single generic
+"some fields need cleanup" message — so the user sees exactly what's wrong before deciding.
 
 See the [Satellite App Guide §6.6](SATELLITE_APP_GUIDE.md#66-data-hygiene-cleaning-records-before-insert)
 for the wiring pattern with code examples.

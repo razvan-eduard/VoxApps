@@ -1,5 +1,6 @@
 package com.voxapps.calendarapp.data
 
+import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.datahygiene.RecordSanitizer
 
@@ -17,10 +18,11 @@ object CalendarEntrySanitizer : RecordSanitizer<CalendarEntry> {
         location = FieldCleaner.clean(record.location, "location", recordLabel(record))
     )
 
-    override fun isDirty(record: CalendarEntry): Boolean =
-        FieldCleaner.isDirty(record.title) ||
-            FieldCleaner.isDirty(record.description) ||
-            FieldCleaner.isDirty(record.location)
+    override fun dirtyFields(record: CalendarEntry): List<DirtyField> = listOfNotNull(
+        FieldCleaner.dirtyValue(record.title)?.let { DirtyField("title", it) },
+        FieldCleaner.dirtyValue(record.description)?.let { DirtyField("description", it) },
+        FieldCleaner.dirtyValue(record.location)?.let { DirtyField("location", it) }
+    )
 
     private fun recordLabel(record: CalendarEntry) = "CalendarEntry#${record.id}"
 }

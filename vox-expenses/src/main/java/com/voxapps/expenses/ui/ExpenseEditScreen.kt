@@ -85,10 +85,15 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
 import com.voxapps.expenses.domain.llm.MultimodalAttachmentResolver
+import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesStateManager
+import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.RecordSource
 import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.DateFormat
@@ -99,6 +104,7 @@ import java.time.ZoneId
 import java.util.Date
 
 private val ConfirmGreen = Color(0xFF4CAF50)
+private val OffenseRed = Color(0xFFD32F2F)
 
 private data class LineItemDraft(
     var name: String,
@@ -112,7 +118,16 @@ private data class LineItemDraft(
 private fun LineItemDraft.subtotal(useComma: Boolean): Double =
     (parseDecimalOrNull(quantityText, useComma) ?: 0.0) * (parseDecimalOrNull(unitPriceText, useComma) ?: 0.0)
 
-private data class PendingCleanup(val expense: Expense, val items: List<ExpenseLineItem>)
+private data class PendingCleanup(val expense: Expense, val items: List<ExpenseLineItem>, val dirtyFields: List<DirtyField>)
+
+private fun expenseFieldLabel(languageManager: LanguageManager, fieldKey: String): String = when (fieldKey) {
+    "title" -> languageManager.getString("expense_title_optional")
+    "vendor" -> languageManager.getString("expense_vendor")
+    "bank" -> languageManager.getString("expense_bank")
+    "location" -> languageManager.getString("expense_location")
+    "comments" -> languageManager.getString("expense_comments")
+    else -> fieldKey
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -397,7 +412,7 @@ fun ExpenseEditScreen(
                                 onDone()
                             }
                             is SaveDecision.ConfirmCleanup -> {
-                                pendingCleanup = PendingCleanup(decision.original, lineItems)
+                                pendingCleanup = PendingCleanup(decision.original, lineItems, decision.dirtyFields)
                             }
                         }
                     },
@@ -473,6 +488,7 @@ fun ExpenseEditScreen(
 
     pendingCleanup?.let { pending ->
         ConfirmCleanupDialog(
+            dirtyFields = pending.dirtyFields,
             onConfirm = {
                 saveExpense(ExpenseSanitizer.sanitize(pending.expense), pending.items)
                 pendingCleanup = null
@@ -724,12 +740,27 @@ private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () ->
 }
 
 @Composable
-private fun ConfirmCleanupDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun ConfirmCleanupDialog(dirtyFields: List<DirtyField>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val languageManager = LocalLanguageManager.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(languageManager.getString("cleanup_confirm_title")) },
-        text = { Text(languageManager.getString("cleanup_confirm_message")) },
+        text = {
+            Column {
+                Text(languageManager.getString("cleanup_confirm_message"))
+                Spacer(Modifier.height(8.dp))
+                dirtyFields.forEach { field ->
+                    Text(
+                        buildAnnotatedString {
+                            append("${expenseFieldLabel(languageManager, field.fieldKey)}: ")
+                            withStyle(SpanStyle(color = OffenseRed, fontWeight = FontWeight.Bold)) {
+                                append(field.value)
+                            }
+                        }
+                    )
+                }
+            }
+        },
         confirmButton = {
             TextButton(onClick = onConfirm) { Text(languageManager.getString("auto_clean")) }
         },

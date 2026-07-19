@@ -57,6 +57,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntrySanitizer
@@ -64,7 +68,9 @@ import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.RecurrenceFrequency
+import com.voxapps.calendarapp.domain.localization.LanguageManager
 import com.voxapps.calendarapp.state.CalendarStateManager
+import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.RecordSource
 import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
@@ -75,6 +81,17 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Date
+
+private val OffenseRed = Color(0xFFD32F2F)
+
+private data class PendingCleanup(val entry: CalendarEntry, val tags: List<String>, val dirtyFields: List<DirtyField>)
+
+private fun entryFieldLabel(languageManager: LanguageManager, fieldKey: String): String = when (fieldKey) {
+    "title" -> languageManager.getString("entry_title")
+    "description" -> languageManager.getString("entry_description")
+    "location" -> languageManager.getString("entry_location")
+    else -> fieldKey
+}
 
 /**
  * Add/edit screen for a single Event or Task. [title] is the only mandatory field. Follows the same
@@ -117,7 +134,7 @@ fun EntryEditScreen(
     var showUntilDatePicker by remember { mutableStateOf(false) }
     var recurrenceMenuExpanded by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    var pendingCleanup by remember { mutableStateOf<Pair<CalendarEntry, List<String>>?>(null) }
+    var pendingCleanup by remember { mutableStateOf<PendingCleanup?>(null) }
 
     fun saveEntry(entry: CalendarEntry, entryTags: List<String>) {
         if (existing != null) {
@@ -357,7 +374,7 @@ fun EntryEditScreen(
                                 onDone()
                             }
                             is SaveDecision.ConfirmCleanup -> {
-                                pendingCleanup = decision.original to tags.toList()
+                                pendingCleanup = PendingCleanup(decision.original, tags.toList(), decision.dirtyFields)
                             }
                         }
                     },
@@ -426,15 +443,30 @@ fun EntryEditScreen(
         )
     }
 
-    pendingCleanup?.let { (entry, entryTags) ->
+    pendingCleanup?.let { pending ->
         AlertDialog(
             onDismissRequest = { pendingCleanup = null },
             title = { Text(languageManager.getString("cleanup_confirm_title")) },
-            text = { Text(languageManager.getString("cleanup_confirm_message")) },
+            text = {
+                Column {
+                    Text(languageManager.getString("cleanup_confirm_message"))
+                    Spacer(Modifier.height(8.dp))
+                    pending.dirtyFields.forEach { field ->
+                        Text(
+                            buildAnnotatedString {
+                                append("${entryFieldLabel(languageManager, field.fieldKey)}: ")
+                                withStyle(SpanStyle(color = OffenseRed, fontWeight = FontWeight.Bold)) {
+                                    append(field.value)
+                                }
+                            }
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        saveEntry(CalendarEntrySanitizer.sanitize(entry), entryTags)
+                        saveEntry(CalendarEntrySanitizer.sanitize(pending.entry), pending.tags)
                         pendingCleanup = null
                         onDone()
                     }

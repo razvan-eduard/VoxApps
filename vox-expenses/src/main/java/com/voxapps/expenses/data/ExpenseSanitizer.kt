@@ -1,5 +1,6 @@
 package com.voxapps.expenses.data
 
+import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.datahygiene.RecordSanitizer
 
@@ -17,12 +18,13 @@ object ExpenseSanitizer : RecordSanitizer<Expense> {
         comments = FieldCleaner.clean(record.comments, "comments", recordLabel(record))
     )
 
-    override fun isDirty(record: Expense): Boolean =
-        FieldCleaner.isDirty(record.title) ||
-            FieldCleaner.isDirty(record.vendor) ||
-            FieldCleaner.isDirty(record.bank) ||
-            FieldCleaner.isDirty(record.location) ||
-            FieldCleaner.isDirty(record.comments)
+    override fun dirtyFields(record: Expense): List<DirtyField> = listOfNotNull(
+        FieldCleaner.dirtyValue(record.title)?.let { DirtyField("title", it) },
+        FieldCleaner.dirtyValue(record.vendor)?.let { DirtyField("vendor", it) },
+        FieldCleaner.dirtyValue(record.bank)?.let { DirtyField("bank", it) },
+        FieldCleaner.dirtyValue(record.location)?.let { DirtyField("location", it) },
+        FieldCleaner.dirtyValue(record.comments)?.let { DirtyField("comments", it) }
+    )
 
     private fun recordLabel(record: Expense) = "Expense#${record.id}"
 }

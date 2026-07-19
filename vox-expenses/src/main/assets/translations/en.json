@@ -53,7 +53,7 @@
   "delete_category_title": "Delete category?",
   "delete_category_message": "Expenses in this category will become uncategorized. The expenses themselves are not deleted.",
   "cleanup_confirm_title": "Clean up before saving?",
-  "cleanup_confirm_message": "Some fields contain only symbols or the text \"null\". Auto-clean removes them, or cancel to fix them yourself.",
+  "cleanup_confirm_message": "The following field(s) contain only symbols or the text \"null\":",
   "auto_clean": "Auto-clean",
   "apply": "Apply",
   "settings": "Settings",

@@ -19,7 +19,7 @@
   "cancel": "Annuler",
   "delete": "Supprimer",
   "cleanup_confirm_title": "Nettoyer avant d'enregistrer ?",
-  "cleanup_confirm_message": "Le titre ne contient que des symboles ou le texte \"null\". Le nettoyage automatique le supprime, ou annulez pour le corriger vous-même.",
+  "cleanup_confirm_message": "Les champs suivants ne contiennent que des symboles ou le texte \"null\" :",
   "auto_clean": "Nettoyage automatique",
   "collapse_note": "Réduire la note",
   "apply": "Appliquer",

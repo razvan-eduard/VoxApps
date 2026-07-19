@@ -35,7 +35,7 @@
   "delete_note_title": "Delete note?",
   "delete_note_message": "This note will be permanently deleted.",
   "cleanup_confirm_title": "Clean up before saving?",
-  "cleanup_confirm_message": "The title contains only symbols or the text \"null\". Auto-clean removes it, or cancel to fix it yourself.",
+  "cleanup_confirm_message": "The following field(s) contain only symbols or the text \"null\":",
   "auto_clean": "Auto-clean",
   "delete_category_title": "Delete category?",
   "delete_category_message": "Notes in this category will become uncategorized. The notes themselves are not deleted.",

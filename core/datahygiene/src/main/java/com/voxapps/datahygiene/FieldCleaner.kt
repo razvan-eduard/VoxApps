@@ -50,10 +50,18 @@ object FieldCleaner {
      * worth interrupting a save for). This is the signal a manual-UI save handler checks to decide
      * whether a confirmation dialog is even warranted.
      */
-    fun isDirty(value: String?): Boolean {
+    fun isDirty(value: String?): Boolean = dirtyValue(value) != null
+
+    /**
+     * The actual garbage content [value] would be cleaned to null/[fallback], or null if [value]
+     * isn't dirty. Callers use this (rather than just the [isDirty] boolean) to show the user exactly
+     * what's wrong — e.g. surfacing `null` (the literal text) or `.` in a confirmation dialog instead
+     * of a generic "some fields need cleanup" message.
+     */
+    fun dirtyValue(value: String?): String? {
         val trimmed = value?.trim()
-        if (trimmed.isNullOrEmpty()) return false
-        return isGarbage(trimmed)
+        if (trimmed.isNullOrEmpty() || !isGarbage(trimmed)) return null
+        return trimmed
     }
 
     private fun isGarbage(trimmed: String): Boolean =

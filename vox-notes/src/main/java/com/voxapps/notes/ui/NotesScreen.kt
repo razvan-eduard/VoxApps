@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -45,10 +47,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendar.CalendarView
+import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.RecordSource
 import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
@@ -58,6 +66,7 @@ import com.voxapps.notes.data.NoteSanitizer
 import com.voxapps.notes.data.NoteWithCategory
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.notes.domain.llm.ScanRequestSender
+import com.voxapps.notes.domain.localization.LanguageManager
 import com.voxapps.notes.state.NotesStateManager
 import com.voxapps.notes.state.NotesUiState
 import kotlinx.coroutines.launch
@@ -252,7 +261,22 @@ fun NotesScreen(
         AlertDialog(
             onDismissRequest = { pendingNoteCleanup = null },
             title = { Text(languageManager.getString("cleanup_confirm_title")) },
-            text = { Text(languageManager.getString("cleanup_confirm_message")) },
+            text = {
+                Column {
+                    Text(languageManager.getString("cleanup_confirm_message"))
+                    Spacer(Modifier.height(8.dp))
+                    pending.dirtyFields.forEach { field ->
+                        Text(
+                            buildAnnotatedString {
+                                append("${noteFieldLabel(languageManager, field.fieldKey)}: ")
+                                withStyle(SpanStyle(color = OffenseRed, fontWeight = FontWeight.Bold)) {
+                                    append(field.value)
+                                }
+                            }
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -320,7 +344,14 @@ private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () ->
 private data class EditBuffer(val id: Long?, val title: String, val text: String, val categoryId: Long?)
 
 /** A dirty save the user needs to accept auto-clean or cancel to fix manually. */
-private data class PendingNoteCleanup(val id: Long?, val note: Note)
+private data class PendingNoteCleanup(val id: Long?, val note: Note, val dirtyFields: List<DirtyField>)
+
+private val OffenseRed = Color(0xFFD32F2F)
+
+private fun noteFieldLabel(languageManager: LanguageManager, fieldKey: String): String = when (fieldKey) {
+    "title" -> languageManager.getString("note_title_optional")
+    else -> fieldKey
+}
 
 /**
  * Persist an edit buffer: create/update when it has content, delete an emptied existing note.
@@ -349,7 +380,7 @@ private fun commitEdit(buf: EditBuffer?, stateManager: NotesStateManager, confir
             saveNote(buf.id, decision.record, stateManager)
             null
         }
-        is SaveDecision.ConfirmCleanup -> PendingNoteCleanup(buf.id, decision.original)
+        is SaveDecision.ConfirmCleanup -> PendingNoteCleanup(buf.id, decision.original, decision.dirtyFields)
     }
 }
 

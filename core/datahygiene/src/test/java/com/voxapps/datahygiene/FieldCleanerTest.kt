@@ -82,4 +82,29 @@ class FieldCleanerTest {
         assertTrue(FieldCleaner.isDirty("."))
         assertTrue(FieldCleaner.isDirty(";"))
     }
+
+    @Test
+    fun `a sentence merely containing the word null is accepted, not flagged`() {
+        assertFalse(FieldCleaner.isDirty("Meeting about Null Island"))
+        assertFalse(FieldCleaner.isDirty("annulled contract"))
+        assertFalse(FieldCleaner.isDirty("null and void, discuss tomorrow"))
+        assertEquals("Meeting about Null Island", FieldCleaner.clean("Meeting about Null Island"))
+    }
+
+    @Test
+    fun `only the field being exactly the word null triggers the guard`() {
+        assertTrue(FieldCleaner.isDirty("null"))
+        assertTrue(FieldCleaner.isDirty("Null"))
+        assertFalse(FieldCleaner.isDirty("nullable"))
+        assertFalse(FieldCleaner.isDirty("null."))
+    }
+
+    @Test
+    fun `dirtyValue returns the actual offending text`() {
+        assertEquals("null", FieldCleaner.dirtyValue("null"))
+        assertEquals(".", FieldCleaner.dirtyValue("  .  "))
+        assertNull(FieldCleaner.dirtyValue("eMAG"))
+        assertNull(FieldCleaner.dirtyValue(null))
+        assertNull(FieldCleaner.dirtyValue(""))
+    }
 }

@@ -1,5 +1,6 @@
 package com.voxapps.notes.data
 
+import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.datahygiene.RecordSanitizer
 
@@ -12,7 +13,9 @@ object NoteSanitizer : RecordSanitizer<Note> {
         title = FieldCleaner.clean(record.title, "title", recordLabel(record))
     )
 
-    override fun isDirty(record: Note): Boolean = FieldCleaner.isDirty(record.title)
+    override fun dirtyFields(record: Note): List<DirtyField> = listOfNotNull(
+        FieldCleaner.dirtyValue(record.title)?.let { DirtyField("title", it) }
+    )
 
     private fun recordLabel(record: Note) = "Note#${record.id}"
 }

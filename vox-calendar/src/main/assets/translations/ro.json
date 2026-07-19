@@ -82,7 +82,7 @@
   "delete_entry_title": "Ștergi această intrare?",
   "delete_entry_message": "Acest eveniment sau sarcină va fi șters permanent.",
   "cleanup_confirm_title": "Curățăm înainte de salvare?",
-  "cleanup_confirm_message": "Unele câmpuri conțin doar simboluri sau textul \"null\". Curățarea automată le elimină, sau anulează pentru a le corecta manual.",
+  "cleanup_confirm_message": "Următoarele câmpuri conțin doar simboluri sau textul \"null\":",
   "auto_clean": "Curățare automată",
 
   "theme_section": "Temă",

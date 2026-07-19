@@ -1,8 +1,12 @@
 package com.voxapps.datahygiene
 
+/** A single garbage field found on a record: which field, and the actual offending text — surfaced
+ *  so a confirmation dialog can show the user exactly what's wrong instead of a generic message. */
+data class DirtyField(val fieldKey: String, val value: String)
+
 /**
  * Contract each satellite's data layer implements once per entity type (Expense, CalendarEntry,
- * Note, ...): given a record, know how to clean it and whether it needs cleaning at all. This is
+ * Note, ...): given a record, know how to clean it and which fields (if any) need cleaning. This is
  * the "virtual class every DB-operation class implements" — the only per-app code is which fields
  * a given entity has and what to call it in logs; the actual cleaning predicate underneath
  * ([FieldCleaner]) and the source-based branching ([decideForSave]) are shared and identical
@@ -12,8 +16,9 @@ interface RecordSanitizer<T> {
     /** Returns a cleaned copy of [record] (garbage fields nulled/coerced via [FieldCleaner]). */
     fun sanitize(record: T): T
 
-    /** True if [sanitize] would actually change [record] — i.e. it has real content worth flagging. */
-    fun isDirty(record: T): Boolean
+    /** Every field on [record] that [FieldCleaner] would treat as garbage, with its raw offending
+     *  value. Empty means [record] is clean (or blank fields only — blank isn't dirty). */
+    fun dirtyFields(record: T): List<DirtyField>
 }
 
 /** Where a record about to be saved came from — determines whether/how it gets cleaned. */
@@ -38,10 +43,10 @@ sealed interface SaveDecision<T> {
     /** Save [record] as-is (already clean, already sanitized, or explicitly exempt like import). */
     data class Proceed<T>(val record: T) : SaveDecision<T>
 
-    /** [original] has a field that looks like garbage — the caller must ask the user before saving:
-     *  accept auto-clean (call [RecordSanitizer.sanitize] and save that), or cancel and let them fix
-     *  it manually. */
-    data class ConfirmCleanup<T>(val original: T) : SaveDecision<T>
+    /** [original] has one or more fields that look like garbage (see [dirtyFields]) — the caller
+     *  must ask the user before saving: accept auto-clean (call [RecordSanitizer.sanitize] and save
+     *  that), or cancel and let them fix it manually. */
+    data class ConfirmCleanup<T>(val original: T, val dirtyFields: List<DirtyField>) : SaveDecision<T>
 }
 
 /**
@@ -51,5 +56,8 @@ sealed interface SaveDecision<T> {
 fun <T> RecordSanitizer<T>.decideForSave(record: T, source: RecordSource): SaveDecision<T> = when (source) {
     RecordSource.LLM -> SaveDecision.Proceed(sanitize(record))
     RecordSource.HUB_IMPORT -> SaveDecision.Proceed(record)
-    RecordSource.MANUAL_UI -> if (isDirty(record)) SaveDecision.ConfirmCleanup(record) else SaveDecision.Proceed(record)
+    RecordSource.MANUAL_UI -> {
+        val dirty = dirtyFields(record)
+        if (dirty.isNotEmpty()) SaveDecision.ConfirmCleanup(record, dirty) else SaveDecision.Proceed(record)
+    }
 }

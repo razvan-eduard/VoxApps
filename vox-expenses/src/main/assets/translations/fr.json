@@ -27,7 +27,7 @@
   "cancel": "Annuler",
   "delete": "Supprimer",
   "cleanup_confirm_title": "Nettoyer avant d'enregistrer ?",
-  "cleanup_confirm_message": "Certains champs ne contiennent que des symboles ou le texte \"null\". Le nettoyage automatique les supprime, ou annulez pour les corriger vous-même.",
+  "cleanup_confirm_message": "Les champs suivants ne contiennent que des symboles ou le texte \"null\" :",
   "auto_clean": "Nettoyage automatique",
   "apply": "Appliquer",
   "settings": "Paramètres",

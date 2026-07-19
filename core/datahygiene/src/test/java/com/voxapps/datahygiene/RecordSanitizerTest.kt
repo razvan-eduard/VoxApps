@@ -8,7 +8,8 @@ private data class Dummy(val name: String?)
 
 private object DummySanitizer : RecordSanitizer<Dummy> {
     override fun sanitize(record: Dummy): Dummy = record.copy(name = FieldCleaner.clean(record.name))
-    override fun isDirty(record: Dummy): Boolean = FieldCleaner.isDirty(record.name)
+    override fun dirtyFields(record: Dummy): List<DirtyField> =
+        listOfNotNull(FieldCleaner.dirtyValue(record.name)?.let { DirtyField("name", it) })
 }
 
 class RecordSanitizerTest {
@@ -38,7 +39,9 @@ class RecordSanitizerTest {
     fun `manual UI with a dirty record asks for confirmation instead of silently rewriting`() {
         val decision = DummySanitizer.decideForSave(Dummy(name = "."), RecordSource.MANUAL_UI)
         assertTrue(decision is SaveDecision.ConfirmCleanup)
-        assertEquals(".", (decision as SaveDecision.ConfirmCleanup).original.name)
+        val confirm = decision as SaveDecision.ConfirmCleanup
+        assertEquals(".", confirm.original.name)
+        assertEquals(listOf(DirtyField("name", ".")), confirm.dirtyFields)
     }
 
     @Test

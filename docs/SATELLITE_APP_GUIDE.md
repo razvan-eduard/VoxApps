@@ -626,9 +626,11 @@ val title  = o.optCleanString("title", fieldName = "title", recordLabel = "Expen
 
 **At the record level**, implement one `RecordSanitizer<T>` per entity — this is the "virtual class
 every DB-operation class implements" that the field-level guard alone doesn't give you, because it
-also needs to answer "is this record dirty enough to ask the user about?":
+also needs to answer "which fields are dirty, and what's the actual offending text?" (used to show a
+specific message, not a generic one — see below):
 
 ```kotlin
+import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.datahygiene.RecordSanitizer
 
@@ -638,14 +640,17 @@ object YourEntitySanitizer : RecordSanitizer<YourEntity> {
         // for a non-nullable String field, use FieldCleaner.cleanRequired(value, fallback, ...) instead
     )
 
-    override fun isDirty(record: YourEntity): Boolean =
-        FieldCleaner.isDirty(record.someNullableField)
+    override fun dirtyFields(record: YourEntity): List<DirtyField> = listOfNotNull(
+        FieldCleaner.dirtyValue(record.someNullableField)?.let { DirtyField("someNullableField", it) }
+    )
 }
 ```
 
-`isDirty` is true only when a field has real, non-blank content that `clean`/`cleanRequired` would
-discard (literal `"null"`, pure punctuation) — **not** just because a field happens to be blank, so a
-routine empty field never trips a confirmation dialog.
+`FieldCleaner.dirtyValue(value)` returns the actual trimmed offending text (e.g. `null`, `.`) if the
+field is garbage, or `null` if it's fine — including if it's merely blank. A field is **never** flagged
+just for being empty, and the "null" check is a **whole-string** match only: a title like `"Meeting
+about Null Island"` or `"null and void, discuss tomorrow"` is left alone — only a field whose entire
+trimmed content is exactly `null` (any case) counts as garbage.
 
 **The three-way save-source contract** — this is the part that answers "clean automatically, or ask
 first?" — lives in one shared function, `decideForSave`, so you never re-implement the branching:
@@ -656,8 +661,8 @@ import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
 
 when (val decision = YourEntitySanitizer.decideForSave(candidate, source)) {
-    is SaveDecision.Proceed       -> save(decision.record)   // LLM: already auto-cleaned. Hub import: untouched, as-is.
-    is SaveDecision.ConfirmCleanup -> showCleanupDialog(decision.original) // MANUAL_UI only, and only when isDirty()
+    is SaveDecision.Proceed        -> save(decision.record)   // LLM: already auto-cleaned. Hub import: untouched, as-is.
+    is SaveDecision.ConfirmCleanup -> showCleanupDialog(decision.original, decision.dirtyFields) // MANUAL_UI only, only when dirtyFields is non-empty
 }
 ```
 
@@ -667,7 +672,41 @@ when (val decision = YourEntitySanitizer.decideForSave(candidate, source)) {
 | --- | --- |
 | `LLM` | Always `sanitize()`s and proceeds — no prompt, since there's no human to ask mid-broadcast. |
 | `HUB_IMPORT` | Always proceeds **untouched** — another install already validated this data; silently rewriting it on import would be its own bug. |
-| `MANUAL_UI` | Proceeds untouched if clean; if `isDirty()`, returns `ConfirmCleanup` instead of saving so the UI can ask the user to accept auto-clean or cancel and fix it themselves. |
+| `MANUAL_UI` | Proceeds untouched if clean; if `dirtyFields` is non-empty, returns `ConfirmCleanup` (carrying that list) instead of saving so the UI can ask the user to accept auto-clean or cancel and fix it themselves. |
+
+**Showing the actual offending value, not a generic message.** The confirm dialog should tell the user
+*which* field and *what* text tripped the guard — not just "some fields look wrong." Render each
+`DirtyField` with its raw `value` highlighted (e.g. in red) so it's unmistakable at a glance:
+
+```kotlin
+@Composable
+fun CleanupDialog(dirtyFields: List<DirtyField>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Clean up before saving?") },
+        text = {
+            Column {
+                dirtyFields.forEach { field ->
+                    Text(
+                        buildAnnotatedString {
+                            append("${fieldLabel(field.fieldKey)}: ")
+                            withStyle(SpanStyle(color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)) {
+                                append(field.value) // the actual offending text, e.g. "null" or "."
+                            }
+                        }
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Auto-clean") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+```
+
+`field.fieldKey` is whatever string you passed into `DirtyField(...)` in your `dirtyFields()`
+implementation (e.g. `"vendor"`) — map it to a localized label via your app's own `LanguageManager`
+before display; `:core:datahygiene` itself has no localization dependency.
 
 Where to call `decideForSave` from:
 - **LLM path** (§6.4's receiver, or your `OP_CREATE` handler): call it right before the repository

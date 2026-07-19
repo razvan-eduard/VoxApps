@@ -19,7 +19,7 @@
   "cancel": "Abbrechen",
   "delete": "Löschen",
   "cleanup_confirm_title": "Vor dem Speichern bereinigen?",
-  "cleanup_confirm_message": "Der Titel enthält nur Symbole oder den Text \"null\". Automatisch bereinigen entfernt ihn, oder abbrechen, um ihn selbst zu korrigieren.",
+  "cleanup_confirm_message": "Die folgenden Felder enthalten nur Symbole oder den Text \"null\":",
   "auto_clean": "Automatisch bereinigen",
   "collapse_note": "Notiz einklappen",
   "apply": "Anwenden",
