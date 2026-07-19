@@ -1680,4 +1680,55 @@ banking app) and re-persists the result.
 
 ---
 
+## 21. Data Hygiene (`:core:datahygiene`)
+
+A small contracts-and-logic Gradle module (`com.voxapps.datahygiene`, Android-library — needs
+`org.json.JSONObject` at runtime, mirroring `:core:ipc`'s exact reasoning for that module shape) that
+gives every satellite one shared way to stop garbage strings from reaching the database, and one
+shared policy for *when* to clean silently vs. ask the user first.
+
+**The bug this closes**: `org.json.JSONObject.optString(key)` (no fallback arg) silently turns a
+genuine JSON `null` into the literal string `"null"` — `JSONObject` stores JSON null as the
+`JSONObject.NULL` sentinel, and that sentinel's `toString()` returns `"null"`; `optString` stringifies
+whatever `opt()` returns. A well-formed LLM reply (`"vendor": null`) and a malformed one
+(`"vendor": "null"`) both corrupt identically, with no exception to catch it. First found live in
+vox-expenses (a notification-captured expense had `vendor` literally displaying "null"); on
+investigation, the same bug class existed independently in vox-calendar's `CalendarEventParseResultParser`
+(a private, case-*sensitive* reimplementation of the same guard with no punctuation check) and
+vox-notes' `NoteScanCleanupResultParser` (no guard at all) — both fixed as part of this module landing.
+
+**`FieldCleaner`** — the one shared predicate: `clean(value, fieldName?, recordLabel?)` trims and
+discards to `null` if the value is blank, the literal string `"null"` (case-insensitive), or pure
+punctuation/whitespace with no letters or digits; `cleanRequired(value, fallback, ...)` is the same
+predicate for a non-nullable field, coercing to `fallback` instead of `null`; `isDirty(value)` is true
+only when a field has real garbage content that `clean` would discard — not just because it's blank —
+so a manual-UI confirm dialog (below) never fires on a routine empty field.
+
+**`optCleanString`** — a `JSONObject` extension (`optCleanString(key, fieldName, recordLabel)`)
+delegating to `FieldCleaner.clean`, replacing every satellite's own ad-hoc null-string guard at the
+JSON-parsing boundary.
+
+**`RecordSanitizer<T>`** — the per-entity contract (`sanitize(record): T`, `isDirty(record): Boolean`)
+each satellite implements once per data class it wants covered (`ExpenseSanitizer`,
+`CalendarEntrySanitizer`, `NoteSanitizer`). **`RecordSource`** (`LLM` / `HUB_IMPORT` / `MANUAL_UI`) and
+the shared **`decideForSave(record, source)`** extension function encode the actual policy so it's
+never reimplemented per app:
+
+| `RecordSource` | Behavior |
+|---|---|
+| `LLM` | Always sanitized, always proceeds — no human in the loop to ask. |
+| `HUB_IMPORT` | Always proceeds untouched — another install's already-validated data; rewriting it on import would be its own bug. |
+| `MANUAL_UI` | Proceeds untouched if clean; if `isDirty()`, returns `SaveDecision.ConfirmCleanup` instead of saving, so the calling screen can show "auto-clean or cancel and fix it yourself" before committing. |
+
+Gating always happens in the **caller** (the LLM-result receiver, or the edit screen's Save handler),
+never inside the shared repository's `add*`/`update*` methods — those are called by both manual saves
+and Hub import with no way to distinguish the two internally, so sanitizing there would incorrectly
+rewrite imported data too. Each app's existing inline `?.trim()?.takeIf { it.isNotEmpty() }` cleanup
+inside the repository stays as-is and is unrelated to this stricter guard.
+
+See the [Satellite App Guide §6.6](SATELLITE_APP_GUIDE.md#66-data-hygiene-cleaning-records-before-insert)
+for the wiring pattern with code examples.
+
+---
+
 *This documentation reflects the codebase as of July 2026. For the latest changes, refer to the git history.*

@@ -42,6 +42,9 @@ handful of constants.
   categories). See §7.
 - **TTS is VoxCommander's job, not yours.** For `OP_READ`, you return text; VoxCommander decides to
   speak it. Your app never calls a "speak" hook itself.
+- **`:core:datahygiene`** gives every satellite a shared way to clean garbage out of a record before
+  it hits the database — auto-clean for LLM-derived saves, untouched for Hub import, confirm-first
+  for manual UI edits. See §6.6.
 
 ---
 
@@ -594,6 +597,94 @@ This sends `ACTION_SCHEMA_CHANGED` as an explicit intent targeting VoxCommander,
 broadcast doesn't expose caller identity, so VoxCommander re-verifies that claim via
 `PackageManager.checkSignatures` before trusting it — see §8).
 
+### 6.6 Data hygiene: cleaning records before insert
+
+`org.json.JSONObject.optString(key)` (no fallback arg) silently turns a genuine JSON `null` value
+into the **literal string `"null"`** — `JSONObject` stores JSON null as the `JSONObject.NULL`
+sentinel, whose `toString()` returns `"null"`, and `optString` stringifies whatever `opt()` returns.
+A well-formed LLM reply (`"vendor": null`) and a malformed one (`"vendor": "null"`) both corrupt your
+DB identically, with no exception to catch. The same class of bug shows up any time a field is
+extracted without a garbage guard — a stray `"."` or `";"` from a noisy LLM reply, an unguarded manual
+text field, etc.
+
+**`:core:datahygiene`** (`com.voxapps.datahygiene`) is the shared fix, used by every satellite that
+does its own JSON extraction and/or record editing (vox-expenses, vox-calendar, vox-notes). Depend on
+it the same way as `:core:ipc`:
+
+```kotlin
+implementation(project(":core:datahygiene"))
+```
+
+**At the JSON-parsing boundary**, replace bare `optString`/`isNull` checks with the shared extension:
+
+```kotlin
+import com.voxapps.datahygiene.optCleanString
+
+val vendor = o.optCleanString("vendor")          // null for: absent key, JSON null, "null" (any case), blank, or pure punctuation
+val title  = o.optCleanString("title", fieldName = "title", recordLabel = "Expense") // adds a debug log line when something gets discarded
+```
+
+**At the record level**, implement one `RecordSanitizer<T>` per entity — this is the "virtual class
+every DB-operation class implements" that the field-level guard alone doesn't give you, because it
+also needs to answer "is this record dirty enough to ask the user about?":
+
+```kotlin
+import com.voxapps.datahygiene.FieldCleaner
+import com.voxapps.datahygiene.RecordSanitizer
+
+object YourEntitySanitizer : RecordSanitizer<YourEntity> {
+    override fun sanitize(record: YourEntity): YourEntity = record.copy(
+        someNullableField = FieldCleaner.clean(record.someNullableField, "someNullableField", "YourEntity#${record.id}")
+        // for a non-nullable String field, use FieldCleaner.cleanRequired(value, fallback, ...) instead
+    )
+
+    override fun isDirty(record: YourEntity): Boolean =
+        FieldCleaner.isDirty(record.someNullableField)
+}
+```
+
+`isDirty` is true only when a field has real, non-blank content that `clean`/`cleanRequired` would
+discard (literal `"null"`, pure punctuation) — **not** just because a field happens to be blank, so a
+routine empty field never trips a confirmation dialog.
+
+**The three-way save-source contract** — this is the part that answers "clean automatically, or ask
+first?" — lives in one shared function, `decideForSave`, so you never re-implement the branching:
+
+```kotlin
+import com.voxapps.datahygiene.RecordSource
+import com.voxapps.datahygiene.SaveDecision
+import com.voxapps.datahygiene.decideForSave
+
+when (val decision = YourEntitySanitizer.decideForSave(candidate, source)) {
+    is SaveDecision.Proceed       -> save(decision.record)   // LLM: already auto-cleaned. Hub import: untouched, as-is.
+    is SaveDecision.ConfirmCleanup -> showCleanupDialog(decision.original) // MANUAL_UI only, and only when isDirty()
+}
+```
+
+`RecordSource` is `LLM` / `HUB_IMPORT` / `MANUAL_UI`:
+
+| Source | Behavior |
+| --- | --- |
+| `LLM` | Always `sanitize()`s and proceeds — no prompt, since there's no human to ask mid-broadcast. |
+| `HUB_IMPORT` | Always proceeds **untouched** — another install already validated this data; silently rewriting it on import would be its own bug. |
+| `MANUAL_UI` | Proceeds untouched if clean; if `isDirty()`, returns `ConfirmCleanup` instead of saving so the UI can ask the user to accept auto-clean or cancel and fix it themselves. |
+
+Where to call `decideForSave` from:
+- **LLM path** (§6.4's receiver, or your `OP_CREATE` handler): call it right before the repository
+  insert, with `RecordSource.LLM`. If your repository method takes individual named fields rather
+  than a full entity (common for `addParsed*`-style calls), it's fine to call `FieldCleaner.clean`
+  directly on each field instead of constructing a throwaway entity just to run it through
+  `decideForSave` — the LLM branch always auto-cleans anyway, so the two are equivalent.
+- **Manual UI save button**: build the candidate record from current UI state, call `decideForSave`
+  with `RecordSource.MANUAL_UI`, and hold the `ConfirmCleanup` case in local dialog state (mirror
+  whatever nullable-state-holds-dialog-target pattern your screen already uses for delete
+  confirmation). Accept → `sanitize()` then save; Cancel → dismiss, keep editing.
+- **Hub import handler**: don't call it at all. Import already goes straight to the repository.
+
+This gating happens in the **caller**, never inside the shared repository's `add*`/`update*` methods
+— those are used by both manual saves and Hub import with no way to tell them apart internally, so
+sanitizing inside the repository would incorrectly also rewrite imported data.
+
 ---
 
 ## 7. The generic LLM hook (outside the create/extraction flow)
@@ -742,5 +833,10 @@ understanding it helps when debugging "my app doesn't show up" or "the wrong app
   respective `domain/llm/*ParsePromptBuilder.kt` / `*ParseResultParser.kt` pairs.
 - **Contract types**: `core/ipc/src/main/java/com/voxapps/ipc/`.
 - **Schema-versioning annotation + processor**: `core/schema-annotations/`, `core/schema-processor/`.
+- **Data hygiene** (§6.6): `core/datahygiene/src/main/java/com/voxapps/datahygiene/` (`FieldCleaner.kt`,
+  `JsonExtensions.kt`, `RecordSanitizer.kt`). Per-app `RecordSanitizer` implementations:
+  `vox-expenses/.../data/ExpenseSanitizer.kt`, `vox-calendar/.../data/CalendarEntrySanitizer.kt`,
+  `vox-notes/.../data/NoteSanitizer.kt` — and their wiring into each app's `LlmResultReceiver.kt` (LLM
+  path) and edit screen (`ExpenseEditScreen.kt` / `EntryEditScreen.kt` / `NotesScreen.kt`, manual-UI path).
 - **VoxCommander's consuming side**: `vox-commander/src/main/java/com/voxapps/commander/domain/integration/`
   (`VoxSatelliteRegistry.kt`, `SatelliteRouting.kt`) and `.../domain/intent/handler/SatelliteHandler.kt`.
