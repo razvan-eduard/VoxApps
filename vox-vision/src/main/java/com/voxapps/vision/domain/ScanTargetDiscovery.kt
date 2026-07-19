@@ -29,7 +29,12 @@ object ScanTargetDiscovery {
                 val info = ri.activityInfo ?: return@mapNotNull null
                 if (info.packageName == context.packageName) return@mapNotNull null
                 val task = info.metaData?.getString(VoxIpc.META_OCR_TASK) ?: return@mapNotNull null
-                val label = info.applicationInfo?.loadLabel(pm)?.toString() ?: info.packageName
+                // Strip the "Vox " prefix every app's launcher label carries (e.g. "Vox Calendar" ->
+                // "Calendar") — this screen is already Vision's own Vox-scoped scan flow, so the
+                // prefix is redundant, and the shorter label is what actually fits the equal-width
+                // send buttons without truncating (three targets sharing a row leaves little room).
+                val fullLabel = info.applicationInfo?.loadLabel(pm)?.toString() ?: info.packageName
+                val label = fullLabel.removePrefix("Vox ").trim().ifEmpty { fullLabel }
                 ScanTarget(info.packageName, task, label)
             }
             .distinctBy { it.packageName }

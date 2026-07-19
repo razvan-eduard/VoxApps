@@ -101,6 +101,7 @@ class CalendarStateManager internal constructor(
     fun setLanguage(code: String) { scope.launch { settingsRepo.setLanguage(code) } }
     fun setDefaultLayerId(id: Long?) { scope.launch { settingsRepo.setDefaultLayerId(id) } }
     fun setAutoCreateLayer(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateLayer(enabled) } }
+    fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setDebugLoggingEnabled(enabled: Boolean) {
         Logger.setEnabled(enabled)
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }

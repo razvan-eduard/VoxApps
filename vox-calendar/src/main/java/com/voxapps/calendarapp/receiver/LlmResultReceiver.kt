@@ -3,6 +3,7 @@ package com.voxapps.calendarapp.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarEventParseResultParser
@@ -42,6 +43,34 @@ class LlmResultReceiver : BroadcastReceiver() {
                     return
                 }
                 Logger.d(TAG, "Calendar event parse: creating ${parsed.type} '${parsed.title}' layer=${parsed.layer}")
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        createEntryFromParsed(container, parsed)
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            LlmTasks.CALENDAR_SCAN_CLEANUP -> {
+                val rawJson = result.rawJson
+                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
+                    Logger.w(TAG, "Calendar scan cleanup failed: ${result.error}")
+                    // Unconditional — the only signal the user has that the scan didn't produce an
+                    // entry, mirrors vox-notes'/vox-expenses' OCR-failure toast.
+                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
+                    return
+                }
+                val parsed = CalendarEventParseResultParser.parse(rawJson) ?: run {
+                    // No title/date (i.e. no date reference, direct or indirect) is the same
+                    // mandatory-field rule voice-created entries already enforce — a scanned
+                    // document with no date reference simply can't become a calendar entry.
+                    Logger.w(TAG, "Calendar scan cleanup: could not parse LLM result (no title/date?). rawJson=$rawJson")
+                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
+                    return
+                }
+                Logger.d(TAG, "Calendar scan cleanup: creating ${parsed.type} '${parsed.title}' layer=${parsed.layer}")
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {

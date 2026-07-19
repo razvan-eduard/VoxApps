@@ -11,6 +11,8 @@ import androidx.compose.runtime.Immutable
  * - [defaultLayerId]/[autoCreateLayer]: how a voice/LLM-created event resolves its target layer when
  *   the spoken layer name doesn't match an existing one — same semantics as vox-expenses' equivalent
  *   voice-category fields.
+ * - [attachPhotoOnScan]: whether a scanned document's photo is attached to the OCR-cleanup LLM call
+ *   (multimodal engines only) — same semantics as vox-notes'/vox-expenses' equivalent field.
  * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output — off by default.
  * - [themeDarkMode]/[themeColored]: same theme controls as vox-commander's AppSettings — "SYSTEM"/
  *   "LIGHT"/"DARK" and Material You dynamic color, fed into the shared `:core:design` VoxTheme.
@@ -25,6 +27,7 @@ data class CalendarSettings(
     val language: String = DEFAULT_LANGUAGE,
     val defaultLayerId: Long? = null,
     val autoCreateLayer: Boolean = false,
+    val attachPhotoOnScan: Boolean = false,
     val debugLoggingEnabled: Boolean = false,
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,

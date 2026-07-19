@@ -1,6 +1,7 @@
 package com.voxapps.calendarapp.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,8 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
@@ -21,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -31,14 +35,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendar.CalendarView
 import com.voxapps.calendarapp.data.CalendarLayer
+import com.voxapps.calendarapp.domain.llm.CalendarScanRequestSender
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.state.CalendarViewMode
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.ipc.VoxAppsDiscovery
 import java.text.DateFormat
 import java.time.Instant
 import java.time.ZoneId
@@ -64,7 +73,7 @@ fun CalendarScreen(
     val layerById = remember(state.layers) { state.layers.associateBy { it.id } }
     val locale = Locale.forLanguageTag(language)
     var daySummaryFor by remember { mutableStateOf<Long?>(null) }
-    var sidebarVisible by remember { mutableStateOf(true) }
+    var sidebarVisible by remember { mutableStateOf(false) }
 
     DoubleBackToExitHandler(message = languageManager.getString("press_back_again_to_exit"))
 
@@ -78,6 +87,38 @@ fun CalendarScreen(
                     }
                 },
                 actions = {
+                    val context = LocalContext.current
+                    // Scan always forwards through Commander's LLM hook for cleanup (no direct-save
+                    // fallback) — hidden entirely rather than offered and silently failing if
+                    // Commander isn't installed. Mirrors vox-notes'/vox-expenses' identical gate.
+                    val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+                    if (commanderInstalled) {
+                        Surface(
+                            onClick = { CalendarScanRequestSender.send(context) },
+                            shape = RoundedCornerShape(percent = 50),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 4.dp)
+                                .semantics { contentDescription = languageManager.getString("scan_calendar_entry") }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.DocumentScanner,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    languageManager.getString("scan_action"),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
                     }

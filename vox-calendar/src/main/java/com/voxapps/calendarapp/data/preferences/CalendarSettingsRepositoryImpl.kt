@@ -27,6 +27,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val LANGUAGE = stringPreferencesKey("language")
         val DEFAULT_LAYER_ID = longPreferencesKey("default_layer_id")
         val AUTO_CREATE_LAYER = booleanPreferencesKey("auto_create_layer")
+        val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
@@ -40,6 +41,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             language = prefs[Keys.LANGUAGE] ?: defaultDeviceLanguage(),
             defaultLayerId = prefs[Keys.DEFAULT_LAYER_ID],
             autoCreateLayer = prefs[Keys.AUTO_CREATE_LAYER] ?: false,
+            attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: CalendarSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
@@ -80,6 +82,10 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         dataStore.edit { it[Keys.AUTO_CREATE_LAYER] = enabled }
     }
 
+    override suspend fun setAttachPhotoOnScan(enabled: Boolean) {
+        dataStore.edit { it[Keys.ATTACH_PHOTO_ON_SCAN] = enabled }
+    }
+
     override suspend fun setDebugLoggingEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
     }
@@ -107,6 +113,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
                 prefs[Keys.DEFAULT_LAYER_ID] = settings.defaultLayerId
             }
             prefs[Keys.AUTO_CREATE_LAYER] = settings.autoCreateLayer
+            prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
             prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
