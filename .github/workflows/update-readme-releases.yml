@@ -1,0 +1,51 @@
+name: Update README Release Links
+
+# Keeps README.md's "Latest Releases" table (between the LATEST_RELEASES:START/END markers) pointing
+# at whatever's actually published, instead of a hand-typed tag that goes stale the moment any app's
+# version bumps. Fires on every GitHub Release across all 6 apps' independent release-*.yml workflows
+# (a single `release: published` event, not one listener per app) — see
+# scripts/update_release_readme_links.sh for the actual table-generation logic this just invokes.
+#
+# concurrency + a pull --rebase before pushing: several apps' release workflows can each publish a
+# release within moments of each other (e.g. after a shared version-bump commit lands on main), so
+# more than one run of this workflow can be in flight at once — queued (not cancelled) so each run's
+# push has a chance to land instead of racing on a stale base.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-readme-releases
+  cancel-in-progress: false
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Regenerate Latest Releases table
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/update_release_readme_links.sh
+
+      - name: Commit and push if changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "README.md unchanged, nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: refresh latest-release links in README"
+          git pull --rebase origin main
+          git push origin HEAD:main
