@@ -250,7 +250,9 @@ val autoCheckOpenWakeWord = tasks.register<Exec>("autoCheckOpenWakeWord") {
     group = "verification"
     description = "Verifică dacă submodulul OpenWakeWord a rămas în urma unui tag upstream nou."
 
-    commandLine("sh", "${project.rootDir}/scripts/check_openwakeword_version.sh")
+    // bash, not sh: the script uses a bash array (PATCHES=(...)) — same class of bug as the
+    // build_opencv_android.sh fix (sh on Ubuntu runners is dash, which doesn't support this).
+    commandLine("bash", "${project.rootDir}/scripts/check_openwakeword_version.sh")
 }
 
 // Copy models.json from repo root into assets (single source of truth in root)
