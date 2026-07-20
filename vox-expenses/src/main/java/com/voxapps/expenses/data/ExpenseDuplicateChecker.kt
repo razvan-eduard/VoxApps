@@ -1,5 +1,6 @@
 package com.voxapps.expenses.data
 
+import com.voxapps.calendar.CalendarDateUtils
 import com.voxapps.datahygiene.DuplicateChecker
 import com.voxapps.datahygiene.FieldCleaner
 
@@ -11,6 +12,12 @@ import com.voxapps.datahygiene.FieldCleaner
  * [Expense.isStub] are identity/audit fields, deliberately excluded — two records can be the same
  * real-world expense even if one is a stub-then-retried version of the other's photo, or was
  * inserted milliseconds apart.
+ *
+ * [Expense.dateTime] is compared by calendar day, not exact millis, for that same reason: a
+ * notification-sourced expense stamps `dateTime` with the capture instant
+ * ([com.voxapps.expenses.receiver.LlmResultReceiver]'s `System.currentTimeMillis()`), which is never
+ * the same twice — an exact-millis match would make this checker a no-op for that whole source,
+ * exactly the case a "force re-check" retry of the same notification needs to catch.
  */
 object ExpenseDuplicateChecker : DuplicateChecker<Expense> {
     override fun isDuplicateOf(candidate: Expense, existing: Expense): Boolean =
@@ -20,7 +27,7 @@ object ExpenseDuplicateChecker : DuplicateChecker<Expense> {
             FieldCleaner.clean(candidate.vendor) == FieldCleaner.clean(existing.vendor) &&
             FieldCleaner.clean(candidate.bank) == FieldCleaner.clean(existing.bank) &&
             FieldCleaner.clean(candidate.location) == FieldCleaner.clean(existing.location) &&
-            candidate.dateTime == existing.dateTime &&
+            CalendarDateUtils.millisToLocalDate(candidate.dateTime) == CalendarDateUtils.millisToLocalDate(existing.dateTime) &&
             FieldCleaner.clean(candidate.comments) == FieldCleaner.clean(existing.comments) &&
             candidate.categoryId == existing.categoryId
 }

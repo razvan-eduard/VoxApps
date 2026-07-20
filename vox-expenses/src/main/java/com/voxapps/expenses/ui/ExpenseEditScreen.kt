@@ -145,8 +145,6 @@ fun ExpenseEditScreen(
     val useComma = decimalSeparator == ExpensesSettings.DECIMAL_COMMA
     val context = LocalContext.current
 
-    BackHandler { onDone() }
-
     var title by remember { mutableStateOf(existing?.expense?.title ?: "") }
     var totalText by remember { mutableStateOf(existing?.expense?.totalAmount?.let { formatDecimal(it, useComma) } ?: "") }
     var currency by remember { mutableStateOf(existing?.expense?.currencyCode ?: defaultCurrency) }
@@ -208,12 +206,61 @@ fun ExpenseEditScreen(
     val totalMismatch = items.isNotEmpty() &&
         (parseDecimalOrNull(totalText, useComma)?.let { ExpenseAmountMismatch.isMismatch(it, itemsSum) } ?: false)
 
+    // Shared by the checkmark button, the back arrow, and the system back gesture/button — this
+    // screen has no separate "discard changes" path, so leaving it any way always tries to save
+    // first. No valid amount (the one mandatory field) has nothing meaningful to save, so that case
+    // just closes without writing anything, matching the old Save button's
+    // `enabled = parseDecimalOrNull(totalText, useComma) != null` guard.
+    fun attemptSaveAndClose() {
+        val total = parseDecimalOrNull(totalText, useComma)
+        if (total == null) {
+            onDone()
+            return
+        }
+        val lineItems = items
+            .filter { it.name.isNotBlank() }
+            .map {
+                ExpenseLineItem(
+                    expenseId = existing?.expense?.id ?: 0,
+                    name = it.name.trim(),
+                    quantity = parseDecimalOrNull(it.quantityText, useComma) ?: 1.0,
+                    unitPrice = parseDecimalOrNull(it.unitPriceText, useComma) ?: 0.0,
+                    netAmount = parseDecimalOrNull(it.netAmountText, useComma),
+                    vatAmount = parseDecimalOrNull(it.vatAmountText, useComma),
+                    grossAmount = parseDecimalOrNull(it.grossAmountText, useComma)
+                )
+            }
+        val candidate = (existing?.expense ?: Expense(totalAmount = total, currencyCode = currency, dateTime = dateTime)).copy(
+            title = title,
+            totalAmount = total,
+            currencyCode = currency.ifBlank { defaultCurrency },
+            vendor = vendor,
+            bank = bank,
+            location = location,
+            dateTime = dateTime,
+            comments = comments,
+            categoryId = categoryId,
+            isStub = false
+        )
+        when (val decision = ExpenseSanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
+            is SaveDecision.Proceed -> {
+                saveExpense(decision.record, lineItems)
+                onDone()
+            }
+            is SaveDecision.ConfirmCleanup -> {
+                pendingCleanup = PendingCleanup(decision.original, lineItems, decision.dirtyFields)
+            }
+        }
+    }
+
+    BackHandler { attemptSaveAndClose() }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(languageManager.getString(if (existing != null) "edit_expense" else "new_expense")) },
                 navigationIcon = {
-                    IconButton(onClick = onDone) {
+                    IconButton(onClick = ::attemptSaveAndClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = languageManager.getString("back"))
                     }
                 },
@@ -222,6 +269,9 @@ fun ExpenseEditScreen(
                         IconButton(onClick = { showDeleteExpenseConfirm = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
                         }
+                    }
+                    IconButton(onClick = ::attemptSaveAndClose, enabled = parseDecimalOrNull(totalText, useComma) != null) {
+                        Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
                     }
                 }
             )
@@ -384,51 +434,6 @@ fun ExpenseEditScreen(
                 }
             }
 
-            item {
-                Button(
-                    onClick = {
-                        val total = parseDecimalOrNull(totalText, useComma) ?: return@Button
-                        val lineItems = items
-                            .filter { it.name.isNotBlank() }
-                            .map {
-                                ExpenseLineItem(
-                                    expenseId = existing?.expense?.id ?: 0,
-                                    name = it.name.trim(),
-                                    quantity = parseDecimalOrNull(it.quantityText, useComma) ?: 1.0,
-                                    unitPrice = parseDecimalOrNull(it.unitPriceText, useComma) ?: 0.0,
-                                    netAmount = parseDecimalOrNull(it.netAmountText, useComma),
-                                    vatAmount = parseDecimalOrNull(it.vatAmountText, useComma),
-                                    grossAmount = parseDecimalOrNull(it.grossAmountText, useComma)
-                                )
-                            }
-                        val candidate = (existing?.expense ?: Expense(totalAmount = total, currencyCode = currency, dateTime = dateTime)).copy(
-                            title = title,
-                            totalAmount = total,
-                            currencyCode = currency.ifBlank { defaultCurrency },
-                            vendor = vendor,
-                            bank = bank,
-                            location = location,
-                            dateTime = dateTime,
-                            comments = comments,
-                            categoryId = categoryId,
-                            isStub = false
-                        )
-                        when (val decision = ExpenseSanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
-                            is SaveDecision.Proceed -> {
-                                saveExpense(decision.record, lineItems)
-                                onDone()
-                            }
-                            is SaveDecision.ConfirmCleanup -> {
-                                pendingCleanup = PendingCleanup(decision.original, lineItems, decision.dirtyFields)
-                            }
-                        }
-                    },
-                    enabled = parseDecimalOrNull(totalText, useComma) != null,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(languageManager.getString("save"))
-                }
-            }
         }
     }
 

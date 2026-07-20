@@ -1,6 +1,8 @@
 package com.voxapps.expenses.receiver
 
 import android.app.Notification
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.NotificationListenerService.RankingMap
@@ -63,9 +65,20 @@ class PaymentNotificationListenerService : NotificationListenerService() {
      */
     override fun onListenerConnected() {
         super.onListenerConnected()
+        activeInstance = this
         CoroutineScope(Dispatchers.IO).launch {
             activeNotifications?.forEach { sbn -> processNotification(sbn) }
         }
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        if (activeInstance === this) activeInstance = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (activeInstance === this) activeInstance = null
     }
 
     /**
@@ -83,11 +96,11 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         CoroutineScope(Dispatchers.IO).launch { processNotification(sbn) }
     }
 
-    private suspend fun processNotification(sbn: StatusBarNotification) {
+    private suspend fun processNotification(sbn: StatusBarNotification, force: Boolean = false) {
         val container = (applicationContext as ExpensesApplication).container
         val settings = container.settingsRepository.getSnapshot()
         if (sbn.packageName !in settings.paymentSourcePackages) return
-        if (processedKeys.isProcessed(sbn.key)) return
+        if (!force && processedKeys.isProcessed(sbn.key)) return
 
         val extras = sbn.notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
@@ -95,13 +108,22 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         if (title.isNullOrBlank() && text.isNullOrBlank()) return
 
         // Deterministic, not a guess: the user explicitly starred this exact package as a bank app.
+        // LauncherAppsCache is only a display-name convenience cache (persisted from whatever the
+        // device's app list looked like at the last scan) — it can legitimately miss a package that
+        // was starred without ever triggering a rescan since. Rather than silently losing the bank
+        // name in that case (the observed failure mode: an empty "bank" field despite the source
+        // package being correctly starred), fall back to a live PackageManager label lookup, which
+        // has no staleness window at all.
         val knownBankName = if (sbn.packageName in settings.bankingSourcePackages) {
             LauncherAppsCache.cachedApps.find { it.packageName == sbn.packageName }?.displayName
+                ?: runCatching {
+                    val pm = applicationContext.packageManager
+                    pm.getApplicationLabel(pm.getApplicationInfo(sbn.packageName, 0)).toString()
+                }.getOrNull()
         } else {
             null
         }
-
-        Logger.d(TAG, "Captured notification from ${sbn.packageName}, forwarding for LLM triage")
+        Logger.d(TAG, "Captured notification from ${sbn.packageName}, forwarding for LLM triage (knownBankName=$knownBankName)")
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val promptText = NotificationExpenseParsePromptBuilder.build(
             notificationTitle = title,
@@ -128,5 +150,35 @@ class PaymentNotificationListenerService : NotificationListenerService() {
                 .setPackage(COMMANDER_PACKAGE)
                 .putExtra(VoxIpc.EXTRA_LLM_PAYLOAD, payload)
         )
+    }
+
+    companion object {
+        // Set/cleared alongside the connect/disconnect lifecycle above — lets a "force check" action
+        // reach the live instance directly instead of going through requestRebind() (which asks the
+        // OS to unbind+rebind and just hopes onListenerConnected's catch-up scan follows; on this
+        // OEM that rebind can be silently blocked entirely — "Service starting has been prevented by
+        // iaware or trustsbase" — so it's not a reliable way to force anything).
+        @Volatile private var activeInstance: PaymentNotificationListenerService? = null
+
+        /**
+         * Re-evaluates every notification currently in the shade against [processNotification],
+         * bypassing the [ProcessedNotificationKeysStore] "already processed" guard entirely — unlike
+         * the normal catch-up paths ([onListenerConnected]/[onNotificationRemoved]), which must
+         * respect it to avoid endlessly re-parsing the same notification, an explicit user-triggered
+         * "force check" tap means they specifically want a re-check regardless of prior outcome
+         * (e.g. a notification that was captured but produced no expense for reasons since fixed).
+         * Falls back to [requestRebind] only if the service isn't currently bound at all, so its own
+         * next natural connect at least gets a normal (non-bypassing) catch-up scan.
+         */
+        fun forceRecheckNow(context: Context) {
+            val instance = activeInstance
+            if (instance != null) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    instance.activeNotifications?.forEach { sbn -> instance.processNotification(sbn, force = true) }
+                }
+            } else {
+                requestRebind(ComponentName(context, PaymentNotificationListenerService::class.java))
+            }
+        }
     }
 }

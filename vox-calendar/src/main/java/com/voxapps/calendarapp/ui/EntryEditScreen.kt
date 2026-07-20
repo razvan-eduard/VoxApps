@@ -20,11 +20,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -113,8 +113,6 @@ fun EntryEditScreen(
     val languageManager = LocalLanguageManager.current
     val zoneId = ZoneId.systemDefault()
 
-    BackHandler { onDone() }
-
     var type by remember { mutableStateOf(existing?.entry?.type ?: CalendarEntryType.EVENT) }
     var title by remember { mutableStateOf(existing?.entry?.title ?: "") }
     var description by remember { mutableStateOf(existing?.entry?.description ?: "") }
@@ -158,6 +156,51 @@ fun EntryEditScreen(
         }
     }
 
+    // Shared by the checkmark button, the back arrow, and the system back gesture/button — this
+    // screen has no separate "discard changes" path, so leaving it any way always tries to save
+    // first. A blank title (the one mandatory field) has nothing meaningful to save, so that case
+    // just closes without writing anything, matching the old Save button's `enabled = title.isNotBlank()`
+    // guard instead of silently creating an empty-titled entry.
+    fun attemptSaveAndClose() {
+        if (title.isBlank()) {
+            onDone()
+            return
+        }
+        val effectiveEnd = if (type == CalendarEntryType.EVENT) endMillis else null
+        val base = existing?.entry ?: CalendarEntry(
+            uid = java.util.UUID.randomUUID().toString(),
+            type = type,
+            title = title,
+            startMillis = startMillis,
+            layerId = defaultLayer.id,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+        val candidate = base.copy(
+            type = type,
+            title = title.trim(),
+            description = description,
+            location = location,
+            startMillis = startMillis,
+            endMillis = effectiveEnd,
+            allDay = allDay,
+            completed = completed,
+            recurrenceFrequency = recurrence,
+            recurrenceUntilMillis = recurrenceUntilMillis
+        )
+        when (val decision = CalendarEntrySanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
+            is SaveDecision.Proceed -> {
+                saveEntry(decision.record, tags.toList())
+                onDone()
+            }
+            is SaveDecision.ConfirmCleanup -> {
+                pendingCleanup = PendingCleanup(decision.original, tags.toList(), decision.dirtyFields)
+            }
+        }
+    }
+
+    BackHandler { attemptSaveAndClose() }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -181,7 +224,7 @@ fun EntryEditScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onDone) {
+                    IconButton(onClick = ::attemptSaveAndClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = languageManager.getString("back"))
                     }
                 },
@@ -190,6 +233,9 @@ fun EntryEditScreen(
                         IconButton(onClick = { showDeleteConfirm = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
                         }
+                    }
+                    IconButton(onClick = ::attemptSaveAndClose, enabled = title.isNotBlank()) {
+                        Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
                     }
                 }
             )
@@ -361,47 +407,6 @@ fun EntryEditScreen(
                 }
             }
 
-            item {
-                Button(
-                    onClick = {
-                        val effectiveEnd = if (type == CalendarEntryType.EVENT) endMillis else null
-                        val base = existing?.entry ?: CalendarEntry(
-                            uid = java.util.UUID.randomUUID().toString(),
-                            type = type,
-                            title = title,
-                            startMillis = startMillis,
-                            layerId = defaultLayer.id,
-                            createdAt = System.currentTimeMillis(),
-                            updatedAt = System.currentTimeMillis()
-                        )
-                        val candidate = base.copy(
-                            type = type,
-                            title = title.trim(),
-                            description = description,
-                            location = location,
-                            startMillis = startMillis,
-                            endMillis = effectiveEnd,
-                            allDay = allDay,
-                            completed = completed,
-                            recurrenceFrequency = recurrence,
-                            recurrenceUntilMillis = recurrenceUntilMillis
-                        )
-                        when (val decision = CalendarEntrySanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
-                            is SaveDecision.Proceed -> {
-                                saveEntry(decision.record, tags.toList())
-                                onDone()
-                            }
-                            is SaveDecision.ConfirmCleanup -> {
-                                pendingCleanup = PendingCleanup(decision.original, tags.toList(), decision.dirtyFields)
-                            }
-                        }
-                    },
-                    enabled = title.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(languageManager.getString("save"))
-                }
-            }
         }
     }
 

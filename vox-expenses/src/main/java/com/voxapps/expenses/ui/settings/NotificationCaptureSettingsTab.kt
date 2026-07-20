@@ -1,11 +1,9 @@
 package com.voxapps.expenses.ui.settings
 
-import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
-import android.service.notification.NotificationListenerService
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,7 +45,6 @@ import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.receiver.PaymentNotificationListenerService
-import com.voxapps.expenses.receiver.ProcessedNotificationKeysStore
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
@@ -182,21 +179,12 @@ fun NotificationCaptureSettingsTab(
                 if (!accessGranted) {
                     Toast.makeText(context, languageManager.getString("grant_notification_access_button"), Toast.LENGTH_SHORT).show()
                 } else {
-                    // Clears the processed-keys history first — otherwise a notification already
-                    // (mis)marked processed (e.g. by an older build that marked at dispatch time
-                    // instead of on a confirmed Commander reply) would stay permanently skipped even
-                    // after the rebind below. Then asks the OS to rebind
-                    // PaymentNotificationListenerService, which fires onListenerConnected() again
-                    // exactly as a natural reconnect would — the same recovery path that scans
-                    // getActiveNotifications() for anything still visible in the shade. Lets the user
-                    // force a full re-check right now instead of waiting for the OS to reconnect on
-                    // its own.
-                    scope.launch {
-                        ProcessedNotificationKeysStore(context).clearAll()
-                        NotificationListenerService.requestRebind(
-                            ComponentName(context, PaymentNotificationListenerService::class.java)
-                        )
-                    }
+                    // Re-checks every notification currently in the shade directly against the
+                    // "already processed" guard, bypassing it entirely for this explicit user action
+                    // (see PaymentNotificationListenerService.forceRecheckNow's doc comment) — no
+                    // longer relies on wiping the whole processed-keys history + hoping the OS honors
+                    // a rebind request, which this OEM can silently block outright.
+                    PaymentNotificationListenerService.forceRecheckNow(context)
                     Toast.makeText(context, languageManager.getString("force_check_notifications_started"), Toast.LENGTH_SHORT).show()
                 }
             },

@@ -1,6 +1,7 @@
 package com.voxapps.expenses.data
 
 import android.content.Context
+import com.voxapps.calendar.CalendarDateUtils
 import com.voxapps.datahygiene.findDuplicate
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.logging.Logger
@@ -75,10 +76,14 @@ class ExpensesRepository(
             )
 
             if (checkForDuplicate) {
-                // Same exact instant is the cheap, precise pre-filter (ExpenseDuplicateChecker
-                // requires dateTime equality anyway) — avoids a full-table scan on every insert.
-                val sameInstant = expenseDao.getForDateRange(dateTime, dateTime)
-                val duplicate = ExpenseDuplicateChecker.findDuplicate(candidate, sameInstant)
+                // Same calendar day is the cheap pre-filter, matching ExpenseDuplicateChecker's own
+                // day-level (not exact-instant) dateTime comparison — avoids a full-table scan on
+                // every insert while still surfacing every candidate the checker could actually match.
+                val day = CalendarDateUtils.millisToLocalDate(dateTime)
+                val dayStart = CalendarDateUtils.startOfDayMillis(day)
+                val dayEnd = CalendarDateUtils.startOfDayMillis(day.plusDays(1)) - 1
+                val sameDay = expenseDao.getForDateRange(dayStart, dayEnd)
+                val duplicate = ExpenseDuplicateChecker.findDuplicate(candidate, sameDay)
                 if (duplicate != null) {
                     Logger.w("ExpensesRepository", "Duplicate entry — skipping insert (matches existing id=${duplicate.id})")
                     return DUPLICATE_ENTRY_RESULT
