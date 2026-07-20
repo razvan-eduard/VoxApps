@@ -1,6 +1,8 @@
 {
   "app_name": "Vox Calendar",
   "calendar_title": "Calendar",
+  "widget_app_name": "Calendar",
+  "widget_add_button": "+ Event",
   "onboarding_welcome_tagline": "Private, encrypted calendar with colored layers, ICS import/export, and voice-created events.",
   "onboarding_bullet1_title": "Voice-created via Vox Commander",
   "onboarding_bullet1_desc": "Say \"dentist in a week\" and Vox Commander creates the event, picking the right calendar layer for you.",
@@ -108,5 +110,6 @@
   "locked_title": "Calendar is locked",
   "unlock": "Unlock",
   "unlock_title": "Unlock Vox Calendar",
-  "unlock_subtitle": "Authenticate to view your calendar"
+  "unlock_subtitle": "Authenticate to view your calendar",
+  "widget_no_upcoming_entries": "No upcoming entries"
 }

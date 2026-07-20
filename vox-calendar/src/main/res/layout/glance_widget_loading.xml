@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder shown for the brief moment before Glance's own composable content replaces it —
+     the platform widget-provider XML schema requires an initialLayout even though Glance owns the
+     real content. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />

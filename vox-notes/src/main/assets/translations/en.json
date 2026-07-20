@@ -1,6 +1,9 @@
 {
   "app_name": "Vox Notes",
   "notes_title": "Vox Notes",
+  "widget_app_name": "Notes",
+  "widget_no_recent_notes": "No recent notes",
+  "widget_add_button": "+ Note",
   "onboarding_welcome_tagline": "Private, encrypted notes you can create by voice, by hand, or by scanning a document.",
   "onboarding_bullet1_title": "Voice-created via Vox Commander",
   "onboarding_bullet1_desc": "Just say what to save — Commander routes it here and files it under the right category.",

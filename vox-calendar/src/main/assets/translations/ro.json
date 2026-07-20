@@ -1,6 +1,8 @@
 {
   "app_name": "Vox Calendar",
   "calendar_title": "Calendar",
+  "widget_app_name": "Calendar",
+  "widget_add_button": "+ Eveniment",
   "onboarding_welcome_tagline": "Calendar privat, criptat, cu straturi colorate, import/export ICS și evenimente create prin voce.",
   "onboarding_bullet1_title": "Create prin voce cu Vox Commander",
   "onboarding_bullet1_desc": "Spune \"dentist peste o săptămână\" și Vox Commander creează evenimentul, alegând stratul potrivit.",
@@ -108,5 +110,6 @@
   "locked_title": "Calendarul este blocat",
   "unlock": "Deblochează",
   "unlock_title": "Deblochează Vox Calendar",
-  "unlock_subtitle": "Autentifică-te pentru a vedea calendarul"
+  "unlock_subtitle": "Autentifică-te pentru a vedea calendarul",
+  "widget_no_upcoming_entries": "Nicio intrare viitoare"
 }

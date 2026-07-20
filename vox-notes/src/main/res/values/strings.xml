@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Vox Notes</string>
+    <string name="notes_widget_label">Vox Notes</string>
 
     <!-- Top bar / actions -->
     <string name="notes_title">Vox Notes</string>

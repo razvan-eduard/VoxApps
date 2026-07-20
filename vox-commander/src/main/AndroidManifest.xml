@@ -193,6 +193,20 @@
                 <action android:name="com.voxapps.action.CAPABILITY_QUERY" />
             </intent-filter>
         </receiver>
+
+        <!-- Independent "tap to speak" home-screen widget — not tied to any satellite's data, just a
+             direct trigger into the voice-capture flow MainScreen's own mic button already uses. -->
+        <receiver
+            android:name=".ui.widget.SpeakWidgetReceiver"
+            android:exported="false"
+            android:label="@string/speak_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/speak_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

@@ -127,5 +127,17 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <receiver
+            android:name=".ui.widget.ExpensesWidgetReceiver"
+            android:exported="false"
+            android:label="@string/expenses_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/expenses_widget_info" />
+        </receiver>
     </application>
 </manifest>

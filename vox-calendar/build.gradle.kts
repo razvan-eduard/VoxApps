@@ -84,6 +84,11 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.runtime.compose)
 
+    // Home-screen widget (Jetpack Glance — current best practice over raw RemoteViews/AppWidgetProvider).
+    // GlanceTheme itself lives in the base :glance artifact (a transitive dep of glance-appwidget),
+    // already gets Material You dynamic color for free — no separate glance-material3 dependency needed.
+    implementation(libs.androidx.glance.appwidget)
+
     // Preferences (settings + session timeout)
     implementation(libs.androidx.datastore.preferences)
 

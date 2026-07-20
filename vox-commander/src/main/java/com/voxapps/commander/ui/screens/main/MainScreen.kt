@@ -62,7 +62,12 @@ fun MainScreen(
     onRequestLocationPermission: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
     onClearCustomModel: () -> Unit = {},
-    onImportOpenWakeWordModel: () -> Unit = {}
+    onImportOpenWakeWordModel: () -> Unit = {},
+    // Incremented (not a plain Boolean) by MainActivity whenever a widget "tap to speak" launch
+    // arrives — from onCreate's initial intent AND from onNewIntent if the activity was already
+    // running — so a second widget tap while the app is already open still re-triggers even
+    // though a Boolean would look "unchanged". 0 = no pending request (the default, normal launch).
+    autoStartListeningTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
     val lastIntent by viewModel.currentIntent.collectAsStateWithLifecycle()
@@ -72,6 +77,13 @@ fun MainScreen(
     val isListening by VoiceManager.isListeningFlow.collectAsStateWithLifecycle()
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val isOnline by NetworkMonitor.onlineFlow.collectAsStateWithLifecycle()
+
+    // Widget "tap to speak" — mirrors the in-app mic button's onClick below exactly.
+    LaunchedEffect(autoStartListeningTrigger) {
+        if (autoStartListeningTrigger > 0 && !isProcessing) {
+            viewModel.processVoiceCommand(uiState.modelFilterLang, uiState.voiceProcessor)
+        }
+    }
 
     var currentHeaderMode by remember { mutableStateOf(TopHeaderMode.NONE) }
     

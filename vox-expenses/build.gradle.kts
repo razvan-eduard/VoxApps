@@ -113,6 +113,11 @@ dependencies {
     // Exchange-rate lookups at reporting time (Stage 5)
     implementation(libs.okhttp)
 
+    // Home-screen widget (Jetpack Glance — current best practice over raw RemoteViews/AppWidgetProvider).
+    // GlanceTheme itself lives in the base :glance artifact (a transitive dep of glance-appwidget),
+    // already gets Material You dynamic color for free — no separate glance-material3 dependency needed.
+    implementation(libs.androidx.glance.appwidget)
+
     // --- Unit tests (JVM, mirror vox-notes) ---
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

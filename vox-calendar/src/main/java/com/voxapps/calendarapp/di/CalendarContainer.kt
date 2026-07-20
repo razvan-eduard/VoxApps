@@ -8,6 +8,12 @@ import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepositoryImpl
 import com.voxapps.calendarapp.domain.localization.LanguageManager
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.state.SessionManager
+import androidx.glance.appwidget.updateAll
+import com.voxapps.calendarapp.ui.widget.CalendarWidget
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Manual DI container for Vox Calendar (mirrors vox-expenses' ExpensesContainer). Owns all singletons
@@ -35,5 +41,14 @@ class CalendarContainer(context: Context) {
 
     val languageManager = LanguageManager(appContext).also {
         it.loadLanguage(settingsRepository.getSnapshot().language)
+    }
+
+    init {
+        // Keeps CalendarWidget's home-screen snapshot in sync with every uiState change (add/edit/
+        // delete, lock/unlock, settings) — one central hook here instead of scattering updateAll()
+        // calls across every write path in CalendarStateManager/CalendarRepository.
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
+            calendarStateManager.uiState.collect { CalendarWidget().updateAll(appContext) }
+        }
     }
 }

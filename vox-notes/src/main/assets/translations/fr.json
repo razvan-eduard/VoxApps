@@ -1,6 +1,9 @@
 {
   "app_name": "Vox Notes",
   "notes_title": "Vox Notes",
+  "widget_app_name": "Notes",
+  "widget_no_recent_notes": "Aucune note récente",
+  "widget_add_button": "+ Note",
   "categories": "Catégories",
   "all_notes": "Toutes les notes",
   "add_note": "Ajouter une note",

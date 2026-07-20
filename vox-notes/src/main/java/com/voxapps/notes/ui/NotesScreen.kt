@@ -39,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,7 +79,12 @@ fun NotesScreen(
     stateManager: NotesStateManager,
     calendarViewEnabled: Boolean,
     language: String,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    // Widget "Add"/tap-a-note-to-edit triggers (see NotesRoot's doc comments) — 0 = no pending
+    // request. Counters, not plain values, so a repeat of the same request still re-fires.
+    quickAddTrigger: Int = 0,
+    editNoteId: Long = -1L,
+    editNoteTrigger: Int = 0
 ) {
     val languageManager = LocalLanguageManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -88,6 +94,22 @@ fun NotesScreen(
     var showDateSheet by remember { mutableStateOf(false) }
     var pendingDeleteNote by remember { mutableStateOf<Note?>(null) }
     var pendingNoteCleanup by remember { mutableStateOf<PendingNoteCleanup?>(null) }
+
+    LaunchedEffect(quickAddTrigger) {
+        if (quickAddTrigger > 0) {
+            commitEdit(editing, stateManager)
+            editing = EditBuffer(id = null, title = "", text = "", categoryId = state.selectedCategoryId)
+        }
+    }
+
+    LaunchedEffect(editNoteTrigger) {
+        if (editNoteTrigger > 0 && editNoteId >= 0) {
+            state.notes.firstOrNull { it.note.id == editNoteId }?.let { nwc ->
+                commitEdit(editing, stateManager)
+                editing = EditBuffer(nwc.note.id, nwc.note.title.orEmpty(), nwc.note.text, nwc.note.categoryId)
+            }
+        }
+    }
 
     // While editing, back closes the inline editor instead of exiting; at rest, back re-arms the
     // standard double-press-to-exit flow. `enabled` keeps the two mutually exclusive regardless of

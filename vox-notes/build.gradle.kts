@@ -107,6 +107,11 @@ dependencies {
     // Scheduled Auto-Merge Categories (off/daily/weekly/monthly)
     implementation(libs.androidx.work.runtime.ktx)
 
+    // Home-screen widget (Jetpack Glance — current best practice over raw RemoteViews/AppWidgetProvider).
+    // GlanceTheme itself lives in the base :glance artifact (a transitive dep of glance-appwidget),
+    // already gets Material You dynamic color for free — no separate glance-material3 dependency needed.
+    implementation(libs.androidx.glance.appwidget)
+
     // --- Unit tests (JVM, mirror vox-commander) ---
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

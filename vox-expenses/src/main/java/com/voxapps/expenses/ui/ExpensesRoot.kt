@@ -16,6 +16,7 @@ import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.onboarding.ExpensesOnboardingFlow
 import com.voxapps.expenses.ui.settings.SettingsScreen
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 
 private sealed interface EditTarget {
@@ -31,8 +32,18 @@ private sealed interface EditTarget {
 @Composable
 fun ExpensesRoot(
     container: ExpensesContainer,
-    initialExpenseId: Long? = null,
-    onUnlockRequest: () -> Unit
+    onUnlockRequest: () -> Unit,
+    // Incremented (not a plain Boolean) by ExpensesActivity whenever a new "quick add" launch
+    // arrives — from onCreate's initial intent AND from onNewIntent if the activity was already
+    // running — so a second widget tap while the app is already open still re-triggers even though
+    // a Boolean would look "unchanged". 0 = no pending request (the default, normal launch).
+    quickAddTrigger: Int = 0,
+    // Same shape as quickAddTrigger, for ExpensesWidget's tap-a-record-to-edit rows (and the
+    // existing Calendar day-tap-through deep link, which shares the same EXTRA_EXPENSE_ID):
+    // editExpenseId is the target expense's id, editExpenseTrigger is the counter that forces
+    // re-firing even when the same expense is tapped twice in a row.
+    editExpenseId: Long = -1L,
+    editExpenseTrigger: Int = 0
 ) {
     val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
         initialValue = ExpensesSettings()
@@ -57,12 +68,22 @@ fun ExpensesRoot(
                 var showReports by remember { mutableStateOf(false) }
                 var editTarget by remember { mutableStateOf<EditTarget?>(null) }
 
-                // Automatically trigger editing flow if an expense ID was passed in the intent.
-                // Re-runs whenever initialExpenseId changes (though it usually only happens once on launch).
-                LaunchedEffect(initialExpenseId) {
-                    if (initialExpenseId != null) {
+                // Widget "Add" tap — set even while locked; once ExpensesUiState transitions to
+                // Unlocked the `when` below picks ExpenseEditScreen up automatically, no extra wiring.
+                LaunchedEffect(quickAddTrigger) {
+                    if (quickAddTrigger > 0) editTarget = EditTarget.New
+                }
+
+                // Widget row tap / Calendar day-tap-through deep link — waits for the first Unlocked
+                // state (immediately if already unlocked, or after the user authenticates if not)
+                // rather than a one-shot snapshot, so tapping while locked still opens it once unlocked.
+                LaunchedEffect(editExpenseTrigger) {
+                    if (editExpenseTrigger > 0 && editExpenseId >= 0) {
+                        container.expensesStateManager.uiState
+                            .filterIsInstance<ExpensesUiState.Unlocked>()
+                            .first()
                         val expense = container.expensesRepository.expensesWithDetails.first()
-                            .firstOrNull { it.expense.id == initialExpenseId }
+                            .firstOrNull { it.expense.id == editExpenseId }
                         if (expense != null) {
                             editTarget = EditTarget.Existing(expense)
                         }

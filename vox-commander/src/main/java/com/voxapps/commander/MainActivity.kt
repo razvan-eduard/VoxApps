@@ -44,6 +44,13 @@ class MainActivity : ComponentActivity() {
     private lateinit var voiceIntentLauncher: VoiceIntentLauncher
     private var pendingModelLanguage: String? = null
 
+    // Compose state hoisted here (not just read once in onCreate) so a widget tap while the
+    // Activity is already running (onNewIntent, no fresh onCreate/setContent — MainActivity is
+    // launchMode="singleTop") still reaches MainScreen's composition. Counter, not a plain
+    // Boolean, so a second widget tap still re-triggers even though a Boolean would look
+    // "unchanged". 0 = no pending request (the default, normal launch).
+    private val autoStartListeningTrigger = mutableIntStateOf(0)
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { _ ->
@@ -115,6 +122,7 @@ class MainActivity : ComponentActivity() {
 
         // Handle OAuth redirect if app was launched via deep link (cold start)
         handleOAuthRedirect(intent)
+        handleWidgetIntent(intent)
 
         // Google Voice Intent launcher (lifecycle-bound, must live in the Activity)
         voiceIntentLauncher = VoiceIntentLauncher(this) { result ->
@@ -309,7 +317,8 @@ class MainActivity : ComponentActivity() {
                             },
                             onImportOpenWakeWordModel = {
                                 customOpenWakeWordModelLauncher.launch(arrayOf("*/*"))
-                            }
+                            },
+                            autoStartListeningTrigger = autoStartListeningTrigger.intValue
                         )
                     }
                 }
@@ -327,6 +336,13 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleOAuthRedirect(intent)
+        handleWidgetIntent(intent)
+    }
+
+    private fun handleWidgetIntent(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_AUTO_START_LISTENING, false) == true) {
+            autoStartListeningTrigger.intValue++
+        }
     }
 
     /**
@@ -369,5 +385,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val MIME_TYPE_ALL = "*/*"
+        /** Set by SpeakWidget's tap action — immediately start listening once MainScreen is up. */
+        const val EXTRA_AUTO_START_LISTENING = "com.voxapps.commander.EXTRA_AUTO_START_LISTENING"
     }
 }

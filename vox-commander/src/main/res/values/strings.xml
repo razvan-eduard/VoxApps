@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">Vox Commander</string>
+    <string name="speak_widget_label">Vox Speak</string>
     <string name="processor_info_title">Voice Processors</string>
     <string name="processor_info_whisper">• Whisper.cpp: Local, offline, fast processing</string>
     <string name="processor_info_vosk">• Vosk: Legacy, offline, supports multiple languages</string>

@@ -10,3 +10,12 @@
 # this is Tink's well-known standard R8 warning, not a real missing dependency.
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn javax.annotation.**
+
+# Jetpack Glance (home-screen widget) renders content via a WorkManager background worker and
+# resolves click actions (ActionCallback subclasses) by reflectively loading their class name from
+# a RemoteViews PendingIntent extra — R8 can't see either path via static analysis. Without these
+# keeps the worker silently fails to start ("WM-WorkerWrapper: Could not create Input Merger
+# androidx.work.OverwritingInputMerger") and the widget never advances past its static placeholder.
+-keep class androidx.work.** { *; }
+-keep class androidx.glance.** { *; }
+-keep class com.voxapps.notes.ui.widget.** { *; }

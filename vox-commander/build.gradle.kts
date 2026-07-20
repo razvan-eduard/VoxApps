@@ -195,6 +195,10 @@ dependencies {
     implementation(libs.newpipe.extractor)
     // ProcessPhoenix — reliable app restart (handles process kill + relaunch)
     implementation("com.jakewharton:process-phoenix:3.0.0")
+    // Home-screen widget (Jetpack Glance — current best practice over raw RemoteViews/AppWidgetProvider).
+    // GlanceTheme itself lives in the base :glance artifact (a transitive dep of glance-appwidget),
+    // already gets Material You dynamic color for free — no separate glance-material3 dependency needed.
+    implementation(libs.androidx.glance.appwidget)
     // STT Engines (Whisper.cpp integration)
 
     testImplementation(libs.junit)

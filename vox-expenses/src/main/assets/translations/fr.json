@@ -1,6 +1,8 @@
 {
   "app_name": "Vox Expenses",
   "expenses_title": "Vox Dépenses",
+  "widget_app_name": "Dépenses",
+  "widget_add_button": "+ Dépense",
   "all_expenses": "Toutes les dépenses",
   "add_expense": "Ajouter une dépense",
   "edit_expense": "Modifier la dépense",
@@ -172,6 +174,7 @@
   "attach_photo_on_retry": "Joindre la photo lors de la nouvelle tentative",
   "attach_photo_on_retry_desc": "Envoyer aussi la photo lors d'une nouvelle tentative après un échec, pas seulement au premier essai",
   "today": "Aujourd'hui",
+  "widget_no_recent_expenses": "Aucune dépense récente",
   "debug_section": "Débogage",
   "add_test_data": "Ajouter des données de test",
   "auto_accept_notification_expenses_desc": "Ignore l'étape de vérification — une notification correctement analysée est enregistrée immédiatement comme une dépense normale (toujours modifiable ensuite) au lieu d'attendre votre approbation.",

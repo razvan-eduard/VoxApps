@@ -1,6 +1,8 @@
 {
   "app_name": "Vox Expenses",
   "expenses_title": "Vox Ausgaben",
+  "widget_app_name": "Ausgaben",
+  "widget_add_button": "+ Ausgabe",
   "all_expenses": "Alle Ausgaben",
   "add_expense": "Ausgabe hinzufügen",
   "edit_expense": "Ausgabe bearbeiten",
@@ -172,6 +174,7 @@
   "attach_photo_on_retry": "Foto bei Wiederholung anhängen",
   "attach_photo_on_retry_desc": "Sendet das Foto auch beim erneuten Versuch nach einem fehlgeschlagenen Scan, nicht nur beim ersten Versuch",
   "today": "Heute",
+  "widget_no_recent_expenses": "Keine kürzlichen Ausgaben",
   "debug_section": "Debug",
   "add_test_data": "Testdaten hinzufügen",
   "auto_accept_notification_expenses_desc": "Überspringt den Überprüfungsschritt — eine erfolgreich erkannte Benachrichtigung wird sofort als normale Ausgabe gespeichert (weiterhin bearbeitbar), anstatt auf deine Freigabe zu warten.",

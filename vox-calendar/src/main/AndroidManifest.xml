@@ -99,5 +99,19 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Home-screen widget (Jetpack Glance) — a snapshot of upcoming entries plus quick
+             Add/Scan actions. Purely local to this app, no shared/signature permission needed. -->
+        <receiver
+            android:name=".ui.widget.CalendarWidgetReceiver"
+            android:exported="false"
+            android:label="@string/calendar_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/calendar_widget_info" />
+        </receiver>
     </application>
 </manifest>

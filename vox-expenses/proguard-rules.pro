@@ -15,3 +15,12 @@
 # Prevent R8 from renaming or stripping receivers and services needed for cross-app IPC.
 -keep class com.voxapps.**.receiver.** { *; }
 -keep class com.voxapps.**.service.** { *; }
+
+# Jetpack Glance (home-screen widget) renders content via a WorkManager background worker and
+# resolves click actions (ActionCallback subclasses) by reflectively loading their class name from
+# a RemoteViews PendingIntent extra — R8 can't see either path via static analysis. Without these
+# keeps the worker silently fails to start ("WM-WorkerWrapper: Could not create Input Merger
+# androidx.work.OverwritingInputMerger") and the widget never advances past its static placeholder.
+-keep class androidx.work.** { *; }
+-keep class androidx.glance.** { *; }
+-keep class com.voxapps.expenses.ui.widget.** { *; }

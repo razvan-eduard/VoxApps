@@ -1,6 +1,8 @@
 {
   "app_name": "Vox Calendar",
   "calendar_title": "Calendrier",
+  "widget_app_name": "Calendrier",
+  "widget_add_button": "+ Événement",
   "onboarding_welcome_tagline": "Calendrier privé et chiffré avec des calques colorés, import/export ICS, et événements créés à la voix.",
   "onboarding_bullet1_title": "Créé à la voix via Vox Commander",
   "onboarding_bullet1_desc": "Dites « dentiste dans une semaine » et Vox Commander crée l'événement, en choisissant le bon calque de calendrier pour vous.",
@@ -106,5 +108,6 @@
   "locked_title": "Le calendrier est verrouillé",
   "unlock": "Déverrouiller",
   "unlock_title": "Déverrouiller Vox Calendar",
-  "unlock_subtitle": "Authentifiez-vous pour afficher votre calendrier"
+  "unlock_subtitle": "Authentifiez-vous pour afficher votre calendrier",
+  "widget_no_upcoming_entries": "Aucun événement à venir"
 }

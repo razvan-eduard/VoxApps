@@ -1,6 +1,7 @@
 package com.voxapps.expenses.di
 
 import android.content.Context
+import androidx.glance.appwidget.updateAll
 import com.voxapps.expenses.data.ExchangeRateRepository
 import com.voxapps.expenses.data.ExpensesDatabase
 import com.voxapps.expenses.data.ExpensesRepository
@@ -14,9 +15,11 @@ import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
 import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.SessionManager
+import com.voxapps.expenses.ui.widget.ExpensesWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -60,6 +63,14 @@ class ExpensesContainer(context: Context) {
     }
 
     init {
+        // Keeps ExpensesWidget's home-screen snapshot fresh — reacts to both lock-state transitions
+        // (uiState) and data changes (expensesWithDetails), since the widget reads both independently
+        // of any in-app filter (see ExpensesWidget.kt's provideGlance doc comment).
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
+            combine(expensesStateManager.uiState, expensesRepository.expensesWithDetails) { _, _ -> }
+                .collect { ExpensesWidget().updateAll(appContext) }
+        }
+
         // Warm the launcher-apps cache before any UI composes (mirrors vox-commander's AppContainer
         // loading AppRegistry from cache in its init block). Unlike AppRegistry, this scan is a single
         // queryIntentActivities call with no per-app probing, so it's fast enough to run synchronously

@@ -38,6 +38,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -160,7 +161,25 @@ fun EntryEditScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(languageManager.getString(if (existing != null) "edit_entry" else "new_entry")) },
+                title = {
+                    Box {
+                        if (title.isEmpty()) {
+                            Text(
+                                languageManager.getString("entry_title"),
+                                style = MaterialTheme.typography.titleLarge,
+                                color = LocalContentColor.current.copy(alpha = 0.5f)
+                            )
+                        }
+                        BasicTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.titleLarge.copy(color = LocalContentColor.current),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onDone) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = languageManager.getString("back"))
@@ -198,7 +217,6 @@ fun EntryEditScreen(
             item {
                 SectionCard {
                     SectionTitle(languageManager.getString("entry_details"))
-                    PaperField(label = languageManager.getString("entry_title"), value = title, onValueChange = { title = it })
                     PaperField(
                         label = languageManager.getString("entry_description"),
                         value = description,

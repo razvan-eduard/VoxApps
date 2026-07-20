@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple "scan frame" glyph (four corner brackets + a scan beam) — used by the home-screen
+     widget's Scan action, since Glance/RemoteViews can't render Compose Material icons directly
+     and needs a real drawable resource. Rendered tinted via ColorFilter.tint at composition time,
+     so the fillColor here is just a mask. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M4,4 H8 V6 H6 V8 H4 Z M16,4 H20 V8 H18 V6 H16 Z M4,20 V16 H6 V18 H8 V20 Z M20,20 H16 V18 H18 V16 H20 Z M3,11 H21 V13 H3 Z" />
+</vector>

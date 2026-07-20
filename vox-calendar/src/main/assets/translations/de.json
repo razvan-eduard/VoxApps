@@ -1,6 +1,8 @@
 {
   "app_name": "Vox Calendar",
   "calendar_title": "Kalender",
+  "widget_app_name": "Kalender",
+  "widget_add_button": "+ Termin",
   "onboarding_welcome_tagline": "Privater, verschlüsselter Kalender mit farbigen Ebenen, ICS-Import/-Export und per Sprache erstellten Terminen.",
   "onboarding_bullet1_title": "Per Sprache erstellt über Vox Commander",
   "onboarding_bullet1_desc": "Sag „Zahnarzt in einer Woche“ und Vox Commander erstellt den Termin und wählt die passende Kalenderebene für dich aus.",
@@ -106,5 +108,6 @@
   "locked_title": "Kalender ist gesperrt",
   "unlock": "Entsperren",
   "unlock_title": "Vox Calendar entsperren",
-  "unlock_subtitle": "Authentifiziere dich, um deinen Kalender anzuzeigen"
+  "unlock_subtitle": "Authentifiziere dich, um deinen Kalender anzuzeigen",
+  "widget_no_upcoming_entries": "Keine anstehenden Termine"
 }

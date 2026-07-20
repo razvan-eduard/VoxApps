@@ -1,6 +1,9 @@
 {
   "app_name": "Vox Notes",
   "notes_title": "Vox Notes",
+  "widget_app_name": "Notițe",
+  "widget_no_recent_notes": "Nicio notiță recentă",
+  "widget_add_button": "+ Notiță",
   "onboarding_welcome_tagline": "Notițe private, criptate, pe care le poți crea prin voce, manual sau scanând un document.",
   "onboarding_bullet1_title": "Create prin voce cu Vox Commander",
   "onboarding_bullet1_desc": "Spune ce vrei să salvezi — Commander trimite aici și o încadrează în categoria potrivită.",

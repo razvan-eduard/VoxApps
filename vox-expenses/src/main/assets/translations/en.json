@@ -1,6 +1,8 @@
 {
   "app_name": "Vox Expenses",
   "expenses_title": "Vox Expenses",
+  "widget_app_name": "Expenses",
+  "widget_add_button": "+ Expense",
   "onboarding_welcome_tagline": "Private, encrypted expense tracking — by voice, by scanning a receipt, or straight from a bank notification.",
   "onboarding_bullet1_title": "Three ways to capture an expense",
   "onboarding_bullet1_desc": "Speak it to Vox Commander, scan a receipt with Vox Vision, or let a bank notification suggest one for you to approve.",
@@ -207,6 +209,7 @@
   "attach_photo_on_retry": "Attach photo on retry",
   "attach_photo_on_retry_desc": "Also send the photo when retrying a failed scan's cleanup, not just on the first attempt",
   "today": "Today",
+  "widget_no_recent_expenses": "No recent expenses",
   "debug_section": "Debug",
   "add_test_data": "Add test data",
   "delete_all_expenses": "Delete all expenses",

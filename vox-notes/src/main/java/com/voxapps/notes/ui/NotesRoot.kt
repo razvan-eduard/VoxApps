@@ -22,7 +22,18 @@ import com.voxapps.notes.ui.settings.SettingsScreen
 @Composable
 fun NotesRoot(
     container: NotesContainer,
-    onUnlockRequest: () -> Unit
+    onUnlockRequest: () -> Unit,
+    // Incremented (not a plain Boolean) by NotesActivity whenever a new "quick add" launch arrives
+    // — from onCreate's initial intent AND from onNewIntent if the activity was already running —
+    // so a second widget tap while the app is already open still re-triggers even though a Boolean
+    // would look "unchanged". 0 = no pending request (the default, normal launch). Forwarded to
+    // NotesScreen, which owns the actual inline-editor state.
+    quickAddTrigger: Int = 0,
+    // Same shape as quickAddTrigger, for NotesWidget's tap-a-note-to-edit rows: editNoteId is the
+    // tapped note's id, editNoteTrigger is the counter that forces re-firing even when the same
+    // note is tapped twice in a row.
+    editNoteId: Long = -1L,
+    editNoteTrigger: Int = 0
 ) {
     val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
         initialValue = NotesSettings()
@@ -61,7 +72,10 @@ fun NotesRoot(
                                 stateManager = container.notesStateManager,
                                 calendarViewEnabled = settings.calendarViewEnabled,
                                 language = settings.language,
-                                onOpenSettings = { showSettings = true }
+                                onOpenSettings = { showSettings = true },
+                                quickAddTrigger = quickAddTrigger,
+                                editNoteId = editNoteId,
+                                editNoteTrigger = editNoteTrigger
                             )
                         }
                     }
