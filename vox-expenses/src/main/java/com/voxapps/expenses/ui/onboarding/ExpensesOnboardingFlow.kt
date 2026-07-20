@@ -36,9 +36,23 @@ fun ExpensesOnboardingFlow(languageManager: LanguageManager, stateManager: Expen
             ) == PackageManager.PERMISSION_GRANTED
         )
     }
-    val requestPermissionLauncher = rememberLauncherForActivityResult(
+    val requestNotifPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> notifGranted = granted }
+
+    // Coarse is sufficient (and what's actually requested) for a city-level location prefill —
+    // see ExpensesLocationHelper. Either counts as granted, matching how the app itself checks.
+    var locationGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val requestLocationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> locationGranted = granted }
 
     var showPermissions by remember { mutableStateOf(false) }
 
@@ -56,23 +70,32 @@ fun ExpensesOnboardingFlow(languageManager: LanguageManager, stateManager: Expen
                     languageManager.getString("onboarding_bullet3_desc")
             ),
             continueLabel = languageManager.getString("continue_button"),
-            onContinue = {
-                if (needsNotifPermission) showPermissions = true
-                else stateManager.setOnboardingCompleted(true)
-            }
+            onContinue = { showPermissions = true }
         )
     } else {
         OnboardingPermissionsScreen(
             title = languageManager.getString("onboarding_permissions_title"),
             intro = languageManager.getString("onboarding_permissions_intro"),
-            permissions = listOf(
-                OnboardingPermission(
-                    title = languageManager.getString("permission_notif_title"),
-                    description = languageManager.getString("permission_notif_desc"),
-                    granted = notifGranted,
-                    onRequest = { requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+            permissions = buildList {
+                if (needsNotifPermission) {
+                    add(
+                        OnboardingPermission(
+                            title = languageManager.getString("permission_notif_title"),
+                            description = languageManager.getString("permission_notif_desc"),
+                            granted = notifGranted,
+                            onRequest = { requestNotifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                        )
+                    )
+                }
+                add(
+                    OnboardingPermission(
+                        title = languageManager.getString("permission_location_title"),
+                        description = languageManager.getString("permission_location_desc"),
+                        granted = locationGranted,
+                        onRequest = { requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }
+                    )
                 )
-            ),
+            },
             grantedLabel = languageManager.getString("permission_status_granted"),
             requiredLabel = languageManager.getString("permission_status_required"),
             continueLabel = languageManager.getString("continue_button"),

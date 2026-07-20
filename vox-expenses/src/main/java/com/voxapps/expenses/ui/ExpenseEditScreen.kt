@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -86,6 +87,7 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
 import com.voxapps.expenses.domain.llm.MultimodalAttachmentResolver
+import com.voxapps.expenses.domain.location.ExpensesLocationHelper
 import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.datahygiene.DirtyField
@@ -151,6 +153,17 @@ fun ExpenseEditScreen(
     var vendor by remember { mutableStateOf(existing?.expense?.vendor ?: "") }
     var bank by remember { mutableStateOf(existing?.expense?.bank ?: "") }
     var location by remember { mutableStateOf(existing?.expense?.location ?: "") }
+    // New expense only (never overrides a real edit) — resolveCurrentCity's own first step is a
+    // synchronous cache check, so this resolves near-instantly when a fresh city is already cached,
+    // and only falls through to an actual GPS/network round-trip otherwise. Checks location.isBlank()
+    // right before writing so a user who typed their own location first (however unlikely, given
+    // this runs immediately on open) never gets overwritten.
+    if (existing == null) {
+        LaunchedEffect(Unit) {
+            val city = ExpensesLocationHelper.resolveCurrentCity(context)
+            if (city != null && location.isBlank()) location = city
+        }
+    }
     var comments by remember { mutableStateOf(existing?.expense?.comments ?: "") }
     var dateTime by remember { mutableStateOf(existing?.expense?.dateTime ?: System.currentTimeMillis()) }
     var categoryId by remember { mutableStateOf(existing?.expense?.categoryId) }

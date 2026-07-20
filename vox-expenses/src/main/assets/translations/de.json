@@ -217,6 +217,8 @@
   "onboarding_permissions_title": "Eine kurze Berechtigung",
   "onboarding_welcome_tagline": "Private, verschlüsselte Ausgabenverfolgung — per Sprache, durch Scannen einer Quittung oder direkt aus einer Bank-Benachrichtigung.",
   "permission_notif_desc": "Erforderlich für die Ausgabenlimit-Benachrichtigung und die Bestätigung „Ausgabe gespeichert“ bei per Sprache erfassten Ausgaben.",
+  "permission_location_title": "Standort",
+  "permission_location_desc": "Optional — lässt eine erfasste Ausgabe (per Sprache, Scan oder manuell) ihren Standort mit deiner aktuellen Stadt vorausfüllen. Du kannst dies jederzeit bearbeiten oder löschen.",
   "permission_notif_title": "Benachrichtigungen",
   "permission_status_granted": "Erteilt",
   "permission_status_required": "Erforderlich",

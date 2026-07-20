@@ -14,6 +14,8 @@
   "onboarding_permissions_intro": "Grant this so Vox Expenses can alert you about spending limits and confirm voice-captured expenses, even in the background. You can change it later in your device Settings.",
   "permission_notif_title": "Notifications",
   "permission_notif_desc": "Needed for the spending-limit alert and the \"expense saved\" confirmation toast for voice-captured expenses.",
+  "permission_location_title": "Location",
+  "permission_location_desc": "Optional — lets a captured expense (voice, scan, or manual) prefill its location with your current city. You can always edit or clear it.",
   "permission_status_granted": "Granted",
   "permission_status_required": "Required",
   "continue_button": "Continue",

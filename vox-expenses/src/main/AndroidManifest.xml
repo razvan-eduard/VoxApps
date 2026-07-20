@@ -2,9 +2,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Expenses live on-device; the only network use is Stage 5's exchange-rate lookup at
-         reporting time (never per-expense), a plain outbound HTTPS GET to exchangerate-api.com. -->
+    <!-- Expenses live on-device; the only network uses are the exchange-rate lookup at reporting
+         time (never per-expense), a plain outbound HTTPS GET to exchangerate-api.com, and reverse
+         geocoding a captured GPS fix into a city name (OpenStreetMap Nominatim — deliberately not
+         Android's on-device Geocoder, whose backend is Google-owned on most real devices; see
+         ExpensesLocationHelper's doc comment). -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Opt-in, requested in onboarding: lets a captured expense (voice, scan, or manual) prefill
+         its location field with the user's current city. Coarse is sufficient for a city-level
+         result and is what's actually requested at runtime; fine is declared too since some OEMs
+         only expose a last-known fix via the fine-location code path even when only city-level
+         precision is needed. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <!-- Without this, queryIntentActivities() (LauncherAppsCache's notification-source app scan)
          is silently restricted by Android 11+ package-visibility filtering to a small OS-chosen

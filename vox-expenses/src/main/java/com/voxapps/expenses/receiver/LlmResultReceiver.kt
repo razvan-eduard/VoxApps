@@ -11,6 +11,7 @@ import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.domain.llm.CategoryMergeMappingParser
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationResultParser
 import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
+import com.voxapps.expenses.domain.location.ExpensesLocationHelper
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
@@ -231,6 +232,13 @@ class LlmResultReceiver : BroadcastReceiver() {
                 grossAmount = it.grossAmount
             )
         }
+        // "location" comes from the LLM only for a scan (a receipt's printed address, if any) — for
+        // voice, parsed.location is always null since that prompt never asks for it, so this falls
+        // straight through to the GPS-derived city for both tasks uniformly. Deterministic
+        // (LLM-read) beats guessed (GPS-derived) whenever both are available, same priority as the
+        // notification-capture flow's bank-name handling.
+        val location = parsed.location?.let { FieldCleaner.clean(it, "location", "Expense") }
+            ?: ExpensesLocationHelper.resolveCurrentCity(appContext)
         // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard — this is the
         // only guard for fields not sourced from raw JSON.
         val newExpenseId = container.expensesRepository.addParsedExpense(
@@ -239,7 +247,7 @@ class LlmResultReceiver : BroadcastReceiver() {
             currencyCode = parsed.currency ?: settings.defaultCurrency,
             vendor = FieldCleaner.clean(parsed.vendor, "vendor", "Expense"),
             bank = FieldCleaner.clean(parsed.bank, "bank", "Expense"),
-            location = null,
+            location = location,
             comments = null,
             dateTime = mergeDateTime(parsed.date, parsed.time),
             spokenCategory = FieldCleaner.clean(parsed.category, "category", "Expense"),
@@ -306,6 +314,10 @@ class LlmResultReceiver : BroadcastReceiver() {
             currencyCode = parsed.currency ?: settings.defaultCurrency,
             vendor = parsed.vendor,
             bank = parsed.bank,
+            // Same priority as the first-attempt path: LLM-read beats GPS-derived. A retry can land
+            // long after the original scan, so this is *current* location, not the location at scan
+            // time — the best available substitute when nothing better was ever captured.
+            location = parsed.location ?: ExpensesLocationHelper.resolveCurrentCity(appContext),
             dateTime = mergeDateTime(parsed.date, parsed.time),
             comments = null,
             isStub = false

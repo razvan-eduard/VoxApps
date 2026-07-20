@@ -52,8 +52,11 @@ object ExpenseScanCleanupPromptBuilder {
 
             Extract it into a structured expense record: infer a short title, the vendor/store name,
             the bank if one is printed (e.g. the card-issuing or acquiring bank shown on a POS/card slip,
-            such as "ING BANK"), and the individual product line items (name, quantity — default 1 if not
-            stated, unit price) if clearly present. If a line item's net amount (fără TVA), VAT amount,
+            such as "ING BANK"), the store's printed location if one appears on the receipt (a city name
+            is enough — prefer just the city over a full street address; omit/null if no location is
+            printed anywhere, never guess or infer one from the vendor name alone), and the individual
+            product line items (name, quantity — default 1 if not stated, unit price) if clearly present.
+            If a line item's net amount (fără TVA), VAT amount,
             and gross/total amount are ALL separately printed for that line, also include them as
             "netAmount", "vatAmount", "grossAmount" on that item — but only when the document actually
             shows this breakdown explicitly; never compute or estimate these yourself, leave them null otherwise.
@@ -87,12 +90,12 @@ object ExpenseScanCleanupPromptBuilder {
             never invent a new spelling, translation, capitalization, or diacritics for it. 
             Only suggest a new category name if none of the existing ones fit. 
             
-            Respond in the "$languageCode" language. 
-            Return ONLY a JSON object of the shape {"title": "...", "totalAmount": 12.5, "currency": "...", 
-            "vendor": "...", "bank": "...", "category": "...", "date": "YYYY-MM-DD", "time": "HH:mm",
-            "items": [{"name": "...", "quantity": 1, "unitPrice": 12.5, "netAmount": null, 
-            "vatAmount": null, "grossAmount": null}]}, no prose, no markdown. Omit/null "bank" 
-            if none is printed — never guess one.
+            Respond in the "$languageCode" language.
+            Return ONLY a JSON object of the shape {"title": "...", "totalAmount": 12.5, "currency": "...",
+            "vendor": "...", "bank": "...", "location": "...", "category": "...", "date": "YYYY-MM-DD",
+            "time": "HH:mm", "items": [{"name": "...", "quantity": 1, "unitPrice": 12.5, "netAmount": null,
+            "vatAmount": null, "grossAmount": null}]}, no prose, no markdown. Omit/null "bank" and
+            "location" if not printed — never guess either.
 
             OCR text: $rawText
         """.trimIndent()

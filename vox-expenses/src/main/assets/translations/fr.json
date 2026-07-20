@@ -217,6 +217,8 @@
   "onboarding_permissions_title": "Une autorisation rapide",
   "onboarding_welcome_tagline": "Suivi de dépenses privé et chiffré — à la voix, en scannant un reçu, ou directement depuis une notification bancaire.",
   "permission_notif_desc": "Nécessaire pour l'alerte de limite de dépenses et la confirmation « dépense enregistrée » pour les dépenses capturées à la voix.",
+  "permission_location_title": "Localisation",
+  "permission_location_desc": "Optionnel — permet à une dépense capturée (voix, scan ou manuelle) de pré-remplir sa localisation avec votre ville actuelle. Vous pouvez toujours la modifier ou l'effacer.",
   "permission_notif_title": "Notifications",
   "permission_status_granted": "Accordée",
   "permission_status_required": "Requise",

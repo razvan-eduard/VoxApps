@@ -14,6 +14,8 @@
   "onboarding_permissions_intro": "Acordă-o ca Vox Expenses să te poată alerta despre limitele de cheltuieli și să confirme cheltuielile capturate prin voce, chiar și în fundal. O poți schimba oricând din Setările dispozitivului.",
   "permission_notif_title": "Notificări",
   "permission_notif_desc": "Necesară pentru alerta de limită de cheltuieli și pentru confirmarea \"cheltuială salvată\" la cele capturate prin voce.",
+  "permission_location_title": "Locație",
+  "permission_location_desc": "Opțional — permite ca o cheltuială înregistrată (prin voce, scanare sau manual) să își completeze locația cu orașul curent. Poți edita sau șterge oricând.",
   "permission_status_granted": "Acordată",
   "permission_status_required": "Necesară",
   "continue_button": "Continuă",
