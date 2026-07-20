@@ -253,6 +253,8 @@
   "permission_mic_desc": "Necesar pentru a înregistra și procesa comenzile vocale.",
   "permission_notif_title": "Notificări",
   "permission_notif_desc": "Necesar pentru a afișa starea serviciului în fundal.",
+  "permission_location_title": "Locație",
+  "permission_location_desc": "Necesar pentru ca furnizorul de căutare meteo să obțină prognoza locală.",
   "overlay_permission_title": "Overlay de Sistem",
   "battery_optimization_title": "Optimizarea bateriei",
   "battery_optimization_warning": "Unele telefoane opresc agresiv aplicațiile din fundal, ceea ce poate opri detectarea cuvântului de trezire până când sistemul o reconectează. Excluderea acestei aplicații de la optimizarea bateriei o face să ruleze mai fiabil în fundal.",

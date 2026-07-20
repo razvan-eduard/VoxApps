@@ -65,8 +65,8 @@ fun PermissionsSettingsTab(
 
         // 4. Location Permission (for weather search)
         PermissionItem(
-            title = "Location",
-            desc = "Required for weather search provider to get local forecast.",
+            title = languageManager.getString("permission_location_title") ?: "Location",
+            desc = languageManager.getString("permission_location_desc") ?: "Required for weather search provider to get local forecast.",
             isGranted = uiState.hasLocationPermission,
 
             onClick = onRequestLocation

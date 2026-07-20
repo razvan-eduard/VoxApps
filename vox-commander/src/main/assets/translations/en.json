@@ -261,6 +261,8 @@
   "permission_mic_desc": "Required to record and process your voice commands.",
   "permission_notif_title": "Notifications",
   "permission_notif_desc": "Required to show the background service status.",
+  "permission_location_title": "Location",
+  "permission_location_desc": "Required for the weather search provider to get your local forecast.",
   "overlay_permission_title": "System Overlay",
   "battery_optimization_title": "Battery optimization",
   "battery_optimization_warning": "Some phones kill background apps aggressively, which can silence wake-word detection until the OS reconnects it. Exempting this app from battery optimization keeps it running reliably in the background.",

@@ -231,6 +231,8 @@
   "permission_mic_desc": "Erforderlich für die Aufnahme und Verarbeitung von Sprachbefehlen.",
   "permission_notif_title": "Benachrichtigungen",
   "permission_notif_desc": "Erforderlich für die Anzeige des Dienststatus im Hintergrund.",
+  "permission_location_title": "Standort",
+  "permission_location_desc": "Erforderlich, damit der Wetter-Suchanbieter deine lokale Vorhersage abrufen kann.",
   "overlay_permission_title": "System-Overlay",
   "battery_optimization_title": "Akku-Optimierung",
   "battery_optimization_warning": "Manche Telefone beenden Hintergrund-Apps sehr aggressiv, wodurch die Weckwort-Erkennung stumm bleiben kann, bis das System sie wieder verbindet. Wenn diese App von der Akku-Optimierung ausgenommen wird, läuft sie zuverlässiger im Hintergrund.",

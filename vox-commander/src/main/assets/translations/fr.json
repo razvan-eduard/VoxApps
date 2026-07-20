@@ -231,6 +231,8 @@
   "permission_mic_desc": "Nécessaire pour enregistrer et traiter les commandes vocales.",
   "permission_notif_title": "Notifications",
   "permission_notif_desc": "Nécessaire pour afficher l'état du service en arrière-plan.",
+  "permission_location_title": "Localisation",
+  "permission_location_desc": "Nécessaire pour que le fournisseur de recherche météo obtienne vos prévisions locales.",
   "overlay_permission_title": "Superposition système",
   "battery_optimization_title": "Optimisation de la batterie",
   "battery_optimization_warning": "Certains téléphones ferment agressivement les applications en arrière-plan, ce qui peut couper la détection du mot de réveil jusqu'à ce que le système la reconnecte. Exempter cette application de l'optimisation de la batterie la fait fonctionner plus fiablement en arrière-plan.",
