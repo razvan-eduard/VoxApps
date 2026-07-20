@@ -109,6 +109,8 @@
   "retry_cleanup_no_saved_text": "Nu există text de scanare salvat pentru reîncercare — te rugăm să rescanezi bonul",
   "retrying_scan": "Se reîncearcă procesarea scanării…",
   "scan_receipt": "Scanează bon",
+  "commander_required_message": "Această funcție necesită ca Vox Commander să fie instalat și configurat",
+  "vision_required_message": "Această funcție necesită ca Vox Vision să fie instalat",
   "auto_merge_categories_button": "Combină categoriile automat",
   "auto_merge_categories_desc": "Cere AI-ului VoxCommander să găsească categorii aproape identice, pentru a le revizui",
   "auto_merge_categories_need_two": "Adaugă cel puțin 2 categorii pentru a folosi combinarea automată",

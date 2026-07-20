@@ -40,6 +40,9 @@ import com.voxapps.notes.NotesActivity
 import com.voxapps.notes.NotesApplication
 import com.voxapps.notes.R
 import com.voxapps.notes.data.NoteWithCategory
+import com.voxapps.design.showRequirementToast
+import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.ipc.VoxIpc
 import com.voxapps.notes.domain.llm.ScanRequestSender
 import com.voxapps.notes.domain.localization.LanguageManager
 import com.voxapps.notes.state.NotesUiState
@@ -81,6 +84,8 @@ class NotesWidget : GlanceAppWidget() {
             putExtra(NotesActivity.EXTRA_QUICK_ADD, true)
         }
         val locale = Locale.forLanguageTag(container.settingsRepository.getSnapshot().language)
+        val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
+            VoxAppsDiscovery.isCommanderInstalled(context)
 
         provideContent {
             GlanceTheme {
@@ -89,7 +94,8 @@ class NotesWidget : GlanceAppWidget() {
                     notes = recentNotes,
                     languageManager = container.languageManager,
                     addIntent = addIntent,
-                    locale = locale
+                    locale = locale,
+                    scanEnabled = scanEnabled
                 )
             }
         }
@@ -98,7 +104,15 @@ class NotesWidget : GlanceAppWidget() {
 
 class NotesWidgetScanAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        ScanRequestSender.send(context)
+        val container = (context.applicationContext as NotesApplication).container
+        val languageManager = container.languageManager
+        when {
+            !VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) ->
+                showRequirementToast(context, languageManager.getString("vision_required_message"))
+            !VoxAppsDiscovery.isCommanderInstalled(context) ->
+                showRequirementToast(context, languageManager.getString("commander_required_message"))
+            else -> ScanRequestSender.send(context)
+        }
     }
 }
 
@@ -108,7 +122,8 @@ private fun NotesWidgetContent(
     notes: List<NoteWithCategory>,
     languageManager: LanguageManager,
     addIntent: Intent,
-    locale: Locale
+    locale: Locale,
+    scanEnabled: Boolean
 ) {
     Column(
         modifier = GlanceModifier
@@ -128,7 +143,7 @@ private fun NotesWidgetContent(
             Image(
                 provider = ImageProvider(R.drawable.ic_scan),
                 contentDescription = languageManager.getString("scan_note"),
-                colorFilter = ColorFilter.tint(GlanceTheme.colors.primary),
+                colorFilter = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant),
                 modifier = GlanceModifier
                     .size(18.dp)
                     .clickable(actionRunCallback<NotesWidgetScanAction>())

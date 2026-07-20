@@ -22,9 +22,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.design.rememberRequirementGate
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.domain.llm.DuplicateGroup
@@ -50,6 +53,14 @@ fun NoteCleanupSettingsTab(
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val pendingGroups by stateManager.pendingNoteDuplicateGroups.collectAsStateWithLifecycle(initialValue = emptyList())
+    val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+    val findDuplicatesGate = rememberRequirementGate(
+        satisfied = commanderInstalled,
+        requiredMessage = languageManager.getString("commander_required_message")
+    ) {
+        stateManager.requestNoteDeduplication(context)
+        Toast.makeText(context, languageManager.getString("find_duplicate_notes_sent_toast"), Toast.LENGTH_SHORT).show()
+    }
 
     // Resolved against the *current* notes list — a group shrinks or disappears if a note it
     // referenced was edited/deleted since the suggestion arrived, rather than showing stale content.
@@ -84,11 +95,8 @@ fun NoteCleanupSettingsTab(
             )
         } else {
             Button(
-                onClick = {
-                    stateManager.requestNoteDeduplication(context)
-                    Toast.makeText(context, languageManager.getString("find_duplicate_notes_sent_toast"), Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth()
+                onClick = findDuplicatesGate.onClick,
+                modifier = Modifier.fillMaxWidth().alpha(findDuplicatesGate.alpha)
             ) {
                 Text(languageManager.getString("find_duplicate_notes_button"))
             }

@@ -12,6 +12,7 @@ import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParsePromptBuilder
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequest
 import com.voxapps.logging.Logger
@@ -100,6 +101,11 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val container = (applicationContext as ExpensesApplication).container
         val settings = container.settingsRepository.getSnapshot()
         if (sbn.packageName !in settings.paymentSourcePackages) return
+        // No UI on-screen to explain a silently-dropped broadcast to when this runs (fully automatic,
+        // no user tap) — just skip it. Deliberately not marked processed: if Commander gets installed
+        // later, this notification is still sitting in the shade and onListenerConnected's normal
+        // catch-up scan (or the manual "force check" button) will pick it up then.
+        if (!VoxAppsDiscovery.isCommanderInstalled(applicationContext)) return
         if (!force && processedKeys.isProcessed(sbn.key)) return
 
         val extras = sbn.notification.extras

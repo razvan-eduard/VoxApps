@@ -3,6 +3,7 @@ package com.voxapps.notes.domain.llm
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.notes.NotesApplication
 import kotlinx.coroutines.flow.first
 
@@ -18,6 +19,9 @@ class NoteDeduplicationWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        // See CategoryAutoMergeWorker's doc comment: no one is watching this run to explain a
+        // silently-dropped broadcast, so just skip it rather than send one.
+        if (!VoxAppsDiscovery.isCommanderInstalled(applicationContext)) return Result.success()
         val container = (applicationContext as NotesApplication).container
         val notes = container.notesRepository.notes.first().map { NoteSummary(it.id, it.title, it.text) }
         NoteDeduplicationRequestSender.send(applicationContext, notes)

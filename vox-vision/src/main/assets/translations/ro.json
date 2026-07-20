@@ -3,6 +3,7 @@
   "scan_stub_label": "Text recunoscut (editabil)",
   "sent_to_commander": "Trimis către VoxCommander pentru curățare…",
   "sent_to_target": "Trimis către %1$s",
+  "commander_required_message": "Această funcție necesită ca Vox Commander să fie instalat și configurat",
   "empty_text_error": "Introdu mai întâi un text",
   "scan_button": "Scanează",
   "send_button": "Trimite",

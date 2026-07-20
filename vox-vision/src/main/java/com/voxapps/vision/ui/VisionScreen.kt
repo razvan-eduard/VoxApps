@@ -47,6 +47,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.design.rememberRequirementGate
 import androidx.core.content.FileProvider
 import java.io.File
 import java.util.UUID
@@ -202,13 +204,14 @@ fun VisionScreen(
         }
     }
 
-    // Discovered once — installed apps don't change within a single Activity lifetime. Every
-    // scan target's OcrResultReceiver unconditionally forwards to Commander's LLM hook for cleanup
-    // (no direct-save fallback), so without Commander installed there's nothing a "send to X" tap
-    // could actually accomplish — hidden entirely rather than offered and silently failing.
-    val scanTargets = remember {
-        if (VoxAppsDiscovery.isCommanderInstalled(context)) ScanTargetDiscovery.discover(context) else emptyList()
-    }
+    // Discovered once — installed apps don't change within a single Activity lifetime. Every scan
+    // target's OcrResultReceiver unconditionally forwards to Commander's LLM hook for cleanup (no
+    // direct-save fallback), so without Commander installed there's nothing a "send to X" tap could
+    // actually accomplish — the targets themselves (Notes/Expenses/Calendar) are still discovered
+    // and shown, just dimmed with an explanatory toast on tap, rather than force-emptying the whole
+    // list with no explanation for why every button vanished.
+    val scanTargets = remember { ScanTargetDiscovery.discover(context) }
+    val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
 
     // Shared by the manual final button (pendingRequest case) and auto-capture's hands-free
     // completion below. Standalone mode has no single "submit" action anymore — the user picks a
@@ -405,35 +408,39 @@ fun VisionScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     scanTargets.forEach { target ->
-                        Button(
-                            onClick = {
-                                captureAndRecognize(
-                                    context, scope, cameraController, container,
-                                    onRecognizing = { isRecognizing = it },
-                                    onResult = { text, imageUri, aiImageUri ->
-                                        val trimmed = text.trim()
-                                        OcrResultSender.send(
-                                            context, target.packageName,
-                                            VoxOcrResult(
-                                                task = target.task,
-                                                status = VoxOcrResult.STATUS_SUCCESS,
-                                                rawText = trimmed.takeIf { it.isNotEmpty() } ?: "Image scan",
-                                                imageUri = imageUri,
-                                                aiImageUri = aiImageUri
-                                            )
+                        val targetGate = rememberRequirementGate(
+                            satisfied = commanderInstalled,
+                            requiredMessage = languageManager.getString("commander_required_message")
+                        ) {
+                            captureAndRecognize(
+                                context, scope, cameraController, container,
+                                onRecognizing = { isRecognizing = it },
+                                onResult = { text, imageUri, aiImageUri ->
+                                    val trimmed = text.trim()
+                                    OcrResultSender.send(
+                                        context, target.packageName,
+                                        VoxOcrResult(
+                                            task = target.task,
+                                            status = VoxOcrResult.STATUS_SUCCESS,
+                                            rawText = trimmed.takeIf { it.isNotEmpty() } ?: "Image scan",
+                                            imageUri = imageUri,
+                                            aiImageUri = aiImageUri
                                         )
-                                        rawText = trimmed
-                                        lastScannedUri = imageUri
-                                        Toast.makeText(
-                                            context,
-                                            String.format(languageManager.getString("sent_to_target"), target.label),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                )
-                            },
+                                    )
+                                    rawText = trimmed
+                                    lastScannedUri = imageUri
+                                    Toast.makeText(
+                                        context,
+                                        String.format(languageManager.getString("sent_to_target"), target.label),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            )
+                        }
+                        Button(
+                            onClick = targetGate.onClick,
                             enabled = !isRecognizing,
-                            modifier = Modifier.weight(1f) // Equal width for both buttons
+                            modifier = Modifier.weight(1f).alpha(targetGate.alpha) // Equal width for both buttons
                         ) {
                             if (isRecognizing) {
                                 CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)

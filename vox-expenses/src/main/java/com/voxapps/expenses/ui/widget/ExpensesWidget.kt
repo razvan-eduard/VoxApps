@@ -45,6 +45,8 @@ import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.CategoryColors
 import com.voxapps.expenses.ui.formatAmount
+import com.voxapps.design.showRequirementToast
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
 import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.flow.first
@@ -84,6 +86,9 @@ class ExpensesWidget : GlanceAppWidget() {
         }
         val locale = Locale.forLanguageTag(container.settingsRepository.getSnapshot().language)
 
+        val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
+            VoxAppsDiscovery.isCommanderInstalled(context)
+
         provideContent {
             GlanceTheme {
                 ExpensesWidgetContent(
@@ -91,7 +96,8 @@ class ExpensesWidget : GlanceAppWidget() {
                     expenses = recentExpenses,
                     languageManager = container.languageManager,
                     addIntent = addIntent,
-                    locale = locale
+                    locale = locale,
+                    scanEnabled = scanEnabled
                 )
             }
         }
@@ -100,7 +106,15 @@ class ExpensesWidget : GlanceAppWidget() {
 
 class ExpensesWidgetScanAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        ExpenseScanRequestSender.send(context)
+        val container = (context.applicationContext as ExpensesApplication).container
+        val languageManager = container.languageManager
+        when {
+            !VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) ->
+                showRequirementToast(context, languageManager.getString("vision_required_message"))
+            !VoxAppsDiscovery.isCommanderInstalled(context) ->
+                showRequirementToast(context, languageManager.getString("commander_required_message"))
+            else -> ExpenseScanRequestSender.send(context)
+        }
     }
 }
 
@@ -110,7 +124,8 @@ private fun ExpensesWidgetContent(
     expenses: List<ExpenseWithDetails>,
     languageManager: LanguageManager,
     addIntent: Intent,
-    locale: Locale
+    locale: Locale,
+    scanEnabled: Boolean
 ) {
     Column(
         modifier = GlanceModifier
@@ -130,7 +145,10 @@ private fun ExpensesWidgetContent(
             Image(
                 provider = ImageProvider(R.drawable.ic_scan),
                 contentDescription = languageManager.getString("scan_receipt"),
-                colorFilter = ColorFilter.tint(GlanceTheme.colors.primary),
+                // Dimmed (not hidden) when Vision/Commander aren't installed — tapping it still
+                // works, ExpensesWidgetScanAction shows an explanatory toast instead of launching
+                // Vision; Glance has no alpha modifier, so a muted tint stands in for "disabled".
+                colorFilter = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant),
                 modifier = GlanceModifier
                     .size(18.dp)
                     .clickable(actionRunCallback<ExpensesWidgetScanAction>())

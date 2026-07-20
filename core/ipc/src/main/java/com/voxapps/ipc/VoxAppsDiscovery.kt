@@ -38,14 +38,27 @@ object VoxAppsDiscovery {
 
     /**
      * Every satellite's OCR-scan-cleanup and voice-parse flows (Vision's "send to X", Notes'/
-     * Expenses' "Scan" entry points) unconditionally forward through Commander's generic LLM hook —
-     * there's no direct-save fallback. Callers use this to hide those entry points entirely rather
-     * than let the user hit a silent dead end (the broadcast to a missing package just goes nowhere,
-     * no crash, no error).
+     * Expenses'/Calendar's "Scan" entry points, category auto-merge, dedupe/cleanup) unconditionally
+     * forward through Commander's generic LLM hook — there's no direct-save fallback. The broadcast to
+     * a missing package just goes nowhere (no crash, no error), so callers gate on this rather than
+     * let the user hit that silent dead end — either by hiding the entry point, or (the newer,
+     * preferred pattern — see `:core:design`'s `rememberCommanderGate`) keeping it visible but dimmed,
+     * with an explanatory message on tap.
      */
-    fun isCommanderInstalled(context: Context): Boolean = try {
-        context.packageManager.getApplicationInfo(COMMANDER_PACKAGE, 0)
-        true
+    fun isCommanderInstalled(context: Context): Boolean = isAppInstalled(context, COMMANDER_PACKAGE)
+
+    /** General "is this package installed *and enabled*" check — [isCommanderInstalled] is the
+     *  common case, but a scan flow also needs to know whether [VoxIpc.VISION_PACKAGE] itself is
+     *  present before even attempting to launch it (a missing target for an explicit-component
+     *  `startActivity` throws `ActivityNotFoundException`, a crash rather than the silent-drop
+     *  failure mode a missing Commander produces). Checks [ApplicationInfo.enabled] on top of the
+     *  installed check, not just presence — a user can disable an app from Android's own App Info
+     *  screen (or `adb shell pm disable-user`) without uninstalling it, and `getApplicationInfo`
+     *  happily returns that disabled app's info without throwing; a disabled app is exactly as
+     *  unreachable for a broadcast/launch as an absent one, so treating it as "not installed" here
+     *  is what every caller of this function actually needs. */
+    fun isAppInstalled(context: Context, packageName: String): Boolean = try {
+        context.packageManager.getApplicationInfo(packageName, 0).enabled
     } catch (e: PackageManager.NameNotFoundException) {
         false
     }

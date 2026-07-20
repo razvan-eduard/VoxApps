@@ -8,6 +8,8 @@
   "all_notes": "Alle Notizen",
   "add_note": "Notiz hinzufügen",
   "scan_note": "Notiz scannen",
+  "commander_required_message": "Diese Funktion erfordert, dass Vox Commander installiert und konfiguriert ist",
+  "vision_required_message": "Diese Funktion erfordert, dass Vox Vision installiert ist",
   "edit_note": "Notiz bearbeiten",
   "add_category": "Kategorie hinzufügen",
   "remove_category": "Kategorie entfernen",

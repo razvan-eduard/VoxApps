@@ -3,6 +3,7 @@ package com.voxapps.notes.domain.llm
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.notes.NotesApplication
 import kotlinx.coroutines.flow.first
 
@@ -18,6 +19,11 @@ class CategoryAutoMergeWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        // No one is watching this run to explain a silently-dropped broadcast to (unlike the manual
+        // button, which has rememberRequirementGate for that) — just skip it. Not a failure/retry
+        // case: nothing about retrying fixes a missing Commander, and the next scheduled run will
+        // check again anyway.
+        if (!VoxAppsDiscovery.isCommanderInstalled(applicationContext)) return Result.success()
         val container = (applicationContext as NotesApplication).container
         val categoryNames = container.notesRepository.categories.first().map { it.name }
         val language = container.settingsRepository.getSnapshot().language

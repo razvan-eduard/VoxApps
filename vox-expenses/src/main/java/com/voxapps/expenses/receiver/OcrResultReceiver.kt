@@ -9,6 +9,7 @@ import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.MultimodalAttachmentResolver
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.logging.Logger
@@ -45,8 +46,17 @@ class OcrResultReceiver : BroadcastReceiver() {
             return
         }
 
-        Logger.d(TAG, "Scan result received, forwarding to Commander for cleanup")
         val container = (context.applicationContext as ExpensesApplication).container
+        // Rare edge case (the Scan entry point itself already checks this before ever launching
+        // Vision) — Commander could still get uninstalled mid-scan. Nothing downstream can do
+        // anything without it, so skip straight to telling the user why instead of staging a photo
+        // that would never actually become an expense.
+        if (!VoxAppsDiscovery.isCommanderInstalled(context)) {
+            Toast.makeText(context, container.languageManager.getString("commander_required_message"), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Logger.d(TAG, "Scan result received, forwarding to Commander for cleanup")
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {

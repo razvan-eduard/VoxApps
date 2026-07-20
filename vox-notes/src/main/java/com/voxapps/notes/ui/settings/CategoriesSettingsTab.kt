@@ -31,9 +31,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.rememberRequirementGate
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.notes.data.Category
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.domain.llm.SupportedLanguages
@@ -154,14 +157,19 @@ fun CategoriesSettingsTab(
             }
         }
 
+        val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+        val autoMergeGate = rememberRequirementGate(
+            satisfied = commanderInstalled,
+            requiredMessage = languageManager.getString("commander_required_message")
+        ) {
+            val names = categories.filter { it.id in selectedIds }.map { it.name }
+            stateManager.requestCategoryAutoMerge(context, names)
+            Toast.makeText(context, languageManager.getString("auto_merge_categories_sent_toast"), Toast.LENGTH_SHORT).show()
+        }
         Button(
-            onClick = {
-                val names = categories.filter { it.id in selectedIds }.map { it.name }
-                stateManager.requestCategoryAutoMerge(context, names)
-                Toast.makeText(context, languageManager.getString("auto_merge_categories_sent_toast"), Toast.LENGTH_SHORT).show()
-            },
+            onClick = autoMergeGate.onClick,
             enabled = selectedIds.size >= 2,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().alpha(autoMergeGate.alpha)
         ) {
             Text(languageManager.getString("auto_merge_categories_button"))
         }

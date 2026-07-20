@@ -3,6 +3,7 @@
   "scan_stub_label": "Recognized text (editable)",
   "sent_to_commander": "Sent to VoxCommander for cleanup…",
   "sent_to_target": "Sent to %1$s",
+  "commander_required_message": "This feature requires Vox Commander to be installed and configured",
   "empty_text_error": "Enter some text first",
   "scan_button": "Scan",
   "send_button": "Send",

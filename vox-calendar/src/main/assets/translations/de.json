@@ -102,6 +102,8 @@
   "debug_logging_desc": "Ausführliche Protokolle zur Fehlersuche — standardmäßig deaktiviert",
   "scan_calendar_entry": "Termin scannen",
   "scan_action": "Scannen",
+  "commander_required_message": "Diese Funktion erfordert, dass Vox Commander installiert und konfiguriert ist",
+  "vision_required_message": "Diese Funktion erfordert, dass Vox Vision installiert ist",
   "scan_save_failed": "Konnte nicht gespeichert werden — bitte erneut versuchen",
   "attach_photo_on_scan": "Foto beim Scannen anhängen",
   "attach_photo_on_scan_desc": "Sendet das gescannte Foto zusammen mit dem erkannten Text an die KI (erfordert auch Visions Einstellung „Foto an KI senden“ und eine multimodale Engine)",

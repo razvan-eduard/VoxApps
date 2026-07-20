@@ -47,6 +47,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -62,10 +63,12 @@ import com.voxapps.datahygiene.RecordSource
 import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.design.rememberRequirementGate
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NoteSanitizer
 import com.voxapps.notes.data.NoteWithCategory
 import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.ipc.VoxIpc
 import com.voxapps.notes.domain.llm.ScanRequestSender
 import com.voxapps.notes.domain.localization.LanguageManager
 import com.voxapps.notes.state.NotesStateManager
@@ -149,14 +152,20 @@ fun NotesScreen(
                     },
                     actions = {
                         val context = LocalContext.current
-                        // Scan always forwards through Commander's LLM hook for cleanup (no
-                        // direct-save fallback) — hidden entirely rather than offered and silently
-                        // failing if Commander isn't installed.
+                        // Scan needs Vision installed to even launch, and Commander installed for
+                        // the OCR-cleanup step that runs after — stays visible but dimmed, with an
+                        // explanatory toast on tap naming whichever one is missing, rather than
+                        // silently failing (or crashing, for the Vision case).
+                        val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
                         val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
-                        if (commanderInstalled) {
-                            IconButton(onClick = { ScanRequestSender.send(context) }) {
-                                Icon(Icons.Filled.DocumentScanner, contentDescription = languageManager.getString("scan_note"))
-                            }
+                        val scanGate = rememberRequirementGate(
+                            satisfied = visionInstalled && commanderInstalled,
+                            requiredMessage = languageManager.getString(
+                                if (!visionInstalled) "vision_required_message" else "commander_required_message"
+                            )
+                        ) { ScanRequestSender.send(context) }
+                        IconButton(onClick = scanGate.onClick, modifier = Modifier.alpha(scanGate.alpha)) {
+                            Icon(Icons.Filled.DocumentScanner, contentDescription = languageManager.getString("scan_note"))
                         }
                         IconButton(onClick = { showDateSheet = true }) {
                             Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("sort_and_filter"))

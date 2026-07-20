@@ -75,6 +75,8 @@
   "retry_cleanup_no_saved_text": "Kein gespeicherter Scan-Text zum Wiederholen — bitte Beleg erneut scannen",
   "retrying_scan": "Scan-Verarbeitung wird wiederholt…",
   "scan_receipt": "Beleg scannen",
+  "commander_required_message": "Diese Funktion erfordert, dass Vox Commander installiert und konfiguriert ist",
+  "vision_required_message": "Diese Funktion erfordert, dass Vox Vision installiert ist",
   "auto_merge_categories_button": "Kategorien automatisch zusammenführen",
   "auto_merge_categories_desc": "VoxCommanders KI bitten, fast identische Kategorien zur Überprüfung zu finden",
   "auto_merge_categories_need_two": "Füge mindestens 2 Kategorien hinzu, um dies zu nutzen",

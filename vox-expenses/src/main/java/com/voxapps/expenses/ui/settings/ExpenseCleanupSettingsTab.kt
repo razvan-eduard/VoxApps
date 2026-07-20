@@ -22,15 +22,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.design.rememberRequirementGate
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
+import com.voxapps.ipc.VoxAppsDiscovery
 
 private data class ResolvedGroup(val group: DuplicateGroup, val keep: Expense, val duplicates: List<Expense>)
 
@@ -51,6 +54,14 @@ fun ExpenseCleanupSettingsTab(
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val pendingGroups by stateManager.pendingExpenseDuplicateGroups.collectAsStateWithLifecycle(initialValue = emptyList())
+    val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+    val findDuplicatesGate = rememberRequirementGate(
+        satisfied = commanderInstalled,
+        requiredMessage = languageManager.getString("commander_required_message")
+    ) {
+        stateManager.requestExpenseDeduplication(context)
+        Toast.makeText(context, languageManager.getString("find_duplicate_expenses_sent_toast"), Toast.LENGTH_SHORT).show()
+    }
 
     // Resolved against the *current* expenses — a group shrinks or disappears if an expense it
     // referenced was edited/deleted since the suggestion arrived, rather than showing stale content.
@@ -85,11 +96,8 @@ fun ExpenseCleanupSettingsTab(
             )
         } else {
             Button(
-                onClick = {
-                    stateManager.requestExpenseDeduplication(context)
-                    Toast.makeText(context, languageManager.getString("find_duplicate_expenses_sent_toast"), Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth()
+                onClick = findDuplicatesGate.onClick,
+                modifier = Modifier.fillMaxWidth().alpha(findDuplicatesGate.alpha)
             ) {
                 Text(languageManager.getString("find_duplicate_expenses_button"))
             }

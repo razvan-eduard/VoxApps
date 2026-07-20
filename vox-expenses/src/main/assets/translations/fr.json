@@ -75,6 +75,8 @@
   "retry_cleanup_no_saved_text": "Aucun texte de scan enregistré à réessayer — veuillez rescanner le reçu",
   "retrying_scan": "Nouvelle tentative de traitement du scan…",
   "scan_receipt": "Scanner un reçu",
+  "commander_required_message": "Cette fonctionnalité nécessite que Vox Commander soit installé et configuré",
+  "vision_required_message": "Cette fonctionnalité nécessite que Vox Vision soit installé",
   "auto_merge_categories_button": "Fusionner les catégories automatiquement",
   "auto_merge_categories_desc": "Demander à l'IA de VoxCommander de trouver des catégories quasi identiques à examiner",
   "auto_merge_categories_need_two": "Ajoutez au moins 2 catégories pour utiliser ceci",

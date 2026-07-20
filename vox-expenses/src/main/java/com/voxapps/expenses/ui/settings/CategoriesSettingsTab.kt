@@ -41,12 +41,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.draw.alpha
+import com.voxapps.design.rememberRequirementGate
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.CategoryPalette
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.CategoryColors
 import com.voxapps.expenses.ui.LocalLanguageManager
+import com.voxapps.ipc.VoxAppsDiscovery
 
 /**
  * Category CRUD, the Auto-Merge Categories trigger + schedule, and — unlike vox-notes, where the
@@ -67,6 +70,14 @@ fun CategoriesSettingsTab(
     var addingNew by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
     var pendingDeleteCategory by remember { mutableStateOf<Category?>(null) }
+    val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+    val autoMergeGate = rememberRequirementGate(
+        satisfied = commanderInstalled,
+        requiredMessage = languageManager.getString("commander_required_message")
+    ) {
+        stateManager.requestCategoryAutoMerge(context, categories.map { it.name })
+        Toast.makeText(context, languageManager.getString("auto_merge_categories_sent_toast"), Toast.LENGTH_SHORT).show()
+    }
 
     val pendingMapping by stateManager.pendingCategoryMergeMapping.collectAsStateWithLifecycle(initialValue = emptyMap())
     // Resolved against the *current* categories — an entry drops out if either name no longer exists
@@ -147,11 +158,8 @@ fun CategoriesSettingsTab(
             )
         } else {
             Button(
-                onClick = {
-                    stateManager.requestCategoryAutoMerge(context, categories.map { it.name })
-                    Toast.makeText(context, languageManager.getString("auto_merge_categories_sent_toast"), Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth()
+                onClick = autoMergeGate.onClick,
+                modifier = Modifier.fillMaxWidth().alpha(autoMergeGate.alpha)
             ) {
                 Text(languageManager.getString("auto_merge_categories_button"))
             }

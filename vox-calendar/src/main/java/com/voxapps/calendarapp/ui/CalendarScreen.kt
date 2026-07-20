@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -47,7 +48,9 @@ import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.state.CalendarViewMode
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.design.rememberRequirementGate
 import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.ipc.VoxIpc
 import java.text.DateFormat
 import java.time.Instant
 import java.time.ZoneId
@@ -88,35 +91,43 @@ fun CalendarScreen(
                 },
                 actions = {
                     val context = LocalContext.current
-                    // Scan always forwards through Commander's LLM hook for cleanup (no direct-save
-                    // fallback) — hidden entirely rather than offered and silently failing if
-                    // Commander isn't installed. Mirrors vox-notes'/vox-expenses' identical gate.
+                    // Scan needs Vision installed to even launch, and Commander installed for the
+                    // OCR-cleanup step that runs after — stays visible but dimmed, with an
+                    // explanatory toast on tap naming whichever one is missing, rather than silently
+                    // failing (or crashing, for the Vision case). Mirrors vox-notes'/vox-expenses'
+                    // identical gate.
+                    val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
                     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
-                    if (commanderInstalled) {
-                        Surface(
-                            onClick = { CalendarScanRequestSender.send(context) },
-                            shape = RoundedCornerShape(percent = 50),
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 4.dp)
-                                .semantics { contentDescription = languageManager.getString("scan_calendar_entry") }
+                    val scanGate = rememberRequirementGate(
+                        satisfied = visionInstalled && commanderInstalled,
+                        requiredMessage = languageManager.getString(
+                            if (!visionInstalled) "vision_required_message" else "commander_required_message"
+                        )
+                    ) { CalendarScanRequestSender.send(context) }
+                    Surface(
+                        onClick = scanGate.onClick,
+                        shape = RoundedCornerShape(percent = 50),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(end = 4.dp)
+                            .alpha(scanGate.alpha)
+                            .semantics { contentDescription = languageManager.getString("scan_calendar_entry") }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    Icons.Filled.DocumentScanner,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    languageManager.getString("scan_action"),
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
+                            Icon(
+                                Icons.Filled.DocumentScanner,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                languageManager.getString("scan_action"),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                style = MaterialTheme.typography.labelLarge
+                            )
                         }
                     }
                     IconButton(onClick = onOpenSettings) {

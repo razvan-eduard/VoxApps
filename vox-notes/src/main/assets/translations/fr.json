@@ -8,6 +8,8 @@
   "all_notes": "Toutes les notes",
   "add_note": "Ajouter une note",
   "scan_note": "Scanner une note",
+  "commander_required_message": "Cette fonctionnalité nécessite que Vox Commander soit installé et configuré",
+  "vision_required_message": "Cette fonctionnalité nécessite que Vox Vision soit installé",
   "edit_note": "Modifier la note",
   "add_category": "Ajouter une catégorie",
   "remove_category": "Supprimer la catégorie",

@@ -33,16 +33,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendar.CalendarView
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.design.rememberRequirementGate
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.state.SortMode
 import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.ipc.VoxIpc
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,9 +62,18 @@ fun ExpensesScreen(
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     var showFilterSheet by remember { mutableStateOf(false) }
-    // Scan always forwards through Commander's LLM hook for cleanup (no direct-save fallback) —
-    // hidden entirely rather than offered and silently failing if Commander isn't installed.
+    // Scan needs Vision installed to even launch, and Commander installed for the OCR-cleanup step
+    // that runs after — stays visible but dimmed, with an explanatory toast on tap naming whichever
+    // one is actually missing, rather than silently failing (or crashing, for the Vision case) if
+    // either isn't installed.
+    val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+    val scanGate = rememberRequirementGate(
+        satisfied = visionInstalled && commanderInstalled,
+        requiredMessage = languageManager.getString(
+            if (!visionInstalled) "vision_required_message" else "commander_required_message"
+        )
+    ) { ExpenseScanRequestSender.send(context) }
 
     // Amount-sorted order isn't chronological, so it doesn't fit a per-day calendar layout — a
     // derived rule, no extra persisted state: clearing the sort (the chip's X) automatically
@@ -89,14 +101,12 @@ fun ExpensesScreen(
         },
         floatingActionButton = {
             Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                if (commanderInstalled) {
-                    ExtendedFloatingActionButton(
-                        onClick = { ExpenseScanRequestSender.send(context) },
-                        icon = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
-                        text = { Text(languageManager.getString("scan_receipt")) },
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                }
+                ExtendedFloatingActionButton(
+                    onClick = scanGate.onClick,
+                    icon = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
+                    text = { Text(languageManager.getString("scan_receipt")) },
+                    modifier = Modifier.padding(bottom = 12.dp).alpha(scanGate.alpha)
+                )
                 FloatingActionButton(onClick = onAddExpense) {
                     Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_expense"))
                 }
