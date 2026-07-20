@@ -24,6 +24,8 @@
 18. [Dependency Graph](#18-dependency-graph)
 19. [Vox Apps Ecosystem (Cross-App Contract)](#19-vox-apps-ecosystem-cross-app-contract)
 20. [Shared UI Modules (`:core:calendar`, `:core:apppicker`)](#20-shared-ui-modules-corecalendar-coreapppicker)
+21. [Data Hygiene (`:core:datahygiene`)](#21-data-hygiene-coredatahygiene)
+22. [Project Structure](#22-project-structure)
 
 ---
 
@@ -1741,6 +1743,61 @@ or `.`) highlighted in red via a Compose `AnnotatedString`/`SpanStyle`, rather t
 
 See the [Satellite App Guide §6.6](SATELLITE_APP_GUIDE.md#66-data-hygiene-cleaning-records-before-insert)
 for the wiring pattern with code examples.
+
+---
+
+## 22. Project Structure
+
+```
+vox-commander/src/main/java/com/voxapps/commander/
+├── MainActivity.kt              # Entry point, permission handling
+├── VoxApplication.kt            # Application class, memory management
+├── data/
+│   ├── preferences/             # AppSettings, SettingsRepository, DataStore
+│   ├── remote/                  # RemoteModelRegistry (models.json, engine defs)
+│   └── local/                   # Room database, DAOs
+├── di/
+│   └── AppContainer.kt          # Dependency injection, startup wiring
+├── domain/
+│   ├── engine/                  # STT/TTS engines (Whisper, Vosk, Piper, Android TTS)
+│   ├── intent/
+│   │   ├── IntentDecisionMap.kt # Triple AI Brain orchestrator
+│   │   ├── interpreter/         # OpenAI, Gemini Nano, Local LLM, FastMap
+│   │   ├── model/NluIntent.kt   # Universal intent data class
+│   │   ├── taxonomy/            # IntentTaxonomy (domains, actions)
+│   │   ├── registry/AppRegistry # App scanning, URI templates
+│   │   ├── registry/ApiIntegrationRegistry # Declarative per-service API defs (api_integrations.json)
+│   │   ├── resolver/AppResolver # App resolution with aliases + defaults
+│   │   ├── router/IntentRouter  # Central dispatcher
+│   │   └── handler/             # Audio, Navigation, System, Messaging, Search
+│   ├── voice/                   # VoiceManager, WakeWordCalibrator, TtsManager
+│   ├── search/                  # Search providers (web, news, weather, knowledge)
+│   └── localization/            # LanguageManager (i18n)
+├── service/
+│   ├── WakeWordService.kt       # Foreground service, always-on listening
+│   ├── WakeWordEngine.kt        # Vosk wake word with template + voice print
+│   ├── SpotifyRemoteManager.kt  # Spotify App Remote SDK wrapper (out-of-band, separate from below)
+│   ├── OAuth2Manager.kt         # Generic per-service OAuth2 (PKCE/auth-code) client
+│   ├── DeclarativeApiExecutor.kt # Generic declarative-REST executor (api_call/api_sequence/deep_link)
+│   └── MediaSessionListenerService.kt
+├── state/
+│   ├── AppState.kt              # Global UI state
+│   └── AppStateManager.kt       # State flow management
+├── ui/
+│   ├── components/              # Reusable Compose components
+│   ├── screens/
+│   │   ├── main/                # Listening screen, voice overlay
+│   │   ├── settings/            # 7 settings tabs
+│   │   ├── splash/               # Splash screen
+│   │   └── rules/               # FastMap rule editor
+│   └── theme/                   # Material 3 theme
+└── utils/                       # Logger, NetworkMonitor, IntentUtils, etc.
+```
+
+Satellite apps (`vox-notes`, `vox-vision`, `vox-expenses`, `vox-calendar`, `vox-hub`) each follow the
+same rough shape (`data/`, `di/`, `domain/`, `receiver/` for the `:core:ipc` contract, `state/`, `ui/`)
+at a smaller scale — see [`SATELLITE_APP_GUIDE.md`](SATELLITE_APP_GUIDE.md) for the full convention a
+new satellite app is expected to follow.
 
 ---
 
