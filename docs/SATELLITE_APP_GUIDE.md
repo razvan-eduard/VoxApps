@@ -6,8 +6,7 @@ dependency on VoxCommander) that *optionally* lights up when VoxCommander is als
 letting the user create/read its data by voice and get its data spoken back via TTS.
 
 If you want the architecture overview instead of a build-it tutorial, see
-[`docs/TECHNICAL_DOCUMENTATION.md` §19](TECHNICAL_DOCUMENTATION.md#19-vox-apps-ecosystem-cross-app-contract)
-and the README's "Vox Apps ecosystem" section.
+[`docs/TECHNICAL_DOCUMENTATION.md` §19](TECHNICAL_DOCUMENTATION.md#19-vox-apps-ecosystem-cross-app-contract).
 
 There is **no shared runtime state** between VoxCommander and a satellite. Everything crosses
 process boundaries as JSON inside `Intent` extras over Android's native broadcast/activity
@@ -778,7 +777,7 @@ keyAlias = "vox-apps"   // must be this exact string, in every vox-* app's relea
 A different alias — even one stored in the *same* keystore file — is a cryptographically unrelated
 key. If your satellite's release build uses a different alias than VoxCommander's, the permission
 checks silently fail: your receiver never gets called, `checkSignatures()` never matches, and (per
-this repo's own experience, documented in the README) the *first* visible symptom can be as late as
+this repo's own experience) the *first* visible symptom can be as late as
 `INSTALL_FAILED_DUPLICATE_PERMISSION` when installing release builds of two apps side by side —
 long after the actual mismatch happened. Copy the signing block from an existing app's
 `build.gradle.kts` verbatim; don't hand-type it.

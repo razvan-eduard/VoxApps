@@ -26,6 +26,7 @@
 20. [Shared UI Modules (`:core:calendar`, `:core:apppicker`)](#20-shared-ui-modules-corecalendar-coreapppicker)
 21. [Data Hygiene (`:core:datahygiene`)](#21-data-hygiene-coredatahygiene)
 22. [Project Structure](#22-project-structure)
+23. [Release Process & CI Automation](#23-release-process--ci-automation)
 
 ---
 
@@ -1312,10 +1313,11 @@ When several apps advertise the same domain (e.g. Vox Notes **and** a third-part
    into `resolvedApp` before the handler runs, so it's honored automatically.
 3. **First-party** — a candidate with `isFirstParty == true` (same signing key as Commander). Vox Notes
    beats a third-party alternative **silently** — signature-based, so it can't be spoofed by app name.
-   Requires every first-party app to actually share one release signing certificate (see the README's
-   "Download APK" section) — this went silently unenforced for a while (each app used its own distinct
-   keyAlias within the shared keystore file, which are unrelated key pairs), so this check quietly
-   always returned `false` between apps in release builds until that was fixed.
+   Requires every first-party app to actually share one release signing certificate (see
+   [Satellite App Guide §8.1](SATELLITE_APP_GUIDE.md#81-signature-level-permissions-are-the-entire-trust-mechanism))
+   — this went silently unenforced for a while (each app used its own distinct keyAlias within the
+   shared keystore file, which are unrelated key pairs), so this check quietly always returned `false`
+   between apps in release builds until that was fixed.
 4. **Single third-party** — exactly one candidate → route to it.
 5. **2+ third-party, no star** — route to the first discovered and flag `ambiguous` (logged). A spoken
    "which app?" disambiguation that persists the choice as a star is a planned follow-up.
@@ -1798,6 +1800,66 @@ Satellite apps (`vox-notes`, `vox-vision`, `vox-expenses`, `vox-calendar`, `vox-
 same rough shape (`data/`, `di/`, `domain/`, `receiver/` for the `:core:ipc` contract, `state/`, `ui/`)
 at a smaller scale — see [`SATELLITE_APP_GUIDE.md`](SATELLITE_APP_GUIDE.md) for the full convention a
 new satellite app is expected to follow.
+
+---
+
+## 23. Release Process & CI Automation
+
+Each of the six apps has its own independent release pipeline — a `.github/workflows/release-<app>.yml`
+per app (`release-commander.yml`, `release-calendar.yml`, `release-expenses.yml`, `release-notes.yml`,
+`release-vision.yml`, `release-hub.yml`), all following the same shape.
+
+### Triggering a release
+
+- **Push to `main` that touches that app's `build.gradle.kts`** — the normal path. A "Detect
+  versionCode bump" step compares the current `versionCode` against the previous commit's; if
+  unchanged, the rest of the job is skipped (`if: steps.check_bump.outputs.changed != 'false'` on every
+  later step) — so pushing unrelated changes never triggers a rebuild, only an actual version bump does.
+- **`workflow_dispatch`** — a manual run from the Actions tab always builds, bypassing the bump check
+  (useful to force-rebuild without changing the version).
+- **A direct tag push** (e.g. `git push origin calendar-v0.5`) also triggers the workflow (its
+  `on.push.tags` pattern) and publishes under that exact tag.
+
+### Tag naming (`.github/actions/compute-release-tag`)
+
+A shared composite action is the single source of truth for the `<app-prefix>-v<versionName>` tag
+convention (e.g. `calendar-v0.5`, `commander-v0.7-beta`) — previously duplicated as a ~12-line bash
+block in every `release-*.yml`. On a `main` push or `workflow_dispatch`, it reads `versionName` straight
+out of that app's `build.gradle.kts`; on a direct tag push, it passes the pushed tag straight through
+instead of recomputing it. It also derives `is_prerelease` from whether the version name contains
+`-beta`/`-rc`/`-alpha` (used to mark a GitHub Release as a pre-release).
+
+### Build → sign → publish
+
+1. Unit tests (`./gradlew :vox-<app>:testDebugUnitTest`).
+2. Decode the shared release keystore from a base64-encoded repo secret (`RELEASE_KEYSTORE_BASE64`)
+   into a temp file, then `./gradlew :vox-<app>:assembleRelease` with `RELEASE_KEYSTORE_PATH`/
+   `RELEASE_KEYSTORE_PASSWORD` pointed at it. **All six apps are signed with the same certificate**
+   (one `vox-apps` keystore alias, not one per app) — this is load-bearing for the cross-app
+   `:core:ipc` contract's signature-level permissions and first-party routing check, not just a release
+   convenience; see [Satellite App Guide §8.1](SATELLITE_APP_GUIDE.md#81-signature-level-permissions-are-the-entire-trust-mechanism)
+   for exactly why, and what breaks silently if a new app in this monorepo ever uses a different alias.
+3. The APK is renamed to `Vox<App>-<tag>.apk` (e.g. `VoxCalendar-calendar-v0.5.apk`) and published via
+   `softprops/action-gh-release`, which creates the GitHub Release, uploads the APK as an asset, and
+   auto-generates release notes from the commits since the previous tag.
+
+### Keeping README.md's release table in sync
+
+The top-level `README.md` has a "Latest Releases" table (one row per app, direct APK download link)
+regenerated by `scripts/update_release_readme_links.sh` — it queries this repo's actual GitHub Releases
+via `gh api`, groups them by tag prefix, picks the newest per app, and rewrites the content between two
+`<!-- LATEST_RELEASES:START/END -->` HTML-comment markers in place. Never hand-edit that table; the
+next regeneration overwrites it.
+
+`.github/workflows/update-readme-releases.yml` runs that script automatically and commits the result
+whenever a new release publishes. It's triggered by `workflow_run` (listening for each of the six
+`release-*.yml` workflows to complete), **not** the more obvious `on: release: published` — because
+every `release-*.yml` creates its GitHub Release using the default `GITHUB_TOKEN`, and GitHub explicitly
+does not let an event triggered by `GITHUB_TOKEN` cascade into starting *another* workflow run (an
+anti-recursion safeguard). A plain `release: published` trigger here would simply never fire; this was
+confirmed the hard way the first time this workflow shipped (three releases published, zero README
+updates) before switching to `workflow_run`, which is GitHub's documented workaround for chaining a
+follow-up workflow onto one that creates its own releases/PRs with the default token.
 
 ---
 
