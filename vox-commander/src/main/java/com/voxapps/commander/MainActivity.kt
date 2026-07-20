@@ -69,6 +69,12 @@ class MainActivity : ComponentActivity() {
         appContainer.appStateManager.refreshPermissions()
     }
 
+    private val batteryOptimizationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        appContainer.appStateManager.refreshPermissions()
+    }
+
     private val customVoskModelLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
@@ -233,6 +239,11 @@ class MainActivity : ComponentActivity() {
                         onRequestLocation = {
                             requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                         },
+                        onRequestBatteryOptimization = {
+                            batteryOptimizationLauncher.launch(
+                                com.voxapps.commander.utils.PermissionUtils.getIgnoreBatteryOptimizationsIntent(this@MainActivity)
+                            )
+                        },
                         onContinue = {
                             showPermissions = false
                             appContainer.appStateManager.setFirstLaunchCompleted(true)
@@ -297,6 +308,11 @@ class MainActivity : ComponentActivity() {
                             },
                             onRequestLocationPermission = {
                                 requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                            },
+                            onRequestBatteryOptimizationPermission = {
+                                batteryOptimizationLauncher.launch(
+                                    com.voxapps.commander.utils.PermissionUtils.getIgnoreBatteryOptimizationsIntent(this@MainActivity)
+                                )
                             },
                             onImportCustomModel = { langCode ->
                                 val isZipEngine = com.voxapps.commander.data.remote.RemoteModelRegistry.isZipEngine(

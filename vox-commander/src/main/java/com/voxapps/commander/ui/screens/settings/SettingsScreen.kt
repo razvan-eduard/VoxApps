@@ -51,6 +51,7 @@ fun SettingsContent(
     onRequestMicrophonePermission: () -> Unit = {},
     onRequestNotificationPermission: () -> Unit = {},
     onRequestLocationPermission: () -> Unit = {},
+    onRequestBatteryOptimizationPermission: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
     onClearCustomModel: () -> Unit = {},
     onImportOpenWakeWordModel: () -> Unit = {}
@@ -234,7 +235,8 @@ fun SettingsContent(
                                     onRequestMicrophone = onRequestMicrophonePermission,
                                     onRequestNotification = onRequestNotificationPermission,
                                     onRequestOverlay = onRequestOverlayPermission,
-                                    onRequestLocation = onRequestLocationPermission
+                                    onRequestLocation = onRequestLocationPermission,
+                                    onRequestBatteryOptimization = onRequestBatteryOptimizationPermission
                                 )
                             }
                         }

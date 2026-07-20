@@ -2,6 +2,7 @@ package com.voxapps.commander.ui.screens.settings
 
 import com.voxapps.commander.ui.LocalLanguageManager
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -10,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.state.AppStateManager
@@ -21,9 +23,11 @@ fun PermissionsSettingsTab(
     onRequestMicrophone: () -> Unit,
     onRequestNotification: () -> Unit,
     onRequestOverlay: () -> Unit,
-    onRequestLocation: () -> Unit
+    onRequestLocation: () -> Unit,
+    onRequestBatteryOptimization: () -> Unit = {}
 ) {
         val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -68,7 +72,24 @@ fun PermissionsSettingsTab(
             onClick = onRequestLocation
         )
 
-        // 5. Query All Packages (normal permission, granted at install)
+        // 5. Battery optimization exemption — some OEMs' aggressive background-process killers
+        // unbind WakeWordService while backgrounded, silencing wake-word detection. Always
+        // clickable (not disabled once granted) — tapping again just confirms via toast rather
+        // than re-launching the system dialog.
+        PermissionItem(
+            title = languageManager.getString("battery_optimization_title") ?: "Battery optimization",
+            desc = languageManager.getString("battery_optimization_warning") ?: "Exempt this app so background services keep running reliably.",
+            isGranted = uiState.isIgnoringBatteryOptimizations,
+            onClick = {
+                if (uiState.isIgnoringBatteryOptimizations) {
+                    Toast.makeText(context, languageManager.getString("battery_optimization_already_disabled") ?: "Already disabled", Toast.LENGTH_SHORT).show()
+                } else {
+                    onRequestBatteryOptimization()
+                }
+            }
+        )
+
+        // 6. Query All Packages (normal permission, granted at install)
         PermissionItem(
             title = languageManager.getString("permission_query_packages_title") ?: "Query All Packages",
             desc = languageManager.getString("permission_query_packages_desc") ?: "Required to list installed apps for the Default Apps picker. Granted automatically at install.",

@@ -60,6 +60,7 @@ fun MainScreen(
     onRequestMicrophonePermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onRequestLocationPermission: () -> Unit = {},
+    onRequestBatteryOptimizationPermission: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
     onClearCustomModel: () -> Unit = {},
     onImportOpenWakeWordModel: () -> Unit = {},
@@ -281,6 +282,7 @@ fun MainScreen(
             onRequestMicrophonePermission = onRequestMicrophonePermission,
             onRequestNotificationPermission = onRequestNotificationPermission,
             onRequestLocationPermission = onRequestLocationPermission,
+            onRequestBatteryOptimizationPermission = onRequestBatteryOptimizationPermission,
             onImportCustomModel = onImportCustomModel,
             onClearCustomModel = onClearCustomModel,
             onImportOpenWakeWordModel = onImportOpenWakeWordModel

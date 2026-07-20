@@ -1,6 +1,7 @@
 package com.voxapps.commander.ui.screens.onboarding
 
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.commander.state.AppStateManager
@@ -39,9 +41,11 @@ fun PermissionsOnboardingScreen(
     onRequestMicrophone: () -> Unit,
     onRequestNotification: () -> Unit,
     onRequestLocation: () -> Unit,
+    onRequestBatteryOptimization: () -> Unit,
     onContinue: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
     Scaffold { pad ->
@@ -99,6 +103,29 @@ fun PermissionsOnboardingScreen(
                 onClick = onRequestLocation
             )
 
+            // Battery optimization exemption — some OEMs' aggressive background-process killers
+            // unbind WakeWordService while backgrounded, silencing wake-word detection. Always
+            // clickable (not disabled once granted) — tapping again just confirms via toast rather
+            // than re-launching the system dialog.
+            PermissionRow(
+                title = languageManager.getString("battery_optimization_title") ?: "Battery optimization",
+                desc = languageManager.getString("battery_optimization_warning")
+                    ?: "Exempt this app so background services keep running reliably.",
+                isGranted = uiState.isIgnoringBatteryOptimizations,
+                onClick = {
+                    if (uiState.isIgnoringBatteryOptimizations) {
+                        Toast.makeText(
+                            context,
+                            languageManager.getString("battery_optimization_already_disabled") ?: "Already disabled",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        onRequestBatteryOptimization()
+                    }
+                },
+                alwaysClickable = true
+            )
+
             Button(
                 onClick = onContinue,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
@@ -114,7 +141,12 @@ private fun PermissionRow(
     title: String,
     desc: String,
     isGranted: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    // Most permission rows disable the button once granted (nothing left to confirm). Battery
+    // optimization stays clickable even when granted — tapping again shows a toast instead of
+    // re-launching the system dialog, matching the persistent green/red pattern used elsewhere
+    // (e.g. Vox Expenses' notification-access button).
+    alwaysClickable: Boolean = false
 ) {
     val languageManager = LocalLanguageManager.current
     Card(
@@ -138,7 +170,7 @@ private fun PermissionRow(
             }
             Button(
                 onClick = onClick,
-                enabled = !isGranted,
+                enabled = alwaysClickable || !isGranted,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (isGranted) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
                 )

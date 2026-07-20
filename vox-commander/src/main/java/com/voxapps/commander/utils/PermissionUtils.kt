@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 
@@ -54,6 +55,32 @@ object PermissionUtils {
         } else {
             true // Automatic on older versions
         }
+    }
+
+    /**
+     * Checks whether the app is already exempt from battery optimization — some OEMs' aggressive
+     * background-process killers unbind WakeWordService while backgrounded, silencing wake-word
+     * detection until the OS gets around to rebinding it (confirmed on-device on Honor's "iAware"
+     * background management, which logs "Service starting has been prevented by iaware or trustsbase").
+     */
+    fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+        // Context.POWER_SERVICE + `as?`, not the generic getSystemService(Class<T>) overload — the
+        // generic overload's type-erased return trips up MockK's relaxed-mock auto-value generation
+        // in JVM unit tests (surfaces as a ClassCastException, not a clean null), where `as?` just
+        // yields null safely either way.
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return true
+        return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    /**
+     * Returns an intent that shows the system's "Ignore battery optimizations?" dialog directly for
+     * this app (needs `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` in the manifest).
+     */
+    fun getIgnoreBatteryOptimizationsIntent(context: Context): Intent {
+        return Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:" + context.packageName)
+        )
     }
 
     /**

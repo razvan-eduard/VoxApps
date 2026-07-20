@@ -81,7 +81,8 @@ class AppStateManager private constructor(
         val canDrawOverlays: Boolean = false,
         val hasMicrophonePermission: Boolean = false,
         val hasNotificationPermission: Boolean = false,
-        val hasLocationPermission: Boolean = false
+        val hasLocationPermission: Boolean = false,
+        val isIgnoringBatteryOptimizations: Boolean = false
     )
 
     // --- WAKE WORD EVENT (one-shot event, not state) ---
@@ -91,7 +92,8 @@ class AppStateManager private constructor(
         canDrawOverlays = com.voxapps.commander.utils.PermissionUtils.canDrawOverlays(context),
         hasMicrophonePermission = com.voxapps.commander.utils.PermissionUtils.hasMicrophonePermission(context),
         hasNotificationPermission = com.voxapps.commander.utils.PermissionUtils.hasNotificationPermission(context),
-        hasLocationPermission = com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(context)
+        hasLocationPermission = com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(context),
+        isIgnoringBatteryOptimizations = com.voxapps.commander.utils.PermissionUtils.isIgnoringBatteryOptimizations(context)
     ))
 
     // --- CENTRALIZED UI STATE (reactive combination of settings + runtime) ---
@@ -152,7 +154,8 @@ class AppStateManager private constructor(
                 canDrawOverlays = runtime.canDrawOverlays,
                 hasMicrophonePermission = runtime.hasMicrophonePermission,
                 hasNotificationPermission = runtime.hasNotificationPermission,
-                hasLocationPermission = runtime.hasLocationPermission
+                hasLocationPermission = runtime.hasLocationPermission,
+                isIgnoringBatteryOptimizations = runtime.isIgnoringBatteryOptimizations
             )
         }.onEach { newState ->
             _uiState.value = newState
@@ -172,7 +175,8 @@ class AppStateManager private constructor(
                 canDrawOverlays = com.voxapps.commander.utils.PermissionUtils.canDrawOverlays(context),
                 hasMicrophonePermission = com.voxapps.commander.utils.PermissionUtils.hasMicrophonePermission(context),
                 hasNotificationPermission = com.voxapps.commander.utils.PermissionUtils.hasNotificationPermission(context),
-                hasLocationPermission = com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(context)
+                hasLocationPermission = com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(context),
+                isIgnoringBatteryOptimizations = com.voxapps.commander.utils.PermissionUtils.isIgnoringBatteryOptimizations(context)
             )
         }
     }

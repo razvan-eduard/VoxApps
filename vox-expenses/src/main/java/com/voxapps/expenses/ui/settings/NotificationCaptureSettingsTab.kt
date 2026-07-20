@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,7 +76,7 @@ fun NotificationCaptureSettingsTab(
         mutableStateOf(NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName))
     }
 
-    val powerManager = remember { context.getSystemService(PowerManager::class.java) }
+    val powerManager = remember { context.getSystemService(android.content.Context.POWER_SERVICE) as? PowerManager }
     var batteryOptimizationIgnored by remember {
         mutableStateOf(powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true)
     }
@@ -146,29 +147,30 @@ fun NotificationCaptureSettingsTab(
             Text(languageManager.getString("grant_notification_access_button"), color = Color.White)
         }
 
-        if (!batteryOptimizationIgnored) {
-            Card {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        languageManager.getString("battery_optimization_warning"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+        Text(
+            languageManager.getString("battery_optimization_warning"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(
+            onClick = {
+                if (batteryOptimizationIgnored) {
+                    Toast.makeText(context, languageManager.getString("battery_optimization_already_disabled"), Toast.LENGTH_SHORT).show()
+                } else {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            Uri.parse("package:${context.packageName}")
+                        )
                     )
-                    Button(
-                        onClick = {
-                            context.startActivity(
-                                Intent(
-                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                    Uri.parse("package:${context.packageName}")
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(languageManager.getString("disable_battery_optimization_button"))
-                    }
                 }
-            }
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (batteryOptimizationIgnored) Color(0xFF4CAF50) else Color(0xFFF44336)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(languageManager.getString("disable_battery_optimization_button"), color = Color.White)
         }
 
         HorizontalDivider()

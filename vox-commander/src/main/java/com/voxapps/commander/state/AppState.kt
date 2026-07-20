@@ -84,7 +84,8 @@ data class AppState(
     val hasMicrophonePermission: Boolean = false,
     val hasNotificationPermission: Boolean = false,
     val hasLocationPermission: Boolean = false,
-    
+    val isIgnoringBatteryOptimizations: Boolean = false,
+
     // --- DERIVED PROPERTIES (Calculated from base state) ---
     val voiceModelReady: Boolean,
     val intentModelReady: Boolean
@@ -216,6 +217,7 @@ data class AppState(
                 hasMicrophonePermission = com.voxapps.commander.utils.PermissionUtils.hasMicrophonePermission(context),
                 hasNotificationPermission = com.voxapps.commander.utils.PermissionUtils.hasNotificationPermission(context),
                 hasLocationPermission = com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(context),
+                isIgnoringBatteryOptimizations = com.voxapps.commander.utils.PermissionUtils.isIgnoringBatteryOptimizations(context),
                 voiceModelReady = voiceModelReady,
                 intentModelReady = intentModelReady
             )

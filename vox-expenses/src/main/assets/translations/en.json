@@ -150,6 +150,7 @@
   "grant_notification_access_button": "Grant notification access",
   "battery_optimization_warning": "Some phones kill background apps aggressively, which can silently drop a payment notification before it's captured. Exempting this app from battery optimization keeps it running reliably in the background.",
   "disable_battery_optimization_button": "Disable battery optimization",
+  "battery_optimization_already_disabled": "Already disabled",
   "payment_source_apps_label": "Payment source apps",
   "payment_source_apps_desc": "Only notifications from apps checked below are ever inspected — everything else is ignored",
   "auto_accept_notification_expenses_label": "Auto-accept captured payments",

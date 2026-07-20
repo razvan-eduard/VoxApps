@@ -15,6 +15,11 @@
         tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Lets the onboarding/General settings screen show the system's "Ignore battery
+         optimizations?" dialog directly (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) — without
+         this, some OEMs' aggressive background-process killers unbind WakeWordService while
+         backgrounded, silently dropping wake-word detection until the OS gets around to rebinding it. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Custom permission for external voice trigger (MacroDroid, Tasker, etc.) -->
     <permission
