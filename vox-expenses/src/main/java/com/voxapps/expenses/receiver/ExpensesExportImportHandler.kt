@@ -246,7 +246,12 @@ class ExpensesExportImportHandler(
                     // would make a later re-sync from the same backup see this row as freshly
                     // created and permanently immune to being correctly replaced, silently
                     // reintroducing the bug this createdAt filter exists to fix.
-                    createdAt = e.optLong("createdAt", System.currentTimeMillis())
+                    createdAt = e.optLong("createdAt", System.currentTimeMillis()),
+                    // Old pre-existing rows are deleted AFTER this insert loop (below), so they're
+                    // still present here and would otherwise get misdetected as duplicates of the
+                    // very rows they're about to be replaced by — import must never be blocked by
+                    // this check (RecordSource.HUB_IMPORT: another install's already-validated data).
+                    checkForDuplicate = false
                 )
                 expensesCreated++
             }

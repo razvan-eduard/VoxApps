@@ -1,9 +1,11 @@
 package com.voxapps.expenses.ui.settings
 
+import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,6 +46,7 @@ import com.voxapps.apppicker.AppPickerStrings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
+import com.voxapps.expenses.receiver.PaymentNotificationListenerService
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
@@ -171,6 +174,29 @@ fun NotificationCaptureSettingsTab(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(languageManager.getString("disable_battery_optimization_button"), color = Color.White)
+        }
+
+        OutlinedButton(
+            onClick = {
+                if (!accessGranted) {
+                    Toast.makeText(context, languageManager.getString("grant_notification_access_button"), Toast.LENGTH_SHORT).show()
+                } else {
+                    // Asks the OS to rebind PaymentNotificationListenerService, which fires
+                    // onListenerConnected() again exactly as a natural reconnect would — the same
+                    // recovery path that scans getActiveNotifications() for anything still visible
+                    // in the shade but not yet captured (e.g. from the OEM-kill gap this screen's
+                    // battery-optimization button exists to reduce). Lets the user force a re-check
+                    // right now instead of waiting for the OS to get around to it on its own.
+                    NotificationListenerService.requestRebind(
+                        ComponentName(context, PaymentNotificationListenerService::class.java)
+                    )
+                    Toast.makeText(context, languageManager.getString("force_check_notifications_started"), Toast.LENGTH_SHORT).show()
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            Text(languageManager.getString("force_check_notifications_button"))
         }
 
         HorizontalDivider()

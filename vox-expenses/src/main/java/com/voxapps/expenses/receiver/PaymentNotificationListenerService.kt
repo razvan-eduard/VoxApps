@@ -3,6 +3,7 @@ package com.voxapps.expenses.receiver
 import android.app.Notification
 import android.content.Intent
 import android.service.notification.NotificationListenerService
+import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
@@ -54,6 +55,21 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         CoroutineScope(Dispatchers.IO).launch {
             activeNotifications?.forEach { sbn -> processNotification(sbn) }
         }
+    }
+
+    /**
+     * Last chance: a notification being dismissed (swiped away, auto-cancelled, tapped, cleared by
+     * "Clear all", ...) is the final point [sbn]'s content is still reachable at all — after this,
+     * neither [onNotificationPosted] nor [onListenerConnected]'s [getActiveNotifications] scan can
+     * ever see it again. [processNotification]'s own [ProcessedNotificationKeysStore] guard makes
+     * this safe to call unconditionally: if [onNotificationPosted] already captured this exact
+     * [StatusBarNotification.getKey], this is a silent no-op; if the OEM-kill gap (see
+     * [onListenerConnected]'s doc comment) meant it never got captured at all, this is the only
+     * remaining opportunity to.
+     */
+    override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {
+        super.onNotificationRemoved(sbn, rankingMap, reason)
+        CoroutineScope(Dispatchers.IO).launch { processNotification(sbn) }
     }
 
     private suspend fun processNotification(sbn: StatusBarNotification) {

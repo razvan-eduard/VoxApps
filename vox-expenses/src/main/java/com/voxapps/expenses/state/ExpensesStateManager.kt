@@ -160,12 +160,18 @@ class ExpensesStateManager internal constructor(
         categoryId: Long?,
         items: List<ExpenseLineItem>,
         imageName: String? = null,
-        isStub: Boolean = false
+        isStub: Boolean = false,
+        // -1L is ExpensesRepository.addExpense's existing sentinel for "not inserted" (a genuine DB
+        // failure OR a detected duplicate) — the UI layer can't tell which without this callback,
+        // since the call itself is otherwise fire-and-forget. Defaults to a no-op for every existing
+        // caller that doesn't care.
+        onResult: (Long) -> Unit = {}
     ) {
         scope.launch {
-            expensesRepo.addExpense(
+            val id = expensesRepo.addExpense(
                 title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, categoryId, items, imageName, isStub
             )
+            onResult(id)
         }
     }
 

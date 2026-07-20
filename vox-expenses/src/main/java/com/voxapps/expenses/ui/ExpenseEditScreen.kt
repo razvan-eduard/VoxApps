@@ -77,6 +77,7 @@ import me.saket.telephoto.zoomable.rememberZoomableImageState
 import android.widget.Toast
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.Category
+import com.voxapps.expenses.data.DUPLICATE_ENTRY_RESULT
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSanitizer
@@ -142,6 +143,7 @@ fun ExpenseEditScreen(
 ) {
     val languageManager = LocalLanguageManager.current
     val useComma = decimalSeparator == ExpensesSettings.DECIMAL_COMMA
+    val context = LocalContext.current
 
     BackHandler { onDone() }
 
@@ -175,7 +177,12 @@ fun ExpenseEditScreen(
                 dateTime = expense.dateTime,
                 comments = expense.comments,
                 categoryId = expense.categoryId,
-                items = lineItems
+                items = lineItems,
+                onResult = { id ->
+                    if (id == DUPLICATE_ENTRY_RESULT) {
+                        Toast.makeText(context, languageManager.getString("duplicate_entry_error"), Toast.LENGTH_LONG).show()
+                    }
+                }
             )
         }
     }

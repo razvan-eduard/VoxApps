@@ -91,7 +91,7 @@ class ExpensesExportImportHandlerTest {
             expense(id = 100, createdAt = 500L),
             expense(id = 200, createdAt = 2000L)
         )
-        coEvery { expensesRepo.addExpense(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns 1L
+        coEvery { expensesRepo.addExpense(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns 1L
 
         val payload = """{"exported_at":1000,"expenses":[{"totalAmount":5.0,"currencyCode":"RON"}]}"""
         handler.import(payload)
@@ -112,7 +112,7 @@ class ExpensesExportImportHandlerTest {
 
     @Test
     fun `import preserves the imported row's original createdAt, not the current time`() = runTest {
-        coEvery { expensesRepo.addExpense(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns 1L
+        coEvery { expensesRepo.addExpense(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns 1L
 
         val payload = """{"exported_at":9999999999,"expenses":[{"totalAmount":5.0,"currencyCode":"RON","createdAt":42}]}"""
         handler.import(payload)
@@ -121,14 +121,14 @@ class ExpensesExportImportHandlerTest {
             expensesRepo.addExpense(
                 title = null, totalAmount = 5.0, currencyCode = "RON", vendor = null, bank = null,
                 location = null, dateTime = any(), comments = null, categoryId = null, items = emptyList(),
-                imageName = null, createdAt = 42L
+                imageName = null, createdAt = 42L, checkForDuplicate = false
             )
         }
     }
 
     @Test
     fun `import passes receiptImageName through to addExpense`() = runTest {
-        coEvery { expensesRepo.addExpense(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns 1L
+        coEvery { expensesRepo.addExpense(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns 1L
 
         val payload = """{"expenses":[{"totalAmount":5.0,"currencyCode":"RON","receiptImageName":"rec_x.jpg"}]}"""
         handler.import(payload)
@@ -137,7 +137,7 @@ class ExpensesExportImportHandlerTest {
             expensesRepo.addExpense(
                 title = null, totalAmount = 5.0, currencyCode = "RON", vendor = null, bank = null,
                 location = null, dateTime = any(), comments = null, categoryId = null, items = emptyList(),
-                imageName = "rec_x.jpg", createdAt = any()
+                imageName = "rec_x.jpg", createdAt = any(), checkForDuplicate = false
             )
         }
     }

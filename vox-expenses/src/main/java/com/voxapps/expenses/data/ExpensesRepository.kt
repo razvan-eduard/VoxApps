@@ -1,12 +1,19 @@
 package com.voxapps.expenses.data
 
 import android.content.Context
+import com.voxapps.datahygiene.findDuplicate
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.io.File
+
+/** [ExpensesRepository.addExpense]'s return value when the insert was skipped because
+ *  [ExpenseDuplicateChecker] found an exact match already in the database — distinct from the
+ *  generic `-1L` "insert threw" failure sentinel so callers can show a precise "Duplicate entry"
+ *  message instead of a generic save-failed one. */
+const val DUPLICATE_ENTRY_RESULT = -2L
 
 /**
  * Single write point over the Room DAOs.
@@ -42,25 +49,43 @@ class ExpensesRepository(
         items: List<ExpenseLineItem> = emptyList(),
         imageName: String? = null,
         isStub: Boolean = false,
-        createdAt: Long = System.currentTimeMillis()
+        createdAt: Long = System.currentTimeMillis(),
+        // Hub import is the one caller that must pass false: it inserts every imported row BEFORE
+        // deleting the pre-existing rows it's replacing (see ExpensesExportImportHandler — order
+        // matters there for its own createdAt-based cleanup), so the old rows are still present
+        // during the insert loop and would otherwise get misdetected as duplicates of the very
+        // rows they're about to be replaced by. Matches RecordSource.HUB_IMPORT's documented
+        // "never touched, another install's already-validated data" rule in :core:datahygiene.
+        checkForDuplicate: Boolean = true
     ): Long {
         return try {
-            val id = expenseDao.insert(
-                Expense(
-                    title = title?.trim()?.takeIf { it.isNotEmpty() },
-                    totalAmount = totalAmount,
-                    currencyCode = currencyCode,
-                    vendor = vendor?.trim()?.takeIf { it.isNotEmpty() },
-                    bank = bank?.trim()?.takeIf { it.isNotEmpty() },
-                    location = location?.trim()?.takeIf { it.isNotEmpty() },
-                    dateTime = dateTime,
-                    comments = comments?.trim()?.takeIf { it.isNotEmpty() },
-                    categoryId = categoryId,
-                    receiptImageName = imageName,
-                    isStub = isStub,
-                    createdAt = createdAt
-                )
+            val candidate = Expense(
+                title = title?.trim()?.takeIf { it.isNotEmpty() },
+                totalAmount = totalAmount,
+                currencyCode = currencyCode,
+                vendor = vendor?.trim()?.takeIf { it.isNotEmpty() },
+                bank = bank?.trim()?.takeIf { it.isNotEmpty() },
+                location = location?.trim()?.takeIf { it.isNotEmpty() },
+                dateTime = dateTime,
+                comments = comments?.trim()?.takeIf { it.isNotEmpty() },
+                categoryId = categoryId,
+                receiptImageName = imageName,
+                isStub = isStub,
+                createdAt = createdAt
             )
+
+            if (checkForDuplicate) {
+                // Same exact instant is the cheap, precise pre-filter (ExpenseDuplicateChecker
+                // requires dateTime equality anyway) — avoids a full-table scan on every insert.
+                val sameInstant = expenseDao.getForDateRange(dateTime, dateTime)
+                val duplicate = ExpenseDuplicateChecker.findDuplicate(candidate, sameInstant)
+                if (duplicate != null) {
+                    Logger.w("ExpensesRepository", "Duplicate entry — skipping insert (matches existing id=${duplicate.id})")
+                    return DUPLICATE_ENTRY_RESULT
+                }
+            }
+
+            val id = expenseDao.insert(candidate)
             if (id > 0) {
                 Logger.d("ExpensesRepository", "DB Insert SUCCESS - ID: $id")
                 if (items.isNotEmpty()) {
