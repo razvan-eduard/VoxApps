@@ -27,7 +27,7 @@ object LocationHelper {
     private const val KEY_LAT = "last_lat"
     private const val KEY_LON = "last_lon"
     private const val KEY_TIMESTAMP = "last_timestamp"
-    private val MAX_AGE_MS = TimeUnit.DAYS.toMillis(30) // Cache valid for 30 days
+    private val MAX_AGE_MS = TimeUnit.DAYS.toMillis(1) // Cache valid for 1 day
 
     var settingsRepo: SettingsRepository? = null
 
