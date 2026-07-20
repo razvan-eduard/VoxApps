@@ -158,17 +158,19 @@ summarized here for completeness alongside its siblings:
 |---|---|
 | `vendor/openwakeword-android-kt` | Git submodule — pristine upstream source at a pinned tag. Reference only, never compiled directly. |
 | `core/wakeword/` | Local Gradle module — vendored + patched copy of upstream's `:wakeword` module, compiled into `vox-commander`. |
-| `core/wakeword/src/main/kotlin/.../audio/AudioRecorder.kt` | The one patched file — an RMS silence gate. |
-| `core/wakeword/patches/0001-rms-silence-gate.patch` | The patch as a real unified diff — regenerate with `scripts/regen_openwakeword_patch.sh`. |
+| `core/wakeword/src/main/kotlin/.../audio/AudioRecorder.kt` | Patched file #1 — an RMS silence gate, layered with an adaptive noise-floor margin (`:core:audio`'s `AdaptiveNoiseGate`, also shared by the Vosk engine). |
+| `core/wakeword/src/main/kotlin/.../WakeWordEngine.kt` | Patched file #2 — just forwards the gate params through to `AudioRecorder`. |
+| `core/wakeword/patches/0001-rms-silence-gate.patch`, `0002-wakeword-engine-params.patch` | The two patches as real unified diffs — regenerate both together with `scripts/regen_openwakeword_patch.sh`. |
 | `core/wakeword/NOTICE` / `LICENSE` | Apache-2.0 attribution chain. |
 
 - **`scripts/check_openwakeword_version.sh`** — non-destructive dry-run: is a newer upstream tag
-  available, and would the stored patch still `git apply --check` cleanly against it?
-- **`autoCheckOpenWakeWord`** Gradle task runs this on every `preBuild`.
+  available, and would each stored patch still `git apply --check` cleanly against it?
+- **`autoCheckOpenWakeWord`** Gradle task runs this on every `preBuild` (via `bash`, not `sh` — the
+  script uses a bash array).
 - **`.github/workflows/sync-openwakeword.yml`** — weekly: bumps the submodule, fully re-vendors
-  `core/wakeword`'s sources, tries to `git apply` the stored patch, and if it applies cleanly *and* the
-  module compiles + unit tests pass, opens a PR that's already ready to merge. Only surfaces a
-  manual-merge PR if the patch genuinely conflicts.
+  `core/wakeword`'s sources, tries to `git apply` each stored patch, and if both apply cleanly *and*
+  the module compiles + unit tests pass, opens a PR that's already ready to merge. Only surfaces a
+  manual-merge PR if a patch genuinely conflicts.
 
 ---
 

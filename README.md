@@ -15,7 +15,7 @@
 
 ---
 
-> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, release workflow, and adaptive launcher icon; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`), **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher), **`vox-vision`** (a standalone document scanner, `com.voxapps.vision`, camera capture + on-device OCR), **`vox-expenses`** (a standalone, encrypted on-device expense tracker, `com.voxapps.expenses`, Room + SQLCipher, voice/receipt/notification-driven capture), **`vox-calendar`** (a standalone, encrypted on-device calendar, `com.voxapps.calendar`, Room + SQLCipher, colored layers + ICS import/export + voice-created events), and **`vox-hub`** (a lightweight, database-free backup/restore utility, `com.voxapps.hub`, that discovers every installed Vox app and exports/imports their data as one JSON file). Eleven `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork, `calendar` a shared month-paged agenda view, `apppicker` a shared searchable app-selector card, `logging` a shared logger, `onboarding` shared first-launch welcome/permissions screens, `textmatch` fuzzy category/layer matching, `schema-annotations`/`schema-processor` a KSP-based prompt-schema-versioning pair, `datahygiene` a shared LLM/manual-save record-cleaning contract — see [`docs/SATELLITE_APP_GUIDE.md`](docs/SATELLITE_APP_GUIDE.md) §6) are compiled into one or more apps for code reuse — they carry no shared runtime state, just library code. See [Vox Notes](#vox-notes), [Vox Vision](#vox-vision), [Vox Expenses](#vox-expenses), [Vox Calendar](#vox-calendar), and [Vox Hub](#vox-hub) below for what those apps do; the rest of this README covers `vox-commander`.
+> **VoxApps monorepo.** This repository hosts multiple **fully independent** apps — each with its own applicationId, APK, release workflow, and adaptive launcher icon; the only *runtime* link is an optional native Android Intent (the Vox contract, below). Today: **`vox-commander`** (the voice assistant below, `com.voxapps.commander`), **`vox-notes`** (a standalone, encrypted on-device notes app, `com.voxapps.notes`, Room + SQLCipher), **`vox-vision`** (a standalone document scanner, `com.voxapps.vision`, camera capture + on-device OCR), **`vox-expenses`** (a standalone, encrypted on-device expense tracker, `com.voxapps.expenses`, Room + SQLCipher, voice/receipt/notification-driven capture), **`vox-calendar`** (a standalone, encrypted on-device calendar, `com.voxapps.calendar`, Room + SQLCipher, colored layers + ICS import/export + voice-created events), and **`vox-hub`** (a lightweight, database-free backup/restore utility, `com.voxapps.hub`, that discovers every installed Vox app and exports/imports their data as one JSON file). Twelve `:core:*` Gradle modules (`design` theming, `ipc` contract types, `wakeword` a vendored+patched OpenWakeWord fork, `audio` a shared adaptive noise-floor gate used by both OpenWakeWord and Vosk, `calendar` a shared month-paged agenda view, `apppicker` a shared searchable app-selector card, `logging` a shared logger, `onboarding` shared first-launch welcome/permissions screens, `textmatch` fuzzy category/layer matching, `schema-annotations`/`schema-processor` a KSP-based prompt-schema-versioning pair, `datahygiene` a shared LLM/manual-save record-cleaning contract — see [`docs/SATELLITE_APP_GUIDE.md`](docs/SATELLITE_APP_GUIDE.md) §6) are compiled into one or more apps for code reuse — they carry no shared runtime state, just library code. See [Vox Notes](#vox-notes), [Vox Vision](#vox-vision), [Vox Expenses](#vox-expenses), [Vox Calendar](#vox-calendar), and [Vox Hub](#vox-hub) below for what those apps do; the rest of this README covers `vox-commander`.
 
 ## Features
 
@@ -36,6 +36,7 @@
 - **System Controls** — Volume, WiFi, Bluetooth, GPS toggles
 - **Multi-language** — English, Romanian, German, French, and extensible via `LanguageManager`
 - **Overlay UI** — Floating voice overlay with transcription and status
+- **Home-screen widget** — independent "tap to speak" widget (Jetpack Glance), not tied to any satellite's data — jumps straight into voice capture
 - **Model Downloads** — On-demand DLC for Whisper models, Piper voices, wake word models
 - **Settings** — Compose-based settings with 7 tabs (General, App Manager, Services, Integrations, Models, Advanced, Permissions)
 
@@ -84,7 +85,7 @@ adb shell am start -n com.voxapps.commander/.MainActivity
 
 ## Download APK
 
-Pre-built APKs are available on the [Releases page](https://github.com/razvan-eduard/VoxApps/releases), tagged per app (`commander-v0.5-beta`, `vision-v0.4`, `expenses-v0.5`, `notes-v0.6`, `hub-v0.5`, `calendar-v0.3`, ...). Each release is built automatically via GitHub Actions — normally triggered by bumping that app's `versionCode`/`versionName` in its `build.gradle.kts` and pushing to `main`; a direct push of a matching tag (e.g. `git push origin vision-v0.5`) or a manual `workflow_dispatch` run also work. See `.github/actions/compute-release-tag` for the shared tag-naming logic.
+Pre-built APKs are available on the [Releases page](https://github.com/razvan-eduard/VoxApps/releases), tagged per app (`commander-v0.6-beta`, `vision-v0.4`, `expenses-v0.6`, `notes-v0.7`, `hub-v0.5`, `calendar-v0.4`, ...). Each release is built automatically via GitHub Actions — normally triggered by bumping that app's `versionCode`/`versionName` in its `build.gradle.kts` and pushing to `main`; a direct push of a matching tag (e.g. `git push origin vision-v0.5`) or a manual `workflow_dispatch` run also work. See `.github/actions/compute-release-tag` for the shared tag-naming logic.
 
 > **Note**: All six apps share the **same release signing certificate** (one `vox-apps` alias inside
 > the shared `RELEASE_KEYSTORE_PATH` keystore, not a per-app alias) — this is load-bearing, not just
@@ -251,6 +252,9 @@ through Commander (`create`/`read`) or used entirely on its own.
 - **Attach photo on scan** (Settings, off by default) — sends the scanned photo to the AI alongside
   the OCR text when Vision provided one and the configured engine supports images; Notes has no
   retry/stub mechanism, so unlike Vox Expenses there's no separate on-retry toggle
+- **Home-screen widget** (Jetpack Glance) — recent notes grouped by day, category-colored rows, tap a
+  note to edit it in place, plus Add/Scan actions — reads the same reactive state as the in-app UI, so
+  a biometric-locked session shows locked here too
 - Multi-language UI (English, Romanian, German, French)
 
 ### Vox Vision
@@ -316,6 +320,8 @@ bank/payment notifications, or entered by hand.
   receipt photo to the AI alongside the OCR text when Vision provided one and the configured engine
   supports images; retry (re-sending already-staged OCR text after a failed parse) is a separate
   toggle since it's a distinct, less frequent path
+- **Home-screen widget** (Jetpack Glance) — recent expenses grouped by day, category-colored rows,
+  tap an expense to edit it in place, plus Add/Scan actions
 - Multi-language UI (English, Romanian, German, French)
 
 ### Vox Calendar
@@ -342,6 +348,9 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
 - Recurrence is deliberately minimal (none/daily/weekly/monthly/yearly + optional until-date, expanded
   at read time) — no RRULE engine, no per-occurrence materialized rows, editing a series edits the
   whole thing
+- **Home-screen widget** (Jetpack Glance) — upcoming entries grouped by day (today bolded, its
+  divider thicker), layer-colored rows with tag chips, tap an entry to edit it in place, plus
+  Add/Scan actions
 - Multi-language UI (English, Romanian)
 
 ### Vox Hub
@@ -448,12 +457,16 @@ All three are defined in `models.json` and selected by capability (not hardcoded
 
 **OpenWakeWord is vendored locally as `:core:wakeword`**, not pulled from JitPack — the upstream library
 runs full ONNX inference (mel-spectrogram + embedding + classifier) on every audio buffer, including
-silence, which was a meaningful battery cost for always-on wake word detection. The fork carries a small
-RMS silence-gate patch (`AudioRecorder.kt`) that drops silent buffers before inference ever runs. A git
-submodule (`vendor/openwakeword-android-kt`) tracks the pristine upstream source; the patch itself is a
-maintained diff (`core/wakeword/patches/0001-rms-silence-gate.patch`); a scheduled workflow
+silence, which was a meaningful battery cost for always-on wake word detection. The fork carries two
+patched files (`AudioRecorder.kt`, `WakeWordEngine.kt`) that drop silent buffers before inference ever
+runs — layering a fixed RMS floor with an *adaptive* noise-floor margin (`:core:audio`'s
+`AdaptiveNoiseGate`, also shared by the Vosk engine) so the gate keeps working in a sustained noisy
+room, where a fixed threshold alone stops helping. A git submodule (`vendor/openwakeword-android-kt`)
+tracks the pristine upstream source; each patch is a maintained diff
+(`core/wakeword/patches/0001-rms-silence-gate.patch`, `0002-wakeword-engine-params.patch`,
+regenerated together via `scripts/regen_openwakeword_patch.sh`); a scheduled workflow
 (`.github/workflows/sync-openwakeword.yml`) checks for new upstream releases weekly and opens a PR with
-the patch already re-applied and tested (only needs a manual merge if the patch genuinely conflicts).
+both patches already re-applied and tested (only needs a manual merge if a patch genuinely conflicts).
 See `core/wakeword/NOTICE` for the full attribution and maintenance process.
 
 ### YouTube Search Engines

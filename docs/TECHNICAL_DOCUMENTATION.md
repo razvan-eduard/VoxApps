@@ -112,6 +112,9 @@ All three wake engines are defined in `models.json` (`wake_vosk`, `wake_openwake
 - **Template Mode + Voice Print** — DTW (Dynamic Time Warping) matches the acoustic template of the user's wake word recording.
 - **Voice Print Verification** — After template match, spectral features are compared against the user's voice print (threshold: 0.65 similarity). Rejects TTS audio and other speakers.
 - **Calibration** — `WakeWordCalibrator` measures ambient noise floor and sets a calibrated detection threshold.
+- **Adaptive noise gate** — shares `:core:audio`'s `AdaptiveNoiseGate` with OpenWakeWord's patched
+  `AudioRecorder.kt` (see [OpenWakeWord Fork & Sync](#openwakeword-fork--sync)) rather than each engine
+  maintaining its own noise-floor math; margin is derived from the same Wake Word Sensitivity setting.
 - **AEC** — Optional Acoustic Echo Cancellation for wake word detection during media/TTS playback (`wakeWordAecEnabled`).
 
 #### Picovoice Porcupine (`PorcupineWakeWordEngine.kt`)
@@ -171,8 +174,9 @@ owning the source.
 |------|------|
 | `vendor/openwakeword-android-kt` | Git submodule — pristine upstream source at a pinned tag. Reference only, never compiled directly. |
 | `core/wakeword/` | Local Gradle module (`android-library`) — vendored + patched copy of the upstream `:wakeword` module, compiled into `vox-commander`. |
-| `core/wakeword/src/main/kotlin/.../audio/AudioRecorder.kt` | The one patched file. An RMS silence gate drops buffers below an energy floor *before* the short→float conversion and *before* anything is emitted — so `WakeWordEngine`'s ONNX inference never runs on silence. Gate floor (`rmsGate`) is derived from the user's Wake Word Sensitivity setting via `WakeWordSensitivity.openWakeWordRmsGate()`; `0f` preserves upstream behavior. |
-| `core/wakeword/patches/0001-rms-silence-gate.patch` | The patch, maintained as a real unified diff (not just "the current file") — regenerate with `scripts/regen_openwakeword_patch.sh` any time the patch itself changes. |
+| `core/wakeword/src/main/kotlin/.../audio/AudioRecorder.kt` | Patched file #1. An RMS silence gate drops buffers below an energy floor *before* the short→float conversion and *before* anything is emitted — so `WakeWordEngine`'s ONNX inference never runs on silence. Layered with an *adaptive* margin above the live ambient noise floor (`:core:audio`'s `AdaptiveNoiseGate`, also shared by the Vosk engine — see below), so the gate keeps closing in a sustained noisy room where a fixed floor alone stops helping. Both the fixed floor (`rmsGate`) and the adaptive margin (`noiseGateMargin`) are derived from the user's Wake Word Sensitivity setting via `WakeWordSensitivity.openWakeWordRmsGate()`/`.noiseGateMargin()`; `0f`/upstream defaults preserve stock behavior. |
+| `core/wakeword/src/main/kotlin/.../WakeWordEngine.kt` | Patched file #2 (the vendored library's own engine class — not to be confused with `vox-commander`'s separate Vosk `WakeWordEngine.kt`). Just forwards `rmsGate`/`noiseGateMargin` through its public constructor to `AudioRecorder`, which is the only place that actually acts on them. |
+| `core/wakeword/patches/0001-rms-silence-gate.patch`, `0002-wakeword-engine-params.patch` | The two patches above, each maintained as a real unified diff (not just "the current file") — regenerate both together with `scripts/regen_openwakeword_patch.sh`. |
 | `core/wakeword/NOTICE` / `LICENSE` | Apache 2.0 attribution chain (OpenWakeWord, Google Speech Embedding Model, ONNX Runtime). |
 
 **Keeping it in sync with upstream releases:**
@@ -1181,7 +1185,7 @@ tasks.named("preBuild") {
 |------|-------------|
 | `autoCompileWhisper` | Checks whisper.cpp upstream and recompiles via CMake if needed |
 | `autoCheckVosk` | Checks for newer Vosk version on JitPack |
-| `autoCheckOpenWakeWord` | Checks for a newer OpenWakeWord upstream tag and whether the RMS-gate patch would still apply (see [§2 OpenWakeWord Fork & Sync](#openwakeword-fork--sync)) |
+| `autoCheckOpenWakeWord` | Checks for a newer OpenWakeWord upstream tag and whether both patches would still apply (see [§2 OpenWakeWord Fork & Sync](#openwakeword-fork--sync)) |
 | `copyModelsJson` | Copies `models.json` from repo root to assets |
 | `copySearchDefinitions` | Copies `search_definitions.json` from repo root to assets |
 | `copyIntentsJson` | Copies `intents.json` from repo root to assets |
