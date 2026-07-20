@@ -183,6 +183,12 @@ fun AppPickerCard(
                             selectedApps.isEmpty() -> strings.noAppsSelected
                             defaultApp != null ->
                                 strings.defaultAppSummaryFormat.format(defaultApp.displayName, selectedApps.size - 1)
+                            // Star mode (starredPackages/onToggleStar wired instead of a single default) —
+                            // show how many of the selected apps are actually starred, rather than the
+                            // single-default fallback text (which talks about "no default", nonsensical
+                            // here since this call site never had a "default" concept to begin with).
+                            onToggleStar != null ->
+                                strings.starredCountSummaryFormat.format(selectedApps.size, starredPackages.size)
                             else -> strings.appsSelectedNoDefaultFormat.format(selectedApps.size)
                         },
                         style = MaterialTheme.typography.bodySmall,

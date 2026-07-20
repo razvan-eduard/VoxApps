@@ -153,6 +153,7 @@
   "no_apps_selected": "Keine Apps ausgewählt",
   "default_app_summary": "Standard: %s (+%d andere)",
   "apps_selected_no_default": "%d Apps ausgewählt, kein Standard",
+  "payment_apps_banks_summary": "%d Apps ausgewählt, %d als Bank markiert",
   "selected": "Ausgewählt",
   "set_as_default": "Als Standard festlegen",
   "remove_default": "Standard entfernen",

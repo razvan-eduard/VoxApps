@@ -107,6 +107,7 @@ fun NotificationCaptureSettingsTab(
             noAppsSelected = languageManager.getString("no_apps_selected"),
             defaultAppSummaryFormat = languageManager.getString("default_app_summary"),
             appsSelectedNoDefaultFormat = languageManager.getString("apps_selected_no_default"),
+            starredCountSummaryFormat = languageManager.getString("payment_apps_banks_summary"),
             selected = languageManager.getString("selected"),
             // This screen's star toggle means "this is a bank app", not "the default app" — the
             // shared AppPickerCard star icon is generic, only the wording passed in here differs.

@@ -5,9 +5,14 @@ package com.voxapps.apppicker
  * — each app has its own, incompatible LanguageManager type, so this module stays free of either
  * app's localization dependency rather than picking one.
  *
- * [defaultAppSummaryFormat]/[appsSelectedNoDefaultFormat] are `String.format` templates:
+ * [defaultAppSummaryFormat]/[appsSelectedNoDefaultFormat]/[starredCountSummaryFormat] are
+ * `String.format` templates:
  * - defaultAppSummaryFormat: one `%s` (the default app's name), one `%d` (count of other selected apps)
- * - appsSelectedNoDefaultFormat: one `%d` (count of selected apps)
+ * - appsSelectedNoDefaultFormat: one `%d` (count of selected apps) — used when the call site is in
+ *   single-default mode ([AppPickerCard]'s `defaultPackage`/`onSetDefault`) and no default is set yet.
+ * - starredCountSummaryFormat: two `%d` (count of selected apps, count of starred apps) — used when
+ *   the call site is in independently-toggled star mode ([AppPickerCard]'s `starredPackages`/
+ *   `onToggleStar`, e.g. "which of these payment apps are banks") instead of a single default.
  */
 data class AppPickerStrings(
     val searchPlaceholder: String,
@@ -23,6 +28,7 @@ data class AppPickerStrings(
     val noAppsSelected: String,
     val defaultAppSummaryFormat: String,
     val appsSelectedNoDefaultFormat: String,
+    val starredCountSummaryFormat: String,
     val selected: String,
     val setAsDefault: String,
     val removeDefault: String

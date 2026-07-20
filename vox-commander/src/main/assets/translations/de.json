@@ -344,6 +344,7 @@
   "no_apps_selected": "Keine Apps ausgewählt",
   "default_app_summary": "Standard: %s (+%d andere)",
   "apps_selected_no_default": "%d Apps ausgewählt, kein Standard",
+  "apps_selected_starred_count": "%d ausgewählt, %d markiert",
   "show_all_apps": "Alle Apps anzeigen",
   "show_user_apps": "Benutzer-Apps anzeigen",
   "show_system_apps": "System-Apps anzeigen",

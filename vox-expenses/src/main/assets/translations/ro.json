@@ -186,6 +186,7 @@
   "no_apps_selected": "Nicio aplicație selectată",
   "default_app_summary": "Implicit: %s (+%d altele)",
   "apps_selected_no_default": "%d aplicații selectate, fără implicit",
+  "payment_apps_banks_summary": "%d aplicații selectate, %d marcate ca bănci",
   "selected": "Selectat",
   "set_as_default": "Setează ca implicit",
   "remove_default": "Elimină implicit",

@@ -96,6 +96,10 @@ private fun rememberAppPickerStrings(): AppPickerStrings {
             noAppsSelected = lm?.getString("no_apps_selected") ?: "No apps selected",
             defaultAppSummaryFormat = lm?.getString("default_app_summary") ?: "Default: %s (+%d others)",
             appsSelectedNoDefaultFormat = lm?.getString("apps_selected_no_default") ?: "%d apps selected, no default",
+            // Unused here — this screen's multi-select pickers are always single-default mode
+            // (defaultPackage/onSetDefault), never independently-toggled star mode — kept for
+            // AppPickerStrings' contract completeness.
+            starredCountSummaryFormat = lm?.getString("apps_selected_starred_count") ?: "%d selected, %d starred",
             selected = lm?.getString("selected") ?: "Selected",
             setAsDefault = lm?.getString("set_as_default") ?: "Set as default",
             removeDefault = lm?.getString("remove_default") ?: "Remove default"

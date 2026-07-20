@@ -379,6 +379,7 @@
   "no_apps_selected": "Nicio aplicație selectată",
   "default_app_summary": "Implicit: %s (+%d altele)",
   "apps_selected_no_default": "%d aplicații selectate, fără implicit",
+  "apps_selected_starred_count": "%d selectate, %d marcate",
   "show_all_apps": "Arată toate aplicațiile",
   "show_user_apps": "Arată aplicațiile utilizator",
   "show_system_apps": "Arată aplicațiile de sistem",
