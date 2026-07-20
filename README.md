@@ -30,7 +30,7 @@ for the install caveats that follow from that.
 
 | App | Latest tag | Install |
 |-----|-----------|---------|
-| **Vox Commander** | [`commander-v0.6-beta (pre-release)`](https://github.com/razvan-eduard/VoxApps/releases/tag/commander-v0.6-beta) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/commander-v0.6-beta/VoxCommander-commander-v0.6-beta.apk) |
+| **Vox Commander** | [`commander-v0.7-beta (pre-release)`](https://github.com/razvan-eduard/VoxApps/releases/tag/commander-v0.7-beta) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/commander-v0.7-beta/VoxCommander-commander-v0.7-beta.apk) |
 | **Vox Calendar** | [`calendar-v0.5`](https://github.com/razvan-eduard/VoxApps/releases/tag/calendar-v0.5) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/calendar-v0.5/VoxCalendar-calendar-v0.5.apk) |
 | **Vox Expenses** | [`expenses-v0.7`](https://github.com/razvan-eduard/VoxApps/releases/tag/expenses-v0.7) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/expenses-v0.7/VoxExpenses-expenses-v0.7.apk) |
 | **Vox Notes** | [`notes-v0.8`](https://github.com/razvan-eduard/VoxApps/releases/tag/notes-v0.8) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/notes-v0.8/VoxNotes-notes-v0.8.apk) |
