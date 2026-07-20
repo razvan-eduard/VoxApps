@@ -116,6 +116,8 @@
   "notification_access_granted": "Accès aux notifications : accordé",
   "notification_access_not_granted": "Accès aux notifications : non accordé",
   "grant_notification_access_button": "Accorder l'accès aux notifications",
+  "battery_optimization_warning": "Certains téléphones ferment agressivement les applications en arrière-plan, ce qui peut faire perdre silencieusement une notification de paiement avant qu'elle ne soit capturée. Exempter cette application de l'optimisation de la batterie la fait fonctionner plus fiablement en arrière-plan.",
+  "disable_battery_optimization_button": "Désactiver l'optimisation de la batterie",
   "recheck_access_button": "Revérifier l'accès",
   "payment_source_apps_label": "Applications sources de paiement",
   "payment_source_apps_desc": "Seules les notifications des applications cochées ci-dessous sont examinées — tout le reste est ignoré",

@@ -116,6 +116,8 @@
   "notification_access_granted": "Benachrichtigungszugriff: erteilt",
   "notification_access_not_granted": "Benachrichtigungszugriff: nicht erteilt",
   "grant_notification_access_button": "Benachrichtigungszugriff erteilen",
+  "battery_optimization_warning": "Manche Telefone beenden Hintergrund-Apps sehr aggressiv, wodurch eine Zahlungsbenachrichtigung unbemerkt verloren gehen kann, bevor sie erfasst wird. Wenn diese App von der Akku-Optimierung ausgenommen wird, läuft sie zuverlässiger im Hintergrund.",
+  "disable_battery_optimization_button": "Akku-Optimierung deaktivieren",
   "recheck_access_button": "Zugriff erneut prüfen",
   "payment_source_apps_label": "Zahlungsquellen-Apps",
   "payment_source_apps_desc": "Nur Benachrichtigungen der unten markierten Apps werden überhaupt geprüft — alles andere wird ignoriert",

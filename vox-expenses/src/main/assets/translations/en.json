@@ -148,6 +148,8 @@
   "notification_capture_title": "Notification capture",
   "notification_capture_desc": "Automatically detect payments from notifications of apps you pick below (e.g. your banking app) and propose them as expenses for you to review — nothing is created automatically unless you enable auto-accept below.",
   "grant_notification_access_button": "Grant notification access",
+  "battery_optimization_warning": "Some phones kill background apps aggressively, which can silently drop a payment notification before it's captured. Exempting this app from battery optimization keeps it running reliably in the background.",
+  "disable_battery_optimization_button": "Disable battery optimization",
   "payment_source_apps_label": "Payment source apps",
   "payment_source_apps_desc": "Only notifications from apps checked below are ever inspected — everything else is ignored",
   "auto_accept_notification_expenses_label": "Auto-accept captured payments",

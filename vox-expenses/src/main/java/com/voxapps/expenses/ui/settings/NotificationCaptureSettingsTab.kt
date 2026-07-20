@@ -1,6 +1,8 @@
 package com.voxapps.expenses.ui.settings
 
 import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -73,15 +75,21 @@ fun NotificationCaptureSettingsTab(
         mutableStateOf(NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName))
     }
 
-    // The OS grant happens in system Settings (deep-linked below), not a normal runtime dialog, so
-    // there's no ActivityResult callback to catch the change — re-checking on ON_RESUME (fires when
-    // the user backs out of system Settings back into this screen) keeps the button's status accurate
-    // without a manual "re-check" action.
+    val powerManager = remember { context.getSystemService(PowerManager::class.java) }
+    var batteryOptimizationIgnored by remember {
+        mutableStateOf(powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true)
+    }
+
+    // Both OS grants happen in system Settings / a system dialog, not a normal runtime permission
+    // dialog, so there's no ActivityResult callback to catch either change — re-checking on
+    // ON_RESUME (fires when the user backs out of system Settings back into this screen) keeps both
+    // buttons' status accurate without a manual "re-check" action.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 accessGranted = NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+                batteryOptimizationIgnored = powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -136,6 +144,31 @@ fun NotificationCaptureSettingsTab(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(languageManager.getString("grant_notification_access_button"), color = Color.White)
+        }
+
+        if (!batteryOptimizationIgnored) {
+            Card {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        languageManager.getString("battery_optimization_warning"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(languageManager.getString("disable_battery_optimization_button"))
+                    }
+                }
+            }
         }
 
         HorizontalDivider()

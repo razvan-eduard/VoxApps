@@ -148,6 +148,8 @@
   "notification_capture_title": "Captură din notificări",
   "notification_capture_desc": "Detectează automat plăți din notificările aplicațiilor alese mai jos (ex. aplicația băncii tale) și le propune ca cheltuieli pentru a le revizui — nimic nu se creează automat, decât dacă activezi acceptarea automată mai jos.",
   "grant_notification_access_button": "Acordă acces la notificări",
+  "battery_optimization_warning": "Unele telefoane opresc agresiv aplicațiile din fundal, ceea ce poate face ca o notificare de plată să fie pierdută înainte de a fi capturată. Excluderea acestei aplicații de la optimizarea bateriei o face să ruleze mai fiabil în fundal.",
+  "disable_battery_optimization_button": "Dezactivează optimizarea bateriei",
   "payment_source_apps_label": "Aplicații sursă pentru plăți",
   "payment_source_apps_desc": "Doar notificările aplicațiilor bifate mai jos sunt inspectate vreodată — restul sunt ignorate",
   "auto_accept_notification_expenses_label": "Acceptă automat plățile detectate",
