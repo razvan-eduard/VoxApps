@@ -47,6 +47,7 @@ import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.receiver.PaymentNotificationListenerService
+import com.voxapps.expenses.receiver.ProcessedNotificationKeysStore
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
@@ -181,15 +182,21 @@ fun NotificationCaptureSettingsTab(
                 if (!accessGranted) {
                     Toast.makeText(context, languageManager.getString("grant_notification_access_button"), Toast.LENGTH_SHORT).show()
                 } else {
-                    // Asks the OS to rebind PaymentNotificationListenerService, which fires
-                    // onListenerConnected() again exactly as a natural reconnect would — the same
-                    // recovery path that scans getActiveNotifications() for anything still visible
-                    // in the shade but not yet captured (e.g. from the OEM-kill gap this screen's
-                    // battery-optimization button exists to reduce). Lets the user force a re-check
-                    // right now instead of waiting for the OS to get around to it on its own.
-                    NotificationListenerService.requestRebind(
-                        ComponentName(context, PaymentNotificationListenerService::class.java)
-                    )
+                    // Clears the processed-keys history first — otherwise a notification already
+                    // (mis)marked processed (e.g. by an older build that marked at dispatch time
+                    // instead of on a confirmed Commander reply) would stay permanently skipped even
+                    // after the rebind below. Then asks the OS to rebind
+                    // PaymentNotificationListenerService, which fires onListenerConnected() again
+                    // exactly as a natural reconnect would — the same recovery path that scans
+                    // getActiveNotifications() for anything still visible in the shade. Lets the user
+                    // force a full re-check right now instead of waiting for the OS to reconnect on
+                    // its own.
+                    scope.launch {
+                        ProcessedNotificationKeysStore(context).clearAll()
+                        NotificationListenerService.requestRebind(
+                            ComponentName(context, PaymentNotificationListenerService::class.java)
+                        )
+                    }
                     Toast.makeText(context, languageManager.getString("force_check_notifications_started"), Toast.LENGTH_SHORT).show()
                 }
             },

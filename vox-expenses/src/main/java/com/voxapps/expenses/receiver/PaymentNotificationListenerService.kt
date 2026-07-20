@@ -5,6 +5,7 @@ import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
+import android.util.Base64
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.LlmTasks
@@ -33,6 +34,16 @@ private const val COMMANDER_PACKAGE = "com.voxapps.commander"
  * extract it — never parsed or acted on locally. The async reply lands in [LlmResultReceiver], which
  * either stores it for individual approve/dismiss or (if `autoAcceptNotificationExpenses` is on)
  * inserts it directly — this service never creates an expense itself either way.
+ *
+ * [ProcessedNotificationKeysStore.markProcessed] is deliberately NOT called here, only once
+ * [LlmResultReceiver] actually receives Commander's reply (the notification's key rides along
+ * base64-encoded in the request's `task` string, the same "task:extra" convention
+ * [com.voxapps.expenses.domain.llm.LlmTasks.EXPENSE_SCAN_CLEANUP] already uses for its imageName).
+ * Marking it here, at dispatch time, would have meant a broadcast that's silently dropped (Commander
+ * not running, killed mid-processing, no reply ever arrives) permanently "processed" this
+ * notification with no expense ever created and no way to retry — exactly what happened to a real
+ * missed Revolut charge that outlived several `onListenerConnected()`/`onNotificationRemoved()`
+ * retries, because all of them share this same guard.
  */
 class PaymentNotificationListenerService : NotificationListenerService() {
 
@@ -83,8 +94,6 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         if (title.isNullOrBlank() && text.isNullOrBlank()) return
 
-        processedKeys.markProcessed(sbn.key)
-
         // Deterministic, not a guess: the user explicitly starred this exact package as a bank app.
         val knownBankName = if (sbn.packageName in settings.bankingSourcePackages) {
             LauncherAppsCache.cachedApps.find { it.packageName == sbn.packageName }?.displayName
@@ -102,9 +111,10 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             languageCode = settings.language,
             knownBankName = knownBankName
         )
+        val encodedKey = Base64.encodeToString(sbn.key.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         val payload = VoxLlmRequest(
             sourcePackage = packageName,
-            task = LlmTasks.NOTIFICATION_EXPENSE_PARSE,
+            task = "${LlmTasks.NOTIFICATION_EXPENSE_PARSE}:$encodedKey",
             promptText = promptText,
             data = listOfNotNull(title, text)
         ).toJson()

@@ -34,6 +34,17 @@ class ProcessedNotificationKeysStore(context: Context) {
         }
     }
 
+    /** Wipes the whole processed-keys history — the "force-check notifications" settings button
+     *  calls this before requesting a rebind, so a key that got permanently (mis)marked processed
+     *  by an old build (e.g. before [PaymentNotificationListenerService] stopped marking at dispatch
+     *  time instead of on a confirmed Commander reply) isn't stuck unrecoverable forever. Safe to
+     *  clear entirely: at worst a handful of already-successfully-processed notifications get
+     *  re-dispatched once, and ExpenseDuplicateChecker/the pending-review queue's own dedup already
+     *  guard against that turning into a real duplicate expense. */
+    suspend fun clearAll() {
+        dataStore.edit { it[Keys.PROCESSED_KEYS] = JSONArray(emptyList<String>()).toString() }
+    }
+
     private fun decode(json: String?): List<String> {
         if (json == null) return emptyList()
         return try {

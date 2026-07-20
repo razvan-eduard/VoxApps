@@ -130,12 +130,34 @@ class LlmResultReceiver : BroadcastReceiver() {
             }
 
             LlmTasks.NOTIFICATION_EXPENSE_PARSE -> {
+                // The notification's key rides along base64-encoded as the task's second segment
+                // (see PaymentNotificationListenerService) — decoded back here so the "processed"
+                // mark only lands once Commander's reply actually arrives, not at dispatch time.
+                // Marked unconditionally below regardless of outcome: a genuine reply (success or
+                // failure) means this notification is done being retried, matching how
+                // EXPENSE_PARSE/EXPENSE_SCAN_CLEANUP already only surface a failure toast rather than
+                // auto-retrying either. If Commander never replies at all (dropped broadcast, crash
+                // before it could respond), the key stays unmarked and onListenerConnected()/
+                // onNotificationRemoved()/the manual "force-check" button can genuinely retry it later.
+                val notificationKey = taskParts.getOrNull(1)?.let {
+                    try { String(android.util.Base64.decode(it, android.util.Base64.NO_WRAP), Charsets.UTF_8) } catch (e: Exception) { null }
+                }
                 val rawJson = result.rawJson
-                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) return
-                val parsed = NotificationExpenseParseResultParser.parse(rawJson) ?: return
+                val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
+                    NotificationExpenseParseResultParser.parse(rawJson)
+                } else {
+                    Logger.w(TAG, "Notification expense parse failed: ${result.error}")
+                    null
+                }
+
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        if (notificationKey != null) {
+                            ProcessedNotificationKeysStore(context.applicationContext).markProcessed(notificationKey)
+                        }
+                        if (parsed == null) return@launch
+
                         val settings = container.settingsRepository.getSnapshot()
                         // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard —
                         // this is the only guard for fields not sourced from raw JSON.
