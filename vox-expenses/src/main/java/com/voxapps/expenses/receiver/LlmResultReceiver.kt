@@ -142,6 +142,14 @@ class LlmResultReceiver : BroadcastReceiver() {
                 val notificationKey = taskParts.getOrNull(1)?.let {
                     try { String(android.util.Base64.decode(it, android.util.Base64.NO_WRAP), Charsets.UTF_8) } catch (e: Exception) { null }
                 }
+                // Deterministic (the user starred this exact source app as a bank), not the LLM's
+                // echo of it — the prompt asks the model to repeat the bank name back
+                // character-for-character in its JSON reply, which is exactly the kind of instruction
+                // an LLM can silently drop or garble. Preferring this over parsed.bank below is what
+                // actually fixes an empty "bank" field on an otherwise-successful parse.
+                val knownBankName = taskParts.getOrNull(2)?.takeIf { it.isNotEmpty() }?.let {
+                    try { String(android.util.Base64.decode(it, android.util.Base64.NO_WRAP), Charsets.UTF_8) } catch (e: Exception) { null }
+                }
                 val rawJson = result.rawJson
                 val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
                     NotificationExpenseParseResultParser.parse(rawJson)
@@ -163,7 +171,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                         // this is the only guard for fields not sourced from raw JSON.
                         val cleanTitle = FieldCleaner.clean(parsed.title, "title", "NotificationExpense")
                         val cleanVendor = FieldCleaner.clean(parsed.vendor, "vendor", "NotificationExpense")
-                        val cleanBank = FieldCleaner.clean(parsed.bank, "bank", "NotificationExpense")
+                        val cleanBank = knownBankName ?: FieldCleaner.clean(parsed.bank, "bank", "NotificationExpense")
                         val cleanCategory = FieldCleaner.clean(parsed.category, "category", "NotificationExpense")
                         if (settings.autoAcceptNotificationExpenses) {
                             // Same insert path as ExpensesStateManager.approveNotificationExpense —

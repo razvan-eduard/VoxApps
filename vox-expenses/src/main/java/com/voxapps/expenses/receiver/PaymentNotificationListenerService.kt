@@ -112,9 +112,14 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             knownBankName = knownBankName
         )
         val encodedKey = Base64.encodeToString(sbn.key.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+        // knownBankName rides along the same way rather than trusting the LLM to echo it back
+        // verbatim in its JSON reply — that's what the "bank" field being empty on a successfully
+        // created expense turned out to trace back to (see LlmResultReceiver). Empty segment (not
+        // omitted — taskParts.getOrNull(2) must stay index-stable) when there's no known bank.
+        val encodedBank = knownBankName?.let { Base64.encodeToString(it.toByteArray(Charsets.UTF_8), Base64.NO_WRAP) }.orEmpty()
         val payload = VoxLlmRequest(
             sourcePackage = packageName,
-            task = "${LlmTasks.NOTIFICATION_EXPENSE_PARSE}:$encodedKey",
+            task = "${LlmTasks.NOTIFICATION_EXPENSE_PARSE}:$encodedKey:$encodedBank",
             promptText = promptText,
             data = listOfNotNull(title, text)
         ).toJson()

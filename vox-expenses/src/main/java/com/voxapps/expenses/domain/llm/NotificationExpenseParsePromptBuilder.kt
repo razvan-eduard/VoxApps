@@ -22,18 +22,26 @@ object NotificationExpenseParsePromptBuilder {
         } else {
             "Existing categories: ${existingCategories.joinToString(", ")}."
         }
-        val bankLine = if (knownBankName != null) {
-            """
+        // When the source app is already a known/starred bank, the bank name is deterministic —
+        // PaymentNotificationListenerService uses it directly rather than trusting the LLM to echo
+        // it back character-for-character (a real, observed failure mode: an otherwise-successful
+        // parse with an empty "bank" field). So the model is never even asked for it in that case —
+        // one less field to get wrong, and fewer output tokens either way.
+        val bankLine: String
+        val bankJsonField: String
+        if (knownBankName != null) {
+            bankLine = """
 
             The source app for this notification is a known banking app called "$knownBankName" —
             this is certain, not a guess. This does NOT mean this specific notification is a payment —
             banking apps send far more ads, marketing, login alerts, and balance summaries than actual
             transactions, and the same rule above applies: judge this notification on its own content
-            alone. Only if you independently determine it IS a payment, set "bank" to exactly
-            "$knownBankName" in your response, character-for-character.
+            alone.
             """.trimIndent()
+            bankJsonField = ""
         } else {
-            ""
+            bankLine = ""
+            bankJsonField = """, "bank": "..." (omit or use null if the bank isn't known)"""
         }
         return """
             The following is the title and body text of a notification from an app the user has
@@ -53,8 +61,8 @@ object NotificationExpenseParsePromptBuilder {
             diacritics for it. Only suggest a new category name if none of the existing ones fit.
             Respond in the "$languageCode" language. Return ONLY a JSON object, no prose, no markdown,
             of the shape {"isPayment": true, "title": "...", "totalAmount": 12.5, "currency": "...",
-            "vendor": "...", "category": "...", "bank": "..."} when it is a payment, or
-            {"isPayment": false} when it is not. Omit "bank" (or use null) if the bank isn't known.
+            "vendor": "...", "category": "..."$bankJsonField} when it is a payment, or
+            {"isPayment": false} when it is not.
 
             Notification title: ${notificationTitle.orEmpty()}
             Notification text: ${notificationText.orEmpty()}

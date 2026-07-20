@@ -44,7 +44,11 @@ class NotificationExpenseParsePromptBuilderTest {
     }
 
     @Test
-    fun `knownBankName tells the LLM the bank authoritatively`() {
+    fun `knownBankName is context only, not something the LLM is asked to echo back`() {
+        // The bank name is deterministic once known (the user starred this exact source app) —
+        // PaymentNotificationListenerService/LlmResultReceiver use it directly rather than trusting
+        // an LLM echo, so the prompt shouldn't spend tokens asking for "bank" in the JSON reply, or
+        // instruct the model to repeat the name back, when it's already known.
         val prompt = NotificationExpenseParsePromptBuilder.build(
             notificationTitle = "Card payment",
             notificationText = "You paid 45.90 RON at Lidl",
@@ -55,8 +59,14 @@ class NotificationExpenseParsePromptBuilderTest {
         )
 
         assertTrue(prompt.contains("known banking app called \"Revolut\""))
-        assertTrue(prompt.contains("set \"bank\" to exactly"))
-        assertTrue(prompt.contains("\"Revolut\" in your response"))
+        assertFalse(prompt.contains("set \"bank\" to exactly"))
+        assertFalse(prompt.contains("\"bank\": \"...\""))
+    }
+
+    @Test
+    fun `no knownBankName still asks for bank in the JSON shape`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build("t", "x", emptyList(), "RON", "en")
+        assertTrue(prompt.contains("\"bank\": \"...\""))
     }
 
     @Test
