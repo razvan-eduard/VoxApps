@@ -4,6 +4,7 @@ import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.state.SessionManager
 import com.voxapps.ipc.VoxResult
+import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -13,9 +14,12 @@ import org.json.JSONObject
  * expired it returns a locked message and **never touches the DB**; otherwise it snapshots expenses.
  *
  * When [dateFrom]/[dateTo] are both given (Vox Calendar's day-tap summary), the reply is a compact
- * JSON `{"count": N, "items": [{"title", "timeMillis"}, ...]}` instead of the plain-text format, since
- * the caller needs to parse counts/titles programmatically. Any caller that never sets these keeps
- * getting the original human-readable text unchanged.
+ * JSON `{"count": N, "items": [{"title", "timeMillis", "id", "colorArgb"}, ...]}` instead of the
+ * plain-text format, since the caller needs to render tappable, color-tinted rows (matching the
+ * home-screen widget's look) rather than just display text — "id" lets it deep-link straight into
+ * this expense's editor (see [com.voxapps.ipc.VoxIpc.EXTRA_EXPENSE_ID]), "colorArgb" (omitted when
+ * uncategorized) is the expense's category color. Any caller that never sets [dateFrom]/[dateTo]
+ * keeps getting the original human-readable text unchanged.
  */
 class ExpensesReadResponder(
     private val settingsRepo: ExpensesSettingsRepository,
@@ -38,6 +42,7 @@ class ExpensesReadResponder(
         if (dateFrom != null && dateTo != null) {
             val expenses = expensesRepo.expensesForDateRange(dateFrom, dateTo)
             com.voxapps.logging.Logger.d("ExpensesReadResponder", "Read request SUCCESS (Date Range: $dateFrom - $dateTo, Found: ${expenses.size})")
+            val colorByCategoryId = expensesRepo.categories.first().associate { it.id to it.colorArgb }
             val items = JSONArray()
             expenses.forEach { expense ->
                 items.put(
@@ -46,6 +51,8 @@ class ExpensesReadResponder(
                             ?: "${expense.totalAmount} ${expense.currencyCode}"
                         put("title", label)
                         put("timeMillis", expense.dateTime)
+                        put("id", expense.id)
+                        expense.categoryId?.let { colorByCategoryId[it] }?.let { put("colorArgb", it) }
                     }
                 )
             }

@@ -93,6 +93,11 @@ object VoxIpc {
      */
     const val EXTRA_EXPENSE_ID = "com.voxapps.extra.EXPENSE_ID"
 
+    /** Notes' equivalent of [EXTRA_EXPENSE_ID] — same deep-link-to-editor purpose, one per satellite
+     *  since each already had its own locally-scoped constant of this exact string value before this
+     *  one existed (see `NotesActivity.EXTRA_EDIT_NOTE_ID`, kept as an alias for source compat). */
+    const val EXTRA_EDIT_NOTE_ID = "com.voxapps.notes.EXTRA_EDIT_NOTE_ID"
+
     // --- Command ops ---
     const val OP_CREATE = "create"
     const val OP_READ = "read"

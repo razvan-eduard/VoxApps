@@ -209,6 +209,7 @@ fun CalendarScreen(
         DaySummarySheet(
             dayMillis = dayMillis,
             calendarItemsForDay = itemsForDay,
+            layers = state.layers,
             onDismiss = { daySummaryFor = null },
             onEditEntry = {
                 daySummaryFor = null

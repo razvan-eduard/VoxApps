@@ -33,4 +33,26 @@ object DayLinkIntentSender {
             }
         )
     }
+
+    /** Jumps straight into a specific note's editor — the same [VoxIpc.EXTRA_EDIT_NOTE_ID] extra
+     *  NotesWidget's own rows use, just sent cross-app instead of in-process. */
+    fun openNoteForEdit(context: Context, noteId: Long) {
+        context.startActivity(
+            Intent().apply {
+                setClassName(NOTES_PACKAGE, NOTES_ACTIVITY_CLASS)
+                putExtra(VoxIpc.EXTRA_EDIT_NOTE_ID, noteId)
+            }
+        )
+    }
+
+    /** Jumps straight into a specific expense's editor — the same [VoxIpc.EXTRA_EXPENSE_ID] extra
+     *  ExpensesWidget's own rows use, just sent cross-app instead of in-process. */
+    fun openExpenseForEdit(context: Context, expenseId: Long) {
+        context.startActivity(
+            Intent().apply {
+                setClassName(EXPENSES_PACKAGE, EXPENSES_ACTIVITY_CLASS)
+                putExtra(VoxIpc.EXTRA_EXPENSE_ID, expenseId)
+            }
+        )
+    }
 }

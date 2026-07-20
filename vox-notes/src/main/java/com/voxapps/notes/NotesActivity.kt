@@ -92,7 +92,8 @@ class NotesActivity : FragmentActivity() {
     companion object {
         /** Set by NotesWidget's "Add" action — jump straight to a blank new-note editor. */
         const val EXTRA_QUICK_ADD = "com.voxapps.notes.EXTRA_QUICK_ADD"
-        /** Set by NotesWidget's note rows — jump straight to that note's inline editor. */
-        const val EXTRA_EDIT_NOTE_ID = "com.voxapps.notes.EXTRA_EDIT_NOTE_ID"
+        /** Set by NotesWidget's note rows — jump straight to that note's inline editor. Also used
+         *  cross-app by Vox Calendar's day-summary sheet, hence the [VoxIpc] alias. */
+        const val EXTRA_EDIT_NOTE_ID = VoxIpc.EXTRA_EDIT_NOTE_ID
     }
 }
