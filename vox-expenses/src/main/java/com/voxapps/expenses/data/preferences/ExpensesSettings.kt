@@ -88,7 +88,13 @@ data class ExpensesSettings(
     /** Separate from [attachPhotoOnScan] since retry (re-sending already-staged OCR text after a
      *  failed parse) is a distinct, less frequent code path — a user might want the photo attached
      *  on a fresh scan but not want it re-sent every retry, or vice versa. */
-    val attachPhotoOnRetry: Boolean = false
+    val attachPhotoOnRetry: Boolean = false,
+    /** On by default (matches the behavior before this toggle existed) — one switch governing every
+     *  place an expense's location field can get auto-filled from GPS (scan, voice, and manual
+     *  entry — see [com.voxapps.expenses.domain.location.ExpensesLocationHelper]'s callers).
+     *  Independent of the OS location permission itself: granting that in onboarding only makes
+     *  the feature *possible*, this is the separate "and do I actually want it" control. */
+    val locationPrefillEnabled: Boolean = true
 ) {
     companion object {
         const val TIMEOUT_30M = 30

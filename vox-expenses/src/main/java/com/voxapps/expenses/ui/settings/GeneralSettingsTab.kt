@@ -226,6 +226,28 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
+        // --- Location prefill: one switch governing every place an expense's location field can
+        // get auto-filled from GPS (scan, voice, manual entry). Independent of the OS location
+        // permission granted in onboarding — that only makes the feature possible, this is whether
+        // the user actually wants it. ---
+        Text(languageManager.getString("location_section"), style = MaterialTheme.typography.labelLarge)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("location_prefill_label"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("location_prefill_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.locationPrefillEnabled,
+                onCheckedChange = { stateManager.setLocationPrefillEnabled(it) }
+            )
+        }
+
+        HorizontalDivider()
+
         // --- Debug logging (off by default; only turn on while actively debugging) ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {

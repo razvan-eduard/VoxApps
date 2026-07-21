@@ -102,6 +102,7 @@ fun ExpensesRoot(
                                 defaultCurrency = container.settingsRepository.getSnapshot().defaultCurrency,
                                 vatDisplayEnabled = container.settingsRepository.getSnapshot().vatDisplayEnabled,
                                 decimalSeparator = container.settingsRepository.getSnapshot().decimalSeparator,
+                                locationPrefillEnabled = container.settingsRepository.getSnapshot().locationPrefillEnabled,
                                 stateManager = container.expensesStateManager,
                                 onDone = { editTarget = null }
                             )

@@ -140,6 +140,7 @@ fun ExpenseEditScreen(
     defaultCurrency: String,
     vatDisplayEnabled: Boolean,
     decimalSeparator: String,
+    locationPrefillEnabled: Boolean,
     stateManager: ExpensesStateManager,
     onDone: () -> Unit
 ) {
@@ -158,7 +159,7 @@ fun ExpenseEditScreen(
     // and only falls through to an actual GPS/network round-trip otherwise. Checks location.isBlank()
     // right before writing so a user who typed their own location first (however unlikely, given
     // this runs immediately on open) never gets overwritten.
-    if (existing == null) {
+    if (existing == null && locationPrefillEnabled) {
         LaunchedEffect(Unit) {
             val city = ExpensesLocationHelper.resolveCurrentCity(context)
             if (city != null && location.isBlank()) location = city

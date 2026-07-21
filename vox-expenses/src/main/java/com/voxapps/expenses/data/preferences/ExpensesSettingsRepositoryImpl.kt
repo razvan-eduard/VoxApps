@@ -47,6 +47,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
         val ATTACH_PHOTO_ON_RETRY = booleanPreferencesKey("attach_photo_on_retry")
+        val LOCATION_PREFILL_ENABLED = booleanPreferencesKey("location_prefill_enabled")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -74,7 +75,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
             attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
-            attachPhotoOnRetry = prefs[Keys.ATTACH_PHOTO_ON_RETRY] ?: false
+            attachPhotoOnRetry = prefs[Keys.ATTACH_PHOTO_ON_RETRY] ?: false,
+            locationPrefillEnabled = prefs[Keys.LOCATION_PREFILL_ENABLED] ?: true
         )
     }
 
@@ -196,6 +198,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.ATTACH_PHOTO_ON_RETRY] = enabled }
     }
 
+    override suspend fun setLocationPrefillEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.LOCATION_PREFILL_ENABLED] = enabled }
+    }
+
     override suspend fun restoreSettings(settings: ExpensesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -224,6 +230,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.THEME_COLORED] = settings.themeColored
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
             prefs[Keys.ATTACH_PHOTO_ON_RETRY] = settings.attachPhotoOnRetry
+            prefs[Keys.LOCATION_PREFILL_ENABLED] = settings.locationPrefillEnabled
             // appCacheJson intentionally untouched — see interface doc comment.
         }
     }

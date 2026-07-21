@@ -236,9 +236,15 @@ class LlmResultReceiver : BroadcastReceiver() {
         // voice, parsed.location is always null since that prompt never asks for it, so this falls
         // straight through to the GPS-derived city for both tasks uniformly. Deterministic
         // (LLM-read) beats guessed (GPS-derived) whenever both are available, same priority as the
-        // notification-capture flow's bank-name handling.
-        val location = parsed.location?.let { FieldCleaner.clean(it, "location", "Expense") }
-            ?: ExpensesLocationHelper.resolveCurrentCity(appContext)
+        // notification-capture flow's bank-name handling. The settings toggle governs *every* form
+        // of location fill, not just the GPS fallback — turning it off means a receipt's own printed
+        // address is left unused too, not silently kept.
+        val location = if (!settings.locationPrefillEnabled) {
+            null
+        } else {
+            parsed.location?.let { FieldCleaner.clean(it, "location", "Expense") }
+                ?: ExpensesLocationHelper.resolveCurrentCity(appContext)
+        }
         // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard — this is the
         // only guard for fields not sourced from raw JSON.
         val newExpenseId = container.expensesRepository.addParsedExpense(
@@ -314,10 +320,16 @@ class LlmResultReceiver : BroadcastReceiver() {
             currencyCode = parsed.currency ?: settings.defaultCurrency,
             vendor = parsed.vendor,
             bank = parsed.bank,
-            // Same priority as the first-attempt path: LLM-read beats GPS-derived. A retry can land
-            // long after the original scan, so this is *current* location, not the location at scan
-            // time — the best available substitute when nothing better was ever captured.
-            location = parsed.location ?: ExpensesLocationHelper.resolveCurrentCity(appContext),
+            // Same priority (and same toggle-respects-everything rule) as the first-attempt path:
+            // LLM-read beats GPS-derived, and the whole thing is skipped if the user turned location
+            // prefill off. A retry can land long after the original scan, so this is *current*
+            // location, not the location at scan time — the best available substitute when nothing
+            // better was ever captured.
+            location = if (!settings.locationPrefillEnabled) {
+                existing.expense.location
+            } else {
+                parsed.location ?: ExpensesLocationHelper.resolveCurrentCity(appContext)
+            },
             dateTime = mergeDateTime(parsed.date, parsed.time),
             comments = null,
             isStub = false
