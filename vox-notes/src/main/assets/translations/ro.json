@@ -116,7 +116,7 @@
   "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme",
   "calendar_view": "Vizualizare calendar",
   "calendar_view_desc": "Răsfoiește notițele ca un calendar defilabil, paginat pe luni, în loc de o listă simplă",
-  "attach_photo_on_scan": "Atașează foto la scanare",
+  "attach_photo_on_scan": "Procesează foto cu AI la scanare",
   "attach_photo_on_scan_desc": "Trimite fotografia scanată către AI alături de textul recunoscut (necesită și setarea „trimite foto către AI” din Vision și un motor multimodal configurat)",
   "today": "Astăzi",
   "debug_section": "Depanare",

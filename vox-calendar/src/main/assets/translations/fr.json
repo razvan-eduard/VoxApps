@@ -105,7 +105,7 @@
   "commander_required_message": "Cette fonctionnalité nécessite que Vox Commander soit installé et configuré",
   "vision_required_message": "Cette fonctionnalité nécessite que Vox Vision soit installé",
   "scan_save_failed": "Échec de l'enregistrement — veuillez réessayer",
-  "attach_photo_on_scan": "Joindre la photo lors du scan",
+  "attach_photo_on_scan": "Traiter la photo avec l'IA lors du scan",
   "attach_photo_on_scan_desc": "Envoyer la photo scannée avec le texte reconnu à l'IA (nécessite aussi le réglage « envoyer la photo à l'IA » de Vision et un moteur multimodal configuré)",
   "locked_title": "Le calendrier est verrouillé",
   "unlock": "Déverrouiller",

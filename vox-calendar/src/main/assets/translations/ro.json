@@ -107,7 +107,7 @@
   "commander_required_message": "Această funcție necesită ca Vox Commander să fie instalat și configurat",
   "vision_required_message": "Această funcție necesită ca Vox Vision să fie instalat",
   "scan_save_failed": "Nu s-a putut salva — încearcă din nou",
-  "attach_photo_on_scan": "Atașează foto la scanare",
+  "attach_photo_on_scan": "Procesează foto cu AI la scanare",
   "attach_photo_on_scan_desc": "Trimite fotografia scanată către AI alături de textul recunoscut (necesită și setarea „trimite foto către AI” din Vision și un motor multimodal configurat)",
   "locked_title": "Calendarul este blocat",
   "unlock": "Deblochează",

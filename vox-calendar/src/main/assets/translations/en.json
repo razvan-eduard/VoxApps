@@ -107,7 +107,7 @@
   "commander_required_message": "This feature requires Vox Commander to be installed and configured",
   "vision_required_message": "This feature requires Vox Vision to be installed",
   "scan_save_failed": "Couldn't save — please try again",
-  "attach_photo_on_scan": "Attach photo on scan",
+  "attach_photo_on_scan": "Process photo with AI on scan",
   "attach_photo_on_scan_desc": "Send the scanned photo to the AI alongside the recognized text (needs Vision's \"send photo to AI\" setting on too, and a multimodal engine configured)",
   "locked_title": "Calendar is locked",
   "unlock": "Unlock",
