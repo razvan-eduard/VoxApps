@@ -9,11 +9,16 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,8 +26,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.CalendarLayer
+import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.util.Locale
 
@@ -108,5 +115,39 @@ internal fun DayColumn(
                 )
             }
         }
+        if (date == LocalDate.now()) {
+            val currentTimeFraction by rememberCurrentTimeFraction()
+            val dotSize = 8.dp
+            Row(
+                modifier = Modifier
+                    .padding(top = (HOUR_HEIGHT * currentTimeFraction) - dotSize / 2)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.size(dotSize).background(MaterialTheme.colorScheme.error, CircleShape))
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(2.dp)
+                        .background(MaterialTheme.colorScheme.error)
+                )
+            }
+        }
     }
+}
+
+/** Ticks once a minute so the current-time line drifts down the grid in real time without a full
+ *  screen refresh. Only meaningful for today's column — callers gate rendering on that. */
+@Composable
+private fun rememberCurrentTimeFraction(): State<Float> =
+    produceState(initialValue = currentHourFraction()) {
+        while (true) {
+            value = currentHourFraction()
+            delay(60_000L)
+        }
+    }
+
+private fun currentHourFraction(): Float {
+    val now = LocalTime.now()
+    return now.hour + now.minute / 60f
 }

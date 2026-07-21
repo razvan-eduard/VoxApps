@@ -1,6 +1,7 @@
 package com.voxapps.calendarapp.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -67,6 +68,37 @@ fun WeekView(
                 }
             }
         }
+        // Pinned all-day pane, one column per day — mirrors DayView's "only visible if items
+        // exist" convention. Without this, all-day items were silently dropped in Week view:
+        // DayColumn discards them from the timed grid and nothing else ever showed them.
+        val allDayEventsByDay = remember(items, days) {
+            days.associateWith { day ->
+                items.filter {
+                    it.entryWithTags.entry.allDay &&
+                        Instant.ofEpochMilli(it.occurrenceStartMillis).atZone(zoneId).toLocalDate() == day
+                }
+            }
+        }
+        if (allDayEventsByDay.values.any { it.isNotEmpty() }) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.width(HOUR_LABEL_WIDTH))
+                days.forEach { day ->
+                    // AllDayEventsPane renders nothing at all when its day has no all-day events
+                    // (early-returns) — wrapping it in an always-emitted Box keeps every day's
+                    // column the same width, so they stay aligned with the hour grid below.
+                    Box(modifier = Modifier.weight(1f)) {
+                        AllDayEventsPane(
+                            events = allDayEventsByDay.getValue(day),
+                            layerById = layerById,
+                            onItemClick = onItemClick,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+            HorizontalDivider(thickness = 0.5.dp)
+        }
+
         HorizontalDivider()
         Row(
             modifier = Modifier
