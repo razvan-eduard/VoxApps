@@ -1,5 +1,6 @@
 package com.voxapps.ipc
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -29,7 +30,15 @@ data class VoxCommand(
      *  don't check these fields are unaffected, and every existing caller that never sets them keeps
      *  getting the original full-snapshot behavior. */
     val dateFrom: Long? = null,
-    val dateTo: Long? = null
+    val dateTo: Long? = null,
+    /** [VoxIpc.OP_SYNC_EXPORT]: only return entries with `updatedAt > since` (and tombstones with
+     *  `deletedAt > since`) — null/0 means "everything", used for a first-ever sync with a given
+     *  peer. See [VoxDataTransferClient.requestSyncExport]. */
+    val since: Long? = null,
+    /** [VoxIpc.OP_SYNC_EXPORT]: category/layer *names* (not ids — ids aren't stable across devices,
+     *  see [VoxIpc.OP_SYNC_EXPORT]'s doc comment) to restrict the export to. Null/empty means every
+     *  category/layer is in scope. */
+    val scopeNames: List<String>? = null
 ) {
     fun toJson(): String {
         val o = JSONObject()
@@ -44,6 +53,8 @@ data class VoxCommand(
         if (includePhotos) o.put("includePhotos", true)
         dateFrom?.let { o.put("dateFrom", it) }
         dateTo?.let { o.put("dateTo", it) }
+        since?.let { o.put("since", it) }
+        scopeNames?.let { o.put("scopeNames", JSONArray(it)) }
         return o.toString()
     }
 
@@ -65,7 +76,11 @@ data class VoxCommand(
                     includeSecrets = o.optBoolean("includeSecrets", false),
                     includePhotos = o.optBoolean("includePhotos", false),
                     dateFrom = if (o.has("dateFrom")) o.optLong("dateFrom") else null,
-                    dateTo = if (o.has("dateTo")) o.optLong("dateTo") else null
+                    dateTo = if (o.has("dateTo")) o.optLong("dateTo") else null,
+                    since = if (o.has("since")) o.optLong("since") else null,
+                    scopeNames = o.optJSONArray("scopeNames")?.let { arr ->
+                        (0 until arr.length()).map { arr.optString(it) }
+                    }
                 )
             } catch (e: Exception) {
                 null

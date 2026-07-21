@@ -66,4 +66,32 @@ class VoxCommandTest {
         assertFalse(VoxCommand.fromJson(withoutPhotos.toJson())!!.includePhotos)
         assertFalse(withoutPhotos.toJson().contains("includePhotos"))
     }
+
+    @Test
+    fun `sync_export round-trips since and scopeNames`() {
+        val cmd = VoxCommand(
+            op = VoxIpc.OP_SYNC_EXPORT,
+            since = 1_700_000_000_000L,
+            scopeNames = listOf("Personal", "Work")
+        )
+        val parsed = VoxCommand.fromJson(cmd.toJson())
+        assertEquals(cmd, parsed)
+    }
+
+    @Test
+    fun `sync_export with since and scopeNames omitted parses to null, not empty`() {
+        val cmd = VoxCommand(op = VoxIpc.OP_SYNC_EXPORT)
+        val parsed = VoxCommand.fromJson(cmd.toJson())!!
+        assertNull(parsed.since)
+        assertNull(parsed.scopeNames)
+        assertFalse(cmd.toJson().contains("since"))
+        assertFalse(cmd.toJson().contains("scopeNames"))
+    }
+
+    @Test
+    fun `sync_merge carries the delta payload in text`() {
+        val cmd = VoxCommand(op = VoxIpc.OP_SYNC_MERGE, text = """{"entries":[],"tombstones":[]}""")
+        val parsed = VoxCommand.fromJson(cmd.toJson())
+        assertEquals(cmd, parsed)
+    }
 }

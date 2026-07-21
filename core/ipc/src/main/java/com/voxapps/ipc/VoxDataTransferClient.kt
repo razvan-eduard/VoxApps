@@ -39,6 +39,35 @@ object VoxDataTransferClient {
     ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_IMPORT, text = payloadJson), timeoutMs)
 
     /**
+     * Peer-to-peer sync, export side: asks a satellite for everything that's changed since [since]
+     * (0/null for a first-ever sync with this peer), optionally restricted to [scopeNames]
+     * (category/layer names — null/empty means everything). See [VoxIpc.OP_SYNC_EXPORT].
+     */
+    suspend fun requestSyncExport(
+        context: Context,
+        packageName: String,
+        since: Long?,
+        scopeNames: List<String>? = null,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    ): VoxResult? = send(
+        context, packageName,
+        VoxCommand(op = VoxIpc.OP_SYNC_EXPORT, since = since, scopeNames = scopeNames),
+        timeoutMs
+    )
+
+    /**
+     * Peer-to-peer sync, merge side: hands a satellite a delta ([deltaJson], the same shape
+     * [requestSyncExport] returns) to apply via insert-if-new / last-write-wins-by-updatedAt /
+     * delete-on-tombstone — never [requestImport]'s wipe-and-replace. See [VoxIpc.OP_SYNC_MERGE].
+     */
+    suspend fun requestSyncMerge(
+        context: Context,
+        packageName: String,
+        deltaJson: String,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_SYNC_MERGE, text = deltaJson), timeoutMs)
+
+    /**
      * Fetches a satellite's [VoxSatelliteSchema] — its call-count contract, prompt template, and
      * schema version — over the same request-response channel as [requestExport]/[requestImport].
      * Called from Commander's Integrations "Refresh" button (proactive, cached), not per voice

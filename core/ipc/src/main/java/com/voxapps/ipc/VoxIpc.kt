@@ -121,6 +121,21 @@ object VoxIpc {
      */
     const val OP_GET_SCHEMA = "get_schema"
 
+    /**
+     * Vox Hub's peer-to-peer device sync ops (NFC pairing + Bluetooth transport) — deliberately
+     * separate from [OP_EXPORT]/[OP_IMPORT], which is a one-directional *restore* (wipe pre-existing
+     * rows, insert the snapshot verbatim). [OP_SYNC_EXPORT] returns only entries with
+     * `updatedAt > `[VoxCommand.since] (plus deletion tombstones with `deletedAt > since`), optionally
+     * restricted to [VoxCommand.scopeNames] (category/layer *names*, not ids — ids are a local Room
+     * sequence with no meaning on another phone; names are what category/layer reconciliation already
+     * keys on). [OP_SYNC_MERGE] applies an incoming delta of that same shape: insert-if-new,
+     * last-write-wins-by-`updatedAt` on a uid collision, delete-on-tombstone — never a blind
+     * insert-then-wipe like [OP_IMPORT]. See [VoxDataTransferClient.requestSyncExport]/
+     * [requestSyncMerge].
+     */
+    const val OP_SYNC_EXPORT = "sync_export"
+    const val OP_SYNC_MERGE = "sync_merge"
+
     /** [VoxCommand.exportScope] values — which slice of an app's export payload to include. */
     const val EXPORT_SCOPE_SETTINGS = "settings"
     const val EXPORT_SCOPE_DATA = "data"
