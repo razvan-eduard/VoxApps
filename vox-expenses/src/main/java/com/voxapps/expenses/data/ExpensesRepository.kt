@@ -106,8 +106,10 @@ class ExpensesRepository(
         }
     }
 
+    /** Bumps [Expense.updatedAt] to now — never trust a caller-supplied value here, since that's
+     *  exactly the field peer-to-peer sync's last-write-wins conflict resolution relies on. */
     suspend fun updateExpense(expense: Expense, items: List<ExpenseLineItem>) {
-        expenseDao.update(expense)
+        expenseDao.update(expense.copy(updatedAt = System.currentTimeMillis()))
         lineItemDao.deleteAllForExpense(expense.id)
         if (items.isNotEmpty()) {
             lineItemDao.insertAll(items.mapIndexed { index, item -> item.copy(id = 0, expenseId = expense.id, position = index) })
@@ -116,19 +118,25 @@ class ExpensesRepository(
 
     suspend fun deleteExpense(expense: Expense) {
         expenseDao.delete(expense)
+        expenseDao.insertTombstone(ExpenseTombstone(expense.uid, System.currentTimeMillis()))
         deleteReceiptFiles(listOfNotNull(expense.receiptImageName))
     }
 
     suspend fun deleteExpenseById(id: Long) {
-        val imageName = expenseDao.getReceiptImageName(id)
+        val expense = expenseDao.getWithDetailsById(id)?.expense
         expenseDao.deleteById(id)
-        deleteReceiptFiles(listOfNotNull(imageName))
+        if (expense != null) {
+            expenseDao.insertTombstone(ExpenseTombstone(expense.uid, System.currentTimeMillis()))
+        }
+        deleteReceiptFiles(listOfNotNull(expense?.receiptImageName))
     }
 
     suspend fun deleteAllExpenses() {
-        val imageNames = expenseDao.getAllReceiptImageNames()
+        val all = expensesSnapshot()
         expenseDao.deleteAll()
-        deleteReceiptFiles(imageNames)
+        val now = System.currentTimeMillis()
+        expenseDao.insertTombstones(all.map { ExpenseTombstone(it.uid, now) })
+        deleteReceiptFiles(all.mapNotNull { it.receiptImageName })
     }
 
     /** Best-effort cleanup: a file-delete failure never blocks/rolls back the DB delete — an orphan
@@ -221,7 +229,10 @@ class ExpensesRepository(
         val idsToDelete = groups.flatMap { g -> g.duplicateIds.filter { it != g.keepId } }.distinct()
         if (idsToDelete.isEmpty()) return
         val imageNames = expenseDao.getReceiptImageNames(idsToDelete)
+        val uids = expenseDao.getUidsByIds(idsToDelete)
         expenseDao.deleteByIds(idsToDelete)
+        val now = System.currentTimeMillis()
+        expenseDao.insertTombstones(uids.map { ExpenseTombstone(it, now) })
         deleteReceiptFiles(imageNames)
     }
 }

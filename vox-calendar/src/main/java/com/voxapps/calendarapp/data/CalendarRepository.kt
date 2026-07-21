@@ -69,9 +69,16 @@ class CalendarRepository(
         insertTags(entry.id, tags)
     }
 
-    suspend fun deleteEntry(entry: CalendarEntry) = entryDao.delete(entry)
+    suspend fun deleteEntry(entry: CalendarEntry) {
+        entryDao.delete(entry)
+        entryDao.insertTombstone(CalendarEntryTombstone(entry.uid, System.currentTimeMillis()))
+    }
 
-    suspend fun deleteEntryById(id: Long) = entryDao.deleteById(id)
+    suspend fun deleteEntryById(id: Long) {
+        val uid = entryDao.getUidById(id)
+        entryDao.deleteById(id)
+        if (uid != null) entryDao.insertTombstone(CalendarEntryTombstone(uid, System.currentTimeMillis()))
+    }
 
     private suspend fun insertTags(entryId: Long, tags: List<String>) {
         val clean = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinct()

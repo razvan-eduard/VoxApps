@@ -3,6 +3,7 @@ package com.voxapps.calendarapp.data
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -37,4 +38,22 @@ interface CalendarEntryDao {
 
     @Delete
     suspend fun delete(entry: CalendarEntry)
+
+    // --- Sync tombstones (see CalendarEntryTombstone) ---
+
+    /** Read the uid before a delete-by-id, since the row won't exist to query afterwards. */
+    @Query("SELECT uid FROM calendar_entries WHERE id = :id")
+    suspend fun getUidById(id: Long): String?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTombstone(tombstone: CalendarEntryTombstone)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTombstones(tombstones: List<CalendarEntryTombstone>)
+
+    @Query("SELECT * FROM calendar_entry_tombstones WHERE deletedAt > :since")
+    suspend fun getTombstonesSince(since: Long): List<CalendarEntryTombstone>
+
+    @Query("DELETE FROM calendar_entry_tombstones WHERE deletedAt < :before")
+    suspend fun deleteStaleTombstones(before: Long)
 }

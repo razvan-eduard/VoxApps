@@ -3,6 +3,7 @@ package com.voxapps.expenses.data
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -62,9 +63,27 @@ interface ExpenseDao {
     @Query("SELECT receiptImageName FROM expenses WHERE receiptImageName IS NOT NULL")
     suspend fun getAllReceiptImageNames(): List<String>
 
+    /** Read tombstone-worthy uids before a delete-by-ids, since the rows won't exist to query afterwards. */
+    @Query("SELECT uid FROM expenses WHERE id IN (:ids)")
+    suspend fun getUidsByIds(ids: List<Long>): List<String>
+
     @Update
     suspend fun update(expense: Expense)
 
     @Delete
     suspend fun delete(expense: Expense)
+
+    // --- Sync tombstones (see ExpenseTombstone) ---
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTombstone(tombstone: ExpenseTombstone)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTombstones(tombstones: List<ExpenseTombstone>)
+
+    @Query("SELECT * FROM expense_tombstones WHERE deletedAt > :since")
+    suspend fun getTombstonesSince(since: Long): List<ExpenseTombstone>
+
+    @Query("DELETE FROM expense_tombstones WHERE deletedAt < :before")
+    suspend fun deleteStaleTombstones(before: Long)
 }

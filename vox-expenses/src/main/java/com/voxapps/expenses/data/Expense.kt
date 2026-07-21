@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.util.UUID
 
 /**
  * A single expense. [totalAmount] is the only mandatory field.
@@ -17,13 +18,20 @@ import androidx.room.PrimaryKey
  * existed when a backup was taken (safe to replace) from ones created since (must survive). Rows
  * from before this field existed backfill to 0 via the Room migration, deliberately (see
  * ExpensesDatabase's MIGRATION_4_5 doc comment).
+ * [uid]/[updatedAt] back the peer-to-peer sync merge (see :core:datahygiene's merge helper) — [uid]
+ * is a stable cross-device identity generated once at creation (unlike [id], a local Room sequence
+ * that means nothing on another phone), and [updatedAt] is bumped on every field-level edit so two
+ * devices can resolve a conflicting edit by last-write-wins. Rows from before these fields existed
+ * backfill via ExpensesDatabase's MIGRATION_5_6 (a fresh generated [uid] per row, [updatedAt] copied
+ * from [createdAt]).
  */
 @Entity(
     tableName = "expenses",
-    indices = [Index("categoryId")]
+    indices = [Index("categoryId"), Index(value = ["uid"], unique = true)]
 )
 data class Expense(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val uid: String = UUID.randomUUID().toString(),
     val title: String? = null,
     val totalAmount: Double,
     val currencyCode: String,
@@ -35,5 +43,6 @@ data class Expense(
     @ColumnInfo(name = "categoryId") val categoryId: Long? = null,
     val receiptImageName: String? = null,
     val isStub: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
 )

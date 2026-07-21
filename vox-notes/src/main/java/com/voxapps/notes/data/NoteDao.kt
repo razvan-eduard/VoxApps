@@ -3,6 +3,7 @@ package com.voxapps.notes.data
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -40,8 +41,8 @@ interface NoteDao {
     suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long)
 
     /** Partial update from the inline editor — preserves createdAt. */
-    @Query("UPDATE notes SET title = :title, text = :text, categoryId = :categoryId WHERE id = :id")
-    suspend fun updateFields(id: Long, title: String?, text: String, categoryId: Long?)
+    @Query("UPDATE notes SET title = :title, text = :text, categoryId = :categoryId, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateFields(id: Long, title: String?, text: String, categoryId: Long?, updatedAt: Long)
 
     @Query("DELETE FROM notes WHERE id = :id")
     suspend fun deleteById(id: Long)
@@ -51,4 +52,22 @@ interface NoteDao {
 
     @Delete
     suspend fun delete(note: Note)
+
+    // --- Sync tombstones (see NoteTombstone) ---
+
+    /** Read the uid before a delete-by-id, since the row won't exist to query afterwards. */
+    @Query("SELECT uid FROM notes WHERE id = :id")
+    suspend fun getUidById(id: Long): String?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTombstone(tombstone: NoteTombstone)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTombstones(tombstones: List<NoteTombstone>)
+
+    @Query("SELECT * FROM note_tombstones WHERE deletedAt > :since")
+    suspend fun getTombstonesSince(since: Long): List<NoteTombstone>
+
+    @Query("DELETE FROM note_tombstones WHERE deletedAt < :before")
+    suspend fun deleteStaleTombstones(before: Long)
 }

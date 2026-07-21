@@ -4,6 +4,7 @@ import android.content.Context
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -67,7 +68,8 @@ class ExpensesRepositoryDeleteReceiptFileTest {
     @Test
     fun `deleteExpenseById looks up the filename before deleting the row`() = runTest {
         stageReceipt("rec_2.jpg")
-        coEvery { expenseDao.getReceiptImageName(2) } returns "rec_2.jpg"
+        val expense = Expense(id = 2, totalAmount = 10.0, currencyCode = "RON", dateTime = 0, receiptImageName = "rec_2.jpg")
+        coEvery { expenseDao.getWithDetailsById(2) } returns ExpenseWithDetails(expense = expense)
 
         repository.deleteExpenseById(2)
 
@@ -79,7 +81,11 @@ class ExpensesRepositoryDeleteReceiptFileTest {
     fun `deleteAllExpenses removes every staged receipt`() = runTest {
         stageReceipt("rec_3.jpg")
         stageReceipt("rec_4.jpg")
-        coEvery { expenseDao.getAllReceiptImageNames() } returns listOf("rec_3.jpg", "rec_4.jpg")
+        val expenses = listOf(
+            Expense(id = 3, totalAmount = 10.0, currencyCode = "RON", dateTime = 0, receiptImageName = "rec_3.jpg"),
+            Expense(id = 4, totalAmount = 10.0, currencyCode = "RON", dateTime = 0, receiptImageName = "rec_4.jpg")
+        )
+        coEvery { expenseDao.observeAll() } returns flowOf(expenses)
 
         repository.deleteAllExpenses()
 

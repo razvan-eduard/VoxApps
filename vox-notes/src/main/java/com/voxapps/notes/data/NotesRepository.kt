@@ -58,19 +58,28 @@ class NotesRepository(
         return resolved
     }
 
-    suspend fun updateNote(note: Note) = noteDao.update(note)
+    /** Bumps [Note.updatedAt] to now — never trust a caller-supplied value here, since that's
+     *  exactly the field peer-to-peer sync's last-write-wins conflict resolution relies on. */
+    suspend fun updateNote(note: Note) = noteDao.update(note.copy(updatedAt = System.currentTimeMillis()))
 
     /** Update editable fields by id (keeps createdAt). Deletes the note if it ends up empty. */
     suspend fun updateNoteFields(id: Long, title: String?, text: String, categoryId: Long?) {
         val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
         val cleanText = text.trim()
-        if (cleanTitle == null && cleanText.isEmpty()) noteDao.deleteById(id)
-        else noteDao.updateFields(id, cleanTitle, cleanText, categoryId)
+        if (cleanTitle == null && cleanText.isEmpty()) deleteNoteById(id)
+        else noteDao.updateFields(id, cleanTitle, cleanText, categoryId, System.currentTimeMillis())
     }
 
-    suspend fun deleteNote(note: Note) = noteDao.delete(note)
+    suspend fun deleteNote(note: Note) {
+        noteDao.delete(note)
+        noteDao.insertTombstone(NoteTombstone(note.uid, System.currentTimeMillis()))
+    }
 
-    suspend fun deleteNoteById(id: Long) = noteDao.deleteById(id)
+    suspend fun deleteNoteById(id: Long) {
+        val uid = noteDao.getUidById(id)
+        noteDao.deleteById(id)
+        if (uid != null) noteDao.insertTombstone(NoteTombstone(uid, System.currentTimeMillis()))
+    }
 
     /**
      * Applies a user-approved note-deduplication resolution: for each [DuplicateGroup], deletes every
@@ -82,7 +91,7 @@ class NotesRepository(
         for (group in groups) {
             for (duplicateId in group.duplicateIds) {
                 if (duplicateId == group.keepId) continue
-                noteDao.deleteById(duplicateId)
+                deleteNoteById(duplicateId)
             }
         }
     }

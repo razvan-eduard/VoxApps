@@ -9,8 +9,8 @@ import androidx.room.migration.Migration
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
-    entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class],
-    version = 5,
+    entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class, ExpenseTombstone::class],
+    version = 6,
     exportSchema = false
 )
 abstract class ExpensesDatabase : RoomDatabase() {
@@ -55,6 +55,31 @@ abstract class ExpensesDatabase : RoomDatabase() {
             }
         }
 
+        // Backs the peer-to-peer sync merge (see Expense's doc comment): every existing row needs a
+        // distinct stable uid, not the shared '' the ADD COLUMN default leaves behind. SQLite has no
+        // UUID() builtin, so this generates a v4-shaped id per row directly in SQL — randomblob()/
+        // random() are re-evaluated for every row an unfiltered UPDATE touches, unlike a Kotlin-side
+        // loop this needs no separate SELECT-then-N-UPDATEs round trip.
+        private const val SQL_GENERATE_UUID = """
+            lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
+            substr(lower(hex(randomblob(2))), 2) || '-' ||
+            substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) ||
+            '-' || lower(hex(randomblob(6)))
+        """
+
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE expenses ADD COLUMN uid TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE expenses ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE expenses SET uid = $SQL_GENERATE_UUID WHERE uid = ''")
+                db.execSQL("UPDATE expenses SET updatedAt = createdAt WHERE updatedAt = 0")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_expenses_uid ON expenses(uid)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS expense_tombstones (uid TEXT NOT NULL PRIMARY KEY, deletedAt INTEGER NOT NULL)"
+                )
+            }
+        }
+
         fun get(context: Context): ExpensesDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
         }
@@ -64,7 +89,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
         }
     }

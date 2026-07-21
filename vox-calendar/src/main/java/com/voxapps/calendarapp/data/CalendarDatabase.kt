@@ -5,11 +5,13 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
-    entities = [CalendarLayer::class, CalendarEntry::class, CalendarEntryTag::class],
-    version = 1,
+    entities = [CalendarLayer::class, CalendarEntry::class, CalendarEntryTag::class, CalendarEntryTombstone::class],
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(CalendarConverters::class)
@@ -20,6 +22,17 @@ abstract class CalendarDatabase : RoomDatabase() {
 
     companion object {
         @Volatile private var instance: CalendarDatabase? = null
+
+        // Backs the peer-to-peer sync merge — CalendarEntry already had a stable uid/updatedAt pair
+        // (unlike Expense/Note, which needed those added), so this migration is just the new
+        // tombstone table, no column backfill needed.
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS calendar_entry_tombstones (uid TEXT NOT NULL PRIMARY KEY, deletedAt INTEGER NOT NULL)"
+                )
+            }
+        }
 
         /** Room backed by SQLCipher; passphrase comes from the Keystore-backed store. */
         fun get(context: Context): CalendarDatabase = instance ?: synchronized(this) {
@@ -33,6 +46,7 @@ abstract class CalendarDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, CalendarDatabase::class.java, "vox-calendar.db")
                 .openHelperFactory(factory)
+                .addMigrations(MIGRATION_1_2)
                 .build()
         }
     }
