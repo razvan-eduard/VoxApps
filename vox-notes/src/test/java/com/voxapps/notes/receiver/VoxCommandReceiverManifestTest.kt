@@ -38,6 +38,6 @@ class VoxCommandReceiverManifestTest {
     @Test
     fun `domain and actions meta-data are unaffected by the nluHint addition`() {
         assertEquals("notes", metaDataValue("com.voxapps.vox.domain"))
-        assertEquals("create,read,export,import,get_schema", metaDataValue("com.voxapps.vox.actions"))
+        assertEquals("create,read,export,import,get_schema,sync_export,sync_merge", metaDataValue("com.voxapps.vox.actions"))
     }
 }

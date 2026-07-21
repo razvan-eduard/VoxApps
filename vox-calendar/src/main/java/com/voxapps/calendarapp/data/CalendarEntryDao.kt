@@ -45,6 +45,11 @@ interface CalendarEntryDao {
     @Query("SELECT uid FROM calendar_entries WHERE id = :id")
     suspend fun getUidById(id: Long): String?
 
+    /** Resolves a peer-to-peer sync delta's uid back to this device's own local row id — needed
+     *  before an update (preserve the local id) or a delete-by-uid (Room has no delete-by-uid). */
+    @Query("SELECT id FROM calendar_entries WHERE uid = :uid")
+    suspend fun getIdByUid(uid: String): Long?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTombstone(tombstone: CalendarEntryTombstone)
 

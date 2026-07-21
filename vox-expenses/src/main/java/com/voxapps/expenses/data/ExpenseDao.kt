@@ -67,6 +67,11 @@ interface ExpenseDao {
     @Query("SELECT uid FROM expenses WHERE id IN (:ids)")
     suspend fun getUidsByIds(ids: List<Long>): List<String>
 
+    /** Resolves a peer-to-peer sync delta's uid back to this device's own local row id — needed
+     *  before an update (preserve the local id) or a delete-by-uid (Room has no delete-by-uid). */
+    @Query("SELECT id FROM expenses WHERE uid = :uid")
+    suspend fun getIdByUid(uid: String): Long?
+
     @Update
     suspend fun update(expense: Expense)
 

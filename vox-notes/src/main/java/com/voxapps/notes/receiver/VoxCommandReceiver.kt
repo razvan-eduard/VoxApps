@@ -131,6 +131,38 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     }
                 }
             }
+
+            VoxIpc.OP_SYNC_EXPORT -> {
+                val handler = NotesSyncHandler(
+                    container.settingsRepository,
+                    container.sessionManager,
+                    container.notesRepository
+                )
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        pending.setResultData(handler.export(command.since ?: 0L, command.scopeNames).toJson())
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            VoxIpc.OP_SYNC_MERGE -> {
+                val handler = NotesSyncHandler(
+                    container.settingsRepository,
+                    container.sessionManager,
+                    container.notesRepository
+                )
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        pending.setResultData(handler.merge(command.text.orEmpty()).toJson())
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
         }
     }
 }

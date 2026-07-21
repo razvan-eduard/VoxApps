@@ -80,6 +80,39 @@ class CalendarRepository(
         if (uid != null) entryDao.insertTombstone(CalendarEntryTombstone(uid, System.currentTimeMillis()))
     }
 
+    // --- Peer-to-peer sync (see :core:datahygiene's SyncMerge and CalendarSyncHandler) ---
+
+    suspend fun tombstonesSince(since: Long): List<CalendarEntryTombstone> = entryDao.getTombstonesSince(since)
+
+    suspend fun getIdByUid(uid: String): Long? = entryDao.getIdByUid(uid)
+
+    /** Insert-side of a sync merge: preserves [entry]'s uid/createdAt/updatedAt verbatim — unlike
+     *  [addEntry], which always mints a fresh uid and stamps both timestamps to "now" (correct for a
+     *  locally *created* entry, wrong for one being replicated from a peer that already has real sync
+     *  identity). [tags] come from the peer's delta, same as [entry]'s other fields. */
+    suspend fun insertSyncedEntry(entry: CalendarEntry, tags: List<String>): Long {
+        val id = entryDao.insert(entry.copy(id = 0))
+        insertTags(id, tags)
+        return id
+    }
+
+    /** Update-side of a sync merge: [entry] must already carry the *local* row's id (resolved via
+     *  [getIdByUid] before calling this) — every other field, including updatedAt, comes from the
+     *  peer's newer version, since it won the last-write-wins comparison that got us here. */
+    suspend fun updateSyncedEntry(entry: CalendarEntry, tags: List<String>) {
+        entryDao.update(entry)
+        tagDao.deleteAllForEntry(entry.id)
+        insertTags(entry.id, tags)
+    }
+
+    /** Applies an incoming sync tombstone: deletes the local row by uid (a no-op if it's already gone
+     *  or was never synced here) via the normal [deleteEntryById] path, so a fresh local tombstone is
+     *  written too — letting the deletion propagate transitively to a third device. */
+    suspend fun deleteEntryByUid(uid: String) {
+        val id = entryDao.getIdByUid(uid) ?: return
+        deleteEntryById(id)
+    }
+
     private suspend fun insertTags(entryId: Long, tags: List<String>) {
         val clean = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (clean.isNotEmpty()) {

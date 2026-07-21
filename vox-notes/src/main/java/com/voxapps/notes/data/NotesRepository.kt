@@ -23,6 +23,30 @@ class NotesRepository(
     /** One-shot day-scoped snapshot (Vox Calendar's day-tap summary via Commander IPC). */
     suspend fun notesForDateRange(from: Long, to: Long): List<Note> = noteDao.getForDateRange(from, to)
 
+    // --- Peer-to-peer sync (see :core:datahygiene's SyncMerge and NotesSyncHandler) ---
+
+    suspend fun tombstonesSince(since: Long): List<NoteTombstone> = noteDao.getTombstonesSince(since)
+
+    suspend fun getIdByUid(uid: String): Long? = noteDao.getIdByUid(uid)
+
+    /** Insert-side of a sync merge: preserves [note]'s uid/updatedAt verbatim — unlike [addNote],
+     *  which always mints a fresh uid and stamps updatedAt to "now" (correct for a locally *created*
+     *  row, wrong for one being replicated from a peer that already has real sync identity). */
+    suspend fun insertSyncedNote(note: Note) = noteDao.insert(note.copy(id = 0))
+
+    /** Update-side of a sync merge: [note] must already carry the *local* row's id (resolved via
+     *  [getIdByUid] before calling this) — every other field, including updatedAt, comes from the
+     *  peer's newer version, since it won the last-write-wins comparison that got us here. */
+    suspend fun updateSyncedNote(note: Note) = noteDao.update(note)
+
+    /** Applies an incoming sync tombstone: deletes the local row by uid (a no-op if it's already
+     *  gone or was never synced here) via the normal [deleteNoteById] path, so a fresh local
+     *  tombstone is written too — letting the deletion propagate transitively to a third device. */
+    suspend fun deleteNoteByUid(uid: String) {
+        val id = noteDao.getIdByUid(uid) ?: return
+        deleteNoteById(id)
+    }
+
     // --- NOTES ---
     suspend fun addNote(title: String?, text: String, categoryId: Long?, createdAt: Long) {
         val clean = text.trim()

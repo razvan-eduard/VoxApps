@@ -35,6 +35,30 @@ class ExpensesRepository(
 
     suspend fun getExpenseById(id: Long): ExpenseWithDetails? = expenseDao.getWithDetailsById(id)
 
+    // --- Peer-to-peer sync (see :core:datahygiene's SyncMerge and ExpensesSyncHandler) ---
+
+    suspend fun tombstonesSince(since: Long): List<ExpenseTombstone> = expenseDao.getTombstonesSince(since)
+
+    suspend fun getIdByUid(uid: String): Long? = expenseDao.getIdByUid(uid)
+
+    /** Insert-side of a sync merge: preserves [expense]'s uid/updatedAt verbatim — unlike [addExpense],
+     *  which always mints a fresh uid and stamps updatedAt to "now" (correct for a locally *created*
+     *  row, wrong for one being replicated from a peer that already has real sync identity). */
+    suspend fun insertSyncedExpense(expense: Expense): Long = expenseDao.insert(expense.copy(id = 0))
+
+    /** Update-side of a sync merge: [expense] must already carry the *local* row's id (resolved via
+     *  [getIdByUid] before calling this) — every other field, including updatedAt, comes from the
+     *  peer's newer version, since it won the last-write-wins comparison that got us here. */
+    suspend fun updateSyncedExpense(expense: Expense) = expenseDao.update(expense)
+
+    /** Applies an incoming sync tombstone: deletes the local row by uid (a no-op if it's already
+     *  gone or was never synced here) via the normal [deleteExpenseById] path, so a fresh local
+     *  tombstone is written too — letting the deletion propagate transitively to a third device. */
+    suspend fun deleteExpenseByUid(uid: String) {
+        val id = expenseDao.getIdByUid(uid) ?: return
+        deleteExpenseById(id)
+    }
+
     suspend fun expensesForDateRange(from: Long, to: Long): List<Expense> = expenseDao.getForDateRange(from, to)
 
     suspend fun addExpense(
