@@ -1,5 +1,6 @@
 package com.voxapps.hub
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,6 +9,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
@@ -36,14 +39,24 @@ class HubActivity : ComponentActivity() {
                     },
                     colored = settings.themeColored
                 ) {
+                    val context = LocalContext.current
                     var showSettings by remember { mutableStateOf(false) }
+                    var restoreFileUri by remember { mutableStateOf<Uri?>(null) }
                     if (showSettings) {
                         HubSettingsScreen(
                             settingsRepo = container.settingsRepository,
-                            onBack = { showSettings = false }
+                            onBack = { showSettings = false },
+                            onRestoreBackup = { file ->
+                                restoreFileUri = FileProvider.getUriForFile(context, "com.voxapps.hub.fileprovider", file)
+                                showSettings = false
+                            }
                         )
                     } else {
-                        HubScreen(onOpenSettings = { showSettings = true })
+                        HubScreen(
+                            settingsRepo = container.settingsRepository,
+                            restoreFileUri = restoreFileUri,
+                            onOpenSettings = { showSettings = true }
+                        )
                     }
                 }
             }

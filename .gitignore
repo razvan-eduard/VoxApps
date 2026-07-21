@@ -46,6 +46,9 @@ Thumbs.db
 obj/
 *.so
 backup
+# ...except actual source code that happens to live in a directory named "backup"
+# (the pattern above is for native-build artifacts, e.g. whisper.cpp's .so safety backup).
+!vox-hub/src/main/java/com/voxapps/hub/domain/backup/
 build-android-hybrid/
 
 # =========================

@@ -17,6 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,13 +44,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.hub.data.preferences.HubSettings
+import com.voxapps.hub.data.preferences.HubSettingsRepository
 import com.voxapps.hub.domain.ExportImportUtil
+import com.voxapps.hub.domain.backup.BackupZipWriter
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxIpc
-import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -61,11 +66,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
-import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
-
-private const val TAG = "HubScreen"
 
 private data class ImportPreview(
     val perDomain: Map<String, JSONObject>,
@@ -77,12 +78,23 @@ private val SuccessGreen = Color(0xFF2E7D32)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HubScreen(onOpenSettings: () -> Unit = {}) {
+fun HubScreen(
+    settingsRepo: HubSettingsRepository,
+    restoreFileUri: Uri? = null,
+    onOpenSettings: () -> Unit = {}
+) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     DoubleBackToExitHandler(message = languageManager.getString("press_back_again_to_exit"))
+
+    // Scheduled backups run with no UI visible, so a failure has to surface here, the next time
+    // the user opens Hub — this is the only way they'd otherwise find out. Dismissing just
+    // remembers the timestamp already shown (a local "seen" flag, not the underlying record), so a
+    // *later* failure re-shows even if an earlier one was dismissed.
+    val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = HubSettings())
+    var dismissedFailureTimestamp by remember { mutableStateOf<Long?>(null) }
 
     var apps by remember { mutableStateOf<List<VoxAppInfo>>(emptyList()) }
     var selectedForExport by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -133,27 +145,8 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
 
     fun finalizeExport(uri: Uri, perDomainJson: Map<String, String>, perDomainAttachmentUri: Map<String, String>) {
         if (perDomainJson.isNotEmpty()) {
-            val document = ExportImportUtil.buildExportDocument(perDomainJson)
             context.contentResolver.openOutputStream(uri)?.use { out ->
-                ZipOutputStream(out).use { zos ->
-                    zos.putNextEntry(ZipEntry("export.json"))
-                    zos.write(document.toByteArray())
-                    zos.closeEntry()
-                    // "expenses" is the only domain that ever populates attachmentUri today —
-                    // matches ExportImportUtil.summarize()'s existing convention of hardcoding known
-                    // domain literals rather than a shared constant.
-                    perDomainAttachmentUri["expenses"]?.let { attachUriString ->
-                        try {
-                            context.contentResolver.openInputStream(Uri.parse(attachUriString))?.use { input ->
-                                zos.putNextEntry(ZipEntry("expenses-receipts.zip"))
-                                input.copyTo(zos)
-                                zos.closeEntry()
-                            }
-                        } catch (e: Exception) {
-                            Logger.w(TAG, "Failed to bundle receipt photos into export zip", e)
-                        }
-                    }
-                }
+                BackupZipWriter.write(out, context.contentResolver, perDomainJson, perDomainAttachmentUri["expenses"])
             }
             Toast.makeText(context, languageManager.getString("hub_export_saved_toast"), Toast.LENGTH_SHORT).show()
         }
@@ -383,10 +376,11 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
         (documentText ?: bytes.decodeToString()) to receiptsZipUri
     }
 
-    val openDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    // Shared by the manual "Choose file to import" picker below and the Settings screen's
+    // per-backup "Restore" action (which hands in a FileProvider Uri for one of its own
+    // on-disk scheduled-backup files instead of a user-picked one) — same preview/confirm flow
+    // either way.
+    fun startImportFrom(uri: Uri) {
         importError = null
         scope.launch {
             try {
@@ -413,6 +407,20 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
         }
     }
 
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) startImportFrom(uri)
+    }
+
+    // Set by HubActivity right before switching from Settings back to this screen, when the user
+    // tapped "Restore" on one of the Past backups entries — this is the trigger, not a picker
+    // result, so it's consumed via LaunchedEffect instead of an ActivityResult callback. Only
+    // fires again if a *different* backup's Uri is set next (LaunchedEffect keys on the value).
+    LaunchedEffect(restoreFileUri) {
+        restoreFileUri?.let { startImportFrom(it) }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -426,6 +434,37 @@ fun HubScreen(onOpenSettings: () -> Unit = {}) {
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+            val backupTimestamp = settings.lastBackupTimestamp
+            if (settings.lastBackupSuccess == false && backupTimestamp != null && backupTimestamp != dismissedFailureTimestamp) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            languageManager.getString("backup_failed_banner_title"),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            String.format(
+                                languageManager.getString("backup_failed_banner_message"),
+                                SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(backupTimestamp)),
+                                settings.lastBackupError ?: ""
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        TextButton(
+                            onClick = { dismissedFailureTimestamp = backupTimestamp },
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            Text(languageManager.getString("dismiss_button"))
+                        }
+                    }
+                }
+            }
             if (apps.isEmpty()) {
                 Text(languageManager.getString("hub_no_apps_found"))
             } else {

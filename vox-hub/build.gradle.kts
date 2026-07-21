@@ -72,6 +72,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
