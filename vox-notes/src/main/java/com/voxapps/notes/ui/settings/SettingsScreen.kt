@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MergeType
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Tune
@@ -26,13 +27,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.logging.ui.LogViewerStrings
+import com.voxapps.logging.ui.LogsSettingsTab
+import com.voxapps.logging.ui.LogsTabStrings
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
 import com.voxapps.notes.state.NotesStateManager
 import com.voxapps.notes.state.NotesUiState
 import com.voxapps.notes.ui.LocalLanguageManager
 
-private enum class SettingsPage { MENU, GENERAL, NOTIFICATIONS, CATEGORIES, NOTE_CLEANUP }
+private enum class SettingsPage { MENU, GENERAL, NOTIFICATIONS, CATEGORIES, NOTE_CLEANUP, LOGS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +63,7 @@ fun SettingsScreen(
         SettingsPage.NOTIFICATIONS -> languageManager.getString("notifications")
         SettingsPage.CATEGORIES -> languageManager.getString("categories_settings_title")
         SettingsPage.NOTE_CLEANUP -> languageManager.getString("note_cleanup_settings_title")
+        SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
     }
 
     Scaffold(
@@ -96,6 +101,11 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Filled.CleaningServices, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTE_CLEANUP }
                 )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("logs_settings_title")) },
+                    leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
+                )
             }
             SettingsPage.GENERAL -> GeneralSettingsTab(settings = settings, stateManager = stateManager, modifier = mod)
             SettingsPage.NOTIFICATIONS -> NotificationsSettingsTab(
@@ -114,6 +124,26 @@ fun SettingsScreen(
                 settings = settings,
                 notes = notes,
                 stateManager = stateManager,
+                modifier = mod
+            )
+            SettingsPage.LOGS -> LogsSettingsTab(
+                enabled = settings.debugLoggingEnabled,
+                onEnabledChange = { stateManager.setDebugLoggingEnabled(it) },
+                toastsEnabled = settings.debugToastsEnabled,
+                onToastsEnabledChange = { stateManager.setDebugToastsEnabled(it) },
+                strings = LogsTabStrings(
+                    enabledLabel = languageManager.getString("debug_logging"),
+                    enabledDesc = languageManager.getString("debug_logging_desc"),
+                    toastsLabel = languageManager.getString("debug_toasts_label"),
+                    viewer = LogViewerStrings(
+                        sectionTitle = languageManager.getString("verbose_logging_section"),
+                        clearLabel = languageManager.getString("clear_logs"),
+                        copyLabel = languageManager.getString("copy_button"),
+                        shareLabel = languageManager.getString("share_button"),
+                        noLogsLabel = languageManager.getString("no_logs")
+                    )
+                ),
+                shareSubject = "VoxNotes Logs",
                 modifier = mod
             )
         }

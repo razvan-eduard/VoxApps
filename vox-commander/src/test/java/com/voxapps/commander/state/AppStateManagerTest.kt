@@ -71,8 +71,8 @@ class AppStateManagerTest {
         every { context.getExternalFilesDir(any()) } returns java.io.File(System.getProperty("java.io.tmpdir"))
 
         // Mock Logger to avoid NPE from uninitialized context
-        mockkObject(com.voxapps.commander.utils.Logger)
-        every { com.voxapps.commander.utils.Logger.log(any(), any()) } returns Unit
+        mockkObject(com.voxapps.logging.Logger)
+        every { com.voxapps.logging.Logger.log(any(), any()) } returns Unit
 
         val initialSettings = AppSettings(
             voiceProcessor = Strings.Processors.GOOGLE,

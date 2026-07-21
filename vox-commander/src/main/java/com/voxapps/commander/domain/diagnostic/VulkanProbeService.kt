@@ -8,7 +8,7 @@ import android.os.Looper
 import android.os.Message
 import android.os.Messenger
 import android.os.RemoteException
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.whispercpp.whisper.WhisperContext
 import com.whispercpp.whisper.WhisperLib
 import java.io.File

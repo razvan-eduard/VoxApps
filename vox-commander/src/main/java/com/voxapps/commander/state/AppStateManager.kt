@@ -6,7 +6,7 @@ import android.content.Context
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.intent.registry.AppRegistry
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -362,8 +362,14 @@ class AppStateManager private constructor(
         scope.launch { repo.setCloudIntelligenceEnabled(enabled) }
     }
 
-    fun setVerboseLoggingEnabled(enabled: Boolean) {
-        scope.launch { repo.setVerboseLoggingEnabled(enabled) }
+    fun setDebugLoggingEnabled(enabled: Boolean) {
+        Logger.setEnabled(enabled)
+        scope.launch { repo.setDebugLoggingEnabled(enabled) }
+    }
+
+    fun setDebugToastsEnabled(enabled: Boolean) {
+        Logger.setToastsEnabled(enabled)
+        scope.launch { repo.setDebugToastsEnabled(enabled) }
     }
 
     fun setExperimentalVulkanEnabled(enabled: Boolean) {

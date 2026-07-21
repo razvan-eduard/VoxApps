@@ -7,7 +7,7 @@ import com.voxapps.commander.service.DeclarativeApiExecutor
 import com.voxapps.commander.service.OAuth2Manager
 import com.voxapps.commander.service.OAuthConfig
 import com.voxapps.commander.service.SpotifyRemoteManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * Playback helpers used by [AudioIntentHandler]'s search-based `play` fallback chain. Renamed

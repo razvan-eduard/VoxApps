@@ -4,7 +4,7 @@ import android.app.DownloadManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import java.io.File
 
 class DownloadCompleteReceiver : BroadcastReceiver() {

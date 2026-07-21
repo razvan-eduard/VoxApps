@@ -7,7 +7,7 @@ import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
 import com.voxapps.commander.utils.IntentUtils
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * Handles navigation domain intents: navigate to a destination.

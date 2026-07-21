@@ -12,7 +12,7 @@ import com.voxapps.commander.domain.intent.interpreter.NluIntentParser
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.voice.TtsManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxCommand
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmResult

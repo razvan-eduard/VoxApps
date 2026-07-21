@@ -6,7 +6,7 @@ import com.google.gson.Gson
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.NetworkMonitor
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.Dispatchers

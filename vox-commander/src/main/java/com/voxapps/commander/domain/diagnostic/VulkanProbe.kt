@@ -9,7 +9,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Message
 import android.os.Messenger
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 
 /**

@@ -20,7 +20,7 @@ import com.voxapps.commander.domain.voice.VoiceManager
 import com.voxapps.commander.domain.voice.TtsManager
 import com.voxapps.commander.domain.conversation.ConversationHandler
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.ui.viewmodels.MainViewModel
 import com.voxapps.commander.ui.viewmodels.ModelManagementViewModel
 import com.whispercpp.whisper.WhisperLib

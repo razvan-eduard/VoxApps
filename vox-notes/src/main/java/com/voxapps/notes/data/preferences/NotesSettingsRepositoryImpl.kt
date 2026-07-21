@@ -31,6 +31,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val SCHEDULED_MERGE_INTERVAL = stringPreferencesKey("scheduled_merge_interval")
         val SCHEDULED_NOTE_DEDUP_INTERVAL = stringPreferencesKey("scheduled_note_dedup_interval")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
+        val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
         val CALENDAR_VIEW_ENABLED = booleanPreferencesKey("calendar_view_enabled")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
@@ -49,6 +50,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             scheduledMergeInterval = prefs[Keys.SCHEDULED_MERGE_INTERVAL] ?: NotesSettings.INTERVAL_OFF,
             scheduledNoteDedupInterval = prefs[Keys.SCHEDULED_NOTE_DEDUP_INTERVAL] ?: NotesSettings.INTERVAL_OFF,
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
+            debugToastsEnabled = prefs[Keys.DEBUG_TOASTS_ENABLED] ?: false,
             calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: NotesSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
@@ -106,6 +108,10 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
     }
 
+    override suspend fun setDebugToastsEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.DEBUG_TOASTS_ENABLED] = enabled }
+    }
+
     override suspend fun setCalendarViewEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.CALENDAR_VIEW_ENABLED] = enabled }
     }
@@ -141,6 +147,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             prefs[Keys.SCHEDULED_MERGE_INTERVAL] = settings.scheduledMergeInterval
             prefs[Keys.SCHEDULED_NOTE_DEDUP_INTERVAL] = settings.scheduledNoteDedupInterval
             prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
+            prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.CALENDAR_VIEW_ENABLED] = settings.calendarViewEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored

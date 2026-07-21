@@ -6,7 +6,7 @@ import android.util.Base64
 import androidx.browser.customtabs.CustomTabsIntent
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.utils.AppScope
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.NetworkMonitor
 import kotlinx.coroutines.launch
 import org.json.JSONObject

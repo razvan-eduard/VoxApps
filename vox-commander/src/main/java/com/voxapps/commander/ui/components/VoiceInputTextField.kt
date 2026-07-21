@@ -19,7 +19,7 @@ import androidx.compose.ui.graphics.Color
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.voice.VoiceManager
 import com.voxapps.commander.ui.screens.main.ListeningScreen
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 @Composable
 fun VoiceInputTextField(

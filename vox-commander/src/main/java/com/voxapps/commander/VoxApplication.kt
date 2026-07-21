@@ -5,14 +5,16 @@ import com.voxapps.commander.data.remote.NativeLibManager
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.di.AppContainer
 import com.voxapps.commander.service.OAuth2Manager
-import com.voxapps.commander.utils.LogLevel
-import com.voxapps.commander.utils.Logger
-import com.voxapps.commander.utils.LoggingFlags
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.NetworkMonitor
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -27,12 +29,19 @@ class VoxApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         
-        // Initialize Logger early
+        // Initialize Logger early — same shape as every other Vox app's Application class now.
         val snapshot = container.settingsRepository.getSettingsSnapshot()
-        val level = LogLevel.valueOf(snapshot.logLevel)
-        Logger.initialize(this, level)
-        Logger.setLoggingFlags(LoggingFlags.fromLogLevel(level))
-        Logger.setVerboseLoggingEnabled(snapshot.verboseLoggingEnabled)
+        Logger.initialize(this, "VoxCommander")
+        Logger.setEnabled(snapshot.debugLoggingEnabled)
+        Logger.setToastsEnabled(snapshot.debugToastsEnabled, this)
+        container.settingsRepository.settingsFlow
+            .map { it.debugLoggingEnabled to it.debugToastsEnabled }
+            .distinctUntilChanged()
+            .onEach { (loggingEnabled, toastsEnabled) ->
+                Logger.setEnabled(loggingEnabled)
+                Logger.setToastsEnabled(toastsEnabled)
+            }
+            .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Default))
 
         // Initialize default model filter language if not set
         if (snapshot.modelFilterLang.isEmpty()) {

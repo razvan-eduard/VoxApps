@@ -3,7 +3,7 @@ package com.voxapps.commander.domain.intent.registry
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * Declarative external-app-API integration schema. One entry replaces what used to require three

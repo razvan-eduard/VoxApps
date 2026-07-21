@@ -38,6 +38,7 @@ class ExpensesApplication : Application() {
 
         // Apply the persisted debug-logging flag immediately, then keep it in sync with any later
         // Settings toggle (mirrors vox-notes' NotesApplication).
+        Logger.initialize(this, "VoxExpenses")
         Logger.setEnabled(settingsSnapshot.debugLoggingEnabled)
         Logger.setToastsEnabled(settingsSnapshot.debugToastsEnabled, this)
         container.settingsRepository.settingsFlow

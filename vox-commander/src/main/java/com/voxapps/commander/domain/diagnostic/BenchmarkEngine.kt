@@ -17,7 +17,7 @@ import com.voxapps.commander.domain.engine.whisper.WhisperSttEngine
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.state.BenchmarkResult
 import com.voxapps.commander.state.VoiceState
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import com.whispercpp.whisper.WhisperLib
 import kotlinx.coroutines.Dispatchers

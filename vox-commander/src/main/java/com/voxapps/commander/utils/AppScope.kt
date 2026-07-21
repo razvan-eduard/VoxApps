@@ -1,5 +1,7 @@
 package com.voxapps.commander.utils
 
+import com.voxapps.logging.Logger
+
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

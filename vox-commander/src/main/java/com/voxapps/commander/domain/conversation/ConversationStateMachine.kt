@@ -1,6 +1,6 @@
 package com.voxapps.commander.domain.conversation
 
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * States for the conversation pipeline (STT → LLM → TTS with barge-in).

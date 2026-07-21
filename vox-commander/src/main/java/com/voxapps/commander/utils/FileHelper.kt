@@ -1,5 +1,7 @@
 package com.voxapps.commander.utils
 
+import com.voxapps.logging.Logger
+
 import android.content.Context
 import android.net.Uri
 import com.voxapps.commander.data.remote.RemoteModelRegistry

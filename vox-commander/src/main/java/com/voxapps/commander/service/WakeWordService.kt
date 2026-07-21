@@ -15,7 +15,7 @@ import com.voxapps.commander.domain.voice.WakeWordProfile
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.state.ServiceLoadingState
 import com.voxapps.commander.state.VoiceState
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

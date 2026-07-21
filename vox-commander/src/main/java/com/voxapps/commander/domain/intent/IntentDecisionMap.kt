@@ -4,7 +4,7 @@ import com.voxapps.commander.domain.intent.interpreter.AssistantEngine
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.utils.Strings
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * Master orchestrator for command interpretation.

@@ -1,7 +1,7 @@
 package com.voxapps.commander.domain.voice
 
 import android.content.Context
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.regex.Pattern

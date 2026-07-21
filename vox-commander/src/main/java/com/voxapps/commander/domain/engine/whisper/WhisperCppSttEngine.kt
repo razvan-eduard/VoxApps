@@ -2,7 +2,7 @@ package com.voxapps.commander.domain.engine.whisper
 
 import android.content.Context
 import com.voxapps.commander.utils.AudioConvert
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.engine.SttEngine
 import com.voxapps.commander.utils.Strings

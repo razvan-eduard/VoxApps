@@ -29,6 +29,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val AUTO_CREATE_LAYER = booleanPreferencesKey("auto_create_layer")
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
+        val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
@@ -43,6 +44,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             autoCreateLayer = prefs[Keys.AUTO_CREATE_LAYER] ?: false,
             attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
+            debugToastsEnabled = prefs[Keys.DEBUG_TOASTS_ENABLED] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: CalendarSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false
@@ -90,6 +92,10 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
     }
 
+    override suspend fun setDebugToastsEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.DEBUG_TOASTS_ENABLED] = enabled }
+    }
+
     override suspend fun setThemeDarkMode(mode: String) {
         dataStore.edit { it[Keys.THEME_DARK_MODE] = mode }
     }
@@ -115,6 +121,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             prefs[Keys.AUTO_CREATE_LAYER] = settings.autoCreateLayer
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
             prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
+            prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
         }

@@ -2,7 +2,7 @@ package com.voxapps.commander.domain.engine
 
 import android.content.Context
 import android.speech.tts.TextToSpeech
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.utils.TextUtils
 import java.util.Locale

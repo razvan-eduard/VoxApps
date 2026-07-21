@@ -103,24 +103,6 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
-        // --- Debug logging (off by default; only turn on while actively debugging) ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("debug_logging"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("debug_logging_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = settings.debugLoggingEnabled,
-                onCheckedChange = { stateManager.setDebugLoggingEnabled(it) }
-            )
-        }
-
-        HorizontalDivider()
-
         // --- Attach photo to AI on scan (opt-in; costs real LLM tokens on top of free OCR text,
         // and only takes effect when Vision's own "send photo to AI" setting also provided one). ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

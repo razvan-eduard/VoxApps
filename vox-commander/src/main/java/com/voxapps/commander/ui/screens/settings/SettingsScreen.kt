@@ -142,11 +142,8 @@ fun SettingsContent(
                             settingsRepo = settingsRepo,
                             appStateManager = appStateManager,
                             onCleanupRequest = { showCleanupDialog = true },
-                            onClearDefaultFallback = { 
+                            onClearDefaultFallback = {
                                 modelManagementViewModel.clearDefaultOfflineFallback()
-                            },
-                            onVerboseLoggingChange = { 
-                                appStateManager.setVerboseLoggingEnabled(it)
                             },
                             refreshTrigger = uiState.refreshTrigger
                         )

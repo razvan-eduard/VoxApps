@@ -3,7 +3,7 @@ package com.voxapps.commander.domain.search
 import android.content.Context
 import com.google.gson.Gson
 import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URL

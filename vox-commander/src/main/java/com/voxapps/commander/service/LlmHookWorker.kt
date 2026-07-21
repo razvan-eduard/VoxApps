@@ -11,7 +11,7 @@ import com.voxapps.commander.R
 import com.voxapps.commander.VoxApplication
 import com.voxapps.commander.domain.intent.RawPromptOutcome
 import com.voxapps.commander.domain.intent.interpreter.NluIntentParser
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequest
 import com.voxapps.ipc.VoxLlmResult

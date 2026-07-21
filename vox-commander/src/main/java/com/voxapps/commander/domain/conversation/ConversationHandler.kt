@@ -3,7 +3,7 @@ package com.voxapps.commander.domain.conversation
 import com.voxapps.commander.domain.voice.TtsManager
 import com.voxapps.commander.state.VoiceState
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

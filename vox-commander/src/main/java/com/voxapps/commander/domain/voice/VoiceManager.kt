@@ -16,7 +16,7 @@ import com.voxapps.commander.domain.engine.whisper.WhisperSttEngine
 import com.voxapps.commander.domain.voice.WakeWordProfile
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.state.VoiceState
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*

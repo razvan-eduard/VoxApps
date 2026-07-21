@@ -54,9 +54,9 @@ data class AppSettings(
     val defaultIntentFallbackProcessor: String? = null,
     val defaultIntentFallbackModel: String? = null,
 
-    // --- LOGGING ---
-    val logLevel: String = "LOGCAT_ONLY",
-    val verboseLoggingEnabled: Boolean = false,
+    // --- LOGGING --- (same shape as every other Vox app's pair, see com.voxapps.logging.Logger)
+    val debugLoggingEnabled: Boolean = true,
+    val debugToastsEnabled: Boolean = false,
     val themeDarkMode: String = "SYSTEM", // "SYSTEM", "LIGHT", "DARK"
     val themeColored: Boolean = false,    // true = Material You dynamic color (Android 12+)
 

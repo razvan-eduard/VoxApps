@@ -8,7 +8,7 @@ import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
 import com.voxapps.commander.domain.search.SearchProviderRegistry
 import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * Provides hydrated prompt templates for AI agents.

@@ -2,7 +2,7 @@ package com.voxapps.commander.domain.voice
 
 import android.content.Context
 import android.content.res.AssetManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject

@@ -106,6 +106,10 @@ class CalendarStateManager internal constructor(
         Logger.setEnabled(enabled)
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }
     }
+    fun setDebugToastsEnabled(enabled: Boolean) {
+        Logger.setToastsEnabled(enabled)
+        scope.launch { settingsRepo.setDebugToastsEnabled(enabled) }
+    }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
     fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }

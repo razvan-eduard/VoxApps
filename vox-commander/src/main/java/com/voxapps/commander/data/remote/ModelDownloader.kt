@@ -6,7 +6,7 @@ import android.net.Uri
 import android.os.Environment
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream

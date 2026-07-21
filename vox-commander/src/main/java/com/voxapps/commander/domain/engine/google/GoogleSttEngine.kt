@@ -2,7 +2,7 @@ package com.voxapps.commander.domain.engine.google
 
 import android.content.Context
 import android.speech.SpeechRecognizer
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.domain.engine.SttEngine
 import com.voxapps.commander.utils.Strings
 

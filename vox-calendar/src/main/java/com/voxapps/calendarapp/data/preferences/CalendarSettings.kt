@@ -14,6 +14,7 @@ import androidx.compose.runtime.Immutable
  * - [attachPhotoOnScan]: whether a scanned document's photo is attached to the OCR-cleanup LLM call
  *   (multimodal engines only) — same semantics as vox-notes'/vox-expenses' equivalent field.
  * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output — off by default.
+ * - [debugToastsEnabled]: gates `com.voxapps.logging.Logger` toast output — off by default.
  * - [themeDarkMode]/[themeColored]: same theme controls as vox-commander's AppSettings — "SYSTEM"/
  *   "LIGHT"/"DARK" and Material You dynamic color, fed into the shared `:core:design` VoxTheme.
  * - [onboardingCompleted]: whether the first-launch welcome + permissions flow has been shown.
@@ -29,6 +30,7 @@ data class CalendarSettings(
     val autoCreateLayer: Boolean = false,
     val attachPhotoOnScan: Boolean = false,
     val debugLoggingEnabled: Boolean = false,
+    val debugToastsEnabled: Boolean = false,
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,
     val onboardingCompleted: Boolean = false

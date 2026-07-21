@@ -7,7 +7,7 @@ import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.testutil.TestDataFactory
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk

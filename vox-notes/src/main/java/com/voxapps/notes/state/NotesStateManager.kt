@@ -99,6 +99,10 @@ class NotesStateManager internal constructor(
         Logger.setEnabled(enabled)
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }
     }
+    fun setDebugToastsEnabled(enabled: Boolean) {
+        Logger.setToastsEnabled(enabled)
+        scope.launch { settingsRepo.setDebugToastsEnabled(enabled) }
+    }
     fun setCalendarViewEnabled(enabled: Boolean) { scope.launch { settingsRepo.setCalendarViewEnabled(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }

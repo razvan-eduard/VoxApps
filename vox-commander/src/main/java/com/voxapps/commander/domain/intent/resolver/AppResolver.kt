@@ -3,7 +3,7 @@ package com.voxapps.commander.domain.intent.resolver
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.domain.intent.registry.AppRegistry
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * Resolves the target AppEntry for an NluIntent.

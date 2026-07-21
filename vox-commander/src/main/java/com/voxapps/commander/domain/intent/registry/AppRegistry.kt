@@ -7,7 +7,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 

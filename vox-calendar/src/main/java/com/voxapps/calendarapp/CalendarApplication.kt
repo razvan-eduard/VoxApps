@@ -25,13 +25,19 @@ class CalendarApplication : Application() {
         super.onCreate()
         container = CalendarContainer(this)
 
-        // Apply the persisted debug-logging flag immediately, then keep it in sync with any later
-        // Settings toggle (mirrors vox-expenses' ExpensesApplication).
-        Logger.setEnabled(container.settingsRepository.getSnapshot().debugLoggingEnabled)
+        // Apply the persisted debug-logging flags immediately (no lag waiting for the first
+        // settingsFlow emission), then keep them in sync with any later Settings toggle.
+        Logger.initialize(this, "VoxCalendar")
+        val initialSnapshot = container.settingsRepository.getSnapshot()
+        Logger.setEnabled(initialSnapshot.debugLoggingEnabled)
+        Logger.setToastsEnabled(initialSnapshot.debugToastsEnabled, this)
         container.settingsRepository.settingsFlow
-            .map { it.debugLoggingEnabled }
+            .map { it.debugLoggingEnabled to it.debugToastsEnabled }
             .distinctUntilChanged()
-            .onEach { Logger.setEnabled(it) }
+            .onEach { (loggingEnabled, toastsEnabled) ->
+                Logger.setEnabled(loggingEnabled)
+                Logger.setToastsEnabled(toastsEnabled)
+            }
             .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Default))
 
         // Push a corrected schema to Commander's cache the instant our own calendar list changes —

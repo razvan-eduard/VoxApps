@@ -1,7 +1,7 @@
 package com.voxapps.commander.domain.conversation
 
 import android.util.Log
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.mockkStatic

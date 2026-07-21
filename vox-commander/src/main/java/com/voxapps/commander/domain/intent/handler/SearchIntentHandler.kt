@@ -8,7 +8,7 @@ import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
 import com.voxapps.commander.domain.search.LocationHelper
 import com.voxapps.commander.domain.search.SearchProviderRouter
 import com.voxapps.commander.domain.conversation.ConversationHandler
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

@@ -248,40 +248,6 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
-        // --- Debug logging (off by default; only turn on while actively debugging) ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("debug_logging"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("debug_logging_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = settings.debugLoggingEnabled,
-                onCheckedChange = { stateManager.setDebugLoggingEnabled(it) }
-            )
-        }
-
-        // --- Debug Toasts ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("debug_toasts"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("debug_toasts_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = settings.debugToastsEnabled,
-                onCheckedChange = { stateManager.setDebugToastsEnabled(it) }
-            )
-        }
-
-        HorizontalDivider()
-
         // --- Danger Zone: Delete All ---
         var showDeleteAllConfirm by remember { mutableStateOf(false) }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

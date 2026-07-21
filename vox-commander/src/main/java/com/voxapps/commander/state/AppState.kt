@@ -191,7 +191,7 @@ data class AppState(
                 themeDarkMode = settings.themeDarkMode,
                 themeColored = settings.themeColored,
                 isWakeWordServiceListening = isWakeWordServiceListening,
-                isVerboseLoggingEnabled = settings.verboseLoggingEnabled,
+                isVerboseLoggingEnabled = settings.debugLoggingEnabled,
                 isExperimentalVulkanEnabled = settings.experimentalVulkanEnabled,
                 isWhisperSystemEnabled = settings.isWhisperSystemEnabled,
                 downloadPreference = settings.downloadPreference,

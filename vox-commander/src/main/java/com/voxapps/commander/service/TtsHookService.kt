@@ -5,7 +5,7 @@ import android.content.Intent
 import android.os.IBinder
 import com.voxapps.commander.VoxApplication
 import com.voxapps.commander.domain.voice.TtsManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 
 /**

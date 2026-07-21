@@ -1,6 +1,6 @@
 package com.voxapps.commander.domain.search
 
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * Routes search queries to the appropriate provider based on category.

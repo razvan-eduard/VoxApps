@@ -86,8 +86,8 @@ interface SettingsRepository {
     suspend fun clearDefaultOfflineFallback()
 
     // --- LOGGING ---
-    suspend fun setLogLevel(level: String)
-    suspend fun setVerboseLoggingEnabled(enabled: Boolean)
+    suspend fun setDebugLoggingEnabled(enabled: Boolean)
+    suspend fun setDebugToastsEnabled(enabled: Boolean)
     suspend fun setThemeDarkMode(mode: String)
     suspend fun setThemeColored(colored: Boolean)
 

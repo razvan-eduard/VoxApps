@@ -20,7 +20,7 @@ import com.voxapps.commander.ui.components.DropdownGroup
 import com.voxapps.commander.ui.components.EngineModelSection
 import com.voxapps.commander.ui.components.GroupedDropdownContent
 import com.voxapps.commander.ui.components.GroupedDropdownMenu
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 
 @OptIn(ExperimentalMaterial3Api::class)

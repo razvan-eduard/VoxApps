@@ -1,7 +1,7 @@
 package com.voxapps.commander.domain.engine.whisper
 
 import com.voxapps.commander.domain.engine.SttEngine
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.utils.WavUtils
 import okhttp3.MediaType.Companion.toMediaType

@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +32,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.logging.Logger
+import com.voxapps.logging.ui.LogViewerCard
+import com.voxapps.logging.ui.LogViewerStrings
 import com.voxapps.vision.di.VisionContainer
 import com.voxapps.vision.data.preferences.VisionSettingsRepository
 import kotlinx.coroutines.launch
@@ -60,6 +65,8 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
         initialValue = VisionSettingsRepository.DEFAULT_STABILITY
     )
     val debugLoggingEnabled by container.settingsRepository.debugLoggingEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
+    val debugToastsEnabled by container.settingsRepository.debugToastsEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
+    val logs by Logger.verboseLogs.collectAsStateWithLifecycle()
     val sendPhotoToAi by container.settingsRepository.sendPhotoToAiFlow.collectAsStateWithLifecycle(initialValue = false)
     val photoDetailForAi by container.settingsRepository.photoDetailForAiFlow.collectAsStateWithLifecycle(
         initialValue = VisionSettingsRepository.DEFAULT_PHOTO_DETAIL
@@ -79,7 +86,13 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
             Text(languageManager.getString("ocr_language_zone"), style = MaterialTheme.typography.titleMedium)
             zones.forEach { zone ->
                 Row(
@@ -208,7 +221,44 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
                 }
                 Switch(
                     checked = debugLoggingEnabled,
-                    onCheckedChange = { scope.launch { container.settingsRepository.setDebugLoggingEnabled(it) } }
+                    onCheckedChange = {
+                        Logger.setEnabled(it)
+                        scope.launch { container.settingsRepository.setDebugLoggingEnabled(it) }
+                    }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    languageManager.getString("debug_toasts_label"),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Switch(
+                    checked = debugToastsEnabled,
+                    enabled = debugLoggingEnabled,
+                    onCheckedChange = {
+                        Logger.setToastsEnabled(it)
+                        scope.launch { container.settingsRepository.setDebugToastsEnabled(it) }
+                    }
+                )
+            }
+
+            if (debugLoggingEnabled) {
+                LogViewerCard(
+                    logs = logs,
+                    strings = LogViewerStrings(
+                        sectionTitle = languageManager.getString("verbose_logging_section"),
+                        clearLabel = languageManager.getString("clear_logs"),
+                        copyLabel = languageManager.getString("copy_button"),
+                        shareLabel = languageManager.getString("share_button"),
+                        noLogsLabel = languageManager.getString("no_logs")
+                    ),
+                    shareSubject = "VoxVision Logs",
+                    modifier = Modifier.padding(top = 16.dp)
                 )
             }
         }

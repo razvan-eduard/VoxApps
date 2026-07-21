@@ -3,7 +3,7 @@ package com.voxapps.commander.domain.localization
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import java.io.InputStreamReader
 

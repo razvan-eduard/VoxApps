@@ -2,7 +2,7 @@ package com.voxapps.commander.domain.intent.interpreter
 
 import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.domain.intent.model.NluIntent
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.RegexGenerator
 
 import kotlinx.coroutines.flow.first

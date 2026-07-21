@@ -7,7 +7,7 @@ import android.provider.MediaStore
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.utils.IntentUtils
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * Catch-all handler (registered LAST in IntentRouter). Runs only for intents no specific handler

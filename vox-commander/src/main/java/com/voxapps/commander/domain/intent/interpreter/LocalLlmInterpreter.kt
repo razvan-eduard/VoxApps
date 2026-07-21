@@ -1,7 +1,7 @@
 package com.voxapps.commander.domain.intent.interpreter
 
 import android.content.Context
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import com.voxapps.commander.domain.intent.model.NluIntent

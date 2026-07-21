@@ -6,7 +6,7 @@ import android.content.Intent
 import android.os.Build
 import com.voxapps.commander.data.preferences.SettingsRepositoryImpl
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * BroadcastReceiver that allows external automation apps (MacroDroid, Tasker, etc.)

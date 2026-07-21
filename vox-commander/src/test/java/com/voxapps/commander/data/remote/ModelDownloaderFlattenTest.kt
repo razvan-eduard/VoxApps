@@ -26,8 +26,8 @@ class ModelDownloaderFlattenTest {
         every { Log.d(any<String>(), any<String>()) } returns 0
         every { Log.w(any<String>(), any<String>()) } returns 0
         every { Log.e(any<String>(), any<String>()) } returns 0
-        mockkObject(com.voxapps.commander.utils.Logger)
-        every { com.voxapps.commander.utils.Logger.log(any(), any()) } returns Unit
+        mockkObject(com.voxapps.logging.Logger)
+        every { com.voxapps.logging.Logger.log(any(), any()) } returns Unit
     }
 
     @Test

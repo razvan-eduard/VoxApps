@@ -5,7 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import com.google.gson.Gson
 import com.google.gson.JsonParser
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.NetworkMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

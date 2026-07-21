@@ -3,7 +3,7 @@ package com.voxapps.commander.service
 import com.voxapps.commander.domain.intent.registry.ApiIntegration
 import com.voxapps.commander.domain.intent.registry.CapabilitySlot
 import com.voxapps.commander.domain.intent.registry.SequenceStep
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.NetworkMonitor
 import org.json.JSONArray
 import org.json.JSONObject

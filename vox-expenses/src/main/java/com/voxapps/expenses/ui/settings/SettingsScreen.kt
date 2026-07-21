@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MergeType
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
@@ -35,9 +36,12 @@ import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.LocalLanguageManager
+import com.voxapps.logging.ui.LogViewerStrings
+import com.voxapps.logging.ui.LogsSettingsTab
+import com.voxapps.logging.ui.LogsTabStrings
 
 private enum class SettingsPage {
-    MENU, GENERAL, VOICE, CATEGORIES, EXPENSE_CLEANUP, CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS
+    MENU, GENERAL, VOICE, CATEGORIES, EXPENSE_CLEANUP, CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, LOGS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,6 +73,7 @@ fun SettingsScreen(
         SettingsPage.CURRENCY -> languageManager.getString("currency_settings_title")
         SettingsPage.NOTIFICATION_CAPTURE -> languageManager.getString("notification_capture_title")
         SettingsPage.SPENDING_LIMITS -> languageManager.getString("spending_limits_title")
+        SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
     }
 
     Scaffold(
@@ -121,6 +126,11 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Filled.Shield, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SPENDING_LIMITS }
                 )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("logs_settings_title")) },
+                    leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
+                )
             }
             SettingsPage.GENERAL -> GeneralSettingsTab(settings = settings, stateManager = stateManager, modifier = mod)
             SettingsPage.VOICE -> VoiceSettingsTab(
@@ -160,6 +170,26 @@ fun SettingsScreen(
                 categories = categories,
                 homeCurrency = settings.homeCurrency,
                 stateManager = stateManager,
+                modifier = mod
+            )
+            SettingsPage.LOGS -> LogsSettingsTab(
+                enabled = settings.debugLoggingEnabled,
+                onEnabledChange = { stateManager.setDebugLoggingEnabled(it) },
+                toastsEnabled = settings.debugToastsEnabled,
+                onToastsEnabledChange = { stateManager.setDebugToastsEnabled(it) },
+                strings = LogsTabStrings(
+                    enabledLabel = languageManager.getString("debug_logging"),
+                    enabledDesc = languageManager.getString("debug_logging_desc"),
+                    toastsLabel = languageManager.getString("debug_toasts"),
+                    viewer = LogViewerStrings(
+                        sectionTitle = languageManager.getString("verbose_logging_section"),
+                        clearLabel = languageManager.getString("clear_logs"),
+                        copyLabel = languageManager.getString("copy_button"),
+                        shareLabel = languageManager.getString("share_button"),
+                        noLogsLabel = languageManager.getString("no_logs")
+                    )
+                ),
+                shareSubject = "VoxExpenses Logs",
                 modifier = mod
             )
         }

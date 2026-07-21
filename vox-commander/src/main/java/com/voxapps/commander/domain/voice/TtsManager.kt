@@ -9,7 +9,7 @@ import com.voxapps.commander.domain.engine.ITtsEngine
 import com.voxapps.commander.domain.engine.PiperTtsEngine
 import com.voxapps.commander.domain.engine.TtsEngineType
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

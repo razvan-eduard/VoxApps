@@ -3,7 +3,7 @@ package com.voxapps.commander.domain.search
 import androidx.compose.runtime.Immutable
 
 import com.google.gson.JsonParser
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType

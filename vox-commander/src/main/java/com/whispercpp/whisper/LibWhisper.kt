@@ -1,7 +1,7 @@
 package com.whispercpp.whisper
 
 import android.content.res.AssetManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.*
 import java.util.concurrent.Executors
 

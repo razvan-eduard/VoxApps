@@ -5,7 +5,7 @@ import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URL

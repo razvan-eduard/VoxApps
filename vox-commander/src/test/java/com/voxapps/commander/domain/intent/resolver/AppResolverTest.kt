@@ -6,7 +6,7 @@ import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
 import com.voxapps.commander.testutil.TestDataFactory
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.mockkStatic

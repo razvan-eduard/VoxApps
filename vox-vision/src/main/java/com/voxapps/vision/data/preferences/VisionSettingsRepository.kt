@@ -21,6 +21,7 @@ class VisionSettingsRepository(context: Context) {
         val AUTO_TRIGGER_STABILITY = stringPreferencesKey("auto_trigger_stability")
         val FLASH_MODE = stringPreferencesKey("flash_mode")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
+        val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
         val SEND_PHOTO_TO_AI = booleanPreferencesKey("send_photo_to_ai")
         val PHOTO_DETAIL_FOR_AI = stringPreferencesKey("photo_detail_for_ai")
     }
@@ -92,6 +93,14 @@ class VisionSettingsRepository(context: Context) {
 
     suspend fun setDebugLoggingEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
+    }
+
+    /** Gates `com.voxapps.logging.Logger` on-screen toasts — off by default. */
+    val debugToastsEnabledFlow: Flow<Boolean> =
+        dataStore.data.map { it[Keys.DEBUG_TOASTS_ENABLED] ?: false }
+
+    suspend fun setDebugToastsEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.DEBUG_TOASTS_ENABLED] = enabled }
     }
 
     /**

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,8 +30,11 @@ import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepository
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.ui.LocalLanguageManager
+import com.voxapps.logging.ui.LogViewerStrings
+import com.voxapps.logging.ui.LogsSettingsTab
+import com.voxapps.logging.ui.LogsTabStrings
 
-private enum class SettingsPage { MENU, GENERAL, ICS }
+private enum class SettingsPage { MENU, GENERAL, ICS, LOGS }
 
 /** Settings shell (mirrors vox-expenses' SettingsScreen menu/subpage shape). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,6 +55,7 @@ fun SettingsScreen(
         SettingsPage.MENU -> languageManager.getString("settings")
         SettingsPage.GENERAL -> languageManager.getString("general")
         SettingsPage.ICS -> languageManager.getString("ics_settings_title")
+        SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
     }
 
     Scaffold(
@@ -78,6 +83,11 @@ fun SettingsScreen(
                         leadingContent = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
                         modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.ICS }
                     )
+                    ListItem(
+                        headlineContent = { Text(languageManager.getString("logs_settings_title")) },
+                        leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
+                    )
                 }
             }
             SettingsPage.GENERAL -> GeneralSettingsTab(
@@ -87,6 +97,26 @@ fun SettingsScreen(
             )
             SettingsPage.ICS -> IcsSettingsTab(
                 calendarRepository = calendarRepository,
+                modifier = Modifier.fillMaxSize().padding(padding)
+            )
+            SettingsPage.LOGS -> LogsSettingsTab(
+                enabled = settings.debugLoggingEnabled,
+                onEnabledChange = { stateManager.setDebugLoggingEnabled(it) },
+                toastsEnabled = settings.debugToastsEnabled,
+                onToastsEnabledChange = { stateManager.setDebugToastsEnabled(it) },
+                strings = LogsTabStrings(
+                    enabledLabel = languageManager.getString("debug_logging"),
+                    enabledDesc = languageManager.getString("debug_logging_desc"),
+                    toastsLabel = languageManager.getString("debug_toasts_label"),
+                    viewer = LogViewerStrings(
+                        sectionTitle = languageManager.getString("verbose_logging_section"),
+                        clearLabel = languageManager.getString("clear_logs"),
+                        copyLabel = languageManager.getString("copy_button"),
+                        shareLabel = languageManager.getString("share_button"),
+                        noLogsLabel = languageManager.getString("no_logs")
+                    )
+                ),
+                shareSubject = "VoxCalendar Logs",
                 modifier = Modifier.fillMaxSize().padding(padding)
             )
         }

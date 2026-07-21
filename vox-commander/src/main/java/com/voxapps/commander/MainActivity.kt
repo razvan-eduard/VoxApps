@@ -29,7 +29,7 @@ import com.voxapps.commander.ui.theme.VoxCommanderTheme
 import com.voxapps.commander.ui.LocalLanguageManager
 import com.voxapps.commander.service.OAuth2Manager
 import com.voxapps.commander.domain.localization.TutorialManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.utils.VoiceIntentLauncher
 

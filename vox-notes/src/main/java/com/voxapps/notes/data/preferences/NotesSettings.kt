@@ -19,8 +19,9 @@ import androidx.compose.runtime.Immutable
  * - [scheduledNoteDedupInterval]: same idea, for the note-deduplication feature — kept as its own
  *   independent setting rather than reusing [scheduledMergeInterval] since the two features run on
  *   independent schedules.
- * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output to logcat. Off by default so a
- *   normal install never floods logcat; flip it on only while actively debugging.
+ * - [debugLoggingEnabled]/[debugToastsEnabled]: gate `com.voxapps.logging.Logger` output to logcat
+ *   and to on-screen toasts respectively. Both off by default so a normal install never floods
+ *   logcat; flip them on only while actively debugging (mirrors vox-expenses' identical pair).
  * - [calendarViewEnabled]: swaps the main screen's chronological list for a month-paged, per-day
  *   calendar view (see `:core:calendar`). Off by default — it changes the primary browsing
  *   paradigm, so it's an explicit opt-in rather than a silent default switch.
@@ -42,6 +43,7 @@ data class NotesSettings(
     val scheduledMergeInterval: String = INTERVAL_OFF,
     val scheduledNoteDedupInterval: String = INTERVAL_OFF,
     val debugLoggingEnabled: Boolean = false,
+    val debugToastsEnabled: Boolean = false,
     val calendarViewEnabled: Boolean = false,
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,

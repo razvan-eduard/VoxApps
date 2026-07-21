@@ -2,7 +2,7 @@ package com.voxapps.commander.domain.intent.interpreter
 
 import android.util.Log
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.PackageNames
 import io.mockk.every
 import io.mockk.mockkObject

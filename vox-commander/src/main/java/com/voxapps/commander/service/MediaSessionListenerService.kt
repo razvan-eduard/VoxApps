@@ -6,7 +6,7 @@ import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.os.Build
 import android.service.notification.NotificationListenerService
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * NotificationListenerService that grants access to MediaSessionManager.getActiveSessions().

@@ -6,7 +6,7 @@ import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * Parses LLM JSON output into NluIntent using the anatomy-based schema.

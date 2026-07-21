@@ -19,6 +19,7 @@ interface CalendarSettingsRepository {
     suspend fun setAutoCreateLayer(enabled: Boolean)
     suspend fun setAttachPhotoOnScan(enabled: Boolean)
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
+    suspend fun setDebugToastsEnabled(enabled: Boolean)
     suspend fun setThemeDarkMode(mode: String)
     suspend fun setThemeColored(colored: Boolean)
     suspend fun setOnboardingCompleted(completed: Boolean)

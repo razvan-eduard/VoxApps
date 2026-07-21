@@ -13,7 +13,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
 import com.voxapps.commander.data.remote.RemoteModelRegistry
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.utils.AppScope
 import kotlinx.coroutines.flow.Flow
@@ -83,8 +83,8 @@ class SettingsRepositoryImpl(
         val DEFAULT_INTENT_FALLBACK_MODEL = stringPreferencesKey("default_intent_fallback_model")
 
         // Logging
-        val LOG_LEVEL = stringPreferencesKey("log_level")
-        val VERBOSE_LOGGING_ENABLED = booleanPreferencesKey("verbose_logging_enabled")
+        val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
+        val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
 
@@ -225,8 +225,8 @@ class SettingsRepositoryImpl(
                 all["default_intent_fallback_model"]?.let { prefs[Keys.DEFAULT_INTENT_FALLBACK_MODEL] = it as String }
 
                 // Logging
-                all["log_level"]?.let { prefs[Keys.LOG_LEVEL] = it as String }
-                all[Strings.Preferences.KEY_VERBOSE_LOGGING]?.let { prefs[Keys.VERBOSE_LOGGING_ENABLED] = it as Boolean }
+                all["debug_logging_enabled"]?.let { prefs[Keys.DEBUG_LOGGING_ENABLED] = it as Boolean }
+                all["debug_toasts_enabled"]?.let { prefs[Keys.DEBUG_TOASTS_ENABLED] = it as Boolean }
 
                 // Vulkan
                 all[Strings.Preferences.KEY_VULKAN_INCOMPATIBLE]?.let { prefs[Keys.VULKAN_INCOMPATIBLE] = it as Boolean }
@@ -320,8 +320,8 @@ class SettingsRepositoryImpl(
             defaultIntentFallbackProcessor = prefs[Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR],
             defaultIntentFallbackModel = prefs[Keys.DEFAULT_INTENT_FALLBACK_MODEL],
 
-            logLevel = prefs[Keys.LOG_LEVEL] ?: "LOGCAT_ONLY",
-            verboseLoggingEnabled = prefs[Keys.VERBOSE_LOGGING_ENABLED] ?: false,
+            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: true,
+            debugToastsEnabled = prefs[Keys.DEBUG_TOASTS_ENABLED] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: "SYSTEM",
             themeColored = prefs[Keys.THEME_COLORED] ?: false,
 
@@ -436,8 +436,8 @@ class SettingsRepositoryImpl(
             imported.defaultIntentFallbackModel?.let { prefs[Keys.DEFAULT_INTENT_FALLBACK_MODEL] = it }
                 ?: prefs.remove(Keys.DEFAULT_INTENT_FALLBACK_MODEL)
 
-            prefs[Keys.LOG_LEVEL] = imported.logLevel
-            prefs[Keys.VERBOSE_LOGGING_ENABLED] = imported.verboseLoggingEnabled
+            prefs[Keys.DEBUG_LOGGING_ENABLED] = imported.debugLoggingEnabled
+            prefs[Keys.DEBUG_TOASTS_ENABLED] = imported.debugToastsEnabled
             prefs[Keys.THEME_DARK_MODE] = imported.themeDarkMode
             prefs[Keys.THEME_COLORED] = imported.themeColored
 
@@ -679,12 +679,12 @@ class SettingsRepositoryImpl(
     }
 
     // --- LOGGING ---
-    override suspend fun setLogLevel(level: String) {
-        dataStore.edit { it[Keys.LOG_LEVEL] = level }
+    override suspend fun setDebugLoggingEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
     }
 
-    override suspend fun setVerboseLoggingEnabled(enabled: Boolean) {
-        dataStore.edit { it[Keys.VERBOSE_LOGGING_ENABLED] = enabled }
+    override suspend fun setDebugToastsEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.DEBUG_TOASTS_ENABLED] = enabled }
     }
 
     override suspend fun setThemeDarkMode(mode: String) {

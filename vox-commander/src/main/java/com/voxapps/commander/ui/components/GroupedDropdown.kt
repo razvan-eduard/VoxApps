@@ -20,7 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.domain.localization.LanguageManager
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 data class DropdownGroup<T>(
     val header: String,

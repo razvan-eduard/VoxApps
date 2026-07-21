@@ -9,7 +9,7 @@ import android.location.Location
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume

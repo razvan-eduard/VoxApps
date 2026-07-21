@@ -26,9 +26,9 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.state.BenchmarkResult
 import com.voxapps.commander.state.VoiceState
-import com.voxapps.commander.utils.Logger
-import com.voxapps.commander.utils.LogLevel
-import com.voxapps.commander.utils.LoggingFlags
+import com.voxapps.logging.Logger
+import com.voxapps.logging.ui.LogViewerCard
+import com.voxapps.logging.ui.LogViewerStrings
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -40,7 +40,6 @@ fun AdvancedSettingsTab(
     appStateManager: AppStateManager,
     onCleanupRequest: () -> Unit,
     onClearDefaultFallback: () -> Unit,
-    onVerboseLoggingChange: (Boolean) -> Unit,
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
@@ -52,6 +51,7 @@ fun AdvancedSettingsTab(
     val nativeLibsStatus by appStateManager.nativeLibsStatus.collectAsStateWithLifecycle()
     val systemInfo by appStateManager.systemInfo.collectAsStateWithLifecycle()
     val logs by Logger.verboseLogs.collectAsStateWithLifecycle()
+    val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())
 
     val appContainer = remember { (context.applicationContext as com.voxapps.commander.VoxApplication).container }
     val benchmarkEngine = remember {
@@ -74,243 +74,74 @@ fun AdvancedSettingsTab(
     var isDownloadingWhisper by remember { mutableStateOf(false) }
     var whisperDownloadProgress by remember { mutableStateOf(0f) }
 
-    // Manage own state with logging flags
-    var loggingFlags by remember {
-        mutableStateOf(
-            LoggingFlags.fromLogLevel(
-                when (settingsRepo.getSettingsSnapshot().logLevel) {
-                    "NONE" -> LogLevel.NONE
-                    "TOAST_ONLY" -> LogLevel.TOAST_ONLY
-                    "LOGCAT_ONLY" -> LogLevel.LOGCAT_ONLY
-                    else -> LogLevel.TOAST_AND_LOGCAT
-                }
-            )
-        )
-    }
-    var verboseLoggingEnabled by remember(loggingFlags.logcatEnabled) {
-        mutableStateOf(
-            if (loggingFlags.logcatEnabled) {
-                settingsRepo.getSettingsSnapshot().verboseLoggingEnabled
-            } else {
-                false
-            }
-        )
-    }
-
-    LaunchedEffect(loggingFlags.logcatEnabled) {
-        if (!loggingFlags.logcatEnabled) {
-            verboseLoggingEnabled = false
-            // Already inside a LaunchedEffect (suspend) — call directly, no runBlocking.
-            settingsRepo.setVerboseLoggingEnabled(false)
-            Logger.setVerboseLoggingEnabled(false)
-            onVerboseLoggingChange(false)
-        } else {
-            val savedVerbose = settingsRepo.getSettingsSnapshot().verboseLoggingEnabled
-            verboseLoggingEnabled = savedVerbose
-            Logger.setVerboseLoggingEnabled(savedVerbose)
-            onVerboseLoggingChange(savedVerbose)
-        }
-    }
-
-    LaunchedEffect(verboseLoggingEnabled) {
-        onVerboseLoggingChange(verboseLoggingEnabled)
-    }
-
     LaunchedEffect(Unit) {
         appStateManager.refreshNativeLibsStatus()
-        Logger.initialize(context, LoggingFlags.toLogLevel(loggingFlags))
-        Logger.setLoggingFlags(loggingFlags)
-        Logger.setVerboseLoggingEnabled(verboseLoggingEnabled)
     }
-
-    val dateFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // --- LOGGING SECTION ---
+        // --- LOGGING SECTION (same two-switch + viewer shape as every other app's Logs tab) ---
         item {
             Text(text = languageManager.getString("advanced_settings_section"), style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = languageManager.getString("logging_level"), style = MaterialTheme.typography.labelLarge)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        val enabled = !loggingFlags.toastEnabled
-                        loggingFlags = loggingFlags.copy(toastEnabled = enabled)
-                        val newLogLevel = LoggingFlags.toLogLevel(loggingFlags)
-                        scope.launch { settingsRepo.setLogLevel(newLogLevel.name) }
-                        Logger.setLoggingFlags(loggingFlags)
-                    },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(languageManager.getString("toast_label"))
-                Checkbox(
-                    checked = loggingFlags.toastEnabled,
-                    onCheckedChange = { enabled ->
-                        loggingFlags = loggingFlags.copy(toastEnabled = enabled)
-                        val newLogLevel = LoggingFlags.toLogLevel(loggingFlags)
-                        scope.launch { settingsRepo.setLogLevel(newLogLevel.name) }
-                        Logger.setLoggingFlags(loggingFlags)
-                    }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        val enabled = !loggingFlags.logcatEnabled
-                        loggingFlags = loggingFlags.copy(logcatEnabled = enabled)
-                        val newLogLevel = LoggingFlags.toLogLevel(loggingFlags)
-                        scope.launch { settingsRepo.setLogLevel(newLogLevel.name) }
-                        Logger.setLoggingFlags(loggingFlags)
-                    },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(languageManager.getString("logcat_label"))
-                Checkbox(
-                    checked = loggingFlags.logcatEnabled,
-                    onCheckedChange = { enabled ->
-                        loggingFlags = loggingFlags.copy(logcatEnabled = enabled)
-                        val newLogLevel = LoggingFlags.toLogLevel(loggingFlags)
-                        scope.launch { settingsRepo.setLogLevel(newLogLevel.name) }
-                        Logger.setLoggingFlags(loggingFlags)
-                    }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("debug_logging"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("debug_logging_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.debugLoggingEnabled,
+                    onCheckedChange = { appStateManager.setDebugLoggingEnabled(it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Dependent on debug logging being on — same as every other app's Logs tab, and
+            // matches the fact that a toast is just an alternate rendering of the same log event.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    languageManager.getString("verbose_logging"),
-                    color = if (loggingFlags.logcatEnabled) LocalContentColor.current else Color.Gray
+                    languageManager.getString("debug_toasts_label"),
+                    color = if (settings.debugLoggingEnabled) LocalContentColor.current else Color.Gray
                 )
                 Switch(
-                    checked = verboseLoggingEnabled,
-                    onCheckedChange = { enabled ->
-                        verboseLoggingEnabled = enabled
-                        scope.launch { settingsRepo.setVerboseLoggingEnabled(enabled) }
-                        Logger.setVerboseLoggingEnabled(enabled)
-                    },
-                    enabled = loggingFlags.logcatEnabled
+                    checked = settings.debugToastsEnabled,
+                    enabled = settings.debugLoggingEnabled,
+                    onCheckedChange = { appStateManager.setDebugToastsEnabled(it) }
                 )
             }
         }
 
-        // --- VERBOSE LOGS SECTION ---
-        if (verboseLoggingEnabled) {
+        // --- VERBOSE LOGS SECTION (shared viewer, same as every other app's Logs tab) ---
+        if (settings.debugLoggingEnabled) {
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(text = languageManager.getString("verbose_logging_section"), style = MaterialTheme.typography.titleMedium)
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Button(
-                                onClick = { Logger.clearVerboseLogs() },
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(languageManager.getString("clear_logs"), style = MaterialTheme.typography.labelSmall)
-                            }
-                            Button(
-                                onClick = {
-                                    val logText = logs.joinToString("\n") { logEntry ->
-                                        val timestamp = dateFormat.format(Date(logEntry.timestamp))
-                                        "[$timestamp] [${logEntry.tag}] ${logEntry.message}"
-                                    }
-                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    val clip = android.content.ClipData.newPlainText("VoxCommander Logs", logText)
-                                    clipboard.setPrimaryClip(clip)
-                                },
-                                modifier = Modifier.weight(1f),
-                                enabled = logs.isNotEmpty(),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = languageManager.getString("copy_button"), modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(languageManager.getString("copy_button"), style = MaterialTheme.typography.labelSmall)
-                            }
-                            Button(
-                                onClick = {
-                                    val logText = logs.joinToString("\n") { logEntry ->
-                                        val timestamp = dateFormat.format(Date(logEntry.timestamp))
-                                        "[$timestamp] [${logEntry.tag}] ${logEntry.message}"
-                                    }
-                                    val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(android.content.Intent.EXTRA_TEXT, logText)
-                                        putExtra(android.content.Intent.EXTRA_SUBJECT, "VoxCommander Logs")
-                                    }
-                                    context.startActivity(android.content.Intent.createChooser(shareIntent, "Share Logs"))
-                                },
-                                modifier = Modifier.weight(1f),
-                                enabled = logs.isNotEmpty(),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Icon(Icons.Default.Share, contentDescription = languageManager.getString("share_button"), modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(languageManager.getString("share_button"), style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-
-                        if (logs.isEmpty()) {
-                            Text(
-                                text = languageManager.getString("no_logs"),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                logs.forEach { logEntry ->
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                                    ) {
-                                        Column(modifier = Modifier.padding(8.dp)) {
-                                            Text(
-                                                text = dateFormat.format(Date(logEntry.timestamp)),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.secondary
-                                            )
-                                            Text(
-                                                text = "[${logEntry.tag}]",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                            Text(
-                                                text = logEntry.message,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontFamily = FontFamily.Monospace
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                LogViewerCard(
+                    logs = logs,
+                    strings = LogViewerStrings(
+                        sectionTitle = languageManager.getString("verbose_logging_section"),
+                        clearLabel = languageManager.getString("clear_logs"),
+                        copyLabel = languageManager.getString("copy_button"),
+                        shareLabel = languageManager.getString("share_button"),
+                        noLogsLabel = languageManager.getString("no_logs")
+                    ),
+                    shareSubject = "VoxCommander Logs"
+                )
             }
         }
 

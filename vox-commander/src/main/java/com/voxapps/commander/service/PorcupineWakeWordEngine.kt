@@ -13,7 +13,7 @@ import ai.picovoice.porcupine.PorcupineException
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.state.VoiceState
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

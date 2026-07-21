@@ -9,7 +9,7 @@ import android.provider.Settings
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 
 /**
  * Handles system/settings domain intents: volume up/down, wifi toggle, bluetooth toggle, gps toggle.

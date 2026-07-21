@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
-import com.voxapps.commander.utils.Logger
+import com.voxapps.logging.Logger
 import java.io.ByteArrayOutputStream
 
 /**

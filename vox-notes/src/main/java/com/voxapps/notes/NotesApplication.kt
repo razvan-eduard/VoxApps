@@ -24,13 +24,19 @@ class NotesApplication : Application() {
         // still honored.
         CategoryAutoMergeScheduler.reschedule(this, container.settingsRepository.getSnapshot().scheduledMergeInterval)
 
-        // Apply the persisted debug-logging flag immediately (no lag waiting for the first
-        // settingsFlow emission), then keep it in sync with any later Settings toggle.
-        Logger.setEnabled(container.settingsRepository.getSnapshot().debugLoggingEnabled)
+        // Apply the persisted debug-logging flags immediately (no lag waiting for the first
+        // settingsFlow emission), then keep them in sync with any later Settings toggle.
+        Logger.initialize(this, "VoxNotes")
+        val initialSnapshot = container.settingsRepository.getSnapshot()
+        Logger.setEnabled(initialSnapshot.debugLoggingEnabled)
+        Logger.setToastsEnabled(initialSnapshot.debugToastsEnabled, this)
         container.settingsRepository.settingsFlow
-            .map { it.debugLoggingEnabled }
+            .map { it.debugLoggingEnabled to it.debugToastsEnabled }
             .distinctUntilChanged()
-            .onEach { Logger.setEnabled(it) }
+            .onEach { (loggingEnabled, toastsEnabled) ->
+                Logger.setEnabled(loggingEnabled)
+                Logger.setToastsEnabled(toastsEnabled)
+            }
             .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Default))
     }
 }

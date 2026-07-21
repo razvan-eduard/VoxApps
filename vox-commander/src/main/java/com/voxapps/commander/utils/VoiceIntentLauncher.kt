@@ -1,5 +1,7 @@
 package com.voxapps.commander.utils
 
+import com.voxapps.logging.Logger
+
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
