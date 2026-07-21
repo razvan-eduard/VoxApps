@@ -174,6 +174,11 @@
           "element": "location_permission",
           "title": "Location Permission",
           "description": "Optional — used for location-based commands like 'navigate home'."
+        },
+        {
+          "element": "battery_optimization_permission",
+          "title": "Battery Optimization",
+          "description": "Some phones kill background apps aggressively, which can silence wake-word detection until the OS reconnects it. Exempting this app from battery optimization keeps it running reliably in the background."
         }
       ]
     },
@@ -196,6 +201,7 @@
       "title": "You're All Set!",
       "paragraphs": [
         "You now know the basics of VoxCommander. Tap the microphone and try saying 'play Bohemian Rhapsody on Spotify' or 'navigate to the nearest gas station'.",
+        "Tip: add the 'Tap to Speak' widget to your home screen for instant voice access without opening the app.",
         "You can revisit this tutorial anytime from Settings → Advanced."
       ]
     }
@@ -375,6 +381,11 @@
           "element": "location_permission",
           "title": "Standort-Berechtigung",
           "description": "Optional — für standortbasierte Befehle wie 'nach Hause navigieren'."
+        },
+        {
+          "element": "battery_optimization_permission",
+          "title": "Akku-Optimierung",
+          "description": "Manche Telefone beenden Hintergrund-Apps sehr aggressiv, wodurch die Weckwort-Erkennung stumm bleiben kann, bis das System sie wieder verbindet. Wenn diese App von der Akku-Optimierung ausgenommen wird, läuft sie zuverlässiger im Hintergrund."
         }
       ]
     },
@@ -397,6 +408,7 @@
       "title": "Alles bereit!",
       "paragraphs": [
         "Sie kennen nun die Grundlagen von VoxCommander. Tippen Sie auf das Mikrofon und sagen Sie 'Spiele Bohemian Rhapsody auf Spotify' oder 'Navigiere zur nächsten Tankstelle'.",
+        "Tipp: Fügen Sie das Widget „Zum Sprechen tippen“ zu Ihrem Startbildschirm hinzu, um sofortigen Sprachzugriff zu erhalten, ohne die App zu öffnen.",
         "Sie können dieses Tutorial jederzeit über Einstellungen → Erweitert erneut aufrufen."
       ]
     }
@@ -576,6 +588,11 @@
           "element": "location_permission",
           "title": "Autorisation de localisation",
           "description": "Optionnelle — utilisée pour les commandes basées sur la localisation."
+        },
+        {
+          "element": "battery_optimization_permission",
+          "title": "Optimisation de la batterie",
+          "description": "Certains téléphones ferment agressivement les applications en arrière-plan, ce qui peut couper la détection du mot de réveil jusqu'à ce que le système la reconnecte. Exempter cette application de l'optimisation de la batterie la fait fonctionner plus fiablement en arrière-plan."
         }
       ]
     },
@@ -598,6 +615,7 @@
       "title": "Tout est prêt !",
       "paragraphs": [
         "Vous connaissez maintenant les bases de VoxCommander. Appuyez sur le microphone et essayez de dire « Joue Bohemian Rhapsody sur Spotify » ou « Navigue vers la station-service la plus proche ».",
+        "Astuce : ajoutez le widget « Toucher pour parler » à votre écran d'accueil pour un accès vocal instantané sans ouvrir l'application.",
         "Vous pouvez revoir ce tutoriel à tout moment via Paramètres → Avancé."
       ]
     }
@@ -777,6 +795,11 @@
           "element": "location_permission",
           "title": "Permisiune locație",
           "description": "Opțională — folosită pentru comenzi bazate pe locație."
+        },
+        {
+          "element": "battery_optimization_permission",
+          "title": "Optimizarea bateriei",
+          "description": "Unele telefoane opresc agresiv aplicațiile din fundal, ceea ce poate opri detectarea cuvântului de trezire până când sistemul o reconectează. Excluderea acestei aplicații de la optimizarea bateriei o face să ruleze mai fiabil în fundal."
         }
       ]
     },
@@ -799,6 +822,7 @@
       "title": "Gata!",
       "paragraphs": [
         "Acum cunoști bazele VoxCommander. Atinge microfonul și încearcă să spui „Redă Bohemian Rhapsody pe Spotify” sau „Navighează spre cea mai apropiată benzinărie”.",
+        "Sfat: adaugă widget-ul „Atinge pentru a vorbi” pe ecranul principal pentru acces vocal instantaneu, fără să deschizi aplicația.",
         "Poți revisualiza acest tutorial oricând din Setări → Avansat."
       ]
     }
