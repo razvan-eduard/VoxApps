@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -106,6 +107,7 @@ fun SyncScreen(
     var peers by remember { mutableStateOf(peerStore.getPeers()) }
     var peerSyncStates by remember { mutableStateOf<Map<String, PeerSyncState>>(emptyMap()) }
     var pendingSyncPeer by remember { mutableStateOf<PairedPeer?>(null) }
+    var editingScopeForPeer by remember { mutableStateOf<PairedPeer?>(null) }
 
     fun refreshPeers() {
         peers = peerStore.getPeers()
@@ -235,6 +237,18 @@ fun SyncScreen(
         }
     }
 
+    editingScopeForPeer?.let { peer ->
+        SyncScopeScreen(
+            peer = peer,
+            peerStore = peerStore,
+            onBack = {
+                editingScopeForPeer = null
+                refreshPeers()
+            }
+        )
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -327,6 +341,9 @@ fun SyncScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = { requestSyncNow(peer) }) {
                                             Icon(Icons.Filled.Sync, contentDescription = languageManager.getString("sync_now_button"))
+                                        }
+                                        IconButton(onClick = { editingScopeForPeer = peer }) {
+                                            Icon(Icons.Filled.Tune, contentDescription = languageManager.getString("sync_scope_button"))
                                         }
                                         TextButton(onClick = {
                                             peerStore.removePeer(peer.peerId)

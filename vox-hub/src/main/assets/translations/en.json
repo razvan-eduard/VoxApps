@@ -74,6 +74,9 @@
   "sync_in_progress": "Syncing…",
   "sync_apps_synced": "%1$d/%2$d apps synced",
   "sync_auto_label": "Auto-sync",
-  "sync_interval_minutes": "Every %1$d min"
+  "sync_interval_minutes": "Every %1$d min",
+  "sync_scope_button": "Sync scope",
+  "sync_scope_title": "What syncs with %1$s",
+  "sync_scope_no_categories": "No categories found for this app"
 
 }

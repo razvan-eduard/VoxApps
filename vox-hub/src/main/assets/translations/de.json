@@ -74,6 +74,9 @@
   "sync_in_progress": "Synchronisiert…",
   "sync_apps_synced": "%1$d/%2$d Apps synchronisiert",
   "sync_auto_label": "Automatische Synchronisierung",
-  "sync_interval_minutes": "Alle %1$d Min."
+  "sync_interval_minutes": "Alle %1$d Min.",
+  "sync_scope_button": "Sync-Bereich",
+  "sync_scope_title": "Was mit %1$s synchronisiert wird",
+  "sync_scope_no_categories": "Keine Kategorien für diese App gefunden"
 
 }

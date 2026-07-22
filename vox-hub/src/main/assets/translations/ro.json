@@ -74,6 +74,9 @@
   "sync_in_progress": "Se sincronizează…",
   "sync_apps_synced": "%1$d/%2$d aplicații sincronizate",
   "sync_auto_label": "Sincronizare automată",
-  "sync_interval_minutes": "La fiecare %1$d min"
+  "sync_interval_minutes": "La fiecare %1$d min",
+  "sync_scope_button": "Ce se sincronizează",
+  "sync_scope_title": "Ce se sincronizează cu %1$s",
+  "sync_scope_no_categories": "Nicio categorie găsită pentru această aplicație"
 
 }
