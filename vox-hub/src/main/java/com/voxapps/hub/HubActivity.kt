@@ -18,6 +18,7 @@ import com.voxapps.hub.data.preferences.HubSettings
 import com.voxapps.hub.ui.HubScreen
 import com.voxapps.hub.ui.HubSettingsScreen
 import com.voxapps.hub.ui.LocalLanguageManager
+import com.voxapps.hub.ui.SyncScreen
 
 /** Standalone launcher, mirrors vox-vision's VisionActivity shape. */
 class HubActivity : ComponentActivity() {
@@ -41,9 +42,10 @@ class HubActivity : ComponentActivity() {
                 ) {
                     val context = LocalContext.current
                     var showSettings by remember { mutableStateOf(false) }
+                    var showSync by remember { mutableStateOf(false) }
                     var restoreFileUri by remember { mutableStateOf<Uri?>(null) }
-                    if (showSettings) {
-                        HubSettingsScreen(
+                    when {
+                        showSettings -> HubSettingsScreen(
                             settingsRepo = container.settingsRepository,
                             onBack = { showSettings = false },
                             onRestoreBackup = { file ->
@@ -51,11 +53,15 @@ class HubActivity : ComponentActivity() {
                                 showSettings = false
                             }
                         )
-                    } else {
-                        HubScreen(
+                        showSync -> SyncScreen(
+                            peerStore = container.syncPeerStore,
+                            onBack = { showSync = false }
+                        )
+                        else -> HubScreen(
                             settingsRepo = container.settingsRepository,
                             restoreFileUri = restoreFileUri,
-                            onOpenSettings = { showSettings = true }
+                            onOpenSettings = { showSettings = true },
+                            onOpenSync = { showSync = true }
                         )
                     }
                 }

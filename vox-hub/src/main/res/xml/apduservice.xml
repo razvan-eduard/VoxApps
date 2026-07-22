@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Registers PairingHceService for our proprietary AID (see NfcPairingProtocol.AID_HEX — must match
+    byte-for-byte). category="other" since this isn't a payment app; requireDeviceUnlock keeps the
+    passive/card side from responding while the phone is locked, matching the sighted "hold near"
+    pairing UX (avoids an idle locked phone silently pairing with anyone who taps it).
+-->
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/app_name"
+    android:requireDeviceUnlock="true">
+    <aid-group
+        android:description="@string/app_name"
+        android:category="other">
+        <aid-filter android:name="F0564F5841505053" />
+    </aid-group>
+</host-apdu-service>

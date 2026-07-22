@@ -8,6 +8,20 @@
         requests export/import) — it holds no local database and exposes no receiver of its own.
     -->
 
+    <!-- Peer-to-peer device sync (see domain/sync/): NFC pairing + Bluetooth Classic transport. -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc.hce" android:required="false" />
+
+    <!-- Classic Bluetooth discovery/connect. Pre-31 needs location for scan results; 31+ replaces
+         that with BLUETOOTH_SCAN/CONNECT (neverForLocation: we only ever match by device name, never
+         derive physical location from scan results). -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+
     <application
         android:name=".HubApplication"
         android:allowBackup="false"
@@ -41,5 +55,19 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- The passive/card side of an NFC pairing tap — see PairingHceService's doc comment. Android
+             wakes/binds this on its own via AID routing, no foreground UI required on this device. -->
+        <service
+            android:name=".domain.sync.PairingHceService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NFC_SERVICE">
+            <intent-filter>
+                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.cardemulation.host_apdu_service"
+                android:resource="@xml/apduservice" />
+        </service>
     </application>
 </manifest>

@@ -57,6 +57,18 @@
   "clear_logs": "Effacer les logs",
   "no_logs": "Aucun log disponible",
   "copy_button": "Copier",
-  "share_button": "Partager"
+  "share_button": "Partager",
+
+  "sync_title": "Synchronisation des appareils",
+  "sync_pair_button": "Associer un nouvel appareil",
+  "sync_waiting_for_tap": "Approchez ce téléphone de l'autre appareil…",
+  "sync_resolving_bluetooth": "Recherche de l'autre appareil via Bluetooth…",
+  "sync_paired_success": "Associé avec %1$s",
+  "sync_bluetooth_not_found": "Association réussie, mais l'appareil n'a pas été trouvé via Bluetooth. Nouvel essai à la prochaine synchronisation.",
+  "sync_permission_required": "L'autorisation Bluetooth est nécessaire pour associer des appareils",
+  "sync_paired_devices_section": "Appareils associés",
+  "sync_no_paired_devices": "Aucun appareil associé pour le moment",
+  "sync_remove_device": "Supprimer",
+  "sync_mac_pending": "Adresse Bluetooth pas encore trouvée"
 
 }

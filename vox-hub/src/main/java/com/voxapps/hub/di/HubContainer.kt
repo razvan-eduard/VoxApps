@@ -4,6 +4,7 @@ import android.content.Context
 import com.voxapps.hub.data.preferences.HubSettingsRepository
 import com.voxapps.hub.data.preferences.HubSettingsRepositoryImpl
 import com.voxapps.hub.domain.localization.LanguageManager
+import com.voxapps.hub.domain.sync.SyncPeerStore
 import java.util.Locale
 
 /**
@@ -20,4 +21,6 @@ class HubContainer(context: Context) {
     }
 
     val settingsRepository: HubSettingsRepository = HubSettingsRepositoryImpl(appContext)
+
+    val syncPeerStore: SyncPeerStore by lazy { SyncPeerStore(appContext) }
 }

@@ -57,6 +57,18 @@
   "clear_logs": "Clear Logs",
   "no_logs": "No logs available",
   "copy_button": "Copy",
-  "share_button": "Share"
+  "share_button": "Share",
+
+  "sync_title": "Device sync",
+  "sync_pair_button": "Pair new device",
+  "sync_waiting_for_tap": "Hold this phone near the other device…",
+  "sync_resolving_bluetooth": "Finding the other device over Bluetooth…",
+  "sync_paired_success": "Paired with %1$s",
+  "sync_bluetooth_not_found": "Paired, but couldn't find the device over Bluetooth. It will retry the next time you sync.",
+  "sync_permission_required": "Bluetooth permission is needed to pair devices",
+  "sync_paired_devices_section": "Paired devices",
+  "sync_no_paired_devices": "No paired devices yet",
+  "sync_remove_device": "Remove",
+  "sync_mac_pending": "Bluetooth address not resolved yet"
 
 }

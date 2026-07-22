@@ -57,6 +57,18 @@
   "clear_logs": "Logs löschen",
   "no_logs": "Keine Logs verfügbar",
   "copy_button": "Kopieren",
-  "share_button": "Teilen"
+  "share_button": "Teilen",
+
+  "sync_title": "Geräte-Synchronisierung",
+  "sync_pair_button": "Neues Gerät koppeln",
+  "sync_waiting_for_tap": "Halte dieses Telefon an das andere Gerät…",
+  "sync_resolving_bluetooth": "Suche das andere Gerät über Bluetooth…",
+  "sync_paired_success": "Gekoppelt mit %1$s",
+  "sync_bluetooth_not_found": "Gekoppelt, aber das Gerät wurde über Bluetooth nicht gefunden. Wird beim nächsten Sync erneut versucht.",
+  "sync_permission_required": "Für die Gerätekopplung ist die Bluetooth-Berechtigung erforderlich",
+  "sync_paired_devices_section": "Gekoppelte Geräte",
+  "sync_no_paired_devices": "Noch keine gekoppelten Geräte",
+  "sync_remove_device": "Entfernen",
+  "sync_mac_pending": "Bluetooth-Adresse noch nicht ermittelt"
 
 }

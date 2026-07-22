@@ -57,6 +57,18 @@
   "clear_logs": "Șterge Loguri",
   "no_logs": "Niciun log disponibil",
   "copy_button": "Copiază",
-  "share_button": "Partajează"
+  "share_button": "Partajează",
+
+  "sync_title": "Sincronizare dispozitive",
+  "sync_pair_button": "Asociază dispozitiv nou",
+  "sync_waiting_for_tap": "Ține telefonul lângă celălalt dispozitiv…",
+  "sync_resolving_bluetooth": "Se caută celălalt dispozitiv prin Bluetooth…",
+  "sync_paired_success": "Asociat cu %1$s",
+  "sync_bluetooth_not_found": "Asociere reușită, dar dispozitivul nu a fost găsit prin Bluetooth. Va reîncerca la următoarea sincronizare.",
+  "sync_permission_required": "Este necesară permisiunea Bluetooth pentru a asocia dispozitive",
+  "sync_paired_devices_section": "Dispozitive asociate",
+  "sync_no_paired_devices": "Niciun dispozitiv asociat încă",
+  "sync_remove_device": "Elimină",
+  "sync_mac_pending": "Adresa Bluetooth nu a fost încă găsită"
 
 }

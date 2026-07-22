@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -81,7 +82,8 @@ private val SuccessGreen = Color(0xFF2E7D32)
 fun HubScreen(
     settingsRepo: HubSettingsRepository,
     restoreFileUri: Uri? = null,
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onOpenSync: () -> Unit = {}
 ) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
@@ -426,6 +428,9 @@ fun HubScreen(
             TopAppBar(
                 title = { Text(languageManager.getString("hub_title")) },
                 actions = {
+                    IconButton(onClick = onOpenSync) {
+                        Icon(Icons.Filled.Nfc, contentDescription = languageManager.getString("sync_title"))
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
                     }
