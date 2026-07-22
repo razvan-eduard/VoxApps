@@ -77,6 +77,7 @@ private fun PairedPeer.toJson(): JSONObject = JSONObject().apply {
     put("autoSyncIntervalMinutes", autoSyncIntervalMinutes)
     put("lastSyncAtByApp", JSONObject(lastSyncAtByApp))
     put("scopeNamesByApp", JSONObject(scopeNamesByApp.mapValues { (_, names) -> JSONArray(names) }))
+    put("lastAttemptedSyncAt", lastAttemptedSyncAt)
 }
 
 private fun JSONObject.toPairedPeer(): PairedPeer {
@@ -99,6 +100,7 @@ private fun JSONObject.toPairedPeer(): PairedPeer {
         autoSyncEnabled = optBoolean("autoSyncEnabled", false),
         autoSyncIntervalMinutes = optInt("autoSyncIntervalMinutes", PairedPeer.DEFAULT_AUTO_SYNC_INTERVAL_MINUTES),
         lastSyncAtByApp = lastSyncAtByApp,
-        scopeNamesByApp = scopeNamesByApp
+        scopeNamesByApp = scopeNamesByApp,
+        lastAttemptedSyncAt = if (has("lastAttemptedSyncAt") && !isNull("lastAttemptedSyncAt")) optLong("lastAttemptedSyncAt") else null
     )
 }

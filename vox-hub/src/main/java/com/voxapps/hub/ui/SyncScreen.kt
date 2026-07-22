@@ -2,6 +2,10 @@ package com.voxapps.hub.ui
 
 import android.Manifest
 import android.app.Activity
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,20 +16,24 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Nfc
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -37,6 +45,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -47,7 +56,9 @@ import com.voxapps.hub.domain.sync.PairedPeer
 import com.voxapps.hub.domain.sync.PairingEvent
 import com.voxapps.hub.domain.sync.PairingEvents
 import com.voxapps.hub.domain.sync.PairingResult
+import com.voxapps.hub.domain.sync.SyncOrchestrator
 import com.voxapps.hub.domain.sync.SyncPeerStore
+import com.voxapps.hub.domain.sync.SyncSessionResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -59,6 +70,13 @@ private sealed interface PairingUiState {
     data class Error(val message: String) : PairingUiState
 }
 
+private sealed interface PeerSyncState {
+    data object Syncing : PeerSyncState
+    data class Done(val result: SyncSessionResult) : PeerSyncState
+}
+
+private val AUTO_SYNC_INTERVAL_OPTIONS = listOf(30, 60, 120, 240)
+
 private fun requiredBluetoothPermissions(): Array<String> =
     if (Build.VERSION.SDK_INT >= 31) {
         arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE)
@@ -67,11 +85,11 @@ private fun requiredBluetoothPermissions(): Array<String> =
     }
 
 /**
- * Phase D's minimal, testable surface: pair a new device over NFC (see NfcPairingReader/
- * PairingHceService) and show what's already paired. Deliberately doesn't attempt an actual data
- * sync yet — connecting the socket and running OP_SYNC_EXPORT/OP_SYNC_MERGE over it is Phase E; the
- * per-peer autoSyncEnabled/scopeNamesByApp fields already exist on PairedPeer so that phase won't
- * need another migration, but this screen has no controls for them yet.
+ * Pair a new device over NFC (see NfcPairingReader/PairingHceService), trigger an on-demand sync with
+ * an already-paired one (see SyncOrchestrator — the "trigger din meniu forțat" path), and toggle
+ * per-peer scheduled auto-sync (ScheduledSyncWorker picks this up in the background, "de comun acord"
+ * on both phones independently enabling it). Doesn't yet expose per-app category/layer scope
+ * checklists — PairedPeer.scopeNamesByApp exists for that but has no UI control here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,9 +104,63 @@ fun SyncScreen(
 
     var uiState by remember { mutableStateOf<PairingUiState>(PairingUiState.Idle) }
     var peers by remember { mutableStateOf(peerStore.getPeers()) }
+    var peerSyncStates by remember { mutableStateOf<Map<String, PeerSyncState>>(emptyMap()) }
+    var pendingSyncPeer by remember { mutableStateOf<PairedPeer?>(null) }
 
     fun refreshPeers() {
         peers = peerStore.getPeers()
+    }
+
+    fun runSyncNow(peer: PairedPeer) {
+        peerSyncStates = peerSyncStates + (peer.peerId to PeerSyncState.Syncing)
+        scope.launch {
+            val result = SyncOrchestrator(context, peerStore).syncNow(peer)
+            peerSyncStates = peerSyncStates + (peer.peerId to PeerSyncState.Done(result))
+            refreshPeers()
+        }
+    }
+
+    val enableBluetoothLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        // Whether the user granted it or not, attempt the sync — a decline just means
+        // SyncOrchestrator fails fast with a clear "couldn't establish a connection" result.
+        pendingSyncPeer?.let { runSyncNow(it) }
+        pendingSyncPeer = null
+    }
+
+    val syncPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        val peer = pendingSyncPeer
+        if (granted.values.all { it } && peer != null) {
+            val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+            if (adapter != null && !adapter.isEnabled) {
+                enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            } else {
+                pendingSyncPeer = null
+                runSyncNow(peer)
+            }
+        } else {
+            pendingSyncPeer = null
+            peerSyncStates = peerSyncStates + (
+                (peer?.peerId ?: "") to PeerSyncState.Done(SyncSessionResult.Failure(languageManager.getString("sync_permission_required")))
+            )
+        }
+    }
+
+    fun requestSyncNow(peer: PairedPeer) {
+        val missing = requiredBluetoothPermissions().filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) {
+            pendingSyncPeer = peer
+            syncPermissionLauncher.launch(missing.toTypedArray())
+            return
+        }
+        val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+        if (adapter != null && !adapter.isEnabled) {
+            pendingSyncPeer = peer
+            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+        } else {
+            runSyncNow(peer)
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
@@ -193,7 +265,7 @@ fun SyncScreen(
                     }
                 }
                 is PairingUiState.WaitingForTap -> {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.padding(end = 12.dp))
                         Text(languageManager.getString("sync_waiting_for_tap"))
                     }
@@ -202,7 +274,7 @@ fun SyncScreen(
                     }
                 }
                 is PairingUiState.ResolvingBluetooth -> {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.padding(end = 12.dp))
                         Text(languageManager.getString("sync_resolving_bluetooth"))
                     }
@@ -238,24 +310,98 @@ fun SyncScreen(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             colors = CardDefaults.cardColors()
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text(peer.label, style = MaterialTheme.typography.bodyLarge)
-                                    Text(
-                                        if (peer.bluetoothMac != null) peer.bluetoothMac else languageManager.getString("sync_mac_pending"),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(peer.label, style = MaterialTheme.typography.bodyLarge)
+                                        Text(
+                                            peer.bluetoothMac ?: languageManager.getString("sync_mac_pending"),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(onClick = { requestSyncNow(peer) }) {
+                                            Icon(Icons.Filled.Sync, contentDescription = languageManager.getString("sync_now_button"))
+                                        }
+                                        TextButton(onClick = {
+                                            peerStore.removePeer(peer.peerId)
+                                            refreshPeers()
+                                        }) {
+                                            Text(languageManager.getString("sync_remove_device"))
+                                        }
+                                    }
+                                }
+
+                                when (val syncState = peerSyncStates[peer.peerId]) {
+                                    is PeerSyncState.Syncing -> Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(top = 8.dp)
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp).size(16.dp))
+                                        Text(languageManager.getString("sync_in_progress"), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    is PeerSyncState.Done -> when (val result = syncState.result) {
+                                        is SyncSessionResult.Success -> {
+                                            val successCount = result.appResults.count { it.success }
+                                            Text(
+                                                String.format(
+                                                    languageManager.getString("sync_apps_synced"),
+                                                    successCount, result.appResults.size
+                                                ),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (successCount == result.appResults.size) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.error
+                                                },
+                                                modifier = Modifier.padding(top = 8.dp)
+                                            )
+                                        }
+                                        is SyncSessionResult.Failure -> Text(
+                                            result.reason,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.padding(top = 8.dp)
+                                        )
+                                    }
+                                    null -> {}
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(languageManager.getString("sync_auto_label"), style = MaterialTheme.typography.bodySmall)
+                                    Switch(
+                                        checked = peer.autoSyncEnabled,
+                                        onCheckedChange = { enabled ->
+                                            peerStore.upsertPeer(peer.copy(autoSyncEnabled = enabled))
+                                            refreshPeers()
+                                        }
                                     )
                                 }
-                                TextButton(onClick = {
-                                    peerStore.removePeer(peer.peerId)
-                                    refreshPeers()
-                                }) {
-                                    Text(languageManager.getString("sync_remove_device"))
+                                if (peer.autoSyncEnabled) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        AUTO_SYNC_INTERVAL_OPTIONS.forEach { minutes ->
+                                            FilterChip(
+                                                selected = peer.autoSyncIntervalMinutes == minutes,
+                                                onClick = {
+                                                    peerStore.upsertPeer(peer.copy(autoSyncIntervalMinutes = minutes))
+                                                    refreshPeers()
+                                                },
+                                                label = { Text(String.format(languageManager.getString("sync_interval_minutes"), minutes)) }
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

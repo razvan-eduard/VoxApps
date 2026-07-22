@@ -23,7 +23,12 @@ data class PairedPeer(
     val autoSyncEnabled: Boolean = false,
     val autoSyncIntervalMinutes: Int = DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
     val lastSyncAtByApp: Map<String, Long> = emptyMap(),
-    val scopeNamesByApp: Map<String, List<String>> = emptyMap()
+    val scopeNamesByApp: Map<String, List<String>> = emptyMap(),
+    /** When [ScheduledSyncWorker] last *attempted* a sync with this peer, success or not — distinct
+     *  from [lastSyncAtByApp] (which only advances per-app on a successful merge) because the
+     *  interval cadence must not attempt again every 15 minutes (WorkManager's periodic floor) just
+     *  because the peer was unreachable at the last attempt. */
+    val lastAttemptedSyncAt: Long? = null
 ) {
     companion object {
         const val DEFAULT_AUTO_SYNC_INTERVAL_MINUTES = 60

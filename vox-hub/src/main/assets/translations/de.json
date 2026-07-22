@@ -69,6 +69,11 @@
   "sync_paired_devices_section": "Gekoppelte Geräte",
   "sync_no_paired_devices": "Noch keine gekoppelten Geräte",
   "sync_remove_device": "Entfernen",
-  "sync_mac_pending": "Bluetooth-Adresse noch nicht ermittelt"
+  "sync_mac_pending": "Bluetooth-Adresse noch nicht ermittelt",
+  "sync_now_button": "Jetzt synchronisieren",
+  "sync_in_progress": "Synchronisiert…",
+  "sync_apps_synced": "%1$d/%2$d Apps synchronisiert",
+  "sync_auto_label": "Automatische Synchronisierung",
+  "sync_interval_minutes": "Alle %1$d Min."
 
 }

@@ -3,6 +3,7 @@ package com.voxapps.hub
 import android.app.Application
 import com.voxapps.hub.di.HubContainer
 import com.voxapps.hub.domain.backup.BackupScheduler
+import com.voxapps.hub.domain.sync.ScheduledSyncScheduler
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,7 @@ class HubApplication : Application() {
         // still honored (mirrors vox-notes' NotesApplication).
         val initialSnapshot = container.settingsRepository.getSnapshot()
         BackupScheduler.reschedule(this, initialSnapshot.backupInterval)
+        ScheduledSyncScheduler.ensureScheduled(this)
 
         // Apply the persisted debug-logging flags immediately, then keep them in sync with any
         // later Settings toggle (mirrors every other satellite app's Application class).
