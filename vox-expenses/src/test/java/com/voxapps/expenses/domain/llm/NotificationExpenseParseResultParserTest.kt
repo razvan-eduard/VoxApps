@@ -1,5 +1,6 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.expenses.data.TransactionDirection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -81,5 +82,29 @@ class NotificationExpenseParseResultParserTest {
     @Test
     fun `malformed json returns null`() {
         assertNull(NotificationExpenseParseResultParser.parse("{ not json"))
+    }
+
+    @Test
+    fun `direction defaults to outgoing when the field is missing`() {
+        val json = """{"isPayment":true,"totalAmount":45.9}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertEquals(TransactionDirection.OUTGOING, result.direction)
+    }
+
+    @Test
+    fun `direction incoming parses to TransactionDirection INCOMING`() {
+        val json = """{"isPayment":true,"totalAmount":45.9,"direction":"incoming"}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertEquals(TransactionDirection.INCOMING, result.direction)
+    }
+
+    @Test
+    fun `an unrecognized direction value defaults to outgoing`() {
+        val json = """{"isPayment":true,"totalAmount":45.9,"direction":"sideways"}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertEquals(TransactionDirection.OUTGOING, result.direction)
     }
 }

@@ -85,4 +85,19 @@ class NotificationExpenseParsePromptBuilderTest {
         assertTrue(prompt.contains("\"isPayment\": false"))
         assertTrue(prompt.contains("does NOT mean this specific notification is a payment"))
     }
+
+    @Test
+    fun `explains there are two transaction directions and asks for the direction field`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build("t", "x", emptyList(), "RON", "en")
+        assertTrue(prompt.contains("OUTGOING"))
+        assertTrue(prompt.contains("INCOMING"))
+        assertTrue(prompt.contains("\"direction\": \"outgoing\""))
+    }
+
+    @Test
+    fun `a balance line alongside a real transaction does not disqualify the notification`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build("t", "x", emptyList(), "RON", "en")
+        assertTrue(prompt.contains("does not disqualify it on its own"))
+        assertTrue(prompt.contains("ENTIRE notification content is just a balance figure"))
+    }
 }

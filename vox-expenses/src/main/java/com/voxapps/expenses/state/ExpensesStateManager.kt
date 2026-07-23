@@ -6,6 +6,7 @@ import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.SpendingLimit
+import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.limits.SpendingLimitAlertRepository
 import com.voxapps.expenses.domain.llm.CategoryAutoMergeScheduler
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -126,6 +128,9 @@ class ExpensesStateManager internal constructor(
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setAttachPhotoOnRetry(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnRetry(enabled) } }
     fun setLocationPrefillEnabled(enabled: Boolean) { scope.launch { settingsRepo.setLocationPrefillEnabled(enabled) } }
+    fun setNearDuplicateDetectionEnabled(enabled: Boolean) { scope.launch { settingsRepo.setNearDuplicateDetectionEnabled(enabled) } }
+    fun setNearDuplicateFuzzyMatchEnabled(enabled: Boolean) { scope.launch { settingsRepo.setNearDuplicateFuzzyMatchEnabled(enabled) } }
+    fun setNearDuplicateTimeWindowMinutes(minutes: Int) { scope.launch { settingsRepo.setNearDuplicateTimeWindowMinutes(minutes) } }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
     fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }
@@ -162,6 +167,7 @@ class ExpensesStateManager internal constructor(
         items: List<ExpenseLineItem>,
         imageName: String? = null,
         isStub: Boolean = false,
+        direction: TransactionDirection = TransactionDirection.OUTGOING,
         // -1L is ExpensesRepository.addExpense's existing sentinel for "not inserted" (a genuine DB
         // failure OR a detected duplicate) — the UI layer can't tell which without this callback,
         // since the call itself is otherwise fire-and-forget. Defaults to a no-op for every existing
@@ -169,8 +175,15 @@ class ExpensesStateManager internal constructor(
         onResult: (Long) -> Unit = {}
     ) {
         scope.launch {
+            // Resolved here rather than pushed onto every caller — near-duplicate detection is a
+            // standing preference, not something each call site should have to know or forward.
+            val settings = settingsRepo.getSnapshot()
             val id = expensesRepo.addExpense(
-                title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, categoryId, items, imageName, isStub
+                title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, categoryId, items, imageName, isStub,
+                direction = direction,
+                nearDuplicateCheckEnabled = settings.nearDuplicateDetectionEnabled,
+                nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
+                nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong())
             )
             onResult(id)
         }
@@ -260,7 +273,11 @@ class ExpensesStateManager internal constructor(
                 dateTime = entry.capturedAt,
                 spokenCategory = entry.category,
                 defaultCategoryId = settings.defaultVoiceCategoryId,
-                autoCreate = settings.autoCreateVoiceCategory
+                autoCreate = settings.autoCreateVoiceCategory,
+                direction = entry.direction,
+                nearDuplicateCheckEnabled = settings.nearDuplicateDetectionEnabled,
+                nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
+                nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong())
             )
             pendingNotificationExpenseRepo.removePending(setOf(entry.id))
         }

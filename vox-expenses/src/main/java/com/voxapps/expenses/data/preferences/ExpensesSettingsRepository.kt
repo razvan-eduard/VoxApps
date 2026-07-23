@@ -38,6 +38,9 @@ interface ExpensesSettingsRepository {
     suspend fun setAttachPhotoOnScan(enabled: Boolean)
     suspend fun setAttachPhotoOnRetry(enabled: Boolean)
     suspend fun setLocationPrefillEnabled(enabled: Boolean)
+    suspend fun setNearDuplicateDetectionEnabled(enabled: Boolean)
+    suspend fun setNearDuplicateFuzzyMatchEnabled(enabled: Boolean)
+    suspend fun setNearDuplicateTimeWindowMinutes(minutes: Int)
 
     /**
      * Bulk overwrite, e.g. from a Vox Hub import — writes every portable field in one DataStore edit.

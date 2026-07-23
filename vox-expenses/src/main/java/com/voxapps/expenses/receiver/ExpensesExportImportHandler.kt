@@ -12,6 +12,8 @@ import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
+import com.voxapps.expenses.domain.llm.optTransactionDirection
+import com.voxapps.expenses.domain.llm.toJsonValue
 import com.voxapps.expenses.state.SessionManager
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
@@ -240,6 +242,7 @@ class ExpensesExportImportHandler(
                     dateTime = e.optLong("dateTime", System.currentTimeMillis()),
                     comments = e.optStringOrNull("comments"),
                     categoryId = categoryId,
+                    direction = e.optTransactionDirection(),
                     items = items,
                     imageName = e.optStringOrNull("receiptImageName"),
                     // Preserved from the source device, never re-stamped to "now" — re-stamping
@@ -372,6 +375,7 @@ private fun Expense.toJson(items: List<ExpenseLineItem>): JSONObject = JSONObjec
     put("dateTime", dateTime)
     put("comments", comments)
     put("categoryId", categoryId)
+    put("direction", direction.toJsonValue())
     put("receiptImageName", receiptImageName)
     put("createdAt", createdAt)
     put("items", JSONArray(items.map { it.toJson() }))

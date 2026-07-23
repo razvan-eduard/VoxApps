@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.ExchangeRateRepository
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.expenses.data.TransactionDirection
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
@@ -69,7 +70,8 @@ fun ReportsScreen(
 
     var period by remember { mutableStateOf(ReportPeriod.MONTH) }
     var loading by remember { mutableStateOf(true) }
-    var total by remember { mutableStateOf(0.0) }
+    var totalOutgoing by remember { mutableStateOf(0.0) }
+    var totalIncoming by remember { mutableStateOf(0.0) }
     var byCategory by remember { mutableStateOf<List<CategoryTotal>>(emptyList()) }
 
     LaunchedEffect(period, expenses, homeCurrency) {
@@ -85,12 +87,14 @@ fun ReportsScreen(
         val inRange = expenses.filter { windowStart == null || it.expense.dateTime >= windowStart }
         val converted = inRange.mapNotNull { ewd ->
             val amount = exchangeRateRepository.convertToHome(ewd.expense.totalAmount, ewd.expense.currencyCode, homeCurrency)
-            if (amount == null) null else ewd.category to amount
+            if (amount == null) null else Triple(ewd.expense.direction, ewd.category, amount)
         }
-        total = converted.sumOf { it.second }
+        totalOutgoing = converted.filter { it.first == TransactionDirection.OUTGOING }.sumOf { it.third }
+        totalIncoming = converted.filter { it.first == TransactionDirection.INCOMING }.sumOf { it.third }
         byCategory = converted
-            .groupBy { it.first }
-            .map { (category, entries) -> CategoryTotal(category, entries.sumOf { it.second }) }
+            .filter { it.first == TransactionDirection.OUTGOING }
+            .groupBy { it.second }
+            .map { (category, entries) -> CategoryTotal(category, entries.sumOf { it.third }) }
             .sortedByDescending { it.amount }
         loading = false
     }
@@ -125,7 +129,20 @@ fun ReportsScreen(
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(top = 16.dp)
                 )
-                Text(formatAmount(total, homeCurrency), style = MaterialTheme.typography.headlineMedium)
+                Text(formatAmount(totalOutgoing, homeCurrency), style = MaterialTheme.typography.headlineMedium)
+
+                if (totalIncoming > 0.0) {
+                    Text(
+                        languageManager.getString("report_total_received_label"),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                    Text(
+                        formatAmount(totalIncoming, homeCurrency),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 

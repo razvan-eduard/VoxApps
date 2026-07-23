@@ -1,6 +1,7 @@
 package com.voxapps.expenses.domain.llm
 
 import com.voxapps.datahygiene.optCleanString
+import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.schema.VoxExtractionSchema
 import org.json.JSONArray
 import org.json.JSONObject
@@ -20,7 +21,7 @@ object ExpenseParseResultParser {
         val grossAmount: Double? = null
     )
 
-    @VoxExtractionSchema(version = 1)
+    @VoxExtractionSchema(version = 2)
     data class Parsed(
         val title: String?,
         val totalAmount: Double,
@@ -34,7 +35,8 @@ object ExpenseParseResultParser {
         val category: String?,
         val date: String?, // YYYY-MM-DD format
         val time: String?, // HH:mm format
-        val items: List<ParsedItem>
+        val items: List<ParsedItem>,
+        val direction: TransactionDirection = TransactionDirection.OUTGOING
     ) {
         val itemsSumMismatch: Boolean =
             ExpenseAmountMismatch.isGrossMismatch(totalAmount, items.sumOf { it.quantity * it.unitPrice })
@@ -90,7 +92,8 @@ object ExpenseParseResultParser {
             category = o.optCleanString("category"),
             date = o.optCleanString("date"),
             time = o.optCleanString("time"),
-            items = items
+            items = items,
+            direction = o.optTransactionDirection()
         )
     } catch (e: Exception) {
         null

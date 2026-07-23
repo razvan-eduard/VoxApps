@@ -94,7 +94,19 @@ data class ExpensesSettings(
      *  entry — see [com.voxapps.expenses.domain.location.ExpensesLocationHelper]'s callers).
      *  Independent of the OS location permission itself: granting that in onboarding only makes
      *  the feature *possible*, this is the separate "and do I actually want it" control. */
-    val locationPrefillEnabled: Boolean = true
+    val locationPrefillEnabled: Boolean = true,
+    /** Off by default — this is new, auto-merging behavior, not a preexisting one a user would expect
+     *  preserved. When on, a new expense that closely matches one already saved (see
+     *  [com.voxapps.expenses.data.ExpenseNearDuplicateDetector]) merges into it instead of creating a
+     *  second row — deterministic and DB-only, distinct from the AI-based cleanup review flow. */
+    val nearDuplicateDetectionEnabled: Boolean = false,
+    /** An exact-only near-duplicate check would barely differ from the existing day-granularity
+     *  [com.voxapps.expenses.data.ExpenseDuplicateChecker]; fuzzy matching is what actually lets this
+     *  feature catch two sources describing the same transaction with different wording, so it's the
+     *  sane default for whenever [nearDuplicateDetectionEnabled] is on. */
+    val nearDuplicateFuzzyMatchEnabled: Boolean = true,
+    /** Minutes, not millis — converted at the point of use. */
+    val nearDuplicateTimeWindowMinutes: Int = NEAR_DUP_DEFAULT_WINDOW_MINUTES
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -115,5 +127,12 @@ data class ExpensesSettings(
         const val THEME_SYSTEM = "SYSTEM"
         const val THEME_LIGHT = "LIGHT"
         const val THEME_DARK = "DARK"
+
+        const val NEAR_DUP_WINDOW_1M = 1
+        const val NEAR_DUP_WINDOW_2M = 2
+        const val NEAR_DUP_WINDOW_5M = 5
+        const val NEAR_DUP_WINDOW_10M = 10
+        const val NEAR_DUP_WINDOW_15M = 15
+        const val NEAR_DUP_DEFAULT_WINDOW_MINUTES = NEAR_DUP_WINDOW_2M
     }
 }

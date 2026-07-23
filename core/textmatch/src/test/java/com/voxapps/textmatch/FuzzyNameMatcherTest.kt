@@ -1,7 +1,9 @@
 package com.voxapps.textmatch
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FuzzyNameMatcherTest {
@@ -72,5 +74,36 @@ class FuzzyNameMatcherTest {
         val r = FuzzyNameMatcher.resolve("Groceries", catsWithDiacritics, defaultId = 3)
         assertEquals(3L, r.id)
         assertEquals("Cumpărături", r.name)
+    }
+
+    @Test
+    fun `namesMatch is case-insensitive on an exact match`() {
+        assertTrue(FuzzyNameMatcher.namesMatch("Example Store", "example store"))
+    }
+
+    @Test
+    fun `namesMatch matches when one name fully contains the other`() {
+        assertTrue(FuzzyNameMatcher.namesMatch("Example Store", "Payment to Example Store"))
+        assertTrue(FuzzyNameMatcher.namesMatch("Payment to Example Store", "Example Store"))
+    }
+
+    @Test
+    fun `namesMatch does not use containment for very short names`() {
+        assertFalse(FuzzyNameMatcher.namesMatch("A", "A long unrelated description"))
+    }
+
+    @Test
+    fun `namesMatch accepts a minor typo within the fuzzy threshold`() {
+        assertTrue(FuzzyNameMatcher.namesMatch("Example Store", "Exampl Store"))
+    }
+
+    @Test
+    fun `namesMatch rejects genuinely unrelated names`() {
+        assertFalse(FuzzyNameMatcher.namesMatch("Example Store", "Completely Different Vendor"))
+    }
+
+    @Test
+    fun `namesMatch rejects blank input`() {
+        assertFalse(FuzzyNameMatcher.namesMatch("", "Example Store"))
     }
 }

@@ -7,6 +7,7 @@ import android.widget.Toast
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.domain.llm.CategoryMergeMappingParser
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationResultParser
@@ -29,6 +30,7 @@ import java.time.LocalTime
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
 
 private const val TAG = "LlmResultReceiver"
 
@@ -189,7 +191,11 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 dateTime = System.currentTimeMillis(),
                                 spokenCategory = cleanCategory,
                                 defaultCategoryId = settings.defaultVoiceCategoryId,
-                                autoCreate = settings.autoCreateVoiceCategory
+                                autoCreate = settings.autoCreateVoiceCategory,
+                                direction = parsed.direction,
+                                nearDuplicateCheckEnabled = settings.nearDuplicateDetectionEnabled,
+                                nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
+                                nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong())
                             )
                         } else {
                             container.pendingNotificationExpenseRepository.addPending(
@@ -201,6 +207,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                                     vendor = cleanVendor,
                                     category = cleanCategory,
                                     bank = cleanBank,
+                                    direction = parsed.direction,
                                     capturedAt = System.currentTimeMillis()
                                 )
                             )
@@ -260,7 +267,11 @@ class LlmResultReceiver : BroadcastReceiver() {
             defaultCategoryId = settings.defaultVoiceCategoryId,
             autoCreate = settings.autoCreateVoiceCategory,
             items = items,
-            imageName = imageName
+            imageName = imageName,
+            direction = parsed.direction,
+            nearDuplicateCheckEnabled = settings.nearDuplicateDetectionEnabled,
+            nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
+            nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong())
         )
 
         if (newExpenseId > 0 && parsed.itemsSumMismatch) {
@@ -283,11 +294,13 @@ class LlmResultReceiver : BroadcastReceiver() {
             withContext(Dispatchers.Main) {
                 Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
             }
-        } else if (newExpenseId <= 0) {
+        } else if (newExpenseId <= 0 && newExpenseId != NEAR_DUPLICATE_MERGED_RESULT) {
             Logger.e(TAG, "Failed to save parsed expense to database. ID: $newExpenseId")
             withContext(Dispatchers.Main) {
                 Toast.makeText(appContext, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_LONG).show()
             }
+        } else if (newExpenseId == NEAR_DUPLICATE_MERGED_RESULT) {
+            Logger.d(TAG, "Parsed expense merged into an existing near-duplicate instead of inserting")
         }
     }
 

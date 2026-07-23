@@ -85,17 +85,21 @@ object ExpenseScanCleanupPromptBuilder {
             always prefer the printed total here.)
 
             Use "$defaultCurrency" as the currency unless a different one is clearly printed on the
-            receipt. Also suggest a category for this expense based on its content. $categoriesLine 
-            If one of the existing categories fits, copy that name verbatim, character-for-character — 
-            never invent a new spelling, translation, capitalization, or diacritics for it. 
-            Only suggest a new category name if none of the existing ones fit. 
-            
+            receipt. Also suggest a category for this expense based on its content. $categoriesLine
+            If one of the existing categories fits, copy that name verbatim, character-for-character —
+            never invent a new spelling, translation, capitalization, or diacritics for it.
+            Only suggest a new category name if none of the existing ones fit.
+
+            Also decide the record's "direction": "outgoing" if this document represents money paid by
+            the customer (a normal purchase receipt/invoice — the default assumption for any receipt),
+            or "incoming" only if it is clearly a refund, credit note, or reimbursement document instead.
+
             Respond in the "$languageCode" language.
             Return ONLY a JSON object of the shape {"title": "...", "totalAmount": 12.5, "currency": "...",
             "vendor": "...", "bank": "...", "location": "...", "category": "...", "date": "YYYY-MM-DD",
-            "time": "HH:mm", "items": [{"name": "...", "quantity": 1, "unitPrice": 12.5, "netAmount": null,
-            "vatAmount": null, "grossAmount": null}]}, no prose, no markdown. Omit/null "bank" and
-            "location" if not printed — never guess either.
+            "time": "HH:mm", "direction": "outgoing", "items": [{"name": "...", "quantity": 1,
+            "unitPrice": 12.5, "netAmount": null, "vatAmount": null, "grossAmount": null}]}, no prose,
+            no markdown. Omit/null "bank" and "location" if not printed — never guess either.
 
             OCR text: $rawText
         """.trimIndent()

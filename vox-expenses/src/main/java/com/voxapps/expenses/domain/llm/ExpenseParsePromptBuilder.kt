@@ -62,6 +62,12 @@ object ExpenseParsePromptBuilder {
 
             STEP 4 — CATEGORIZATION: $categoriesLine Match exactly if possible, or suggest a new one.
 
+            STEP 5 — DIRECTION: this app tracks two kinds of records: OUTGOING (money the speaker paid
+            or spent — the default, and by far the most common case for a spoken expense) and INCOMING
+            (money the speaker received — a refund, a repayment, being paid back, a deposit). Set
+            "direction" to "outgoing" unless the sentence clearly describes money arriving instead of
+            leaving.
+
             ABSTRACT REASONING PATTERN (schema, not a literal case):
               Given any utterance of the form:
                 [PREDICATE] [QUANTITY] [THEME] [PRICE-MARKER] [PRICE] [CURRENCY] [DISTRIBUTIVE-MARKER?]
@@ -79,8 +85,8 @@ object ExpenseParsePromptBuilder {
             - Respond in language: "$languageCode".
             - Default currency: "$defaultCurrency".
             - Output: Return ONLY raw JSON. No text, no markdown, no role labels.
-            - Format: {"title": "...", "totalAmount": 100.0, "currency": "...", "vendor": "...", 
-              "category": "...", "date": "YYYY-MM-DD", "time": "HH:mm", 
+            - Format: {"title": "...", "totalAmount": 100.0, "currency": "...", "vendor": "...",
+              "category": "...", "date": "YYYY-MM-DD", "time": "HH:mm", "direction": "outgoing",
               "items": [{"name": "...", "quantity": 10.0, "unitPrice": 10.0}]}
             - Extract "date" (YYYY-MM-DD) and "time" (HH:mm, 24h) if mentioned. 
               If not mentioned, leave as null.

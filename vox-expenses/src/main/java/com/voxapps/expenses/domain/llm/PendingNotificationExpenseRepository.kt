@@ -3,6 +3,7 @@ package com.voxapps.expenses.domain.llm
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.preferences.DataStoreProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -21,7 +22,8 @@ data class PendingNotificationExpense(
     val capturedAt: Long,
     /** Set deterministically when the notification came from a starred (banking) source app —
      *  see [com.voxapps.expenses.receiver.PaymentNotificationListenerService]. */
-    val bank: String? = null
+    val bank: String? = null,
+    val direction: TransactionDirection = TransactionDirection.OUTGOING
 )
 
 /**
@@ -76,6 +78,7 @@ class PendingNotificationExpenseRepository(context: Context) {
             e.vendor?.let { o.put("vendor", it) }
             e.category?.let { o.put("category", it) }
             e.bank?.let { o.put("bank", it) }
+            o.put("direction", e.direction.toJsonValue())
             o.put("capturedAt", e.capturedAt)
             array.put(o)
         }
@@ -94,6 +97,7 @@ class PendingNotificationExpenseRepository(context: Context) {
                 vendor = if (o.has("vendor")) o.optString("vendor") else null,
                 category = if (o.has("category")) o.optString("category") else null,
                 bank = if (o.has("bank")) o.optString("bank") else null,
+                direction = o.optTransactionDirection(),
                 capturedAt = o.optLong("capturedAt")
             )
         }

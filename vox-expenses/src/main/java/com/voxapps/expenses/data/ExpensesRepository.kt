@@ -3,18 +3,26 @@ package com.voxapps.expenses.data
 import android.content.Context
 import com.voxapps.calendar.CalendarDateUtils
 import com.voxapps.datahygiene.findDuplicate
+import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 /** [ExpensesRepository.addExpense]'s return value when the insert was skipped because
  *  [ExpenseDuplicateChecker] found an exact match already in the database — distinct from the
  *  generic `-1L` "insert threw" failure sentinel so callers can show a precise "Duplicate entry"
  *  message instead of a generic save-failed one. */
 const val DUPLICATE_ENTRY_RESULT = -2L
+
+/** [ExpensesRepository.addExpense]'s return value when no insert happened because
+ *  [ExpenseNearDuplicateDetector] merged the candidate's extra data into an already-committed row
+ *  instead — distinct from [DUPLICATE_ENTRY_RESULT] (a rejected, unchanged duplicate) since data here
+ *  WAS preserved, just not as a new row. */
+const val NEAR_DUPLICATE_MERGED_RESULT = -3L
 
 /**
  * Single write point over the Room DAOs.
@@ -81,7 +89,11 @@ class ExpensesRepository(
         // during the insert loop and would otherwise get misdetected as duplicates of the very
         // rows they're about to be replaced by. Matches RecordSource.HUB_IMPORT's documented
         // "never touched, another install's already-validated data" rule in :core:datahygiene.
-        checkForDuplicate: Boolean = true
+        checkForDuplicate: Boolean = true,
+        direction: TransactionDirection = TransactionDirection.OUTGOING,
+        nearDuplicateCheckEnabled: Boolean = false,
+        nearDuplicateFuzzyMatch: Boolean = true,
+        nearDuplicateTimeWindowMillis: Long = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong())
     ): Long {
         return try {
             val candidate = Expense(
@@ -94,6 +106,7 @@ class ExpensesRepository(
                 dateTime = dateTime,
                 comments = comments?.trim()?.takeIf { it.isNotEmpty() },
                 categoryId = categoryId,
+                direction = direction,
                 receiptImageName = imageName,
                 isStub = isStub,
                 createdAt = createdAt
@@ -111,6 +124,26 @@ class ExpensesRepository(
                 if (duplicate != null) {
                     Logger.w("ExpensesRepository", "Duplicate entry — skipping insert (matches existing id=${duplicate.id})")
                     return DUPLICATE_ENTRY_RESULT
+                }
+
+                if (nearDuplicateCheckEnabled) {
+                    val nearby = expenseDao.getForDateRange(
+                        dateTime - nearDuplicateTimeWindowMillis,
+                        dateTime + nearDuplicateTimeWindowMillis
+                    )
+                    val detector = ExpenseNearDuplicateDetector(nearDuplicateFuzzyMatch, nearDuplicateTimeWindowMillis)
+                    val nearMatch = detector.findDuplicate(candidate, nearby)
+                    if (nearMatch != null) {
+                        val enriched = enrichWithNearDuplicate(nearMatch, candidate)
+                        if (enriched !== nearMatch) expenseDao.update(enriched)
+                        // The candidate's own receipt photo (if any) is now orphaned unless it got
+                        // adopted into the enriched record.
+                        if (imageName != null && enriched.receiptImageName != imageName) {
+                            deleteReceiptFiles(listOf(imageName))
+                        }
+                        Logger.w("ExpensesRepository", "Near-duplicate merged into existing id=${nearMatch.id}")
+                        return NEAR_DUPLICATE_MERGED_RESULT
+                    }
                 }
             }
 
@@ -192,7 +225,11 @@ class ExpensesRepository(
         defaultCategoryId: Long?,
         autoCreate: Boolean,
         items: List<ExpenseLineItem> = emptyList(),
-        imageName: String? = null
+        imageName: String? = null,
+        direction: TransactionDirection = TransactionDirection.OUTGOING,
+        nearDuplicateCheckEnabled: Boolean = false,
+        nearDuplicateFuzzyMatch: Boolean = true,
+        nearDuplicateTimeWindowMillis: Long = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong())
     ): Long {
         val cats = categoryDao.observeAll().first()
         var resolved = FuzzyNameMatcher.resolve(
@@ -207,7 +244,13 @@ class ExpensesRepository(
             if (id > 0) resolved = FuzzyNameMatcher.Resolved(id, spoken)
         }
 
-        return addExpense(title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, resolved.id, items, imageName)
+        return addExpense(
+            title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, resolved.id, items, imageName,
+            direction = direction,
+            nearDuplicateCheckEnabled = nearDuplicateCheckEnabled,
+            nearDuplicateFuzzyMatch = nearDuplicateFuzzyMatch,
+            nearDuplicateTimeWindowMillis = nearDuplicateTimeWindowMillis
+        )
     }
 
     suspend fun addCategory(name: String, colorArgb: Long, position: Int, createdAt: Long): Long {

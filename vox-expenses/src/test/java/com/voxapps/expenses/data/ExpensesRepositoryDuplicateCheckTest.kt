@@ -1,13 +1,16 @@
 package com.voxapps.expenses.data
 
 import android.content.Context
+import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.just
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
+import java.util.concurrent.TimeUnit
 
 class ExpensesRepositoryDuplicateCheckTest {
 
@@ -90,5 +93,60 @@ class ExpensesRepositoryDuplicateCheckTest {
 
         assertEquals(9L, result)
         coVerify(exactly = 1) { expenseDao.insert(any()) }
+    }
+
+    // --- near-duplicate detection (off by default) ---
+
+    @Test
+    fun `near-duplicate detection stays off by default even with a fuzzy match nearby in time`() = runTest {
+        val nearby = Expense(id = 1, title = "Example Store", totalAmount = 99.0, currencyCode = "RON", dateTime = 1000L)
+        coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(nearby)
+        coEvery { expenseDao.insert(any()) } returns 5L
+
+        val result = repository.addExpense(
+            title = "Payment to Example Store", totalAmount = 99.0, currencyCode = "RON", vendor = null,
+            bank = null, location = null, dateTime = 1050L, comments = null, categoryId = null
+        )
+
+        assertEquals(5L, result)
+        coVerify(exactly = 1) { expenseDao.insert(any()) }
+        coVerify(exactly = 0) { expenseDao.update(any()) }
+    }
+
+    @Test
+    fun `near-duplicate detection enabled merges a fuzzy match within the time window instead of inserting`() = runTest {
+        val nearby = Expense(id = 1, title = "Example Store", totalAmount = 99.0, currencyCode = "RON", dateTime = 1000L)
+        coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(nearby)
+        coEvery { expenseDao.update(any()) } just Runs
+
+        val result = repository.addExpense(
+            title = "Payment to Example Store", totalAmount = 99.0, currencyCode = "RON", vendor = null,
+            bank = "Some Bank", location = null, dateTime = 1050L, comments = null, categoryId = null,
+            nearDuplicateCheckEnabled = true,
+            nearDuplicateFuzzyMatch = true,
+            nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(2)
+        )
+
+        assertEquals(NEAR_DUPLICATE_MERGED_RESULT, result)
+        coVerify(exactly = 1) { expenseDao.update(match { it.id == 1L && it.bank == "Some Bank" }) }
+        coVerify(exactly = 0) { expenseDao.insert(any()) }
+    }
+
+    @Test
+    fun `near-duplicate detection enabled but outside the time window inserts normally`() = runTest {
+        coEvery { expenseDao.getForDateRange(any(), any()) } returns emptyList()
+        coEvery { expenseDao.insert(any()) } returns 5L
+
+        val result = repository.addExpense(
+            title = "Example Store", totalAmount = 99.0, currencyCode = "RON", vendor = null,
+            bank = null, location = null, dateTime = 1000L + TimeUnit.HOURS.toMillis(1), comments = null, categoryId = null,
+            nearDuplicateCheckEnabled = true,
+            nearDuplicateFuzzyMatch = true,
+            nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(2)
+        )
+
+        assertEquals(5L, result)
+        coVerify(exactly = 1) { expenseDao.insert(any()) }
+        coVerify(exactly = 0) { expenseDao.update(any()) }
     }
 }

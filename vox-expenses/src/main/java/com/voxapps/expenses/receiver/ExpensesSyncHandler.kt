@@ -6,6 +6,8 @@ import com.voxapps.expenses.data.CategoryPalette
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
+import com.voxapps.expenses.domain.llm.optTransactionDirection
+import com.voxapps.expenses.domain.llm.toJsonValue
 import com.voxapps.expenses.state.SessionManager
 import com.voxapps.ipc.VoxResult
 import kotlinx.coroutines.flow.first
@@ -125,6 +127,7 @@ private fun Expense.toSyncJson(categoryName: String?): JSONObject = JSONObject()
     put("dateTime", dateTime)
     put("comments", comments)
     put("categoryName", categoryName)
+    put("direction", direction.toJsonValue())
     put("receiptImageName", receiptImageName)
     put("isStub", isStub)
     put("createdAt", createdAt)
@@ -142,6 +145,7 @@ private fun JSONObject.toExpense(categoryId: Long?): Expense = Expense(
     dateTime = optLong("dateTime"),
     comments = optNullableString("comments"),
     categoryId = categoryId,
+    direction = optTransactionDirection(),
     receiptImageName = optNullableString("receiptImageName"),
     isStub = optBoolean("isStub", false),
     createdAt = optLong("createdAt"),

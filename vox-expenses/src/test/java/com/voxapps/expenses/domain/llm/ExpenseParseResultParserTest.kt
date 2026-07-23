@@ -1,5 +1,6 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.expenses.data.TransactionDirection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -106,5 +107,19 @@ class ExpenseParseResultParserTest {
         val json = """{"totalAmount":101.97,"items":[{"name":"paine","quantity":1,"unitPrice":33.99}]}"""
         val result = ExpenseParseResultParser.parse(json)!!
         assertTrue(result.itemsSumMismatch)
+    }
+
+    @Test
+    fun `direction defaults to outgoing when the field is missing`() {
+        val json = """{"totalAmount":10.0}"""
+        val result = ExpenseParseResultParser.parse(json)!!
+        assertEquals(TransactionDirection.OUTGOING, result.direction)
+    }
+
+    @Test
+    fun `direction incoming parses to TransactionDirection INCOMING`() {
+        val json = """{"totalAmount":10.0,"direction":"incoming"}"""
+        val result = ExpenseParseResultParser.parse(json)!!
+        assertEquals(TransactionDirection.INCOMING, result.direction)
     }
 }

@@ -4,15 +4,17 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.migration.Migration
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class, ExpenseTombstone::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
+@TypeConverters(ExpensesConverters::class)
 abstract class ExpensesDatabase : RoomDatabase() {
     abstract fun expenseDao(): ExpenseDao
     abstract fun categoryDao(): CategoryDao
@@ -80,6 +82,14 @@ abstract class ExpensesDatabase : RoomDatabase() {
             }
         }
 
+        // Every existing row genuinely is an outgoing expense (there was no way to record anything
+        // else before this column existed), so this backfill is exact rather than a best-effort guess.
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE expenses ADD COLUMN direction TEXT NOT NULL DEFAULT 'OUTGOING'")
+            }
+        }
+
         fun get(context: Context): ExpensesDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
         }
@@ -89,7 +99,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
         }
     }

@@ -14,6 +14,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -80,108 +81,180 @@ fun ExpenseCleanupSettingsTab(
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // --- Find duplicate expenses (manual trigger) ---
-        Text(languageManager.getString("find_duplicate_expenses_button"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("find_duplicate_expenses_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        if (expenses.size < 2) {
-            Text(
-                languageManager.getString("find_duplicate_expenses_need_two"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
-        } else {
-            Button(
-                onClick = findDuplicatesGate.onClick,
-                modifier = Modifier.fillMaxWidth().alpha(findDuplicatesGate.alpha)
-            ) {
-                Text(languageManager.getString("find_duplicate_expenses_button"))
-            }
-        }
-
-        HorizontalDivider()
-
-        // --- Scheduled expense cleanup ---
-        Text(languageManager.getString("scheduled_dedup_label"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("scheduled_dedup_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            val options = listOf(
-                ExpensesSettings.INTERVAL_OFF to "scheduled_dedup_off",
-                ExpensesSettings.INTERVAL_DAILY to "scheduled_dedup_daily",
-                ExpensesSettings.INTERVAL_WEEKLY to "scheduled_dedup_weekly",
-                ExpensesSettings.INTERVAL_MONTHLY to "scheduled_dedup_monthly"
-            )
-            options.forEach { (interval, labelKey) ->
-                FilterChip(
-                    selected = settings.scheduledExpenseDedupInterval == interval,
-                    onClick = { stateManager.setScheduledExpenseDedupInterval(context, interval) },
-                    label = { Text(languageManager.getString(labelKey)) }
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(languageManager.getString("expense_cleanup_ai_section_title"), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    languageManager.getString("expense_cleanup_ai_section_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-        }
+                HorizontalDivider()
 
-        // --- Pending suggestion review ---
-        if (resolvedGroups.isNotEmpty()) {
-            HorizontalDivider()
-            Text(languageManager.getString("duplicate_expenses_pending_title"), style = MaterialTheme.typography.labelLarge)
+                // --- Find duplicate expenses (manual trigger) ---
+                Text(languageManager.getString("find_duplicate_expenses_button"), style = MaterialTheme.typography.labelLarge)
+                Text(
+                    languageManager.getString("find_duplicate_expenses_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-            resolvedGroups.forEachIndexed { index, resolved ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.Top) {
-                            Checkbox(
-                                checked = index in checkedGroups,
-                                onCheckedChange = { checked ->
-                                    checkedGroups = if (checked) checkedGroups + index else checkedGroups - index
-                                }
-                            )
-                            Column(modifier = Modifier.padding(top = 12.dp)) {
-                                Text(
-                                    languageManager.getString("keep_label"),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(expensePreview(resolved.keep), style = MaterialTheme.typography.bodyMedium)
+                if (expenses.size < 2) {
+                    Text(
+                        languageManager.getString("find_duplicate_expenses_need_two"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else {
+                    Button(
+                        onClick = findDuplicatesGate.onClick,
+                        modifier = Modifier.fillMaxWidth().alpha(findDuplicatesGate.alpha)
+                    ) {
+                        Text(languageManager.getString("find_duplicate_expenses_button"))
+                    }
+                }
 
-                                resolved.duplicates.forEach { dup ->
-                                    Text(
-                                        languageManager.getString("duplicate_label"),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.padding(top = 8.dp)
+                HorizontalDivider()
+
+                // --- Scheduled expense cleanup ---
+                Text(languageManager.getString("scheduled_dedup_label"), style = MaterialTheme.typography.labelLarge)
+                Text(
+                    languageManager.getString("scheduled_dedup_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    val options = listOf(
+                        ExpensesSettings.INTERVAL_OFF to "scheduled_dedup_off",
+                        ExpensesSettings.INTERVAL_DAILY to "scheduled_dedup_daily",
+                        ExpensesSettings.INTERVAL_WEEKLY to "scheduled_dedup_weekly",
+                        ExpensesSettings.INTERVAL_MONTHLY to "scheduled_dedup_monthly"
+                    )
+                    options.forEach { (interval, labelKey) ->
+                        FilterChip(
+                            selected = settings.scheduledExpenseDedupInterval == interval,
+                            onClick = { stateManager.setScheduledExpenseDedupInterval(context, interval) },
+                            label = { Text(languageManager.getString(labelKey)) }
+                        )
+                    }
+                }
+
+                // --- Pending suggestion review ---
+                if (resolvedGroups.isNotEmpty()) {
+                    HorizontalDivider()
+                    Text(languageManager.getString("duplicate_expenses_pending_title"), style = MaterialTheme.typography.labelLarge)
+
+                    resolvedGroups.forEachIndexed { index, resolved ->
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.Top) {
+                                    Checkbox(
+                                        checked = index in checkedGroups,
+                                        onCheckedChange = { checked ->
+                                            checkedGroups = if (checked) checkedGroups + index else checkedGroups - index
+                                        }
                                     )
-                                    Text(expensePreview(dup), style = MaterialTheme.typography.bodySmall)
+                                    Column(modifier = Modifier.padding(top = 12.dp)) {
+                                        Text(
+                                            languageManager.getString("keep_label"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(expensePreview(resolved.keep), style = MaterialTheme.typography.bodyMedium)
+
+                                        resolved.duplicates.forEach { dup ->
+                                            Text(
+                                                languageManager.getString("duplicate_label"),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.padding(top = 8.dp)
+                                            )
+                                            Text(expensePreview(dup), style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { stateManager.dismissExpenseDeduplication() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(languageManager.getString("dismiss_all_button"))
+                        }
+                        Button(
+                            onClick = {
+                                val approved = checkedGroups.mapNotNull { resolvedGroups.getOrNull(it)?.group }
+                                stateManager.approveExpenseDeduplication(approved)
+                            },
+                            enabled = checkedGroups.isNotEmpty(),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(languageManager.getString("apply_selected_button"))
+                        }
+                    }
                 }
             }
+        }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
-                    onClick = { stateManager.dismissExpenseDeduplication() },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(languageManager.getString("dismiss_all_button"))
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(languageManager.getString("expense_cleanup_direct_section_title"), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    languageManager.getString("expense_cleanup_direct_section_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                HorizontalDivider()
+
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(languageManager.getString("near_duplicate_detection_label"), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            languageManager.getString("near_duplicate_detection_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.nearDuplicateDetectionEnabled,
+                        onCheckedChange = { stateManager.setNearDuplicateDetectionEnabled(it) }
+                    )
                 }
-                Button(
-                    onClick = {
-                        val approved = checkedGroups.mapNotNull { resolvedGroups.getOrNull(it)?.group }
-                        stateManager.approveExpenseDeduplication(approved)
-                    },
-                    enabled = checkedGroups.isNotEmpty(),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(languageManager.getString("apply_selected_button"))
+
+                val subAlpha = if (settings.nearDuplicateDetectionEnabled) 1f else 0.4f
+                Column(modifier = Modifier.alpha(subAlpha), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(languageManager.getString("near_duplicate_match_mode_label"), style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !settings.nearDuplicateFuzzyMatchEnabled,
+                            onClick = { stateManager.setNearDuplicateFuzzyMatchEnabled(false) },
+                            label = { Text(languageManager.getString("near_duplicate_match_exact")) }
+                        )
+                        FilterChip(
+                            selected = settings.nearDuplicateFuzzyMatchEnabled,
+                            onClick = { stateManager.setNearDuplicateFuzzyMatchEnabled(true) },
+                            label = { Text(languageManager.getString("near_duplicate_match_fuzzy")) }
+                        )
+                    }
+
+                    Text(languageManager.getString("near_duplicate_time_window_label"), style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val windowOptions = listOf(
+                            ExpensesSettings.NEAR_DUP_WINDOW_1M, ExpensesSettings.NEAR_DUP_WINDOW_2M,
+                            ExpensesSettings.NEAR_DUP_WINDOW_5M, ExpensesSettings.NEAR_DUP_WINDOW_10M,
+                            ExpensesSettings.NEAR_DUP_WINDOW_15M
+                        )
+                        windowOptions.forEach { minutes ->
+                            FilterChip(
+                                selected = settings.nearDuplicateTimeWindowMinutes == minutes,
+                                onClick = { stateManager.setNearDuplicateTimeWindowMinutes(minutes) },
+                                label = { Text(String.format(languageManager.getString("near_duplicate_interval_minutes"), minutes)) }
+                            )
+                        }
+                    }
                 }
             }
         }

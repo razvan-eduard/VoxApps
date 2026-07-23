@@ -48,6 +48,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
         val ATTACH_PHOTO_ON_RETRY = booleanPreferencesKey("attach_photo_on_retry")
         val LOCATION_PREFILL_ENABLED = booleanPreferencesKey("location_prefill_enabled")
+        val NEAR_DUPLICATE_DETECTION_ENABLED = booleanPreferencesKey("near_duplicate_detection_enabled")
+        val NEAR_DUPLICATE_FUZZY_MATCH_ENABLED = booleanPreferencesKey("near_duplicate_fuzzy_match_enabled")
+        val NEAR_DUPLICATE_TIME_WINDOW_MINUTES = intPreferencesKey("near_duplicate_time_window_minutes")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -76,7 +79,11 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
             attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
             attachPhotoOnRetry = prefs[Keys.ATTACH_PHOTO_ON_RETRY] ?: false,
-            locationPrefillEnabled = prefs[Keys.LOCATION_PREFILL_ENABLED] ?: true
+            locationPrefillEnabled = prefs[Keys.LOCATION_PREFILL_ENABLED] ?: true,
+            nearDuplicateDetectionEnabled = prefs[Keys.NEAR_DUPLICATE_DETECTION_ENABLED] ?: false,
+            nearDuplicateFuzzyMatchEnabled = prefs[Keys.NEAR_DUPLICATE_FUZZY_MATCH_ENABLED] ?: true,
+            nearDuplicateTimeWindowMinutes = prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES]
+                ?: ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES
         )
     }
 
@@ -202,6 +209,18 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.LOCATION_PREFILL_ENABLED] = enabled }
     }
 
+    override suspend fun setNearDuplicateDetectionEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.NEAR_DUPLICATE_DETECTION_ENABLED] = enabled }
+    }
+
+    override suspend fun setNearDuplicateFuzzyMatchEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.NEAR_DUPLICATE_FUZZY_MATCH_ENABLED] = enabled }
+    }
+
+    override suspend fun setNearDuplicateTimeWindowMinutes(minutes: Int) {
+        dataStore.edit { it[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES] = minutes }
+    }
+
     override suspend fun restoreSettings(settings: ExpensesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -231,6 +250,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
             prefs[Keys.ATTACH_PHOTO_ON_RETRY] = settings.attachPhotoOnRetry
             prefs[Keys.LOCATION_PREFILL_ENABLED] = settings.locationPrefillEnabled
+            prefs[Keys.NEAR_DUPLICATE_DETECTION_ENABLED] = settings.nearDuplicateDetectionEnabled
+            prefs[Keys.NEAR_DUPLICATE_FUZZY_MATCH_ENABLED] = settings.nearDuplicateFuzzyMatchEnabled
+            prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES] = settings.nearDuplicateTimeWindowMinutes
             // appCacheJson intentionally untouched — see interface doc comment.
         }
     }

@@ -1,6 +1,7 @@
 package com.voxapps.expenses.domain.llm
 
 import com.voxapps.datahygiene.optCleanString
+import com.voxapps.expenses.data.TransactionDirection
 import org.json.JSONObject
 
 /**
@@ -16,7 +17,8 @@ object NotificationExpenseParseResultParser {
         val currency: String?,
         val vendor: String?,
         val category: String?,
-        val bank: String?
+        val bank: String?,
+        val direction: TransactionDirection = TransactionDirection.OUTGOING
     )
 
     fun parse(json: String): Parsed? = try {
@@ -36,7 +38,8 @@ object NotificationExpenseParseResultParser {
                 currency = o.optCleanString("currency"),
                 vendor = o.optCleanString("vendor"),
                 category = o.optCleanString("category"),
-                bank = o.optCleanString("bank")
+                bank = o.optCleanString("bank"),
+                direction = o.optTransactionDirection()
             )
         }
     } catch (e: Exception) {

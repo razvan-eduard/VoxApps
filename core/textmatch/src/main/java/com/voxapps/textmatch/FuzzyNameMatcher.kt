@@ -17,6 +17,32 @@ object FuzzyNameMatcher {
     data class Candidate(val id: Long, val name: String)
     data class Resolved(val id: Long?, val name: String?)
 
+    /** A minimum normalized length below which containment alone isn't a reliable signal — two very
+     *  short strings can trivially contain one another without meaning the same thing. */
+    private const val MIN_CONTAINMENT_LENGTH = 3
+
+    /**
+     * Pairwise "do these two free-text names plausibly refer to the same thing" check, reusing the
+     * same normalize/Levenshtein machinery [resolve] uses against a candidate list. Order: exact match
+     * (after normalization) wins; otherwise one name fully containing the other counts as a match too
+     * — a longer descriptive string built around a shorter core name is still the same referent, and
+     * plain edit-distance alone would not catch that pairing since the length difference alone can
+     * exceed the fuzzy threshold; otherwise a Levenshtein-distance fuzzy match against the same
+     * length-relative threshold [resolve] uses.
+     */
+    fun namesMatch(a: String, b: String): Boolean {
+        val normA = normalize(a)
+        val normB = normalize(b)
+        if (normA.isEmpty() || normB.isEmpty()) return false
+        if (normA == normB) return true
+        if (normA.length >= MIN_CONTAINMENT_LENGTH && normB.length >= MIN_CONTAINMENT_LENGTH &&
+            (normA.contains(normB) || normB.contains(normA))
+        ) {
+            return true
+        }
+        return levenshtein(normA, normB) <= threshold(normA.length, normB.length)
+    }
+
     fun resolve(spokenName: String?, candidates: List<Candidate>, defaultId: Long?): Resolved {
         val spoken = spokenName?.trim()?.takeIf { it.isNotEmpty() }
         if (spoken != null) {

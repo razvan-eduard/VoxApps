@@ -6,6 +6,11 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.UUID
 
+/** Whether money left the account (a purchase/payment/transfer sent) or arrived (a refund, an
+ *  incoming transfer, or a top-up) — every record is one or the other, defaulting to [OUTGOING]
+ *  since that's overwhelmingly the common case for an expense tracker. */
+enum class TransactionDirection { OUTGOING, INCOMING }
+
 /**
  * A single expense. [totalAmount] is the only mandatory field.
  * [receiptImageName] stores the filename of the receipt photo in internal storage.
@@ -41,6 +46,7 @@ data class Expense(
     val dateTime: Long,
     val comments: String? = null,
     @ColumnInfo(name = "categoryId") val categoryId: Long? = null,
+    val direction: TransactionDirection = TransactionDirection.OUTGOING,
     val receiptImageName: String? = null,
     val isStub: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),

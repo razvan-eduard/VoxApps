@@ -83,6 +83,8 @@ import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSanitizer
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
+import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
@@ -169,6 +171,8 @@ fun ExpenseEditScreen(
     var dateTime by remember { mutableStateOf(existing?.expense?.dateTime ?: System.currentTimeMillis()) }
     var categoryId by remember { mutableStateOf(existing?.expense?.categoryId) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
+    var direction by remember { mutableStateOf(existing?.expense?.direction ?: TransactionDirection.OUTGOING) }
+    var directionMenuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showDeleteExpenseConfirm by remember { mutableStateOf(false) }
@@ -190,9 +194,12 @@ fun ExpenseEditScreen(
                 comments = expense.comments,
                 categoryId = expense.categoryId,
                 items = lineItems,
+                direction = expense.direction,
                 onResult = { id ->
                     if (id == DUPLICATE_ENTRY_RESULT) {
                         Toast.makeText(context, languageManager.getString("duplicate_entry_error"), Toast.LENGTH_LONG).show()
+                    } else if (id == NEAR_DUPLICATE_MERGED_RESULT) {
+                        Toast.makeText(context, languageManager.getString("near_duplicate_merged_message"), Toast.LENGTH_LONG).show()
                     }
                 }
             )
@@ -254,6 +261,7 @@ fun ExpenseEditScreen(
             dateTime = dateTime,
             comments = comments,
             categoryId = categoryId,
+            direction = direction,
             isStub = false
         )
         when (val decision = ExpenseSanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
@@ -416,6 +424,33 @@ fun ExpenseEditScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error
                         )
+                    }
+                    Box {
+                        PaperTapField(
+                            label = languageManager.getString("expense_direction"),
+                            value = languageManager.getString(
+                                if (direction == TransactionDirection.OUTGOING) "transaction_direction_outgoing" else "transaction_direction_incoming"
+                            ),
+                            onClick = { directionMenuExpanded = true },
+                            trailingIcon = {
+                                Icon(
+                                    Icons.Filled.ExpandMore,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        )
+                        DropdownMenu(expanded = directionMenuExpanded, onDismissRequest = { directionMenuExpanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text(languageManager.getString("transaction_direction_outgoing")) },
+                                onClick = { direction = TransactionDirection.OUTGOING; directionMenuExpanded = false }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(languageManager.getString("transaction_direction_incoming")) },
+                                onClick = { direction = TransactionDirection.INCOMING; directionMenuExpanded = false }
+                            )
+                        }
                     }
                 }
             }
