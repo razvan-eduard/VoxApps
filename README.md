@@ -125,11 +125,25 @@ Each app below is fully independent — install any subset. Vox Commander can op
 others by voice once they're installed (e.g. "add a note", "add an expense"). See
 [`docs/APPS_OVERVIEW.md`](docs/APPS_OVERVIEW.md) for the full feature list of each app.
 
-- **[Vox Notes](docs/APPS_OVERVIEW.md#vox-notes)** — Encrypted on-device notes, voice-created or manual, with AI-assisted category cleanup and an optional calendar view.
-- **[Vox Vision](docs/APPS_OVERVIEW.md#vox-vision)** — Document scanner: camera capture, auto-crop, on-device OCR, forwards cleaned text to Notes or Expenses.
-- **[Vox Expenses](docs/APPS_OVERVIEW.md#vox-expenses)** — Encrypted on-device expense tracker: voice, receipt-scan, or automatic bank-notification capture, spending limits, reports.
-- **[Vox Calendar](docs/APPS_OVERVIEW.md#vox-calendar)** — Encrypted on-device calendar: colored layers, natural-language event creation, ICS import/export, a day view that also shows that day's Notes/Expenses.
-- **[Vox Hub](docs/APPS_OVERVIEW.md#vox-hub)** — Zero-config backup/restore: discovers every installed Vox app and exports/imports all of their data as one JSON file.
+- **[Vox Notes](docs/APPS_OVERVIEW.md#vox-notes)** — Encrypted on-device notes app. Create notes by
+  voice through Commander or by hand; AI-assisted category cleanup and duplicate-note review (nothing
+  auto-deleted without confirmation); an optional calendar view instead of the plain list; a
+  home-screen widget; syncs with another phone via Vox Hub.
+- **[Vox Vision](docs/APPS_OVERVIEW.md#vox-vision)** — Document scanner. Camera capture with
+  auto-detected document bounds and auto-capture, on-device OCR (no network round-trip), edge-cropping,
+  then forwards the cleaned text to Vox Notes or Vox Expenses as a new record.
+- **[Vox Expenses](docs/APPS_OVERVIEW.md#vox-expenses)** — Encrypted on-device expense tracker. Three
+  ways in — voice, receipt-scan OCR, or automatic capture from bank/payment notifications — plus manual
+  entry; per-category spending limits with alerts, multi-currency reports, an optional calendar view, a
+  home-screen widget, and sync with another phone via Vox Hub.
+- **[Vox Calendar](docs/APPS_OVERVIEW.md#vox-calendar)** — Encrypted on-device calendar. Colored,
+  named layers instead of a rigid category tree; natural-language event/task creation through Commander
+  ("dentist in a week"); ICS import/export for interop with Google Calendar/Thunderbird/Apple Calendar;
+  a day view that also shows that day's Notes and Expenses; syncs with another phone via Vox Hub.
+- **[Vox Hub](docs/APPS_OVERVIEW.md#vox-hub)** — Backup, restore, and peer-to-peer sync. Zero-config
+  export/import (discovers every installed Vox app automatically), scheduled backups with retention and
+  a failure banner, and NFC-paired, Bluetooth-transferred bidirectional sync between two phones for
+  Notes/Calendar/Expenses — no cloud involved.
 
 ## Key Technologies
 

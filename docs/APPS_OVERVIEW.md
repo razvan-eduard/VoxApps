@@ -34,6 +34,9 @@ through Commander (`create`/`read`) or used entirely on its own.
 - **Home-screen widget** (Jetpack Glance) — recent notes grouped by day, category-colored rows, tap a
   note to edit it in place, plus Add/Scan actions — reads the same reactive state as the in-app UI, so
   a biometric-locked session shows locked here too
+- **Peer-to-peer device sync** (paired from Vox Hub, see [Vox Hub](#vox-hub) below) — genuinely
+  bidirectional sync with another phone over NFC + Bluetooth, no cloud; category-scoped, last-write-wins
+  on a conflicting edit, deletions propagate via tombstones
 - Multi-language UI (English, Romanian, German, French)
 
 ## Vox Vision
@@ -109,6 +112,9 @@ bank/payment notifications, or entered by hand.
 - **Battery-optimization exemption prompt** — Settings → Notification Capture and first-launch
   onboarding both offer a direct button into the OS's "ignore battery optimizations" dialog, since some
   OEMs' aggressive background-process killers can silently unbind the notification listener otherwise
+- **Peer-to-peer device sync** (paired from Vox Hub, see [Vox Hub](#vox-hub) below) — genuinely
+  bidirectional sync with another phone over NFC + Bluetooth, no cloud; category-scoped, last-write-wins
+  on a conflicting edit, deletions propagate via tombstones
 - Multi-language UI (English, Romanian, German, French)
 
 ## Vox Calendar
@@ -140,6 +146,9 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
 - **Home-screen widget** (Jetpack Glance) — upcoming entries grouped by day (today bolded, its
   divider thicker), layer-colored rows with tag chips, tap an entry to edit it in place, plus
   Add/Scan actions
+- **Peer-to-peer device sync** (paired from Vox Hub, see [Vox Hub](#vox-hub) below) — genuinely
+  bidirectional sync with another phone over NFC + Bluetooth, no cloud; layer-scoped, last-write-wins
+  on a conflicting edit, deletions propagate via tombstones
 - Multi-language UI (English, Romanian)
 
 ## Vox Hub
@@ -157,4 +166,18 @@ other satellite implements as a server.
   anything is written, and lets the user deselect individual apps; each target app applies its own
   snapshot-then-replace semantics (existing records for that domain are fully replaced by the import,
   not merged)
-- Holds no local Room database — the only thing it persists itself is its own theme preference
+- **Scheduled backups** — off/daily/weekly/monthly interval (`WorkManager`), configurable retention
+  (none/2/5/10/unlimited, with a storage-growth warning at unlimited), a dismissible failure banner
+  when a scheduled run doesn't complete, and a past-backups list (capped to 5 visible rows, scrollable)
+  with per-backup **Share** and **Restore** actions
+- **Peer-to-peer device sync** — a second, genuinely *bidirectional* path alongside export/import's
+  one-directional restore: pair two phones over NFC (tap to exchange identity + a session key — no
+  Bluetooth PIN dialog), then sync Notes/Calendar/Expenses over Bluetooth Classic, both phones ending up
+  with each other's changes, not one overwriting the other. Trigger a sync by tapping again, from a
+  manual **Sync now** per paired device, or leave **Auto-sync** on for a background check every 15–240
+  minutes (configurable). Per-peer category/layer checklist controls what's included. See
+  [`TECHNICAL_DOCUMENTATION.md`'s Peer-to-peer device sync section](TECHNICAL_DOCUMENTATION.md#peer-to-peer-device-sync-op_sync_export--op_sync_merge)
+  for the full architecture.
+- Holds no local Room database for its own app data — sync's paired-device identities/keys are the one
+  exception, kept in `EncryptedSharedPreferences`; everything else it persists itself is UI preference
+  (theme, backup schedule)

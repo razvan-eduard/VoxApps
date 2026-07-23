@@ -1226,8 +1226,8 @@ strings locally; nothing forces a dependency.
 
 | Type | Purpose |
 |------|---------|
-| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`, `ACTION_LLM_PROCESS`, `ACTION_LLM_RESULT`, `ACTION_OCR_RESULT`, `ACTION_SCHEMA_CHANGED`, `ACTION_CAPABILITY_QUERY`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`, `OP_GET_SCHEMA`, `OP_EXPORT`, `OP_IMPORT`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`, `META_NLU_HINT`, `META_OCR_TASK`), the six shared `com.voxapps.vox.permission.*` constants |
-| `VoxCommand` | Command envelope authored by Commander (`op`, `text?`, `title?`, `category?`, `domain?`, `exportScope?`, `dateFrom?`, `dateTo?`) with `toJson()`/`fromJson()` (org.json) — `dateFrom`/`dateTo` are an additive pair used only by Vox Calendar's day-scoped `OP_READ` (see below); every other satellite's `OP_READ` ignores them and behaves exactly as before |
+| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`, `ACTION_LLM_PROCESS`, `ACTION_LLM_RESULT`, `ACTION_OCR_RESULT`, `ACTION_SCHEMA_CHANGED`, `ACTION_CAPABILITY_QUERY`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`, `OP_GET_SCHEMA`, `OP_EXPORT`, `OP_IMPORT`, `OP_SYNC_EXPORT`, `OP_SYNC_MERGE`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`, `META_NLU_HINT`, `META_OCR_TASK`), the six shared `com.voxapps.vox.permission.*` constants |
+| `VoxCommand` | Command envelope authored by Commander (`op`, `text?`, `title?`, `category?`, `domain?`, `exportScope?`, `dateFrom?`, `dateTo?`, `since?`, `scopeNames?`) with `toJson()`/`fromJson()` (org.json) — `dateFrom`/`dateTo` are an additive pair used only by Vox Calendar's day-scoped `OP_READ` (see below); `since`/`scopeNames` back `OP_SYNC_EXPORT`/`OP_SYNC_MERGE` (see [Peer-to-peer device sync](#peer-to-peer-device-sync-op_sync_export--op_sync_merge) below); every other satellite's `OP_READ` ignores them and behaves exactly as before |
 | `VoxResult` | Satellite reply for reads (`ok`, `text`) — the notes payload, or a spoken "locked" message; also the `OP_GET_SCHEMA` reply's envelope (`text` carries a `VoxSatelliteSchema` JSON — see [Collapsed satellite extraction flow](#collapsed-satellite-extraction-flow-voxsatelliteschema) below) |
 | `VoxSatelliteSchema` | A satellite's extraction contract: `needsExtractionPass`, `promptTemplate` (with an `{{INPUT}}` placeholder), `fieldSchemaVersion`, `taskId` — see below |
 
@@ -1574,6 +1574,61 @@ a **consumer** of the `export`/`import` actions every other satellite already ex
 - Because Hub holds no Room database, its own settings (currently just the shared theme preference) are
   the only thing it persists locally.
 
+### Peer-to-peer device sync (`OP_SYNC_EXPORT` / `OP_SYNC_MERGE`)
+
+A second, genuinely bidirectional path alongside export/import's one-directional "replace" restore —
+syncs Notes/Calendar/Expenses between two phones over NFC + Bluetooth Classic, no cloud, entirely
+orchestrated from Hub. Export/import and sync are deliberately separate wire ops rather than a mode
+flag on the existing ones, since their semantics differ at every layer (snapshot-then-replace vs.
+delta-then-merge).
+
+- **Schema prerequisite** — every synced entity (`Expense`, `Note`, `CalendarEntry`) carries a stable
+  `uid` (survives across devices, unlike the local Room auto-increment `id`) and an `updatedAt`
+  timestamp bumped on every field-level edit, plus a small per-app tombstone table
+  (`expense_tombstones`, `note_tombstones`, `calendar_entry_tombstones`) written on every delete —
+  necessary because deletions need to propagate too, and a missing row is indistinguishable from a
+  never-synced one without an explicit record of it.
+- **`OP_SYNC_EXPORT`**(`since`, `scopeNames?`) — returns only entries with `updatedAt > since` plus
+  tombstones with `deletedAt > since`, optionally filtered to `scopeNames` (category/layer names, by
+  name rather than id since a local Room sequence has no cross-device meaning — mirrors how
+  export/import's own category reconciliation already works).
+- **`OP_SYNC_MERGE`**(`deltaJson`) — applies a peer's delta via `:core:datahygiene`'s shared
+  `SyncIdentity`/`planMerge()`: insert-if-new, last-write-wins by `updatedAt` on a uid collision,
+  delete-on-tombstone. Each satellite's `*SyncHandler.kt` (`ExpensesSyncHandler`, `NotesSyncHandler`,
+  `CalendarSyncHandler`) wraps this with its own category/layer name resolution (auto-creating an
+  unknown one, same convention as import).
+- **NFC pairing** (`vox-hub/.../domain/sync/`) — `PairingHceService` (a `HostApduService`, the passive
+  "card" side of a tap — Android wakes it automatically via AID routing, no foreground UI needed on
+  that phone) and `NfcPairingReader` (`NfcAdapter.enableReaderMode`, the active side) exchange a
+  `peerId` and a freshly generated AES-256 key over a tiny custom APDU protocol
+  (`NfcPairingProtocol`). Deliberately **not** the Bluetooth MAC — Android forbids an app from reading
+  its own adapter's address (a privacy restriction since API 23), so the client side instead resolves
+  the server's MAC once via `BluetoothPeerResolver`: the server briefly requests discoverability and
+  sets a temporary recognizable device name, the client runs a classic-Bluetooth discovery scan
+  matching that name (reading a *remote* device's address from a scan result has no such
+  restriction), then caches the resolved MAC — no repeat discovery, no OS-level bonding/PIN dialog,
+  for any later sync with that peer.
+- **Transport** (`BluetoothSyncTransport`, `SecureSyncChannel`, `SyncCrypto`) — an insecure RFCOMM
+  socket (fixed app UUID, role fixed at pairing time: the HCE side always listens, the reader side
+  always connects) carrying length-prefixed, AES-256-GCM-encrypted messages — the NFC-exchanged key is
+  what actually secures the payload, standing in for the OS pairing this design skips.
+- **`SyncOrchestrator`** drives one full session: both sides agree on which installed, syncable apps to
+  cover, then for each one both sides call their own `OP_SYNC_EXPORT`, exchange deltas over the socket,
+  and both apply the peer's via `OP_SYNC_MERGE` — genuinely bidirectional, not push or pull. Callable
+  identically from a manual "Sync now" tap, or from `ScheduledSyncWorker` (a 15-minute `WorkManager`
+  periodic tick — the platform's own floor — that checks each peer's own configured interval against
+  `PairedPeer.lastAttemptedSyncAt` and only actually connects when due). A background worker can't
+  prompt for anything, so it silently skips a peer whose Bluetooth isn't already on or whose runtime
+  permissions aren't granted, retrying next tick — real reliability depends on both phones' independent
+  `WorkManager` schedules happening to overlap, which is an inherent limitation of the platform, not
+  something the app can paper over.
+- **Scope selection** — `SyncScopeScreen` reuses the existing `OP_EXPORT` (scope=`data`) call purely to
+  read each app's category/layer *names* for a per-peer checklist, rather than adding a dedicated
+  lightweight IPC op for it (this screen is opened rarely, unlike the orchestrator's own
+  watermark-bounded `OP_SYNC_EXPORT` calls). Selections are stored per peer
+  (`PairedPeer.scopeNamesByApp`); an entry absent from that map means "sync everything," the same
+  convention every satellite's own `OP_SYNC_EXPORT` handler already uses for a null `scopeNames`.
+
 ### Key classes
 
 | Class | Path |
@@ -1601,6 +1656,13 @@ a **consumer** of the `export`/`import` actions every other satellite already ex
 | `MultimodalAttachmentResolver` (Expenses' scan/retry photo-attach gate) | `vox-expenses/.../domain/llm/MultimodalAttachmentResolver.kt` |
 | Day-scoped read + ICS export/import | `vox-calendar/.../receiver/VoxCommandReceiver.kt`, `vox-calendar/.../domain/ics/` |
 | Hub's export/import client | `core/ipc/.../VoxDataTransferClient.kt`, `vox-hub/.../ui/HubScreen.kt` |
+| `SyncIdentity` / `planMerge()` (shared merge algorithm) | `core/datahygiene/.../SyncMerge.kt` |
+| Per-app sync handlers | `vox-expenses/.../receiver/ExpensesSyncHandler.kt`, `vox-notes/.../receiver/NotesSyncHandler.kt`, `vox-calendar/.../receiver/CalendarSyncHandler.kt` |
+| `PairedPeer` / `SyncPeerStore` (persisted per-peer identity + key) | `vox-hub/.../domain/sync/` |
+| `PairingHceService` / `NfcPairingReader` / `NfcPairingProtocol` (NFC pairing) | `vox-hub/.../domain/sync/` |
+| `BluetoothPeerResolver` / `BluetoothSyncTransport` / `SecureSyncChannel` / `SyncCrypto` | `vox-hub/.../domain/sync/` |
+| `SyncOrchestrator` / `ScheduledSyncWorker` / `ScheduledSyncScheduler` | `vox-hub/.../domain/sync/` |
+| `SyncScreen` / `SyncScopeScreen` | `vox-hub/.../ui/` |
 
 ---
 
