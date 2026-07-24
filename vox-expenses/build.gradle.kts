@@ -12,8 +12,8 @@ android {
         applicationId = "com.voxapps.expenses"
         minSdk = 29
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.11"
+        versionCode = 12
+        versionName = "0.12"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -68,6 +68,7 @@ dependencies {
     implementation(project(":core:calendar"))
     implementation(project(":core:apppicker"))
     implementation(project(":core:ipc"))
+    implementation(project(":core:attachments"))
     implementation(project(":core:logging"))
     implementation(project(":core:datahygiene"))
     implementation(project(":core:schema-annotations"))
@@ -106,9 +107,6 @@ dependencies {
 
     // Scheduled jobs (category auto-merge, expense dedup, spending-limit checks)
     implementation(libs.androidx.work.runtime.ktx)
-
-    // Zoomable image support for receipt inspection
-    implementation("me.saket.telephoto:zoomable-image-coil:0.19.0")
 
     // Exchange-rate lookups at reporting time (Stage 5)
     implementation(libs.okhttp)

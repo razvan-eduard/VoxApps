@@ -24,6 +24,7 @@ interface NotesSettingsRepository {
     suspend fun setDebugToastsEnabled(enabled: Boolean)
     suspend fun setCalendarViewEnabled(enabled: Boolean)
     suspend fun setAttachPhotoOnScan(enabled: Boolean)
+    suspend fun setScanImageRetention(mode: String)
     suspend fun setThemeDarkMode(mode: String)
     suspend fun setThemeColored(colored: Boolean)
     suspend fun setOnboardingCompleted(completed: Boolean)

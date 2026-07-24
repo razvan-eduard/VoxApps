@@ -12,8 +12,8 @@ android {
         applicationId = "com.voxapps.notes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.9"
+        versionCode = 10
+        versionName = "0.10"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -67,6 +67,7 @@ dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:calendar"))
     implementation(project(":core:ipc"))
+    implementation(project(":core:attachments"))
     implementation(project(":core:logging"))
     implementation(project(":core:datahygiene"))
     implementation(project(":core:textmatch"))

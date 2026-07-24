@@ -30,7 +30,7 @@ interface NoteDao {
     suspend fun getForDateRange(from: Long, to: Long): List<Note>
 
     @Insert
-    suspend fun insert(note: Note)
+    suspend fun insert(note: Note): Long
 
     /** Detach all notes from a category being deleted (code-level ON DELETE SET NULL). */
     @Query("UPDATE notes SET categoryId = NULL WHERE categoryId = :categoryId")

@@ -130,6 +130,13 @@
   "calendar_view_desc": "Răsfoiește notițele ca un calendar defilabil, paginat pe luni, în loc de o listă simplă",
   "attach_photo_on_scan": "Procesează foto cu AI la scanare",
   "attach_photo_on_scan_desc": "Trimite fotografia scanată către AI alături de textul recunoscut (necesită și setarea „trimite foto către AI” din Vision și un motor multimodal configurat)",
+  "scan_image_retention": "Păstrează fotografia scanată",
+  "scan_image_retention_desc": "Dacă fotografia scanată e păstrată ca atașament pe notiță după ce curățarea se termină",
+  "retention_never": "Niciodată",
+  "retention_on_failure": "La eșec",
+  "retention_always": "Întotdeauna",
+  "attachments": "Atașamente",
+  "manual_review_required": "Necesită verificare manuală",
   "today": "Astăzi",
   "debug_section": "Depanare",
   "add_test_data": "Adaugă date de test"

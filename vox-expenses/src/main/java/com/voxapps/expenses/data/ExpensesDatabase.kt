@@ -7,14 +7,17 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.migration.Migration
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.ipc.PendingLlmRequestDao
 import com.voxapps.ipc.PendingLlmRequestEntity
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class,
-        ExpenseTombstone::class, MerchantCategoryMemory::class, PendingLlmRequestEntity::class],
-    version = 9,
+        ExpenseTombstone::class, MerchantCategoryMemory::class, PendingLlmRequestEntity::class,
+        AttachmentEntity::class],
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -25,6 +28,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
     abstract fun spendingLimitDao(): SpendingLimitDao
     abstract fun merchantCategoryMemoryDao(): MerchantCategoryMemoryDao
     abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
+    abstract fun attachmentDao(): AttachmentDao
 
     companion object {
         @Volatile private var instance: ExpensesDatabase? = null
@@ -121,6 +125,23 @@ abstract class ExpensesDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS attachments (" +
+                        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "recordType TEXT NOT NULL, " +
+                        "recordId INTEGER NOT NULL, " +
+                        "fileName TEXT NOT NULL, " +
+                        "source TEXT NOT NULL, " +
+                        "createdAt INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_attachments_recordType_recordId ON attachments(recordType, recordId)"
+                )
+            }
+        }
+
         fun get(context: Context): ExpensesDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
         }
@@ -130,7 +151,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .build()
         }
     }

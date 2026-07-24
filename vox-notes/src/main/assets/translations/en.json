@@ -130,6 +130,13 @@
   "calendar_view_desc": "Browse notes as a scrollable, month-paged calendar instead of a plain list",
   "attach_photo_on_scan": "Process photo with AI on scan",
   "attach_photo_on_scan_desc": "Send the scanned photo to the AI alongside the recognized text (needs Vision's \"send photo to AI\" setting on too, and a multimodal engine configured)",
+  "scan_image_retention": "Keep scanned photo",
+  "scan_image_retention_desc": "Whether the scanned photo is kept as an attachment on the note after cleanup finishes",
+  "retention_never": "Never",
+  "retention_on_failure": "On failure",
+  "retention_always": "Always",
+  "attachments": "Attachments",
+  "manual_review_required": "Manual review required",
   "today": "Today",
   "debug_section": "Debug",
   "add_test_data": "Add test data"

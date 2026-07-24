@@ -1,5 +1,8 @@
 package com.voxapps.notes.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -52,14 +56,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.AttachmentSource
+import com.voxapps.attachments.ui.AttachmentUiItem
+import com.voxapps.attachments.ui.AttachmentsSection
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.notes.data.Category
 import com.voxapps.notes.data.CategoryPalette
 import com.voxapps.notes.data.NoteWithCategory
+import com.voxapps.notes.data.NotesAttachments
+import com.voxapps.notes.state.NotesStateManager
 import kotlin.math.abs
 
 /** Low-alpha tint applied to a note card's background from its category color. */
@@ -109,6 +121,8 @@ fun CollapsedNoteCard(item: NoteWithCategory, onClick: () -> Unit) {
  */
 @Composable
 fun NoteEditorCard(
+    noteId: Long?,
+    stateManager: NotesStateManager,
     title: String,
     text: String,
     categoryId: Long?,
@@ -129,12 +143,14 @@ fun NoteEditorCard(
         )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Collapse affordance: its own centered row above everything else, in a shadowed
-            // pill so it reads as a distinct floating control rather than blending into the title.
+            // Top row: the collapse pill stays centered; Delete/Save move up here (previously at
+            // the bottom of the text column) so they read as this card's primary actions at a
+            // glance, with Attachments now occupying the bottom instead (see below).
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.Center
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Spacer(modifier = Modifier.weight(1f))
                 Surface(
                     onClick = onDone,
                     shape = CircleShape,
@@ -146,6 +162,16 @@ fun NoteEditorCard(
                         contentDescription = languageManager.getString("collapse_note"),
                         modifier = Modifier.padding(6.dp)
                     )
+                }
+                Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                    if (onDelete != null) {
+                        IconButton(onClick = onDelete) {
+                            Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
+                        }
+                    }
+                    IconButton(onClick = onDone) {
+                        Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
+                    }
                 }
             }
 
@@ -189,20 +215,6 @@ fun NoteEditorCard(
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp).padding(top = 8.dp)
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (onDelete != null) {
-                            IconButton(onClick = onDelete) {
-                                Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
-                            }
-                        }
-                        IconButton(onClick = onDone) {
-                            Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
-                        }
-                    }
                 }
 
                 // Vertical coverflow category picker on the right edge.
@@ -213,8 +225,50 @@ fun NoteEditorCard(
                     onAddCategory = onAddCategory
                 )
             }
+
+            // Attachments only once the note is a persisted row — a brand-new draft has no id to
+            // scope rows against yet (same implicit constraint vox-expenses' receipt image has).
+            // At the bottom now that Delete/Save moved up to the top row.
+            if (noteId != null) {
+                NoteAttachmentsHost(noteId, stateManager)
+            }
         }
     }
+}
+
+/** Resolves [noteId]'s attachment rows into display items and wires add/remove to
+ *  [NotesStateManager], including staging a newly-picked photo into this app's own files dir before
+ *  recording it. Split out from [NoteEditorCard] so that composable's own signature stays scannable. */
+@Composable
+private fun NoteAttachmentsHost(noteId: Long, stateManager: NotesStateManager) {
+    val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
+    val entities by stateManager.observeAttachments(noteId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val items = remember(entities) {
+        entities.map { e ->
+            AttachmentUiItem(
+                id = e.id,
+                uri = AttachmentFileStore.uriFor(context, NotesAttachments.FILE_PROVIDER_AUTHORITY, NotesAttachments.DIR, e.fileName),
+                removable = e.source == AttachmentSource.MANUAL
+            )
+        }
+    }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            AttachmentFileStore.stage(context, uri, NotesAttachments.DIR)?.let { fileName ->
+                stateManager.addManualAttachment(noteId, fileName)
+            }
+        }
+    }
+    AttachmentsSection(
+        title = languageManager.getString("attachments"),
+        items = items,
+        canAdd = items.count { it.removable } < 10,
+        onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onRemove = { item ->
+            entities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
+        }
+    )
 }
 
 /** One row of the coverflow: the fixed "no category" swatch, one per real [Category], or the

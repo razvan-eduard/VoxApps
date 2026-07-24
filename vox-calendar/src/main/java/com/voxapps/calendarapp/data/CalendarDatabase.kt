@@ -7,14 +7,16 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.ipc.PendingLlmRequestDao
 import com.voxapps.ipc.PendingLlmRequestEntity
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [CalendarLayer::class, CalendarEntry::class, CalendarEntryTag::class, CalendarEntryTombstone::class,
-        PendingLlmRequestEntity::class],
-    version = 3,
+        PendingLlmRequestEntity::class, AttachmentEntity::class],
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(CalendarConverters::class)
@@ -23,6 +25,7 @@ abstract class CalendarDatabase : RoomDatabase() {
     abstract fun calendarEntryDao(): CalendarEntryDao
     abstract fun calendarEntryTagDao(): CalendarEntryTagDao
     abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
+    abstract fun attachmentDao(): AttachmentDao
 
     companion object {
         @Volatile private var instance: CalendarDatabase? = null
@@ -52,6 +55,23 @@ abstract class CalendarDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS attachments (" +
+                        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "recordType TEXT NOT NULL, " +
+                        "recordId INTEGER NOT NULL, " +
+                        "fileName TEXT NOT NULL, " +
+                        "source TEXT NOT NULL, " +
+                        "createdAt INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_attachments_recordType_recordId ON attachments(recordType, recordId)"
+                )
+            }
+        }
+
         /** Room backed by SQLCipher; passphrase comes from the Keystore-backed store. */
         fun get(context: Context): CalendarDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
@@ -64,7 +84,7 @@ abstract class CalendarDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, CalendarDatabase::class.java, "vox-calendar.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
         }
     }

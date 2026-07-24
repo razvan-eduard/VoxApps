@@ -67,6 +67,7 @@
   "entry_description": "Beschreibung",
   "entry_location": "Ort",
   "entry_layer": "Kalender",
+  "attachments": "Anhänge",
   "entry_when": "Wann",
   "entry_due": "Fällig",
   "entry_start_date": "Startdatum",

@@ -177,11 +177,17 @@ fun NotesScreen(
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = {
-                    commitEdit(editing, stateManager)
-                    editing = EditBuffer(id = null, title = "", text = "", categoryId = state.selectedCategoryId)
-                }) {
-                    Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_note"))
+                // Hidden while a note is expanded for editing — the expanded card already occupies
+                // that same bottom-right area's attention, and tapping it mid-edit would commit
+                // whatever's currently open before starting a new draft, which read as a confusing
+                // double-action rather than a clear "add note" affordance.
+                if (editing == null) {
+                    FloatingActionButton(onClick = {
+                        commitEdit(editing, stateManager)
+                        editing = EditBuffer(id = null, title = "", text = "", categoryId = state.selectedCategoryId)
+                    }) {
+                        Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_note"))
+                    }
                 }
             }
         ) { pad ->
@@ -217,6 +223,8 @@ fun NotesScreen(
                         if (editing?.id == null && editing != null) {
                             item(key = "new-note-editor") {
                                 NoteEditorCard(
+                                    noteId = editing!!.id,
+                                    stateManager = stateManager,
                                     title = editing!!.title,
                                     text = editing!!.text,
                                     categoryId = editing!!.categoryId,
@@ -236,6 +244,8 @@ fun NotesScreen(
                         items(state.notes, key = { it.note.id }) { nwc ->
                             if (editing?.id == nwc.note.id) {
                                 NoteEditorCard(
+                                    noteId = editing!!.id,
+                                    stateManager = stateManager,
                                     title = editing!!.title,
                                     text = editing!!.text,
                                     categoryId = editing!!.categoryId,
@@ -272,6 +282,8 @@ fun NotesScreen(
         val current = editing!!
         ModalBottomSheet(onDismissRequest = { editing = null }) {
             NoteEditorCard(
+                noteId = current.id,
+                stateManager = stateManager,
                 title = current.title,
                 text = current.text,
                 categoryId = current.categoryId,

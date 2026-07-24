@@ -1,5 +1,11 @@
 package com.voxapps.calendarapp.state
 
+import android.content.Context
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.AttachmentSource
+import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarLayer
@@ -11,6 +17,7 @@ import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +39,8 @@ import kotlinx.coroutines.launch
 class CalendarStateManager internal constructor(
     private val settingsRepo: CalendarSettingsRepository,
     private val calendarRepo: CalendarRepository,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val attachmentDao: AttachmentDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -190,6 +198,31 @@ class CalendarStateManager internal constructor(
         scope.launch { calendarRepo.deleteLayer(layer) }
     }
 
+    // --- Attachments (manually-added photos on an entry — see :core:attachments) ---
+    fun observeAttachments(entryId: Long): Flow<List<AttachmentEntity>> =
+        attachmentDao.observeFor(CalendarAttachments.RECORD_TYPE, entryId)
+
+    fun addManualAttachment(entryId: Long, fileName: String) {
+        scope.launch {
+            attachmentDao.insert(
+                AttachmentEntity(
+                    recordType = CalendarAttachments.RECORD_TYPE,
+                    recordId = entryId,
+                    fileName = fileName,
+                    source = AttachmentSource.MANUAL,
+                    createdAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    fun removeAttachment(entity: AttachmentEntity, context: Context) {
+        scope.launch {
+            attachmentDao.delete(entity.id)
+            AttachmentFileStore.delete(context, CalendarAttachments.DIR, entity.fileName)
+        }
+    }
+
     private fun uiStateLayers(): List<CalendarLayer> =
         (_uiState.value as? CalendarUiState.Unlocked)?.layers ?: emptyList()
 
@@ -199,9 +232,10 @@ class CalendarStateManager internal constructor(
         fun getInstance(
             settingsRepo: CalendarSettingsRepository,
             calendarRepo: CalendarRepository,
-            sessionManager: SessionManager
+            sessionManager: SessionManager,
+            attachmentDao: AttachmentDao
         ): CalendarStateManager = instance ?: synchronized(this) {
-            instance ?: CalendarStateManager(settingsRepo, calendarRepo, sessionManager).also { instance = it }
+            instance ?: CalendarStateManager(settingsRepo, calendarRepo, sessionManager, attachmentDao).also { instance = it }
         }
     }
 }

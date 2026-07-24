@@ -1,7 +1,12 @@
 package com.voxapps.expenses.state
 
 import android.content.Context
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.expenses.data.Category
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpensesRepository
@@ -45,7 +50,8 @@ class ExpensesStateManager internal constructor(
     private val expenseDeduplicationRepo: ExpenseDeduplicationRepository,
     private val pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
     private val spendingLimitAlertRepo: SpendingLimitAlertRepository,
-    private val pendingLlmRequestQueue: VoxLlmRequestQueue
+    private val pendingLlmRequestQueue: VoxLlmRequestQueue,
+    private val attachmentDao: AttachmentDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -387,6 +393,31 @@ class ExpensesStateManager internal constructor(
         }
     }
 
+    // --- Attachments (manually-added extras alongside the original receipt scan) ---
+    fun observeAttachments(expenseId: Long): Flow<List<AttachmentEntity>> =
+        attachmentDao.observeFor(ExpensesAttachments.RECORD_TYPE, expenseId)
+
+    fun addManualAttachment(expenseId: Long, fileName: String) {
+        scope.launch {
+            attachmentDao.insert(
+                AttachmentEntity(
+                    recordType = ExpensesAttachments.RECORD_TYPE,
+                    recordId = expenseId,
+                    fileName = fileName,
+                    source = AttachmentSource.MANUAL,
+                    createdAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    fun removeAttachment(entity: AttachmentEntity, context: Context) {
+        scope.launch {
+            attachmentDao.delete(entity.id)
+            AttachmentFileStore.delete(context, ExpensesAttachments.DIR, entity.fileName)
+        }
+    }
+
     companion object {
         @Volatile private var instance: ExpensesStateManager? = null
 
@@ -398,11 +429,12 @@ class ExpensesStateManager internal constructor(
             expenseDeduplicationRepo: ExpenseDeduplicationRepository,
             pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
             spendingLimitAlertRepo: SpendingLimitAlertRepository,
-            pendingLlmRequestQueue: VoxLlmRequestQueue
+            pendingLlmRequestQueue: VoxLlmRequestQueue,
+            attachmentDao: AttachmentDao
         ): ExpensesStateManager = instance ?: synchronized(this) {
             instance ?: ExpensesStateManager(
                 settingsRepo, expensesRepo, sessionManager, pendingCategoryMergeRepo, expenseDeduplicationRepo,
-                pendingNotificationExpenseRepo, spendingLimitAlertRepo, pendingLlmRequestQueue
+                pendingNotificationExpenseRepo, spendingLimitAlertRepo, pendingLlmRequestQueue, attachmentDao
             ).also { instance = it }
         }
     }

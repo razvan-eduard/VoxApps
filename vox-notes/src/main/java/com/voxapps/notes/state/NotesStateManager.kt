@@ -1,7 +1,12 @@
 package com.voxapps.notes.state
 
 import android.content.Context
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.notes.data.Category
+import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NotesRepository
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
@@ -39,7 +44,8 @@ class NotesStateManager internal constructor(
     private val notesRepo: NotesRepository,
     private val sessionManager: SessionManager,
     private val noteDeduplicationRepo: NoteDeduplicationRepository,
-    private val pendingLlmRequestQueue: VoxLlmRequestQueue
+    private val pendingLlmRequestQueue: VoxLlmRequestQueue,
+    private val attachmentDao: AttachmentDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -107,6 +113,32 @@ class NotesStateManager internal constructor(
     }
     fun setCalendarViewEnabled(enabled: Boolean) { scope.launch { settingsRepo.setCalendarViewEnabled(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
+    fun setScanImageRetention(mode: String) { scope.launch { settingsRepo.setScanImageRetention(mode) } }
+
+    // --- Attachments (generic per-note photos, both the scan-kept one and manually-added ones) ---
+    fun observeAttachments(noteId: Long): Flow<List<AttachmentEntity>> =
+        attachmentDao.observeFor(NotesAttachments.RECORD_TYPE, noteId)
+
+    fun addManualAttachment(noteId: Long, fileName: String) {
+        scope.launch {
+            attachmentDao.insert(
+                AttachmentEntity(
+                    recordType = NotesAttachments.RECORD_TYPE,
+                    recordId = noteId,
+                    fileName = fileName,
+                    source = AttachmentSource.MANUAL,
+                    createdAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    fun removeAttachment(entity: AttachmentEntity, context: Context) {
+        scope.launch {
+            attachmentDao.delete(entity.id)
+            AttachmentFileStore.delete(context, NotesAttachments.DIR, entity.fileName)
+        }
+    }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
     fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }
@@ -212,9 +244,10 @@ class NotesStateManager internal constructor(
             notesRepo: NotesRepository,
             sessionManager: SessionManager,
             noteDeduplicationRepo: NoteDeduplicationRepository,
-            pendingLlmRequestQueue: VoxLlmRequestQueue
+            pendingLlmRequestQueue: VoxLlmRequestQueue,
+            attachmentDao: AttachmentDao
         ): NotesStateManager = instance ?: synchronized(this) {
-            instance ?: NotesStateManager(settingsRepo, notesRepo, sessionManager, noteDeduplicationRepo, pendingLlmRequestQueue)
+            instance ?: NotesStateManager(settingsRepo, notesRepo, sessionManager, noteDeduplicationRepo, pendingLlmRequestQueue, attachmentDao)
                 .also { instance = it }
         }
     }

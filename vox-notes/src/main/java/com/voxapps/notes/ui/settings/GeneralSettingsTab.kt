@@ -138,6 +138,31 @@ fun GeneralSettingsTab(
             )
         }
 
+        HorizontalDivider()
+
+        // --- Keep the scanned photo on the note (independent of attachPhotoOnScan above, which
+        // only controls whether the LLM sees it during cleanup) ---
+        Text(languageManager.getString("scan_image_retention"), style = MaterialTheme.typography.labelLarge)
+        Text(
+            languageManager.getString("scan_image_retention_desc"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            val retentionOptions = listOf(
+                NotesSettings.RETENTION_NEVER to "retention_never",
+                NotesSettings.RETENTION_ON_FAILURE to "retention_on_failure",
+                NotesSettings.RETENTION_ALWAYS to "retention_always"
+            )
+            retentionOptions.forEach { (mode, labelKey) ->
+                FilterChip(
+                    selected = settings.scanImageRetention == mode,
+                    onClick = { stateManager.setScanImageRetention(mode) },
+                    label = { Text(languageManager.getString(labelKey)) }
+                )
+            }
+        }
+
         if (com.voxapps.notes.BuildConfig.DEBUG) {
             HorizontalDivider()
             Text(languageManager.getString("debug_section"), style = MaterialTheme.typography.labelLarge)

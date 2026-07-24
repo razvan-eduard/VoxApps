@@ -33,7 +33,7 @@ class NotesExportImportHandlerTest {
 
         every { settingsRepo.getSnapshot() } returns NotesSettings(isBiometricRequired = false)
         every { notesRepo.categories } returns flowOf(emptyList())
-        coEvery { notesRepo.addNote(any(), any(), any(), any()) } just Runs
+        coEvery { notesRepo.addNote(any(), any(), any(), any()) } returns 1L
         coEvery { notesRepo.deleteNoteById(any()) } just Runs
     }
 

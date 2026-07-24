@@ -31,6 +31,7 @@ class CalendarContainer(context: Context) {
         database.calendarLayerDao(),
         database.calendarEntryTagDao()
     )
+    val attachmentDao = database.attachmentDao()
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 
@@ -39,7 +40,8 @@ class CalendarContainer(context: Context) {
     val calendarStateManager = CalendarStateManager.getInstance(
         settingsRepository,
         calendarRepository,
-        sessionManager
+        sessionManager,
+        attachmentDao
     )
 
     val languageManager = LanguageManager(appContext).also {

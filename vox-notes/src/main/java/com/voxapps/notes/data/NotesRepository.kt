@@ -4,6 +4,8 @@ import com.voxapps.notes.domain.llm.DuplicateGroup
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
+data class VoiceNoteResult(val noteId: Long, val categoryId: Long?, val categoryName: String?)
+
 /**
  * Single write point over the Room DAOs (mirrors how vox-commander's AppStateManager delegates
  * persistence to SettingsRepository). NotesStateManager observes [notes] / [categories] and calls
@@ -32,7 +34,7 @@ class NotesRepository(
     /** Insert-side of a sync merge: preserves [note]'s uid/updatedAt verbatim — unlike [addNote],
      *  which always mints a fresh uid and stamps updatedAt to "now" (correct for a locally *created*
      *  row, wrong for one being replicated from a peer that already has real sync identity). */
-    suspend fun insertSyncedNote(note: Note) = noteDao.insert(note.copy(id = 0))
+    suspend fun insertSyncedNote(note: Note) { noteDao.insert(note.copy(id = 0)) }
 
     /** Update-side of a sync merge: [note] must already carry the *local* row's id (resolved via
      *  [getIdByUid] before calling this) — every other field, including updatedAt, comes from the
@@ -48,17 +50,27 @@ class NotesRepository(
     }
 
     // --- NOTES ---
-    suspend fun addNote(title: String?, text: String, categoryId: Long?, createdAt: Long) {
+    /** Returns the new row's id, or 0 if both [title] and [text] were blank (nothing inserted). */
+    suspend fun addNote(title: String?, text: String, categoryId: Long?, createdAt: Long): Long {
         val clean = text.trim()
         val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
-        if (clean.isEmpty() && cleanTitle == null) return
-        noteDao.insert(Note(title = cleanTitle, text = clean, createdAt = createdAt, categoryId = categoryId))
+        if (clean.isEmpty() && cleanTitle == null) return 0
+        return noteDao.insert(Note(title = cleanTitle, text = clean, createdAt = createdAt, categoryId = categoryId))
     }
+
+    /** A note whose scan couldn't be parsed into usable text but whose photo was kept anyway (see
+     *  NotesSettings.scanImageRetention) — unlike [addNote], always inserts even with blank [text],
+     *  since the point of this row is to exist so the photo isn't lost, pending manual review. Returns
+     *  the new row's id so the caller can attach the image via AttachmentDao. */
+    suspend fun addStubNote(title: String, createdAt: Long): Long =
+        noteDao.insert(Note(title = title, text = "", createdAt = createdAt, isStub = true))
 
     /**
      * Headless voice-note insert: resolves the spoken category name (or the configured default) to a
-     * category, saves, and returns the resolved [VoiceCategoryResolver.Resolved] so the caller can
-     * toast the category name. Uncategorized when nothing resolves.
+     * category, saves, and returns the resolved category info (as [VoiceNoteResult.categoryId]/
+     * [VoiceNoteResult.categoryName], same field names [VoiceCategoryResolver.Resolved] used, so
+     * existing callers reading those two fields don't need to change) plus the new note's id, so a
+     * scan-cleanup caller can attach the scanned image to it. Uncategorized when nothing resolves.
      */
     suspend fun addVoiceNote(
         title: String?,
@@ -67,7 +79,7 @@ class NotesRepository(
         defaultCategoryId: Long?,
         autoCreate: Boolean,
         createdAt: Long
-    ): VoiceCategoryResolver.Resolved {
+    ): VoiceNoteResult {
         val cats = categoryDao.observeAll().first()
         var resolved = VoiceCategoryResolver.resolve(spokenCategory, cats, defaultCategoryId)
 
@@ -78,8 +90,8 @@ class NotesRepository(
             if (id > 0) resolved = VoiceCategoryResolver.Resolved(id, spoken)
         }
 
-        addNote(title, text, resolved.categoryId, createdAt)
-        return resolved
+        val noteId = addNote(title, text, resolved.categoryId, createdAt)
+        return VoiceNoteResult(noteId, resolved.categoryId, resolved.categoryName)
     }
 
     /** Bumps [Note.updatedAt] to now — never trust a caller-supplied value here, since that's

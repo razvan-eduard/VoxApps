@@ -1,6 +1,9 @@
 package com.voxapps.calendarapp.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -62,7 +65,13 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.ui.AttachmentUiItem
+import com.voxapps.attachments.ui.AttachmentsSection
+import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntrySanitizer
 import com.voxapps.calendarapp.data.CalendarEntryType
@@ -267,6 +276,12 @@ fun EntryEditScreen(
                         onClick = { type = CalendarEntryType.TASK },
                         label = { Text(languageManager.getString("entry_type_task")) }
                     )
+                }
+            }
+
+            if (existing?.entry?.id != null) {
+                item {
+                    EntryAttachmentsSection(existing.entry.id, stateManager)
                 }
             }
 
@@ -593,6 +608,40 @@ private fun TimeOnlyPickerDialog(
             }) { Text(languageManager.getString("apply")) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) } }
+    )
+}
+
+/** Manually-added photo attachments on this entry (see :core:attachments) — no scan-sourced photo
+ *  concept here to unify with (unlike Expenses), so this is manual-only. */
+@Composable
+private fun EntryAttachmentsSection(entryId: Long, stateManager: CalendarStateManager) {
+    val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
+    val entities by stateManager.observeAttachments(entryId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val items = remember(entities) {
+        entities.map { e ->
+            AttachmentUiItem(
+                id = e.id,
+                uri = AttachmentFileStore.uriFor(context, CalendarAttachments.FILE_PROVIDER_AUTHORITY, CalendarAttachments.DIR, e.fileName),
+                removable = true
+            )
+        }
+    }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            AttachmentFileStore.stage(context, uri, CalendarAttachments.DIR)?.let { fileName ->
+                stateManager.addManualAttachment(entryId, fileName)
+            }
+        }
+    }
+    AttachmentsSection(
+        title = languageManager.getString("attachments"),
+        items = items,
+        canAdd = items.size < 10,
+        onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onRemove = { item ->
+            entities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
+        }
     )
 }
 

@@ -4,12 +4,17 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.logging.Logger
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.notes.NotesApplication
+import com.voxapps.notes.data.NotesAttachments
+import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.domain.llm.CategoryMergeMappingParser
 import com.voxapps.notes.domain.llm.LlmTasks
 import com.voxapps.notes.domain.llm.NoteDeduplicationResultParser
@@ -42,7 +47,14 @@ class LlmResultReceiver : BroadcastReceiver() {
         // matching against the plain LlmTasks constants below.
         val (task, requestId) = VoxLlmRequestQueue.splitRequestId(result.task)
 
-        when (task) {
+        // Recover the base task and optional staged-image filename (format "TASK:IMAGE_NAME" for
+        // NOTE_SCAN_CLEANUP; every other task's string has no colon, so baseTask == task for them —
+        // no behavior change there).
+        val taskParts = task.split(":")
+        val baseTask = taskParts[0]
+        val storedImageName = taskParts.getOrNull(1)
+
+        when (baseTask) {
             LlmTasks.CATEGORY_DEDUPLICATION -> {
                 val rawJson = result.rawJson
                 val mapping = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
@@ -82,20 +94,43 @@ class LlmResultReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        val settings = container.settingsRepository.getSnapshot()
                         if (cleaned == null) {
-                            // Unconditional (not gated behind voiceSaveToastEnabled) — the only signal
-                            // the user has that the scan didn't produce a note.
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
+                            // Real outcome is known now — decide whether the staged scan photo
+                            // (unconditionally saved by OcrResultReceiver, since we didn't know
+                            // success/failure yet at that point) becomes a real attachment or gets
+                            // discarded, per NotesSettings.scanImageRetention.
+                            if (storedImageName != null && settings.scanImageRetention != NotesSettings.RETENTION_NEVER) {
+                                val title = container.languageManager.getString("manual_review_required")
+                                val noteId = container.notesRepository.addStubNote(title, System.currentTimeMillis())
+                                if (noteId > 0) {
+                                    container.attachmentDao.insert(
+                                        AttachmentEntity(
+                                            recordType = NotesAttachments.RECORD_TYPE,
+                                            recordId = noteId,
+                                            fileName = storedImageName,
+                                            source = AttachmentSource.SCANNED,
+                                            createdAt = System.currentTimeMillis()
+                                        )
+                                    )
+                                }
+                            } else {
+                                if (storedImageName != null) {
+                                    AttachmentFileStore.delete(context.applicationContext, NotesAttachments.DIR, storedImageName)
+                                }
+                                // Unconditional (not gated behind voiceSaveToastEnabled) — the only
+                                // signal the user has that the scan didn't produce a note.
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
+                                }
                             }
                             return@launch
                         }
                         Logger.d(TAG, "Note scan cleanup: creating note title=${cleaned.title} category=${cleaned.category}")
-                        val settings = container.settingsRepository.getSnapshot()
                         // Same category resolution voice notes already use: match an existing
                         // category case-insensitively, else fall back to the default / auto-create.
                         // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard.
-                        container.notesRepository.addVoiceNote(
+                        val voiceNoteResult = container.notesRepository.addVoiceNote(
                             title = FieldCleaner.clean(cleaned.title, "title", "Note"),
                             text = cleaned.text,
                             spokenCategory = FieldCleaner.clean(cleaned.category, "category", "Note"),
@@ -103,6 +138,21 @@ class LlmResultReceiver : BroadcastReceiver() {
                             autoCreate = settings.autoCreateVoiceCategory,
                             createdAt = System.currentTimeMillis()
                         )
+                        if (storedImageName != null) {
+                            if (settings.scanImageRetention == NotesSettings.RETENTION_ALWAYS && voiceNoteResult.noteId > 0) {
+                                container.attachmentDao.insert(
+                                    AttachmentEntity(
+                                        recordType = NotesAttachments.RECORD_TYPE,
+                                        recordId = voiceNoteResult.noteId,
+                                        fileName = storedImageName,
+                                        source = AttachmentSource.SCANNED,
+                                        createdAt = System.currentTimeMillis()
+                                    )
+                                )
+                            } else {
+                                AttachmentFileStore.delete(context.applicationContext, NotesAttachments.DIR, storedImageName)
+                            }
+                        }
                     } finally {
                         pending.finish()
                     }

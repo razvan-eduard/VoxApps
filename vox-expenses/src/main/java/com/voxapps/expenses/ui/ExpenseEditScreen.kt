@@ -1,6 +1,9 @@
 package com.voxapps.expenses.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,7 +32,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
@@ -75,11 +77,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import me.saket.telephoto.zoomable.coil.ZoomableAsyncImage
-import me.saket.telephoto.zoomable.rememberZoomableImageState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.widget.Toast
+import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.ui.AttachmentUiItem
+import com.voxapps.attachments.ui.AttachmentsSection
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.expenses.ExpensesApplication
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.CategoryPalette
 import com.voxapps.expenses.data.DUPLICATE_ENTRY_RESULT
@@ -320,12 +325,12 @@ fun ExpenseEditScreen(
             val imageName = existing?.expense?.receiptImageName
             if (existing?.expense?.isStub == true) {
                 item {
-                    StubRetryBanner(expenseId = existing.expense.id, imageName = imageName, onDone = onDone)
+                    StubRetryBanner(expenseId = existing.expense.id, imageName = imageName, stateManager = stateManager, onDone = onDone)
                 }
             }
-            if (!imageName.isNullOrBlank()) {
+            if (existing?.expense?.id != null) {
                 item {
-                    ReceiptImage(imageName)
+                    ExpenseAttachmentsSection(existing.expense.id, imageName, stateManager)
                 }
             }
 
@@ -682,12 +687,56 @@ private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium)
 }
 
+/** One photo this expense could send to the LLM on retry: the original scan, or a manually-added
+ *  attachment (see :core:attachments). [dirName]/[fileName] locate the actual file for
+ *  [MultimodalAttachmentResolver]; [isOriginalScan] picks which resolver function/downscaling
+ *  convention applies. */
+private data class RetryPhotoCandidate(
+    val label: String,
+    val dirName: String,
+    val fileName: String,
+    val isOriginalScan: Boolean
+)
+
 @Composable
-private fun StubRetryBanner(expenseId: Long, imageName: String?, onDone: () -> Unit) {
+private fun StubRetryBanner(expenseId: Long, imageName: String?, stateManager: ExpensesStateManager, onDone: () -> Unit) {
     val context = LocalContext.current
     val languageManager = LocalLanguageManager.current
     val scope = rememberCoroutineScope()
     var retrying by remember { mutableStateOf(false) }
+    var showPicker by remember { mutableStateOf(false) }
+    val manualAttachments by stateManager.observeAttachments(expenseId).collectAsStateWithLifecycle(initialValue = emptyList())
+
+    fun sendRetry(candidate: RetryPhotoCandidate) {
+        val rawTextFile = imageName?.let {
+            File(File(context.filesDir, "receipts"), it.substringBeforeLast('.') + ".txt")
+        }
+        val rawText = rawTextFile?.takeIf { it.exists() }?.readText()
+        if (imageName == null || rawText.isNullOrBlank()) {
+            Toast.makeText(context, languageManager.getString("retry_cleanup_no_saved_text"), Toast.LENGTH_LONG).show()
+            return
+        }
+        retrying = true
+        val container = (context.applicationContext as ExpensesApplication).container
+        scope.launch {
+            // Same staged AI copy OcrResultReceiver already prepared for the original scan (if
+            // Vision's own setting produced one) — gated on its own attachPhotoOnRetry toggle,
+            // separate from attachPhotoOnScan (see ExpensesSettings' doc comments for why retry is
+            // treated as a distinct decision). Applies to a manually-picked candidate too, so the
+            // toggle stays a single "attach a photo on retry, yes/no" decision either way.
+            val attachOnRetry = container.settingsRepository.getSnapshot().attachPhotoOnRetry
+            val attachmentUri = if (candidate.isOriginalScan) {
+                MultimodalAttachmentResolver.resolve(context, imageName, attachOnRetry)
+            } else {
+                MultimodalAttachmentResolver.resolveArbitraryFile(context, candidate.dirName, candidate.fileName, attachOnRetry)
+            }
+            ExpenseScanCleanupRequestSender.send(
+                context, container, rawText, imageName, retryOfExpenseId = expenseId, attachmentUri = attachmentUri
+            )
+        }
+        Toast.makeText(context, languageManager.getString("retrying_scan"), Toast.LENGTH_SHORT).show()
+        onDone()
+    }
 
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -711,29 +760,13 @@ private fun StubRetryBanner(expenseId: Long, imageName: String?, onDone: () -> U
             Button(
                 enabled = !retrying,
                 onClick = {
-                    val rawTextFile = imageName?.let {
-                        File(File(context.filesDir, "receipts"), it.substringBeforeLast('.') + ".txt")
+                    // Only the original scan exists as a candidate unless manual attachments have
+                    // also been added — in that common case, behave exactly as before (no picker).
+                    if (manualAttachments.isEmpty() || imageName == null) {
+                        sendRetry(RetryPhotoCandidate(languageManager.getString("retry_original_scan"), "receipts", imageName.orEmpty(), isOriginalScan = true))
+                    } else {
+                        showPicker = true
                     }
-                    val rawText = rawTextFile?.takeIf { it.exists() }?.readText()
-                    if (imageName == null || rawText.isNullOrBlank()) {
-                        Toast.makeText(context, languageManager.getString("retry_cleanup_no_saved_text"), Toast.LENGTH_LONG).show()
-                        return@Button
-                    }
-                    retrying = true
-                    val container = (context.applicationContext as ExpensesApplication).container
-                    scope.launch {
-                        // Same staged AI copy OcrResultReceiver already prepared for the original scan
-                        // (if Vision's own setting produced one) — gated on its own attachPhotoOnRetry
-                        // toggle, separate from attachPhotoOnScan (see ExpensesSettings' doc comments
-                        // for why retry is treated as a distinct decision).
-                        val attachOnRetry = container.settingsRepository.getSnapshot().attachPhotoOnRetry
-                        val attachmentUri = MultimodalAttachmentResolver.resolve(context, imageName, attachOnRetry)
-                        ExpenseScanCleanupRequestSender.send(
-                            context, container, rawText, imageName, retryOfExpenseId = expenseId, attachmentUri = attachmentUri
-                        )
-                    }
-                    Toast.makeText(context, languageManager.getString("retrying_scan"), Toast.LENGTH_SHORT).show()
-                    onDone()
                 }
             ) {
                 Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -742,66 +775,91 @@ private fun StubRetryBanner(expenseId: Long, imageName: String?, onDone: () -> U
             }
         }
     }
-}
 
-@Composable
-fun ReceiptImage(imageName: String) {
-    val context = LocalContext.current
-    val languageManager = LocalLanguageManager.current
-    val imageFile = remember(imageName) {
-        File(File(context.filesDir, "receipts"), imageName)
-    }
-
-    if (imageFile.exists()) {
-        var expanded by remember { mutableStateOf(true) }
-        
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
-        ) {
-            Column {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { expanded = !expanded }
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ReceiptLong,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = languageManager.getString("receipt_photo"),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Icon(
-                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) "Collapse" else "Expand"
+    if (showPicker && imageName != null) {
+        val candidates = remember(manualAttachments) {
+            listOf(RetryPhotoCandidate(languageManager.getString("retry_original_scan"), "receipts", imageName, isOriginalScan = true)) +
+                manualAttachments.mapIndexed { index, entity ->
+                    RetryPhotoCandidate(
+                        String.format(languageManager.getString("retry_attachment_n"), index + 1),
+                        ExpensesAttachments.DIR,
+                        entity.fileName,
+                        isOriginalScan = false
                     )
                 }
-
-                if (expanded) {
-                    Box(modifier = Modifier.fillMaxWidth().height(450.dp)) {
-                        ZoomableAsyncImage(
-                            model = imageFile,
-                            contentDescription = "Receipt Image",
-                            state = rememberZoomableImageState(),
-                            modifier = Modifier.fillMaxSize()
-                        )
+        }
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            title = { Text(languageManager.getString("retry_pick_photo")) },
+            text = {
+                Column {
+                    candidates.forEach { candidate ->
+                        TextButton(
+                            onClick = {
+                                showPicker = false
+                                sendRetry(candidate)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(candidate.label, modifier = Modifier.fillMaxWidth())
+                        }
                     }
                 }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text(languageManager.getString("cancel")) }
+            }
+        )
+    }
+}
+
+/** Unifies the original receipt scan (if any — first, non-removable) with manually-added
+ *  attachments (see :core:attachments) into one section, per the shared AttachmentsSection UI. */
+@Composable
+private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?, stateManager: ExpensesStateManager) {
+    val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
+    val manualEntities by stateManager.observeAttachments(expenseId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val items = remember(receiptImageName, manualEntities) {
+        buildList {
+            if (!receiptImageName.isNullOrBlank()) {
+                add(
+                    AttachmentUiItem(
+                        id = -1L,
+                        uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, "receipts", receiptImageName),
+                        removable = false
+                    )
+                )
+            }
+            addAll(
+                manualEntities.map { e ->
+                    AttachmentUiItem(
+                        id = e.id,
+                        uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, ExpensesAttachments.DIR, e.fileName),
+                        removable = true
+                    )
+                }
+            )
+        }
+    }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            AttachmentFileStore.stage(context, uri, ExpensesAttachments.DIR)?.let { fileName ->
+                stateManager.addManualAttachment(expenseId, fileName)
             }
         }
     }
+    AttachmentsSection(
+        title = languageManager.getString("attachments"),
+        items = items,
+        canAdd = manualEntities.size < 10,
+        onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onRemove = { item ->
+            manualEntities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
+        },
+        modifier = Modifier.padding(bottom = 12.dp)
+    )
 }
 
 @Composable

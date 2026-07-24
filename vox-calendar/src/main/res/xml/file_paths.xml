@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <!-- Staged AI-attachment copy of a scanned photo, for the one-shot Commander LLM call —
-         no image-attached record equivalent here (unlike Expenses), so this is cache, not files. -->
+         short-lived by design, so this is cache, not files. -->
     <cache-path name="ai_scans" path="ai_scans/" />
+    <!-- Manually-added attachments on a calendar entry — see :core:attachments. -->
+    <files-path name="attachments" path="attachments/" />
 </paths>

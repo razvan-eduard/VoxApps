@@ -41,6 +41,7 @@ class ExpensesContainer(context: Context) {
         database.merchantCategoryMemoryDao(),
         appContext
     )
+    val attachmentDao = database.attachmentDao()
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 
@@ -60,7 +61,8 @@ class ExpensesContainer(context: Context) {
         expenseDeduplicationRepository,
         pendingNotificationExpenseRepository,
         spendingLimitAlertRepository,
-        pendingLlmRequestQueue
+        pendingLlmRequestQueue,
+        attachmentDao
     )
 
     val languageManager = LanguageManager(appContext).also {

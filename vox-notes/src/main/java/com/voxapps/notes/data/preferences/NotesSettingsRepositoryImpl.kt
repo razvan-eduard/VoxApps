@@ -37,6 +37,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
+        val SCAN_IMAGE_RETENTION = stringPreferencesKey("scan_image_retention")
     }
 
     override val settingsFlow: Flow<NotesSettings> = dataStore.data.map { prefs ->
@@ -55,7 +56,8 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: NotesSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
-            attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false
+            attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
+            scanImageRetention = prefs[Keys.SCAN_IMAGE_RETENTION] ?: NotesSettings.RETENTION_ON_FAILURE
         )
     }
 
@@ -132,6 +134,10 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         dataStore.edit { it[Keys.ATTACH_PHOTO_ON_SCAN] = enabled }
     }
 
+    override suspend fun setScanImageRetention(mode: String) {
+        dataStore.edit { it[Keys.SCAN_IMAGE_RETENTION] = mode }
+    }
+
     override suspend fun restoreSettings(settings: NotesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -152,6 +158,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
+            prefs[Keys.SCAN_IMAGE_RETENTION] = settings.scanImageRetention
         }
     }
 

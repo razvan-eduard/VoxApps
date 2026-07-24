@@ -20,6 +20,12 @@ import java.util.UUID
  * [uid]/[updatedAt] back the peer-to-peer sync merge (see :core:datahygiene's merge helper), mirroring
  * Expense's identical pair — see that entity's doc comment for the full rationale. Rows from before
  * these fields existed backfill via NotesDatabase's MIGRATION_2_3.
+ *
+ * [isStub] mirrors Expense.isStub: set when a scan's LLM cleanup couldn't extract usable text (an
+ * "Unclear Document"-style reply) but the scanned image was kept anyway per the
+ * NotesSettings.scanImageRetention setting — [text] is `""` in that case, and the photo is the note's
+ * only content until the user manually edits/retries it. Rows from before this field existed
+ * backfill to `false` via NotesDatabase's MIGRATION_4_5.
  */
 @Entity(
     tableName = "notes",
@@ -33,5 +39,6 @@ data class Note(
     val text: String,
     val createdAt: Long,
     @ColumnInfo(name = "categoryId") val categoryId: Long? = null,
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val isStub: Boolean = false
 )

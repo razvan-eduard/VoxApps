@@ -6,7 +6,9 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.logging.Logger
+import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.ipc.VoxIpc
@@ -80,10 +82,24 @@ class OcrResultReceiver : BroadcastReceiver() {
                     result.aiImageUri?.let { aiUriString -> stageAndGrantAiCopy(context, aiUriString) }
                 } else null
 
+                // Unconditionally staged (regardless of scanImageRetention) — mirrors vox-expenses'
+                // OcrResultReceiver, and for the same reason: we don't yet know success/failure, and
+                // Vision's own grant on result.imageUri may not outlive this call. LlmResultReceiver
+                // decides whether to keep it (create an AttachmentEntity) or delete it once the real
+                // outcome is known, per NotesSettings.scanImageRetention.
+                val stagedImageName = result.imageUri?.let { uriString ->
+                    AttachmentFileStore.stage(context, Uri.parse(uriString), NotesAttachments.DIR)
+                }
+                val taskWithMeta = if (stagedImageName != null) {
+                    "${LlmTasks.NOTE_SCAN_CLEANUP}:$stagedImageName"
+                } else {
+                    LlmTasks.NOTE_SCAN_CLEANUP
+                }
+
                 container.pendingLlmRequestQueue.enqueueAndSend(
                     context = context,
                     sourcePackage = context.packageName,
-                    task = LlmTasks.NOTE_SCAN_CLEANUP,
+                    task = taskWithMeta,
                     promptText = NoteScanCleanupPromptBuilder.build(rawText, existingCategories, language),
                     targetPackage = COMMANDER_PACKAGE,
                     data = listOf(rawText),

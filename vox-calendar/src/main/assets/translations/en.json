@@ -68,6 +68,7 @@
   "entry_description": "Description",
   "entry_location": "Location",
   "entry_layer": "Calendar",
+  "attachments": "Attachments",
   "entry_when": "When",
   "entry_due": "Due",
   "entry_start_date": "Start date",

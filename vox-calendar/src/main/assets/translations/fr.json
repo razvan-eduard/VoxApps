@@ -67,6 +67,7 @@
   "entry_description": "Description",
   "entry_location": "Lieu",
   "entry_layer": "Calendrier",
+  "attachments": "Pièces jointes",
   "entry_when": "Quand",
   "entry_due": "Échéance",
   "entry_start_date": "Date de début",

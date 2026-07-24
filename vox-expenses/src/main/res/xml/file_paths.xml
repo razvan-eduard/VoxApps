@@ -4,4 +4,6 @@
     <!-- Staged receipt images (filesDir/receipts/rec_<uuid>.jpg) — granted to Commander for the
          multimodal photo attachment (section 7 of the collapsed voice-command plan). -->
     <files-path name="receipts" path="receipts/" />
+    <!-- Manually-added extra attachments beyond the original receipt scan — see :core:attachments. -->
+    <files-path name="attachments" path="attachments/" />
 </paths>

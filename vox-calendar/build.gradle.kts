@@ -15,8 +15,8 @@ android {
         applicationId = "com.voxapps.calendar"
         minSdk = 29
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.6"
+        versionCode = 7
+        versionName = "0.7"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -70,6 +70,7 @@ dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:calendar"))
     implementation(project(":core:ipc"))
+    implementation(project(":core:attachments"))
     implementation(project(":core:logging"))
     implementation(project(":core:datahygiene"))
     implementation(project(":core:textmatch"))

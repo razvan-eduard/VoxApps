@@ -34,14 +34,29 @@ object MultimodalAttachmentResolver {
         if (!attachEnabled || imageName == null) return null
         val file = File(File(context.filesDir, "receipts"), aiCopyFileName(imageName))
         if (!file.exists()) return null // no AI copy was ever staged (Vision's own toggle was off)
-        if (!VoxCapabilityClient.isMultimodal(context)) return null
+        return grantToCommander(context, file)
+    }
 
+    /** Same idea as [resolve], but for a manually-added attachment (see :core:attachments) rather
+     *  than the original scan's pre-made downscaled sibling — there's no `_ai.jpg` convention for
+     *  these, so the file is sent as-is rather than downscaled. Used when the "Retry cleanup" picker
+     *  (see [com.voxapps.expenses.ui.ExpenseEditScreen]'s `StubRetryBanner`) resolves to a
+     *  manually-added photo instead of the original scan. */
+    suspend fun resolveArbitraryFile(context: Context, dirName: String, fileName: String, attachEnabled: Boolean): String? {
+        if (!attachEnabled) return null
+        val file = File(File(context.filesDir, dirName), fileName)
+        if (!file.exists()) return null
+        return grantToCommander(context, file)
+    }
+
+    private suspend fun grantToCommander(context: Context, file: File): String? {
+        if (!VoxCapabilityClient.isMultimodal(context)) return null
         return try {
             val uri = FileProvider.getUriForFile(context, EXPENSES_FILE_PROVIDER_AUTHORITY, file)
             context.grantUriPermission(VoxAppsDiscovery.COMMANDER_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             uri.toString()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to grant Commander access to the AI-attachment image", e)
+            Logger.e(TAG, "Failed to grant Commander access to the attachment image", e)
             null
         }
     }
