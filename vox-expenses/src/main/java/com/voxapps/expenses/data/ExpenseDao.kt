@@ -33,6 +33,20 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE dateTime BETWEEN :from AND :to ORDER BY dateTime ASC")
     suspend fun getForDateRange(from: Long, to: Long): List<Expense>
 
+    /** Cheap "what color is the top-of-list expense's category" lookup for
+     *  [CategoryPalette.unusedOrRandomColor]'s `precedingColor` param — a single indexed-order
+     *  `LIMIT 1` row, not a full fetch+sort of the table. */
+    @Query(
+        """
+        SELECT c.colorArgb FROM expenses e
+        INNER JOIN categories c ON c.id = e.categoryId
+        WHERE e.categoryId IS NOT NULL
+        ORDER BY e.dateTime DESC
+        LIMIT 1
+        """
+    )
+    suspend fun getMostRecentCategoryColor(): Long?
+
     @Insert
     suspend fun insert(expense: Expense): Long
 

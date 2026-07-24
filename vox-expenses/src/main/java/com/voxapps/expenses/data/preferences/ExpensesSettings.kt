@@ -106,7 +106,18 @@ data class ExpensesSettings(
      *  sane default for whenever [nearDuplicateDetectionEnabled] is on. */
     val nearDuplicateFuzzyMatchEnabled: Boolean = true,
     /** Minutes, not millis — converted at the point of use. */
-    val nearDuplicateTimeWindowMinutes: Int = NEAR_DUP_DEFAULT_WINDOW_MINUTES
+    val nearDuplicateTimeWindowMinutes: Int = NEAR_DUP_DEFAULT_WINDOW_MINUTES,
+    /** Off by default — new, override-the-LLM behavior a user must opt into, same posture as
+     *  [nearDuplicateDetectionEnabled]. When on, [com.voxapps.expenses.data.ExpensesRepository.addParsedExpense]
+     *  checks [com.voxapps.expenses.data.MerchantCategoryMemoryDao] BEFORE running category
+     *  resolution at all — see that function's doc comment for the exact precedence. */
+    val merchantCategoryMemoryEnabled: Boolean = false,
+    /** How many consecutive manual assignments to the same category (for one vendor) before that
+     *  category auto-applies to future captures for that vendor. Defaults to 3 — 1 is aggressive (a
+     *  single correction could be a one-off exception, e.g. a gift bought at a usually-groceries
+     *  store, not a real pattern), while 3 requires a genuinely consistent pattern before the app
+     *  starts overriding the LLM/default outright. */
+    val merchantCategoryMemoryThreshold: Int = MERCHANT_MEMORY_DEFAULT_THRESHOLD
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -134,5 +145,11 @@ data class ExpensesSettings(
         const val NEAR_DUP_WINDOW_10M = 10
         const val NEAR_DUP_WINDOW_15M = 15
         const val NEAR_DUP_DEFAULT_WINDOW_MINUTES = NEAR_DUP_WINDOW_2M
+
+        const val MERCHANT_MEMORY_THRESHOLD_1 = 1
+        const val MERCHANT_MEMORY_THRESHOLD_3 = 3
+        const val MERCHANT_MEMORY_THRESHOLD_5 = 5
+        const val MERCHANT_MEMORY_THRESHOLD_10 = 10
+        const val MERCHANT_MEMORY_DEFAULT_THRESHOLD = MERCHANT_MEMORY_THRESHOLD_3
     }
 }

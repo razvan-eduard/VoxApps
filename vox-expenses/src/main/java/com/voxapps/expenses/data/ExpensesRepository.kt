@@ -32,6 +32,7 @@ class ExpensesRepository(
     private val categoryDao: CategoryDao,
     private val lineItemDao: ExpenseLineItemDao,
     private val spendingLimitDao: SpendingLimitDao,
+    private val merchantCategoryMemoryDao: MerchantCategoryMemoryDao,
     private val appContext: Context
 ) {
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
@@ -42,6 +43,38 @@ class ExpensesRepository(
     suspend fun expensesSnapshot(): List<Expense> = expenseDao.observeAll().first()
 
     suspend fun getExpenseById(id: Long): ExpenseWithDetails? = expenseDao.getWithDetailsById(id)
+
+    /** The color of the most recent expense's category — see [CategoryPalette.unusedOrRandomColor]'s
+     *  `precedingColor` param. */
+    suspend fun mostRecentCategoryColor(): Long? = expenseDao.getMostRecentCategoryColor()
+
+    // --- Merchant category memory (see MerchantCategoryMemory) ---
+
+    /** Called only for a GENUINE manual category change (see ExpenseEditScreen's save path) — never
+     *  for an unchanged re-save. Unconditional/pure: the caller (ExpensesStateManager) is responsible
+     *  for gating this on ExpensesSettings.merchantCategoryMemoryEnabled, matching the established
+     *  convention that this repository never reads settings itself. */
+    suspend fun recordManualCategoryChange(vendor: String?, categoryId: Long?) {
+        val vendorKey = MerchantVendorKey.normalize(vendor) ?: return
+        if (categoryId == null) {
+            merchantCategoryMemoryDao.delete(vendorKey)
+            return
+        }
+        val existing = merchantCategoryMemoryDao.get(vendorKey)
+        val newCount = if (existing?.categoryId == categoryId) existing.consecutiveCount + 1 else 1
+        merchantCategoryMemoryDao.upsert(MerchantCategoryMemory(vendorKey, categoryId, newCount, System.currentTimeMillis()))
+    }
+
+    suspend fun getLearnedCategoryId(vendor: String?, threshold: Int): Long? {
+        val vendorKey = MerchantVendorKey.normalize(vendor) ?: return null
+        return merchantCategoryMemoryDao.getLearnedCategoryId(vendorKey, threshold)
+    }
+
+    suspend fun merchantCategoryMemorySnapshot(): List<MerchantCategoryMemory> = merchantCategoryMemoryDao.getAll()
+
+    suspend fun upsertMerchantCategoryMemory(vendorKey: String, categoryId: Long, consecutiveCount: Int, updatedAt: Long) {
+        merchantCategoryMemoryDao.upsert(MerchantCategoryMemory(vendorKey, categoryId, consecutiveCount, updatedAt))
+    }
 
     // --- Peer-to-peer sync (see :core:datahygiene's SyncMerge and ExpensesSyncHandler) ---
 
@@ -229,18 +262,34 @@ class ExpensesRepository(
         direction: TransactionDirection = TransactionDirection.OUTGOING,
         nearDuplicateCheckEnabled: Boolean = false,
         nearDuplicateFuzzyMatch: Boolean = true,
-        nearDuplicateTimeWindowMillis: Long = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong())
+        nearDuplicateTimeWindowMillis: Long = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong()),
+        merchantMemoryEnabled: Boolean = false,
+        merchantMemoryThreshold: Int = ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD
     ): Long {
         val cats = categoryDao.observeAll().first()
-        var resolved = FuzzyNameMatcher.resolve(
-            spokenName = spokenCategory,
-            candidates = cats.map { FuzzyNameMatcher.Candidate(it.id, it.name) },
-            defaultId = defaultCategoryId
-        )
+
+        // A learned merchant mapping is a total short-circuit — it overrides whatever the LLM/spoken
+        // category or configured default would otherwise suggest, checked BEFORE resolution runs at
+        // all, not as a tie-break afterward. Falls through to normal resolution if the mapping points
+        // at a category that's since been deleted.
+        var resolved: FuzzyNameMatcher.Resolved? = null
+        if (merchantMemoryEnabled) {
+            val learnedId = getLearnedCategoryId(vendor, merchantMemoryThreshold)
+            val learnedCategory = learnedId?.let { id -> cats.firstOrNull { it.id == id } }
+            if (learnedCategory != null) resolved = FuzzyNameMatcher.Resolved(learnedCategory.id, learnedCategory.name)
+        }
+        if (resolved == null) {
+            resolved = FuzzyNameMatcher.resolve(
+                spokenName = spokenCategory,
+                candidates = cats.map { FuzzyNameMatcher.Candidate(it.id, it.name) },
+                defaultId = defaultCategoryId
+            )
+        }
 
         val spoken = spokenCategory?.trim()?.takeIf { it.isNotEmpty() }
         if (resolved.id == null && autoCreate && spoken != null) {
-            val id = addCategory(spoken, CategoryPalette.unusedOrRandomColor(cats.map { it.colorArgb }), cats.size, dateTime)
+            val precedingColor = expenseDao.getMostRecentCategoryColor()
+            val id = addCategory(spoken, CategoryPalette.unusedOrRandomColor(cats.map { it.colorArgb }, precedingColor), cats.size, dateTime)
             if (id > 0) resolved = FuzzyNameMatcher.Resolved(id, spoken)
         }
 
@@ -266,6 +315,7 @@ class ExpensesRepository(
     suspend fun deleteCategory(category: Category) {
         expenseDao.clearCategory(category.id)
         spendingLimitDao.clearCategory(category.id)
+        merchantCategoryMemoryDao.clearCategory(category.id)
         categoryDao.delete(category)
     }
 

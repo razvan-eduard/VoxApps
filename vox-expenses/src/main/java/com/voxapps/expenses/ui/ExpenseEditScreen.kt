@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -45,6 +46,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -78,6 +80,7 @@ import me.saket.telephoto.zoomable.rememberZoomableImageState
 import android.widget.Toast
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.Category
+import com.voxapps.expenses.data.CategoryPalette
 import com.voxapps.expenses.data.DUPLICATE_ENTRY_RESULT
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
@@ -143,6 +146,7 @@ fun ExpenseEditScreen(
     vatDisplayEnabled: Boolean,
     decimalSeparator: String,
     locationPrefillEnabled: Boolean,
+    mostRecentCategoryColor: Long? = null,
     stateManager: ExpensesStateManager,
     onDone: () -> Unit
 ) {
@@ -171,6 +175,7 @@ fun ExpenseEditScreen(
     var dateTime by remember { mutableStateOf(existing?.expense?.dateTime ?: System.currentTimeMillis()) }
     var categoryId by remember { mutableStateOf(existing?.expense?.categoryId) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
+    var showNewCategoryDialog by remember { mutableStateOf(false) }
     var direction by remember { mutableStateOf(existing?.expense?.direction ?: TransactionDirection.OUTGOING) }
     var directionMenuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -180,6 +185,13 @@ fun ExpenseEditScreen(
     var pendingCleanup by remember { mutableStateOf<PendingCleanup?>(null) }
 
     fun saveExpense(expense: Expense, lineItems: List<ExpenseLineItem>) {
+        // A genuine manual category change — covers both "edited an existing expense's category"
+        // and "picked a category on a brand-new manual entry" (the pre-edit value is null for a new
+        // expense, so picking anything counts as a change). Never fires from voice/scan/notification
+        // capture, since those paths never route through this screen at creation time.
+        if (expense.categoryId != existing?.expense?.categoryId) {
+            stateManager.recordManualCategoryChange(expense.vendor, expense.categoryId)
+        }
         if (existing != null) {
             stateManager.updateExpense(expense, lineItems)
         } else {
@@ -384,6 +396,11 @@ fun ExpenseEditScreen(
                                 text = { Text(languageManager.getString("none")) },
                                 onClick = { categoryId = null; categoryMenuExpanded = false }
                             )
+                            DropdownMenuItem(
+                                text = { Text(languageManager.getString("new_category_dropdown_item")) },
+                                leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                                onClick = { categoryMenuExpanded = false; showNewCategoryDialog = true }
+                            )
                             categories.forEach { cat ->
                                 DropdownMenuItem(
                                     text = { Text(cat.name) },
@@ -570,6 +587,62 @@ fun ExpenseEditScreen(
             onDismiss = { pendingDeleteItemIndex = null }
         )
     }
+
+    if (showNewCategoryDialog) {
+        NewCategoryDialog(
+            existingColors = categories.map { it.colorArgb },
+            precedingColor = mostRecentCategoryColor,
+            onDismiss = { showNewCategoryDialog = false },
+            onConfirm = { name, color ->
+                stateManager.addCategory(name, color, onResult = { newId -> if (newId > 0) categoryId = newId })
+                showNewCategoryDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun NewCategoryDialog(
+    existingColors: List<Long>,
+    precedingColor: Long?,
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, colorArgb: Long) -> Unit
+) {
+    val languageManager = LocalLanguageManager.current
+    var name by remember { mutableStateOf("") }
+    val suggestedColor = remember(existingColors, precedingColor) {
+        CategoryPalette.unusedOrRandomColor(existingColors, precedingColor)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(languageManager.getString("new_category_dialog_title")) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(languageManager.getString("category_name")) },
+                    singleLine = true
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(20.dp).clip(CircleShape).background(CategoryColors.fromStored(suggestedColor))
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(languageManager.getString("new_category_color_auto_hint"), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name.trim(), suggestedColor) }, enabled = name.isNotBlank()) {
+                Text(languageManager.getString("save"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
+        }
+    )
 }
 
 @Composable

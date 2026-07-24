@@ -51,6 +51,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val NEAR_DUPLICATE_DETECTION_ENABLED = booleanPreferencesKey("near_duplicate_detection_enabled")
         val NEAR_DUPLICATE_FUZZY_MATCH_ENABLED = booleanPreferencesKey("near_duplicate_fuzzy_match_enabled")
         val NEAR_DUPLICATE_TIME_WINDOW_MINUTES = intPreferencesKey("near_duplicate_time_window_minutes")
+        val MERCHANT_CATEGORY_MEMORY_ENABLED = booleanPreferencesKey("merchant_category_memory_enabled")
+        val MERCHANT_CATEGORY_MEMORY_THRESHOLD = intPreferencesKey("merchant_category_memory_threshold")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -83,7 +85,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             nearDuplicateDetectionEnabled = prefs[Keys.NEAR_DUPLICATE_DETECTION_ENABLED] ?: false,
             nearDuplicateFuzzyMatchEnabled = prefs[Keys.NEAR_DUPLICATE_FUZZY_MATCH_ENABLED] ?: true,
             nearDuplicateTimeWindowMinutes = prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES]
-                ?: ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES
+                ?: ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES,
+            merchantCategoryMemoryEnabled = prefs[Keys.MERCHANT_CATEGORY_MEMORY_ENABLED] ?: false,
+            merchantCategoryMemoryThreshold = prefs[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD]
+                ?: ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD
         )
     }
 
@@ -221,6 +226,14 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES] = minutes }
     }
 
+    override suspend fun setMerchantCategoryMemoryEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.MERCHANT_CATEGORY_MEMORY_ENABLED] = enabled }
+    }
+
+    override suspend fun setMerchantCategoryMemoryThreshold(count: Int) {
+        dataStore.edit { it[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD] = count }
+    }
+
     override suspend fun restoreSettings(settings: ExpensesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -253,6 +266,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.NEAR_DUPLICATE_DETECTION_ENABLED] = settings.nearDuplicateDetectionEnabled
             prefs[Keys.NEAR_DUPLICATE_FUZZY_MATCH_ENABLED] = settings.nearDuplicateFuzzyMatchEnabled
             prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES] = settings.nearDuplicateTimeWindowMinutes
+            prefs[Keys.MERCHANT_CATEGORY_MEMORY_ENABLED] = settings.merchantCategoryMemoryEnabled
+            prefs[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD] = settings.merchantCategoryMemoryThreshold
             // appCacheJson intentionally untouched — see interface doc comment.
         }
     }

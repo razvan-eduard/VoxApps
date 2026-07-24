@@ -70,6 +70,9 @@ class ExpensesSyncHandler(
         // Same auto-create-by-name convention ExpensesExportImportHandler.import() already uses.
         val existingCategories = expensesRepo.categories.first().toMutableList()
         val nameToId = existingCategories.associate { it.name.lowercase() to it.id }.toMutableMap()
+        // Fetched once per merge, not per-entry — see CategoryPalette.unusedOrRandomColor's
+        // precedingColor param.
+        val precedingColor = expensesRepo.mostRecentCategoryColor()
 
         val entriesJson = root.optJSONArray("entries") ?: JSONArray()
         val remoteEntries = (0 until entriesJson.length()).map { i ->
@@ -79,7 +82,7 @@ class ExpensesSyncHandler(
                 nameToId[name.lowercase()] ?: run {
                     val newId = expensesRepo.addCategory(
                         name,
-                        CategoryPalette.unusedOrRandomColor(existingCategories.map { it.colorArgb }),
+                        CategoryPalette.unusedOrRandomColor(existingCategories.map { it.colorArgb }, precedingColor),
                         existingCategories.size,
                         System.currentTimeMillis()
                     )

@@ -47,6 +47,7 @@ class ExpensesExportImportHandlerTest {
         coEvery { expensesRepo.expensesSnapshot() } returns emptyList()
         coEvery { expensesRepo.deleteExpenseById(any()) } just Runs
         coEvery { expensesRepo.deleteSpendingLimit(any()) } just Runs
+        coEvery { expensesRepo.merchantCategoryMemorySnapshot() } returns emptyList()
     }
 
     private fun expense(id: Long, totalAmount: Double = 10.0, createdAt: Long, receiptImageName: String? = null) = Expense(

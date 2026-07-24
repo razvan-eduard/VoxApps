@@ -9,6 +9,7 @@ import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExchangeRateApiKeyStore
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpensesRepository
+import com.voxapps.expenses.data.MerchantCategoryMemory
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
@@ -67,9 +68,11 @@ class ExpensesExportImportHandler(
             val categories = expensesRepo.categories.first()
             val spendingLimits = expensesRepo.spendingLimits.first()
             val expensesWithDetails = expensesRepo.expensesWithDetails.first()
+            val merchantCategoryMemory = expensesRepo.merchantCategoryMemorySnapshot()
             json.put("categories", JSONArray(categories.map { it.toJson() }))
             json.put("spendingLimits", JSONArray(spendingLimits.map { it.toJson() }))
             json.put("expenses", JSONArray(expensesWithDetails.map { it.expense.toJson(it.items) }))
+            json.put("merchantCategoryMemory", JSONArray(merchantCategoryMemory.map { it.toJson() }))
 
             if (includePhotos) {
                 val names = expensesWithDetails.mapNotNull { it.expense.receiptImageName?.takeIf { n -> n.isNotBlank() } }
@@ -182,6 +185,19 @@ class ExpensesExportImportHandler(
                 newId.takeIf { it > 0 }
             }
             importedIdToLocalId[importedId] = localId
+        }
+
+        // Upserted by vendorKey, not replace-by-snapshot like spendingLimits/expenses below — wiping
+        // locally learned mappings on every restore would un-learn correction streaks built up on
+        // this device since the backup was taken.
+        val importedMerchantMemory = root.optJSONArray("merchantCategoryMemory") ?: JSONArray()
+        for (i in 0 until importedMerchantMemory.length()) {
+            val m = importedMerchantMemory.getJSONObject(i)
+            val vendorKey = m.optString("vendorKey").takeIf { it.isNotBlank() } ?: continue
+            val localCategoryId = importedIdToLocalId[m.optLong("categoryId")] ?: continue
+            expensesRepo.upsertMerchantCategoryMemory(
+                vendorKey, localCategoryId, m.optInt("consecutiveCount", 1), m.optLong("updatedAt", System.currentTimeMillis())
+            )
         }
 
         // Replace, not merge (mirrors vox-notes' NotesExportImportHandler): importing a data
@@ -311,6 +327,8 @@ private fun ExpensesSettings.toJson(): JSONObject = JSONObject().apply {
     put("calendarViewEnabled", calendarViewEnabled)
     put("themeDarkMode", themeDarkMode)
     put("themeColored", themeColored)
+    put("merchantCategoryMemoryEnabled", merchantCategoryMemoryEnabled)
+    put("merchantCategoryMemoryThreshold", merchantCategoryMemoryThreshold)
     // appCacheJson intentionally excluded — internal cache, not user data.
 }
 
@@ -345,7 +363,9 @@ private fun JSONObject.toExpensesSettings(): ExpensesSettings {
         decimalSeparator = optString("decimalSeparator", ExpensesSettings.DECIMAL_PERIOD),
         calendarViewEnabled = optBoolean("calendarViewEnabled", false),
         themeDarkMode = optString("themeDarkMode", ExpensesSettings.THEME_SYSTEM),
-        themeColored = optBoolean("themeColored", true)
+        themeColored = optBoolean("themeColored", true),
+        merchantCategoryMemoryEnabled = optBoolean("merchantCategoryMemoryEnabled", false),
+        merchantCategoryMemoryThreshold = optInt("merchantCategoryMemoryThreshold", ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD)
     )
 }
 
@@ -362,6 +382,13 @@ private fun SpendingLimit.toJson(): JSONObject = JSONObject().apply {
     put("amountHomeCurrency", amountHomeCurrency)
     put("period", period)
     put("createdAt", createdAt)
+}
+
+private fun MerchantCategoryMemory.toJson(): JSONObject = JSONObject().apply {
+    put("vendorKey", vendorKey)
+    put("categoryId", categoryId)
+    put("consecutiveCount", consecutiveCount)
+    put("updatedAt", updatedAt)
 }
 
 private fun Expense.toJson(items: List<ExpenseLineItem>): JSONObject = JSONObject().apply {

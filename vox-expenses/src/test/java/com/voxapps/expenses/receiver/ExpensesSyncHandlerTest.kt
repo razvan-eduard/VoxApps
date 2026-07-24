@@ -40,6 +40,7 @@ class ExpensesSyncHandlerTest {
         every { expensesRepo.categories } returns flowOf(emptyList())
         coEvery { expensesRepo.expensesSnapshot() } returns emptyList()
         coEvery { expensesRepo.tombstonesSince(any()) } returns emptyList()
+        coEvery { expensesRepo.mostRecentCategoryColor() } returns null
     }
 
     private fun expense(uid: String, updatedAt: Long, totalAmount: Double = 10.0, categoryId: Long? = null) = Expense(

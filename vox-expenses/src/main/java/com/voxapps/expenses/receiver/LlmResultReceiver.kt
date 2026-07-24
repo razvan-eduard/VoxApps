@@ -195,7 +195,9 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 direction = parsed.direction,
                                 nearDuplicateCheckEnabled = settings.nearDuplicateDetectionEnabled,
                                 nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
-                                nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong())
+                                nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong()),
+                                merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
+                                merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
                             )
                         } else {
                             container.pendingNotificationExpenseRepository.addPending(
@@ -271,7 +273,9 @@ class LlmResultReceiver : BroadcastReceiver() {
             direction = parsed.direction,
             nearDuplicateCheckEnabled = settings.nearDuplicateDetectionEnabled,
             nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
-            nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong())
+            nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong()),
+            merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
+            merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
         )
 
         if (newExpenseId > 0 && parsed.itemsSumMismatch) {

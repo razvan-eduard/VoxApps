@@ -39,7 +39,9 @@ class ExpensesRepositoryDeleteReceiptFileTest {
         val context = mockk<Context>()
         every { context.filesDir } returns filesDir
 
-        repository = ExpensesRepository(expenseDao, categoryDao, lineItemDao, spendingLimitDao, context)
+        repository = ExpensesRepository(
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), context
+        )
     }
 
     private fun stageReceipt(name: String): File {

@@ -95,6 +95,13 @@ fun ExpensesRoot(
                     is ExpensesUiState.Locked -> AuthGate(onUnlockRequest = onUnlockRequest)
                     is ExpensesUiState.Unlocked -> {
                         val target = editTarget
+                        // Fetched fresh rather than derived from state.categories/state.expenses
+                        // (which reflect any active filter) — the "+ New category..." color
+                        // suggestion needs the true, unfiltered most-recent expense.
+                        var mostRecentCategoryColor by remember(target) { mutableStateOf<Long?>(null) }
+                        LaunchedEffect(target) {
+                            if (target != null) mostRecentCategoryColor = container.expensesRepository.mostRecentCategoryColor()
+                        }
                         when {
                             target != null -> ExpenseEditScreen(
                                 existing = (target as? EditTarget.Existing)?.expense,
@@ -103,6 +110,7 @@ fun ExpensesRoot(
                                 vatDisplayEnabled = container.settingsRepository.getSnapshot().vatDisplayEnabled,
                                 decimalSeparator = container.settingsRepository.getSnapshot().decimalSeparator,
                                 locationPrefillEnabled = container.settingsRepository.getSnapshot().locationPrefillEnabled,
+                                mostRecentCategoryColor = mostRecentCategoryColor,
                                 stateManager = container.expensesStateManager,
                                 onDone = { editTarget = null }
                             )

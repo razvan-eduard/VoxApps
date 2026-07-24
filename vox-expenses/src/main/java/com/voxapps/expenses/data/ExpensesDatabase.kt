@@ -10,8 +10,9 @@ import androidx.room.migration.Migration
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
-    entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class, ExpenseTombstone::class],
-    version = 7,
+    entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class,
+        ExpenseTombstone::class, MerchantCategoryMemory::class],
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -20,6 +21,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun expenseLineItemDao(): ExpenseLineItemDao
     abstract fun spendingLimitDao(): SpendingLimitDao
+    abstract fun merchantCategoryMemoryDao(): MerchantCategoryMemoryDao
 
     companion object {
         @Volatile private var instance: ExpensesDatabase? = null
@@ -90,6 +92,18 @@ abstract class ExpensesDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS merchant_category_memory (" +
+                        "vendorKey TEXT NOT NULL PRIMARY KEY, " +
+                        "categoryId INTEGER NOT NULL, " +
+                        "consecutiveCount INTEGER NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)"
+                )
+            }
+        }
+
         fun get(context: Context): ExpensesDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
         }
@@ -99,7 +113,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .build()
         }
     }

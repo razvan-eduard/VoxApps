@@ -54,6 +54,45 @@ class CategoryPaletteTest {
         }
     }
 
+    // --- precedingColor adjacency (preset phase) ---
+
+    @Test
+    fun `preset phase prefers the unused preset farthest in hue from precedingColor`() {
+        // Only two presets left unused: red (hue ~1) and teal (hue ~175, the farthest option from red).
+        val used = CategoryPalette.argb.filterIndexed { index, _ -> index !in setOf(0, 5) }
+        val color = CategoryPalette.unusedOrRandomColor(used, precedingColor = CategoryPalette.argb[0])
+        assertEquals(CategoryPalette.argb[5], color)
+    }
+
+    @Test
+    fun `preset phase falls back to first unused preset when precedingColor is null`() {
+        val used = CategoryPalette.argb.filterIndexed { index, _ -> index !in setOf(0, 5) }
+        val color = CategoryPalette.unusedOrRandomColor(used, precedingColor = null)
+        assertEquals(CategoryPalette.argb[0], color)
+    }
+
+    @Test
+    fun `preset phase ignores precedingColor when only one unused preset remains`() {
+        val used = CategoryPalette.argb.drop(1)
+        val color = CategoryPalette.unusedOrRandomColor(used, precedingColor = CategoryPalette.argb.first())
+        assertEquals(CategoryPalette.argb[0], color)
+    }
+
+    // --- precedingColor adjacency (random-fallback phase) ---
+
+    @Test
+    fun `random fallback stays clear of precedingColor's hue even with no other existing colors`() {
+        val preceding = 0xFFEF5350L // red, hue ~1
+        repeat(50) {
+            val color = CategoryPalette.unusedOrRandomColor(CategoryPalette.argb, precedingColor = preceding)
+            val diff = hueDiff(hueOf(color), hueOf(preceding))
+            assertTrue("hue ${hueOf(color)} too close to preceding hue (diff=$diff)", diff >= 90f)
+        }
+    }
+
+    private fun hueDiff(a: Float, b: Float): Float =
+        kotlin.math.abs(a - b).let { if (it > 180f) 360f - it else it }
+
     private fun hueOf(argbColor: Long): Float {
         val r = ((argbColor shr 16) and 0xFFL).toInt() / 255f
         val g = ((argbColor shr 8) and 0xFFL).toInt() / 255f

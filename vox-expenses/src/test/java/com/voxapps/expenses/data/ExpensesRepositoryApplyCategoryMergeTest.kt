@@ -26,7 +26,9 @@ class ExpensesRepositoryApplyCategoryMergeTest {
         categoryDao = mockk(relaxed = true)
         lineItemDao = mockk(relaxed = true)
         spendingLimitDao = mockk(relaxed = true)
-        repository = ExpensesRepository(expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true))
+        repository = ExpensesRepository(
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true)
+        )
         coEvery { categoryDao.observeAll() } returns flowOf(listOf(food, groceries, transport))
     }
 

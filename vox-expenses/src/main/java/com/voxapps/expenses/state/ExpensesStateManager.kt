@@ -131,6 +131,16 @@ class ExpensesStateManager internal constructor(
     fun setNearDuplicateDetectionEnabled(enabled: Boolean) { scope.launch { settingsRepo.setNearDuplicateDetectionEnabled(enabled) } }
     fun setNearDuplicateFuzzyMatchEnabled(enabled: Boolean) { scope.launch { settingsRepo.setNearDuplicateFuzzyMatchEnabled(enabled) } }
     fun setNearDuplicateTimeWindowMinutes(minutes: Int) { scope.launch { settingsRepo.setNearDuplicateTimeWindowMinutes(minutes) } }
+    fun setMerchantCategoryMemoryEnabled(enabled: Boolean) { scope.launch { settingsRepo.setMerchantCategoryMemoryEnabled(enabled) } }
+    fun setMerchantCategoryMemoryThreshold(count: Int) { scope.launch { settingsRepo.setMerchantCategoryMemoryThreshold(count) } }
+
+    /** Gate lives here (not in the repository) — mirrors the "repository has zero settings
+     *  dependency" convention; [ExpensesRepository.recordManualCategoryChange] itself is
+     *  unconditional. */
+    fun recordManualCategoryChange(vendor: String?, categoryId: Long?) {
+        if (!settingsRepo.getSnapshot().merchantCategoryMemoryEnabled) return
+        scope.launch { expensesRepo.recordManualCategoryChange(vendor, categoryId) }
+    }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
     fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }
@@ -200,9 +210,12 @@ class ExpensesStateManager internal constructor(
         scope.launch { expensesRepo.deleteAllExpenses() }
     }
 
-    fun addCategory(name: String, colorArgb: Long) {
+    fun addCategory(name: String, colorArgb: Long, onResult: (Long) -> Unit = {}) {
         val position = (uiStateCategories()).size
-        scope.launch { expensesRepo.addCategory(name, colorArgb, position, System.currentTimeMillis()) }
+        scope.launch {
+            val id = expensesRepo.addCategory(name, colorArgb, position, System.currentTimeMillis())
+            onResult(id)
+        }
     }
 
     fun updateCategory(category: Category) { scope.launch { expensesRepo.updateCategory(category) } }
@@ -277,7 +290,9 @@ class ExpensesStateManager internal constructor(
                 direction = entry.direction,
                 nearDuplicateCheckEnabled = settings.nearDuplicateDetectionEnabled,
                 nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
-                nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong())
+                nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong()),
+                merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
+                merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
             )
             pendingNotificationExpenseRepo.removePending(setOf(entry.id))
         }

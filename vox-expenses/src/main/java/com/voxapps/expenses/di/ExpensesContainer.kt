@@ -37,6 +37,7 @@ class ExpensesContainer(context: Context) {
         database.categoryDao(),
         database.expenseLineItemDao(),
         database.spendingLimitDao(),
+        database.merchantCategoryMemoryDao(),
         appContext
     )
 

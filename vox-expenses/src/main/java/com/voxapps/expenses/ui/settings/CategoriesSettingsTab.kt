@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -137,6 +138,44 @@ fun CategoriesSettingsTab(
             TextButton(onClick = { addingNew = true }) {
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Text(languageManager.getString("add_category"))
+            }
+        }
+
+        HorizontalDivider()
+
+        // --- Merchant category memory ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("merchant_category_memory_label"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("merchant_category_memory_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.merchantCategoryMemoryEnabled,
+                onCheckedChange = { stateManager.setMerchantCategoryMemoryEnabled(it) }
+            )
+        }
+
+        val merchantMemoryAlpha = if (settings.merchantCategoryMemoryEnabled) 1f else 0.4f
+        Column(modifier = Modifier.alpha(merchantMemoryAlpha), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(languageManager.getString("merchant_category_memory_threshold_label"), style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val thresholdOptions = listOf(
+                    ExpensesSettings.MERCHANT_MEMORY_THRESHOLD_1,
+                    ExpensesSettings.MERCHANT_MEMORY_THRESHOLD_3,
+                    ExpensesSettings.MERCHANT_MEMORY_THRESHOLD_5,
+                    ExpensesSettings.MERCHANT_MEMORY_THRESHOLD_10
+                )
+                thresholdOptions.forEach { count ->
+                    FilterChip(
+                        selected = settings.merchantCategoryMemoryThreshold == count,
+                        onClick = { stateManager.setMerchantCategoryMemoryThreshold(count) },
+                        label = { Text(String.format(languageManager.getString("merchant_category_memory_threshold_times"), count)) }
+                    )
+                }
             }
         }
 

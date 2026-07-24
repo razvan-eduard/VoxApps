@@ -41,6 +41,8 @@ interface ExpensesSettingsRepository {
     suspend fun setNearDuplicateDetectionEnabled(enabled: Boolean)
     suspend fun setNearDuplicateFuzzyMatchEnabled(enabled: Boolean)
     suspend fun setNearDuplicateTimeWindowMinutes(minutes: Int)
+    suspend fun setMerchantCategoryMemoryEnabled(enabled: Boolean)
+    suspend fun setMerchantCategoryMemoryThreshold(count: Int)
 
     /**
      * Bulk overwrite, e.g. from a Vox Hub import — writes every portable field in one DataStore edit.

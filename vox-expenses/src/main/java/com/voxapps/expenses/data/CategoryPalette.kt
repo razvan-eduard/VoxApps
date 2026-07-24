@@ -25,25 +25,48 @@ object CategoryPalette {
      *  just by chance. */
     private const val RANDOM_HUE_CANDIDATES = 24
 
-    /**
-     * The first preset palette color not already used by [existingColors], or — once all 10 are
-     * taken — a freshly generated color: fixed saturation/value matching the palette's vivid,
-     * mid-brightness style so it doesn't look out of place next to the presets, with a hue chosen to
-     * be as visually distinct as possible from [existingColors] (farthest-hue-from-nearest-neighbor
-     * among [RANDOM_HUE_CANDIDATES] random samples) rather than a single uniform-random draw, which
-     * could otherwise land right next to an already-used hue.
-     */
-    fun unusedOrRandomColor(existingColors: List<Long>): Long {
-        val used = existingColors.toSet()
-        argb.firstOrNull { it !in used }?.let { return it }
+    /** How far in hue (of 360°) a freshly generated color must land from [unusedOrRandomColor]'s
+     *  optional `precedingColor` to count as "clearly a different color family," not just "not
+     *  identical." Only gates the post-preset random-fallback phase. */
+    private const val MIN_PRECEDING_HUE_DISTANCE = 90f
 
+    /**
+     * The first preset palette color not already used by [existingColors] (preferring whichever
+     * unused preset is farthest in hue from [precedingColor], when given, so two colors assigned
+     * back-to-back don't end up visually adjacent purely by the presets' fixed array order), or —
+     * once all 10 are taken — a freshly generated color: fixed saturation/value matching the
+     * palette's vivid, mid-brightness style so it doesn't look out of place next to the presets,
+     * with a hue chosen to be as visually distinct as possible from [existingColors]
+     * (farthest-hue-from-nearest-neighbor among [RANDOM_HUE_CANDIDATES] random samples), further
+     * biased toward clearing [MIN_PRECEDING_HUE_DISTANCE] from [precedingColor] specifically when
+     * one is given — the aggregate-distance optimization alone doesn't guarantee that.
+     */
+    fun unusedOrRandomColor(existingColors: List<Long>, precedingColor: Long? = null): Long {
+        val used = existingColors.toSet()
+        val unusedPresets = argb.filter { it !in used }
+        if (unusedPresets.isNotEmpty()) return pickPreset(unusedPresets, precedingColor)
+        return pickRandomFallback(existingColors, precedingColor)
+    }
+
+    private fun pickPreset(unusedPresets: List<Long>, precedingColor: Long?): Long {
+        if (precedingColor == null || unusedPresets.size == 1) return unusedPresets.first()
+        val precedingHue = argbToHue(precedingColor) ?: return unusedPresets.first()
+        return unusedPresets.maxBy { candidate -> hueDistance(argbToHue(candidate) ?: 0f, precedingHue) }
+    }
+
+    private fun pickRandomFallback(existingColors: List<Long>, precedingColor: Long?): Long {
         val existingHues = existingColors.mapNotNull(::argbToHue)
-        val hue = if (existingHues.isEmpty()) {
+        val precedingHue = precedingColor?.let(::argbToHue)
+        val hue = if (existingHues.isEmpty() && precedingHue == null) {
             Random.nextFloat() * 360f
         } else {
-            (0 until RANDOM_HUE_CANDIDATES)
-                .map { Random.nextFloat() * 360f }
-                .maxBy { candidate -> existingHues.minOf { hueDistance(candidate, it) } }
+            val scored = (0 until RANDOM_HUE_CANDIDATES).map { Random.nextFloat() * 360f }.map { candidate ->
+                val aggregateDistance = if (existingHues.isEmpty()) Float.MAX_VALUE else existingHues.minOf { hueDistance(candidate, it) }
+                val precedingDistance = precedingHue?.let { hueDistance(candidate, it) } ?: Float.MAX_VALUE
+                Triple(candidate, precedingDistance, aggregateDistance)
+            }
+            val qualifying = scored.filter { it.second >= MIN_PRECEDING_HUE_DISTANCE }
+            if (qualifying.isNotEmpty()) qualifying.maxBy { it.third }.first else scored.maxBy { it.second }.first
         }
         return hsvToArgb(hue = hue, saturation = 0.55f, value = 0.85f)
     }
