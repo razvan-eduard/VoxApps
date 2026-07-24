@@ -1,5 +1,9 @@
 <a name="readme-top"></a>
 
+<p align="center">
+  <img src="docs/assets/voxapps-banner.webp" alt="VoxApps — voxCommander(), voxNotes(), voxVision(), voxExpenses(), voxCalendar(), voxHub()" width="100%" />
+</p>
+
 # VoxCommander
 
 <p align="center">
@@ -7,16 +11,23 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/razvan-eduard/VoxApps/actions/workflows/release-commander.yml">
-    <img src="https://github.com/razvan-eduard/VoxApps/actions/workflows/release-commander.yml/badge.svg" alt="Build APK" />
-  </a>
-  <a href="https://github.com/razvan-eduard/VoxApps/releases">
-    <img src="https://img.shields.io/github/v/release/razvan-eduard/VoxApps?filter=commander-*&display_name=tag" alt="Latest Release" />
-  </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" />
   </a>
 </p>
+
+## Build Status
+
+| App | Build | Latest tag |
+|---|---|---|
+| **Vox Commander** | [![Build](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-commander.yml/badge.svg)](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-commander.yml) | [![Release](https://img.shields.io/github/v/release/razvan-eduard/VoxApps?filter=commander-*&display_name=tag)](https://github.com/razvan-eduard/VoxApps/releases) |
+| **Vox Notes** | [![Build](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-notes.yml/badge.svg)](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-notes.yml) | [![Release](https://img.shields.io/github/v/release/razvan-eduard/VoxApps?filter=notes-*&display_name=tag)](https://github.com/razvan-eduard/VoxApps/releases) |
+| **Vox Vision** | [![Build](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-vision.yml/badge.svg)](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-vision.yml) | [![Release](https://img.shields.io/github/v/release/razvan-eduard/VoxApps?filter=vision-*&display_name=tag)](https://github.com/razvan-eduard/VoxApps/releases) |
+| **Vox Expenses** | [![Build](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-expenses.yml/badge.svg)](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-expenses.yml) | [![Release](https://img.shields.io/github/v/release/razvan-eduard/VoxApps?filter=expenses-*&display_name=tag)](https://github.com/razvan-eduard/VoxApps/releases) |
+| **Vox Calendar** | [![Build](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-calendar.yml/badge.svg)](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-calendar.yml) | [![Release](https://img.shields.io/github/v/release/razvan-eduard/VoxApps?filter=calendar-*&display_name=tag)](https://github.com/razvan-eduard/VoxApps/releases) |
+| **Vox Hub** | [![Build](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-hub.yml/badge.svg)](https://github.com/razvan-eduard/VoxApps/actions/workflows/release-hub.yml) | [![Release](https://img.shields.io/github/v/release/razvan-eduard/VoxApps?filter=hub-*&display_name=tag)](https://github.com/razvan-eduard/VoxApps/releases) |
+
+For direct APK download links, see [🚀 Latest Releases](#latest-releases) below.
 
 ---
 
@@ -28,6 +39,7 @@
 
 ## 📖 Table of Contents
 
+- [🚦 Build Status](#build-status)
 - [🚀 Latest Releases](#latest-releases)
 - [✨ Features](#features)
 - [📋 Requirements](#requirements)
