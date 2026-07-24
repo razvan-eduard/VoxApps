@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Arrow pointing up-right away from a corner (money leaving) — used for TransactionDirection.OUTGOING
+     in both the home-screen widget (Glance/RemoteViews can't render Compose Material icons directly)
+     and mirrors the in-app Icons.AutoMirrored.Filled.CallMade path exactly, so both surfaces show the
+     same glyph. Color is baked in (not tinted at runtime) since direction color is fixed. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFD32F2F"
+        android:pathData="M9,5 V7 H15.59 L4,18.59 L5.41,20 L17,8.41 V15 H19 V5 Z" />
+</vector>

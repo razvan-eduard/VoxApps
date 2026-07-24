@@ -17,18 +17,25 @@ object ExpenseDeduplicationRequestSender {
 
     private const val TAG = "ExpenseDeduplicationRequestSender"
 
-    suspend fun send(context: Context, queue: VoxLlmRequestQueue, expenses: List<ExpenseSummary>) {
+    /** [scoped] marks this as the narrow, insert-time candidate-cluster check (as opposed to the
+     *  manual/scheduled full-list check) by appending an "INSERT_SCOPED" task-string segment — same
+     *  ":"-delimited-segment convention [LlmResultReceiver] already parses for other tasks (e.g.
+     *  EXPENSE_PARSE's image-name segment). [LlmResultReceiver] reads this segment back to decide
+     *  whether [ExpensesSettings.autoAcceptDuplicateMerges] should auto-apply the result instead of
+     *  staging it for review — that setting only ever applies to this scoped path. */
+    suspend fun send(context: Context, queue: VoxLlmRequestQueue, expenses: List<ExpenseSummary>, scoped: Boolean = false) {
         if (expenses.size < 2) {
             Logger.w(TAG, "Not sending — fewer than 2 expenses")
             return
         }
 
         val promptText = ExpenseDeduplicationPromptBuilder.build(expenses)
-        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for ${expenses.size} expenses")
+        val task = if (scoped) "${LlmTasks.EXPENSE_DEDUPLICATION}:INSERT_SCOPED" else LlmTasks.EXPENSE_DEDUPLICATION
+        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for ${expenses.size} expenses (scoped=$scoped)")
         queue.enqueueAndSend(
             context = context,
             sourcePackage = context.packageName,
-            task = LlmTasks.EXPENSE_DEDUPLICATION,
+            task = task,
             promptText = promptText,
             targetPackage = COMMANDER_PACKAGE,
             data = expenses.map { it.id.toString() }

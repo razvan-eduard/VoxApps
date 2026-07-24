@@ -208,6 +208,7 @@ fun ExpenseEditScreen(
                 categoryId = expense.categoryId,
                 items = lineItems,
                 direction = expense.direction,
+                context = context,
                 onResult = { id ->
                     if (id == DUPLICATE_ENTRY_RESULT) {
                         Toast.makeText(context, languageManager.getString("duplicate_entry_error"), Toast.LENGTH_LONG).show()

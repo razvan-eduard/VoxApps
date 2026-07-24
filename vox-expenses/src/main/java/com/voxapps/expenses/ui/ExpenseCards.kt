@@ -17,15 +17,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CallMade
+import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Icon
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import java.text.DateFormat
 import java.util.Date
+
+/** Matches the fixed (non-theme) colors baked into ic_arrow_inward.xml/ic_arrow_outward.xml, used
+ *  by the widget for the same direction glyph — keeps the in-app and widget icons visually identical. */
+private val IncomeGreen = Color(0xFF4CAF50)
+private val ExpenseRed = Color(0xFFD32F2F)
 
 /** A single expense row: title/vendor, category dot, formatted total, and date. */
 @Composable
@@ -76,10 +85,20 @@ fun ExpenseCard(expenseWithDetails: ExpenseWithDetails, onClick: () -> Unit) {
                     )
                 }
             }
+            Icon(
+                imageVector = if (expense.direction == TransactionDirection.INCOMING) {
+                    Icons.AutoMirrored.Filled.CallReceived
+                } else {
+                    Icons.AutoMirrored.Filled.CallMade
+                },
+                contentDescription = null,
+                tint = if (expense.direction == TransactionDirection.INCOMING) IncomeGreen else ExpenseRed,
+                modifier = Modifier.size(16.dp).padding(start = 8.dp)
+            )
             Text(
                 text = formatAmount(expense.totalAmount, expense.currencyCode),
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 8.dp)
+                modifier = Modifier.padding(start = 4.dp)
             )
         }
     }

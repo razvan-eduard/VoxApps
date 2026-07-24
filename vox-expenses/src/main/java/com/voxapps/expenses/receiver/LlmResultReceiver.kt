@@ -5,12 +5,16 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import com.voxapps.expenses.ExpensesApplication
+import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.domain.llm.CategoryMergeMappingParser
+import com.voxapps.expenses.domain.llm.DuplicateGroup
+import com.voxapps.expenses.domain.llm.ExpenseDeduplicationRequestSender
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationResultParser
+import com.voxapps.expenses.domain.llm.ExpenseSummary
 import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
 import com.voxapps.expenses.domain.location.ExpensesLocationHelper
 import com.voxapps.expenses.domain.llm.LlmTasks
@@ -24,6 +28,7 @@ import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -141,7 +146,19 @@ class LlmResultReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
-                        if (groups != null) container.expenseDeduplicationRepository.setPendingGroups(groups)
+                        if (groups != null) {
+                            val expenses = container.expensesRepository.expenses.first()
+                            val validated = validateDuplicateGroups(groups, expenses)
+                            if (validated.isNotEmpty()) {
+                                val isInsertScoped = taskParts.getOrNull(1) == "INSERT_SCOPED"
+                                val settings = container.settingsRepository.getSnapshot()
+                                if (isInsertScoped && settings.autoAcceptDuplicateMerges) {
+                                    container.expensesRepository.applyExpenseDeduplication(validated)
+                                } else {
+                                    container.expenseDeduplicationRepository.mergePendingGroups(validated)
+                                }
+                            }
+                        }
                     } finally {
                         pending.finish()
                     }
@@ -197,7 +214,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                             // Same insert path as ExpensesStateManager.approveNotificationExpense —
                             // skips the pending-review queue entirely. It's still a normal, editable
                             // expense row afterward, just created without an explicit Approve tap.
-                            container.expensesRepository.addParsedExpense(
+                            val newExpenseId = container.expensesRepository.addParsedExpense(
                                 title = cleanTitle,
                                 totalAmount = parsed.totalAmount,
                                 currencyCode = parsed.currency ?: settings.defaultCurrency,
@@ -210,12 +227,13 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 defaultCategoryId = settings.defaultVoiceCategoryId,
                                 autoCreate = settings.autoCreateVoiceCategory,
                                 direction = parsed.direction,
-                                nearDuplicateCheckEnabled = settings.nearDuplicateDetectionEnabled,
+                                nearDuplicateCheckEnabled = settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_AI,
                                 nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
                                 nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong()),
                                 merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
                                 merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
                             )
+                            maybeRequestScopedDuplicateCheck(context, container, settings.duplicateCheckModeAutomatic, newExpenseId)
                         } else {
                             container.pendingNotificationExpenseRepository.addPending(
                                 PendingNotificationExpense(
@@ -303,12 +321,14 @@ class LlmResultReceiver : BroadcastReceiver() {
             items = items,
             imageName = imageName,
             direction = parsed.direction,
-            nearDuplicateCheckEnabled = settings.nearDuplicateDetectionEnabled,
+            nearDuplicateCheckEnabled = settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_AI,
             nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
             nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong()),
             merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
             merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
         )
+
+        maybeRequestScopedDuplicateCheck(appContext, container, settings.duplicateCheckModeAutomatic, newExpenseId)
 
         if (newExpenseId > 0 && parsed.itemsSumMismatch) {
             Logger.w(
@@ -453,5 +473,47 @@ class LlmResultReceiver : BroadcastReceiver() {
         }
 
         return LocalDateTime.of(date, time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    }
+
+    /** Fires an async, scoped AI duplicate check for a freshly-inserted row when the automatic mode
+     *  includes AI ([ExpensesSettings.MODE_LOCAL_AND_AI]/[ExpensesSettings.MODE_AI]) — scoped to just
+     *  the new row's own same-amount candidate cluster (see
+     *  [com.voxapps.expenses.data.ExpensesRepository.duplicateCandidateClusters]), not the whole
+     *  expense list, mirrors [com.voxapps.expenses.state.ExpensesStateManager]'s identical helper for
+     *  the manual-entry path. Never auto-applies — any result lands in the normal review list. */
+    private fun maybeRequestScopedDuplicateCheck(
+        context: Context,
+        container: ExpensesContainer,
+        automaticMode: String,
+        newExpenseId: Long
+    ) {
+        if (newExpenseId <= 0 || automaticMode == ExpensesSettings.MODE_LOCAL) return
+        CoroutineScope(Dispatchers.IO).launch {
+            val candidates = container.expensesRepository.duplicateCandidateClusters(scopedToId = newExpenseId).flatten()
+            if (candidates.size < 2) return@launch
+            val summaries = candidates.map {
+                ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime)
+            }
+            ExpenseDeduplicationRequestSender.send(context, container.pendingLlmRequestQueue, summaries, scoped = true)
+        }
+    }
+
+    /** The AI's proposed groups are never trusted blindly — a hallucinated group (claiming two
+     *  expenses are duplicates when they share nothing in common) is dropped here before it ever
+     *  reaches the review list, by re-checking each duplicate id against the same hard fields
+     *  [com.voxapps.expenses.data.ExpenseNearDuplicateDetector] requires. A genuine duplicate
+     *  trivially survives this (it shares an amount+currency with [DuplicateGroup.keepId] by
+     *  definition); a fabricated one doesn't. A group left with no surviving duplicates is dropped
+     *  entirely rather than staged empty. */
+    private fun validateDuplicateGroups(groups: List<DuplicateGroup>, expenses: List<Expense>): List<DuplicateGroup> {
+        val byId = expenses.associateBy { it.id }
+        return groups.mapNotNull { group ->
+            val keep = byId[group.keepId] ?: return@mapNotNull null
+            val validDuplicateIds = group.duplicateIds.filter { id ->
+                val duplicate = byId[id]
+                duplicate != null && duplicate.totalAmount == keep.totalAmount && duplicate.currencyCode == keep.currencyCode
+            }
+            if (validDuplicateIds.isEmpty()) null else DuplicateGroup(group.keepId, validDuplicateIds)
+        }
     }
 }

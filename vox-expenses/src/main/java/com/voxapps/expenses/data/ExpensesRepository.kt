@@ -352,4 +352,42 @@ class ExpensesRepository(
         expenseDao.insertTombstones(uids.map { ExpenseTombstone(it, now) })
         deleteReceiptFiles(imageNames)
     }
+
+    /** Retroactive scan for [ExpensesSettings.MODE_LOCAL]'s manual "Check for duplicates
+     *  now" path — [ExpenseNearDuplicateDetector] otherwise only ever compares one new candidate
+     *  against a narrow DB window at single-insert time, with no way to catch rows already sitting
+     *  in the table. Greedy grouping: the earliest-created row in a cluster is always [keepId] (same
+     *  "first-arrived record stays authoritative" precedent as [enrichWithNearDuplicate]), and once
+     *  a row is consumed into a group it's never re-grouped into another. */
+    suspend fun findLocalDuplicateGroups(fuzzyMatch: Boolean, timeWindowMillis: Long): List<DuplicateGroup> {
+        val detector = ExpenseNearDuplicateDetector(fuzzyMatch, timeWindowMillis)
+        val all = expensesSnapshot().sortedBy { it.createdAt }
+        val consumed = mutableSetOf<Long>()
+        val groups = mutableListOf<DuplicateGroup>()
+        for (keep in all) {
+            if (keep.id in consumed) continue
+            val dups = all.filter { it.id != keep.id && it.id !in consumed && detector.isDuplicateOf(it, keep) }
+            if (dups.isNotEmpty()) {
+                groups += DuplicateGroup(keep.id, dups.map { it.id })
+                consumed += dups.map { it.id }
+                consumed += keep.id
+            }
+        }
+        return groups
+    }
+
+    /** Wide-net recall pass for the "local prepares a candidate list, AI judges it" hybrid mode —
+     *  groups by exactly the fields [ExpenseNearDuplicateDetector] hard-requires to even consider a
+     *  match (amount/currency/direction), deliberately ignoring the time window here: this step only
+     *  narrows what the AI has to reason over, it never decides anything itself, so casting a wider
+     *  net than the detector's own window is intentional (the AI is what has to draw the line between
+     *  a genuine duplicate and a legitimate recurring same-amount charge, using the fuller context of
+     *  a whole cluster rather than a single ambiguous pair). Pass [scopedToId] to narrow to just the
+     *  cluster containing one specific (freshly-inserted) row, for the insert-time automatic check. */
+    suspend fun duplicateCandidateClusters(scopedToId: Long? = null): List<List<Expense>> {
+        val all = expensesSnapshot()
+        val clusters = all.groupBy { Triple(it.totalAmount, it.currencyCode, it.direction) }
+            .values.filter { it.size >= 2 }
+        return if (scopedToId == null) clusters else clusters.filter { cluster -> cluster.any { it.id == scopedToId } }
+    }
 }

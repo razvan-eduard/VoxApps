@@ -6,12 +6,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
@@ -39,10 +45,10 @@ import com.voxapps.ipc.VoxAppsDiscovery
 private data class ResolvedGroup(val group: DuplicateGroup, val keep: Expense, val duplicates: List<Expense>)
 
 /**
- * Expense cleanup: the manual "Find duplicate expenses" trigger, the scheduled-interval control, and
- * a review section for the LLM's pending suggestion — mirrors vox-notes' NoteCleanupSettingsTab
- * exactly in shape. Real financial records aren't cheaply reversible, so nothing is deleted until the
- * user explicitly approves specific groups here.
+ * Expense cleanup: one unified duplicate-detection surface — a 3-way engine choice (Local/Local+AI/AI)
+ * for both automatic (insert-time) protection and the manual "Check for duplicates now" trigger, plus
+ * a review section shared by whichever engine found something. Real financial records aren't cheaply
+ * reversible, so nothing is deleted until the user explicitly approves specific groups here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,12 +62,14 @@ fun ExpenseCleanupSettingsTab(
     val context = LocalContext.current
     val pendingGroups by stateManager.pendingExpenseDuplicateGroups.collectAsStateWithLifecycle(initialValue = emptyList())
     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
-    val findDuplicatesGate = rememberRequirementGate(
-        satisfied = commanderInstalled,
+    val manualModeNeedsCommander = settings.duplicateCheckModeManual != ExpensesSettings.MODE_LOCAL
+    val checkNowGate = rememberRequirementGate(
+        satisfied = !manualModeNeedsCommander || commanderInstalled,
         requiredMessage = languageManager.getString("commander_required_message")
     ) {
-        stateManager.requestExpenseDeduplication(context)
-        Toast.makeText(context, languageManager.getString("find_duplicate_expenses_sent_toast"), Toast.LENGTH_SHORT).show()
+        stateManager.requestDuplicateCheck(context)
+        val toastKey = if (manualModeNeedsCommander) "find_duplicate_expenses_sent_toast" else "duplicate_check_local_done_toast"
+        Toast.makeText(context, languageManager.getString(toastKey), Toast.LENGTH_SHORT).show()
     }
 
     // Resolved against the *current* expenses — a group shrinks or disappears if an expense it
@@ -77,26 +85,102 @@ fun ExpenseCleanupSettingsTab(
 
     var checkedGroups by remember(resolvedGroups) { mutableStateOf(resolvedGroups.indices.toSet()) }
 
+    val localTuningRelevant = settings.duplicateCheckModeManual != ExpensesSettings.MODE_AI ||
+        settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_AI
+
     Column(
-        modifier = modifier.padding(16.dp),
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(languageManager.getString("expense_cleanup_ai_section_title"), style = MaterialTheme.typography.titleMedium)
+                Text(languageManager.getString("expense_cleanup_section_title"), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    languageManager.getString("expense_cleanup_ai_section_desc"),
+                    languageManager.getString("expense_cleanup_section_desc"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 HorizontalDivider()
 
-                // --- Find duplicate expenses (manual trigger) ---
-                Text(languageManager.getString("find_duplicate_expenses_button"), style = MaterialTheme.typography.labelLarge)
+                // --- Automatic (insert-time) protection ---
+                Text(languageManager.getString("duplicate_check_automatic_label"), style = MaterialTheme.typography.labelLarge)
                 Text(
-                    languageManager.getString("find_duplicate_expenses_desc"),
+                    languageManager.getString("duplicate_check_automatic_desc"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                DuplicateModeChipRow(
+                    selected = settings.duplicateCheckModeAutomatic,
+                    onSelect = { stateManager.setDuplicateCheckModeAutomatic(it) },
+                    languageManager = languageManager
+                )
+
+                if (settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_LOCAL) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(languageManager.getString("auto_accept_duplicate_merges_label"), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                languageManager.getString("auto_accept_duplicate_merges_desc"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = settings.autoAcceptDuplicateMerges,
+                            onCheckedChange = { stateManager.setAutoAcceptDuplicateMerges(it) }
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+
+                // --- Local engine tuning — relevant whenever either mode above includes Local ---
+                val subAlpha = if (localTuningRelevant) 1f else 0.4f
+                Column(modifier = Modifier.alpha(subAlpha), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(languageManager.getString("near_duplicate_match_mode_label"), style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !settings.nearDuplicateFuzzyMatchEnabled,
+                            onClick = { stateManager.setNearDuplicateFuzzyMatchEnabled(false) },
+                            label = { Text(languageManager.getString("near_duplicate_match_exact")) }
+                        )
+                        FilterChip(
+                            selected = settings.nearDuplicateFuzzyMatchEnabled,
+                            onClick = { stateManager.setNearDuplicateFuzzyMatchEnabled(true) },
+                            label = { Text(languageManager.getString("near_duplicate_match_fuzzy")) }
+                        )
+                    }
+
+                    Text(languageManager.getString("near_duplicate_time_window_label"), style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val windowOptions = listOf(
+                            ExpensesSettings.NEAR_DUP_WINDOW_1M, ExpensesSettings.NEAR_DUP_WINDOW_2M,
+                            ExpensesSettings.NEAR_DUP_WINDOW_5M, ExpensesSettings.NEAR_DUP_WINDOW_10M,
+                            ExpensesSettings.NEAR_DUP_WINDOW_15M
+                        )
+                        windowOptions.forEach { minutes ->
+                            FilterChip(
+                                selected = settings.nearDuplicateTimeWindowMinutes == minutes,
+                                onClick = { stateManager.setNearDuplicateTimeWindowMinutes(minutes) },
+                                label = { Text(String.format(languageManager.getString("near_duplicate_interval_minutes"), minutes)) }
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
+                // --- Manual check ---
+                Text(languageManager.getString("duplicate_check_manual_label"), style = MaterialTheme.typography.labelLarge)
+                Text(
+                    languageManager.getString("duplicate_check_manual_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                DuplicateModeChipRow(
+                    selected = settings.duplicateCheckModeManual,
+                    onSelect = { stateManager.setDuplicateCheckModeManual(it) },
+                    languageManager = languageManager
                 )
 
                 if (expenses.size < 2) {
@@ -107,8 +191,8 @@ fun ExpenseCleanupSettingsTab(
                     )
                 } else {
                     Button(
-                        onClick = findDuplicatesGate.onClick,
-                        modifier = Modifier.fillMaxWidth().alpha(findDuplicatesGate.alpha)
+                        onClick = checkNowGate.onClick,
+                        modifier = Modifier.fillMaxWidth().alpha(checkNowGate.alpha)
                     ) {
                         Text(languageManager.getString("find_duplicate_expenses_button"))
                     }
@@ -116,7 +200,7 @@ fun ExpenseCleanupSettingsTab(
 
                 HorizontalDivider()
 
-                // --- Scheduled expense cleanup ---
+                // --- Scheduled check — reruns whatever the manual mode above is set to ---
                 Text(languageManager.getString("scheduled_dedup_label"), style = MaterialTheme.typography.labelLarge)
                 Text(
                     languageManager.getString("scheduled_dedup_desc"),
@@ -154,7 +238,7 @@ fun ExpenseCleanupSettingsTab(
                                             checkedGroups = if (checked) checkedGroups + index else checkedGroups - index
                                         }
                                     )
-                                    Column(modifier = Modifier.padding(top = 12.dp)) {
+                                    Column(modifier = Modifier.padding(top = 12.dp).weight(1f)) {
                                         Text(
                                             languageManager.getString("keep_label"),
                                             style = MaterialTheme.typography.labelSmall,
@@ -171,6 +255,12 @@ fun ExpenseCleanupSettingsTab(
                                             )
                                             Text(expensePreview(dup), style = MaterialTheme.typography.bodySmall)
                                         }
+                                    }
+                                    IconButton(onClick = { stateManager.dismissExpenseDuplicateGroup(resolved.group) }) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = languageManager.getString("dismiss_group_content_description")
+                                        )
                                     }
                                 }
                             }
@@ -198,65 +288,28 @@ fun ExpenseCleanupSettingsTab(
                 }
             }
         }
+    }
+}
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(languageManager.getString("expense_cleanup_direct_section_title"), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    languageManager.getString("expense_cleanup_direct_section_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                HorizontalDivider()
-
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(languageManager.getString("near_duplicate_detection_label"), style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            languageManager.getString("near_duplicate_detection_desc"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = settings.nearDuplicateDetectionEnabled,
-                        onCheckedChange = { stateManager.setNearDuplicateDetectionEnabled(it) }
-                    )
-                }
-
-                val subAlpha = if (settings.nearDuplicateDetectionEnabled) 1f else 0.4f
-                Column(modifier = Modifier.alpha(subAlpha), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(languageManager.getString("near_duplicate_match_mode_label"), style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = !settings.nearDuplicateFuzzyMatchEnabled,
-                            onClick = { stateManager.setNearDuplicateFuzzyMatchEnabled(false) },
-                            label = { Text(languageManager.getString("near_duplicate_match_exact")) }
-                        )
-                        FilterChip(
-                            selected = settings.nearDuplicateFuzzyMatchEnabled,
-                            onClick = { stateManager.setNearDuplicateFuzzyMatchEnabled(true) },
-                            label = { Text(languageManager.getString("near_duplicate_match_fuzzy")) }
-                        )
-                    }
-
-                    Text(languageManager.getString("near_duplicate_time_window_label"), style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val windowOptions = listOf(
-                            ExpensesSettings.NEAR_DUP_WINDOW_1M, ExpensesSettings.NEAR_DUP_WINDOW_2M,
-                            ExpensesSettings.NEAR_DUP_WINDOW_5M, ExpensesSettings.NEAR_DUP_WINDOW_10M,
-                            ExpensesSettings.NEAR_DUP_WINDOW_15M
-                        )
-                        windowOptions.forEach { minutes ->
-                            FilterChip(
-                                selected = settings.nearDuplicateTimeWindowMinutes == minutes,
-                                onClick = { stateManager.setNearDuplicateTimeWindowMinutes(minutes) },
-                                label = { Text(String.format(languageManager.getString("near_duplicate_interval_minutes"), minutes)) }
-                            )
-                        }
-                    }
-                }
-            }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DuplicateModeChipRow(
+    selected: String,
+    onSelect: (String) -> Unit,
+    languageManager: com.voxapps.expenses.domain.localization.LanguageManager
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val options = listOf(
+            ExpensesSettings.MODE_LOCAL to "duplicate_mode_local",
+            ExpensesSettings.MODE_LOCAL_AND_AI to "duplicate_mode_local_ai",
+            ExpensesSettings.MODE_AI to "duplicate_mode_ai"
+        )
+        options.forEach { (mode, labelKey) ->
+            FilterChip(
+                selected = selected == mode,
+                onClick = { onSelect(mode) },
+                label = { Text(languageManager.getString(labelKey)) }
+            )
         }
     }
 }

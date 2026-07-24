@@ -308,7 +308,7 @@ fun NotificationCaptureSettingsTab(
                                 Text(languageManager.getString("dismiss_button"))
                             }
                             Button(
-                                onClick = { stateManager.approveNotificationExpense(entry) },
+                                onClick = { stateManager.approveNotificationExpense(entry, context) },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(languageManager.getString("approve_button"))

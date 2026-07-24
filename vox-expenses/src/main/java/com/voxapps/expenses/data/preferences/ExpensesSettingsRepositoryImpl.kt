@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.voxapps.design.color.VoxColorPalette
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,11 +49,16 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
         val ATTACH_PHOTO_ON_RETRY = booleanPreferencesKey("attach_photo_on_retry")
         val LOCATION_PREFILL_ENABLED = booleanPreferencesKey("location_prefill_enabled")
-        val NEAR_DUPLICATE_DETECTION_ENABLED = booleanPreferencesKey("near_duplicate_detection_enabled")
+        val DUPLICATE_CHECK_MODE_MANUAL = stringPreferencesKey("duplicate_check_mode_manual")
+        val DUPLICATE_CHECK_MODE_AUTOMATIC = stringPreferencesKey("duplicate_check_mode_automatic")
+        val AUTO_ACCEPT_DUPLICATE_MERGES = booleanPreferencesKey("auto_accept_duplicate_merges")
         val NEAR_DUPLICATE_FUZZY_MATCH_ENABLED = booleanPreferencesKey("near_duplicate_fuzzy_match_enabled")
         val NEAR_DUPLICATE_TIME_WINDOW_MINUTES = intPreferencesKey("near_duplicate_time_window_minutes")
         val MERCHANT_CATEGORY_MEMORY_ENABLED = booleanPreferencesKey("merchant_category_memory_enabled")
         val MERCHANT_CATEGORY_MEMORY_THRESHOLD = intPreferencesKey("merchant_category_memory_threshold")
+        val WIDGET_BORDER_ENABLED = booleanPreferencesKey("widget_border_enabled")
+        val WIDGET_BORDER_THICKNESS_DP = intPreferencesKey("widget_border_thickness_dp")
+        val WIDGET_BORDER_COLOR_ARGB = longPreferencesKey("widget_border_color_argb")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -82,13 +88,18 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
             attachPhotoOnRetry = prefs[Keys.ATTACH_PHOTO_ON_RETRY] ?: false,
             locationPrefillEnabled = prefs[Keys.LOCATION_PREFILL_ENABLED] ?: true,
-            nearDuplicateDetectionEnabled = prefs[Keys.NEAR_DUPLICATE_DETECTION_ENABLED] ?: false,
+            duplicateCheckModeManual = prefs[Keys.DUPLICATE_CHECK_MODE_MANUAL] ?: ExpensesSettings.MODE_LOCAL,
+            duplicateCheckModeAutomatic = prefs[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] ?: ExpensesSettings.MODE_LOCAL,
+            autoAcceptDuplicateMerges = prefs[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] ?: false,
             nearDuplicateFuzzyMatchEnabled = prefs[Keys.NEAR_DUPLICATE_FUZZY_MATCH_ENABLED] ?: true,
             nearDuplicateTimeWindowMinutes = prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES]
                 ?: ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES,
             merchantCategoryMemoryEnabled = prefs[Keys.MERCHANT_CATEGORY_MEMORY_ENABLED] ?: false,
             merchantCategoryMemoryThreshold = prefs[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD]
-                ?: ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD
+                ?: ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD,
+            widgetBorderEnabled = prefs[Keys.WIDGET_BORDER_ENABLED] ?: true,
+            widgetBorderThicknessDp = prefs[Keys.WIDGET_BORDER_THICKNESS_DP] ?: ExpensesSettings.THICKNESS_MEDIUM,
+            widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first()
         )
     }
 
@@ -214,8 +225,16 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.LOCATION_PREFILL_ENABLED] = enabled }
     }
 
-    override suspend fun setNearDuplicateDetectionEnabled(enabled: Boolean) {
-        dataStore.edit { it[Keys.NEAR_DUPLICATE_DETECTION_ENABLED] = enabled }
+    override suspend fun setDuplicateCheckModeManual(mode: String) {
+        dataStore.edit { it[Keys.DUPLICATE_CHECK_MODE_MANUAL] = mode }
+    }
+
+    override suspend fun setDuplicateCheckModeAutomatic(mode: String) {
+        dataStore.edit { it[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] = mode }
+    }
+
+    override suspend fun setAutoAcceptDuplicateMerges(enabled: Boolean) {
+        dataStore.edit { it[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] = enabled }
     }
 
     override suspend fun setNearDuplicateFuzzyMatchEnabled(enabled: Boolean) {
@@ -232,6 +251,18 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
 
     override suspend fun setMerchantCategoryMemoryThreshold(count: Int) {
         dataStore.edit { it[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD] = count }
+    }
+
+    override suspend fun setWidgetBorderEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.WIDGET_BORDER_ENABLED] = enabled }
+    }
+
+    override suspend fun setWidgetBorderThicknessDp(thicknessDp: Int) {
+        dataStore.edit { it[Keys.WIDGET_BORDER_THICKNESS_DP] = thicknessDp }
+    }
+
+    override suspend fun setWidgetBorderColorArgb(colorArgb: Long) {
+        dataStore.edit { it[Keys.WIDGET_BORDER_COLOR_ARGB] = colorArgb }
     }
 
     override suspend fun restoreSettings(settings: ExpensesSettings) {
@@ -263,11 +294,16 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
             prefs[Keys.ATTACH_PHOTO_ON_RETRY] = settings.attachPhotoOnRetry
             prefs[Keys.LOCATION_PREFILL_ENABLED] = settings.locationPrefillEnabled
-            prefs[Keys.NEAR_DUPLICATE_DETECTION_ENABLED] = settings.nearDuplicateDetectionEnabled
+            prefs[Keys.DUPLICATE_CHECK_MODE_MANUAL] = settings.duplicateCheckModeManual
+            prefs[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] = settings.duplicateCheckModeAutomatic
+            prefs[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] = settings.autoAcceptDuplicateMerges
             prefs[Keys.NEAR_DUPLICATE_FUZZY_MATCH_ENABLED] = settings.nearDuplicateFuzzyMatchEnabled
             prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES] = settings.nearDuplicateTimeWindowMinutes
             prefs[Keys.MERCHANT_CATEGORY_MEMORY_ENABLED] = settings.merchantCategoryMemoryEnabled
             prefs[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD] = settings.merchantCategoryMemoryThreshold
+            prefs[Keys.WIDGET_BORDER_ENABLED] = settings.widgetBorderEnabled
+            prefs[Keys.WIDGET_BORDER_THICKNESS_DP] = settings.widgetBorderThicknessDp
+            prefs[Keys.WIDGET_BORDER_COLOR_ARGB] = settings.widgetBorderColorArgb
             // appCacheJson intentionally untouched — see interface doc comment.
         }
     }

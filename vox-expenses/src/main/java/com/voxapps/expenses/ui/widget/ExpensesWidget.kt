@@ -3,6 +3,7 @@ package com.voxapps.expenses.ui.widget
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -40,6 +41,7 @@ import com.voxapps.expenses.ExpensesActivity
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.R
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
 import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesUiState
@@ -84,7 +86,8 @@ class ExpensesWidget : GlanceAppWidget() {
         val addIntent = Intent(context, ExpensesActivity::class.java).apply {
             putExtra(ExpensesActivity.EXTRA_QUICK_ADD, true)
         }
-        val locale = Locale.forLanguageTag(container.settingsRepository.getSnapshot().language)
+        val settingsSnapshot = container.settingsRepository.getSnapshot()
+        val locale = Locale.forLanguageTag(settingsSnapshot.language)
 
         val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
             VoxAppsDiscovery.isCommanderInstalled(context)
@@ -97,7 +100,10 @@ class ExpensesWidget : GlanceAppWidget() {
                     languageManager = container.languageManager,
                     addIntent = addIntent,
                     locale = locale,
-                    scanEnabled = scanEnabled
+                    scanEnabled = scanEnabled,
+                    borderEnabled = settingsSnapshot.widgetBorderEnabled,
+                    borderThicknessDp = settingsSnapshot.widgetBorderThicknessDp,
+                    borderColor = Color(settingsSnapshot.widgetBorderColorArgb.toInt())
                 )
             }
         }
@@ -125,7 +131,10 @@ private fun ExpensesWidgetContent(
     languageManager: LanguageManager,
     addIntent: Intent,
     locale: Locale,
-    scanEnabled: Boolean
+    scanEnabled: Boolean,
+    borderEnabled: Boolean,
+    borderThicknessDp: Int,
+    borderColor: Color
 ) {
     Column(
         modifier = GlanceModifier
@@ -164,7 +173,7 @@ private fun ExpensesWidgetContent(
                     style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant)
                 )
             } else {
-                RecentExpensesList(expenses, languageManager, locale)
+                RecentExpensesList(expenses, languageManager, locale, borderEnabled, borderThicknessDp, borderColor)
             }
         }
 
@@ -206,7 +215,14 @@ private fun WidgetAddButton(text: String, addIntent: Intent) {
 }
 
 @Composable
-private fun RecentExpensesList(expenses: List<ExpenseWithDetails>, languageManager: LanguageManager, locale: Locale) {
+private fun RecentExpensesList(
+    expenses: List<ExpenseWithDetails>,
+    languageManager: LanguageManager,
+    locale: Locale,
+    borderEnabled: Boolean,
+    borderThicknessDp: Int,
+    borderColor: Color
+) {
     val zoneId = ZoneId.systemDefault()
     val today = LocalDate.now(zoneId)
     val recent = expenses
@@ -228,79 +244,123 @@ private fun RecentExpensesList(expenses: List<ExpenseWithDetails>, languageManag
 
     Column {
         grouped.forEach { (date, items) ->
-            val isToday = date == today
-            DaySeparatorLabel(date, today, languageManager, locale)
-            Box(
-                modifier = GlanceModifier
-                    .fillMaxWidth()
-                    .height(if (isToday) 2.dp else 1.dp)
-                    .background(if (isToday) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
-            ) {}
+            val dayContent: @Composable () -> Unit = {
+                DaySeparatorLabel(date, today, languageManager, locale)
 
-            items.forEach { item ->
-                val editIntent = Intent(context, ExpensesActivity::class.java).apply {
-                    putExtra(VoxIpc.EXTRA_EXPENSE_ID, item.expense.id)
-                }
-                val categoryColor = item.category?.let { CategoryColors.fromStored(it.colorArgb) }
-                Row(
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .cornerRadius(6.dp)
-                        .let { m -> if (categoryColor != null) m.background(categoryColor.copy(alpha = ROW_TINT_ALPHA)) else m }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .clickable(actionStartActivity(editIntent)),
-                    verticalAlignment = Alignment.Vertical.CenterVertically
-                ) {
-                    Text(
-                        text = item.expense.title?.takeIf { it.isNotBlank() } ?: item.expense.vendor ?: "—",
-                        maxLines = 1,
-                        style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                        modifier = GlanceModifier.defaultWeight()
-                    )
-                    if (!item.expense.comments.isNullOrBlank()) {
-                        Spacer(modifier = GlanceModifier.width(8.dp))
+                items.forEach { item ->
+                    val editIntent = Intent(context, ExpensesActivity::class.java).apply {
+                        putExtra(VoxIpc.EXTRA_EXPENSE_ID, item.expense.id)
+                    }
+                    val categoryColor = item.category?.let { CategoryColors.fromStored(it.colorArgb) }
+                    Row(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .cornerRadius(6.dp)
+                            .let { m -> if (categoryColor != null) m.background(categoryColor.copy(alpha = ROW_TINT_ALPHA)) else m }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .clickable(actionStartActivity(editIntent)),
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
                         Text(
-                            text = item.expense.comments,
-                            maxLines = 2,
-                            style = TextStyle(
-                                fontSize = 12.sp,
-                                color = GlanceTheme.colors.outline,
-                                textAlign = TextAlign.End
-                            ),
+                            text = item.expense.title?.takeIf { it.isNotBlank() } ?: item.expense.vendor ?: "—",
+                            maxLines = 1,
+                            style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
                             modifier = GlanceModifier.defaultWeight()
                         )
+                        if (!item.expense.comments.isNullOrBlank()) {
+                            Spacer(modifier = GlanceModifier.width(8.dp))
+                            Text(
+                                text = item.expense.comments,
+                                maxLines = 2,
+                                style = TextStyle(
+                                    fontSize = 12.sp,
+                                    color = GlanceTheme.colors.outline,
+                                    textAlign = TextAlign.End
+                                ),
+                                modifier = GlanceModifier.defaultWeight()
+                            )
+                        }
+                        Spacer(modifier = GlanceModifier.width(8.dp))
+                        Image(
+                            provider = ImageProvider(
+                                if (item.expense.direction == TransactionDirection.INCOMING) {
+                                    R.drawable.ic_arrow_inward
+                                } else {
+                                    R.drawable.ic_arrow_outward
+                                }
+                            ),
+                            contentDescription = null,
+                            modifier = GlanceModifier.size(13.dp)
+                        )
+                        Spacer(modifier = GlanceModifier.width(4.dp))
+                        Text(
+                            text = formatAmount(item.expense.totalAmount, item.expense.currencyCode),
+                            style = TextStyle(fontSize = 13.sp, color = GlanceTheme.colors.onSurfaceVariant)
+                        )
                     }
-                    Spacer(modifier = GlanceModifier.width(8.dp))
-                    Text(
-                        text = formatAmount(item.expense.totalAmount, item.expense.currencyCode),
-                        style = TextStyle(fontSize = 13.sp, color = GlanceTheme.colors.onSurfaceVariant)
-                    )
+                    Spacer(modifier = GlanceModifier.height(2.dp))
                 }
-                Spacer(modifier = GlanceModifier.height(2.dp))
             }
+
+            if (borderEnabled) {
+                // Putting padding and background on the SAME node doesn't create a transparent
+                // inset in this Glance/RemoteViews version (verified on-device: the inner
+                // background always covers its node's full bounds, padding included, regardless
+                // of padding size) — so the padding lives on its own middle layer with no
+                // background of its own, between the colored outer Box and the white inner Box.
+                Box(
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .cornerRadius(12.dp)
+                        .background(borderColor)
+                ) {
+                    Box(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .padding(borderThicknessDp.dp)
+                    ) {
+                        Column(
+                            modifier = GlanceModifier
+                                .fillMaxWidth()
+                                .cornerRadius(10.dp)
+                                .background(GlanceTheme.colors.surface)
+                                .padding(8.dp)
+                        ) {
+                            dayContent()
+                        }
+                    }
+                }
+            } else {
+                Column(modifier = GlanceModifier.fillMaxWidth().padding(8.dp)) {
+                    dayContent()
+                }
+            }
+            Spacer(modifier = GlanceModifier.height(8.dp))
         }
     }
 }
 
 private const val ROW_TINT_ALPHA = 0.18f
 
-private fun dayLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale): String =
-    if (date == today) {
-        languageManager.getString("today")
-    } else {
-        date.format(DateTimeFormatter.ofPattern("EEE, d MMM", locale))
+private fun dayLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale): String {
+    val shortDate = date.format(DateTimeFormatter.ofPattern("d MMM", locale))
+    return when (date) {
+        today -> "${languageManager.getString("today")} - $shortDate"
+        today.plusDays(1) -> "${languageManager.getString("tomorrow")} - $shortDate"
+        else -> date.format(DateTimeFormatter.ofPattern("EEE, d MMM", locale))
     }
+}
 
-/** Centered day-group separator — plain text for every day, "Today" only distinguished by a
- * bolder/larger label and a thicker divider line underneath it (see the caller), not a background
- * badge (reads too much like a button). */
+/** Centered day-card header — plain text for every day, "Today"/"Tomorrow" only distinguished by
+ * a bolder/larger label (the card's own background tint, set by the caller, is what visually
+ * separates one day's card from the next). */
 @Composable
 private fun DaySeparatorLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale) {
     val isToday = date == today
     Box(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .padding(top = 6.dp, bottom = 2.dp),
+            .padding(bottom = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(

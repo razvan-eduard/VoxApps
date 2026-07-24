@@ -32,6 +32,28 @@ class ExpenseDeduplicationRepository(context: Context) {
         dataStore.edit { it[Keys.PENDING_GROUPS] = encode(groups) }
     }
 
+    /** Adds [newGroups] to whatever's already pending instead of replacing it — a manual/scheduled
+     *  check shouldn't erase suggestions still awaiting review from a previous run or an
+     *  independently-arriving AI reply. */
+    suspend fun mergePendingGroups(newGroups: List<DuplicateGroup>) {
+        if (newGroups.isEmpty()) return
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.PENDING_GROUPS]?.let { decode(it) } ?: emptyList()
+            prefs[Keys.PENDING_GROUPS] = encode(current + newGroups)
+        }
+    }
+
+    /** Removes exactly [groups] from the pending list, leaving every other suggestion untouched —
+     *  used both by approving a subset (only the just-applied groups should disappear) and by
+     *  dismissing a single bad suggestion, as opposed to [clearPendingGroups]'s "drop everything." */
+    suspend fun removeGroups(groups: List<DuplicateGroup>) {
+        if (groups.isEmpty()) return
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.PENDING_GROUPS]?.let { decode(it) } ?: emptyList()
+            prefs[Keys.PENDING_GROUPS] = encode(current.filterNot { it in groups })
+        }
+    }
+
     suspend fun clearPendingGroups() {
         dataStore.edit { it.remove(Keys.PENDING_GROUPS) }
     }

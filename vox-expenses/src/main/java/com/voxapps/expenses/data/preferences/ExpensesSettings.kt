@@ -1,6 +1,7 @@
 package com.voxapps.expenses.data.preferences
 
 import androidx.compose.runtime.Immutable
+import com.voxapps.design.color.VoxColorPalette
 
 /**
  * Immutable snapshot of persisted Vox Expenses settings (mirrors vox-notes' NotesSettings). Fields are
@@ -95,20 +96,40 @@ data class ExpensesSettings(
      *  Independent of the OS location permission itself: granting that in onboarding only makes
      *  the feature *possible*, this is the separate "and do I actually want it" control. */
     val locationPrefillEnabled: Boolean = true,
-    /** Off by default — this is new, auto-merging behavior, not a preexisting one a user would expect
-     *  preserved. When on, a new expense that closely matches one already saved (see
-     *  [com.voxapps.expenses.data.ExpenseNearDuplicateDetector]) merges into it instead of creating a
-     *  second row — deterministic and DB-only, distinct from the AI-based cleanup review flow. */
-    val nearDuplicateDetectionEnabled: Boolean = false,
+    /** Which engine(s) [com.voxapps.expenses.state.ExpensesStateManager.requestDuplicateCheck] (the
+     *  manual "Check for duplicates now" button and its schedule) use: [MODE_LOCAL] (deterministic,
+     *  instant, no Commander dependency), [MODE_LOCAL_AND_AI] (local pre-filters same-amount
+     *  candidate clusters, the AI judges only those — see
+     *  [com.voxapps.expenses.data.ExpensesRepository.duplicateCandidateClusters]), or [MODE_AI]
+     *  (today's original behavior — the AI reasons over the entire expense list unfiltered).
+     *  Defaults to [MODE_LOCAL] so real protection is active out of the box. */
+    val duplicateCheckModeManual: String = MODE_LOCAL,
+    /** Same three engine choices as [duplicateCheckModeManual], but governing what runs
+     *  automatically every time a new expense is inserted (voice/scan/manual/notification-capture).
+     *  [MODE_LOCAL]/[MODE_LOCAL_AND_AI] both run the deterministic
+     *  [com.voxapps.expenses.data.ExpenseNearDuplicateDetector] synchronously and merge silently on a
+     *  match, same as before this setting existed; [MODE_LOCAL_AND_AI]/[MODE_AI] additionally fire an
+     *  async, scoped AI check (only the new row's own same-amount cluster, never the whole list)
+     *  whose result — if any — lands in the review list, unless [autoAcceptDuplicateMerges] is on. */
+    val duplicateCheckModeAutomatic: String = MODE_LOCAL,
+    /** Off by default (same cautious posture as every other "let AI act without review" toggle in
+     *  this app). When on, a duplicate the *scoped, insert-time* AI check confirms (see
+     *  [duplicateCheckModeAutomatic]) merges immediately instead of sitting in the review list —
+     *  the narrow same-amount-cluster scope of that specific check makes it meaningfully
+     *  higher-confidence than the AI reasoning over the whole expense list, which is why this is
+     *  worth offering as its own toggle rather than a blanket "trust the AI" switch. Never applies to
+     *  the manual "Check for duplicates now" button or the scheduled job — those always stage for
+     *  review regardless of this setting. */
+    val autoAcceptDuplicateMerges: Boolean = false,
     /** An exact-only near-duplicate check would barely differ from the existing day-granularity
      *  [com.voxapps.expenses.data.ExpenseDuplicateChecker]; fuzzy matching is what actually lets this
      *  feature catch two sources describing the same transaction with different wording, so it's the
-     *  sane default for whenever [nearDuplicateDetectionEnabled] is on. */
+     *  sane default whenever a duplicate-check mode above includes Local. */
     val nearDuplicateFuzzyMatchEnabled: Boolean = true,
     /** Minutes, not millis — converted at the point of use. */
     val nearDuplicateTimeWindowMinutes: Int = NEAR_DUP_DEFAULT_WINDOW_MINUTES,
     /** Off by default — new, override-the-LLM behavior a user must opt into, same posture as
-     *  [nearDuplicateDetectionEnabled]. When on, [com.voxapps.expenses.data.ExpensesRepository.addParsedExpense]
+     *  [autoAcceptDuplicateMerges]. When on, [com.voxapps.expenses.data.ExpensesRepository.addParsedExpense]
      *  checks [com.voxapps.expenses.data.MerchantCategoryMemoryDao] BEFORE running category
      *  resolution at all — see that function's doc comment for the exact precedence. */
     val merchantCategoryMemoryEnabled: Boolean = false,
@@ -117,7 +138,14 @@ data class ExpensesSettings(
      *  single correction could be a one-off exception, e.g. a gift bought at a usually-groceries
      *  store, not a real pattern), while 3 requires a genuinely consistent pattern before the app
      *  starts overriding the LLM/default outright. */
-    val merchantCategoryMemoryThreshold: Int = MERCHANT_MEMORY_DEFAULT_THRESHOLD
+    val merchantCategoryMemoryThreshold: Int = MERCHANT_MEMORY_DEFAULT_THRESHOLD,
+    /** Whether the home-screen widget's day-cards draw an outline border, and its
+     *  thickness/color if so — mirrors vox-calendar's identical field. Border on by default
+     *  (matches prior hardcoded behavior); color defaults to the first shared preset in
+     *  [VoxColorPalette] rather than a hardcoded hex so it stays in sync with that palette. */
+    val widgetBorderEnabled: Boolean = true,
+    val widgetBorderThicknessDp: Int = THICKNESS_MEDIUM,
+    val widgetBorderColorArgb: Long = VoxColorPalette.presets.first()
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -139,6 +167,10 @@ data class ExpensesSettings(
         const val THEME_LIGHT = "LIGHT"
         const val THEME_DARK = "DARK"
 
+        const val MODE_LOCAL = "LOCAL"
+        const val MODE_LOCAL_AND_AI = "LOCAL_AND_AI"
+        const val MODE_AI = "AI"
+
         const val NEAR_DUP_WINDOW_1M = 1
         const val NEAR_DUP_WINDOW_2M = 2
         const val NEAR_DUP_WINDOW_5M = 5
@@ -151,5 +183,9 @@ data class ExpensesSettings(
         const val MERCHANT_MEMORY_THRESHOLD_5 = 5
         const val MERCHANT_MEMORY_THRESHOLD_10 = 10
         const val MERCHANT_MEMORY_DEFAULT_THRESHOLD = MERCHANT_MEMORY_THRESHOLD_3
+
+        const val THICKNESS_THIN = 1
+        const val THICKNESS_MEDIUM = 2
+        const val THICKNESS_THICK = 4
     }
 }
