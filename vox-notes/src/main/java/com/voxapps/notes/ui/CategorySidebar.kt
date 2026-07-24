@@ -1,10 +1,6 @@
 package com.voxapps.notes.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -33,12 +28,10 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.notes.data.Category
 import com.voxapps.notes.data.CategoryPalette
 
@@ -148,54 +141,6 @@ fun CategorySidebar(
     }
 }
 
-private val SWATCH_SIZE = 28.dp
-private val SWATCH_SPACING = 8.dp
-
-/** Shared color-swatch picker row used by both the add and edit category dialogs. All 10 palette
- *  colors don't fit an AlertDialog's width at once, so this scrolls horizontally rather than
- *  clipping the tail of the palette (deep orange, brown) out of reach. Starts scrolled to whichever
- *  swatch is already selected (the randomly-picked default for a new category, or the category's own
- *  color when editing) so it isn't hidden off-screen the moment the dialog opens.
- */
-@Composable
-private fun ColorSwatchRow(selectedColor: Long, onSelect: (Long) -> Unit) {
-    val scrollState = rememberScrollState()
-    val density = LocalDensity.current
-
-    LaunchedEffect(Unit) {
-        val index = CategoryColors.palette.indexOfFirst { CategoryColors.toStored(it) == selectedColor }
-        if (index > 0) {
-            val offsetPx = with(density) { (SWATCH_SIZE + SWATCH_SPACING).toPx() * index }.toInt()
-            scrollState.scrollTo(offsetPx)
-        }
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(scrollState).padding(top = 16.dp, bottom = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(SWATCH_SPACING)
-    ) {
-        CategoryColors.palette.forEach { color ->
-            val stored = CategoryColors.toStored(color)
-            val isSelected = stored == selectedColor
-            Box(
-                modifier = Modifier
-                    .size(SWATCH_SIZE)
-                    .then(
-                        if (isSelected) Modifier.shadow(elevation = 8.dp, shape = CircleShape) else Modifier
-                    )
-                    .clip(CircleShape)
-                    .background(color)
-                    .then(
-                        if (isSelected)
-                            Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                        else Modifier
-                    )
-                    .clickable { onSelect(stored) }
-            )
-        }
-    }
-}
-
 @Composable
 private fun AddCategoryDialog(existingColors: List<Long>, onDismiss: () -> Unit, onConfirm: (String, Long) -> Unit) {
     val languageManager = LocalLanguageManager.current
@@ -213,7 +158,17 @@ private fun AddCategoryDialog(existingColors: List<Long>, onDismiss: () -> Unit,
                     label = { Text(languageManager.getString("category_name")) },
                     singleLine = true
                 )
-                ColorSwatchRow(selectedColor = selectedColor, onSelect = { selectedColor = it })
+                VoxColorSwatchPicker(
+                    selectedColor = selectedColor,
+                    onColorSelected = { selectedColor = it },
+                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
+                    customColorDialogTitle = languageManager.getString("custom_color_title"),
+                    customColorUseLabel = languageManager.getString("use_color_button"),
+                    customColorCancelLabel = languageManager.getString("cancel"),
+                    customColorHueLabel = languageManager.getString("hue_label"),
+                    customColorSaturationLabel = languageManager.getString("saturation_label"),
+                    customColorBrightnessLabel = languageManager.getString("brightness_label")
+                )
             }
         },
         confirmButton = {
@@ -245,7 +200,17 @@ private fun EditCategoryDialog(category: Category, onDismiss: () -> Unit, onConf
                     label = { Text(languageManager.getString("category_name")) },
                     singleLine = true
                 )
-                ColorSwatchRow(selectedColor = selectedColor, onSelect = { selectedColor = it })
+                VoxColorSwatchPicker(
+                    selectedColor = selectedColor,
+                    onColorSelected = { selectedColor = it },
+                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
+                    customColorDialogTitle = languageManager.getString("custom_color_title"),
+                    customColorUseLabel = languageManager.getString("use_color_button"),
+                    customColorCancelLabel = languageManager.getString("cancel"),
+                    customColorHueLabel = languageManager.getString("hue_label"),
+                    customColorSaturationLabel = languageManager.getString("saturation_label"),
+                    customColorBrightnessLabel = languageManager.getString("brightness_label")
+                )
             }
         },
         confirmButton = {

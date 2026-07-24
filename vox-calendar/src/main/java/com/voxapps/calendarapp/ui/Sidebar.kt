@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.state.CalendarViewMode
@@ -227,26 +228,17 @@ private fun LayerEditDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(12.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LayerColors.palette.forEach { color ->
-                        val stored = LayerColors.toStored(color)
-                        val isSelected = stored == selectedColor
-                        Box(
-                            modifier = Modifier
-                                .size(if (isSelected) 40.dp else 32.dp)
-                                .background(color = color, shape = CircleShape)
-                                .then(
-                                    if (isSelected) {
-                                        Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                                    } else {
-                                        Modifier
-                                    }
-                                )
-                                .clickable { selectedColor = stored }
-                        )
-                    }
-                }
+                VoxColorSwatchPicker(
+                    selectedColor = selectedColor,
+                    onColorSelected = { selectedColor = it },
+                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                    customColorDialogTitle = languageManager.getString("custom_color_title"),
+                    customColorUseLabel = languageManager.getString("use_color_button"),
+                    customColorCancelLabel = languageManager.getString("cancel"),
+                    customColorHueLabel = languageManager.getString("hue_label"),
+                    customColorSaturationLabel = languageManager.getString("saturation_label"),
+                    customColorBrightnessLabel = languageManager.getString("brightness_label")
+                )
                 if (onDelete != null) {
                     Spacer(Modifier.height(12.dp))
                     TextButton(onClick = onDelete) {

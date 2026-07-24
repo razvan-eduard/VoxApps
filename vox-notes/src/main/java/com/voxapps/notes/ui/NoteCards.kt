@@ -22,21 +22,26 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,7 +56,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.notes.data.Category
+import com.voxapps.notes.data.CategoryPalette
 import com.voxapps.notes.data.NoteWithCategory
 import kotlin.math.abs
 
@@ -109,6 +116,7 @@ fun NoteEditorCard(
     onTitleChange: (String) -> Unit,
     onTextChange: (String) -> Unit,
     onCategoryChange: (Long?) -> Unit,
+    onAddCategory: (name: String, colorArgb: Long, onResult: (Long) -> Unit) -> Unit,
     onDone: () -> Unit,
     onDelete: (() -> Unit)?
 ) {
@@ -201,26 +209,42 @@ fun NoteEditorCard(
                 CategoryCoverflow(
                     categories = categories,
                     selectedId = categoryId,
-                    onSelect = onCategoryChange
+                    onSelect = onCategoryChange,
+                    onAddCategory = onAddCategory
                 )
             }
         }
     }
 }
 
+/** One row of the coverflow: the fixed "no category" swatch, one per real [Category], or the
+ *  trailing "add a new category" swatch — a sealed type rather than reusing `Category?` since the
+ *  add-new entry isn't a selectable category at all, it opens a dialog instead. */
+private sealed interface CoverflowEntry {
+    data object None : CoverflowEntry
+    data class Existing(val category: Category) : CoverflowEntry
+    data object AddNew : CoverflowEntry
+}
+
 /**
  * Vertical "coverflow" category picker: a snapping scroller of color swatches on the right. The swatch
  * nearest the vertical center is the selection — enlarged/opaque, its neighbors shrink and fade. The
- * centered category's name shows to the left. Tapping a swatch snaps it to center + selects it.
+ * centered category's name shows to the left. Tapping a swatch snaps it to center + selects it. The
+ * last swatch is a "+" that opens an inline new-category dialog instead of selecting anything;
+ * confirming it both creates the category and selects it on the note being edited.
  */
 @Composable
 private fun CategoryCoverflow(
     categories: List<Category>,
     selectedId: Long?,
-    onSelect: (Long?) -> Unit
+    onSelect: (Long?) -> Unit,
+    onAddCategory: (name: String, colorArgb: Long, onResult: (Long) -> Unit) -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
-    val entries = remember(categories) { listOf<Category?>(null) + categories }
+    var showAddDialog by remember { mutableStateOf(false) }
+    val entries = remember(categories) {
+        listOf(CoverflowEntry.None) + categories.map(CoverflowEntry::Existing) + listOf(CoverflowEntry.AddNew)
+    }
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val itemHeight = 44.dp
@@ -235,24 +259,38 @@ private fun CategoryCoverflow(
         }
     }
 
-    // Center the current selection on first show.
-    LaunchedEffect(Unit) {
-        val idx = entries.indexOfFirst { it?.id == selectedId }.coerceAtLeast(0)
+    // Re-centers on the current selection whenever it changes from outside a user scroll too (e.g.
+    // right after creating+selecting a brand-new category), not just on first show.
+    LaunchedEffect(selectedId, entries) {
+        val idx = entries.indexOfFirst { it is CoverflowEntry.Existing && it.category.id == selectedId }.coerceAtLeast(0)
         listState.scrollToItem(idx)
     }
 
     // Commit the centered swatch as the selection once a scroll settles (skip the initial state).
+    // Landing on "add new" opens the dialog instead of selecting — it's never a real selection.
     var wasScrolling by remember { mutableStateOf(false) }
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
-            if (wasScrolling && !scrolling) onSelect(entries.getOrNull(centeredIndex)?.id)
+            if (wasScrolling && !scrolling) {
+                when (val entry = entries.getOrNull(centeredIndex)) {
+                    is CoverflowEntry.Existing -> onSelect(entry.category.id)
+                    CoverflowEntry.None -> onSelect(null)
+                    CoverflowEntry.AddNew, null -> showAddDialog = true
+                }
+            }
             wasScrolling = scrolling
         }
     }
 
+    val centeredName = when (val entry = entries.getOrNull(centeredIndex)) {
+        is CoverflowEntry.Existing -> entry.category.name
+        CoverflowEntry.None -> languageManager.getString("none")
+        CoverflowEntry.AddNew, null -> languageManager.getString("add_category")
+    }
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = entries.getOrNull(centeredIndex)?.name ?: languageManager.getString("none"),
+            text = centeredName,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.End,
@@ -267,35 +305,122 @@ private fun CategoryCoverflow(
             contentPadding = PaddingValues(vertical = (viewportHeight - itemHeight) / 2),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            itemsIndexed(entries, key = { _, it -> it?.id ?: -1L }) { index, cat ->
+            itemsIndexed(
+                entries,
+                key = { _, entry ->
+                    when (entry) {
+                        is CoverflowEntry.Existing -> entry.category.id
+                        CoverflowEntry.None -> -1L
+                        CoverflowEntry.AddNew -> -2L
+                    }
+                }
+            ) { index, entry ->
                 val info = listState.layoutInfo
                 val center = (info.viewportStartOffset + info.viewportEndOffset) / 2f
                 val itemInfo = info.visibleItemsInfo.firstOrNull { it.index == index }
                 val dist = itemInfo?.let { abs((it.offset + it.size / 2f) - center) } ?: (halfViewportPx * 2)
                 val norm = (1f - dist / halfViewportPx).coerceIn(0f, 1f)
                 val scale = 0.55f + 0.55f * norm
-                val color = cat?.let { CategoryColors.fromStored(it.colorArgb) }
-                    ?: MaterialTheme.colorScheme.surfaceVariant
-                val isSelected = cat?.id == selectedId
+                val isSelected = entry is CoverflowEntry.Existing && entry.category.id == selectedId
                 Box(
                     modifier = Modifier.height(itemHeight).fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .graphicsLayer { scaleX = scale; scaleY = scale; alpha = 0.35f + 0.65f * norm }
-                            .clip(CircleShape)
-                            .background(color)
-                            .then(
-                                if (isSelected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                                else if (cat == null) Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                                else Modifier
+                    when (entry) {
+                        is CoverflowEntry.Existing -> Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .graphicsLayer { scaleX = scale; scaleY = scale; alpha = 0.35f + 0.65f * norm }
+                                .clip(CircleShape)
+                                .background(CategoryColors.fromStored(entry.category.colorArgb))
+                                .then(
+                                    if (isSelected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                                    else Modifier
+                                )
+                                .clickable { onSelect(entry.category.id) }
+                        )
+                        CoverflowEntry.None -> Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .graphicsLayer { scaleX = scale; scaleY = scale; alpha = 0.35f + 0.65f * norm }
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                .clickable { onSelect(null) }
+                        )
+                        CoverflowEntry.AddNew -> Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .graphicsLayer { scaleX = scale; scaleY = scale; alpha = 0.35f + 0.65f * norm }
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                .clickable { showAddDialog = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = languageManager.getString("add_category"),
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            .clickable { onSelect(cat?.id) }
-                    )
+                        }
+                    }
                 }
             }
         }
     }
+
+    if (showAddDialog) {
+        NewCategoryFromNoteDialog(
+            existingColors = categories.map { it.colorArgb },
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, color ->
+                onAddCategory(name, color) { newId -> if (newId > 0) onSelect(newId) }
+                showAddDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun NewCategoryFromNoteDialog(existingColors: List<Long>, onDismiss: () -> Unit, onConfirm: (String, Long) -> Unit) {
+    val languageManager = LocalLanguageManager.current
+    var name by remember { mutableStateOf("") }
+    var selectedColor by remember(existingColors) { mutableLongStateOf(CategoryPalette.unusedOrRandomColor(existingColors)) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(languageManager.getString("add_category")) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(languageManager.getString("category_name")) },
+                    singleLine = true
+                )
+                VoxColorSwatchPicker(
+                    selectedColor = selectedColor,
+                    onColorSelected = { selectedColor = it },
+                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
+                    customColorDialogTitle = languageManager.getString("custom_color_title"),
+                    customColorUseLabel = languageManager.getString("use_color_button"),
+                    customColorCancelLabel = languageManager.getString("cancel"),
+                    customColorHueLabel = languageManager.getString("hue_label"),
+                    customColorSaturationLabel = languageManager.getString("saturation_label"),
+                    customColorBrightnessLabel = languageManager.getString("brightness_label")
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (name.isNotBlank()) onConfirm(name.trim(), selectedColor) },
+                enabled = name.isNotBlank()
+            ) { Text(languageManager.getString("save")) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
+        }
+    )
 }

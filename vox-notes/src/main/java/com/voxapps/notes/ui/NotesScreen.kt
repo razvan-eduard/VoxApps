@@ -224,6 +224,7 @@ fun NotesScreen(
                                     onTitleChange = { editing = editing!!.copy(title = it) },
                                     onTextChange = { editing = editing!!.copy(text = it) },
                                     onCategoryChange = { editing = editing!!.copy(categoryId = it) },
+                                    onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
                                     onDone = {
                                         val cleanup = commitEdit(editing, stateManager, confirmCleanup = true)
                                         if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
@@ -242,6 +243,7 @@ fun NotesScreen(
                                     onTitleChange = { editing = editing!!.copy(title = it) },
                                     onTextChange = { editing = editing!!.copy(text = it) },
                                     onCategoryChange = { editing = editing!!.copy(categoryId = it) },
+                                    onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
                                     onDone = {
                                         val cleanup = commitEdit(editing, stateManager, confirmCleanup = true)
                                         if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
@@ -277,6 +279,7 @@ fun NotesScreen(
                 onTitleChange = { editing = current.copy(title = it) },
                 onTextChange = { editing = current.copy(text = it) },
                 onCategoryChange = { editing = current.copy(categoryId = it) },
+                onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
                 onDone = {
                     val cleanup = commitEdit(editing, stateManager, confirmCleanup = true)
                     if (cleanup != null) pendingNoteCleanup = cleanup else editing = null

@@ -142,9 +142,12 @@ class NotesStateManager internal constructor(
     fun deleteNoteById(id: Long) { scope.launch { notesRepo.deleteNoteById(id) } }
 
     // --- CATEGORY CRUD (delegated) ---
-    fun addCategory(name: String, colorArgb: Long) {
+    fun addCategory(name: String, colorArgb: Long, onResult: (Long) -> Unit = {}) {
         val position = (uiStateCategories()).size
-        scope.launch { notesRepo.addCategory(name, colorArgb, position, System.currentTimeMillis()) }
+        scope.launch {
+            val id = notesRepo.addCategory(name, colorArgb, position, System.currentTimeMillis())
+            onResult(id)
+        }
     }
 
     fun updateCategory(category: Category) { scope.launch { notesRepo.updateCategory(category) } }

@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.draw.alpha
+import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.CategoryPalette
@@ -115,17 +116,28 @@ fun CategoriesSettingsTab(
         }
 
         if (addingNew) {
+            var newColor by remember { mutableStateOf(CategoryPalette.unusedOrRandomColor(categories.map { it.colorArgb })) }
             OutlinedTextField(
                 value = newName,
                 onValueChange = { newName = it },
                 label = { Text(languageManager.getString("category_name")) },
                 modifier = Modifier.fillMaxWidth()
             )
+            VoxColorSwatchPicker(
+                selectedColor = newColor,
+                onColorSelected = { newColor = it },
+                modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                customColorDialogTitle = languageManager.getString("custom_color_title"),
+                customColorUseLabel = languageManager.getString("use_color_button"),
+                customColorCancelLabel = languageManager.getString("cancel"),
+                customColorHueLabel = languageManager.getString("hue_label"),
+                customColorSaturationLabel = languageManager.getString("saturation_label"),
+                customColorBrightnessLabel = languageManager.getString("brightness_label")
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
                     if (newName.isNotBlank()) {
-                        val color = CategoryPalette.unusedOrRandomColor(categories.map { it.colorArgb })
-                        stateManager.addCategory(newName.trim(), color)
+                        stateManager.addCategory(newName.trim(), newColor)
                     }
                     newName = ""
                     addingNew = false

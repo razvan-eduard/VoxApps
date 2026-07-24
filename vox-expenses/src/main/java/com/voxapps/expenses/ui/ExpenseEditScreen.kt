@@ -78,6 +78,7 @@ import androidx.compose.ui.unit.dp
 import me.saket.telephoto.zoomable.coil.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
 import android.widget.Toast
+import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.CategoryPalette
@@ -398,12 +399,19 @@ fun ExpenseEditScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text(languageManager.getString("new_category_dropdown_item")) },
-                                leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
                                 onClick = { categoryMenuExpanded = false; showNewCategoryDialog = true }
                             )
                             categories.forEach { cat ->
                                 DropdownMenuItem(
                                     text = { Text(cat.name) },
+                                    leadingIcon = {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(14.dp)
+                                                .clip(CircleShape)
+                                                .background(CategoryColors.fromStored(cat.colorArgb))
+                                        )
+                                    },
                                     onClick = { categoryId = cat.id; categoryMenuExpanded = false }
                                 )
                             }
@@ -610,8 +618,8 @@ private fun NewCategoryDialog(
 ) {
     val languageManager = LocalLanguageManager.current
     var name by remember { mutableStateOf("") }
-    val suggestedColor = remember(existingColors, precedingColor) {
-        CategoryPalette.unusedOrRandomColor(existingColors, precedingColor)
+    var selectedColor by remember(existingColors, precedingColor) {
+        mutableStateOf(CategoryPalette.unusedOrRandomColor(existingColors, precedingColor))
     }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -624,18 +632,21 @@ private fun NewCategoryDialog(
                     label = { Text(languageManager.getString("category_name")) },
                     singleLine = true
                 )
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(20.dp).clip(CircleShape).background(CategoryColors.fromStored(suggestedColor))
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(languageManager.getString("new_category_color_auto_hint"), style = MaterialTheme.typography.bodySmall)
-                }
+                VoxColorSwatchPicker(
+                    selectedColor = selectedColor,
+                    onColorSelected = { selectedColor = it },
+                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
+                    customColorDialogTitle = languageManager.getString("custom_color_title"),
+                    customColorUseLabel = languageManager.getString("use_color_button"),
+                    customColorCancelLabel = languageManager.getString("cancel"),
+                    customColorHueLabel = languageManager.getString("hue_label"),
+                    customColorSaturationLabel = languageManager.getString("saturation_label"),
+                    customColorBrightnessLabel = languageManager.getString("brightness_label")
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name.trim(), suggestedColor) }, enabled = name.isNotBlank()) {
+            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name.trim(), selectedColor) }, enabled = name.isNotBlank()) {
                 Text(languageManager.getString("save"))
             }
         },

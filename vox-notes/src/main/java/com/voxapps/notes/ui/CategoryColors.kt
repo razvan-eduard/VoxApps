@@ -2,21 +2,11 @@ package com.voxapps.notes.ui
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import com.voxapps.design.color.VoxColorPalette
 
 /** Preset palette offered in the "Add category" dialog. Stored as a packed ARGB int (in a [Long]). */
 object CategoryColors {
-    val palette: List<Color> = listOf(
-        Color(0xFFEF5350), // red
-        Color(0xFFEC407A), // pink
-        Color(0xFFAB47BC), // purple
-        Color(0xFF5C6BC0), // indigo
-        Color(0xFF42A5F5), // blue
-        Color(0xFF26A69A), // teal
-        Color(0xFF66BB6A), // green
-        Color(0xFFFFCA28), // amber
-        Color(0xFFFF7043), // deep orange
-        Color(0xFF8D6E63)  // brown
-    )
+    val palette: List<Color> = VoxColorPalette.presets.map { Color(it.toInt()) }
 
     /**
      * Packed ARGB int widened to Long for storage — masked to the low 32 bits rather than a plain

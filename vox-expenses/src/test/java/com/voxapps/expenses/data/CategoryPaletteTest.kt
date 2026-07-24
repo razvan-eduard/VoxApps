@@ -39,26 +39,12 @@ class CategoryPaletteTest {
         }
     }
 
-    @Test
-    fun `fallback color's hue stays reasonably distant from a single existing color`() {
-        // A sparse palette (one existing category) is the case most likely to produce two
-        // near-identical hues under pure uniform-random sampling — farthest-hue selection among
-        // several candidates should keep them visually distinct almost all the time.
-        val existing = listOf(0xFFEF5350L) // red, hue ~1°
-        repeat(50) {
-            val color = CategoryPalette.unusedOrRandomColor(existing + CategoryPalette.argb.drop(1))
-            val hue = hueOf(color)
-            val existingHue = hueOf(existing.first())
-            val diff = kotlin.math.abs(hue - existingHue).let { if (it > 180f) 360f - it else it }
-            assertTrue("hue $hue too close to existing hue $existingHue (diff=$diff)", diff > 20f)
-        }
-    }
-
     // --- precedingColor adjacency (preset phase) ---
 
     @Test
     fun `preset phase prefers the unused preset farthest in hue from precedingColor`() {
-        // Only two presets left unused: red (hue ~1) and teal (hue ~175, the farthest option from red).
+        // Only two presets left unused: index 0 (hue 0°) and index 5 (hue 180°) — directly opposite,
+        // the farthest possible option from index 0.
         val used = CategoryPalette.argb.filterIndexed { index, _ -> index !in setOf(0, 5) }
         val color = CategoryPalette.unusedOrRandomColor(used, precedingColor = CategoryPalette.argb[0])
         assertEquals(CategoryPalette.argb[5], color)
@@ -78,34 +64,7 @@ class CategoryPaletteTest {
         assertEquals(CategoryPalette.argb[0], color)
     }
 
-    // --- precedingColor adjacency (random-fallback phase) ---
-
-    @Test
-    fun `random fallback stays clear of precedingColor's hue even with no other existing colors`() {
-        val preceding = 0xFFEF5350L // red, hue ~1
-        repeat(50) {
-            val color = CategoryPalette.unusedOrRandomColor(CategoryPalette.argb, precedingColor = preceding)
-            val diff = hueDiff(hueOf(color), hueOf(preceding))
-            assertTrue("hue ${hueOf(color)} too close to preceding hue (diff=$diff)", diff >= 90f)
-        }
-    }
-
-    private fun hueDiff(a: Float, b: Float): Float =
-        kotlin.math.abs(a - b).let { if (it > 180f) 360f - it else it }
-
-    private fun hueOf(argbColor: Long): Float {
-        val r = ((argbColor shr 16) and 0xFFL).toInt() / 255f
-        val g = ((argbColor shr 8) and 0xFFL).toInt() / 255f
-        val b = (argbColor and 0xFFL).toInt() / 255f
-        val max = maxOf(r, g, b)
-        val min = minOf(r, g, b)
-        val delta = max - min
-        if (delta == 0f) return 0f
-        val hue = when (max) {
-            r -> 60f * (((g - b) / delta).mod(6f))
-            g -> 60f * (((b - r) / delta) + 2f)
-            else -> 60f * (((r - g) / delta) + 4f)
-        }
-        return if (hue < 0f) hue + 360f else hue
-    }
+    // Random-fallback hue-distance behavior (including precedingColor bias) now lives in and is
+    // fully covered by VoxColorPaletteTest (:core:design) — CategoryPalette is a thin delegate, so
+    // that randomness-under-threshold case isn't re-verified here.
 }
