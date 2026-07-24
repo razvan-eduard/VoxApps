@@ -7,11 +7,14 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.voxapps.ipc.PendingLlmRequestDao
+import com.voxapps.ipc.PendingLlmRequestEntity
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
-    entities = [CalendarLayer::class, CalendarEntry::class, CalendarEntryTag::class, CalendarEntryTombstone::class],
-    version = 2,
+    entities = [CalendarLayer::class, CalendarEntry::class, CalendarEntryTag::class, CalendarEntryTombstone::class,
+        PendingLlmRequestEntity::class],
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(CalendarConverters::class)
@@ -19,6 +22,7 @@ abstract class CalendarDatabase : RoomDatabase() {
     abstract fun calendarLayerDao(): CalendarLayerDao
     abstract fun calendarEntryDao(): CalendarEntryDao
     abstract fun calendarEntryTagDao(): CalendarEntryTagDao
+    abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
 
     companion object {
         @Volatile private var instance: CalendarDatabase? = null
@@ -30,6 +34,20 @@ abstract class CalendarDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS calendar_entry_tombstones (uid TEXT NOT NULL PRIMARY KEY, deletedAt INTEGER NOT NULL)"
+                )
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS pending_llm_requests (" +
+                        "requestId TEXT NOT NULL PRIMARY KEY, " +
+                        "payloadJson TEXT NOT NULL, " +
+                        "targetPackage TEXT NOT NULL, " +
+                        "createdAt INTEGER NOT NULL, " +
+                        "attemptCount INTEGER NOT NULL, " +
+                        "lastAttemptAt INTEGER NOT NULL)"
                 )
             }
         }
@@ -46,7 +64,7 @@ abstract class CalendarDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, CalendarDatabase::class.java, "vox-calendar.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
         }
     }

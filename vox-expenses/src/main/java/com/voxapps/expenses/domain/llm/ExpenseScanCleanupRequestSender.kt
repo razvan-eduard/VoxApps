@@ -1,10 +1,7 @@
 package com.voxapps.expenses.domain.llm
 
 import android.content.Context
-import android.content.Intent
 import com.voxapps.expenses.di.ExpensesContainer
-import com.voxapps.ipc.VoxIpc
-import com.voxapps.ipc.VoxLlmRequest
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.flow.first
 
@@ -47,26 +44,23 @@ object ExpenseScanCleanupRequestSender {
             else -> LlmTasks.EXPENSE_SCAN_CLEANUP
         }
 
-        val payload = VoxLlmRequest(
-            sourcePackage = context.packageName,
-            task = taskWithMeta,
-            promptText = ExpenseScanCleanupPromptBuilder.build(
-                rawText,
-                existingCategories,
-                settings.defaultCurrency,
-                settings.language,
-                preParsedDate = preParsed.date,
-                preParsedTime = preParsed.time
-            ),
-            data = emptyList(),
-            attachmentUri = attachmentUri
-        ).toJson()
+        val promptText = ExpenseScanCleanupPromptBuilder.build(
+            rawText,
+            existingCategories,
+            settings.defaultCurrency,
+            settings.language,
+            preParsedDate = preParsed.date,
+            preParsedTime = preParsed.time
+        )
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for scan cleanup (retryOfExpenseId=$retryOfExpenseId, multimodal=${attachmentUri != null})")
-        context.sendBroadcast(
-            Intent(VoxIpc.ACTION_LLM_PROCESS)
-                .setPackage(COMMANDER_PACKAGE)
-                .putExtra(VoxIpc.EXTRA_LLM_PAYLOAD, payload)
+        container.pendingLlmRequestQueue.enqueueAndSend(
+            context = context,
+            sourcePackage = context.packageName,
+            task = taskWithMeta,
+            promptText = promptText,
+            targetPackage = COMMANDER_PACKAGE,
+            attachmentUri = attachmentUri
         )
     }
 }

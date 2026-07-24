@@ -59,7 +59,7 @@ class NotesStateManagerTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun manager() = NotesStateManager(settingsRepo, notesRepo, sessionManager, noteDeduplicationRepo)
+    private fun manager() = NotesStateManager(settingsRepo, notesRepo, sessionManager, noteDeduplicationRepo, mockk(relaxed = true))
 
     @Test
     fun `category filter narrows the visible notes`() = runTest {

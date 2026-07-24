@@ -7,6 +7,7 @@ import android.widget.Toast
 import com.voxapps.logging.Logger
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.notes.NotesApplication
 import com.voxapps.notes.domain.llm.CategoryMergeMappingParser
@@ -16,6 +17,7 @@ import com.voxapps.notes.domain.llm.NoteScanCleanupResultParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TAG = "LlmResultReceiver"
 
@@ -35,23 +37,31 @@ class LlmResultReceiver : BroadcastReceiver() {
         val result = VoxLlmResult.fromJson(intent.getStringExtra(VoxIpc.EXTRA_LLM_PAYLOAD)) ?: return
         val container = (context.applicationContext as NotesApplication).container
 
-        when (result.task) {
+        // Strip the trailing requestId VoxLlmRequestQueue.enqueueAndSend appended (if this request
+        // was routed through the queue at all — an un-tagged task is returned unchanged) before
+        // matching against the plain LlmTasks constants below.
+        val (task, requestId) = VoxLlmRequestQueue.splitRequestId(result.task)
+
+        when (task) {
             LlmTasks.CATEGORY_DEDUPLICATION -> {
                 val rawJson = result.rawJson
-                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
+                val mapping = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
+                    CategoryMergeMappingParser.parse(rawJson) ?: run {
+                        Logger.w(TAG, "Category auto-merge: could not parse LLM mapping. rawJson=$rawJson")
+                        null
+                    }
+                } else {
                     Logger.w(TAG, "Category auto-merge failed: ${result.error}")
-                    return
+                    null
                 }
-                val mapping = CategoryMergeMappingParser.parse(rawJson) ?: run {
-                    Logger.w(TAG, "Category auto-merge: could not parse LLM mapping. rawJson=$rawJson")
-                    return
-                }
-                Logger.d(TAG, "Category auto-merge: applying mapping $mapping")
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        container.notesRepository.mergeCategories(mapping)
-                        Logger.d(TAG, "Category auto-merge: mergeCategories() completed")
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        if (mapping != null) {
+                            container.notesRepository.mergeCategories(mapping)
+                            Logger.d(TAG, "Category auto-merge: mergeCategories() completed")
+                        }
                     } finally {
                         pending.finish()
                     }
@@ -59,22 +69,28 @@ class LlmResultReceiver : BroadcastReceiver() {
             }
             LlmTasks.NOTE_SCAN_CLEANUP -> {
                 val rawJson = result.rawJson
-                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
+                val cleaned = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
+                    NoteScanCleanupResultParser.parse(rawJson) ?: run {
+                        Logger.w(TAG, "Note scan cleanup: could not parse LLM result. rawJson=$rawJson")
+                        null
+                    }
+                } else {
                     Logger.w(TAG, "Note scan cleanup failed: ${result.error}")
-                    // Unconditional (not gated behind voiceSaveToastEnabled) — the only signal the
-                    // user has that the scan didn't produce a note.
-                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
-                    return
+                    null
                 }
-                val cleaned = NoteScanCleanupResultParser.parse(rawJson) ?: run {
-                    Logger.w(TAG, "Note scan cleanup: could not parse LLM result. rawJson=$rawJson")
-                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
-                    return
-                }
-                Logger.d(TAG, "Note scan cleanup: creating note title=${cleaned.title} category=${cleaned.category}")
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        if (cleaned == null) {
+                            // Unconditional (not gated behind voiceSaveToastEnabled) — the only signal
+                            // the user has that the scan didn't produce a note.
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
+                            }
+                            return@launch
+                        }
+                        Logger.d(TAG, "Note scan cleanup: creating note title=${cleaned.title} category=${cleaned.category}")
                         val settings = container.settingsRepository.getSnapshot()
                         // Same category resolution voice notes already use: match an existing
                         // category case-insensitively, else fall back to the default / auto-create.
@@ -95,21 +111,26 @@ class LlmResultReceiver : BroadcastReceiver() {
 
             LlmTasks.NOTE_DEDUPLICATION -> {
                 val rawJson = result.rawJson
-                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) {
+                val groups = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
+                    NoteDeduplicationResultParser.parse(rawJson) ?: run {
+                        Logger.w(TAG, "Note deduplication: could not parse LLM result. rawJson=$rawJson")
+                        null
+                    }
+                } else {
                     Logger.w(TAG, "Note deduplication failed: ${result.error}")
-                    return
+                    null
                 }
-                val groups = NoteDeduplicationResultParser.parse(rawJson) ?: run {
-                    Logger.w(TAG, "Note deduplication: could not parse LLM result. rawJson=$rawJson")
-                    return
-                }
-                // Deliberately NOT applied here, unlike category merge — real note content needs
-                // user confirmation, so the suggestion is stored for review in Settings instead.
-                Logger.d(TAG, "Note deduplication: storing ${groups.size} proposed group(s) for review")
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        container.noteDeduplicationRepository.setPendingGroups(groups)
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        if (groups != null) {
+                            // Deliberately NOT applied here, unlike category merge — real note
+                            // content needs user confirmation, so the suggestion is stored for
+                            // review in Settings instead.
+                            Logger.d(TAG, "Note deduplication: storing ${groups.size} proposed group(s) for review")
+                            container.noteDeduplicationRepository.setPendingGroups(groups)
+                        }
                     } finally {
                         pending.finish()
                     }
@@ -117,7 +138,21 @@ class LlmResultReceiver : BroadcastReceiver() {
             }
 
             // Future LLM-backed features add a branch here — zero Commander/:core:ipc changes needed.
-            else -> Logger.d(TAG, "Ignoring unknown LLM task: ${result.task}")
+            else -> {
+                Logger.d(TAG, "Ignoring unknown LLM task: ${result.task}")
+                // Still a definitive reply even though this task type isn't recognized — clear its
+                // queue row so it isn't retried forever for no reason.
+                if (requestId != null) {
+                    val pending = goAsync()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        } finally {
+                            pending.finish()
+                        }
+                    }
+                }
+            }
         }
     }
 }

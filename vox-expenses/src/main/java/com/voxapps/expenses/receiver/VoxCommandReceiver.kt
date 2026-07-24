@@ -52,6 +52,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                         val categoryNames = container.expensesRepository.categories.first().map { it.name }
                         ExpenseParseRequestSender.send(
                             context = context.applicationContext,
+                            queue = container.pendingLlmRequestQueue,
                             rawText = text,
                             existingCategories = categoryNames,
                             defaultCurrency = settings.defaultCurrency,

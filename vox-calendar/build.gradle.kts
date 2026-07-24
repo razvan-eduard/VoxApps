@@ -104,6 +104,10 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    // WorkManager — first scheduled job in this app (PendingLlmRequestRetryWorker), mirrors
+    // vox-expenses'/vox-notes' existing usage.
+    implementation(libs.androidx.work.runtime.ktx)
+
     // Encrypted-at-rest storage: SQLCipher for Room + Keystore-backed passphrase.
     implementation("net.zetetic:sqlcipher-android:4.17.0")
     implementation("androidx.sqlite:sqlite:2.7.0")

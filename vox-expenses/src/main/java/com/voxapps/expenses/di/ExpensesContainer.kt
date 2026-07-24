@@ -16,6 +16,7 @@ import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.SessionManager
 import com.voxapps.expenses.ui.widget.ExpensesWidget
+import com.voxapps.ipc.VoxLlmRequestQueue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +42,8 @@ class ExpensesContainer(context: Context) {
         appContext
     )
 
+    val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
+
     val pendingCategoryMergeRepository = PendingCategoryMergeRepository(appContext)
     val expenseDeduplicationRepository = ExpenseDeduplicationRepository(appContext)
     val pendingNotificationExpenseRepository = PendingNotificationExpenseRepository(appContext)
@@ -56,7 +59,8 @@ class ExpensesContainer(context: Context) {
         pendingCategoryMergeRepository,
         expenseDeduplicationRepository,
         pendingNotificationExpenseRepository,
-        spendingLimitAlertRepository
+        spendingLimitAlertRepository,
+        pendingLlmRequestQueue
     )
 
     val languageManager = LanguageManager(appContext).also {

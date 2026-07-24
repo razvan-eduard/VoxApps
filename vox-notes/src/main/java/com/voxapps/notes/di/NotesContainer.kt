@@ -11,6 +11,7 @@ import com.voxapps.notes.domain.localization.LanguageManager
 import com.voxapps.notes.state.NotesStateManager
 import com.voxapps.notes.state.SessionManager
 import com.voxapps.notes.ui.widget.NotesWidget
+import com.voxapps.ipc.VoxLlmRequestQueue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,7 @@ class NotesContainer(context: Context) {
     val notesRepository = NotesRepository(database.noteDao(), database.categoryDao())
 
     val noteDeduplicationRepository = NoteDeduplicationRepository(appContext)
+    val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 
     val sessionManager = SessionManager()
 
@@ -37,7 +39,8 @@ class NotesContainer(context: Context) {
         settingsRepository,
         notesRepository,
         sessionManager,
-        noteDeduplicationRepository
+        noteDeduplicationRepository,
+        pendingLlmRequestQueue
     )
 
     val languageManager = LanguageManager(appContext).also {

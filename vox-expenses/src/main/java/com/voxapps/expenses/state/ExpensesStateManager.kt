@@ -19,6 +19,7 @@ import com.voxapps.expenses.domain.llm.ExpenseSummary
 import com.voxapps.expenses.domain.llm.PendingCategoryMergeRepository
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
+import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +43,8 @@ class ExpensesStateManager internal constructor(
     private val pendingCategoryMergeRepo: PendingCategoryMergeRepository,
     private val expenseDeduplicationRepo: ExpenseDeduplicationRepository,
     private val pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
-    private val spendingLimitAlertRepo: SpendingLimitAlertRepository
+    private val spendingLimitAlertRepo: SpendingLimitAlertRepository,
+    private val pendingLlmRequestQueue: VoxLlmRequestQueue
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -232,7 +234,7 @@ class ExpensesStateManager internal constructor(
 
     fun requestCategoryAutoMerge(context: Context, categoryNames: List<String>) {
         val language = settingsRepo.getSnapshot().language
-        CategoryMergeRequestSender.send(context, categoryNames, language)
+        scope.launch { CategoryMergeRequestSender.send(context, pendingLlmRequestQueue, categoryNames, language) }
     }
 
     val pendingCategoryMergeMapping: Flow<Map<String, String>> = pendingCategoryMergeRepo.pendingMappingFlow
@@ -253,7 +255,7 @@ class ExpensesStateManager internal constructor(
             val expenses = expensesRepo.expenses.first().map {
                 ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime)
             }
-            ExpenseDeduplicationRequestSender.send(context, expenses)
+            ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, expenses)
         }
     }
 
@@ -329,11 +331,12 @@ class ExpensesStateManager internal constructor(
             pendingCategoryMergeRepo: PendingCategoryMergeRepository,
             expenseDeduplicationRepo: ExpenseDeduplicationRepository,
             pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
-            spendingLimitAlertRepo: SpendingLimitAlertRepository
+            spendingLimitAlertRepo: SpendingLimitAlertRepository,
+            pendingLlmRequestQueue: VoxLlmRequestQueue
         ): ExpensesStateManager = instance ?: synchronized(this) {
             instance ?: ExpensesStateManager(
                 settingsRepo, expensesRepo, sessionManager, pendingCategoryMergeRepo, expenseDeduplicationRepo,
-                pendingNotificationExpenseRepo, spendingLimitAlertRepo
+                pendingNotificationExpenseRepo, spendingLimitAlertRepo, pendingLlmRequestQueue
             ).also { instance = it }
         }
     }

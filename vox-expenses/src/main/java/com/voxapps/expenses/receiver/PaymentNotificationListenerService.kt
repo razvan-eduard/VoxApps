@@ -3,7 +3,6 @@ package com.voxapps.expenses.receiver
 import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
@@ -12,9 +11,6 @@ import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParsePromptBuilder
-import com.voxapps.ipc.VoxAppsDiscovery
-import com.voxapps.ipc.VoxIpc
-import com.voxapps.ipc.VoxLlmRequest
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,20 +29,23 @@ private const val COMMANDER_PACKAGE = "com.voxapps.commander"
  * default), before touching the notification's content at all.
  *
  * A matched notification's title/text is forwarded to Commander's generic LLM hook (task
- * [LlmTasks.NOTIFICATION_EXPENSE_PARSE]) to decide whether it's actually a transaction and, if so,
- * extract it — never parsed or acted on locally. The async reply lands in [LlmResultReceiver], which
- * either stores it for individual approve/dismiss or (if `autoAcceptNotificationExpenses` is on)
- * inserts it directly — this service never creates an expense itself either way.
+ * [LlmTasks.NOTIFICATION_EXPENSE_PARSE]) via [com.voxapps.ipc.VoxLlmRequestQueue.enqueueAndSend] to
+ * decide whether it's actually a transaction and, if so, extract it — never parsed or acted on
+ * locally. The async reply lands in [LlmResultReceiver], which either stores it for individual
+ * approve/dismiss or (if `autoAcceptNotificationExpenses` is on) inserts it directly — this service
+ * never creates an expense itself either way.
  *
  * [ProcessedNotificationKeysStore.markProcessed] is deliberately NOT called here, only once
  * [LlmResultReceiver] actually receives Commander's reply (the notification's key rides along
  * base64-encoded in the request's `task` string, the same "task:extra" convention
  * [com.voxapps.expenses.domain.llm.LlmTasks.EXPENSE_SCAN_CLEANUP] already uses for its imageName).
- * Marking it here, at dispatch time, would have meant a broadcast that's silently dropped (Commander
- * not running, killed mid-processing, no reply ever arrives) permanently "processed" this
- * notification with no expense ever created and no way to retry — exactly what happened to a real
- * missed Revolut charge that outlived several `onListenerConnected()`/`onNotificationRemoved()`
- * retries, because all of them share this same guard.
+ * This guard is now backstopped by [com.voxapps.ipc.VoxLlmRequestQueue]'s own durable row (a second,
+ * independent layer: this key-store guard exists to avoid *redundant* triage of the same still-shade
+ * notification across `onNotificationPosted`/`onListenerConnected`/`onNotificationRemoved`, while the
+ * queue's row exists to *recover* a request whose broadcast never got a reply at all — e.g. a real
+ * missed Revolut charge that outlived several catch-up retries, because Commander simply wasn't
+ * reachable at send time. See [com.voxapps.ipc.VoxLlmRequestQueue]'s doc comment for the recovery
+ * mechanism.
  */
 class PaymentNotificationListenerService : NotificationListenerService() {
 
@@ -101,11 +100,6 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val container = (applicationContext as ExpensesApplication).container
         val settings = container.settingsRepository.getSnapshot()
         if (sbn.packageName !in settings.paymentSourcePackages) return
-        // No UI on-screen to explain a silently-dropped broadcast to when this runs (fully automatic,
-        // no user tap) — just skip it. Deliberately not marked processed: if Commander gets installed
-        // later, this notification is still sitting in the shade and onListenerConnected's normal
-        // catch-up scan (or the manual "force check" button) will pick it up then.
-        if (!VoxAppsDiscovery.isCommanderInstalled(applicationContext)) return
         if (!force && processedKeys.isProcessed(sbn.key)) return
 
         val extras = sbn.notification.extras
@@ -145,16 +139,17 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // created expense turned out to trace back to (see LlmResultReceiver). Empty segment (not
         // omitted — taskParts.getOrNull(2) must stay index-stable) when there's no known bank.
         val encodedBank = knownBankName?.let { Base64.encodeToString(it.toByteArray(Charsets.UTF_8), Base64.NO_WRAP) }.orEmpty()
-        val payload = VoxLlmRequest(
+        // enqueueAndSend persists this request (and appends its own trailing requestId segment to
+        // the task string, after encodedBank) before attempting delivery — see this class's doc
+        // comment and VoxLlmRequestQueue's for why that's what actually fixes a broadcast getting
+        // silently dropped, rather than the FLAG_INCLUDE_STOPPED_PACKAGES flag alone.
+        container.pendingLlmRequestQueue.enqueueAndSend(
+            context = applicationContext,
             sourcePackage = packageName,
             task = "${LlmTasks.NOTIFICATION_EXPENSE_PARSE}:$encodedKey:$encodedBank",
             promptText = promptText,
+            targetPackage = COMMANDER_PACKAGE,
             data = listOfNotNull(title, text)
-        ).toJson()
-        sendBroadcast(
-            Intent(VoxIpc.ACTION_LLM_PROCESS)
-                .setPackage(COMMANDER_PACKAGE)
-                .putExtra(VoxIpc.EXTRA_LLM_PAYLOAD, payload)
         )
     }
 

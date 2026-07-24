@@ -10,7 +10,6 @@ import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.ipc.VoxIpc
-import com.voxapps.ipc.VoxLlmRequest
 import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.domain.llm.CalendarScanCleanupPromptBuilder
@@ -83,17 +82,14 @@ class OcrResultReceiver : BroadcastReceiver() {
                     result.aiImageUri?.let { aiUriString -> stageAndGrantAiCopy(context, aiUriString) }
                 } else null
 
-                val payload = VoxLlmRequest(
+                container.pendingLlmRequestQueue.enqueueAndSend(
+                    context = context,
                     sourcePackage = context.packageName,
                     task = LlmTasks.CALENDAR_SCAN_CLEANUP,
                     promptText = CalendarScanCleanupPromptBuilder.build(rawText, existingLayers, language),
+                    targetPackage = COMMANDER_PACKAGE,
                     data = listOf(rawText),
                     attachmentUri = attachmentUri
-                ).toJson()
-                context.sendBroadcast(
-                    Intent(VoxIpc.ACTION_LLM_PROCESS)
-                        .setPackage(COMMANDER_PACKAGE)
-                        .putExtra(VoxIpc.EXTRA_LLM_PAYLOAD, payload)
                 )
             } finally {
                 pending.finish()

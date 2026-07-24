@@ -10,6 +10,7 @@ import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.state.SessionManager
 import androidx.glance.appwidget.updateAll
 import com.voxapps.calendarapp.ui.widget.CalendarWidget
+import com.voxapps.ipc.VoxLlmRequestQueue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,8 @@ class CalendarContainer(context: Context) {
         database.calendarLayerDao(),
         database.calendarEntryTagDao()
     )
+
+    val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 
     val sessionManager = SessionManager()
 

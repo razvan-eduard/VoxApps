@@ -19,6 +19,7 @@ import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
@@ -45,9 +46,15 @@ class LlmResultReceiver : BroadcastReceiver() {
         val result = VoxLlmResult.fromJson(intent.getStringExtra(VoxIpc.EXTRA_LLM_PAYLOAD)) ?: return
         val container = (context.applicationContext as ExpensesApplication).container
 
+        // Strip the trailing requestId VoxLlmRequestQueue.enqueueAndSend appended (if this request
+        // was routed through the queue at all — an un-tagged task is returned unchanged) before any
+        // of the existing fixed-position segment parsing below, which must see exactly what each
+        // sender originally built.
+        val (task, requestId) = VoxLlmRequestQueue.splitRequestId(result.task)
+
         // Recover task and optional physical asset name (format "TASK:IMAGE_NAME" or, for a stub
         // retry, "TASK:IMAGE_NAME:RETRY_OF_EXPENSE_ID").
-        val taskParts = result.task.split(":")
+        val taskParts = task.split(":")
         val baseTask = taskParts[0]
         val storedImageName = taskParts.getOrNull(1)
         val retryOfExpenseId = taskParts.getOrNull(2)?.toLongOrNull()
@@ -66,6 +73,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
                         if (parsed != null && retryOfExpenseId != null) {
                             // Retry succeeded: update the existing stub row in place rather than
                             // inserting a new one (which would duplicate the expense and orphan
@@ -106,12 +114,16 @@ class LlmResultReceiver : BroadcastReceiver() {
 
             LlmTasks.CATEGORY_DEDUPLICATION -> {
                 val rawJson = result.rawJson
-                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) return
-                val mapping = CategoryMergeMappingParser.parse(rawJson) ?: return
+                val mapping = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
+                    CategoryMergeMappingParser.parse(rawJson)
+                } else {
+                    null
+                }
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        container.pendingCategoryMergeRepository.setPendingMapping(mapping)
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        if (mapping != null) container.pendingCategoryMergeRepository.setPendingMapping(mapping)
                     } finally {
                         pending.finish()
                     }
@@ -120,12 +132,16 @@ class LlmResultReceiver : BroadcastReceiver() {
 
             LlmTasks.EXPENSE_DEDUPLICATION -> {
                 val rawJson = result.rawJson
-                if (result.status != VoxLlmResult.STATUS_SUCCESS || rawJson == null) return
-                val groups = ExpenseDeduplicationResultParser.parse(rawJson) ?: return
+                val groups = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
+                    ExpenseDeduplicationResultParser.parse(rawJson)
+                } else {
+                    null
+                }
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        container.expenseDeduplicationRepository.setPendingGroups(groups)
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        if (groups != null) container.expenseDeduplicationRepository.setPendingGroups(groups)
                     } finally {
                         pending.finish()
                     }
@@ -164,6 +180,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
                         if (notificationKey != null) {
                             ProcessedNotificationKeysStore(context.applicationContext).markProcessed(notificationKey)
                         }
@@ -219,7 +236,22 @@ class LlmResultReceiver : BroadcastReceiver() {
                     }
                 }
             }
-            else -> Logger.d(TAG, "Ignoring unknown LLM task: ${result.task}")
+            else -> {
+                Logger.d(TAG, "Ignoring unknown LLM task: ${result.task}")
+                // Still a definitive reply even though this task type isn't recognized — clear its
+                // queue row so it isn't retried forever for no reason (retrying can't change whether
+                // this receiver understands the task).
+                if (requestId != null) {
+                    val pending = goAsync()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        } finally {
+                            pending.finish()
+                        }
+                    }
+                }
+            }
         }
     }
 

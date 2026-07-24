@@ -53,6 +53,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                         val layerNames = container.calendarRepository.layers.first().map { it.name }
                         CalendarEventParseRequestSender.send(
                             context = context.applicationContext,
+                            queue = container.pendingLlmRequestQueue,
                             // command.category carries the explicitly-named target layer, if any — the
                             // manifest's nluHint reuses this field the same way vox-expenses reuses it
                             // for "target category name". Fold it into the raw text as an explicit hint

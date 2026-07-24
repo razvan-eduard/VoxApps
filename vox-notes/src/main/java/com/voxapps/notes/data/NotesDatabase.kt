@@ -6,12 +6,19 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.voxapps.ipc.PendingLlmRequestDao
+import com.voxapps.ipc.PendingLlmRequestEntity
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
-@Database(entities = [Note::class, Category::class, NoteTombstone::class], version = 3, exportSchema = false)
+@Database(
+    entities = [Note::class, Category::class, NoteTombstone::class, PendingLlmRequestEntity::class],
+    version = 4,
+    exportSchema = false
+)
 abstract class NotesDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
     abstract fun categoryDao(): CategoryDao
+    abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
 
     companion object {
         @Volatile private var instance: NotesDatabase? = null
@@ -60,6 +67,20 @@ abstract class NotesDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS pending_llm_requests (" +
+                        "requestId TEXT NOT NULL PRIMARY KEY, " +
+                        "payloadJson TEXT NOT NULL, " +
+                        "targetPackage TEXT NOT NULL, " +
+                        "createdAt INTEGER NOT NULL, " +
+                        "attemptCount INTEGER NOT NULL, " +
+                        "lastAttemptAt INTEGER NOT NULL)"
+                )
+            }
+        }
+
         /** Room backed by SQLCipher; passphrase comes from the Keystore-backed store. */
         fun get(context: Context): NotesDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
@@ -72,7 +93,7 @@ abstract class NotesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, NotesDatabase::class.java, "vox-notes.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
         }
     }

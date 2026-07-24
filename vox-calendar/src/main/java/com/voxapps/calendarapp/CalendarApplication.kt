@@ -5,6 +5,7 @@ import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarEventParsePromptBuilder
 import com.voxapps.calendarapp.domain.llm.GeneratedParsedSchema
 import com.voxapps.calendarapp.domain.llm.LlmTasks
+import com.voxapps.calendarapp.domain.llm.PendingLlmRequestScheduler
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxSatelliteSchema
 import com.voxapps.logging.Logger
@@ -24,6 +25,7 @@ class CalendarApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = CalendarContainer(this)
+        PendingLlmRequestScheduler.ensureScheduled(this)
 
         // Apply the persisted debug-logging flags immediately (no lag waiting for the first
         // settingsFlow emission), then keep them in sync with any later Settings toggle.

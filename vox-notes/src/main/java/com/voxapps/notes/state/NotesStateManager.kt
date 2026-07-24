@@ -12,6 +12,7 @@ import com.voxapps.notes.domain.llm.NoteDeduplicationRepository
 import com.voxapps.notes.domain.llm.NoteDeduplicationRequestSender
 import com.voxapps.notes.domain.llm.NoteDeduplicationScheduler
 import com.voxapps.notes.domain.llm.NoteSummary
+import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +38,8 @@ class NotesStateManager internal constructor(
     private val settingsRepo: NotesSettingsRepository,
     private val notesRepo: NotesRepository,
     private val sessionManager: SessionManager,
-    private val noteDeduplicationRepo: NoteDeduplicationRepository
+    private val noteDeduplicationRepo: NoteDeduplicationRepository,
+    private val pendingLlmRequestQueue: VoxLlmRequestQueue
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -170,14 +172,14 @@ class NotesStateManager internal constructor(
      */
     fun requestCategoryAutoMerge(context: Context, categoryNames: List<String>) {
         val language = settingsRepo.getSnapshot().language
-        CategoryMergeRequestSender.send(context, categoryNames, language)
+        scope.launch { CategoryMergeRequestSender.send(context, pendingLlmRequestQueue, categoryNames, language) }
     }
 
     /** Fires the note-deduplication request for every current note. See [requestCategoryAutoMerge]. */
     fun requestNoteDeduplication(context: Context) {
         scope.launch {
             val notes = notesRepo.notes.first().map { NoteSummary(it.id, it.title, it.text) }
-            NoteDeduplicationRequestSender.send(context, notes)
+            NoteDeduplicationRequestSender.send(context, pendingLlmRequestQueue, notes)
         }
     }
 
@@ -209,9 +211,10 @@ class NotesStateManager internal constructor(
             settingsRepo: NotesSettingsRepository,
             notesRepo: NotesRepository,
             sessionManager: SessionManager,
-            noteDeduplicationRepo: NoteDeduplicationRepository
+            noteDeduplicationRepo: NoteDeduplicationRepository,
+            pendingLlmRequestQueue: VoxLlmRequestQueue
         ): NotesStateManager = instance ?: synchronized(this) {
-            instance ?: NotesStateManager(settingsRepo, notesRepo, sessionManager, noteDeduplicationRepo)
+            instance ?: NotesStateManager(settingsRepo, notesRepo, sessionManager, noteDeduplicationRepo, pendingLlmRequestQueue)
                 .also { instance = it }
         }
     }
