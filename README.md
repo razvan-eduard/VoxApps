@@ -11,7 +11,7 @@
     <img src="https://github.com/razvan-eduard/VoxApps/actions/workflows/release-commander.yml/badge.svg" alt="Build APK" />
   </a>
   <a href="https://github.com/razvan-eduard/VoxApps/releases">
-    <img src="https://img.shields.io/github/v/release/razvan-eduard/VoxCommander?display_name=tag" alt="Latest Release" />
+    <img src="https://img.shields.io/github/v/release/razvan-eduard/VoxApps?filter=commander-*&display_name=tag" alt="Latest Release" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" />
