@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.voxapps.design.color.VoxColorPalette
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +34,10 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        val SHOW_EVENT_DETAILS_IN_WIDGET = booleanPreferencesKey("show_event_details_in_widget")
+        val WIDGET_BORDER_ENABLED = booleanPreferencesKey("widget_border_enabled")
+        val WIDGET_BORDER_THICKNESS_DP = intPreferencesKey("widget_border_thickness_dp")
+        val WIDGET_BORDER_COLOR_ARGB = longPreferencesKey("widget_border_color_argb")
     }
 
     override val settingsFlow: Flow<CalendarSettings> = dataStore.data.map { prefs ->
@@ -47,7 +52,11 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             debugToastsEnabled = prefs[Keys.DEBUG_TOASTS_ENABLED] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: CalendarSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
-            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false
+            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+            showEventDetailsInWidget = prefs[Keys.SHOW_EVENT_DETAILS_IN_WIDGET] ?: true,
+            widgetBorderEnabled = prefs[Keys.WIDGET_BORDER_ENABLED] ?: true,
+            widgetBorderThicknessDp = prefs[Keys.WIDGET_BORDER_THICKNESS_DP] ?: CalendarSettings.THICKNESS_MEDIUM,
+            widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first()
         )
     }
 
@@ -108,6 +117,22 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
+    override suspend fun setShowEventDetailsInWidget(enabled: Boolean) {
+        dataStore.edit { it[Keys.SHOW_EVENT_DETAILS_IN_WIDGET] = enabled }
+    }
+
+    override suspend fun setWidgetBorderEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.WIDGET_BORDER_ENABLED] = enabled }
+    }
+
+    override suspend fun setWidgetBorderThicknessDp(thicknessDp: Int) {
+        dataStore.edit { it[Keys.WIDGET_BORDER_THICKNESS_DP] = thicknessDp }
+    }
+
+    override suspend fun setWidgetBorderColorArgb(colorArgb: Long) {
+        dataStore.edit { it[Keys.WIDGET_BORDER_COLOR_ARGB] = colorArgb }
+    }
+
     override suspend fun restoreSettings(settings: CalendarSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -124,6 +149,10 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
+            prefs[Keys.SHOW_EVENT_DETAILS_IN_WIDGET] = settings.showEventDetailsInWidget
+            prefs[Keys.WIDGET_BORDER_ENABLED] = settings.widgetBorderEnabled
+            prefs[Keys.WIDGET_BORDER_THICKNESS_DP] = settings.widgetBorderThicknessDp
+            prefs[Keys.WIDGET_BORDER_COLOR_ARGB] = settings.widgetBorderColorArgb
         }
     }
 

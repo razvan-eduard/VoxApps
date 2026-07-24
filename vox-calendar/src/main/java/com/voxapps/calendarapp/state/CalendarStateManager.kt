@@ -112,6 +112,14 @@ class CalendarStateManager internal constructor(
     }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
     fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
+
+    fun setShowEventDetailsInWidget(enabled: Boolean) { scope.launch { settingsRepo.setShowEventDetailsInWidget(enabled) } }
+
+    fun setWidgetBorderEnabled(enabled: Boolean) { scope.launch { settingsRepo.setWidgetBorderEnabled(enabled) } }
+
+    fun setWidgetBorderThicknessDp(thicknessDp: Int) { scope.launch { settingsRepo.setWidgetBorderThicknessDp(thicknessDp) } }
+
+    fun setWidgetBorderColorArgb(colorArgb: Long) { scope.launch { settingsRepo.setWidgetBorderColorArgb(colorArgb) } }
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }
 
     // --- SESSION LOCK ---

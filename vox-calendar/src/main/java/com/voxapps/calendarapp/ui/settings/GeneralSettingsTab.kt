@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.ui.LocalLanguageManager
+import com.voxapps.design.color.VoxColorSwatchPicker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,5 +120,70 @@ fun GeneralSettingsTab(
                 onCheckedChange = { stateManager.setAttachPhotoOnScan(it) }
             )
         }
+
+        HorizontalDivider()
+
+        // --- Show event details (description) in the home-screen widget ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("widget_show_event_details"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("widget_show_event_details_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.showEventDetailsInWidget,
+                onCheckedChange = { stateManager.setShowEventDetailsInWidget(it) }
+            )
+        }
+
+        HorizontalDivider()
+
+        // --- Widget day-card border (on/off, thickness, color) ---
+        Text(languageManager.getString("widget_border_section"), style = MaterialTheme.typography.labelLarge)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("widget_border_enabled"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("widget_border_enabled_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.widgetBorderEnabled,
+                onCheckedChange = { stateManager.setWidgetBorderEnabled(it) }
+            )
+        }
+        Text(languageManager.getString("widget_border_thickness"), style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            val thicknessOptions = listOf(
+                CalendarSettings.THICKNESS_THIN to "widget_border_thickness_thin",
+                CalendarSettings.THICKNESS_MEDIUM to "widget_border_thickness_medium",
+                CalendarSettings.THICKNESS_THICK to "widget_border_thickness_thick"
+            )
+            thicknessOptions.forEach { (thicknessDp, labelKey) ->
+                FilterChip(
+                    enabled = settings.widgetBorderEnabled,
+                    selected = settings.widgetBorderThicknessDp == thicknessDp,
+                    onClick = { stateManager.setWidgetBorderThicknessDp(thicknessDp) },
+                    label = { Text(languageManager.getString(labelKey)) }
+                )
+            }
+        }
+        Text(languageManager.getString("widget_border_color"), style = MaterialTheme.typography.bodyMedium)
+        VoxColorSwatchPicker(
+            selectedColor = settings.widgetBorderColorArgb,
+            onColorSelected = { stateManager.setWidgetBorderColorArgb(it) },
+            modifier = Modifier.padding(top = 4.dp),
+            customColorDialogTitle = languageManager.getString("custom_color_title"),
+            customColorUseLabel = languageManager.getString("use_color_button"),
+            customColorCancelLabel = languageManager.getString("cancel"),
+            customColorHueLabel = languageManager.getString("hue_label"),
+            customColorSaturationLabel = languageManager.getString("saturation_label"),
+            customColorBrightnessLabel = languageManager.getString("brightness_label")
+        )
     }
 }

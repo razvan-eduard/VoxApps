@@ -3,6 +3,7 @@ package com.voxapps.calendarapp.ui.widget
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -83,7 +84,8 @@ class CalendarWidget : GlanceAppWidget() {
         val addIntent = Intent(context, CalendarActivity::class.java).apply {
             putExtra(CalendarActivity.EXTRA_QUICK_ADD, true)
         }
-        val locale = Locale.forLanguageTag(container.settingsRepository.getSnapshot().language)
+        val settingsSnapshot = container.settingsRepository.getSnapshot()
+        val locale = Locale.forLanguageTag(settingsSnapshot.language)
         val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
             VoxAppsDiscovery.isCommanderInstalled(context)
 
@@ -94,7 +96,11 @@ class CalendarWidget : GlanceAppWidget() {
                     languageManager = container.languageManager,
                     addIntent = addIntent,
                     locale = locale,
-                    scanEnabled = scanEnabled
+                    scanEnabled = scanEnabled,
+                    showEventDetails = settingsSnapshot.showEventDetailsInWidget,
+                    borderEnabled = settingsSnapshot.widgetBorderEnabled,
+                    borderThicknessDp = settingsSnapshot.widgetBorderThicknessDp,
+                    borderColor = Color(settingsSnapshot.widgetBorderColorArgb.toInt())
                 )
             }
         }
@@ -121,7 +127,11 @@ private fun CalendarWidgetContent(
     languageManager: LanguageManager,
     addIntent: Intent,
     locale: Locale,
-    scanEnabled: Boolean
+    scanEnabled: Boolean,
+    showEventDetails: Boolean,
+    borderEnabled: Boolean,
+    borderThicknessDp: Int,
+    borderColor: Color
 ) {
     Column(
         modifier = GlanceModifier
@@ -156,7 +166,10 @@ private fun CalendarWidgetContent(
                     text = languageManager.getString("locked_title"),
                     style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant)
                 )
-                is CalendarUiState.Unlocked -> UpcomingEntriesList(uiState.entries, uiState.layers, languageManager, locale)
+                is CalendarUiState.Unlocked -> UpcomingEntriesList(
+                    uiState.entries, uiState.layers, languageManager, locale, showEventDetails,
+                    borderEnabled, borderThicknessDp, borderColor
+                )
                 else -> Unit
             }
         }
@@ -203,7 +216,11 @@ private fun UpcomingEntriesList(
     entries: List<CalendarEntryWithTags>,
     layers: List<CalendarLayer>,
     languageManager: LanguageManager,
-    locale: Locale
+    locale: Locale,
+    showEventDetails: Boolean,
+    borderEnabled: Boolean,
+    borderThicknessDp: Int,
+    borderColor: Color
 ) {
     val zoneId = ZoneId.systemDefault()
     val today = LocalDate.now(zoneId)
@@ -227,70 +244,100 @@ private fun UpcomingEntriesList(
     val context = LocalContext.current
     val layerById = layers.associateBy { it.id }
     // groupBy preserves first-seen key order, and upcoming is already sorted by startMillis, so
-    // the resulting day groups come out in chronological order for free.
-    val grouped = upcoming.groupBy { Instant.ofEpochMilli(it.entry.startMillis).atZone(zoneId).toLocalDate() }
+    // the resulting day groups come out in chronological order for free. Clamp each entry's group
+    // date to "today" at the earliest — a multi-day entry that started before today (still shown
+    // because it hasn't ended yet, per the filter above) must not produce a day-card dated in the
+    // past; it belongs in today's card instead.
+    val grouped = upcoming.groupBy { item ->
+        val startDate = Instant.ofEpochMilli(item.entry.startMillis).atZone(zoneId).toLocalDate()
+        if (startDate.isBefore(today)) today else startDate
+    }
 
     Column {
         grouped.forEach { (date, items) ->
-            val isToday = date == today
-            DaySeparatorLabel(date, today, languageManager, locale)
-            Box(
-                modifier = GlanceModifier
-                    .fillMaxWidth()
-                    .height(if (isToday) 2.dp else 1.dp)
-                    .background(if (isToday) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
-            ) {}
+            val dayContent: @Composable () -> Unit = {
+                DaySeparatorLabel(date, today, languageManager, locale)
 
-            items.forEach { item ->
-                val editIntent = Intent(context, CalendarActivity::class.java).apply {
-                    putExtra(CalendarActivity.EXTRA_EDIT_ENTRY_ID, item.entry.id)
-                }
-                val layerColor = layerById[item.entry.layerId]?.let { LayerColors.fromStored(it.colorArgb) }
-                Column(
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .cornerRadius(6.dp)
-                        .let { m -> if (layerColor != null) m.background(layerColor.copy(alpha = ROW_TINT_ALPHA)) else m }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .clickable(actionStartActivity(editIntent))
-                ) {
-                    Row(
-                        modifier = GlanceModifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Vertical.CenterVertically
+                items.forEach { item ->
+                    val editIntent = Intent(context, CalendarActivity::class.java).apply {
+                        putExtra(CalendarActivity.EXTRA_EDIT_ENTRY_ID, item.entry.id)
+                    }
+                    val layerColor = layerById[item.entry.layerId]?.let { LayerColors.fromStored(it.colorArgb) }
+                    Column(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .cornerRadius(6.dp)
+                            .let { m -> if (layerColor != null) m.background(layerColor.copy(alpha = ROW_TINT_ALPHA)) else m }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .clickable(actionStartActivity(editIntent))
                     ) {
-                        Text(
-                            text = item.entry.title,
-                            maxLines = 1,
-                            style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                            modifier = GlanceModifier.defaultWeight()
-                        )
-                        if (!item.entry.description.isNullOrBlank()) {
-                            Spacer(modifier = GlanceModifier.width(8.dp))
+                        Row(
+                            modifier = GlanceModifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Vertical.CenterVertically
+                        ) {
+                            Text(
+                                text = item.entry.title,
+                                maxLines = 1,
+                                style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
+                                modifier = GlanceModifier.defaultWeight()
+                            )
+                            if (!item.entry.allDay) {
+                                Spacer(modifier = GlanceModifier.width(8.dp))
+                                Text(
+                                    text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(item.entry.startMillis)),
+                                    style = TextStyle(fontSize = 13.sp, color = GlanceTheme.colors.onSurfaceVariant)
+                                )
+                            }
+                        }
+                        if (showEventDetails && !item.entry.description.isNullOrBlank()) {
                             Text(
                                 text = item.entry.description,
                                 maxLines = 2,
-                                style = TextStyle(
-                                    fontSize = 12.sp,
-                                    color = GlanceTheme.colors.outline,
-                                    textAlign = TextAlign.End
-                                ),
-                                modifier = GlanceModifier.defaultWeight()
+                                style = TextStyle(fontSize = 12.sp, color = GlanceTheme.colors.outline)
                             )
                         }
-                        if (!item.entry.allDay) {
-                            Spacer(modifier = GlanceModifier.width(8.dp))
-                            Text(
-                                text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(item.entry.startMillis)),
-                                style = TextStyle(fontSize = 13.sp, color = GlanceTheme.colors.onSurfaceVariant)
-                            )
+                        if (item.tagNames.isNotEmpty()) {
+                            TagChipsRow(item.tagNames)
                         }
                     }
-                    if (item.tagNames.isNotEmpty()) {
-                        TagChipsRow(item.tagNames)
+                    Spacer(modifier = GlanceModifier.height(2.dp))
+                }
+            }
+
+            if (borderEnabled) {
+                // Putting padding and background on the SAME node doesn't create a transparent
+                // inset in this Glance/RemoteViews version (verified on-device: the inner
+                // background always covers its node's full bounds, padding included, regardless
+                // of padding size) — so the padding lives on its own middle layer with no
+                // background of its own, between the colored outer Box and the white inner Box.
+                Box(
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .cornerRadius(12.dp)
+                        .background(borderColor)
+                ) {
+                    Box(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .padding(borderThicknessDp.dp)
+                    ) {
+                        Column(
+                            modifier = GlanceModifier
+                                .fillMaxWidth()
+                                .cornerRadius(10.dp)
+                                .background(GlanceTheme.colors.surface)
+                                .padding(8.dp)
+                        ) {
+                            dayContent()
+                        }
                     }
                 }
-                Spacer(modifier = GlanceModifier.height(2.dp))
+            } else {
+                Column(modifier = GlanceModifier.fillMaxWidth().padding(8.dp)) {
+                    dayContent()
+                }
             }
+            Spacer(modifier = GlanceModifier.height(8.dp))
         }
     }
 }
@@ -318,23 +365,25 @@ private fun TagChipsRow(tagNames: List<String>) {
     }
 }
 
-private fun dayLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale): String =
-    if (date == today) {
-        languageManager.getString("today")
-    } else {
-        date.format(DateTimeFormatter.ofPattern("EEE, d MMM", locale))
+private fun dayLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale): String {
+    val shortDate = date.format(DateTimeFormatter.ofPattern("d MMM", locale))
+    return when (date) {
+        today -> "${languageManager.getString("today")} - $shortDate"
+        today.plusDays(1) -> "${languageManager.getString("tomorrow")} - $shortDate"
+        else -> date.format(DateTimeFormatter.ofPattern("EEE, d MMM", locale))
     }
+}
 
-/** Centered day-group separator — plain text for every day, "Today" only distinguished by a
- * bolder/larger label and a thicker divider line underneath it (see the caller), not a background
- * badge (reads too much like a button). */
+/** Centered day-card header — plain text for every day, "Today"/"Tomorrow" only distinguished by
+ * a bolder/larger label (the card's own background tint, set by the caller, is what visually
+ * separates one day's card from the next). */
 @Composable
 private fun DaySeparatorLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale) {
     val isToday = date == today
     Box(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .padding(top = 6.dp, bottom = 2.dp),
+            .padding(bottom = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(

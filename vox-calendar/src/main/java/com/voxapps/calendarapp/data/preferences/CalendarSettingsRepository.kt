@@ -23,6 +23,10 @@ interface CalendarSettingsRepository {
     suspend fun setThemeDarkMode(mode: String)
     suspend fun setThemeColored(colored: Boolean)
     suspend fun setOnboardingCompleted(completed: Boolean)
+    suspend fun setShowEventDetailsInWidget(enabled: Boolean)
+    suspend fun setWidgetBorderEnabled(enabled: Boolean)
+    suspend fun setWidgetBorderThicknessDp(thicknessDp: Int)
+    suspend fun setWidgetBorderColorArgb(colorArgb: Long)
 
     /** Bulk overwrite, e.g. from a Vox Hub import — writes every portable field in one DataStore edit. */
     suspend fun restoreSettings(settings: CalendarSettings)

@@ -1,6 +1,7 @@
 package com.voxapps.calendarapp.data.preferences
 
 import androidx.compose.runtime.Immutable
+import com.voxapps.design.color.VoxColorPalette
 
 /**
  * Immutable snapshot of persisted Vox Calendar settings (mirrors vox-expenses' ExpensesSettings).
@@ -20,6 +21,12 @@ import androidx.compose.runtime.Immutable
  * - [onboardingCompleted]: whether the first-launch welcome + permissions flow has been shown.
  *   Device-local UI state, not portable user data — deliberately excluded from Hub export/import
  *   (mirrors vox-expenses' `appCacheJson` exclusion rationale).
+ * - [showEventDetailsInWidget]: whether the home-screen widget shows each entry's description
+ *   under its title (up to 2 lines) or just the title row. On by default to match prior behavior.
+ * - [widgetBorderEnabled]/[widgetBorderThicknessDp]/[widgetBorderColorArgb]: whether the
+ *   home-screen widget's day-cards draw an outline border, and its thickness/color if so. Border
+ *   on by default (matches prior hardcoded behavior); color defaults to the first shared preset
+ *   in [VoxColorPalette] rather than a hardcoded hex so it stays in sync with that palette.
  */
 @Immutable
 data class CalendarSettings(
@@ -33,7 +40,11 @@ data class CalendarSettings(
     val debugToastsEnabled: Boolean = false,
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,
-    val onboardingCompleted: Boolean = false
+    val onboardingCompleted: Boolean = false,
+    val showEventDetailsInWidget: Boolean = true,
+    val widgetBorderEnabled: Boolean = true,
+    val widgetBorderThicknessDp: Int = THICKNESS_MEDIUM,
+    val widgetBorderColorArgb: Long = VoxColorPalette.presets.first()
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -45,5 +56,9 @@ data class CalendarSettings(
         const val THEME_SYSTEM = "SYSTEM"
         const val THEME_LIGHT = "LIGHT"
         const val THEME_DARK = "DARK"
+
+        const val THICKNESS_THIN = 1
+        const val THICKNESS_MEDIUM = 2
+        const val THICKNESS_THICK = 4
     }
 }

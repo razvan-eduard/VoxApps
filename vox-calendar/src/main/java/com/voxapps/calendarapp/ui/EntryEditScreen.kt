@@ -207,11 +207,21 @@ fun EntryEditScreen(
                 title = {
                     Box {
                         if (title.isEmpty()) {
-                            Text(
-                                languageManager.getString("entry_title"),
-                                style = MaterialTheme.typography.titleLarge,
-                                color = LocalContentColor.current.copy(alpha = 0.5f)
-                            )
+                            // Title is the only mandatory field (see attemptSaveAndClose's blank-title
+                            // guard below) — the trailing asterisk is the only cue for that, since this
+                            // placeholder doubles as the field's label (no separate label row above it).
+                            Row {
+                                Text(
+                                    languageManager.getString("entry_title"),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = LocalContentColor.current.copy(alpha = 0.5f)
+                                )
+                                Text(
+                                    " *",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                         BasicTextField(
                             value = title,
