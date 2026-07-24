@@ -11,8 +11,8 @@ android {
         applicationId = "com.voxapps.vision"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4"
+        versionCode = 5
+        versionName = "0.5"
         // Without this, onnxruntime-android ships all 4 ABIs (~73MB combined) even though OpenCV/
         // PaddleOCR are only ever built for arm64-v8a — mirrors the same restriction Notes/Expenses/
         // Calendar already apply.
@@ -43,8 +43,14 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // material-icons-extended alone is an ~87MB unshrunk jar (thousands of icon classes);
+            // without R8, every unused one ships in the APK — this is why the DEX alone was ~53MB
+            // (56.7MB total APK). Was disabled while debugging an UnsatisfiedLinkError in the
+            // OpenCV 5.0 upgrade (see commit 9e12b6e) that turned out to be an unrelated redundant
+            // System.loadLibrary() call, already removed — proguard-rules.pro already keeps
+            // org.opencv/ai.onnxruntime/com.paddle.ocr, same as it did before this was disabled.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseKeystorePath != null) {
                 signingConfig = signingConfigs.getByName("release")
