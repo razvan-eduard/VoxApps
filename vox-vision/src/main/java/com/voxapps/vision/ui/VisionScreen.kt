@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.widget.Toast
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import com.voxapps.logging.Logger
@@ -44,6 +46,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,9 +89,12 @@ import kotlinx.coroutines.withContext
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
+import java.util.concurrent.Executors
 
-/** Throttle for the live framing analysis — running contour detection on every frame is wasteful. */
-private const val ANALYSIS_INTERVAL_MS = 400L
+/** Floor for the live framing analysis on a background executor (see LaunchedEffect(cameraController)
+ *  in [VisionScreen]) — a safety cap on CPU/battery use, not the target rate; actual throughput is
+ *  paced by how long each frame's OpenCV processing takes on the device. */
+private const val ANALYSIS_INTERVAL_MS = 80L
 
 /**
  * Maps the user's "Capture speed" setting to how many consecutive good-framing analysis ticks are
@@ -296,19 +302,30 @@ fun VisionScreen(
         cameraController.imageCaptureFlashMode = flashMode
     }
 
+    // Runs the analyzer off the main thread — Canny+findContours on a 1280x960 frame is heavy enough
+    // that doing it on the main executor (the old setup) caused a periodic hitch every analysis tick,
+    // capping how often it was safe to run detection. CameraX's ImageAnalysis defaults to
+    // STRATEGY_KEEP_ONLY_LATEST, so a background executor naturally self-paces to whatever this device
+    // can actually process — no manual throttle needed to avoid queueing up stale frames.
+    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    DisposableEffect(analysisExecutor) {
+        onDispose { analysisExecutor.shutdown() }
+    }
+
     LaunchedEffect(cameraController) {
         val stability = intArrayOf(0)
         val armed = booleanArrayOf(true)
         val lastAnalysisAt = longArrayOf(0L)
-        cameraController.setImageAnalysisAnalyzer(ContextCompat.getMainExecutor(context)) { image ->
+        val mainExecutor = ContextCompat.getMainExecutor(context)
+        cameraController.setImageAnalysisAnalyzer(analysisExecutor) { image ->
             val now = System.currentTimeMillis()
             if (!engineReadyState.value || isRecognizingState.value ||
                 pendingRequestState.value == null || // Don't auto-capture in manual/standalone mode
                 showScanSuccessState.value || // Already submitted — stop analyzing during the confirmation delay
-                now - lastAnalysisAt[0] < ANALYSIS_INTERVAL_MS
+                now - lastAnalysisAt[0] < ANALYSIS_INTERVAL_MS // Floor only, not a target rate — see above
             ) {
                 image.close()
-                if (pendingRequestState.value == null) liveBounds = null
+                if (pendingRequestState.value == null) mainExecutor.execute { liveBounds = null }
                 return@setImageAnalysisAnalyzer
             }
             lastAnalysisAt[0] = now
@@ -323,34 +340,39 @@ fun VisionScreen(
             } finally {
                 image.close()
             }
-            liveBounds = bounds
 
-            if (bounds == null) {
-                armed[0] = true
-                stability[0] = 0
-                return@setImageAnalysisAnalyzer
-            }
-            stability[0]++
-            if (armed[0] && stability[0] >= stabilityThresholdState.value) {
-                armed[0] = false
-                stability[0] = 0
-                liveBounds = null
-                Logger.d("VisionScreen", "Auto-capture triggered (stable framing)")
-                captureAndRecognize(
-                    context, scope, cameraController, container,
-                    onRecognizing = { isRecognizing = it },
-                    onResult = { text, imageUri, aiImageUri ->
-                        rawText = text
-                        lastScannedUri = imageUri
-                        // Only the "scan for another satellite" flow has a single, already-known
-                        // destination — so an auto-triggered capture there can go straight through and
-                        // hand control back to the caller. Standalone mode always needs a deliberate
-                        // tap: there's no way to auto-decide which of N installed targets to send to.
-                        // Reads the live pendingRequestState, not the closure-frozen pendingRequest
-                        // (see above).
-                        if (pendingRequestState.value != null) submitState.value(text, imageUri, aiImageUri)
-                    }
-                )
+            // Compose state writes and captureAndRecognize (which drives the camera + calls back into
+            // Compose state) hop back to main — only the OpenCV Mat work above runs off-thread.
+            mainExecutor.execute {
+                liveBounds = bounds
+
+                if (bounds == null) {
+                    armed[0] = true
+                    stability[0] = 0
+                    return@execute
+                }
+                stability[0]++
+                if (armed[0] && stability[0] >= stabilityThresholdState.value) {
+                    armed[0] = false
+                    stability[0] = 0
+                    liveBounds = null
+                    Logger.d("VisionScreen", "Auto-capture triggered (stable framing)")
+                    captureAndRecognize(
+                        context, scope, cameraController, container,
+                        onRecognizing = { isRecognizing = it },
+                        onResult = { text, imageUri, aiImageUri ->
+                            rawText = text
+                            lastScannedUri = imageUri
+                            // Only the "scan for another satellite" flow has a single, already-known
+                            // destination — so an auto-triggered capture there can go straight through and
+                            // hand control back to the caller. Standalone mode always needs a deliberate
+                            // tap: there's no way to auto-decide which of N installed targets to send to.
+                            // Reads the live pendingRequestState, not the closure-frozen pendingRequest
+                            // (see above).
+                            if (pendingRequestState.value != null) submitState.value(text, imageUri, aiImageUri)
+                        }
+                    )
+                }
             }
         }
     }
@@ -417,13 +439,22 @@ fun VisionScreen(
                     )
                     val bounds = liveBounds
                     if (bounds != null) {
+                        // Now that detection runs on a background executor (see
+                        // LaunchedEffect(cameraController) above) it updates several times a second
+                        // instead of every 400ms — animating each edge smooths those updates into
+                        // continuous motion instead of the rectangle visibly snapping each tick.
+                        val animSpec = tween<Float>(ANALYSIS_INTERVAL_MS.toInt())
+                        val animatedLeft by animateFloatAsState(bounds.left, animSpec, label = "boundsLeft")
+                        val animatedTop by animateFloatAsState(bounds.top, animSpec, label = "boundsTop")
+                        val animatedRight by animateFloatAsState(bounds.right, animSpec, label = "boundsRight")
+                        val animatedBottom by animateFloatAsState(bounds.bottom, animSpec, label = "boundsBottom")
                         Canvas(modifier = Modifier.fillMaxSize()) {
                             drawRect(
                                 color = Color(0xFF00E676),
-                                topLeft = Offset(bounds.left * size.width, bounds.top * size.height),
+                                topLeft = Offset(animatedLeft * size.width, animatedTop * size.height),
                                 size = Size(
-                                    (bounds.right - bounds.left) * size.width,
-                                    (bounds.bottom - bounds.top) * size.height
+                                    (animatedRight - animatedLeft) * size.width,
+                                    (animatedBottom - animatedTop) * size.height
                                 ),
                                 style = Stroke(width = 4.dp.toPx())
                             )
@@ -460,6 +491,21 @@ fun VisionScreen(
                                     contentDescription = languageManager.getString("manual_capture_now")
                                 )
                             }
+                        }
+                    }
+                    // isRecognizing flips true synchronously the instant a capture is triggered (see
+                    // captureAndRecognize) — well before OCR itself finishes — so this appears
+                    // immediately after the live rectangle vanishes on trigger, instead of leaving a
+                    // gap where the preview just looks like it's doing nothing. Drawn last so it also
+                    // covers the FAB above.
+                    if (pendingRequest != null && isRecognizing) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.55f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Color.White)
                         }
                     }
                 }
