@@ -48,9 +48,15 @@ import com.voxapps.expenses.receiver.PaymentNotificationListenerService
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+
+/** Cooldown after tapping "Force-check notifications now" — forceRecheckNow() is fire-and-forget
+ *  with no completion signal, so this is a simple guard against a double-tap dispatching (and, with
+ *  auto-accept on, inserting) the same currently-visible notification twice. */
+private const val FORCE_CHECK_COOLDOWN_MILLIS = 5000L
 
 /**
  * The riskiest permission this app asks for — a [android.service.notification.NotificationListenerService]
@@ -97,6 +103,13 @@ fun NotificationCaptureSettingsTab(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+
+    // forceRecheckNow() dispatches one broadcast per currently-visible notification and returns
+    // immediately (fire-and-forget, no completion callback) — the button gives no feedback beyond a
+    // toast, which invites an impatient double-tap that would dispatch (and, with auto-accept on,
+    // insert) the same notification twice. A short cooldown after each tap is the simplest guard
+    // against that, since there's no real "in flight" signal to key off instead.
+    var forceCheckOnCooldown by remember { mutableStateOf(false) }
 
     // LauncherAppsCache is warmed synchronously in ExpensesContainer's init, before any UI composes —
     // this just reads the already-populated cache rather than re-scanning on every screen open.
@@ -178,7 +191,7 @@ fun NotificationCaptureSettingsTab(
             onClick = {
                 if (!accessGranted) {
                     Toast.makeText(context, languageManager.getString("grant_notification_access_button"), Toast.LENGTH_SHORT).show()
-                } else {
+                } else if (!forceCheckOnCooldown) {
                     // Re-checks every notification currently in the shade directly against the
                     // "already processed" guard, bypassing it entirely for this explicit user action
                     // (see PaymentNotificationListenerService.forceRecheckNow's doc comment) — no
@@ -186,8 +199,14 @@ fun NotificationCaptureSettingsTab(
                     // a rebind request, which this OEM can silently block outright.
                     PaymentNotificationListenerService.forceRecheckNow(context)
                     Toast.makeText(context, languageManager.getString("force_check_notifications_started"), Toast.LENGTH_SHORT).show()
+                    forceCheckOnCooldown = true
+                    scope.launch {
+                        delay(FORCE_CHECK_COOLDOWN_MILLIS)
+                        forceCheckOnCooldown = false
+                    }
                 }
             },
+            enabled = !forceCheckOnCooldown,
             modifier = Modifier.fillMaxWidth()
         ) {
             Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
