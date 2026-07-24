@@ -74,7 +74,7 @@ for how this table and the releases behind it are built.
 |-----|-----------|---------|
 | **Vox Commander** | [`commander-v0.7-beta (pre-release)`](https://github.com/razvan-eduard/VoxApps/releases/tag/commander-v0.7-beta) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/commander-v0.7-beta/VoxCommander-commander-v0.7-beta.apk) |
 | **Vox Calendar** | [`calendar-v0.6`](https://github.com/razvan-eduard/VoxApps/releases/tag/calendar-v0.6) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/calendar-v0.6/VoxCalendar-calendar-v0.6.apk) |
-| **Vox Expenses** | [`expenses-v0.10`](https://github.com/razvan-eduard/VoxApps/releases/tag/expenses-v0.10) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/expenses-v0.10/VoxExpenses-expenses-v0.10.apk) |
+| **Vox Expenses** | [`expenses-v0.11`](https://github.com/razvan-eduard/VoxApps/releases/tag/expenses-v0.11) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/expenses-v0.11/VoxExpenses-expenses-v0.11.apk) |
 | **Vox Notes** | [`notes-v0.9`](https://github.com/razvan-eduard/VoxApps/releases/tag/notes-v0.9) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/notes-v0.9/VoxNotes-notes-v0.9.apk) |
 | **Vox Vision** | [`vision-v0.5`](https://github.com/razvan-eduard/VoxApps/releases/tag/vision-v0.5) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/vision-v0.5/VoxVision-vision-v0.5.apk) |
 | **Vox Hub** | [`hub-v0.6`](https://github.com/razvan-eduard/VoxApps/releases/tag/hub-v0.6) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/hub-v0.6/VoxHub-hub-v0.6.apk) |
