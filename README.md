@@ -1,3 +1,5 @@
+<a name="readme-top"></a>
+
 # VoxCommander
 
 <p align="center">
@@ -11,6 +13,9 @@
   <a href="https://github.com/razvan-eduard/VoxApps/releases">
     <img src="https://img.shields.io/github/v/release/razvan-eduard/VoxCommander?display_name=tag" alt="Latest Release" />
   </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" />
+  </a>
 </p>
 
 ---
@@ -18,12 +23,32 @@
 > **VoxApps monorepo.** This repository hosts several **fully independent** Android apps that can
 > optionally talk to each other: **Vox Commander** (the voice assistant this README covers), **Vox
 > Notes**, **Vox Vision**, **Vox Expenses**, **Vox Calendar**, and **Vox Hub**. Install any subset —
-> see [App overview](#app-overview) below for what each one does, or
+> see [📦 App Overview](#app-overview) below for what each one does, or
 > [`docs/APPS_OVERVIEW.md`](docs/APPS_OVERVIEW.md) for the full feature list per app.
+
+## 📖 Table of Contents
+
+- [🚀 Latest Releases](#latest-releases)
+- [✨ Features](#features)
+- [📋 Requirements](#requirements)
+- [⚡ Quick Start](#quick-start)
+  - [Run Tests](#run-tests)
+- [⬇️ Download APK](#download-apk)
+  - [First Run Setup](#first-run-setup)
+- [📦 App Overview](#app-overview)
+  - [Vox Notes](#-vox-notes)
+  - [Vox Vision](#-vox-vision)
+  - [Vox Expenses](#-vox-expenses)
+  - [Vox Calendar](#-vox-calendar)
+  - [Vox Hub](#-vox-hub)
+- [🧰 Key Technologies](#key-technologies)
+- [📚 Further Reading](#further-reading)
+- [⚠️ License](#license)
+- [🤝 Contributing](#contributing)
 
 ## Latest Releases
 
-Direct APK downloads for every app in this monorepo. See [Download APK](#download-apk) below for
+Direct APK downloads for every app in this monorepo. See [⬇️ Download APK](#download-apk) below for
 install instructions, or [`docs/TECHNICAL_DOCUMENTATION.md` §23](docs/TECHNICAL_DOCUMENTATION.md#23-release-process--ci-automation)
 for how this table and the releases behind it are built.
 
@@ -41,6 +66,16 @@ for how this table and the releases behind it are built.
 | **Vox Hub** | [`hub-v0.6`](https://github.com/razvan-eduard/VoxApps/releases/tag/hub-v0.6) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/hub-v0.6/VoxHub-hub-v0.6.apk) |
 
 <!-- LATEST_RELEASES:END -->
+
+This table is **never hand-edited** — every `release-<app>.yml` workflow publishes a GitHub Release,
+which triggers [`update-readme-releases.yml`](.github/workflows/update-readme-releases.yml) to
+regenerate the block above from whatever's actually published (see
+[`scripts/update_release_readme_links.sh`](scripts/update_release_readme_links.sh)). A manual
+`workflow_dispatch` re-run of any release workflow force-rebuilds under the current version without
+needing a version bump — see
+[`docs/TECHNICAL_DOCUMENTATION.md` §23](docs/TECHNICAL_DOCUMENTATION.md#23-release-process--ci-automation).
+
+[↖ Back to top](#readme-top)
 
 ## Features
 
@@ -63,12 +98,16 @@ for how this table and the releases behind it are built.
 - **Model Downloads** — On-demand downloads for Whisper models, Piper voices, wake word models
 - **Settings** — 7 organized tabs (General, App Manager, Services, Integrations, Models, Advanced, Permissions)
 
+[↖ Back to top](#readme-top)
+
 ## Requirements
 
 - **Android 10+** (API 29)
 - **arm64-v8a** architecture
 - ~16MB APK download (the rest — Whisper models, and mandatory native libs like Vosk/onnxruntime — downloads on first launch)
 - Optional: OpenAI API key for cloud NLU, Spotify Client ID for media control
+
+[↖ Back to top](#readme-top)
 
 ## Quick Start
 
@@ -99,10 +138,12 @@ adb shell am start -n com.voxapps.commander/.MainActivity
 
 > Swap `:vox-commander` for `:vox-notes`, `:vox-vision`, `:vox-expenses`, `:vox-calendar`, or `:vox-hub` in any of the commands above to build/install/test the companion apps instead — each has its own `assembleDebug`/`installDebug`/`testDebugUnitTest` tasks.
 
+[↖ Back to top](#readme-top)
+
 ## Download APK
 
-The [Latest Releases](#latest-releases) table above always has a direct APK link per app. Install via
-`adb install <file>.apk` or by opening the downloaded file and allowing "Install unknown apps."
+The [🚀 Latest Releases](#latest-releases) table above always has a direct APK link per app. Install
+via `adb install <file>.apk` or by opening the downloaded file and allowing "Install unknown apps."
 
 > **Note**: If you're installing more than one Vox app, stick to official releases for all of them (or
 > build all of them yourself) rather than mixing an official release of one with a self-built copy of
@@ -119,31 +160,63 @@ The [Latest Releases](#latest-releases) table above always has a direct APK link
 5. **Set default apps** — Settings → App Manager → Select apps per domain (audio, maps, messaging)
 6. **Enable wake word** — Settings → General → Toggle wake word detection
 
+[↖ Back to top](#readme-top)
+
 ## App Overview
 
 Each app below is fully independent — install any subset. Vox Commander can optionally talk to the
-others by voice once they're installed (e.g. "add a note", "add an expense"). See
-[`docs/APPS_OVERVIEW.md`](docs/APPS_OVERVIEW.md) for the full feature list of each app.
+others by voice once they're installed (e.g. "add a note", "add an expense"). Every section here is a
+short summary; see [`docs/APPS_OVERVIEW.md`](docs/APPS_OVERVIEW.md) for the full feature list of each
+app, with implementation-level detail.
 
-- **[Vox Notes](docs/APPS_OVERVIEW.md#vox-notes)** — Encrypted on-device notes app. Create notes by
-  voice through Commander or by hand; AI-assisted category cleanup and duplicate-note review (nothing
-  auto-deleted without confirmation); an optional calendar view instead of the plain list; a
-  home-screen widget; syncs with another phone via Vox Hub.
-- **[Vox Vision](docs/APPS_OVERVIEW.md#vox-vision)** — Document scanner. Camera capture with
-  auto-detected document bounds and auto-capture, on-device OCR (no network round-trip), edge-cropping,
-  then forwards the cleaned text to Vox Notes or Vox Expenses as a new record.
-- **[Vox Expenses](docs/APPS_OVERVIEW.md#vox-expenses)** — Encrypted on-device expense tracker. Three
-  ways in — voice, receipt-scan OCR, or automatic capture from bank/payment notifications — plus manual
-  entry; per-category spending limits with alerts, multi-currency reports, an optional calendar view, a
-  home-screen widget, and sync with another phone via Vox Hub.
-- **[Vox Calendar](docs/APPS_OVERVIEW.md#vox-calendar)** — Encrypted on-device calendar. Colored,
-  named layers instead of a rigid category tree; natural-language event/task creation through Commander
-  ("dentist in a week"); ICS import/export for interop with Google Calendar/Thunderbird/Apple Calendar;
-  a day view that also shows that day's Notes and Expenses; syncs with another phone via Vox Hub.
-- **[Vox Hub](docs/APPS_OVERVIEW.md#vox-hub)** — Backup, restore, and peer-to-peer sync. Zero-config
-  export/import (discovers every installed Vox app automatically), scheduled backups with retention and
-  a failure banner, and NFC-paired, Bluetooth-transferred bidirectional sync between two phones for
-  Notes/Calendar/Expenses — no cloud involved.
+### 📝 Vox Notes
+
+Encrypted on-device notes app. Create notes by voice through Commander or by hand; AI-assisted category
+cleanup and duplicate-note review (nothing auto-deleted without confirmation); a shared category color
+picker (scrollable presets + a full custom-color screen) with inline "+ New category…" creation right
+from the note editor; an optional calendar view instead of the plain list; a home-screen widget; syncs
+with another phone via Vox Hub.
+
+→ [Full feature list](docs/APPS_OVERVIEW.md#vox-notes)
+
+### 📷 Vox Vision
+
+Document scanner. Camera capture with auto-detected document bounds and auto-capture, on-device OCR (no
+network round-trip), edge-cropping, then forwards the cleaned text to Vox Notes or Vox Expenses as a new
+record.
+
+→ [Full feature list](docs/APPS_OVERVIEW.md#vox-vision)
+
+### 💸 Vox Expenses
+
+Encrypted on-device expense tracker. Three ways in — voice, receipt-scan OCR, or automatic capture from
+bank/payment notifications (now durably queued and retried, not fire-and-forget) — plus manual entry;
+transaction direction (Total vs. Received in Reports), configurable near-duplicate detection, merchant
+category memory (auto-applies a category after you correct the same vendor a few times), per-category
+spending limits with alerts, multi-currency reports, an optional calendar view, a home-screen widget,
+and sync with another phone via Vox Hub.
+
+→ [Full feature list](docs/APPS_OVERVIEW.md#vox-expenses)
+
+### 📅 Vox Calendar
+
+Encrypted on-device calendar. Colored, named layers instead of a rigid category tree; natural-language
+event/task creation through Commander ("dentist in a week"); ICS import/export for interop with Google
+Calendar/Thunderbird/Apple Calendar; a day view that also shows that day's Notes and Expenses; syncs
+with another phone via Vox Hub.
+
+→ [Full feature list](docs/APPS_OVERVIEW.md#vox-calendar)
+
+### 🗂️ Vox Hub
+
+Backup, restore, and peer-to-peer sync. Zero-config export/import (discovers every installed Vox app
+automatically), scheduled backups with retention and a failure banner, and NFC-paired,
+Bluetooth-transferred bidirectional sync between two phones for Notes/Calendar/Expenses — no cloud
+involved.
+
+→ [Full feature list](docs/APPS_OVERVIEW.md#vox-hub)
+
+[↖ Back to top](#readme-top)
 
 ## Key Technologies
 
@@ -159,21 +232,26 @@ others by voice once they're installed (e.g. "add a note", "add an expense"). Se
 | Navigation | Waze, Google Maps |
 | Search | DuckDuckGo, Wikipedia, Google News, GNews, Currents API, NewsAPI, WeatherAPI, Open-Meteo |
 
+[↖ Back to top](#readme-top)
+
 ## Further Reading
 
 - [`docs/APPS_OVERVIEW.md`](docs/APPS_OVERVIEW.md) — the full feature list for Vox Notes, Vision,
   Expenses, Calendar, and Hub.
 - [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md) — deep-dive on `vox-commander`'s
-  architecture, wake word/STT/NLU/TTS engines, intent routing, the cross-app Vox contract, and the
-  monorepo's project structure.
+  architecture, wake word/STT/NLU/TTS engines, intent routing, the cross-app Vox contract (including the
+  durable pending-request queue LLM broadcasts now go through), and the monorepo's project structure.
 - [`docs/SATELLITE_APP_GUIDE.md`](docs/SATELLITE_APP_GUIDE.md) — hands-on developer guide for building
   a new satellite app: Gradle/manifest setup, the full `:core:ipc` contract reference, the generic LLM
-  hook, collapsed extraction (`@VoxExtractionSchema`/KSP), the security model, and a debugging checklist.
+  hook (and its durable-delivery queue), collapsed extraction (`@VoxExtractionSchema`/KSP), the security
+  model, and a debugging checklist.
 - [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md) — monorepo-wide reference for
   every native/ML dependency that's a binary version-check or vendored/patched/compiled from source at
   build time (Vosk, NewPipe Extractor, Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk).
 - [`WALKTHROUGH.md`](WALKTHROUGH.md) — a point-in-time snapshot of a past stable milestone ("Mica"),
   kept as a historical reference rather than living documentation.
+
+[↖ Back to top](#readme-top)
 
 ## License
 
@@ -184,6 +262,10 @@ the MIT license above: the Spotify App Remote SDK (`vox-commander/libs/spotify-a
 Picovoice Porcupine (`ai.picovoice:porcupine-android`) — both closed-source, each under its own vendor
 license.
 
+[↖ Back to top](#readme-top)
+
 ## Contributing
 
 This is a personal project. If you'd like to contribute, please open an issue first to discuss your changes.
+
+[↖ Back to top](#readme-top)

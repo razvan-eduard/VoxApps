@@ -25,9 +25,12 @@ through Commander (`create`/`read`) or used entirely on its own.
 - **Calendar view** (optional, off by default) — a month-paged agenda view (shared `:core:calendar`
   module) instead of the plain chronological list, with a peek into the tail/head of adjacent months
   and a "Today" button; month/weekday names follow the app's own language setting, not the device locale
-- Category color picker — random colors pick the hue farthest from every existing category instead of
-  a plain random draw, the swatch row scrolls to reach all 10 presets, and the selected swatch gets a
-  clear shadow+ring indicator
+- **Category color picker** — shared `:core:design` component (also used by Vox Expenses/Vox
+  Calendar): a scrollable preset row with a clear ring around the selected swatch, plus a "Custom…"
+  entry opening a full-screen color screen (Hue/Saturation/Value sliders, live preview, the same
+  presets for a quick pick). Auto-generated presets sit at evenly-spaced hues so they're never visually
+  close to each other. The note editor's category coverflow has a trailing "+" entry that opens this
+  same picker inline, creating and immediately selecting the new category without leaving the note.
 - **Attach photo on scan** (Settings, off by default) — sends the scanned photo to the AI alongside
   the OCR text when Vision provided one and the configured engine supports images; Notes has no
   retry/stub mechanism, so unlike Vox Expenses there's no separate on-retry toggle
@@ -83,11 +86,34 @@ bank/payment notifications, or entered by hand.
   (same title/amount/currency/vendor/bank/location/comments/category, compared by calendar day rather
   than exact instant so a retried notification-capture doesn't create a second row) skips a repeat
   insert. Notifications the listener missed (OS-killed process, dropped broadcast) get a "last chance"
-  capture on dismissal, plus a manual "Force-check notifications now" button that bypasses the
-  already-processed guard for whatever's still in the notification shade. The source-app allowlist
-  picker is a shared `:core:apppicker` card (search + all/user/system filter) backed by a persisted
-  launcher-apps cache — scanned once ever, reloaded from cache on every later launch, with a manual
-  "Rescan Apps" button for when a new app is installed
+  capture on dismissal, plus a manual "Force-check notifications now" button (debounced — a rapid
+  double-tap can't dispatch the same notification twice) that bypasses the already-processed guard for
+  whatever's still in the notification shade. The source-app allowlist picker is a shared
+  `:core:apppicker` card (search + all/user/system filter) backed by a persisted launcher-apps cache —
+  scanned once ever, reloaded from cache on every later launch, with a manual "Rescan Apps" button for
+  when a new app is installed. The request to Commander is now durably queued rather than
+  fire-and-forget — see
+  [Durable delivery: the pending-request queue](TECHNICAL_DOCUMENTATION.md#durable-delivery-the-pending-request-queue-voxllmrequestqueue)
+  — so a notification is recovered automatically even if Commander was killed/stopped at capture time.
+- **Transaction direction** — every expense is tagged outgoing (money spent) or incoming (money
+  received/refunded); Reports splits **Total** (outgoing only) from **Received** instead of netting
+  them into one misleading figure. Voice/scan/notification parsing infers direction from the source
+  text (e.g. "refund," a bank credit notification) and defaults to outgoing when ambiguous.
+- **Near-duplicate detection** (Settings → Expense cleanup → Direct database matching, off by default,
+  separate from the AI-based cleanup below) — a same-day insert whose fields closely match an existing
+  row gets merged into it instead of creating a second entry, in **Exact** or **Fuzzy** match mode, with
+  a configurable time window (1–15 min) for how close in time two entries must be to be compared at all.
+  Deliberately not the LLM-hook cleanup path — this runs entirely locally, synchronously, on every
+  insert.
+- **Category color adjacency + merchant category memory** — a freshly auto-created category's color is
+  chosen to visibly differ from the most-recently-added expense's category (not just from the aggregate
+  palette), and repeatedly correcting the same vendor to the same category (configurable 1×/3×/5×/10×
+  streak, off by default) makes that mapping auto-apply to future captures for that vendor, overriding
+  whatever the LLM/default would otherwise suggest — see **Category cleanup** below for the streak
+  toggle's exact location.
+- **Inline category creation** — the category dropdown on the expense-edit screen has a
+  "+ New category..." entry that opens the picker described below without leaving the screen; the new
+  category is selected immediately on save.
 - **Line items & VAT** — optional per-item net/VAT/gross breakdown, shown only when enabled (most
   receipts don't carry this detail); a red warning banner appears if the total doesn't match the sum of
   line items, without blocking editing
@@ -96,13 +122,22 @@ bank/payment notifications, or entered by hand.
   vs. period) so typed amounts round-trip correctly regardless of device locale
 - **Spending limits** — per-category/per-period budget alerts, checked by a scheduled `WorkManager` job
   (`SpendingLimitCheckWorker`) and delivered as a system notification
-- **Category auto-merge & expense cleanup** — the same Commander LLM-hook pattern as Vox Notes: auto-merge
-  finds and merges near-duplicate categories, expense cleanup *proposes* duplicate-expense groups for the
-  user to review before anything is deleted; both run on-demand or on a schedule
+- **Category cleanup** (Settings → Categories) — "Remember merchant categories" toggle + 1×/3×/5×/10×
+  threshold chips (see above), plus the same Commander LLM-hook pattern as Vox Notes: auto-merge finds
+  and merges near-duplicate categories, on-demand or on a schedule
+- **Expense cleanup** (Settings → Expense cleanup) — two independent cards: **AI-based cleanup** (the
+  Commander LLM-hook pattern — *proposes* duplicate-expense groups for the user to review before
+  anything is deleted, on-demand or on a schedule) and **Direct database matching** (the
+  near-duplicate-detection toggle above, entirely local)
 - **Calendar view** (optional, off by default) — same shared `:core:calendar` module as Vox Notes, plus
   bank/vendor filters and an amount ascending/descending sort; sorting by amount isn't chronological, so
   it temporarily disables the calendar view (a dismissible chip restores it)
-- **Reports** — totals and by-category breakdowns, converted into the home currency
+- **Reports** — Total (outgoing)/Received split (see Transaction direction above) and by-category
+  breakdowns, converted into the home currency
+- **Category color picker** — shared `:core:design` component (also used by Vox Notes/Vox Calendar):
+  a scrollable preset row with a clear ring around the selected swatch, plus a "Custom…" entry opening a
+  full-screen color screen (Hue/Saturation/Value sliders, live preview, the same presets for a quick
+  pick). Auto-generated presets sit at evenly-spaced hues so they're never visually close to each other.
 - **Attach photo on scan / on retry** (Settings, off by default, independent toggles) — sends the
   receipt photo to the AI alongside the OCR text when Vision provided one and the configured engine
   supports images; retry (re-sending already-staged OCR text after a failed parse) is a separate
@@ -127,7 +162,8 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
   `:core:calendar` engine, Week/Day are a new local hour-of-day grid, Year is 12 compact mini-months
 - **Colored, named layers** (e.g. Personal / Work / Moon Calendar) instead of a hierarchical
   category tree — flat layers plus optional flat tags, each layer independently toggleable and
-  color-coded (random-generation + selection-ring picker mirrors Vox Expenses' category palette)
+  color-coded via the same shared `:core:design` picker Vox Expenses/Vox Notes use (scrollable
+  presets, clear selection ring, "Custom…" full-screen HSV picker with live preview)
 - **Natural-language event/task creation via Commander** — "dentist in a week" resolves the date
   entirely through the LLM (no local date-NLU), picks the right layer by name (exact match → fuzzy
   match via `:core:textmatch` → configurable default), and works for both timed events and due-date

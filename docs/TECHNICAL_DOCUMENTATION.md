@@ -23,7 +23,7 @@
 17. [Dynamic JSON Configuration](#17-dynamic-json-configuration)
 18. [Dependency Graph](#18-dependency-graph)
 19. [Vox Apps Ecosystem (Cross-App Contract)](#19-vox-apps-ecosystem-cross-app-contract)
-20. [Shared UI Modules (`:core:calendar`, `:core:apppicker`)](#20-shared-ui-modules-corecalendar-coreapppicker)
+20. [Shared UI Modules (`:core:calendar`, `:core:apppicker`, `:core:design` color picker)](#20-shared-ui-modules-corecalendar-coreapppicker-coredesign-color-picker)
 21. [Data Hygiene (`:core:datahygiene`)](#21-data-hygiene-coredatahygiene)
 22. [Project Structure](#22-project-structure)
 23. [Release Process & CI Automation](#23-release-process--ci-automation)
@@ -483,7 +483,7 @@ Fallback handler — launches any app by name or package.
 
 **The probe catalog is data-driven** — see `IntentCatalog` (`domain/intent/registry/IntentCatalog.kt`), which loads `intents.json` (root → assets → filesDir → remote, hot-reloadable like `models.json`; see §17). A compact hardcoded seed is used only if the asset read fails. The behavioral handlers (§6) stay in code; the catalog only feeds them.
 
-`AppSelectorDropdown.kt` (the domain-app picker UI used by the Default Apps / App Manager / Rules Manager screens) is now a thin wrapper around the shared `:core:apppicker` card component — it keeps Commander-specific concerns (satellite/domain-aware candidate filtering, Spotify OAuth interception) and delegates all rendering (search, all/user/system filter, checkbox+star list) to the shared module. See [§20 Shared UI Modules](#20-shared-ui-modules-corecalendar-coreapppicker).
+`AppSelectorDropdown.kt` (the domain-app picker UI used by the Default Apps / App Manager / Rules Manager screens) is now a thin wrapper around the shared `:core:apppicker` card component — it keeps Commander-specific concerns (satellite/domain-aware candidate filtering, Spotify OAuth interception) and delegates all rendering (search, all/user/system filter, checkbox+star list) to the shared module. See [§20 Shared UI Modules](#20-shared-ui-modules-corecalendar-coreapppicker-coredesign-color-picker).
 
 ### AppResolver (`AppResolver.kt`)
 
@@ -1220,9 +1220,13 @@ apps declare voice capabilities and Commander routes commands to them. There is 
 
 ### The contract module (`:core:ipc`)
 
-A tiny Android library (`com.voxapps.ipc`) with **no logic** — just the wire protocol, compiled into
-each app (like `:core:design` for theming). A third-party developer can integrate by mirroring these
-strings locally; nothing forces a dependency.
+A small Android library (`com.voxapps.ipc`), mostly the wire protocol (DTOs + constants, no logic),
+compiled into each app (like `:core:design` for theming). A third-party developer can integrate by
+mirroring these strings locally; nothing forces a dependency. One exception to "no logic": it also
+hosts `VoxLlmRequestQueue` and the durable pending-request Room entity/DAO — see
+[Durable delivery: the pending-request queue](#durable-delivery-the-pending-request-queue-voxllmrequestqueue) —
+since that's genuinely shared behavior every satellite's outbound `ACTION_LLM_PROCESS` sends benefit
+from, not per-app wire-format constants.
 
 | Type | Purpose |
 |------|---------|
@@ -1364,6 +1368,68 @@ satellite ──VoxLlmRequest{sourcePackage,task,promptText}──▶ LlmHookRec
                                                                                       │
 satellite  ◀── VoxLlmResult{task,status,rawJson} ── explicit intent, signature-checked ┘
 ```
+
+### Durable delivery: the pending-request queue (`VoxLlmRequestQueue`)
+
+The generic LLM hook above is fire-and-forget: a plain `sendBroadcast` with no delivery confirmation.
+A real-world incident (a bank-notification capture in Vox Expenses sitting unprocessed for hours)
+traced to two compounding causes, both now fixed:
+
+- **Android's stopped-app broadcast gate.** Since Android 3.1, an app the OS considers "stopped"
+  (force-stopped, or killed by an OEM background-management feature — this device family's
+  "AppFastHibernation" is one observed example) does not receive **any** broadcast, implicit or
+  explicit, permission-guarded or not — `setPackage()` targeting alone does not bypass this. Every
+  sender of `ACTION_LLM_PROCESS` (and Commander's own `ACTION_LLM_RESULT` reply) now adds
+  `Intent.FLAG_INCLUDE_STOPPED_PACKAGES`, which tells the OS to wake the target and deliver anyway.
+- **No retry on top of that.** Even with the flag, Commander might not be installed yet, or could be
+  killed again mid-processing. `VoxLlmRequestQueue` (`core/ipc/src/main/java/com/voxapps/ipc/`) adds
+  durability: `enqueueAndSend()` persists a `PendingLlmRequestEntity` row (Room) **before** attempting
+  delivery, so a dropped broadcast is recoverable instead of silently lost.
+
+```
+satellite: queue.enqueueAndSend(task, promptText, ...)
+   │
+   ├─▶ INSERT pending_llm_requests (requestId, payloadJson, attemptCount=1, ...)   [durable]
+   │
+   └─▶ sendBroadcast(ACTION_LLM_PROCESS, FLAG_INCLUDE_STOPPED_PACKAGES, task="...:<requestId>")
+                                                                                          │
+                                                              (Commander processes, replies)
+                                                                                          │
+satellite's LlmResultReceiver ◀── VoxLlmResult{task="...:<requestId>", status, rawJson} ──┘
+   │
+   ├─▶ VoxLlmRequestQueue.splitRequestId(result.task) → (originalTask, requestId)
+   ├─▶ queue.markFulfilled(requestId)   — DELETE the pending row (success OR error reply — either
+   │                                      is a definitive answer, not a delivery failure)
+   └─▶ existing per-task-type handling, keyed on originalTask exactly as before
+
+PendingLlmRequestRetryWorker (WorkManager, every 15 min — the platform's minimum periodic interval):
+   for each row with lastAttemptAt older than 5 min and attemptCount < 50:
+      increment attemptCount, re-dispatch with the same requestId
+   (a row that exhausts 50 attempts — ~12.5h at this cadence — is left in place, not deleted, so
+   it stays inspectable rather than silently vanishing a second time)
+```
+
+**The `requestId` tagging convention** is what makes this retrofit not require any change to
+Commander: `enqueueAndSend()` appends a fresh UUID as a new trailing `:`-delimited segment on `task`
+(the same encoding convention senders already used for other metadata, e.g. the notification-key/bank
+segments in Vox Expenses' `PaymentNotificationListenerService`). Since `VoxLlmResult.task` already
+round-trips its input verbatim — Commander never interprets `task`, only echoes it back — the
+requestId comes back for free. `VoxLlmRequestQueue.splitRequestId()` peels that trailing segment off
+(recognizing it by UUID shape; a task with no such segment is returned unchanged) before any existing
+task-type dispatch logic runs, so per-app `LlmResultReceiver`s only need one new line
+(`splitRequestId` + `markFulfilled`) at the top of their existing `when` block, not a rewrite.
+
+**Not gated on Commander being installed.** `enqueueAndSend()` durably inserts and attempts dispatch
+regardless of `VoxAppsDiscovery.isCommanderInstalled()` — a send to a genuinely uninstalled package is
+a harmless no-op. This means "Commander installed later" self-heals for free via the next scheduled
+retry pass, with no `PACKAGE_ADDED` listener needed.
+
+**Per-app wiring** — each app's own `@Database` includes `PendingLlmRequestEntity::class` in its
+`entities` list and exposes `abstract fun pendingLlmRequestDao(): PendingLlmRequestDao` (the entity/DAO
+interface live once in `:core:ipc`; Room generates the DAO implementation wherever the concrete
+`@Database` is compiled — a standard supported pattern for library-module entities, not a
+cross-process shared table). Each app also registers `PendingLlmRequestScheduler.ensureScheduled(this)`
+in its `Application.onCreate()`, alongside its other `WorkManager` schedules.
 
 ### Collapsed satellite extraction flow (`VoxSatelliteSchema`)
 
@@ -1666,11 +1732,40 @@ delta-then-merge).
 
 ---
 
-## 20. Shared UI Modules (`:core:calendar`, `:core:apppicker`)
+## 20. Shared UI Modules (`:core:calendar`, `:core:apppicker`, `:core:design` color picker)
 
-Two more code-reuse-only Gradle modules (same shape as `:core:design`/`:core:wakeword` — no shared
-runtime state, just library code compiled into whichever apps need it) shipped alongside the Vox Apps
-ecosystem work: a calendar/agenda view and a searchable app picker, each consumed by more than one app.
+Three code-reuse-only Gradle modules (no shared runtime state, just library code compiled into
+whichever apps need it) shipped alongside the Vox Apps ecosystem work: a calendar/agenda view, a
+searchable app picker, and a color picker — each consumed by more than one app.
+
+### `:core:design` color picker
+
+Vox Notes, Vox Expenses, and Vox Calendar each independently grew their own category/layer color
+picker (a hardcoded 10-preset list + hue-distance math + a swatch row), triplicated almost
+byte-for-byte. Consolidated into `core/design/src/main/java/com/voxapps/design/color/`:
+
+- **`VoxColorPalette`** (pure Kotlin, no Compose dependency) — `presets: List<Long>` generated at
+  evenly-spaced hues (`360° / presetCount`) rather than hand-picked hex values, so every pair is
+  guaranteed a minimum hue separation instead of relying on named colors that can drift close together
+  despite looking distinct by name (the previous hand-picked list had three presets within 15° of each
+  other). `unusedOrRandomColor(existingColors, precedingColor?)` — the first unused preset (preferring
+  whichever is farthest in hue from an optional `precedingColor`, e.g. the most-recently-added sibling
+  category), or once presets are exhausted, a freshly generated hue biased to stay far from both the
+  aggregate of existing colors and `precedingColor` specifically.
+- **`VoxColorSwatchPicker`** (Compose) — a `LazyRow` of preset swatches with a genuinely clear
+  selection indicator (an outer ring with visible padding around an inset solid circle, not a border
+  drawn on the swatch's own edge) plus a trailing "Custom…" entry.
+- **`VoxCustomColorDialog`** (Compose) — a full-screen `Dialog` opened from "Custom…": a live preview,
+  the same preset row for a quick-pick shortcut (tapping one seeds the sliders from that color), then
+  Hue/Saturation/Value sliders. Every label defaults to English but accepts caller-supplied strings
+  (mirrors `rememberRequirementGate`'s `requiredMessage` param convention) so each app can localize via
+  its own `LocalLanguageManager` — no shared translations file exists.
+
+Each app's own `*Palette.kt` (`CategoryPalette` in Notes/Expenses, `CalendarLayerPalette` in Calendar)
+is now a thin delegating wrapper over `VoxColorPalette`, and each app's own `*Colors.kt`
+(`CategoryColors`/`LayerColors`) still owns `toStored`/`fromStored` (called from many non-picker
+render sites) but derives `palette` from `VoxColorPalette.presets` — kept as separate per-app objects
+rather than inlining every call site, so existing references didn't need touching.
 
 ### `:core:calendar`
 

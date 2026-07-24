@@ -38,7 +38,9 @@ handful of constants.
 - **A generic LLM hook** exists independent of the create/extraction flow — any satellite can fire
   an arbitrary prompt at VoxCommander's LLM and get an async JSON reply, for use cases that aren't
   "the user just spoke a command" (e.g. cleaning up OCR text from a scanned receipt, deduplicating
-  categories). See §7.
+  categories). See §7. **Route it through `VoxLlmRequestQueue`, not a raw broadcast** — a plain
+  `sendBroadcast` to a stopped/OEM-killed Commander is silently dropped with no error, which is exactly
+  what happened to a real production notification-capture flow before this queue existed.
 - **TTS is VoxCommander's job, not yours.** For `OP_READ`, you return text; VoxCommander decides to
   speak it. Your app never calls a "speak" hook itself.
 - **`:core:datahygiene`** gives every satellite a shared way to clean garbage out of a record before
@@ -728,26 +730,68 @@ sanitizing inside the repository would incorrectly also rewrite imported data.
 ## 7. The generic LLM hook (outside the create/extraction flow)
 
 For anything that isn't "the user just spoke a command to me" — e.g. cleaning up noisy OCR text, or
-deduplicating a list your app already has — fire an arbitrary prompt at VoxCommander directly:
+deduplicating a list your app already has — fire an arbitrary prompt at VoxCommander directly. **Route
+this through `VoxLlmRequestQueue` (`:core:ipc`), not a raw `sendBroadcast`** — a plain broadcast to a
+"stopped" Commander (force-stopped, or killed by an OEM background-management feature) is silently
+dropped by the OS before its receiver ever runs, with no crash and no error to catch; this bit a real
+production notification-capture flow (see
+[Durable delivery: the pending-request queue](TECHNICAL_DOCUMENTATION.md#durable-delivery-the-pending-request-queue-voxllmrequestqueue)
+for the full "why"). The queue fixes it two ways: it sets `FLAG_INCLUDE_STOPPED_PACKAGES` so the
+broadcast wakes a stopped Commander, and it persists the request first so a periodic worker can retry
+it if no reply ever comes:
 
 ```kotlin
-val payload = VoxLlmRequest(
+// One-time setup: add the entity/DAO to your own @Database, then construct the queue once
+// (e.g. in your DI container) — see §1's file pointers below for a concrete example.
+@Database(entities = [/* your entities */, PendingLlmRequestEntity::class], version = N, ...)
+abstract class YourDatabase : RoomDatabase() {
+    abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
+}
+
+val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
+
+// Sending (suspend — enqueueAndSend persists before it dispatches):
+pendingLlmRequestQueue.enqueueAndSend(
+    context = context,
     sourcePackage = context.packageName,
     task = LlmTasks.YOUR_TASK,
     promptText = yourPromptString,
+    targetPackage = VoxAppsDiscovery.COMMANDER_PACKAGE,
     data = listOfNotNull(someContextString)
-).toJson()
-
-context.sendBroadcast(
-    Intent(VoxIpc.ACTION_LLM_PROCESS)
-        .setPackage(VoxAppsDiscovery.COMMANDER_PACKAGE)
-        .putExtra(VoxIpc.EXTRA_LLM_PAYLOAD, payload)
 )
 ```
 
-This is fully async/fire-and-forget — no pending-request state to track. The reply lands in your
-`LlmResultReceiver` (§6.4's dispatch pattern) whenever VoxCommander's process next gets to it; if
-your app was killed in between, the reply just arrives the next time your process is running.
+The reply lands in your `LlmResultReceiver` (§6.4's dispatch pattern) whenever VoxCommander's process
+next gets to it; if your app was killed in between, the reply just arrives the next time your process
+is running. Two additions to that receiver, both at the top of `onReceive` before your existing
+per-task dispatch:
+
+```kotlin
+val (task, requestId) = VoxLlmRequestQueue.splitRequestId(result.task)   // task, not result.task, below
+when (task) {
+    LlmTasks.YOUR_TASK -> {
+        // ... your existing parsing/dispatch, unchanged ...
+        if (requestId != null) pendingLlmRequestQueue.markFulfilled(requestId)  // success OR error reply
+    }
+}
+```
+
+Finally, register a 15-minute retry worker (WorkManager's minimum periodic interval) in your
+`Application.onCreate()` — copy `PendingLlmRequestScheduler`/`PendingLlmRequestRetryWorker` from any
+existing satellite (§11 has the file paths) verbatim; there's nothing app-specific about them beyond
+the `YourApplication` cast inside the worker.
+
+If you genuinely don't need durability for a specific one-off send (rare — most `ACTION_LLM_PROCESS`
+traffic benefits from it), the raw pattern still works and is what the queue calls internally:
+
+```kotlin
+context.sendBroadcast(
+    Intent(VoxIpc.ACTION_LLM_PROCESS)
+        .setPackage(VoxAppsDiscovery.COMMANDER_PACKAGE)
+        .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)   // still worth setting even bypassing the queue
+        .putExtra(VoxIpc.EXTRA_LLM_PAYLOAD, VoxLlmRequest(context.packageName, LlmTasks.YOUR_TASK, yourPromptString).toJson())
+)
+```
 
 If you need to attach a photo (`attachmentUri`), check multimodal support first — don't assume it:
 
@@ -878,3 +922,13 @@ understanding it helps when debugging "my app doesn't show up" or "the wrong app
   path) and edit screen (`ExpenseEditScreen.kt` / `EntryEditScreen.kt` / `NotesScreen.kt`, manual-UI path).
 - **VoxCommander's consuming side**: `vox-commander/src/main/java/com/voxapps/commander/domain/integration/`
   (`VoxSatelliteRegistry.kt`, `SatelliteRouting.kt`) and `.../domain/intent/handler/SatelliteHandler.kt`.
+- **Durable LLM request queue** (§7): `core/ipc/src/main/java/com/voxapps/ipc/` (`PendingLlmRequestEntity.kt`,
+  `PendingLlmRequestDao.kt`, `VoxLlmRequestQueue.kt`) plus a per-app `PendingLlmRequestScheduler.kt`/
+  `PendingLlmRequestRetryWorker.kt` pair — copy from any of `vox-expenses/.../domain/llm/`,
+  `vox-notes/.../domain/llm/`, or `vox-calendar/.../domain/llm/` verbatim. A `LlmResultReceiver.kt` in
+  any of those three shows the `splitRequestId`/`markFulfilled` wiring on the receiving end.
+- **Reusable category/tag color picker**: `core/design/src/main/java/com/voxapps/design/color/`
+  (`VoxColorPalette.kt`, `VoxColorPicker.kt`) — see
+  [`TECHNICAL_DOCUMENTATION.md` §20](TECHNICAL_DOCUMENTATION.md#20-shared-ui-modules-corecalendar-coreapppicker-coredesign-color-picker)
+  for the design, and any of the three apps' category/layer add-edit dialogs for a consuming example
+  (e.g. `vox-expenses/.../ui/settings/CategoriesSettingsTab.kt`).
