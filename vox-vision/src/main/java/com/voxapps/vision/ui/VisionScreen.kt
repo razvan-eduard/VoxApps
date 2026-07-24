@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -426,6 +427,39 @@ fun VisionScreen(
                                 ),
                                 style = Stroke(width = 4.dp.toPx())
                             )
+                        }
+                    }
+                    // Manual bypass for the hands-free auto-capture flow (pendingRequest != null
+                    // only — standalone mode already has its own per-target capture buttons below).
+                    // Hidden once showScanSuccess is up so it can't queue a second capture underneath
+                    // the confirmation overlay (a plain Box there doesn't consume touches on its own).
+                    if (pendingRequest != null && !showScanSuccess) {
+                        FloatingActionButton(
+                            onClick = {
+                                if (!isRecognizing) {
+                                    captureAndRecognize(
+                                        context, scope, cameraController, container,
+                                        onRecognizing = { isRecognizing = it },
+                                        onResult = { text, imageUri, aiImageUri ->
+                                            rawText = text
+                                            lastScannedUri = imageUri
+                                            submitState.value(text, imageUri, aiImageUri)
+                                        }
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 20.dp)
+                        ) {
+                            if (isRecognizing) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(
+                                    Icons.Filled.PhotoCamera,
+                                    contentDescription = languageManager.getString("manual_capture_now")
+                                )
+                            }
                         }
                     }
                 }

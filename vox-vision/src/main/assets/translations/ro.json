@@ -9,6 +9,7 @@
   "send_button": "Trimite",
   "scanning_for_caller": "Scanezi pentru %1$s",
   "scan_successful": "Scanare reușită",
+  "manual_capture_now": "Scanează acum",
   "camera_permission_required": "Este necesară permisiunea pentru cameră ca să poți scana.",
   "settings": "Setări",
   "press_back_again_to_exit": "Apasă din nou înapoi pentru a ieși",
