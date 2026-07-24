@@ -26,7 +26,9 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 
-/** Defaults that only matter for expenses created headlessly via Commander's voice pipeline. */
+/** Category-resolution defaults for expenses created via Commander's LLM pipeline — both voice
+ *  ("Vox, add expense...") and scan cleanup share this same resolution logic (see
+ *  ExpensesRepository.addParsedExpense), so these settings govern both, not just voice. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoiceSettingsTab(

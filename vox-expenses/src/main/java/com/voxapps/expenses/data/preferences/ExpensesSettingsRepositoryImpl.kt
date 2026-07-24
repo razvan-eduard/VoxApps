@@ -48,6 +48,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
         val ATTACH_PHOTO_ON_RETRY = booleanPreferencesKey("attach_photo_on_retry")
+        val AUTO_OPEN_SCANNED_EXPENSE = booleanPreferencesKey("auto_open_scanned_expense")
         val LOCATION_PREFILL_ENABLED = booleanPreferencesKey("location_prefill_enabled")
         val DUPLICATE_CHECK_MODE_MANUAL = stringPreferencesKey("duplicate_check_mode_manual")
         val DUPLICATE_CHECK_MODE_AUTOMATIC = stringPreferencesKey("duplicate_check_mode_automatic")
@@ -87,6 +88,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
             attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
             attachPhotoOnRetry = prefs[Keys.ATTACH_PHOTO_ON_RETRY] ?: false,
+            autoOpenScannedExpense = prefs[Keys.AUTO_OPEN_SCANNED_EXPENSE] ?: false,
             locationPrefillEnabled = prefs[Keys.LOCATION_PREFILL_ENABLED] ?: true,
             duplicateCheckModeManual = prefs[Keys.DUPLICATE_CHECK_MODE_MANUAL] ?: ExpensesSettings.MODE_LOCAL,
             duplicateCheckModeAutomatic = prefs[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] ?: ExpensesSettings.MODE_LOCAL,
@@ -221,6 +223,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.ATTACH_PHOTO_ON_RETRY] = enabled }
     }
 
+    override suspend fun setAutoOpenScannedExpense(enabled: Boolean) {
+        dataStore.edit { it[Keys.AUTO_OPEN_SCANNED_EXPENSE] = enabled }
+    }
+
     override suspend fun setLocationPrefillEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.LOCATION_PREFILL_ENABLED] = enabled }
     }
@@ -293,6 +299,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.THEME_COLORED] = settings.themeColored
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
             prefs[Keys.ATTACH_PHOTO_ON_RETRY] = settings.attachPhotoOnRetry
+            prefs[Keys.AUTO_OPEN_SCANNED_EXPENSE] = settings.autoOpenScannedExpense
             prefs[Keys.LOCATION_PREFILL_ENABLED] = settings.locationPrefillEnabled
             prefs[Keys.DUPLICATE_CHECK_MODE_MANUAL] = settings.duplicateCheckModeManual
             prefs[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] = settings.duplicateCheckModeAutomatic

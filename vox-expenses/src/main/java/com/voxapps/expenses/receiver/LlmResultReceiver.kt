@@ -85,7 +85,16 @@ class LlmResultReceiver : BroadcastReceiver() {
                             // the original stub).
                             updateExpenseFromRetry(context.applicationContext, container, parsed, retryOfExpenseId)
                         } else if (parsed != null) {
-                            createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName)
+                            val newId = createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName)
+                            // Scan-specific — a voice-created expense keeps today's behavior (an
+                            // optional save toast, no forced navigation). Commander's cleanup is
+                            // async, so this is the earliest point Expenses can actually know the
+                            // expense exists to navigate to it.
+                            if (baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && newId > 0 &&
+                                container.settingsRepository.getSnapshot().autoOpenScannedExpense
+                            ) {
+                                launchExpensesForEdit(context.applicationContext, newId)
+                            }
                         } else if (baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && retryOfExpenseId != null) {
                             // Retry failed again — a stub row already exists for this id, leave it
                             // as-is (isStub stays true) so it can be retried again later.
@@ -273,12 +282,16 @@ class LlmResultReceiver : BroadcastReceiver() {
         }
     }
 
+    /** Returns the id of the newly-inserted row (or [NEAR_DUPLICATE_MERGED_RESULT]/a negative
+     *  failure sentinel — see [com.voxapps.expenses.data.ExpensesRepository.addExpense]'s doc
+     *  comment) so callers can decide whether to navigate to it (see the scan-specific auto-open
+     *  branch where this is called). */
     private suspend fun createExpenseFromParsed(
         appContext: Context,
         container: ExpensesContainer,
         parsed: ExpenseParseResultParser.Parsed,
         imageName: String?
-    ) {
+    ): Long {
         val settings: ExpensesSettings = container.settingsRepository.getSnapshot()
         val items = parsed.items.map {
             ExpenseLineItem(
@@ -358,6 +371,8 @@ class LlmResultReceiver : BroadcastReceiver() {
         } else if (newExpenseId == NEAR_DUPLICATE_MERGED_RESULT) {
             Logger.d(TAG, "Parsed expense merged into an existing near-duplicate instead of inserting")
         }
+
+        return newExpenseId
     }
 
     private suspend fun updateExpenseFromRetry(

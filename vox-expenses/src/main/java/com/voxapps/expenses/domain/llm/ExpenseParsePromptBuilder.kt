@@ -60,7 +60,11 @@ object ExpenseParsePromptBuilder {
               - If unitPrice known: subtotal = quantity * unitPrice.
               - totalAmount = sum of all item subtotals (or the cumulative amount on fallback).
 
-            STEP 4 — CATEGORIZATION: $categoriesLine Match exactly if possible, or suggest a new one.
+            STEP 4 — CATEGORIZATION: $categoriesLine Match exactly if possible. Otherwise suggest a
+            new one, but only ever a short, common-sense label describing the kind of expense (e.g.
+            "Groceries", "Utilities", "Transport", "Subscriptions") — never a raw word fragment or
+            noise picked up from misheard speech. If nothing in the input supports a confident,
+            meaningful category, return null rather than guessing.
 
             STEP 5 — DIRECTION: this app tracks two kinds of records: OUTGOING (money the speaker paid
             or spent — the default, and by far the most common case for a spoken expense) and INCOMING

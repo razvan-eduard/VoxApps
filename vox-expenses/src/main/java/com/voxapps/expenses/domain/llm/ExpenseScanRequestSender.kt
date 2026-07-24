@@ -20,11 +20,16 @@ private const val TAG = "ExpenseScanRequestSender"
  * already domain-agnostic.
  */
 object ExpenseScanRequestSender {
-    fun send(context: Context) {
+    /** [returnToCaller] should be true only when [context] is Expenses' own foreground Activity
+     *  (the user tapped "Scan receipt" while already in the app) — false (the default) for the
+     *  home-screen widget's non-Activity Glance context, where there's no foreground Expenses
+     *  screen to meaningfully return to. See [com.voxapps.ipc.VoxOcrRequest.returnToCallerOnComplete]. */
+    fun send(context: Context, returnToCaller: Boolean = false) {
         val payload = VoxOcrRequest(
             sourcePackage = context.packageName,
             task = LlmTasks.EXPENSE_SCAN_CLEANUP,
-            hint = "Scanning for Expenses"
+            hint = "Scanning for Expenses",
+            returnToCallerOnComplete = returnToCaller
         ).toJson()
 
         Logger.d(TAG, "Launching Vision directly for a scan")

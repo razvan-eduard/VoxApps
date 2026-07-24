@@ -274,6 +274,25 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
+        // --- Auto-open a scanned receipt's expense once it's actually created (LLM cleanup is
+        // async, so this can't happen at scan time itself — see LlmResultReceiver). ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("auto_open_scanned_expense"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("auto_open_scanned_expense_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.autoOpenScannedExpense,
+                onCheckedChange = { stateManager.setAutoOpenScannedExpense(it) }
+            )
+        }
+
+        HorizontalDivider()
+
         // --- Location prefill: one switch governing every place an expense's location field can
         // get auto-filled from GPS (scan, voice, manual entry). Independent of the OS location
         // permission granted in onboarding — that only makes the feature possible, this is whether

@@ -13,13 +13,21 @@ import org.json.JSONObject
 data class VoxOcrRequest(
     val sourcePackage: String,
     val task: String,
-    val hint: String? = null
+    val hint: String? = null,
+    // When true, Vision relaunches sourcePackage's own launcher activity (bringing its existing
+    // task to front, not creating a new instance) right before finishing itself — for a caller
+    // whose own foreground UI is what asked for the scan, so the user lands back where they were
+    // instead of wherever Android's back stack happens to resolve to. Left false (the default) for
+    // a caller that wasn't itself in the foreground when it asked (e.g. a home-screen widget) —
+    // there's nothing meaningful to "return" to in that case.
+    val returnToCallerOnComplete: Boolean = false
 ) {
     fun toJson(): String {
         val o = JSONObject()
         o.put("sourcePackage", sourcePackage)
         o.put("task", task)
         hint?.let { o.put("hint", it) }
+        o.put("returnToCallerOnComplete", returnToCallerOnComplete)
         return o.toString()
     }
 
@@ -33,7 +41,8 @@ data class VoxOcrRequest(
                 VoxOcrRequest(
                     sourcePackage = sourcePackage,
                     task = task,
-                    hint = o.optStringOrNull("hint")
+                    hint = o.optStringOrNull("hint"),
+                    returnToCallerOnComplete = o.optBoolean("returnToCallerOnComplete", false)
                 )
             } catch (e: Exception) {
                 null

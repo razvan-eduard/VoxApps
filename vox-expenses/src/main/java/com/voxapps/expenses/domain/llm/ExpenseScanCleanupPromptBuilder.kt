@@ -88,7 +88,11 @@ object ExpenseScanCleanupPromptBuilder {
             receipt. Also suggest a category for this expense based on its content. $categoriesLine
             If one of the existing categories fits, copy that name verbatim, character-for-character —
             never invent a new spelling, translation, capitalization, or diacritics for it.
-            Only suggest a new category name if none of the existing ones fit.
+            Only suggest a new category name if none of the existing ones fit, and only ever suggest
+            a short, common-sense label describing the kind of expense (e.g. "Groceries", "Utilities",
+            "Transport", "Subscriptions") — never a raw fragment, code, abbreviation, or noise copied
+            from the OCR text itself. If nothing in the document supports a confident, meaningful
+            category, return null rather than guessing.
 
             Also decide the record's "direction": "outgoing" if this document represents money paid by
             the customer (a normal purchase receipt/invoice — the default assumption for any receipt),

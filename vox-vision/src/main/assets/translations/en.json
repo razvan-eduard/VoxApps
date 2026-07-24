@@ -8,6 +8,7 @@
   "scan_button": "Scan",
   "send_button": "Send",
   "scanning_for_caller": "Scanning for %1$s",
+  "scan_successful": "Scan Successful",
   "camera_permission_required": "Camera permission is required to scan.",
   "settings": "Settings",
   "press_back_again_to_exit": "Press back again to exit",

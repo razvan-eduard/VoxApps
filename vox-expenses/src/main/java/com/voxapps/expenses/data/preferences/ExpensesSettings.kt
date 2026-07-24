@@ -90,6 +90,11 @@ data class ExpensesSettings(
      *  failed parse) is a distinct, less frequent code path — a user might want the photo attached
      *  on a fresh scan but not want it re-sent every retry, or vice versa. */
     val attachPhotoOnRetry: Boolean = false,
+    /** Off by default — new, forced-navigation behavior a user must opt into. When on, as soon as a
+     *  scanned receipt's LLM cleanup successfully creates its expense (not a voice-created one — see
+     *  [com.voxapps.expenses.receiver.LlmResultReceiver]'s scan-specific branch), Expenses navigates
+     *  straight to that expense's edit screen for review instead of leaving the user on the list. */
+    val autoOpenScannedExpense: Boolean = false,
     /** On by default (matches the behavior before this toggle existed) — one switch governing every
      *  place an expense's location field can get auto-filled from GPS (scan, voice, and manual
      *  entry — see [com.voxapps.expenses.domain.location.ExpensesLocationHelper]'s callers).

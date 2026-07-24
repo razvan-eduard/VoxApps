@@ -11,8 +11,8 @@ android {
         applicationId = "com.voxapps.vision"
         minSdk = 29
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5"
+        versionCode = 6
+        versionName = "0.6"
         // Without this, onnxruntime-android ships all 4 ABIs (~73MB combined) even though OpenCV/
         // PaddleOCR are only ever built for arm64-v8a — mirrors the same restriction Notes/Expenses/
         // Calendar already apply.

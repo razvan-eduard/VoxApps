@@ -8,6 +8,7 @@
   "scan_button": "Scannen",
   "send_button": "Senden",
   "scanning_for_caller": "Scannen für %1$s",
+  "scan_successful": "Scan erfolgreich",
   "camera_permission_required": "Für das Scannen wird die Kameraberechtigung benötigt.",
   "settings": "Einstellungen",
   "press_back_again_to_exit": "Erneut zurück drücken, um zu beenden",

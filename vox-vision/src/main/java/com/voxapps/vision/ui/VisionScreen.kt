@@ -1,6 +1,7 @@
 package com.voxapps.vision.ui
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.camera.core.ImageCapture
@@ -11,6 +12,7 @@ import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -23,11 +25,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -73,6 +78,7 @@ import com.voxapps.vision.domain.ScanTargetDiscovery
 import com.voxapps.vision.ocr.DocumentCropper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -154,6 +160,10 @@ fun VisionScreen(
     var isRecognizing by remember { mutableStateOf(false) }
     var liveBounds by remember { mutableStateOf<DocumentCropper.LiveBounds?>(null) }
     var engineReady by remember { mutableStateOf(false) }
+    // Shown right before finishing for any pendingRequest-driven scan (see `submit` below) — without
+    // this, the app just vanishes the instant a scan succeeds, with zero feedback that anything
+    // happened, especially jarring when the scan was triggered from a widget or another app.
+    var showScanSuccess by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (!cameraGranted) requestCameraPermission { cameraGranted = it }
@@ -218,7 +228,11 @@ fun VisionScreen(
     // destination button instead (see the Column of per-target buttons further down).
     val submit: (String, String?, String?) -> Unit = { text, imageUri, aiImageUri ->
         val trimmed = text.trim()
-        if ((trimmed.isNotEmpty() || imageUri != null) && pendingRequest != null) {
+        // showScanSuccess now gates finishActivity() by ~1.2s (see LaunchedEffect below) instead of
+        // it happening synchronously right here — without this guard, the still-live auto-capture
+        // analyzer can re-arm and fire again during that window, sending a second (or third...)
+        // OcrResultSender.send for the same scan.
+        if (!showScanSuccess && (trimmed.isNotEmpty() || imageUri != null) && pendingRequest != null) {
             OcrResultSender.send(
                 context,
                 pendingRequest.sourcePackage,
@@ -230,13 +244,30 @@ fun VisionScreen(
                     aiImageUri = aiImageUri
                 )
             )
-            finishActivity()
+            showScanSuccess = true
         }
     }
     val submitState = rememberUpdatedState(submit)
 
+    // Holds the confirmation on screen briefly, then (if the caller asked for it) brings that
+    // caller's own task back to the front before finishing — see VoxOcrRequest.returnToCallerOnComplete.
+    // getLaunchIntentForPackage is package-agnostic on purpose: Vision never needs to know any
+    // specific caller's Activity class, keeping the "any first-party satellite" contract intact.
+    LaunchedEffect(showScanSuccess) {
+        if (!showScanSuccess) return@LaunchedEffect
+        delay(1200)
+        if (pendingRequest?.returnToCallerOnComplete == true) {
+            context.packageManager.getLaunchIntentForPackage(pendingRequest.sourcePackage)?.let { launchIntent ->
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                context.startActivity(launchIntent)
+            }
+        }
+        finishActivity()
+    }
+
     val isRecognizingState = rememberUpdatedState(isRecognizing)
     val engineReadyState = rememberUpdatedState(engineReady)
+    val showScanSuccessState = rememberUpdatedState(showScanSuccess)
     // The analyzer callback below is registered once inside LaunchedEffect(cameraController), which
     // never re-runs (cameraController's identity never changes) — a bare `pendingRequest` reference
     // in that closure would freeze at whatever it was on the *first* composition. If Vision started
@@ -272,6 +303,7 @@ fun VisionScreen(
             val now = System.currentTimeMillis()
             if (!engineReadyState.value || isRecognizingState.value ||
                 pendingRequestState.value == null || // Don't auto-capture in manual/standalone mode
+                showScanSuccessState.value || // Already submitted — stop analyzing during the confirmation delay
                 now - lastAnalysisAt[0] < ANALYSIS_INTERVAL_MS
             ) {
                 image.close()
@@ -322,6 +354,7 @@ fun VisionScreen(
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -462,6 +495,36 @@ fun VisionScreen(
                     )
                 }
             }
+        }
+    }
+    if (showScanSuccess) {
+        ScanSuccessOverlay(text = languageManager.getString("scan_successful"))
+    }
+    }
+}
+
+/** Universal "it worked" confirmation for every pendingRequest-driven scan — shown for a beat right
+ *  before [VisionScreen]'s `submit` finishes the activity, since that path otherwise gives the user
+ *  zero feedback before the app disappears (especially jarring when triggered from a widget). */
+@Composable
+private fun ScanSuccessOverlay(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.PhotoCamera,
+                contentDescription = null,
+                tint = Color(0xFF00E676),
+                modifier = Modifier.size(64.dp)
+            )
+            Text(text, style = MaterialTheme.typography.titleLarge)
         }
     }
 }

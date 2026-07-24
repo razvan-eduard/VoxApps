@@ -73,7 +73,7 @@ fun ExpensesScreen(
         requiredMessage = languageManager.getString(
             if (!visionInstalled) "vision_required_message" else "commander_required_message"
         )
-    ) { ExpenseScanRequestSender.send(context) }
+    ) { ExpenseScanRequestSender.send(context, returnToCaller = true) }
 
     // Amount-sorted order isn't chronological, so it doesn't fit a per-day calendar layout — a
     // derived rule, no extra persisted state: clearing the sort (the chip's X) automatically

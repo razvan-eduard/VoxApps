@@ -8,6 +8,7 @@
   "scan_button": "Scanner",
   "send_button": "Envoyer",
   "scanning_for_caller": "Numérisation pour %1$s",
+  "scan_successful": "Numérisation réussie",
   "camera_permission_required": "L'autorisation d'accès à la caméra est nécessaire pour scanner.",
   "settings": "Paramètres",
   "press_back_again_to_exit": "Appuyez à nouveau sur retour pour quitter",

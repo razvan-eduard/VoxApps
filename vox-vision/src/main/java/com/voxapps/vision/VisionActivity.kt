@@ -72,7 +72,8 @@ class VisionActivity : ComponentActivity() {
             PendingScanRequest(
                 sourcePackage = request.sourcePackage,
                 task = request.task,
-                hint = request.hint
+                hint = request.hint,
+                returnToCallerOnComplete = request.returnToCallerOnComplete
             )
         }
 
