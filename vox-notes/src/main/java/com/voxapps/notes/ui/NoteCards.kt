@@ -137,10 +137,12 @@ fun NoteEditorCard(
     text: String,
     categoryId: Long?,
     categories: List<Category>,
+    pendingAttachments: List<String>,
     onTitleChange: (String) -> Unit,
     onTextChange: (String) -> Unit,
     onCategoryChange: (Long?) -> Unit,
     onAddCategory: (name: String, colorArgb: Long, onResult: (Long) -> Unit) -> Unit,
+    onPendingAttachmentsChange: (List<String>) -> Unit,
     onDone: () -> Unit,
     onDelete: (() -> Unit)?
 ) {
@@ -247,11 +249,14 @@ fun NoteEditorCard(
                 )
             }
 
-            // Attachments only once the note is a persisted row — a brand-new draft has no id to
-            // scope rows against yet (same implicit constraint vox-expenses' receipt image has).
-            // At the bottom now that Delete/Save moved up to the top row.
+            // At the bottom now that Delete/Save moved up to the top row. A brand-new draft has no
+            // id yet to scope real AttachmentEntity rows against, so it stages files locally instead
+            // (PendingNoteAttachmentsHost) — NotesScreen links them to the real note once it's saved,
+            // or deletes the staged files if the draft is discarded instead.
             if (noteId != null) {
                 NoteAttachmentsHost(noteId, stateManager)
+            } else {
+                PendingNoteAttachmentsHost(pendingAttachments, onPendingAttachmentsChange)
             }
         }
     }
@@ -288,6 +293,46 @@ private fun NoteAttachmentsHost(noteId: Long, stateManager: NotesStateManager) {
         onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
         onRemove = { item ->
             entities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
+        }
+    )
+}
+
+/** Attachments UI for a not-yet-saved note: stages picked photos into this app's files dir via
+ *  [AttachmentFileStore] immediately (no note id needed for that), but only tracks them as local
+ *  filenames — no [AttachmentEntity] row exists until [NotesScreen] links them once the note is
+ *  actually saved (or deletes the staged files if the draft is discarded instead). A fake id derived
+ *  from the filename's hash is enough for [AttachmentsSection]'s list key — it never needs a real
+ *  database id. */
+@Composable
+private fun PendingNoteAttachmentsHost(pendingAttachments: List<String>, onChange: (List<String>) -> Unit) {
+    val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
+    val items = remember(pendingAttachments) {
+        pendingAttachments.map { fileName ->
+            AttachmentUiItem(
+                id = fileName.hashCode().toLong(),
+                uri = AttachmentFileStore.uriFor(context, NotesAttachments.FILE_PROVIDER_AUTHORITY, NotesAttachments.DIR, fileName),
+                removable = true
+            )
+        }
+    }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            AttachmentFileStore.stage(context, uri, NotesAttachments.DIR)?.let { fileName ->
+                onChange(pendingAttachments + fileName)
+            }
+        }
+    }
+    AttachmentsSection(
+        title = languageManager.getString("attachments"),
+        items = items,
+        canAdd = pendingAttachments.size < 10,
+        onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onRemove = { item ->
+            pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->
+                AttachmentFileStore.delete(context, NotesAttachments.DIR, fileName)
+                onChange(pendingAttachments - fileName)
+            }
         }
     )
 }

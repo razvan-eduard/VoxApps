@@ -1,5 +1,6 @@
 package com.voxapps.expenses.ui
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -134,6 +135,13 @@ private fun LineItemDraft.subtotal(useComma: Boolean): Double =
 
 private data class PendingCleanup(val expense: Expense, val items: List<ExpenseLineItem>, val dirtyFields: List<DirtyField>)
 
+/** Deletes every staged-but-unlinked attachment file for a new expense that ends up never actually
+ *  becoming a real row (screen closed without saving, or the save turned out to be a duplicate/merge
+ *  rather than a new insert) — the counterpart to linking the same list once a real id exists. */
+private fun discardPendingAttachments(fileNames: List<String>, context: Context) {
+    fileNames.forEach { fileName -> AttachmentFileStore.delete(context, ExpensesAttachments.DIR, fileName) }
+}
+
 private fun expenseFieldLabel(languageManager: LanguageManager, fieldKey: String): String = when (fieldKey) {
     "title" -> languageManager.getString("expense_title_optional")
     "vendor" -> languageManager.getString("expense_vendor")
@@ -189,6 +197,12 @@ fun ExpenseEditScreen(
     var showDeleteExpenseConfirm by remember { mutableStateOf(false) }
     var pendingDeleteItemIndex by remember { mutableStateOf<Int?>(null) }
     var pendingCleanup by remember { mutableStateOf<PendingCleanup?>(null) }
+    // Photos staged (via AttachmentFileStore, no id needed for that) while composing a brand-new
+    // expense that doesn't have a real id yet — linked to the real expense id once saveExpense
+    // actually creates the row (see its onResult below), or deleted if the screen closes without
+    // ever saving. Always empty when editing an existing expense (attachments then read/write
+    // straight to the database via ExpenseAttachmentsSection instead).
+    var pendingAttachments by remember { mutableStateOf<List<String>>(emptyList()) }
 
     fun saveExpense(expense: Expense, lineItems: List<ExpenseLineItem>) {
         // A genuine manual category change — covers both "edited an existing expense's category"
@@ -217,9 +231,16 @@ fun ExpenseEditScreen(
                 onResult = { id ->
                     if (id == DUPLICATE_ENTRY_RESULT) {
                         Toast.makeText(context, languageManager.getString("duplicate_entry_error"), Toast.LENGTH_LONG).show()
+                        discardPendingAttachments(pendingAttachments, context)
                     } else if (id == NEAR_DUPLICATE_MERGED_RESULT) {
                         Toast.makeText(context, languageManager.getString("near_duplicate_merged_message"), Toast.LENGTH_LONG).show()
+                        discardPendingAttachments(pendingAttachments, context)
+                    } else if (id > 0) {
+                        // A genuinely new row — link the already-staged files (see pendingAttachments
+                        // above) to its real id now that one exists.
+                        pendingAttachments.forEach { fileName -> stateManager.addManualAttachment(id, fileName) }
                     }
+                    pendingAttachments = emptyList()
                 }
             )
         }
@@ -254,6 +275,9 @@ fun ExpenseEditScreen(
     fun attemptSaveAndClose() {
         val total = parseDecimalOrNull(totalText, useComma)
         if (total == null) {
+            // Nothing will ever link these now — a no-op when editing an existing expense, since
+            // pendingAttachments is only ever populated for a new, not-yet-saved one.
+            discardPendingAttachments(pendingAttachments, context)
             onDone()
             return
         }
@@ -331,6 +355,13 @@ fun ExpenseEditScreen(
             if (existing?.expense?.id != null) {
                 item {
                     ExpenseAttachmentsSection(existing.expense.id, imageName, stateManager)
+                }
+            } else {
+                item {
+                    PendingExpenseAttachmentsSection(
+                        pendingAttachments = pendingAttachments,
+                        onChange = { pendingAttachments = it }
+                    )
                 }
             }
 
@@ -857,6 +888,47 @@ private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?
         onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
         onRemove = { item ->
             manualEntities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
+        },
+        modifier = Modifier.padding(bottom = 12.dp)
+    )
+}
+
+/** Attachments UI for a not-yet-saved expense: stages picked photos into this app's files dir via
+ *  [AttachmentFileStore] immediately (no expense id needed for that), but only tracks them as local
+ *  filenames — no [com.voxapps.attachments.AttachmentEntity] row exists until [ExpenseEditScreen]
+ *  links them once the expense is actually saved (or deletes the staged files if the draft is
+ *  discarded instead). A fake id derived from the filename's hash is enough for [AttachmentsSection]'s
+ *  list key — it never needs a real database id. */
+@Composable
+private fun PendingExpenseAttachmentsSection(pendingAttachments: List<String>, onChange: (List<String>) -> Unit) {
+    val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
+    val items = remember(pendingAttachments) {
+        pendingAttachments.map { fileName ->
+            AttachmentUiItem(
+                id = fileName.hashCode().toLong(),
+                uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, ExpensesAttachments.DIR, fileName),
+                removable = true
+            )
+        }
+    }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            AttachmentFileStore.stage(context, uri, ExpensesAttachments.DIR)?.let { fileName ->
+                onChange(pendingAttachments + fileName)
+            }
+        }
+    }
+    AttachmentsSection(
+        title = languageManager.getString("attachments"),
+        items = items,
+        canAdd = pendingAttachments.size < 10,
+        onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onRemove = { item ->
+            pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->
+                AttachmentFileStore.delete(context, ExpensesAttachments.DIR, fileName)
+                onChange(pendingAttachments - fileName)
+            }
         },
         modifier = Modifier.padding(bottom = 12.dp)
     )

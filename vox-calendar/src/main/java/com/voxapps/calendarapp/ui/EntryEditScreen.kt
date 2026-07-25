@@ -1,5 +1,6 @@
 package com.voxapps.calendarapp.ui
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -96,6 +97,13 @@ private val OffenseRed = Color(0xFFD32F2F)
 
 private data class PendingCleanup(val entry: CalendarEntry, val tags: List<String>, val dirtyFields: List<DirtyField>)
 
+/** Deletes every staged-but-unlinked attachment file for a new entry that's discarded (screen closed
+ *  without a title, so nothing was ever saved) — the counterpart to linking the same list once a real
+ *  entry id exists. */
+private fun discardPendingAttachments(fileNames: List<String>, context: Context) {
+    fileNames.forEach { fileName -> AttachmentFileStore.delete(context, CalendarAttachments.DIR, fileName) }
+}
+
 private fun entryFieldLabel(languageManager: LanguageManager, fieldKey: String): String = when (fieldKey) {
     "title" -> languageManager.getString("entry_title")
     "description" -> languageManager.getString("entry_description")
@@ -121,6 +129,7 @@ fun EntryEditScreen(
 ) {
     val languageManager = LocalLanguageManager.current
     val zoneId = ZoneId.systemDefault()
+    val context = LocalContext.current
 
     var type by remember { mutableStateOf(existing?.entry?.type ?: CalendarEntryType.EVENT) }
     var title by remember { mutableStateOf(existing?.entry?.title ?: "") }
@@ -143,6 +152,12 @@ fun EntryEditScreen(
     var recurrenceMenuExpanded by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var pendingCleanup by remember { mutableStateOf<PendingCleanup?>(null) }
+    // Photos staged (via AttachmentFileStore, no id needed for that) while composing a brand-new
+    // entry that doesn't have a real id yet — linked to the real entry id once saveEntry actually
+    // creates the row, or deleted if the screen closes without ever saving. Always empty when
+    // editing an existing entry (attachments then read/write straight to the database via
+    // EntryAttachmentsSection instead).
+    var pendingAttachments by remember { mutableStateOf<List<String>>(emptyList()) }
 
     fun saveEntry(entry: CalendarEntry, entryTags: List<String>) {
         if (existing != null) {
@@ -160,7 +175,11 @@ fun EntryEditScreen(
                 recurrenceFrequency = entry.recurrenceFrequency,
                 recurrenceUntilMillis = entry.recurrenceUntilMillis,
                 layerId = entry.layerId,
-                tags = entryTags
+                tags = entryTags,
+                onResult = { newId ->
+                    pendingAttachments.forEach { fileName -> stateManager.addManualAttachment(newId, fileName) }
+                    pendingAttachments = emptyList()
+                }
             )
         }
     }
@@ -172,6 +191,9 @@ fun EntryEditScreen(
     // guard instead of silently creating an empty-titled entry.
     fun attemptSaveAndClose() {
         if (title.isBlank()) {
+            // Nothing will ever link these now — a no-op when editing an existing entry, since
+            // pendingAttachments is only ever populated for a new, not-yet-saved one.
+            discardPendingAttachments(pendingAttachments, context)
             onDone()
             return
         }
@@ -282,6 +304,13 @@ fun EntryEditScreen(
             if (existing?.entry?.id != null) {
                 item {
                     EntryAttachmentsSection(existing.entry.id, stateManager)
+                }
+            } else {
+                item {
+                    PendingEntryAttachmentsSection(
+                        pendingAttachments = pendingAttachments,
+                        onChange = { pendingAttachments = it }
+                    )
                 }
             }
 
@@ -641,6 +670,46 @@ private fun EntryAttachmentsSection(entryId: Long, stateManager: CalendarStateMa
         onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
         onRemove = { item ->
             entities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
+        }
+    )
+}
+
+/** Attachments UI for a not-yet-saved entry: stages picked photos into this app's files dir via
+ *  [AttachmentFileStore] immediately (no entry id needed for that), but only tracks them as local
+ *  filenames — no [com.voxapps.attachments.AttachmentEntity] row exists until [EntryEditScreen] links
+ *  them once the entry is actually saved (or deletes the staged files if the draft is discarded
+ *  instead). A fake id derived from the filename's hash is enough for [AttachmentsSection]'s list
+ *  key — it never needs a real database id. */
+@Composable
+private fun PendingEntryAttachmentsSection(pendingAttachments: List<String>, onChange: (List<String>) -> Unit) {
+    val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
+    val items = remember(pendingAttachments) {
+        pendingAttachments.map { fileName ->
+            AttachmentUiItem(
+                id = fileName.hashCode().toLong(),
+                uri = AttachmentFileStore.uriFor(context, CalendarAttachments.FILE_PROVIDER_AUTHORITY, CalendarAttachments.DIR, fileName),
+                removable = true
+            )
+        }
+    }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            AttachmentFileStore.stage(context, uri, CalendarAttachments.DIR)?.let { fileName ->
+                onChange(pendingAttachments + fileName)
+            }
+        }
+    }
+    AttachmentsSection(
+        title = languageManager.getString("attachments"),
+        items = items,
+        canAdd = pendingAttachments.size < 10,
+        onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onRemove = { item ->
+            pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->
+                AttachmentFileStore.delete(context, CalendarAttachments.DIR, fileName)
+                onChange(pendingAttachments - fileName)
+            }
         }
     )
 }

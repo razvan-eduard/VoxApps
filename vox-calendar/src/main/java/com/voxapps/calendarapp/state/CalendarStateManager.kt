@@ -159,22 +159,25 @@ class CalendarStateManager internal constructor(
         recurrenceFrequency: RecurrenceFrequency,
         recurrenceUntilMillis: Long?,
         layerId: Long,
-        tags: List<String>
+        tags: List<String>,
+        onResult: (Long) -> Unit = {}
     ) {
         scope.launch {
-            calendarRepo.addEntry(
-                type = type,
-                title = title,
-                description = description,
-                location = location,
-                startMillis = startMillis,
-                endMillis = endMillis,
-                allDay = allDay,
-                completed = completed,
-                recurrenceFrequency = recurrenceFrequency,
-                recurrenceUntilMillis = recurrenceUntilMillis,
-                layerId = layerId,
-                tags = tags
+            onResult(
+                calendarRepo.addEntry(
+                    type = type,
+                    title = title,
+                    description = description,
+                    location = location,
+                    startMillis = startMillis,
+                    endMillis = endMillis,
+                    allDay = allDay,
+                    completed = completed,
+                    recurrenceFrequency = recurrenceFrequency,
+                    recurrenceUntilMillis = recurrenceUntilMillis,
+                    layerId = layerId,
+                    tags = tags
+                )
             )
         }
     }

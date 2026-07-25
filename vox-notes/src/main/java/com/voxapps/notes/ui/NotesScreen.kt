@@ -1,5 +1,6 @@
 package com.voxapps.notes.ui
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -62,10 +64,12 @@ import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.RecordSource
 import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
+import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NoteSanitizer
+import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.notes.data.NoteWithCategory
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
@@ -92,6 +96,11 @@ fun NotesScreen(
     val languageManager = LocalLanguageManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    // The new-note editor is always item 0 (see the LazyColumn below), but the list otherwise stays
+    // at whatever scroll position the user was previously at — without this, starting a new note
+    // while scrolled down leaves its editor entirely off-screen, expanded but invisible.
+    val listState = rememberLazyListState()
 
     var editing by remember { mutableStateOf<EditBuffer?>(null) }
     var showDateSheet by remember { mutableStateOf(false) }
@@ -100,15 +109,16 @@ fun NotesScreen(
 
     LaunchedEffect(quickAddTrigger) {
         if (quickAddTrigger > 0) {
-            commitEdit(editing, stateManager)
+            commitEdit(editing, stateManager, context)
             editing = EditBuffer(id = null, title = "", text = "", categoryId = state.selectedCategoryId)
+            listState.animateScrollToItem(0)
         }
     }
 
     LaunchedEffect(editNoteTrigger) {
         if (editNoteTrigger > 0 && editNoteId >= 0) {
             state.notes.firstOrNull { it.note.id == editNoteId }?.let { nwc ->
-                commitEdit(editing, stateManager)
+                commitEdit(editing, stateManager, context)
                 editing = EditBuffer(nwc.note.id, nwc.note.title.orEmpty(), nwc.note.text, nwc.note.categoryId)
             }
         }
@@ -116,8 +126,13 @@ fun NotesScreen(
 
     // While editing, back closes the inline editor instead of exiting; at rest, back re-arms the
     // standard double-press-to-exit flow. `enabled` keeps the two mutually exclusive regardless of
-    // Compose's internal back-callback ordering.
-    BackHandler(enabled = editing != null) { editing = null }
+    // Compose's internal back-callback ordering. This never saves (matches the pre-existing behavior
+    // here, unrelated to this change) — a new note's staged-but-unlinked attachment files would
+    // otherwise leak, so discard them along with the rest of the draft.
+    BackHandler(enabled = editing != null) {
+        editing?.let { if (it.id == null) discardPendingAttachments(it.pendingAttachments, context) }
+        editing = null
+    }
     DoubleBackToExitHandler(
         message = languageManager.getString("press_back_again_to_exit"),
         enabled = editing == null
@@ -183,8 +198,9 @@ fun NotesScreen(
                 // double-action rather than a clear "add note" affordance.
                 if (editing == null) {
                     FloatingActionButton(onClick = {
-                        commitEdit(editing, stateManager)
+                        commitEdit(editing, stateManager, context)
                         editing = EditBuffer(id = null, title = "", text = "", categoryId = state.selectedCategoryId)
+                        scope.launch { listState.animateScrollToItem(0) }
                     }) {
                         Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_note"))
                     }
@@ -203,7 +219,7 @@ fun NotesScreen(
                             CollapsedNoteCard(
                                 item = calItem.nwc,
                                 onClick = {
-                                    commitEdit(editing, stateManager)
+                                    commitEdit(editing, stateManager, context)
                                     editing = EditBuffer(
                                         calItem.nwc.note.id,
                                         calItem.nwc.note.title.orEmpty(),
@@ -216,6 +232,7 @@ fun NotesScreen(
                     )
                 } else {
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -229,15 +246,20 @@ fun NotesScreen(
                                     text = editing!!.text,
                                     categoryId = editing!!.categoryId,
                                     categories = state.categories,
+                                    pendingAttachments = editing!!.pendingAttachments,
                                     onTitleChange = { editing = editing!!.copy(title = it) },
                                     onTextChange = { editing = editing!!.copy(text = it) },
                                     onCategoryChange = { editing = editing!!.copy(categoryId = it) },
                                     onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
+                                    onPendingAttachmentsChange = { editing = editing!!.copy(pendingAttachments = it) },
                                     onDone = {
-                                        val cleanup = commitEdit(editing, stateManager, confirmCleanup = true)
+                                        val cleanup = commitEdit(editing, stateManager, context, confirmCleanup = true)
                                         if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
                                     },
-                                    onDelete = { editing = null }
+                                    onDelete = {
+                                        discardPendingAttachments(editing!!.pendingAttachments, context)
+                                        editing = null
+                                    }
                                 )
                             }
                         }
@@ -250,12 +272,14 @@ fun NotesScreen(
                                     text = editing!!.text,
                                     categoryId = editing!!.categoryId,
                                     categories = state.categories,
+                                    pendingAttachments = editing!!.pendingAttachments,
                                     onTitleChange = { editing = editing!!.copy(title = it) },
                                     onTextChange = { editing = editing!!.copy(text = it) },
                                     onCategoryChange = { editing = editing!!.copy(categoryId = it) },
                                     onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
+                                    onPendingAttachmentsChange = { editing = editing!!.copy(pendingAttachments = it) },
                                     onDone = {
-                                        val cleanup = commitEdit(editing, stateManager, confirmCleanup = true)
+                                        val cleanup = commitEdit(editing, stateManager, context, confirmCleanup = true)
                                         if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
                                     },
                                     onDelete = { pendingDeleteNote = nwc.note }
@@ -264,7 +288,7 @@ fun NotesScreen(
                                 CollapsedNoteCard(
                                     item = nwc,
                                     onClick = {
-                                        commitEdit(editing, stateManager)
+                                        commitEdit(editing, stateManager, context)
                                         editing = EditBuffer(nwc.note.id, nwc.note.title.orEmpty(), nwc.note.text, nwc.note.categoryId)
                                     }
                                 )
@@ -280,7 +304,12 @@ fun NotesScreen(
     // inline LazyColumn swap — the calendar's day cells have no natural "replace this row" slot.
     if (calendarViewEnabled && editing != null) {
         val current = editing!!
-        ModalBottomSheet(onDismissRequest = { editing = null }) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                if (current.id == null) discardPendingAttachments(current.pendingAttachments, context)
+                editing = null
+            }
+        ) {
             NoteEditorCard(
                 noteId = current.id,
                 stateManager = stateManager,
@@ -288,16 +317,23 @@ fun NotesScreen(
                 text = current.text,
                 categoryId = current.categoryId,
                 categories = state.categories,
+                pendingAttachments = current.pendingAttachments,
                 onTitleChange = { editing = current.copy(title = it) },
                 onTextChange = { editing = current.copy(text = it) },
                 onCategoryChange = { editing = current.copy(categoryId = it) },
                 onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
+                onPendingAttachmentsChange = { editing = current.copy(pendingAttachments = it) },
                 onDone = {
-                    val cleanup = commitEdit(editing, stateManager, confirmCleanup = true)
+                    val cleanup = commitEdit(editing, stateManager, context, confirmCleanup = true)
                     if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
                 },
                 onDelete = {
-                    pendingDeleteNote = state.notes.firstOrNull { it.note.id == current.id }?.note
+                    if (current.id == null) {
+                        discardPendingAttachments(current.pendingAttachments, context)
+                        editing = null
+                    } else {
+                        pendingDeleteNote = state.notes.firstOrNull { it.note.id == current.id }?.note
+                    }
                 }
             )
         }
@@ -326,7 +362,7 @@ fun NotesScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        saveNote(pending.id, NoteSanitizer.sanitize(pending.note), stateManager)
+                        saveNote(pending.id, NoteSanitizer.sanitize(pending.note), pending.pendingAttachments, stateManager)
                         pendingNoteCleanup = null
                         editing = null
                     }
@@ -386,11 +422,32 @@ private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () ->
     )
 }
 
-/** Local edit buffer for the inline note editor. [id] == null means a new (unsaved) note. */
-private data class EditBuffer(val id: Long?, val title: String, val text: String, val categoryId: Long?)
+/** Local edit buffer for the inline note editor. [id] == null means a new (unsaved) note.
+ *  [pendingAttachments] are files already staged on disk (via [com.voxapps.attachments.AttachmentFileStore])
+ *  for a not-yet-saved note — always empty once [id] is non-null, since an existing note's attachments
+ *  are read/written straight to the database instead. See [saveNote] and the discard sites below for
+ *  where these get linked to the real note id (on save) or deleted (on discard). */
+private data class EditBuffer(
+    val id: Long?,
+    val title: String,
+    val text: String,
+    val categoryId: Long?,
+    val pendingAttachments: List<String> = emptyList()
+)
 
 /** A dirty save the user needs to accept auto-clean or cancel to fix manually. */
-private data class PendingNoteCleanup(val id: Long?, val note: Note, val dirtyFields: List<DirtyField>)
+private data class PendingNoteCleanup(
+    val id: Long?,
+    val note: Note,
+    val dirtyFields: List<DirtyField>,
+    val pendingAttachments: List<String> = emptyList()
+)
+
+/** Deletes every staged-but-unlinked attachment file for a note draft that's being discarded without
+ *  ever being saved — the counterpart to [saveNote]'s linking of the same list on a successful save. */
+private fun discardPendingAttachments(fileNames: List<String>, context: Context) {
+    fileNames.forEach { fileName -> AttachmentFileStore.delete(context, NotesAttachments.DIR, fileName) }
+}
 
 private val OffenseRed = Color(0xFFD32F2F)
 
@@ -407,31 +464,51 @@ private fun noteFieldLabel(languageManager: LanguageManager, fieldKey: String): 
  * [PendingNoteCleanup] iff confirmation is needed (caller must decide what to do); null means the
  * buffer was fully handled (saved, deleted, or was empty).
  */
-private fun commitEdit(buf: EditBuffer?, stateManager: NotesStateManager, confirmCleanup: Boolean = false): PendingNoteCleanup? {
+private fun commitEdit(
+    buf: EditBuffer?,
+    stateManager: NotesStateManager,
+    context: Context,
+    confirmCleanup: Boolean = false
+): PendingNoteCleanup? {
     if (buf == null) return null
     val title = buf.title.trim().ifBlank { null }
     val text = buf.text.trim()
     val empty = title == null && text.isEmpty()
     if (empty) {
-        if (buf.id != null) stateManager.deleteNoteById(buf.id)
+        if (buf.id != null) {
+            stateManager.deleteNoteById(buf.id)
+        } else {
+            // A blank draft with a photo attached still staged real files on disk (title/text being
+            // empty doesn't mean nothing was added) — nothing will ever link them, so delete them now.
+            discardPendingAttachments(buf.pendingAttachments, context)
+        }
         return null
     }
     val candidate = Note(id = buf.id ?: 0, title = title, text = text, createdAt = System.currentTimeMillis(), categoryId = buf.categoryId)
     if (!confirmCleanup) {
-        saveNote(buf.id, NoteSanitizer.sanitize(candidate), stateManager)
+        saveNote(buf.id, NoteSanitizer.sanitize(candidate), buf.pendingAttachments, stateManager)
         return null
     }
     return when (val decision = NoteSanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
         is SaveDecision.Proceed -> {
-            saveNote(buf.id, decision.record, stateManager)
+            saveNote(buf.id, decision.record, buf.pendingAttachments, stateManager)
             null
         }
-        is SaveDecision.ConfirmCleanup -> PendingNoteCleanup(buf.id, decision.original, decision.dirtyFields)
+        is SaveDecision.ConfirmCleanup -> PendingNoteCleanup(buf.id, decision.original, decision.dirtyFields, buf.pendingAttachments)
     }
 }
 
-private fun saveNote(id: Long?, note: Note, stateManager: NotesStateManager) {
-    if (id == null) stateManager.addNote(note.title, note.text, note.categoryId) else stateManager.updateNoteFields(id, note.title, note.text, note.categoryId)
+/** Saves [note], then links any [pendingAttachments] (already staged on disk, see [EditBuffer]) to
+ *  the real note id — for an update this is always an empty list (existing notes' attachments are
+ *  already DB-linked directly, never staged locally), so the link step is a no-op there. */
+private fun saveNote(id: Long?, note: Note, pendingAttachments: List<String>, stateManager: NotesStateManager) {
+    if (id == null) {
+        stateManager.addNote(note.title, note.text, note.categoryId) { newId ->
+            pendingAttachments.forEach { fileName -> stateManager.addManualAttachment(newId, fileName) }
+        }
+    } else {
+        stateManager.updateNoteFields(id, note.title, note.text, note.categoryId)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

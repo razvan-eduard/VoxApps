@@ -164,8 +164,13 @@ class NotesStateManager internal constructor(
     private fun bumpSession() = _runtime.update { it.copy(sessionTick = it.sessionTick + 1) }
 
     // --- NOTE CRUD (delegated) ---
-    fun addNote(title: String?, text: String, categoryId: Long? = _runtime.value.selectedCategoryId) {
-        scope.launch { notesRepo.addNote(title, text, categoryId, System.currentTimeMillis()) }
+    fun addNote(
+        title: String?,
+        text: String,
+        categoryId: Long? = _runtime.value.selectedCategoryId,
+        onResult: (Long) -> Unit = {}
+    ) {
+        scope.launch { onResult(notesRepo.addNote(title, text, categoryId, System.currentTimeMillis())) }
     }
 
     fun updateNote(note: Note) { scope.launch { notesRepo.updateNote(note) } }
