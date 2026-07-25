@@ -262,8 +262,6 @@ involved.
 - [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md) — monorepo-wide reference for
   every native/ML dependency that's a binary version-check or vendored/patched/compiled from source at
   build time (Vosk, NewPipe Extractor, Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk).
-- [`WALKTHROUGH.md`](WALKTHROUGH.md) — a point-in-time snapshot of a past stable milestone ("Mica"),
-  kept as a historical reference rather than living documentation.
 
 [↖ Back to top](#readme-top)
 
