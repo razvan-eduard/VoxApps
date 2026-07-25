@@ -34,6 +34,7 @@ class ExpensesContainer(context: Context) {
 
     private val database = ExpensesDatabase.get(appContext)
     val attachmentDao = database.attachmentDao()
+    val duplicateRuleDao = database.duplicateRuleDao()
     val expensesRepository = ExpensesRepository(
         database.expenseDao(),
         database.categoryDao(),
@@ -41,7 +42,8 @@ class ExpensesContainer(context: Context) {
         database.spendingLimitDao(),
         database.merchantCategoryMemoryDao(),
         appContext,
-        attachmentDao
+        attachmentDao,
+        duplicateRuleDao
     )
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
@@ -63,7 +65,8 @@ class ExpensesContainer(context: Context) {
         pendingNotificationExpenseRepository,
         spendingLimitAlertRepository,
         pendingLlmRequestQueue,
-        attachmentDao
+        attachmentDao,
+        duplicateRuleDao
     )
 
     val languageManager = LanguageManager(appContext).also {

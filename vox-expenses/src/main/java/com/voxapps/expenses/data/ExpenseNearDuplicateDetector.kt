@@ -1,50 +1,34 @@
 package com.voxapps.expenses.data
 
-import com.voxapps.datahygiene.DuplicateChecker
 import com.voxapps.datahygiene.FieldCleaner
-import com.voxapps.textmatch.FuzzyNameMatcher
-import kotlin.math.abs
+import com.voxapps.datahygiene.RuleCombinator
+import com.voxapps.expenses.data.preferences.ExpensesSettings
+import java.util.concurrent.TimeUnit
 
 /**
- * Direct-DB-level (non-AI) near-duplicate detector, layered *alongside* [ExpenseDuplicateChecker] —
- * never replaces it, and is only ever consulted once that exact checker finds nothing. Catches what
- * an all-fields-exact checker structurally cannot: two different capture sources describing the same
- * real-world transaction with different title/vendor wording, recorded a short time apart rather than
- * at the identical instant.
- *
- * Deliberately does NOT compare [Expense.bank]/[Expense.location]/[Expense.categoryId] — those are
- * exactly the fields two different sources are expected to disagree on (their own app identity, their
- * own guessed category), so requiring them to match would defeat the point of this check.
+ * The remaining global knobs [ExpensesRepository.buildDuplicateChecker] needs to build a duplicate
+ * checker for [Expense] — everything else, including per-rule fuzzy matching, lives in the
+ * user-editable [DuplicateRuleEntity] table now (see its own doc comment). [timeWindowMillis] applies
+ * uniformly wherever a rule references [ExpenseRuleFields.ID_DATE_TIME] — one shared setting, not
+ * per-rule, per [ExpenseRuleFields]'s own doc comment.
  */
-class ExpenseNearDuplicateDetector(
-    private val fuzzyMatchEnabled: Boolean,
-    private val timeWindowMillis: Long
-) : DuplicateChecker<Expense> {
+data class NearDuplicateConfig(
+    val timeWindowMillis: Long,
+    val globalCombinator: RuleCombinator = RuleCombinator.OR
+)
 
-    override fun isDuplicateOf(candidate: Expense, existing: Expense): Boolean {
-        if (candidate.totalAmount != existing.totalAmount) return false
-        if (candidate.currencyCode != existing.currencyCode) return false
-        if (candidate.direction != existing.direction) return false
-        if (abs(candidate.dateTime - existing.dateTime) > timeWindowMillis) return false
-
-        val candidateName = FieldCleaner.clean(candidate.title) ?: FieldCleaner.clean(candidate.vendor) ?: return false
-        val existingName = FieldCleaner.clean(existing.title) ?: FieldCleaner.clean(existing.vendor) ?: return false
-
-        return if (fuzzyMatchEnabled) {
-            FuzzyNameMatcher.namesMatch(candidateName, existingName)
-        } else {
-            candidateName.equals(existingName, ignoreCase = true)
-        }
-    }
-}
+fun ExpensesSettings.toNearDuplicateConfig(): NearDuplicateConfig = NearDuplicateConfig(
+    timeWindowMillis = TimeUnit.MINUTES.toMillis(nearDuplicateTimeWindowMinutes.toLong()),
+    globalCombinator = runCatching { RuleCombinator.valueOf(duplicateRuleSetGlobalCombinator) }.getOrDefault(RuleCombinator.OR)
+)
 
 /**
  * Fills any blank/missing field on [existing] with [candidate]'s value for that same field — never
  * overwrites a field [existing] already has real content in, so the first-arrived record stays
  * authoritative wherever it already says something and only gains data it was missing. Excludes
- * identity/audit fields and every field the detector already required to match exactly (amount,
- * currency, direction, dateTime) — those are never "missing data" to enrich. Bumps [Expense.updatedAt]
- * only when something actually changed.
+ * identity/audit fields. Which content fields (title/vendor/amount/...) the rule that matched actually
+ * required is irrelevant here — enrichment only ever fills genuine gaps, which is safe regardless of
+ * what caused the match. Bumps [Expense.updatedAt] only when something actually changed.
  */
 fun enrichWithNearDuplicate(existing: Expense, candidate: Expense): Expense {
     val merged = existing.copy(

@@ -6,12 +6,15 @@ import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
 import com.voxapps.expenses.data.Category
+import com.voxapps.expenses.data.DuplicateRuleDao
+import com.voxapps.expenses.data.DuplicateRuleEntity
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.data.TransactionDirection
+import com.voxapps.expenses.data.toNearDuplicateConfig
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.limits.SpendingLimitAlertRepository
@@ -36,7 +39,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -51,7 +53,8 @@ class ExpensesStateManager internal constructor(
     private val pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
     private val spendingLimitAlertRepo: SpendingLimitAlertRepository,
     private val pendingLlmRequestQueue: VoxLlmRequestQueue,
-    private val attachmentDao: AttachmentDao
+    private val attachmentDao: AttachmentDao,
+    private val duplicateRuleDao: DuplicateRuleDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -141,8 +144,15 @@ class ExpensesStateManager internal constructor(
     fun setDuplicateCheckModeManual(mode: String) { scope.launch { settingsRepo.setDuplicateCheckModeManual(mode) } }
     fun setDuplicateCheckModeAutomatic(mode: String) { scope.launch { settingsRepo.setDuplicateCheckModeAutomatic(mode) } }
     fun setAutoAcceptDuplicateMerges(enabled: Boolean) { scope.launch { settingsRepo.setAutoAcceptDuplicateMerges(enabled) } }
-    fun setNearDuplicateFuzzyMatchEnabled(enabled: Boolean) { scope.launch { settingsRepo.setNearDuplicateFuzzyMatchEnabled(enabled) } }
+    fun setAutomaticProtectionReviewOnly(enabled: Boolean) { scope.launch { settingsRepo.setAutomaticProtectionReviewOnly(enabled) } }
     fun setNearDuplicateTimeWindowMinutes(minutes: Int) { scope.launch { settingsRepo.setNearDuplicateTimeWindowMinutes(minutes) } }
+    fun setDuplicateRuleSetGlobalCombinator(combinator: String) { scope.launch { settingsRepo.setDuplicateRuleSetGlobalCombinator(combinator) } }
+
+    // --- Duplicate rules (see DuplicateRuleEntity/DuplicateRuleDao) ---
+    val duplicateRules: Flow<List<DuplicateRuleEntity>> = duplicateRuleDao.observeAll()
+    fun upsertDuplicateRule(rule: DuplicateRuleEntity) { scope.launch { duplicateRuleDao.upsert(rule) } }
+    fun deleteDuplicateRule(rule: DuplicateRuleEntity) { scope.launch { duplicateRuleDao.delete(rule) } }
+    fun setDuplicateRuleEnabled(id: Long, enabled: Boolean) { scope.launch { duplicateRuleDao.setEnabled(id, enabled) } }
     fun setMerchantCategoryMemoryEnabled(enabled: Boolean) { scope.launch { settingsRepo.setMerchantCategoryMemoryEnabled(enabled) } }
     fun setMerchantCategoryMemoryThreshold(count: Int) { scope.launch { settingsRepo.setMerchantCategoryMemoryThreshold(count) } }
     fun setWidgetBorderEnabled(enabled: Boolean) { scope.launch { settingsRepo.setWidgetBorderEnabled(enabled) } }
@@ -206,14 +216,24 @@ class ExpensesStateManager internal constructor(
             // Resolved here rather than pushed onto every caller — near-duplicate detection is a
             // standing preference, not something each call site should have to know or forward.
             val settings = settingsRepo.getSnapshot()
+            val localModeActive = settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL ||
+                settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL_AND_AI
+            // Review-only mode skips the silent check here entirely and instead evaluates the same
+            // rules AFTER a normal insert (below) — both rows need to already exist for the review
+            // list's Keep/Merge preview, unlike the silent path which never inserts the candidate.
+            val silentMergeEnabled = localModeActive && !settings.automaticProtectionReviewOnly
+            val nearDuplicateConfig = settings.toNearDuplicateConfig()
             val id = expensesRepo.addExpense(
                 title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, categoryId, items, imageName, isStub,
                 direction = direction,
-                nearDuplicateCheckEnabled = settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_AI,
-                nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
-                nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong())
+                nearDuplicateCheckEnabled = silentMergeEnabled,
+                nearDuplicateConfig = nearDuplicateConfig
             )
             onResult(id)
+            if (localModeActive && settings.automaticProtectionReviewOnly && id > 0) {
+                val group = expensesRepo.findLocalDuplicateGroupForRow(id, nearDuplicateConfig)
+                if (group != null) expenseDeduplicationRepo.mergePendingGroups(listOf(group))
+            }
             maybeRequestScopedDuplicateCheck(context, settings.duplicateCheckModeAutomatic, id)
         }
     }
@@ -225,10 +245,11 @@ class ExpensesStateManager internal constructor(
      *  and only fires when there's already a plausible peer to compare against. Never auto-applies —
      *  any result lands in the normal review list via [LlmResultReceiver], same as every other AI
      *  suggestion. No-ops silently if [context] is null, [newExpenseId] isn't a real inserted row
-     *  (negative sentinel — a rejected/merged duplicate has nothing new to check), or the mode is
-     *  Local-only. */
+     *  (negative sentinel — a rejected/merged duplicate has nothing new to check), or the mode has no
+     *  AI component ([ExpensesSettings.MODE_OFF]/[ExpensesSettings.MODE_LOCAL]). */
     private fun maybeRequestScopedDuplicateCheck(context: Context?, automaticMode: String, newExpenseId: Long) {
-        if (context == null || newExpenseId <= 0 || automaticMode == ExpensesSettings.MODE_LOCAL) return
+        val hasAiComponent = automaticMode == ExpensesSettings.MODE_LOCAL_AND_AI || automaticMode == ExpensesSettings.MODE_AI
+        if (context == null || newExpenseId <= 0 || !hasAiComponent) return
         scope.launch {
             val candidates = expensesRepo.duplicateCandidateClusters(scopedToId = newExpenseId).flatten()
             if (candidates.size < 2) return@launch
@@ -300,10 +321,7 @@ class ExpensesStateManager internal constructor(
             val settings = settingsRepo.getSnapshot()
             when (settings.duplicateCheckModeManual) {
                 ExpensesSettings.MODE_LOCAL -> {
-                    val groups = expensesRepo.findLocalDuplicateGroups(
-                        settings.nearDuplicateFuzzyMatchEnabled,
-                        TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong())
-                    )
+                    val groups = expensesRepo.findLocalDuplicateGroups(settings.toNearDuplicateConfig())
                     expenseDeduplicationRepo.mergePendingGroups(groups)
                 }
                 ExpensesSettings.MODE_LOCAL_AND_AI -> {
@@ -362,8 +380,7 @@ class ExpensesStateManager internal constructor(
                 autoCreate = settings.autoCreateVoiceCategory,
                 direction = entry.direction,
                 nearDuplicateCheckEnabled = settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_AI,
-                nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
-                nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong()),
+                nearDuplicateConfig = settings.toNearDuplicateConfig(),
                 merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
                 merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
             )
@@ -430,11 +447,12 @@ class ExpensesStateManager internal constructor(
             pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
             spendingLimitAlertRepo: SpendingLimitAlertRepository,
             pendingLlmRequestQueue: VoxLlmRequestQueue,
-            attachmentDao: AttachmentDao
+            attachmentDao: AttachmentDao,
+            duplicateRuleDao: DuplicateRuleDao
         ): ExpensesStateManager = instance ?: synchronized(this) {
             instance ?: ExpensesStateManager(
                 settingsRepo, expensesRepo, sessionManager, pendingCategoryMergeRepo, expenseDeduplicationRepo,
-                pendingNotificationExpenseRepo, spendingLimitAlertRepo, pendingLlmRequestQueue, attachmentDao
+                pendingNotificationExpenseRepo, spendingLimitAlertRepo, pendingLlmRequestQueue, attachmentDao, duplicateRuleDao
             ).also { instance = it }
         }
     }

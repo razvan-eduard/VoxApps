@@ -5,8 +5,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.data.toNearDuplicateConfig
 import kotlinx.coroutines.flow.first
-import java.util.concurrent.TimeUnit
 
 /**
  * Scheduled counterpart of the manual "Check for duplicates now" button — runs whichever engine(s)
@@ -30,10 +30,7 @@ class ExpenseDeduplicationWorker(
         val settings = container.settingsRepository.getSnapshot()
         when (settings.duplicateCheckModeManual) {
             ExpensesSettings.MODE_LOCAL -> {
-                val groups = container.expensesRepository.findLocalDuplicateGroups(
-                    settings.nearDuplicateFuzzyMatchEnabled,
-                    TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong())
-                )
+                val groups = container.expensesRepository.findLocalDuplicateGroups(settings.toNearDuplicateConfig())
                 container.expenseDeduplicationRepository.mergePendingGroups(groups)
             }
             ExpensesSettings.MODE_LOCAL_AND_AI -> {

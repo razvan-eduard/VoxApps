@@ -53,8 +53,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val DUPLICATE_CHECK_MODE_MANUAL = stringPreferencesKey("duplicate_check_mode_manual")
         val DUPLICATE_CHECK_MODE_AUTOMATIC = stringPreferencesKey("duplicate_check_mode_automatic")
         val AUTO_ACCEPT_DUPLICATE_MERGES = booleanPreferencesKey("auto_accept_duplicate_merges")
-        val NEAR_DUPLICATE_FUZZY_MATCH_ENABLED = booleanPreferencesKey("near_duplicate_fuzzy_match_enabled")
+        val AUTOMATIC_PROTECTION_REVIEW_ONLY = booleanPreferencesKey("automatic_protection_review_only")
         val NEAR_DUPLICATE_TIME_WINDOW_MINUTES = intPreferencesKey("near_duplicate_time_window_minutes")
+        val DUPLICATE_RULE_SET_GLOBAL_COMBINATOR = stringPreferencesKey("duplicate_rule_set_global_combinator")
         val MERCHANT_CATEGORY_MEMORY_ENABLED = booleanPreferencesKey("merchant_category_memory_enabled")
         val MERCHANT_CATEGORY_MEMORY_THRESHOLD = intPreferencesKey("merchant_category_memory_threshold")
         val WIDGET_BORDER_ENABLED = booleanPreferencesKey("widget_border_enabled")
@@ -93,9 +94,11 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             duplicateCheckModeManual = prefs[Keys.DUPLICATE_CHECK_MODE_MANUAL] ?: ExpensesSettings.MODE_LOCAL,
             duplicateCheckModeAutomatic = prefs[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] ?: ExpensesSettings.MODE_LOCAL,
             autoAcceptDuplicateMerges = prefs[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] ?: false,
-            nearDuplicateFuzzyMatchEnabled = prefs[Keys.NEAR_DUPLICATE_FUZZY_MATCH_ENABLED] ?: true,
+            automaticProtectionReviewOnly = prefs[Keys.AUTOMATIC_PROTECTION_REVIEW_ONLY] ?: false,
             nearDuplicateTimeWindowMinutes = prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES]
                 ?: ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES,
+            duplicateRuleSetGlobalCombinator = prefs[Keys.DUPLICATE_RULE_SET_GLOBAL_COMBINATOR]
+                ?: ExpensesSettings.RULE_SET_OR,
             merchantCategoryMemoryEnabled = prefs[Keys.MERCHANT_CATEGORY_MEMORY_ENABLED] ?: false,
             merchantCategoryMemoryThreshold = prefs[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD]
                 ?: ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD,
@@ -243,12 +246,16 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] = enabled }
     }
 
-    override suspend fun setNearDuplicateFuzzyMatchEnabled(enabled: Boolean) {
-        dataStore.edit { it[Keys.NEAR_DUPLICATE_FUZZY_MATCH_ENABLED] = enabled }
+    override suspend fun setAutomaticProtectionReviewOnly(enabled: Boolean) {
+        dataStore.edit { it[Keys.AUTOMATIC_PROTECTION_REVIEW_ONLY] = enabled }
     }
 
     override suspend fun setNearDuplicateTimeWindowMinutes(minutes: Int) {
         dataStore.edit { it[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES] = minutes }
+    }
+
+    override suspend fun setDuplicateRuleSetGlobalCombinator(combinator: String) {
+        dataStore.edit { it[Keys.DUPLICATE_RULE_SET_GLOBAL_COMBINATOR] = combinator }
     }
 
     override suspend fun setMerchantCategoryMemoryEnabled(enabled: Boolean) {
@@ -304,8 +311,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.DUPLICATE_CHECK_MODE_MANUAL] = settings.duplicateCheckModeManual
             prefs[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] = settings.duplicateCheckModeAutomatic
             prefs[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] = settings.autoAcceptDuplicateMerges
-            prefs[Keys.NEAR_DUPLICATE_FUZZY_MATCH_ENABLED] = settings.nearDuplicateFuzzyMatchEnabled
+            prefs[Keys.AUTOMATIC_PROTECTION_REVIEW_ONLY] = settings.automaticProtectionReviewOnly
             prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES] = settings.nearDuplicateTimeWindowMinutes
+            prefs[Keys.DUPLICATE_RULE_SET_GLOBAL_COMBINATOR] = settings.duplicateRuleSetGlobalCombinator
             prefs[Keys.MERCHANT_CATEGORY_MEMORY_ENABLED] = settings.merchantCategoryMemoryEnabled
             prefs[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD] = settings.merchantCategoryMemoryThreshold
             prefs[Keys.WIDGET_BORDER_ENABLED] = settings.widgetBorderEnabled

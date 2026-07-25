@@ -109,14 +109,21 @@ data class ExpensesSettings(
      *  (today's original behavior — the AI reasons over the entire expense list unfiltered).
      *  Defaults to [MODE_LOCAL] so real protection is active out of the box. */
     val duplicateCheckModeManual: String = MODE_LOCAL,
-    /** Same three engine choices as [duplicateCheckModeManual], but governing what runs
-     *  automatically every time a new expense is inserted (voice/scan/manual/notification-capture).
-     *  [MODE_LOCAL]/[MODE_LOCAL_AND_AI] both run the deterministic
-     *  [com.voxapps.expenses.data.ExpenseNearDuplicateDetector] synchronously and merge silently on a
-     *  match, same as before this setting existed; [MODE_LOCAL_AND_AI]/[MODE_AI] additionally fire an
-     *  async, scoped AI check (only the new row's own same-amount cluster, never the whole list)
-     *  whose result — if any — lands in the review list, unless [autoAcceptDuplicateMerges] is on. */
+    /** Same engine choices as [duplicateCheckModeManual], plus [MODE_OFF] (unique to this setting —
+     *  disables insert-time duplicate checking entirely; the manual check/schedule are unaffected),
+     *  governing what runs automatically every time a new expense is inserted (voice/scan/manual/
+     *  notification-capture). [MODE_LOCAL]/[MODE_LOCAL_AND_AI] both run the deterministic rule engine
+     *  synchronously — silently merging on a match, or staging it for review instead if
+     *  [automaticProtectionReviewOnly] is on; [MODE_LOCAL_AND_AI]/[MODE_AI] additionally fire an async,
+     *  scoped AI check (only the new row's own same-amount cluster, never the whole list) whose result
+     *  — if any — lands in the review list, unless [autoAcceptDuplicateMerges] is on. */
     val duplicateCheckModeAutomatic: String = MODE_LOCAL,
+    /** Off by default (today's original silent-merge behavior). When on, an insert-time rule-engine
+     *  match ([duplicateCheckModeAutomatic] LOCAL/LOCAL_AND_AI) is staged in the review list — exactly
+     *  like the manual "Check for duplicates now" button — instead of merging immediately. Has no
+     *  effect when [duplicateCheckModeAutomatic] is OFF or AI (the latter has no local rule-engine
+     *  pass to begin with). */
+    val automaticProtectionReviewOnly: Boolean = false,
     /** Off by default (same cautious posture as every other "let AI act without review" toggle in
      *  this app). When on, a duplicate the *scoped, insert-time* AI check confirms (see
      *  [duplicateCheckModeAutomatic]) merges immediately instead of sitting in the review list —
@@ -126,13 +133,14 @@ data class ExpensesSettings(
      *  the manual "Check for duplicates now" button or the scheduled job — those always stage for
      *  review regardless of this setting. */
     val autoAcceptDuplicateMerges: Boolean = false,
-    /** An exact-only near-duplicate check would barely differ from the existing day-granularity
-     *  [com.voxapps.expenses.data.ExpenseDuplicateChecker]; fuzzy matching is what actually lets this
-     *  feature catch two sources describing the same transaction with different wording, so it's the
-     *  sane default whenever a duplicate-check mode above includes Local. */
-    val nearDuplicateFuzzyMatchEnabled: Boolean = true,
-    /** Minutes, not millis — converted at the point of use. */
+    /** Minutes, not millis — converted at the point of use. Applies wherever a rule references
+     *  [com.voxapps.expenses.data.ExpenseRuleFields.ID_DATE_TIME] — see that class's doc comment. */
     val nearDuplicateTimeWindowMinutes: Int = NEAR_DUP_DEFAULT_WINDOW_MINUTES,
+    /** How the user's [com.voxapps.expenses.data.DuplicateRuleEntity] rules combine — [MODE_LOCAL]'s
+     *  duplicate check is a match if ANY enabled rule matches ([RULE_SET_OR], the default — matches
+     *  the seeded default rules' own intent, "same amount+title" OR "same amount+vendor") or only if
+     *  EVERY enabled rule matches ([RULE_SET_AND], for a stricter "all these signals together" check). */
+    val duplicateRuleSetGlobalCombinator: String = RULE_SET_OR,
     /** Off by default — new, override-the-LLM behavior a user must opt into, same posture as
      *  [autoAcceptDuplicateMerges]. When on, [com.voxapps.expenses.data.ExpensesRepository.addParsedExpense]
      *  checks [com.voxapps.expenses.data.MerchantCategoryMemoryDao] BEFORE running category
@@ -175,6 +183,8 @@ data class ExpensesSettings(
         const val MODE_LOCAL = "LOCAL"
         const val MODE_LOCAL_AND_AI = "LOCAL_AND_AI"
         const val MODE_AI = "AI"
+        /** [duplicateCheckModeAutomatic] only — not a valid value for [duplicateCheckModeManual]. */
+        const val MODE_OFF = "OFF"
 
         const val NEAR_DUP_WINDOW_1M = 1
         const val NEAR_DUP_WINDOW_2M = 2
@@ -182,6 +192,9 @@ data class ExpensesSettings(
         const val NEAR_DUP_WINDOW_10M = 10
         const val NEAR_DUP_WINDOW_15M = 15
         const val NEAR_DUP_DEFAULT_WINDOW_MINUTES = NEAR_DUP_WINDOW_2M
+
+        const val RULE_SET_OR = "OR"
+        const val RULE_SET_AND = "AND"
 
         const val MERCHANT_MEMORY_THRESHOLD_1 = 1
         const val MERCHANT_MEMORY_THRESHOLD_3 = 3

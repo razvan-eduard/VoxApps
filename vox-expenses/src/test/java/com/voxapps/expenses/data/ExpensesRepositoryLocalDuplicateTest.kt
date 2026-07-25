@@ -1,7 +1,9 @@
 package com.voxapps.expenses.data
 
+import com.voxapps.datahygiene.RuleCombinator
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -13,18 +15,26 @@ import org.junit.Test
 class ExpensesRepositoryLocalDuplicateTest {
 
     private lateinit var expenseDao: ExpenseDao
+    private lateinit var duplicateRuleDao: DuplicateRuleDao
     private lateinit var repository: ExpensesRepository
 
     private fun stubAll(expenses: List<Expense>) {
         coEvery { expenseDao.observeAll() } returns flowOf(expenses)
     }
 
+    private val titleAndAmountRule = DuplicateRuleEntity(
+        id = 1, name = "test rule", fieldIds = listOf("title", "totalAmount"), combinator = RuleCombinator.AND.name,
+        fuzzyMatchEnabled = false
+    )
+
     @Before
     fun setup() {
         expenseDao = mockk(relaxed = true)
+        duplicateRuleDao = mockk(relaxed = true)
+        every { duplicateRuleDao.observeAll() } returns flowOf(listOf(titleAndAmountRule))
         repository = ExpensesRepository(
             expenseDao, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
-            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true)
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), duplicateRuleDao
         )
     }
 
@@ -37,7 +47,7 @@ class ExpensesRepositoryLocalDuplicateTest {
             )
         )
 
-        val groups = repository.findLocalDuplicateGroups(fuzzyMatch = false, timeWindowMillis = 60_000)
+        val groups = repository.findLocalDuplicateGroups(NearDuplicateConfig(timeWindowMillis = 60_000))
 
         assertEquals(listOf(DuplicateGroup(keepId = 1, duplicateIds = listOf(2))), groups)
     }
@@ -51,7 +61,7 @@ class ExpensesRepositoryLocalDuplicateTest {
             )
         )
 
-        val groups = repository.findLocalDuplicateGroups(fuzzyMatch = false, timeWindowMillis = 60_000)
+        val groups = repository.findLocalDuplicateGroups(NearDuplicateConfig(timeWindowMillis = 60_000))
 
         assertEquals(listOf(DuplicateGroup(keepId = 3, duplicateIds = listOf(5))), groups)
     }
@@ -68,7 +78,7 @@ class ExpensesRepositoryLocalDuplicateTest {
             )
         )
 
-        val groups = repository.findLocalDuplicateGroups(fuzzyMatch = false, timeWindowMillis = 60_000)
+        val groups = repository.findLocalDuplicateGroups(NearDuplicateConfig(timeWindowMillis = 60_000))
 
         assertEquals(1, groups.size)
         assertEquals(1, groups.first().keepId)
@@ -84,7 +94,22 @@ class ExpensesRepositoryLocalDuplicateTest {
             )
         )
 
-        val groups = repository.findLocalDuplicateGroups(fuzzyMatch = false, timeWindowMillis = 60_000)
+        val groups = repository.findLocalDuplicateGroups(NearDuplicateConfig(timeWindowMillis = 60_000))
+
+        assertTrue(groups.isEmpty())
+    }
+
+    @Test
+    fun `findLocalDuplicateGroups finds nothing when there are no enabled rules`() = runTest {
+        every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
+        stubAll(
+            listOf(
+                Expense(id = 1, title = "Coffee", totalAmount = 15.0, currencyCode = "RON", dateTime = 1_000L, createdAt = 1),
+                Expense(id = 2, title = "Coffee", totalAmount = 15.0, currencyCode = "RON", dateTime = 1_100L, createdAt = 2)
+            )
+        )
+
+        val groups = repository.findLocalDuplicateGroups(NearDuplicateConfig(timeWindowMillis = 60_000))
 
         assertTrue(groups.isEmpty())
     }

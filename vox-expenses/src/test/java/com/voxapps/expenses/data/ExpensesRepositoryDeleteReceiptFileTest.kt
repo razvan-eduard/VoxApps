@@ -40,7 +40,7 @@ class ExpensesRepositoryDeleteReceiptFileTest {
         every { context.filesDir } returns filesDir
 
         repository = ExpensesRepository(
-            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), context, mockk(relaxed = true)
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), context, mockk(relaxed = true), mockk(relaxed = true)
         )
     }
 

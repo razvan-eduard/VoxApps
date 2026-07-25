@@ -3,7 +3,9 @@ package com.voxapps.expenses.data
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentFileStore
-import com.voxapps.calendar.CalendarDateUtils
+import com.voxapps.datahygiene.DuplicateChecker
+import com.voxapps.datahygiene.RuleBasedDuplicateChecker
+import com.voxapps.datahygiene.RuleCombinator
 import com.voxapps.datahygiene.findDuplicate
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.DuplicateGroup
@@ -36,12 +38,40 @@ class ExpensesRepository(
     private val spendingLimitDao: SpendingLimitDao,
     private val merchantCategoryMemoryDao: MerchantCategoryMemoryDao,
     private val appContext: Context,
-    private val attachmentDao: AttachmentDao
+    private val attachmentDao: AttachmentDao,
+    private val duplicateRuleDao: DuplicateRuleDao
 ) {
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
     val expensesWithDetails: Flow<List<ExpenseWithDetails>> = expenseDao.observeExpensesWithDetails()
     val categories: Flow<List<Category>> = categoryDao.observeAll()
     val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll()
+
+    /** Builds the current duplicate checker from whatever rules are persisted right now — fetched
+     *  fresh on every call rather than cached, since rules can change between checks and this
+     *  repository already establishes the pattern of reading its own DAOs directly (never settings).
+     *  [automaticOnly] narrows to rules with [DuplicateRuleEntity.appliesAutomatically] set — used for
+     *  the insert-time silent check; manual/scheduled checks pass false to use every *enabled* rule
+     *  regardless, since those are always staged for review (see [DuplicateRuleEntity]'s doc comment).
+     *  Each rule fuzzy-matches its own string fields independently ([DuplicateRuleEntity.fuzzyMatchEnabled]
+     *  is per-rule, not global) — evaluated one rule at a time against the field set matching its own
+     *  fuzzy setting, then combined via [NearDuplicateConfig.globalCombinator], rather than the single
+     *  shared field list [com.voxapps.datahygiene.RuleBasedDuplicateChecker] alone would allow. */
+    private suspend fun buildDuplicateChecker(config: NearDuplicateConfig, automaticOnly: Boolean = false): DuplicateChecker<Expense> {
+        val rules = duplicateRuleDao.observeAll().first().filter { it.enabled && (!automaticOnly || it.appliesAutomatically) }
+        val exactFields = ExpenseRuleFields(fuzzyMatchEnabled = false, timeWindowMillis = config.timeWindowMillis).all
+        val fuzzyFields = ExpenseRuleFields(fuzzyMatchEnabled = true, timeWindowMillis = config.timeWindowMillis).all
+        return DuplicateChecker { candidate, existing ->
+            if (rules.isEmpty()) return@DuplicateChecker false
+            val results = rules.map { rule ->
+                val fields = if (rule.fuzzyMatchEnabled) fuzzyFields else exactFields
+                RuleBasedDuplicateChecker(fields, listOf(rule.toDuplicateRule()), RuleCombinator.OR).isDuplicateOf(candidate, existing)
+            }
+            when (config.globalCombinator) {
+                RuleCombinator.AND -> results.all { it }
+                RuleCombinator.OR -> results.any { it }
+            }
+        }
+    }
 
     suspend fun expensesSnapshot(): List<Expense> = expenseDao.observeAll().first()
 
@@ -128,8 +158,9 @@ class ExpensesRepository(
         checkForDuplicate: Boolean = true,
         direction: TransactionDirection = TransactionDirection.OUTGOING,
         nearDuplicateCheckEnabled: Boolean = false,
-        nearDuplicateFuzzyMatch: Boolean = true,
-        nearDuplicateTimeWindowMillis: Long = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong())
+        nearDuplicateConfig: NearDuplicateConfig = NearDuplicateConfig(
+            timeWindowMillis = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong())
+        )
     ): Long {
         return try {
             val candidate = Expense(
@@ -148,37 +179,27 @@ class ExpensesRepository(
                 createdAt = createdAt
             )
 
-            if (checkForDuplicate) {
-                // Same calendar day is the cheap pre-filter, matching ExpenseDuplicateChecker's own
-                // day-level (not exact-instant) dateTime comparison — avoids a full-table scan on
-                // every insert while still surfacing every candidate the checker could actually match.
-                val day = CalendarDateUtils.millisToLocalDate(dateTime)
-                val dayStart = CalendarDateUtils.startOfDayMillis(day)
-                val dayEnd = CalendarDateUtils.startOfDayMillis(day.plusDays(1)) - 1
-                val sameDay = expenseDao.getForDateRange(dayStart, dayEnd)
-                val duplicate = ExpenseDuplicateChecker.findDuplicate(candidate, sameDay)
-                if (duplicate != null) {
-                    Logger.w("ExpensesRepository", "Duplicate entry — skipping insert (matches existing id=${duplicate.id})")
-                    return DUPLICATE_ENTRY_RESULT
-                }
-
-                if (nearDuplicateCheckEnabled) {
-                    val nearby = expenseDao.getForDateRange(
-                        dateTime - nearDuplicateTimeWindowMillis,
-                        dateTime + nearDuplicateTimeWindowMillis
-                    )
-                    val detector = ExpenseNearDuplicateDetector(nearDuplicateFuzzyMatch, nearDuplicateTimeWindowMillis)
-                    val nearMatch = detector.findDuplicate(candidate, nearby)
-                    if (nearMatch != null) {
-                        val enriched = enrichWithNearDuplicate(nearMatch, candidate)
-                        if (enriched !== nearMatch) expenseDao.update(enriched)
-                        // The candidate's own receipt photo (if any) is now orphaned unless it got
-                        // adopted into the enriched record.
-                        if (imageName != null && enriched.receiptImageName != imageName) {
-                            deleteReceiptFiles(listOf(imageName))
-                        }
-                        Logger.w("ExpensesRepository", "Near-duplicate merged into existing id=${nearMatch.id}")
-                        return NEAR_DUPLICATE_MERGED_RESULT
+            if (checkForDuplicate && nearDuplicateCheckEnabled) {
+                val nearby = expenseDao.getForDateRange(
+                    dateTime - nearDuplicateConfig.timeWindowMillis,
+                    dateTime + nearDuplicateConfig.timeWindowMillis
+                )
+                val checker = buildDuplicateChecker(nearDuplicateConfig, automaticOnly = true)
+                val match = checker.findDuplicate(candidate, nearby)
+                if (match != null) {
+                    val enriched = enrichWithNearDuplicate(match, candidate)
+                    if (enriched !== match) expenseDao.update(enriched)
+                    // The candidate's own receipt photo (if any) is now orphaned unless it got
+                    // adopted into the enriched record.
+                    if (imageName != null && enriched.receiptImageName != imageName) {
+                        deleteReceiptFiles(listOf(imageName))
+                    }
+                    return if (enriched === match) {
+                        Logger.w("ExpensesRepository", "Duplicate entry — skipping insert (matches existing id=${match.id})")
+                        DUPLICATE_ENTRY_RESULT
+                    } else {
+                        Logger.w("ExpensesRepository", "Near-duplicate merged into existing id=${match.id}")
+                        NEAR_DUPLICATE_MERGED_RESULT
                     }
                 }
             }
@@ -284,8 +305,9 @@ class ExpensesRepository(
         imageName: String? = null,
         direction: TransactionDirection = TransactionDirection.OUTGOING,
         nearDuplicateCheckEnabled: Boolean = false,
-        nearDuplicateFuzzyMatch: Boolean = true,
-        nearDuplicateTimeWindowMillis: Long = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong()),
+        nearDuplicateConfig: NearDuplicateConfig = NearDuplicateConfig(
+            timeWindowMillis = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong())
+        ),
         merchantMemoryEnabled: Boolean = false,
         merchantMemoryThreshold: Int = ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD
     ): Long {
@@ -320,8 +342,7 @@ class ExpensesRepository(
             title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, resolved.id, items, imageName,
             direction = direction,
             nearDuplicateCheckEnabled = nearDuplicateCheckEnabled,
-            nearDuplicateFuzzyMatch = nearDuplicateFuzzyMatch,
-            nearDuplicateTimeWindowMillis = nearDuplicateTimeWindowMillis
+            nearDuplicateConfig = nearDuplicateConfig
         )
     }
 
@@ -377,13 +398,13 @@ class ExpensesRepository(
     }
 
     /** Retroactive scan for [ExpensesSettings.MODE_LOCAL]'s manual "Check for duplicates
-     *  now" path — [ExpenseNearDuplicateDetector] otherwise only ever compares one new candidate
+     *  now" path — [buildDuplicateChecker] otherwise only ever compares one new candidate
      *  against a narrow DB window at single-insert time, with no way to catch rows already sitting
      *  in the table. Greedy grouping: the earliest-created row in a cluster is always [keepId] (same
      *  "first-arrived record stays authoritative" precedent as [enrichWithNearDuplicate]), and once
      *  a row is consumed into a group it's never re-grouped into another. */
-    suspend fun findLocalDuplicateGroups(fuzzyMatch: Boolean, timeWindowMillis: Long): List<DuplicateGroup> {
-        val detector = ExpenseNearDuplicateDetector(fuzzyMatch, timeWindowMillis)
+    suspend fun findLocalDuplicateGroups(nearDuplicateConfig: NearDuplicateConfig): List<DuplicateGroup> {
+        val detector = buildDuplicateChecker(nearDuplicateConfig)
         val all = expensesSnapshot().sortedBy { it.createdAt }
         val consumed = mutableSetOf<Long>()
         val groups = mutableListOf<DuplicateGroup>()
@@ -397,6 +418,23 @@ class ExpensesRepository(
             }
         }
         return groups
+    }
+
+    /** Scoped single-row counterpart to [findLocalDuplicateGroups], for automatic protection's
+     *  "stage for review instead of silently merging" mode
+     *  ([com.voxapps.expenses.data.preferences.ExpensesSettings.automaticProtectionReviewOnly]) —
+     *  checks [candidateId] (already inserted, unlike the silent path which checks *before* inserting)
+     *  against a nearby-in-time window using only auto-apply rules, without modifying either row.
+     *  Null if [candidateId] doesn't exist or nothing matches. */
+    suspend fun findLocalDuplicateGroupForRow(candidateId: Long, nearDuplicateConfig: NearDuplicateConfig): DuplicateGroup? {
+        val candidate = expenseDao.getWithDetailsById(candidateId)?.expense ?: return null
+        val nearby = expenseDao.getForDateRange(
+            candidate.dateTime - nearDuplicateConfig.timeWindowMillis,
+            candidate.dateTime + nearDuplicateConfig.timeWindowMillis
+        ).filter { it.id != candidateId }
+        val checker = buildDuplicateChecker(nearDuplicateConfig, automaticOnly = true)
+        val match = checker.findDuplicate(candidate, nearby) ?: return null
+        return DuplicateGroup(keepId = match.id, duplicateIds = listOf(candidateId))
     }
 
     /** Wide-net recall pass for the "local prepares a candidate list, AI judges it" hybrid mode —

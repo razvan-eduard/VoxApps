@@ -5,7 +5,7 @@ package com.voxapps.datahygiene
  * Note, ...) to detect an exact duplicate already in the database — same "one small interface per
  * entity type, shared scan logic underneath" shape as [RecordSanitizer].
  */
-interface DuplicateChecker<T> {
+fun interface DuplicateChecker<T> {
     /** True if [candidate] and [existing] represent the same real-world record: every
      *  user-meaningful field matches after normalization (route strings through [FieldCleaner] so
      *  e.g. a "null"-string field and a genuinely blank one count as equal), ignoring identity/audit

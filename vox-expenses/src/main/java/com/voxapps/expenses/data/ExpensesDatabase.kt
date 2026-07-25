@@ -16,8 +16,8 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 @Database(
     entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class,
         ExpenseTombstone::class, MerchantCategoryMemory::class, PendingLlmRequestEntity::class,
-        AttachmentEntity::class],
-    version = 10,
+        AttachmentEntity::class, DuplicateRuleEntity::class],
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -29,6 +29,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
     abstract fun merchantCategoryMemoryDao(): MerchantCategoryMemoryDao
     abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
     abstract fun attachmentDao(): AttachmentDao
+    abstract fun duplicateRuleDao(): DuplicateRuleDao
 
     companion object {
         @Volatile private var instance: ExpensesDatabase? = null
@@ -142,6 +143,56 @@ abstract class ExpensesDatabase : RoomDatabase() {
             }
         }
 
+        // Creates the rule engine's table and seeds two default rules reproducing the previous
+        // hardcoded near-duplicate behavior (amount+currency+direction+time-window always required,
+        // plus title-or-vendor) as two AND rules OR'd together — see ExpenseRuleFields for what each
+        // fieldId means. Deliberately does NOT also seed the old ExpenseDuplicateChecker's separate
+        // all-fields-exact/same-day rule — that behavior is intentionally not preserved 1:1 now that
+        // both layers fold into one rule engine with a single shared time window; a user who wants
+        // that strictness back can build it themselves with the new rules UI.
+        private fun seedDefaultDuplicateRules(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "INSERT INTO duplicate_rules (name, fieldIds, combinator, enabled, sortOrder, appliesAutomatically, fuzzyMatchEnabled) VALUES " +
+                    "('Same amount & title', 'totalAmount,currencyCode,direction,dateTime,title', 'AND', 1, 0, 1, 1)"
+            )
+            db.execSQL(
+                "INSERT INTO duplicate_rules (name, fieldIds, combinator, enabled, sortOrder, appliesAutomatically, fuzzyMatchEnabled) VALUES " +
+                    "('Same amount & vendor', 'totalAmount,currencyCode,direction,dateTime,vendor', 'AND', 1, 1, 1, 1)"
+            )
+        }
+
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS duplicate_rules (" +
+                        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "name TEXT NOT NULL, " +
+                        "fieldIds TEXT NOT NULL, " +
+                        "combinator TEXT NOT NULL, " +
+                        "enabled INTEGER NOT NULL, " +
+                        "sortOrder INTEGER NOT NULL)"
+                )
+            }
+        }
+
+        // Adds per-rule control that didn't exist when duplicate_rules was first created: whether a
+        // rule applies automatically at insert time (vs. review-only) and whether its string fields
+        // fuzzy-match — both were briefly a single global setting each before shipping, moved to
+        // per-rule immediately (no real users on the old shape yet), hence bundled into one migration
+        // rather than the usual one-column-per-release cadence.
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE duplicate_rules ADD COLUMN appliesAutomatically INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE duplicate_rules ADD COLUMN fuzzyMatchEnabled INTEGER NOT NULL DEFAULT 1")
+                // MIGRATION_10_11 seeded the two default rules without these columns (they didn't
+                // exist yet) — seed again only if that row genuinely never ran (empty table), so an
+                // upgrade from an already-seeded v11 doesn't duplicate them.
+                val cursor = db.query("SELECT COUNT(*) FROM duplicate_rules")
+                val isEmpty = cursor.use { it.moveToFirst() && it.getInt(0) == 0 }
+                if (isEmpty) seedDefaultDuplicateRules(db)
+            }
+        }
+
         fun get(context: Context): ExpensesDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
         }
@@ -151,7 +202,17 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                // A brand-new install never runs a Migration (Room creates the full current schema
+                // directly from the @Entity annotations) — this seeds the same default rules for that
+                // path too, so a fresh install and an upgraded one both start with working duplicate
+                // protection instead of only the latter getting it.
+                .addCallback(object : RoomDatabase.Callback() {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        super.onCreate(db)
+                        seedDefaultDuplicateRules(db)
+                    }
+                })
                 .build()
         }
     }

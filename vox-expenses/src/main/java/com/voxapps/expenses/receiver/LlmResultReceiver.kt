@@ -9,6 +9,7 @@ import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
+import com.voxapps.expenses.data.toNearDuplicateConfig
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.domain.llm.CategoryMergeMappingParser
 import com.voxapps.expenses.domain.llm.DuplicateGroup
@@ -36,7 +37,6 @@ import java.time.LocalTime
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.concurrent.TimeUnit
 
 private const val TAG = "LlmResultReceiver"
 
@@ -202,10 +202,23 @@ class LlmResultReceiver : BroadcastReceiver() {
                     Logger.w(TAG, "Notification expense parse failed: ${result.error}")
                     null
                 }
+                // A STATUS_ERROR reply (OpenAI/network/etc. failure on Commander's side — see
+                // OpenAiInterpreter.lastErrorReason for the specific cause carried in result.error)
+                // is transient, unlike a STATUS_SUCCESS reply this receiver simply doesn't recognize
+                // as a payment (parsed == null there is a *correct*, final "not a payment" outcome).
+                // Only mark this request/notification handled on a genuine reply — leaving both
+                // markers untouched on an error means the queue's own 15-minute retry cycle
+                // (PendingLlmRequestRetryWorker) naturally re-sends this exact request once the
+                // outage clears, and the notification stays eligible for the listener's normal
+                // catch-up paths too — without this, an API outage silently and permanently dropped
+                // whatever was captured during it the moment Commander's error reply arrived,
+                // regardless of whether the user ever dismissed the source notification.
+                val isRetryableFailure = result.status != VoxLlmResult.STATUS_SUCCESS
 
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        if (isRetryableFailure) return@launch
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
                         if (notificationKey != null) {
                             ProcessedNotificationKeysStore(context.applicationContext).markProcessed(notificationKey)
@@ -223,6 +236,8 @@ class LlmResultReceiver : BroadcastReceiver() {
                             // Same insert path as ExpensesStateManager.approveNotificationExpense —
                             // skips the pending-review queue entirely. It's still a normal, editable
                             // expense row afterward, just created without an explicit Approve tap.
+                            val localModeActive = settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL ||
+                                settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL_AND_AI
                             val newExpenseId = container.expensesRepository.addParsedExpense(
                                 title = cleanTitle,
                                 totalAmount = parsed.totalAmount,
@@ -236,12 +251,12 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 defaultCategoryId = settings.defaultVoiceCategoryId,
                                 autoCreate = settings.autoCreateVoiceCategory,
                                 direction = parsed.direction,
-                                nearDuplicateCheckEnabled = settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_AI,
-                                nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
-                                nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong()),
+                                nearDuplicateCheckEnabled = localModeActive && !settings.automaticProtectionReviewOnly,
+                                nearDuplicateConfig = settings.toNearDuplicateConfig(),
                                 merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
                                 merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
                             )
+                            stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
                             maybeRequestScopedDuplicateCheck(context, container, settings.duplicateCheckModeAutomatic, newExpenseId)
                         } else {
                             container.pendingNotificationExpenseRepository.addPending(
@@ -319,6 +334,8 @@ class LlmResultReceiver : BroadcastReceiver() {
         }
         // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard — this is the
         // only guard for fields not sourced from raw JSON.
+        val localModeActive = settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL ||
+            settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL_AND_AI
         val newExpenseId = container.expensesRepository.addParsedExpense(
             title = FieldCleaner.clean(parsed.title, "title", "Expense"),
             totalAmount = parsed.totalAmount,
@@ -334,12 +351,12 @@ class LlmResultReceiver : BroadcastReceiver() {
             items = items,
             imageName = imageName,
             direction = parsed.direction,
-            nearDuplicateCheckEnabled = settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_AI,
-            nearDuplicateFuzzyMatch = settings.nearDuplicateFuzzyMatchEnabled,
-            nearDuplicateTimeWindowMillis = TimeUnit.MINUTES.toMillis(settings.nearDuplicateTimeWindowMinutes.toLong()),
+            nearDuplicateCheckEnabled = localModeActive && !settings.automaticProtectionReviewOnly,
+            nearDuplicateConfig = settings.toNearDuplicateConfig(),
             merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
             merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
         )
+        stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
 
         maybeRequestScopedDuplicateCheck(appContext, container, settings.duplicateCheckModeAutomatic, newExpenseId)
 
@@ -502,7 +519,8 @@ class LlmResultReceiver : BroadcastReceiver() {
         automaticMode: String,
         newExpenseId: Long
     ) {
-        if (newExpenseId <= 0 || automaticMode == ExpensesSettings.MODE_LOCAL) return
+        val hasAiComponent = automaticMode == ExpensesSettings.MODE_LOCAL_AND_AI || automaticMode == ExpensesSettings.MODE_AI
+        if (newExpenseId <= 0 || !hasAiComponent) return
         CoroutineScope(Dispatchers.IO).launch {
             val candidates = container.expensesRepository.duplicateCandidateClusters(scopedToId = newExpenseId).flatten()
             if (candidates.size < 2) return@launch
@@ -511,6 +529,21 @@ class LlmResultReceiver : BroadcastReceiver() {
             }
             ExpenseDeduplicationRequestSender.send(context, container.pendingLlmRequestQueue, summaries, scoped = true)
         }
+    }
+
+    /** Local-rule-engine counterpart of [maybeRequestScopedDuplicateCheck] for
+     *  [ExpensesSettings.automaticProtectionReviewOnly] mode — see
+     *  [com.voxapps.expenses.state.ExpensesStateManager]'s identical helper for why this runs
+     *  *after* a normal insert rather than checking-then-skipping the insert. */
+    private suspend fun stageLocalReviewIfNeeded(
+        container: ExpensesContainer,
+        settings: com.voxapps.expenses.data.preferences.ExpensesSettings,
+        localModeActive: Boolean,
+        newExpenseId: Long
+    ) {
+        if (!localModeActive || !settings.automaticProtectionReviewOnly || newExpenseId <= 0) return
+        val group = container.expensesRepository.findLocalDuplicateGroupForRow(newExpenseId, settings.toNearDuplicateConfig())
+        if (group != null) container.expenseDeduplicationRepository.mergePendingGroups(listOf(group))
     }
 
     /** The AI's proposed groups are never trusted blindly — a hallucinated group (claiming two
