@@ -1,5 +1,6 @@
 package com.voxapps.hub.data.preferences
 
+import com.voxapps.hub.domain.backup.AppBackupConfig
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -19,6 +20,10 @@ interface HubSettingsRepository {
     suspend fun setDebugToastsEnabled(enabled: Boolean)
     suspend fun setBackupInterval(interval: String)
     suspend fun setBackupRetentionCount(count: Int)
+
+    /** Updates one app's backup config, leaving every other app's entry untouched — read-modify-write
+     *  within a single DataStore edit so concurrent toggles from different app sections don't race. */
+    suspend fun setAppBackupConfig(packageName: String, config: AppBackupConfig)
 
     /** Called by [com.voxapps.hub.domain.backup.BackupWorker] when a scheduled run finishes,
      *  success or failure — this is the only way the user learns a background run failed. */

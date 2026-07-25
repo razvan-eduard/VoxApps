@@ -1,5 +1,9 @@
 package com.voxapps.notes.data
 
+import android.content.Context
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.logging.Logger
 import com.voxapps.notes.domain.llm.DuplicateGroup
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -13,7 +17,9 @@ data class VoiceNoteResult(val noteId: Long, val categoryId: Long?, val category
  */
 class NotesRepository(
     private val noteDao: NoteDao,
-    private val categoryDao: CategoryDao
+    private val categoryDao: CategoryDao,
+    private val attachmentDao: AttachmentDao,
+    private val appContext: Context
 ) {
     val notes: Flow<List<Note>> = noteDao.observeAll()
     val notesWithCategory: Flow<List<NoteWithCategory>> = noteDao.observeNotesWithCategory()
@@ -109,12 +115,31 @@ class NotesRepository(
     suspend fun deleteNote(note: Note) {
         noteDao.delete(note)
         noteDao.insertTombstone(NoteTombstone(note.uid, System.currentTimeMillis()))
+        deleteAttachmentsFor(note.id)
     }
 
     suspend fun deleteNoteById(id: Long) {
         val uid = noteDao.getUidById(id)
         noteDao.deleteById(id)
         if (uid != null) noteDao.insertTombstone(NoteTombstone(uid, System.currentTimeMillis()))
+        deleteAttachmentsFor(id)
+    }
+
+    /** Best-effort cleanup of this note's attachments (see :core:attachments) — a file-delete
+     *  failure never blocks/rolls back the DB delete. Skips the physical delete when another row
+     *  still references the same fileName (e.g. import re-inserting an attachment under a new note
+     *  id, ahead of the "replace snapshot" delete of the note it was originally attached to). */
+    private suspend fun deleteAttachmentsFor(noteId: Long) {
+        val rows = attachmentDao.deleteAllFor(NotesAttachments.RECORD_TYPE, noteId)
+        for (row in rows) {
+            try {
+                if (attachmentDao.countByFileName(NotesAttachments.RECORD_TYPE, row.fileName) == 0) {
+                    AttachmentFileStore.delete(appContext, NotesAttachments.DIR, row.fileName)
+                }
+            } catch (e: Exception) {
+                Logger.w("NotesRepository", "Failed to delete attachment file for note $noteId", e)
+            }
+        }
     }
 
     /**

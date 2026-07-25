@@ -4,7 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.expenses.data.Category
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExchangeRateApiKeyStore
 import com.voxapps.expenses.data.ExpenseLineItem
@@ -41,7 +45,8 @@ class ExpensesExportImportHandler(
     private val context: Context,
     private val settingsRepo: ExpensesSettingsRepository,
     private val sessionManager: SessionManager,
-    private val expensesRepo: ExpensesRepository
+    private val expensesRepo: ExpensesRepository,
+    private val attachmentDao: AttachmentDao
 ) {
     suspend fun export(
         scope: String = VoxIpc.EXPORT_SCOPE_BOTH,
@@ -55,6 +60,7 @@ class ExpensesExportImportHandler(
 
         val json = JSONObject()
         var attachmentUri: String? = null
+        var secondaryAttachmentUri: String? = null
         if (scope != VoxIpc.EXPORT_SCOPE_DATA) {
             json.put("settings", settings.toJson())
             // The exchange-rate API key is a real secret, kept entirely outside ExpensesSettings/
@@ -71,15 +77,83 @@ class ExpensesExportImportHandler(
             val merchantCategoryMemory = expensesRepo.merchantCategoryMemorySnapshot()
             json.put("categories", JSONArray(categories.map { it.toJson() }))
             json.put("spendingLimits", JSONArray(spendingLimits.map { it.toJson() }))
-            json.put("expenses", JSONArray(expensesWithDetails.map { it.expense.toJson(it.items) }))
+            val allAttachmentFileNames = mutableListOf<String>()
+            json.put(
+                "expenses",
+                JSONArray(
+                    expensesWithDetails.map {
+                        val attachments = attachmentDao.getFor(ExpensesAttachments.RECORD_TYPE, it.expense.id)
+                        allAttachmentFileNames += attachments.map { a -> a.fileName }
+                        it.expense.toJson(it.items, attachments)
+                    }
+                )
+            )
             json.put("merchantCategoryMemory", JSONArray(merchantCategoryMemory.map { it.toJson() }))
 
             if (includePhotos) {
                 val names = expensesWithDetails.mapNotNull { it.expense.receiptImageName?.takeIf { n -> n.isNotBlank() } }
                 attachmentUri = buildReceiptsZip(names)?.toString()
+                // Separate zip/field from the receipts one above — manually-added attachments (see
+                // :core:attachments) live in their own filesDir/attachments/ dir, distinct from the
+                // original-scan receipts/ dir, and ride VoxResult's secondaryAttachmentUri rather
+                // than folding into buildReceiptsZip's existing, unchanged output.
+                secondaryAttachmentUri = buildAttachmentsZip(allAttachmentFileNames)?.toString()
             }
         }
-        return VoxResult(ok = true, text = json.toString(), attachmentUri = attachmentUri)
+        return VoxResult(ok = true, text = json.toString(), attachmentUri = attachmentUri, secondaryAttachmentUri = secondaryAttachmentUri)
+    }
+
+    /** Zips manually-added attachment files (see :core:attachments) into a fresh file under
+     *  cacheDir and grants Hub read access — same shape as [buildReceiptsZip], kept separate since
+     *  it covers a different directory (filesDir/attachments/, not filesDir/receipts/). */
+    private fun buildAttachmentsZip(fileNames: List<String>): Uri? {
+        if (fileNames.isEmpty()) return null
+        val attachmentsDir = File(context.filesDir, ExpensesAttachments.DIR)
+        return try {
+            val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
+            val zipFile = File(exportsDir, "export_attachments_${UUID.randomUUID()}.zip")
+            var wroteAny = false
+            ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
+                for (name in fileNames) {
+                    val file = File(attachmentsDir, name)
+                    if (file.exists()) {
+                        zos.putNextEntry(ZipEntry(name))
+                        file.inputStream().use { it.copyTo(zos) }
+                        zos.closeEntry()
+                        wroteAny = true
+                    }
+                }
+            }
+            if (!wroteAny) {
+                zipFile.delete()
+                return null
+            }
+            val uri = FileProvider.getUriForFile(context, "com.voxapps.expenses.fileprovider", zipFile)
+            context.grantUriPermission(VoxIpc.HUB_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            uri
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to build attachments export zip", e)
+            null
+        }
+    }
+
+    /** Same shape as [extractReceiptsZip], kept separate since it targets a different directory. */
+    private fun extractAttachmentsZip(uri: Uri) {
+        val attachmentsDir = File(context.filesDir, ExpensesAttachments.DIR).apply { mkdirs() }
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            ZipInputStream(input).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory) {
+                        val safeName = File(entry.name).name
+                        if (safeName.isNotBlank()) {
+                            FileOutputStream(File(attachmentsDir, safeName)).use { fos -> zis.copyTo(fos) }
+                        }
+                    }
+                    entry = zis.nextEntry
+                }
+            }
+        }
     }
 
     /**
@@ -158,6 +232,14 @@ class ExpensesExportImportHandler(
                 extractReceiptsZip(Uri.parse(uriString))
             } catch (e: Exception) {
                 Logger.w(TAG, "Failed to import receipt photos from $uriString — continuing without them", e)
+            }
+        }
+        // Separate field/zip from receiptsZipUri above — see buildAttachmentsZip's doc comment.
+        root.optStringOrNull("attachmentsZipUri")?.let { uriString ->
+            try {
+                extractAttachmentsZip(Uri.parse(uriString))
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to import attachments from $uriString — continuing without them", e)
             }
         }
 
@@ -248,7 +330,7 @@ class ExpensesExportImportHandler(
                         )
                     }
                 }
-                expensesRepo.addExpense(
+                val newExpenseId = expensesRepo.addExpense(
                     title = e.optStringOrNull("title"),
                     totalAmount = e.optDouble("totalAmount"),
                     currencyCode = e.optString("currencyCode"),
@@ -273,6 +355,23 @@ class ExpensesExportImportHandler(
                     checkForDuplicate = false
                 )
                 expensesCreated++
+
+                if (newExpenseId > 0) {
+                    val importedAttachments = e.optJSONArray("attachments") ?: JSONArray()
+                    for (j in 0 until importedAttachments.length()) {
+                        val a = importedAttachments.getJSONObject(j)
+                        val fileName = a.optString("fileName").takeIf { it.isNotBlank() } ?: continue
+                        attachmentDao.insert(
+                            AttachmentEntity(
+                                recordType = ExpensesAttachments.RECORD_TYPE,
+                                recordId = newExpenseId,
+                                fileName = fileName,
+                                source = a.optString("source", AttachmentSource.MANUAL),
+                                createdAt = a.optLong("createdAt", System.currentTimeMillis())
+                            )
+                        )
+                    }
+                }
             }
 
             preExistingExpenses.filter { it.createdAt <= exportedAt }.forEach { expensesRepo.deleteExpenseById(it.id) }
@@ -391,7 +490,7 @@ private fun MerchantCategoryMemory.toJson(): JSONObject = JSONObject().apply {
     put("updatedAt", updatedAt)
 }
 
-private fun Expense.toJson(items: List<ExpenseLineItem>): JSONObject = JSONObject().apply {
+private fun Expense.toJson(items: List<ExpenseLineItem>, attachments: List<AttachmentEntity> = emptyList()): JSONObject = JSONObject().apply {
     put("id", id)
     put("title", title)
     put("totalAmount", totalAmount)
@@ -406,6 +505,13 @@ private fun Expense.toJson(items: List<ExpenseLineItem>): JSONObject = JSONObjec
     put("receiptImageName", receiptImageName)
     put("createdAt", createdAt)
     put("items", JSONArray(items.map { it.toJson() }))
+    put("attachments", JSONArray(attachments.map { it.toJson() }))
+}
+
+private fun AttachmentEntity.toJson(): JSONObject = JSONObject().apply {
+    put("fileName", fileName)
+    put("source", source)
+    put("createdAt", createdAt)
 }
 
 private fun ExpenseLineItem.toJson(): JSONObject = JSONObject().apply {

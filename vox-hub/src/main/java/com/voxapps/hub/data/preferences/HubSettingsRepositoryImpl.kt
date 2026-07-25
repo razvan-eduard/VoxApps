@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.voxapps.hub.domain.backup.AppBackupConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +32,7 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
         val LAST_BACKUP_SUCCESS = booleanPreferencesKey("last_backup_success")
         val LAST_BACKUP_TIMESTAMP = longPreferencesKey("last_backup_timestamp")
         val LAST_BACKUP_ERROR = stringPreferencesKey("last_backup_error")
+        val APP_BACKUP_CONFIG_JSON = stringPreferencesKey("app_backup_config_json")
     }
 
     override val settingsFlow: Flow<HubSettings> = dataStore.data.map { prefs ->
@@ -43,7 +45,8 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
             backupRetentionCount = prefs[Keys.BACKUP_RETENTION_COUNT] ?: HubSettings.RETENTION_5,
             lastBackupSuccess = prefs[Keys.LAST_BACKUP_SUCCESS],
             lastBackupTimestamp = prefs[Keys.LAST_BACKUP_TIMESTAMP],
-            lastBackupError = prefs[Keys.LAST_BACKUP_ERROR]
+            lastBackupError = prefs[Keys.LAST_BACKUP_ERROR],
+            appBackupConfigs = AppBackupConfig.decodeMap(prefs[Keys.APP_BACKUP_CONFIG_JSON] ?: "{}")
         )
     }
 
@@ -80,6 +83,13 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
 
     override suspend fun setBackupRetentionCount(count: Int) {
         dataStore.edit { it[Keys.BACKUP_RETENTION_COUNT] = count }
+    }
+
+    override suspend fun setAppBackupConfig(packageName: String, config: AppBackupConfig) {
+        dataStore.edit { prefs ->
+            val current = AppBackupConfig.decodeMap(prefs[Keys.APP_BACKUP_CONFIG_JSON] ?: "{}")
+            prefs[Keys.APP_BACKUP_CONFIG_JSON] = AppBackupConfig.encodeMap(current + (packageName to config))
+        }
     }
 
     override suspend fun recordBackupResult(success: Boolean, timestampMillis: Long, error: String?) {

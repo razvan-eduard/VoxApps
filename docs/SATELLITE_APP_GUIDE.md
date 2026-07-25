@@ -380,7 +380,10 @@ data class VoxCommand(
 data class VoxResult(
     val ok: Boolean,
     val text: String,              // payload when ok, or a user-facing message (e.g. "locked") when not
-    val attachmentUri: String? = null   // content:// URI, e.g. OP_EXPORT's receipt-photo zip
+    val attachmentUri: String? = null,          // content:// URI, e.g. OP_EXPORT's receipt/attachments zip
+    val secondaryAttachmentUri: String? = null  // OP_EXPORT only: a second zip, for a domain that already
+                                                 // uses attachmentUri for something else (e.g. Expenses'
+                                                 // receipts zip) but also has a :core:attachments bundle
 )
 
 data class VoxSatelliteSchema(

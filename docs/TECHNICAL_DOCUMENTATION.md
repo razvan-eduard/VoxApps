@@ -1632,13 +1632,113 @@ a **consumer** of the `export`/`import` actions every other satellite already ex
 - **`VoxAppsDiscovery.discover()`** (the same discovery call Commander itself uses) finds every
   installed app advertising `export` and/or `import` — Hub has zero hardcoded app list, so a new
   satellite shows up automatically the moment its manifest meta-data declares those actions.
-- **`VoxDataTransferClient.requestExport(context, pkg, scope)`/`requestImport(context, pkg, json)`**
-  send the same `OP_EXPORT`/`OP_IMPORT` ordered broadcasts a satellite's own `VoxCommandReceiver`
-  already answers — Hub adds no new wire protocol, just a client-side helper.
-  `ExportImportUtil.summarize()` is the one spot with a small hardcoded per-app JSON-key list (for the
-  cosmetic "3 notes, 2 categories"-style import preview) — every other Hub code path is fully generic.
-- Because Hub holds no Room database, its own settings (currently just the shared theme preference) are
-  the only thing it persists locally.
+- **`VoxDataTransferClient.requestExport(context, pkg, scope, includeSecrets, includePhotos)`/
+  `requestImport(context, pkg, json)`** send the same `OP_EXPORT`/`OP_IMPORT` ordered broadcasts a
+  satellite's own `VoxCommandReceiver` already answers — Hub adds no new wire protocol, just a
+  client-side helper. `ExportImportUtil.summarize()` is the one spot with a small hardcoded per-app
+  JSON-key list (for the cosmetic "3 notes, 2 categories"-style import preview) — every other Hub code
+  path is fully generic.
+- Because Hub holds no Room database, its own settings (theme preference, backup schedule, per-app
+  backup config below) are the only thing it persists locally.
+
+**Per-app backup configuration (`AppBackupConfig`)** — the main Export screen and scheduled backups
+used to have independently-configured, inconsistent behavior: a global 3-way scope radio
+(Settings/Data/Both) + 2 global checkboxes (secrets/photos) + a per-app include/exclude checklist for
+the manual Export button, while `BackupWorker` (the scheduled path) ignored all of it and hardcoded
+`scope=BOTH, includeSecrets=false, includePhotos=false` for every discovered app. Replaced with one
+persisted, per-package `AppBackupConfig(includeSettings, includeData, includeApiKeys,
+includeAttachments)` (`vox-hub/.../domain/backup/AppBackupConfig.kt`), stored as a hand-rolled
+`org.json`-encoded map in `HubSettings.appBackupConfigs` (matches Hub's existing `ExportImportUtil.kt`
+convention — Hub has no Gson dependency). Both `includeSettings=false` and `includeData=false` for an
+app means "skip it entirely," subsuming the old checklist with no separate master toggle. An app not
+yet in the map (newly installed) falls back to `AppBackupConfig.DEFAULT` via the `configFor(packageName)`
+extension — matches the pre-this-feature defaults (scope BOTH, secrets off, photos off, every app
+included).
+
+This single config now drives **both** the manual Export button and `BackupWorker` identically, via
+one shared `requestExportFor(context, app, config): VoxResult?`
+(`vox-hub/.../domain/backup/BackupExportRequest.kt`): `includeSettings`+`includeData` both true →
+`EXPORT_SCOPE_BOTH`, only one → that scope, neither → the app is skipped entirely (not called at all).
+`includeApiKeys` maps to `includeSecrets` (only meaningful with Settings on — secrets live inside the
+settings blob); `includeAttachments` maps to `includePhotos` (only meaningful with Data on) and also
+scales the request timeout from 10s to 30s, since bundling attachment files is heavier than a plain
+JSON export. The Hub main screen shows one card per discovered app with the four toggles (Data/
+Attachments only shown for apps whose manifest advertises the `create` action, i.e. Commander is
+Settings+API keys only) plus an **All** toggle that sets every toggle for every exportable app at once;
+the Export button and the Scheduled Backups frequency/retention controls are both disabled when nothing
+is selected. `HubSettingsScreen`'s Scheduled Backups section no longer has its own separate
+data-selection controls — it just points back at the main screen's config ("This selection is also
+what scheduled backups use").
+
+**Multi-domain attachment zip bundling** — `BackupZipWriter.write()` used to take a single nullable
+`attachmentUriString: String?`, and both the manual Export flow and `BackupWorker` only ever populated/
+read the `"expenses"` entry of their per-domain maps, silently discarding any other domain's attachment
+URI. Generalized to a real `attachmentZipEntries: Map<String, String>` (zip-entry name → content URI)
+end to end, built by the shared `zipEntriesFor(domain, result): Map<String, String>`
+(`BackupExportRequest.kt`): the pre-existing Expenses receipts zip keeps its exact legacy entry name
+`"expenses-receipts.zip"` (from `VoxResult.attachmentUri`) so already-created backup files stay
+restorable; every other domain's `:core:attachments` bundle is named `"$domain-attachments.zip"` (from
+`attachmentUri` for domains with no legacy zip, or from the new **`VoxResult.secondaryAttachmentUri`**
+field for Expenses specifically, since its primary `attachmentUri` field is already spoken for by
+receipts). `BackupZipWriter` writes one entry per map entry, best-effort (a failed
+`contentResolver.openInputStream()` for one entry logs a warning and skips just that entry, never fails
+the whole export). Restore-side `HubScreen.readExportDocument()` mirrors this: it recognizes both the
+exact legacy `"expenses-receipts.zip"` name (→ domain `expenses`, import field `receiptsZipUri`, kept
+untouched from before this feature) and the new `"$domain-attachments.zip"` pattern for any domain (→
+import field `attachmentsZipUri`, a separate field name so it never collides with Expenses' existing
+receipts field across independently-released app versions).
+
+### Shared record attachments (`:core:attachments`)
+
+A small Android library (`com.voxapps.attachments`) letting a user attach extra photos to an
+already-created note/expense/calendar entry (beyond whatever photo, if any, created the record in the
+first place) — consumed by `vox-notes`, `vox-expenses`, and `vox-calendar`.
+
+- **No `@Database` of its own** — `AttachmentEntity`/`AttachmentDao` mirror `:core:ipc`'s
+  `PendingLlmRequestEntity` pattern: each app's own encrypted Room database gets its own physical
+  `attachments` table (via `@Database(entities = [..., AttachmentEntity::class])` in that app's own
+  `AppDatabase`), rather than this module owning a shared database. `AttachmentEntity(id, recordType,
+  recordId, fileName, source, createdAt)` — `recordType` is a per-app constant (`NotesAttachments.
+  RECORD_TYPE`, etc.) rather than a foreign key, since attachments are looked up per-(app, record)
+  pair, never joined across apps. `AttachmentFileStore` is plain file I/O (`filesDir/attachments/`),
+  no Room involvement.
+- **Reference-counted file delete** — `AttachmentDao.countByFileName(recordType, fileName)` exists
+  specifically because Hub's "replace snapshot" import re-inserts an attachment row under a *freshly
+  created* record id while **reusing the original on-disk fileName** (see attachments export/import
+  below), ahead of deleting the *old* record it was originally attached to (the import's usual
+  createdAt-filtered cleanup). Naively deleting a record's attachment files on every delete (as the
+  first version of this cleanup did) would delete that shared file out from under the just-inserted
+  row the moment the old record's cleanup ran — each app's `deleteAttachmentsFor(id)` now checks
+  `countByFileName` and only deletes the physical file when no other row still references it.
+- **`AttachmentsSection` (Compose UI)** — a collapsible card (thumbnail `LazyRow` + an "add" tile),
+  shared byte-for-byte across all three apps. Starts collapsed only when there's nothing attached yet;
+  this default is keyed on `items.isNotEmpty()` rather than an unkeyed `remember`, since the caller's
+  list commonly starts empty for one frame before its DB flow's first emission — an unkeyed `remember`
+  would lock in "collapsed" from that empty first frame and never reopen once the real, non-empty list
+  arrives. Thumbnails use Telephoto's `ZoomableAsyncImage` with `ZoomSpec(maxZoomFactor = 1f)` (no
+  pan/zoom — a thumbnail this small has nothing to zoom into) and tapping one opens a full-screen
+  `Dialog` with default (zoomable) state and an X-close button. **Gotcha**: `Modifier.zoomable()`
+  (used internally by `ZoomableAsyncImage`) consumes all gestures, so an *outer* `Modifier.clickable`
+  around the thumbnail never receives the tap — the composable's own `onClick` parameter is the
+  library's documented alternative and is what actually wires up the tap-to-zoom. The zoomed dialog
+  sizes itself to the photo's real aspect ratio (a cheap `BitmapFactory.Options.inJustDecodeBounds`
+  decode, not a full bitmap load, run once per opened URI) rather than a fixed square, and is capped to
+  90% of both the available width *and* height via `BoxWithConstraints` — capping only width would let
+  an extreme portrait/landscape photo push the corner close button outside the visible/touchable area.
+- **Export/import** — each app's `*ExportImportHandler` gained an `AttachmentDao` constructor param;
+  export nests an `"attachments"` JSON array *inside* each record's own JSON object (mirrors how
+  Expenses already nests each expense's line `items`), and separately zips the referenced files (see
+  the Hub subsection above for how that zip is bundled into the overall backup). On import, right
+  after inserting a record and capturing its freshly-generated local id, the handler loops that
+  record's nested `attachments` array and inserts an `AttachmentEntity` row per entry — no separate
+  id-remapping table needed, since it reuses the exact same per-record insert loop import already does.
+  **Each app's `res/xml/file_paths.xml` must declare a `<cache-path name="exports" path="exports/"/>`
+  entry** (or reuse an existing one covering `cacheDir/exports/`) — `buildAttachmentsZip()` stages the
+  zip there before handing Hub a `FileProvider` URI, and a missing path-config entry fails with
+  `FileProvider`'s `IllegalArgumentException: Failed to find configured root` at export time, silently
+  (best-effort catch) producing a backup with no attachments zip and no visible error unless
+  logcat is inspected — Vox Notes and Vox Calendar were missing this entry until it was added
+  alongside this feature (Vox Expenses already had it, reused from its pre-existing receipts zip).
 
 ### Peer-to-peer device sync (`OP_SYNC_EXPORT` / `OP_SYNC_MERGE`)
 
@@ -1722,6 +1822,9 @@ delta-then-merge).
 | `MultimodalAttachmentResolver` (Expenses' scan/retry photo-attach gate) | `vox-expenses/.../domain/llm/MultimodalAttachmentResolver.kt` |
 | Day-scoped read + ICS export/import | `vox-calendar/.../receiver/VoxCommandReceiver.kt`, `vox-calendar/.../domain/ics/` |
 | Hub's export/import client | `core/ipc/.../VoxDataTransferClient.kt`, `vox-hub/.../ui/HubScreen.kt` |
+| `AppBackupConfig` / `requestExportFor` / `zipEntriesFor` (per-app backup config, shared export call) | `vox-hub/.../domain/backup/AppBackupConfig.kt`, `BackupExportRequest.kt` |
+| `BackupZipWriter` / `BackupWorker` (multi-domain zip bundling, scheduled backups) | `vox-hub/.../domain/backup/` |
+| `AttachmentEntity` / `AttachmentDao` / `AttachmentFileStore` / `AttachmentsSection` (shared record attachments) | `core/attachments/src/main/java/com/voxapps/attachments/` |
 | `SyncIdentity` / `planMerge()` (shared merge algorithm) | `core/datahygiene/.../SyncMerge.kt` |
 | Per-app sync handlers | `vox-expenses/.../receiver/ExpensesSyncHandler.kt`, `vox-notes/.../receiver/NotesSyncHandler.kt`, `vox-calendar/.../receiver/CalendarSyncHandler.kt` |
 | `PairedPeer` / `SyncPeerStore` (persisted per-peer identity + key) | `vox-hub/.../domain/sync/` |

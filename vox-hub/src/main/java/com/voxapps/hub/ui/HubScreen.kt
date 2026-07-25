@@ -28,8 +28,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -50,7 +50,12 @@ import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.hub.data.preferences.HubSettings
 import com.voxapps.hub.data.preferences.HubSettingsRepository
 import com.voxapps.hub.domain.ExportImportUtil
+import com.voxapps.hub.domain.backup.AppBackupConfig
 import com.voxapps.hub.domain.backup.BackupZipWriter
+import com.voxapps.hub.domain.backup.configFor
+import com.voxapps.hub.domain.backup.requestExportFor
+import com.voxapps.hub.domain.backup.wantsExport
+import com.voxapps.hub.domain.backup.zipEntriesFor
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxDataTransferClient
@@ -73,6 +78,10 @@ private data class ImportPreview(
     val perDomain: Map<String, JSONObject>,
     val summaries: Map<String, Map<String, Int>>
 )
+
+/** One attachment zip staged from an import file, ready to inject into its owning domain's import
+ *  JSON under [fieldName] (see [com.voxapps.hub.ui.HubScreen]'s readExportDocument). */
+private data class StagedZipAttachment(val domain: String, val fieldName: String, val uri: Uri)
 
 /** Matches the "Granted" success color used in the shared onboarding permission rows. */
 private val SuccessGreen = Color(0xFF2E7D32)
@@ -99,13 +108,6 @@ fun HubScreen(
     var dismissedFailureTimestamp by remember { mutableStateOf<Long?>(null) }
 
     var apps by remember { mutableStateOf<List<VoxAppInfo>>(emptyList()) }
-    var selectedForExport by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var exportScope by remember { mutableStateOf(VoxIpc.EXPORT_SCOPE_BOTH) }
-    // Off by default — an explicit opt-in, since the exported file becomes a plaintext secrets
-    // bundle the moment this is on (see hub_include_secrets_warning).
-    var includeSecrets by remember { mutableStateOf(false) }
-    // Off by default — a photo history can be large and slower to export/import than plain JSON.
-    var includeReceiptPhotos by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
     var exportStatus by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var exportOk by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
@@ -118,10 +120,9 @@ fun HubScreen(
     var pendingResults by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var pendingOkFlags by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var pendingPerDomainJson by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    // Populated only for domains (today, just "expenses") whose export() call returned a
-    // VoxResult.attachmentUri — a FileProvider URI to a zip of receipt photos, bundled into the
-    // final export zip as a nested "expenses-receipts.zip" entry.
-    var pendingPerDomainAttachmentUri by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    // Zip-entry-name -> content URI (see zipEntriesFor) for every domain whose export() call
+    // returned an attachment/secondaryAttachment URI, bundled into the final export zip.
+    var pendingAttachmentZipEntries by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     var isImporting by remember { mutableStateOf(false) }
     var importPreview by remember { mutableStateOf<ImportPreview?>(null) }
@@ -138,17 +139,15 @@ fun HubScreen(
     var pendingImportResults by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     LaunchedEffect(Unit) {
-        val discovered = VoxAppsDiscovery.discover(context).filter {
+        apps = VoxAppsDiscovery.discover(context).filter {
             it.actions.contains("export") || it.actions.contains("import")
         }
-        apps = discovered
-        selectedForExport = discovered.filter { it.actions.contains("export") }.map { it.packageName }.toSet()
     }
 
-    fun finalizeExport(uri: Uri, perDomainJson: Map<String, String>, perDomainAttachmentUri: Map<String, String>) {
+    fun finalizeExport(uri: Uri, perDomainJson: Map<String, String>, attachmentZipEntries: Map<String, String>) {
         if (perDomainJson.isNotEmpty()) {
             context.contentResolver.openOutputStream(uri)?.use { out ->
-                BackupZipWriter.write(out, context.contentResolver, perDomainJson, perDomainAttachmentUri["expenses"])
+                BackupZipWriter.write(out, context.contentResolver, perDomainJson, attachmentZipEntries)
             }
             Toast.makeText(context, languageManager.getString("hub_export_saved_toast"), Toast.LENGTH_SHORT).show()
         }
@@ -167,7 +166,7 @@ fun HubScreen(
         priorResults: Map<String, String>,
         priorOkFlags: Map<String, Boolean>,
         priorPerDomainJson: Map<String, String>,
-        priorPerDomainAttachmentUri: Map<String, String>
+        priorAttachmentZipEntries: Map<String, String>
     ) {
         isExporting = true
         scope.launch {
@@ -196,17 +195,13 @@ fun HubScreen(
             val results = priorResults.toMutableMap()
             val okFlags = priorOkFlags.toMutableMap()
             val perDomainJson = priorPerDomainJson.toMutableMap()
-            val perDomainAttachmentUri = priorPerDomainAttachmentUri.toMutableMap()
+            val attachmentZipEntries = priorAttachmentZipEntries.toMutableMap()
             for (app in apps.filter { it.packageName in targetPackages }) {
                 val domain = app.domain ?: app.packageName
-                val result = VoxDataTransferClient.requestExport(
-                    context, app.packageName, exportScope, includeSecrets,
-                    includePhotos = includeReceiptPhotos,
-                    timeoutMs = if (includeReceiptPhotos) 30_000L else 10_000L
-                )
+                val result = requestExportFor(context, app, settings.appBackupConfigs.configFor(app.packageName))
                 if (result != null && result.ok) {
                     perDomainJson[domain] = result.text
-                    result.attachmentUri?.let { perDomainAttachmentUri[domain] = it }
+                    attachmentZipEntries += zipEntriesFor(domain, result)
                     results[app.packageName] = languageManager.getString("hub_status_ok")
                     okFlags[app.packageName] = true
                 } else {
@@ -217,7 +212,7 @@ fun HubScreen(
                 exportStatus = results.toMap()
                 exportOk = okFlags.toMap()
             }
-            finalizeExport(uri, perDomainJson, perDomainAttachmentUri)
+            finalizeExport(uri, perDomainJson, attachmentZipEntries)
         }
     }
 
@@ -272,7 +267,10 @@ fun HubScreen(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val targets = apps.filter { it.packageName in selectedForExport && it.actions.contains("export") }
+        val targets = apps.filter { app ->
+            app.actions.contains("export") &&
+                settings.appBackupConfigs.configFor(app.packageName).wantsExport()
+        }
         isExporting = true
         exportStatus = emptyMap()
         exportOk = emptyMap()
@@ -280,7 +278,7 @@ fun HubScreen(
             val results = mutableMapOf<String, String>()
             val okFlags = mutableMapOf<String, Boolean>()
             val perDomainJson = mutableMapOf<String, String>()
-            val perDomainAttachmentUri = mutableMapOf<String, String>()
+            val attachmentZipEntries = mutableMapOf<String, String>()
             val unreachable = mutableSetOf<String>()
             for (app in targets) {
                 val domain = app.domain ?: app.packageName
@@ -295,14 +293,10 @@ fun HubScreen(
                     okFlags[app.packageName] = false
                     unreachable += app.packageName
                 } else {
-                    val result = VoxDataTransferClient.requestExport(
-                        context, app.packageName, exportScope, includeSecrets,
-                        includePhotos = includeReceiptPhotos,
-                        timeoutMs = if (includeReceiptPhotos) 30_000L else 10_000L
-                    )
+                    val result = requestExportFor(context, app, settings.appBackupConfigs.configFor(app.packageName))
                     if (result != null && result.ok) {
                         perDomainJson[domain] = result.text
-                        result.attachmentUri?.let { perDomainAttachmentUri[domain] = it }
+                        attachmentZipEntries += zipEntriesFor(domain, result)
                         results[app.packageName] = languageManager.getString("hub_status_ok")
                         okFlags[app.packageName] = true
                     } else {
@@ -322,11 +316,11 @@ fun HubScreen(
                 pendingResults = results
                 pendingOkFlags = okFlags
                 pendingPerDomainJson = perDomainJson
-                pendingPerDomainAttachmentUri = perDomainAttachmentUri
+                pendingAttachmentZipEntries = attachmentZipEntries
                 showFlashRetryDialog = true
                 isExporting = false
             } else {
-                finalizeExport(uri, perDomainJson, perDomainAttachmentUri)
+                finalizeExport(uri, perDomainJson, attachmentZipEntries)
             }
         }
     }
@@ -340,34 +334,45 @@ fun HubScreen(
     }
 
     /**
-     * Tries reading [uri] as a zip containing "export.json" (+ optionally "expenses-receipts.zip");
-     * falls back to treating the whole file as raw JSON text if it's not a valid zip, or is a zip
-     * with no "export.json" entry — this is what makes old (pre-zip) plain-JSON export files still
-     * importable. When a receipts-zip entry is found, its bytes are staged into Hub's own cache and
-     * Expenses is granted read access immediately, so the returned URI is usable as soon as the
-     * "expenses" domain's import request is sent later in the flow.
+     * Tries reading [uri] as a zip containing "export.json" (+ optionally per-domain attachment
+     * zips); falls back to treating the whole file as raw JSON text if it's not a valid zip, or is a
+     * zip with no "export.json" entry — this is what makes old (pre-zip) plain-JSON export files
+     * still importable. Every staged attachment zip's bytes are copied into Hub's own cache and the
+     * owning domain's app is granted read access immediately, so the returned URIs are usable as
+     * soon as that domain's import request is sent later in the flow. Recognizes both the legacy
+     * exact entry name `"expenses-receipts.zip"` (kept for backward compatibility with already-created
+     * backup files, injected as the `receiptsZipUri` field Expenses' import() already reads) and the
+     * newer `"$domain-attachments.zip"` pattern for any domain (injected as `attachmentsZipUri`,
+     * see :core:attachments).
      */
-    suspend fun readExportDocument(uri: Uri): Pair<String, Uri?> = withContext(Dispatchers.IO) {
+    suspend fun readExportDocument(uri: Uri): Pair<String, List<StagedZipAttachment>> = withContext(Dispatchers.IO) {
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: throw IllegalStateException("empty file")
         var documentText: String? = null
-        var receiptsZipUri: Uri? = null
+        val staged = mutableListOf<StagedZipAttachment>()
         try {
             ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
                 var entry = zis.nextEntry
                 while (entry != null) {
-                    when (entry.name) {
-                        "export.json" -> documentText = zis.readBytes().decodeToString()
-                        "expenses-receipts.zip" -> {
-                            val stagedDir = File(context.cacheDir, "imports").apply { mkdirs() }
-                            val stagedFile = File(stagedDir, "import_receipts_${UUID.randomUUID()}.zip")
-                            FileOutputStream(stagedFile).use { fos -> zis.copyTo(fos) }
-                            val staged = FileProvider.getUriForFile(context, "com.voxapps.hub.fileprovider", stagedFile)
-                            apps.firstOrNull { it.domain == "expenses" }?.packageName?.let { pkg ->
-                                context.grantUriPermission(pkg, staged, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            receiptsZipUri = staged
+                    val name = entry.name
+                    val fieldAndDomain = when {
+                        name == "export.json" -> null
+                        name == "expenses-receipts.zip" -> "receiptsZipUri" to "expenses"
+                        name.endsWith("-attachments.zip") -> "attachmentsZipUri" to name.removeSuffix("-attachments.zip")
+                        else -> null
+                    }
+                    if (name == "export.json") {
+                        documentText = zis.readBytes().decodeToString()
+                    } else if (fieldAndDomain != null) {
+                        val (fieldName, domain) = fieldAndDomain
+                        val stagedDir = File(context.cacheDir, "imports").apply { mkdirs() }
+                        val stagedFile = File(stagedDir, "import_${domain}_${UUID.randomUUID()}.zip")
+                        FileOutputStream(stagedFile).use { fos -> zis.copyTo(fos) }
+                        val stagedUri = FileProvider.getUriForFile(context, "com.voxapps.hub.fileprovider", stagedFile)
+                        apps.firstOrNull { it.domain == domain }?.packageName?.let { pkg ->
+                            context.grantUriPermission(pkg, stagedUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
+                        staged += StagedZipAttachment(domain, fieldName, stagedUri)
                     }
                     entry = zis.nextEntry
                 }
@@ -375,7 +380,7 @@ fun HubScreen(
         } catch (e: Exception) {
             documentText = null
         }
-        (documentText ?: bytes.decodeToString()) to receiptsZipUri
+        (documentText ?: bytes.decodeToString()) to staged
     }
 
     // Shared by the manual "Choose file to import" picker below and the Settings screen's
@@ -386,13 +391,15 @@ fun HubScreen(
         importError = null
         scope.launch {
             try {
-                val (text, receiptsZipUri) = readExportDocument(uri)
+                val (text, stagedAttachments) = readExportDocument(uri)
                 val perDomain = ExportImportUtil.parseImportDocument(text)
                 // Single mutation, visible from every later consumer of this same JSONObject
                 // instance (importPreview.perDomain, the confirm loop's targets, and the flash-retry
                 // path's pendingImportTargets) — avoids injecting this at multiple requestImport
                 // call sites where it could drift out of sync.
-                receiptsZipUri?.let { rz -> perDomain["expenses"]?.put("receiptsZipUri", rz.toString()) }
+                for (attachment in stagedAttachments) {
+                    perDomain[attachment.domain]?.put(attachment.fieldName, attachment.uri.toString())
+                }
                 // Only offer domains that are both in the file AND currently installed/discovered.
                 val available = perDomain.filterKeys { domain -> apps.any { it.domain == domain && it.actions.contains("import") } }
                 if (available.isEmpty()) {
@@ -474,22 +481,56 @@ fun HubScreen(
                 Text(languageManager.getString("hub_no_apps_found"))
             } else {
                 Text(languageManager.getString("hub_export_section"), style = MaterialTheme.typography.titleMedium)
-                LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
-                    items(apps.filter { it.actions.contains("export") }, key = { it.packageName }) { app ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Checkbox(
-                                checked = app.packageName in selectedForExport,
-                                onCheckedChange = { checked ->
-                                    selectedForExport = if (checked) selectedForExport + app.packageName else selectedForExport - app.packageName
+                Text(
+                    languageManager.getString("hub_backup_config_shared_note"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                val exportableApps = apps.filter { it.actions.contains("export") }
+                val anySecretsOn = exportableApps.any { settings.appBackupConfigs.configFor(it.packageName).includeApiKeys }
+                val allFullyOn = exportableApps.isNotEmpty() && exportableApps.all { app ->
+                    val c = settings.appBackupConfigs.configFor(app.packageName)
+                    c.includeSettings && c.includeData && c.includeApiKeys && c.includeAttachments
+                }
+                if (exportableApps.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Text(languageManager.getString("hub_toggle_all"), style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = allFullyOn,
+                            onCheckedChange = { turnOn ->
+                                val next = AppBackupConfig(
+                                    includeSettings = turnOn,
+                                    includeData = turnOn,
+                                    includeApiKeys = turnOn,
+                                    includeAttachments = turnOn
+                                )
+                                scope.launch {
+                                    exportableApps.forEach { app -> settingsRepo.setAppBackupConfig(app.packageName, next) }
                                 }
-                            )
-                            Column {
+                            }
+                        )
+                    }
+                }
+                LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                    items(exportableApps, key = { it.packageName }) { app ->
+                        val config = settings.appBackupConfigs.configFor(app.packageName)
+                        val hasData = app.actions.contains("create")
+                        fun update(next: AppBackupConfig) {
+                            scope.launch { settingsRepo.setAppBackupConfig(app.packageName, next) }
+                        }
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 val ok = exportOk[app.packageName] == true
                                 Text(
                                     app.label,
+                                    style = MaterialTheme.typography.titleSmall,
                                     color = if (ok) SuccessGreen else MaterialTheme.colorScheme.onSurface
                                 )
                                 exportStatus[app.packageName]?.let {
@@ -499,31 +540,37 @@ fun HubScreen(
                                         color = if (ok) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
+                                HubBackupToggleRow(
+                                    label = languageManager.getString("hub_toggle_settings"),
+                                    checked = config.includeSettings,
+                                    onCheckedChange = { update(config.copy(includeSettings = it)) }
+                                )
+                                if (hasData) {
+                                    HubBackupToggleRow(
+                                        label = languageManager.getString("hub_toggle_data"),
+                                        checked = config.includeData,
+                                        onCheckedChange = { update(config.copy(includeData = it)) }
+                                    )
+                                }
+                                HubBackupToggleRow(
+                                    label = languageManager.getString("hub_toggle_api_keys"),
+                                    checked = config.includeApiKeys,
+                                    enabled = config.includeSettings,
+                                    onCheckedChange = { update(config.copy(includeApiKeys = it)) }
+                                )
+                                if (hasData) {
+                                    HubBackupToggleRow(
+                                        label = languageManager.getString("hub_toggle_attachments"),
+                                        checked = config.includeAttachments,
+                                        enabled = config.includeData,
+                                        onCheckedChange = { update(config.copy(includeAttachments = it)) }
+                                    )
+                                }
                             }
                         }
                     }
                 }
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    val options = listOf(
-                        VoxIpc.EXPORT_SCOPE_SETTINGS to "hub_scope_settings",
-                        VoxIpc.EXPORT_SCOPE_DATA to "hub_scope_data",
-                        VoxIpc.EXPORT_SCOPE_BOTH to "hub_scope_both"
-                    )
-                    options.forEach { (value, labelKey) ->
-                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            RadioButton(selected = exportScope == value, onClick = { exportScope = value })
-                            Text(languageManager.getString(labelKey), style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = includeSecrets,
-                        onCheckedChange = { includeSecrets = it }
-                    )
-                    Text(languageManager.getString("hub_include_secrets"), style = MaterialTheme.typography.bodySmall)
-                }
-                if (includeSecrets) {
+                if (anySecretsOn) {
                     Text(
                         languageManager.getString("hub_include_secrets_warning"),
                         style = MaterialTheme.typography.labelSmall,
@@ -531,16 +578,12 @@ fun HubScreen(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = includeReceiptPhotos,
-                        onCheckedChange = { includeReceiptPhotos = it }
-                    )
-                    Text(languageManager.getString("hub_include_receipt_photos"), style = MaterialTheme.typography.bodySmall)
-                }
                 Button(
                     onClick = { startExportFlow() },
-                    enabled = !isExporting && selectedForExport.isNotEmpty(),
+                    enabled = !isExporting && apps.any { app ->
+                        app.actions.contains("export") &&
+                            settings.appBackupConfigs.configFor(app.packageName).wantsExport()
+                    },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (isExporting) {
@@ -646,7 +689,7 @@ fun HubScreen(
         AlertDialog(
             onDismissRequest = {
                 showFlashRetryDialog = false
-                pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson, pendingPerDomainAttachmentUri) }
+                pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson, pendingAttachmentZipEntries) }
             },
             title = { Text(languageManager.getString("hub_prewarm_title")) },
             text = { Text(String.format(languageManager.getString("hub_prewarm_message"), unreachableLabels)) },
@@ -662,7 +705,7 @@ fun HubScreen(
                                 priorResults = pendingResults,
                                 priorOkFlags = pendingOkFlags,
                                 priorPerDomainJson = pendingPerDomainJson,
-                                priorPerDomainAttachmentUri = pendingPerDomainAttachmentUri
+                                priorAttachmentZipEntries = pendingAttachmentZipEntries
                             )
                         }
                     }
@@ -672,7 +715,7 @@ fun HubScreen(
                 TextButton(
                     onClick = {
                         showFlashRetryDialog = false
-                        pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson, pendingPerDomainAttachmentUri) }
+                        pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson, pendingAttachmentZipEntries) }
                     }
                 ) { Text(languageManager.getString("hub_prewarm_skip_button")) }
             }
@@ -711,5 +754,29 @@ fun HubScreen(
                 ) { Text(languageManager.getString("hub_prewarm_skip_button")) }
             }
         )
+    }
+}
+
+/** One row of a per-app backup-config section — [enabled] disables (not hides) a toggle whose
+ *  parent is off (API keys needs Settings on, Attachments needs Data on), same pattern
+ *  HubSettingsScreen already uses for debug_toasts under debugLoggingEnabled. */
+@Composable
+private fun HubBackupToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Switch(checked = checked && enabled, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }

@@ -1,6 +1,8 @@
 package com.voxapps.expenses.data
 
 import android.content.Context
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.calendar.CalendarDateUtils
 import com.voxapps.datahygiene.findDuplicate
 import com.voxapps.expenses.data.preferences.ExpensesSettings
@@ -33,7 +35,8 @@ class ExpensesRepository(
     private val lineItemDao: ExpenseLineItemDao,
     private val spendingLimitDao: SpendingLimitDao,
     private val merchantCategoryMemoryDao: MerchantCategoryMemoryDao,
-    private val appContext: Context
+    private val appContext: Context,
+    private val attachmentDao: AttachmentDao
 ) {
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
     val expensesWithDetails: Flow<List<ExpenseWithDetails>> = expenseDao.observeExpensesWithDetails()
@@ -210,6 +213,7 @@ class ExpensesRepository(
         expenseDao.delete(expense)
         expenseDao.insertTombstone(ExpenseTombstone(expense.uid, System.currentTimeMillis()))
         deleteReceiptFiles(listOfNotNull(expense.receiptImageName))
+        deleteAttachmentsFor(expense.id)
     }
 
     suspend fun deleteExpenseById(id: Long) {
@@ -219,6 +223,7 @@ class ExpensesRepository(
             expenseDao.insertTombstone(ExpenseTombstone(expense.uid, System.currentTimeMillis()))
         }
         deleteReceiptFiles(listOfNotNull(expense?.receiptImageName))
+        deleteAttachmentsFor(id)
     }
 
     suspend fun deleteAllExpenses() {
@@ -227,6 +232,24 @@ class ExpensesRepository(
         val now = System.currentTimeMillis()
         expenseDao.insertTombstones(all.map { ExpenseTombstone(it.uid, now) })
         deleteReceiptFiles(all.mapNotNull { it.receiptImageName })
+        all.forEach { deleteAttachmentsFor(it.id) }
+    }
+
+    /** Best-effort cleanup of manually-added attachments (see :core:attachments) — mirrors
+     *  [deleteReceiptFiles]'s "never block/roll back the DB delete on a file-delete failure"
+     *  posture. Distinct from [deleteReceiptFiles]: the original receipt scan lives in
+     *  filesDir/receipts/ via Expense.receiptImageName, unrelated to this table/dir. */
+    private suspend fun deleteAttachmentsFor(expenseId: Long) {
+        val rows = attachmentDao.deleteAllFor(ExpensesAttachments.RECORD_TYPE, expenseId)
+        for (row in rows) {
+            try {
+                if (attachmentDao.countByFileName(ExpensesAttachments.RECORD_TYPE, row.fileName) == 0) {
+                    AttachmentFileStore.delete(appContext, ExpensesAttachments.DIR, row.fileName)
+                }
+            } catch (e: Exception) {
+                Logger.w("ExpensesRepository", "Failed to delete attachment file for expense $expenseId", e)
+            }
+        }
     }
 
     /** Best-effort cleanup: a file-delete failure never blocks/rolls back the DB delete — an orphan

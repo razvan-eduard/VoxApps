@@ -26,12 +26,14 @@ class CalendarContainer(context: Context) {
     val settingsRepository: CalendarSettingsRepository = CalendarSettingsRepositoryImpl(appContext)
 
     private val database = CalendarDatabase.get(appContext)
+    val attachmentDao = database.attachmentDao()
     val calendarRepository = CalendarRepository(
         database.calendarEntryDao(),
         database.calendarLayerDao(),
-        database.calendarEntryTagDao()
+        database.calendarEntryTagDao(),
+        attachmentDao,
+        appContext
     )
-    val attachmentDao = database.attachmentDao()
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 

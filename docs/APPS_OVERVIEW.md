@@ -34,6 +34,13 @@ through Commander (`create`/`read`) or used entirely on its own.
 - **Attach photo on scan** (Settings, off by default) — sends the scanned photo to the AI alongside
   the OCR text when Vision provided one and the configured engine supports images; Notes has no
   retry/stub mechanism, so unlike Vox Expenses there's no separate on-retry toggle
+- **Attachments** — a collapsible thumbnail strip on every note for extra photos beyond whatever scan
+  (if any) created it; tap a thumbnail for a full-screen zoomable view (pan/zoom disabled on the
+  thumbnail itself, enabled in the full view), with an inline add/remove. **Scan image retention**
+  (Settings, default "on failure") independently controls whether the original scanned photo itself
+  survives as an attachment: off, only when Commander's cleanup pass fails outright (so an otherwise
+  unusable "Unclear Document" scan becomes a raw note holding just the photo instead of being lost),
+  or always
 - **Home-screen widget** (Jetpack Glance) — recent notes grouped by day, category-colored rows, tap a
   note to edit it in place, plus Add/Scan actions — reads the same reactive state as the in-app UI, so
   a biometric-locked session shows locked here too
@@ -142,6 +149,9 @@ bank/payment notifications, or entered by hand.
   receipt photo to the AI alongside the OCR text when Vision provided one and the configured engine
   supports images; retry (re-sending already-staged OCR text after a failed parse) is a separate
   toggle since it's a distinct, less frequent path
+- **Attachments** — a collapsible thumbnail strip on every expense for extra photos beyond the
+  original receipt scan (e.g. a warranty card, a second page); tap a thumbnail for a full-screen
+  zoomable view, with an inline add/remove — same shared component as Vox Notes/Vox Calendar
 - **Home-screen widget** (Jetpack Glance) — recent expenses grouped by day, category-colored rows,
   tap an expense to edit it in place, plus Add/Scan actions
 - **Battery-optimization exemption prompt** — Settings → Notification Capture and first-launch
@@ -179,6 +189,9 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
 - Recurrence is deliberately minimal (none/daily/weekly/monthly/yearly + optional until-date, expanded
   at read time) — no RRULE engine, no per-occurrence materialized rows, editing a series edits the
   whole thing
+- **Attachments** — a collapsible thumbnail strip on every entry for extra photos (e.g. a ticket, a
+  booking confirmation); tap a thumbnail for a full-screen zoomable view, with an inline add/remove —
+  same shared component as Vox Notes/Vox Expenses
 - **Home-screen widget** (Jetpack Glance) — upcoming entries grouped by day (today bolded, its
   divider thicker), layer-colored rows with tag chips, tap an entry to edit it in place, plus
   Add/Scan actions
@@ -196,16 +209,21 @@ other satellite implements as a server.
 - **Zero hardcoded app list** — at launch it calls `VoxAppsDiscovery` to find every installed Vox app
   that advertises `export`/`import` in its manifest meta-data; a new satellite (like Vox Calendar) shows
   up automatically with no Hub-side code change
-- **Export** — per-app `settings`/`data`/`both` scope selection, bundles every selected app's exported
-  JSON into one dated file via `ActivityResultContracts.CreateDocument`
+- **Export** — one card per discovered app with four independent toggles (**Settings**, **Data**, **API
+  keys**, **Attachments** — Data/Attachments only shown for apps that actually have record data, e.g.
+  not Commander), plus an **All** toggle that sets every toggle for every app at once; bundles every
+  selected app's exported JSON — and, when its Attachments toggle is on, that app's photo attachments —
+  into one dated zip via `ActivityResultContracts.CreateDocument`. This exact configuration is also
+  what **scheduled backups** use (see below) — there's no separate data-selection step for those
 - **Import** — reads a previously exported file, previews a per-app record-count summary before
   anything is written, and lets the user deselect individual apps; each target app applies its own
   snapshot-then-replace semantics (existing records for that domain are fully replaced by the import,
-  not merged)
+  not merged) and re-attaches any bundled photos to the newly-restored records
 - **Scheduled backups** — off/daily/weekly/monthly interval (`WorkManager`), configurable retention
   (none/2/5/10/unlimited, with a storage-growth warning at unlimited), a dismissible failure banner
   when a scheduled run doesn't complete, and a past-backups list (capped to 5 visible rows, scrollable)
-  with per-backup **Share** and **Restore** actions
+  with per-backup **Share** and **Restore** actions. Frequency/retention controls are disabled until at
+  least one app has something selected in the Export card above — there's nothing to schedule otherwise
 - **Peer-to-peer device sync** — a second, genuinely *bidirectional* path alongside export/import's
   one-directional restore: pair two phones over NFC (tap to exchange identity + a session key — no
   Bluetooth PIN dialog), then sync Notes/Calendar/Expenses over Bluetooth Classic, both phones ending up

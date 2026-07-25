@@ -7,8 +7,6 @@ import com.voxapps.hub.HubApplication
 import com.voxapps.hub.data.preferences.HubSettings
 import com.voxapps.hub.data.preferences.HubSettingsRepository
 import com.voxapps.ipc.VoxAppsDiscovery
-import com.voxapps.ipc.VoxDataTransferClient
-import com.voxapps.ipc.VoxIpc
 import com.voxapps.logging.Logger
 import java.io.File
 import java.io.FileOutputStream
@@ -52,9 +50,15 @@ class BackupWorker(
                 return Result.success()
             }
 
-            val apps = VoxAppsDiscovery.discover(applicationContext).filter { it.actions.contains("export") }
+            // Same shared per-app config the manual Export screen writes to (see
+            // HubSettings.appBackupConfigs) — scheduled backups used to hardcode scope=BOTH,
+            // secrets=false, photos=false unconditionally; now they do exactly what the user
+            // configured on the main screen, including skipping apps with both Settings+Data off.
+            val configs = settingsRepo.getSnapshot().appBackupConfigs
+            val apps = VoxAppsDiscovery.discover(applicationContext)
+                .filter { it.actions.contains("export") && configs.configFor(it.packageName).wantsExport() }
             val perDomainJson = mutableMapOf<String, String>()
-            var attachmentUri: String? = null
+            val attachmentZipEntries = mutableMapOf<String, String>()
             for (app in apps) {
                 val reachable = VoxAppsDiscovery.ping(applicationContext, app.packageName, timeoutMs = 8_000L)
                 if (!reachable) {
@@ -62,13 +66,10 @@ class BackupWorker(
                     continue
                 }
                 val domain = app.domain ?: app.packageName
-                val result = VoxDataTransferClient.requestExport(
-                    applicationContext, app.packageName, VoxIpc.EXPORT_SCOPE_BOTH,
-                    includeSecrets = false, includePhotos = false, timeoutMs = 10_000L
-                )
+                val result = requestExportFor(applicationContext, app, configs.configFor(app.packageName))
                 if (result != null && result.ok) {
                     perDomainJson[domain] = result.text
-                    if (domain == "expenses") result.attachmentUri?.let { attachmentUri = it }
+                    attachmentZipEntries += zipEntriesFor(domain, result)
                 } else {
                     Logger.w(TAG, "Export failed for ${app.packageName}: ${result?.text}")
                 }
@@ -83,7 +84,7 @@ class BackupWorker(
             val outFile = File(backupsDir, fileName)
             try {
                 FileOutputStream(outFile).use { out ->
-                    BackupZipWriter.write(out, applicationContext.contentResolver, perDomainJson, attachmentUri)
+                    BackupZipWriter.write(out, applicationContext.contentResolver, perDomainJson, attachmentZipEntries)
                 }
             } catch (e: IOException) {
                 outFile.delete()

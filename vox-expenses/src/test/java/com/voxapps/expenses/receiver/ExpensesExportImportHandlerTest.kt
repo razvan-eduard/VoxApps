@@ -1,7 +1,10 @@
 package com.voxapps.expenses.receiver
 
 import android.content.Context
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.expenses.data.Expense
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.SpendingLimit
@@ -30,6 +33,7 @@ class ExpensesExportImportHandlerTest {
     private lateinit var settingsRepo: ExpensesSettingsRepository
     private lateinit var sessionManager: SessionManager
     private lateinit var expensesRepo: ExpensesRepository
+    private lateinit var attachmentDao: AttachmentDao
     private lateinit var handler: ExpensesExportImportHandler
 
     @Before
@@ -38,7 +42,8 @@ class ExpensesExportImportHandlerTest {
         settingsRepo = mockk()
         sessionManager = mockk()
         expensesRepo = mockk()
-        handler = ExpensesExportImportHandler(context, settingsRepo, sessionManager, expensesRepo)
+        attachmentDao = mockk(relaxed = true)
+        handler = ExpensesExportImportHandler(context, settingsRepo, sessionManager, expensesRepo, attachmentDao)
 
         every { settingsRepo.getSnapshot() } returns ExpensesSettings(isBiometricRequired = false)
         every { expensesRepo.categories } returns flowOf(emptyList())
@@ -166,5 +171,51 @@ class ExpensesExportImportHandlerTest {
 
         assertFalse(result.ok)
         coVerify(exactly = 0) { expensesRepo.expensesSnapshot() }
+    }
+
+    @Test
+    fun `export nests each expense's attachments under its own entry`() = runTest {
+        every { expensesRepo.expensesWithDetails } returns flowOf(
+            listOf(ExpenseWithDetails(expense(1, createdAt = 100L), items = emptyList()))
+        )
+        coEvery { attachmentDao.getFor(ExpensesAttachments.RECORD_TYPE, 1L) } returns listOf(
+            AttachmentEntity(id = 9, recordType = ExpensesAttachments.RECORD_TYPE, recordId = 1L, fileName = "att_1.jpg", source = "manual", createdAt = 55L)
+        )
+
+        val result = handler.export(includePhotos = false)
+
+        val expenseJson = JSONObject(result.text).getJSONArray("expenses").getJSONObject(0)
+        val attachmentsJson = expenseJson.getJSONArray("attachments")
+        assertEquals(1, attachmentsJson.length())
+        assertEquals("att_1.jpg", attachmentsJson.getJSONObject(0).getString("fileName"))
+    }
+
+    @Test
+    fun `import inserts each nested attachment against the newly created expense's id`() = runTest {
+        coEvery {
+            expensesRepo.addExpense(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns 42L
+
+        val payload = """{"expenses":[{"totalAmount":5.0,"currencyCode":"RON","attachments":[
+            {"fileName":"att_1.jpg","source":"manual","createdAt":10}
+        ]}]}"""
+        handler.import(payload)
+
+        coVerify(exactly = 1) {
+            attachmentDao.insert(
+                AttachmentEntity(recordType = ExpensesAttachments.RECORD_TYPE, recordId = 42L, fileName = "att_1.jpg", source = "manual", createdAt = 10L)
+            )
+        }
+    }
+
+    @Test
+    fun `import skips attachments with a blank fileName`() = runTest {
+        coEvery {
+            expensesRepo.addExpense(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns 3L
+
+        handler.import("""{"expenses":[{"totalAmount":1.0,"currencyCode":"RON","attachments":[{"fileName":"","source":"manual","createdAt":1}]}]}""")
+
+        coVerify(exactly = 0) { attachmentDao.insert(any()) }
     }
 }

@@ -33,15 +33,16 @@ class ExpensesContainer(context: Context) {
     val settingsRepository: ExpensesSettingsRepository = ExpensesSettingsRepositoryImpl(appContext)
 
     private val database = ExpensesDatabase.get(appContext)
+    val attachmentDao = database.attachmentDao()
     val expensesRepository = ExpensesRepository(
         database.expenseDao(),
         database.categoryDao(),
         database.expenseLineItemDao(),
         database.spendingLimitDao(),
         database.merchantCategoryMemoryDao(),
-        appContext
+        appContext,
+        attachmentDao
     )
-    val attachmentDao = database.attachmentDao()
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 

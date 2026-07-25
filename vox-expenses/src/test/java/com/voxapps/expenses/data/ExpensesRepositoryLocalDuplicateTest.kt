@@ -24,7 +24,7 @@ class ExpensesRepositoryLocalDuplicateTest {
         expenseDao = mockk(relaxed = true)
         repository = ExpensesRepository(
             expenseDao, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
-            mockk(relaxed = true), mockk(relaxed = true)
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true)
         )
     }
 

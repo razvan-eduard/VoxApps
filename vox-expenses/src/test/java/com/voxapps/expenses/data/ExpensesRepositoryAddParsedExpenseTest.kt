@@ -31,7 +31,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
         spendingLimitDao = mockk(relaxed = true)
         merchantCategoryMemoryDao = mockk(relaxed = true)
         repository = ExpensesRepository(
-            expenseDao, categoryDao, lineItemDao, spendingLimitDao, merchantCategoryMemoryDao, mockk<Context>()
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, merchantCategoryMemoryDao, mockk<Context>(), mockk(relaxed = true)
         )
         coEvery { expenseDao.getForDateRange(any(), any()) } returns emptyList()
         coEvery { expenseDao.insert(any()) } returns 99L

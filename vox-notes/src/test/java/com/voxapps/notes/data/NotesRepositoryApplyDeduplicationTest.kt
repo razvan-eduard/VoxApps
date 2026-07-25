@@ -17,7 +17,7 @@ class NotesRepositoryApplyDeduplicationTest {
     fun setup() {
         noteDao = mockk(relaxed = true)
         categoryDao = mockk(relaxed = true)
-        repository = NotesRepository(noteDao, categoryDao)
+        repository = NotesRepository(noteDao, categoryDao, mockk(relaxed = true), mockk(relaxed = true))
     }
 
     @Test

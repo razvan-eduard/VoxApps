@@ -1,6 +1,7 @@
 package com.voxapps.hub.data.preferences
 
 import androidx.compose.runtime.Immutable
+import com.voxapps.hub.domain.backup.AppBackupConfig
 
 /**
  * Immutable snapshot of persisted Vox Hub settings.
@@ -19,6 +20,10 @@ import androidx.compose.runtime.Immutable
  *   scheduled run, null until the first one completes. Surfaced as a dismissible banner in
  *   [com.voxapps.hub.ui.HubScreen] when a run failed — there's no other way to learn about it since
  *   the worker runs with no UI visible.
+ * - [appBackupConfigs]: per-package [AppBackupConfig] (Settings/Data/API keys/Attachments), the single
+ *   shared configuration driving both the manual Export button and scheduled [com.voxapps.hub.domain.backup.BackupWorker]
+ *   runs — replaces the old global scope radio + secrets/photos checkboxes + app checklist. An app
+ *   missing from this map falls back to [AppBackupConfig.DEFAULT] (see [com.voxapps.hub.domain.backup.configFor]).
  */
 @Immutable
 data class HubSettings(
@@ -30,7 +35,8 @@ data class HubSettings(
     val backupRetentionCount: Int = RETENTION_5,
     val lastBackupSuccess: Boolean? = null,
     val lastBackupTimestamp: Long? = null,
-    val lastBackupError: String? = null
+    val lastBackupError: String? = null,
+    val appBackupConfigs: Map<String, AppBackupConfig> = emptyMap()
 ) {
     companion object {
         const val THEME_SYSTEM = "SYSTEM"

@@ -44,6 +44,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.hub.data.preferences.HubSettings
 import com.voxapps.hub.data.preferences.HubSettingsRepository
 import com.voxapps.hub.domain.backup.BackupScheduler
+import com.voxapps.hub.domain.backup.configFor
+import com.voxapps.hub.domain.backup.wantsExport
+import com.voxapps.ipc.VoxAppInfo
+import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.logging.Logger
 import com.voxapps.logging.ui.LogViewerCard
 import com.voxapps.logging.ui.LogViewerStrings
@@ -70,6 +74,15 @@ fun HubSettingsScreen(
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = HubSettings())
     val logs by Logger.verboseLogs.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+
+    // Same discovery HubScreen's Export section uses — needed here only to tell whether *any*
+    // app currently wants anything exported, so scheduling controls can be disabled when nothing
+    // is selected (mirrors the Export button's own enabled condition on the main screen).
+    var exportApps by remember { mutableStateOf<List<VoxAppInfo>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        exportApps = VoxAppsDiscovery.discover(context).filter { it.actions.contains("export") }
+    }
+    val anyAppSelected = exportApps.any { settings.appBackupConfigs.configFor(it.packageName).wantsExport() }
 
     var backupFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     fun refreshBackupFiles() {
@@ -138,6 +151,18 @@ fun HubSettingsScreen(
 
             // --- Scheduled backups: frequency, retention, past backups ---
             Text(languageManager.getString("backup_schedule_section"), style = MaterialTheme.typography.labelLarge)
+            Text(
+                languageManager.getString("backup_schedule_uses_main_screen_config"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (!anyAppSelected) {
+                Text(
+                    languageManager.getString("backup_schedule_nothing_selected"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val frequencies = listOf(
                     HubSettings.INTERVAL_OFF to "backup_frequency_off",
@@ -148,6 +173,7 @@ fun HubSettingsScreen(
                 frequencies.forEach { (interval, labelKey) ->
                     FilterChip(
                         selected = settings.backupInterval == interval,
+                        enabled = anyAppSelected,
                         onClick = {
                             scope.launch { settingsRepo.setBackupInterval(interval) }
                             BackupScheduler.reschedule(context, interval)
@@ -169,6 +195,7 @@ fun HubSettingsScreen(
                 retentions.forEach { (count, labelKey) ->
                     FilterChip(
                         selected = settings.backupRetentionCount == count,
+                        enabled = anyAppSelected,
                         onClick = { scope.launch { settingsRepo.setBackupRetentionCount(count) } },
                         label = { Text(languageManager.getString(labelKey)) }
                     )

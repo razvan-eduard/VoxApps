@@ -24,7 +24,7 @@ class ExpensesRepositoryApplyDeduplicationTest {
         spendingLimitDao = mockk(relaxed = true)
         coEvery { expenseDao.getReceiptImageNames(any()) } returns emptyList()
         repository = ExpensesRepository(
-            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true)
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true)
         )
     }
 

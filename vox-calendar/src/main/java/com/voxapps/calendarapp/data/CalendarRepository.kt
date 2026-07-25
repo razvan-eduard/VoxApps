@@ -1,5 +1,9 @@
 package com.voxapps.calendarapp.data
 
+import android.content.Context
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -12,7 +16,9 @@ import java.util.UUID
 class CalendarRepository(
     private val entryDao: CalendarEntryDao,
     private val layerDao: CalendarLayerDao,
-    private val tagDao: CalendarEntryTagDao
+    private val tagDao: CalendarEntryTagDao,
+    private val attachmentDao: AttachmentDao,
+    private val appContext: Context
 ) {
     val entriesWithTags: Flow<List<CalendarEntryWithTags>> = entryDao.observeEntriesWithTags()
     val layers: Flow<List<CalendarLayer>> = layerDao.observeAll()
@@ -72,12 +78,29 @@ class CalendarRepository(
     suspend fun deleteEntry(entry: CalendarEntry) {
         entryDao.delete(entry)
         entryDao.insertTombstone(CalendarEntryTombstone(entry.uid, System.currentTimeMillis()))
+        deleteAttachmentsFor(entry.id)
     }
 
     suspend fun deleteEntryById(id: Long) {
         val uid = entryDao.getUidById(id)
         entryDao.deleteById(id)
         if (uid != null) entryDao.insertTombstone(CalendarEntryTombstone(uid, System.currentTimeMillis()))
+        deleteAttachmentsFor(id)
+    }
+
+    /** Best-effort cleanup of this entry's attachments (see :core:attachments) — a file-delete
+     *  failure never blocks/rolls back the DB delete. */
+    private suspend fun deleteAttachmentsFor(entryId: Long) {
+        val rows = attachmentDao.deleteAllFor(CalendarAttachments.RECORD_TYPE, entryId)
+        for (row in rows) {
+            try {
+                if (attachmentDao.countByFileName(CalendarAttachments.RECORD_TYPE, row.fileName) == 0) {
+                    AttachmentFileStore.delete(appContext, CalendarAttachments.DIR, row.fileName)
+                }
+            } catch (e: Exception) {
+                Logger.w("CalendarRepository", "Failed to delete attachment file for entry $entryId", e)
+            }
+        }
     }
 
     // --- Peer-to-peer sync (see :core:datahygiene's SyncMerge and CalendarSyncHandler) ---

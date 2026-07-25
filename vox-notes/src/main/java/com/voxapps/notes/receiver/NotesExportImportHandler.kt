@@ -1,8 +1,17 @@
 package com.voxapps.notes.receiver
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
+import com.voxapps.logging.Logger
 import com.voxapps.notes.data.Category
+import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.notes.data.NotesRepository
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
@@ -10,6 +19,14 @@ import com.voxapps.notes.state.SessionManager
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+
+private const val TAG = "NotesExportImportHandler"
 
 /**
  * Vox Hub's export/import for this app, extracted from the BroadcastReceiver so it's unit-testable
@@ -17,17 +34,20 @@ import org.json.JSONObject
  * an export/import request while the app is locked never touches the DB.
  */
 class NotesExportImportHandler(
+    private val context: Context,
     private val settingsRepo: NotesSettingsRepository,
     private val sessionManager: SessionManager,
-    private val notesRepo: NotesRepository
+    private val notesRepo: NotesRepository,
+    private val attachmentDao: AttachmentDao
 ) {
-    suspend fun export(scope: String = VoxIpc.EXPORT_SCOPE_BOTH): VoxResult {
+    suspend fun export(scope: String = VoxIpc.EXPORT_SCOPE_BOTH, includePhotos: Boolean = false): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
         if (locked) return VoxResult(ok = false, text = NotesReadResponder.LOCKED_MESSAGE)
 
         val json = JSONObject()
+        var attachmentUri: String? = null
         if (scope != VoxIpc.EXPORT_SCOPE_DATA) {
             json.put("settings", settings.toJson())
         }
@@ -35,22 +55,83 @@ class NotesExportImportHandler(
             val categories = notesRepo.categories.first()
             val notes = notesRepo.notesSnapshot()
             json.put("categories", JSONArray(categories.map { it.toJson() }))
+            val allFileNames = mutableListOf<String>()
             json.put(
                 "notes",
                 JSONArray(
                     notes.map { note ->
+                        val attachments = attachmentDao.getFor(NotesAttachments.RECORD_TYPE, note.id)
+                        allFileNames += attachments.map { it.fileName }
                         JSONObject().apply {
                             put("id", note.id)
                             put("title", note.title)
                             put("text", note.text)
                             put("createdAt", note.createdAt)
                             put("categoryId", note.categoryId)
+                            put("attachments", JSONArray(attachments.map { it.toJson() }))
                         }
                     }
                 )
             )
+            if (includePhotos) {
+                attachmentUri = buildAttachmentsZip(allFileNames)?.toString()
+            }
         }
-        return VoxResult(ok = true, text = json.toString())
+        return VoxResult(ok = true, text = json.toString(), attachmentUri = attachmentUri)
+    }
+
+    /** Zips this export's attachment files (see :core:attachments) into a fresh file under cacheDir
+     *  and grants Hub read access — mirrors vox-expenses' buildReceiptsZip. Best-effort: returns null
+     *  (no attachment) on any failure or if there's nothing to bundle, never blocks the JSON export. */
+    private fun buildAttachmentsZip(fileNames: List<String>): Uri? {
+        if (fileNames.isEmpty()) return null
+        val attachmentsDir = File(context.filesDir, NotesAttachments.DIR)
+        return try {
+            val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
+            val zipFile = File(exportsDir, "export_attachments_${UUID.randomUUID()}.zip")
+            var wroteAny = false
+            ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
+                for (name in fileNames) {
+                    val file = File(attachmentsDir, name)
+                    if (file.exists()) {
+                        zos.putNextEntry(ZipEntry(name))
+                        file.inputStream().use { it.copyTo(zos) }
+                        zos.closeEntry()
+                        wroteAny = true
+                    }
+                }
+            }
+            if (!wroteAny) {
+                zipFile.delete()
+                return null
+            }
+            val uri = FileProvider.getUriForFile(context, NotesAttachments.FILE_PROVIDER_AUTHORITY, zipFile)
+            context.grantUriPermission(VoxIpc.HUB_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            uri
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to build attachments export zip", e)
+            null
+        }
+    }
+
+    /** Same shape as vox-expenses' extractReceiptsZip — every entry name flattened to its bare
+     *  filename (zip-slip defense). */
+    private fun extractAttachmentsZip(uri: Uri) {
+        val attachmentsDir = File(context.filesDir, NotesAttachments.DIR).apply { mkdirs() }
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            ZipInputStream(input).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory) {
+                        val safeName = File(entry.name).name
+                        if (safeName.isNotBlank()) {
+                            FileOutputStream(File(attachmentsDir, safeName)).use { fos -> zis.copyTo(fos) }
+                        }
+                    }
+                    entry = zis.nextEntry
+                }
+            }
+        }
     }
 
     suspend fun import(payloadJson: String): VoxResult {
@@ -72,6 +153,17 @@ class NotesExportImportHandler(
         // this field fails safe by deleting nothing, rather than reverting to "delete everything
         // that existed at import time".
         val exportedAt = root.optLong("exported_at", 0L)
+
+        // Stage any bundled attachment photos before the note-insert loop below references them by
+        // filename, so thumbnails resolve immediately once the import completes. Best-effort: a
+        // failure here never fails the rest of the import, it just means photos are missing.
+        root.optStringOrNull("attachmentsZipUri")?.let { uriString ->
+            try {
+                extractAttachmentsZip(Uri.parse(uriString))
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to import attachment photos from $uriString — continuing without them", e)
+            }
+        }
 
         val existingCategories = notesRepo.categories.first()
         val nameToId = existingCategories.associate { it.name.lowercase() to it.id }.toMutableMap()
@@ -118,7 +210,7 @@ class NotesExportImportHandler(
                 if (text.isBlank() && title.isNullOrBlank()) continue
                 val importedCategoryId = if (n.has("categoryId") && !n.isNull("categoryId")) n.optLong("categoryId") else null
                 val categoryId = importedCategoryId?.let { importedIdToLocalId[it] }
-                notesRepo.addNote(
+                val newNoteId = notesRepo.addNote(
                     title = title,
                     text = text,
                     categoryId = categoryId,
@@ -127,6 +219,23 @@ class NotesExportImportHandler(
                     createdAt = n.optLong("createdAt", System.currentTimeMillis())
                 )
                 notesCreated++
+
+                if (newNoteId > 0) {
+                    val importedAttachments = n.optJSONArray("attachments") ?: JSONArray()
+                    for (j in 0 until importedAttachments.length()) {
+                        val a = importedAttachments.getJSONObject(j)
+                        val fileName = a.optString("fileName").takeIf { it.isNotBlank() } ?: continue
+                        attachmentDao.insert(
+                            AttachmentEntity(
+                                recordType = NotesAttachments.RECORD_TYPE,
+                                recordId = newNoteId,
+                                fileName = fileName,
+                                source = a.optString("source", AttachmentSource.MANUAL),
+                                createdAt = a.optLong("createdAt", System.currentTimeMillis())
+                            )
+                        )
+                    }
+                }
             }
 
             preExistingNotes.filter { it.createdAt <= exportedAt }.forEach { notesRepo.deleteNoteById(it.id) }
@@ -150,9 +259,12 @@ private fun NotesSettings.toJson(): JSONObject = JSONObject().apply {
     put("scheduledMergeInterval", scheduledMergeInterval)
     put("scheduledNoteDedupInterval", scheduledNoteDedupInterval)
     put("debugLoggingEnabled", debugLoggingEnabled)
+    put("debugToastsEnabled", debugToastsEnabled)
     put("calendarViewEnabled", calendarViewEnabled)
     put("themeDarkMode", themeDarkMode)
     put("themeColored", themeColored)
+    put("attachPhotoOnScan", attachPhotoOnScan)
+    put("scanImageRetention", scanImageRetention)
 }
 
 private fun JSONObject.toNotesSettings(): NotesSettings = NotesSettings(
@@ -165,9 +277,12 @@ private fun JSONObject.toNotesSettings(): NotesSettings = NotesSettings(
     scheduledMergeInterval = optString("scheduledMergeInterval", NotesSettings.INTERVAL_OFF),
     scheduledNoteDedupInterval = optString("scheduledNoteDedupInterval", NotesSettings.INTERVAL_OFF),
     debugLoggingEnabled = optBoolean("debugLoggingEnabled", false),
+    debugToastsEnabled = optBoolean("debugToastsEnabled", false),
     calendarViewEnabled = optBoolean("calendarViewEnabled", false),
     themeDarkMode = optString("themeDarkMode", NotesSettings.THEME_SYSTEM),
-    themeColored = optBoolean("themeColored", true)
+    themeColored = optBoolean("themeColored", true),
+    attachPhotoOnScan = optBoolean("attachPhotoOnScan", false),
+    scanImageRetention = optString("scanImageRetention", NotesSettings.RETENTION_ON_FAILURE)
 )
 
 private fun Category.toJson(): JSONObject = JSONObject().apply {
@@ -175,6 +290,12 @@ private fun Category.toJson(): JSONObject = JSONObject().apply {
     put("name", name)
     put("colorArgb", colorArgb)
     put("position", position)
+    put("createdAt", createdAt)
+}
+
+private fun AttachmentEntity.toJson(): JSONObject = JSONObject().apply {
+    put("fileName", fileName)
+    put("source", source)
     put("createdAt", createdAt)
 }
 

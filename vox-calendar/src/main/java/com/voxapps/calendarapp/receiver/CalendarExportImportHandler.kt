@@ -1,5 +1,13 @@
 package com.voxapps.calendarapp.receiver
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentSource
+import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
@@ -11,10 +19,18 @@ import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepository
 import com.voxapps.calendarapp.state.SessionManager
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+
+private const val TAG = "CalendarExportImportHandler"
 
 /**
  * Vox Hub's export/import for this app, extracted from the BroadcastReceiver so it's unit-testable
@@ -23,17 +39,20 @@ import java.util.UUID
  * DB. Fully independent of the ICS import/export screen (Phase 5) — different format, different path.
  */
 class CalendarExportImportHandler(
+    private val context: Context,
     private val settingsRepo: CalendarSettingsRepository,
     private val sessionManager: SessionManager,
-    private val calendarRepo: CalendarRepository
+    private val calendarRepo: CalendarRepository,
+    private val attachmentDao: AttachmentDao
 ) {
-    suspend fun export(scope: String = VoxIpc.EXPORT_SCOPE_BOTH): VoxResult {
+    suspend fun export(scope: String = VoxIpc.EXPORT_SCOPE_BOTH, includePhotos: Boolean = false): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
         if (locked) return VoxResult(ok = false, text = CalendarReadResponder.LOCKED_MESSAGE)
 
         val json = JSONObject()
+        var attachmentUri: String? = null
         if (scope != VoxIpc.EXPORT_SCOPE_DATA) {
             json.put("settings", settings.toJson())
         }
@@ -41,9 +60,76 @@ class CalendarExportImportHandler(
             val layers = calendarRepo.layersSnapshot()
             val entries = calendarRepo.entriesSnapshot()
             json.put("layers", JSONArray(layers.map { it.toJson() }))
-            json.put("events", JSONArray(entries.map { it.toJson() }))
+            val allFileNames = mutableListOf<String>()
+            json.put(
+                "events",
+                JSONArray(
+                    entries.map { entryWithTags ->
+                        val attachments = attachmentDao.getFor(CalendarAttachments.RECORD_TYPE, entryWithTags.entry.id)
+                        allFileNames += attachments.map { it.fileName }
+                        entryWithTags.toJson(attachments)
+                    }
+                )
+            )
+            if (includePhotos) {
+                attachmentUri = buildAttachmentsZip(allFileNames)?.toString()
+            }
         }
-        return VoxResult(ok = true, text = json.toString())
+        return VoxResult(ok = true, text = json.toString(), attachmentUri = attachmentUri)
+    }
+
+    /** Zips this export's attachment files (see :core:attachments) into a fresh file under cacheDir
+     *  and grants Hub read access — mirrors vox-expenses' buildReceiptsZip/vox-notes'
+     *  buildAttachmentsZip. Best-effort: returns null on any failure or if there's nothing to bundle. */
+    private fun buildAttachmentsZip(fileNames: List<String>): Uri? {
+        if (fileNames.isEmpty()) return null
+        val attachmentsDir = File(context.filesDir, CalendarAttachments.DIR)
+        return try {
+            val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
+            val zipFile = File(exportsDir, "export_attachments_${UUID.randomUUID()}.zip")
+            var wroteAny = false
+            ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
+                for (name in fileNames) {
+                    val file = File(attachmentsDir, name)
+                    if (file.exists()) {
+                        zos.putNextEntry(ZipEntry(name))
+                        file.inputStream().use { it.copyTo(zos) }
+                        zos.closeEntry()
+                        wroteAny = true
+                    }
+                }
+            }
+            if (!wroteAny) {
+                zipFile.delete()
+                return null
+            }
+            val uri = FileProvider.getUriForFile(context, CalendarAttachments.FILE_PROVIDER_AUTHORITY, zipFile)
+            context.grantUriPermission(VoxIpc.HUB_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            uri
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to build attachments export zip", e)
+            null
+        }
+    }
+
+    /** Same shape as vox-expenses' extractReceiptsZip — every entry name flattened to its bare
+     *  filename (zip-slip defense). */
+    private fun extractAttachmentsZip(uri: Uri) {
+        val attachmentsDir = File(context.filesDir, CalendarAttachments.DIR).apply { mkdirs() }
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            ZipInputStream(input).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory) {
+                        val safeName = File(entry.name).name
+                        if (safeName.isNotBlank()) {
+                            FileOutputStream(File(attachmentsDir, safeName)).use { fos -> zis.copyTo(fos) }
+                        }
+                    }
+                    entry = zis.nextEntry
+                }
+            }
+        }
     }
 
     suspend fun import(payloadJson: String): VoxResult {
@@ -59,6 +145,17 @@ class CalendarExportImportHandler(
         }
 
         root.optJSONObject("settings")?.let { settingsRepo.restoreSettings(it.toCalendarSettings()) }
+
+        // Stage any bundled attachment photos before the entry-insert loop below references them by
+        // filename, so thumbnails resolve immediately once the import completes. Best-effort: a
+        // failure here never fails the rest of the import, it just means photos are missing.
+        root.optStringOrNull("attachmentsZipUri")?.let { uriString ->
+            try {
+                extractAttachmentsZip(Uri.parse(uriString))
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to import attachment photos from $uriString — continuing without them", e)
+            }
+        }
 
         // Layers merge by name (mirrors categories in vox-expenses) — entries reference layers by id,
         // so wholesale-replacing layers would orphan any untouched records pointing at old layer ids.
@@ -102,7 +199,7 @@ class CalendarExportImportHandler(
                 val tagsArray = e.optJSONArray("tags") ?: JSONArray()
                 val tags = (0 until tagsArray.length()).map { tagsArray.optString(it) }
 
-                calendarRepo.addEntry(
+                val newEntryId = calendarRepo.addEntry(
                     uid = e.optStringOrNull("uid") ?: UUID.randomUUID().toString(),
                     type = e.optStringOrNull("type")?.let { runCatching { CalendarEntryType.valueOf(it) }.getOrNull() }
                         ?: CalendarEntryType.EVENT,
@@ -125,6 +222,23 @@ class CalendarExportImportHandler(
                     tags = tags
                 )
                 entriesCreated++
+
+                if (newEntryId > 0) {
+                    val importedAttachments = e.optJSONArray("attachments") ?: JSONArray()
+                    for (j in 0 until importedAttachments.length()) {
+                        val a = importedAttachments.getJSONObject(j)
+                        val fileName = a.optString("fileName").takeIf { it.isNotBlank() } ?: continue
+                        attachmentDao.insert(
+                            AttachmentEntity(
+                                recordType = CalendarAttachments.RECORD_TYPE,
+                                recordId = newEntryId,
+                                fileName = fileName,
+                                source = a.optString("source", AttachmentSource.MANUAL),
+                                createdAt = a.optLong("createdAt", System.currentTimeMillis())
+                            )
+                        )
+                    }
+                }
             }
 
             preExistingIds.forEach { calendarRepo.deleteEntryById(it) }
@@ -170,7 +284,7 @@ private fun CalendarLayer.toJson(): JSONObject = JSONObject().apply {
     put("createdAt", createdAt)
 }
 
-private fun CalendarEntryWithTags.toJson(): JSONObject = JSONObject().apply {
+private fun CalendarEntryWithTags.toJson(attachments: List<AttachmentEntity> = emptyList()): JSONObject = JSONObject().apply {
     val e: CalendarEntry = entry
     put("id", e.id)
     put("uid", e.uid)
@@ -186,6 +300,13 @@ private fun CalendarEntryWithTags.toJson(): JSONObject = JSONObject().apply {
     put("recurrenceUntilMillis", e.recurrenceUntilMillis)
     put("layerId", e.layerId)
     put("tags", JSONArray(tagNames))
+    put("attachments", JSONArray(attachments.map { it.toJson() }))
+}
+
+private fun AttachmentEntity.toJson(): JSONObject = JSONObject().apply {
+    put("fileName", fileName)
+    put("source", source)
+    put("createdAt", createdAt)
 }
 
 private fun JSONObject.optStringOrNull(key: String): String? =

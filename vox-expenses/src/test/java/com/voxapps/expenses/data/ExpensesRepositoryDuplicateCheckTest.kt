@@ -27,7 +27,7 @@ class ExpensesRepositoryDuplicateCheckTest {
         lineItemDao = mockk(relaxed = true)
         spendingLimitDao = mockk(relaxed = true)
         repository = ExpensesRepository(
-            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk<Context>()
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk<Context>(), mockk(relaxed = true)
         )
     }
 

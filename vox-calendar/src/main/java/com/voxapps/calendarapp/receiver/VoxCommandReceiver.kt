@@ -115,15 +115,17 @@ class VoxCommandReceiver : BroadcastReceiver() {
 
             VoxIpc.OP_EXPORT -> {
                 val handler = CalendarExportImportHandler(
+                    context.applicationContext,
                     container.settingsRepository,
                     container.sessionManager,
-                    container.calendarRepository
+                    container.calendarRepository,
+                    container.attachmentDao
                 )
                 val pending = goAsync()
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        pending.setResultData(handler.export(scope).toJson())
+                        pending.setResultData(handler.export(scope, includePhotos = command.includePhotos).toJson())
                     } finally {
                         pending.finish()
                     }
@@ -132,9 +134,11 @@ class VoxCommandReceiver : BroadcastReceiver() {
 
             VoxIpc.OP_IMPORT -> {
                 val handler = CalendarExportImportHandler(
+                    context.applicationContext,
                     container.settingsRepository,
                     container.sessionManager,
-                    container.calendarRepository
+                    container.calendarRepository,
+                    container.attachmentDao
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {

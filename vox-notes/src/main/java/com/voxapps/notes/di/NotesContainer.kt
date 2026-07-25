@@ -28,8 +28,8 @@ class NotesContainer(context: Context) {
     val settingsRepository: NotesSettingsRepository = NotesSettingsRepositoryImpl(appContext)
 
     private val database = NotesDatabase.get(appContext)
-    val notesRepository = NotesRepository(database.noteDao(), database.categoryDao())
     val attachmentDao = database.attachmentDao()
+    val notesRepository = NotesRepository(database.noteDao(), database.categoryDao(), attachmentDao, appContext)
 
     val noteDeduplicationRepository = NoteDeduplicationRepository(appContext)
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())

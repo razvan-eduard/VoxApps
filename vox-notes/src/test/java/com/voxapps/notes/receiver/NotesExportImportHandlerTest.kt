@@ -1,6 +1,11 @@
 package com.voxapps.notes.receiver
 
+import android.content.Context
+import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.notes.data.Note
+import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.notes.data.NotesRepository
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
@@ -22,6 +27,7 @@ class NotesExportImportHandlerTest {
     private lateinit var settingsRepo: NotesSettingsRepository
     private lateinit var sessionManager: SessionManager
     private lateinit var notesRepo: NotesRepository
+    private lateinit var attachmentDao: AttachmentDao
     private lateinit var handler: NotesExportImportHandler
 
     @Before
@@ -29,7 +35,8 @@ class NotesExportImportHandlerTest {
         settingsRepo = mockk()
         sessionManager = mockk()
         notesRepo = mockk()
-        handler = NotesExportImportHandler(settingsRepo, sessionManager, notesRepo)
+        attachmentDao = mockk(relaxed = true)
+        handler = NotesExportImportHandler(mockk<Context>(), settingsRepo, sessionManager, notesRepo, attachmentDao)
 
         every { settingsRepo.getSnapshot() } returns NotesSettings(isBiometricRequired = false)
         every { notesRepo.categories } returns flowOf(emptyList())
@@ -77,5 +84,48 @@ class NotesExportImportHandlerTest {
 
         assertFalse(result.ok)
         coVerify(exactly = 0) { notesRepo.notesSnapshot() }
+    }
+
+    @Test
+    fun `import inserts each nested attachment against the newly created note's id`() = runTest {
+        coEvery { notesRepo.notesSnapshot() } returns emptyList()
+        coEvery { notesRepo.addNote(any(), any(), any(), any()) } returns 77L
+
+        val payload = """{"notes":[{"text":"hi","attachments":[
+            {"fileName":"att_1.jpg","source":"manual","createdAt":10},
+            {"fileName":"att_2.jpg","source":"scanned","createdAt":20}
+        ]}]}"""
+        handler.import(payload)
+
+        coVerify(exactly = 1) {
+            attachmentDao.insert(
+                AttachmentEntity(recordType = NotesAttachments.RECORD_TYPE, recordId = 77L, fileName = "att_1.jpg", source = AttachmentSource.MANUAL, createdAt = 10L)
+            )
+        }
+        coVerify(exactly = 1) {
+            attachmentDao.insert(
+                AttachmentEntity(recordType = NotesAttachments.RECORD_TYPE, recordId = 77L, fileName = "att_2.jpg", source = AttachmentSource.SCANNED, createdAt = 20L)
+            )
+        }
+    }
+
+    @Test
+    fun `import skips attachments with a blank fileName`() = runTest {
+        coEvery { notesRepo.notesSnapshot() } returns emptyList()
+        coEvery { notesRepo.addNote(any(), any(), any(), any()) } returns 5L
+
+        handler.import("""{"notes":[{"text":"hi","attachments":[{"fileName":"","source":"manual","createdAt":1}]}]}""")
+
+        coVerify(exactly = 0) { attachmentDao.insert(any()) }
+    }
+
+    @Test
+    fun `import does not insert attachments when the note insert failed`() = runTest {
+        coEvery { notesRepo.notesSnapshot() } returns emptyList()
+        coEvery { notesRepo.addNote(any(), any(), any(), any()) } returns 0L
+
+        handler.import("""{"notes":[{"text":"hi","attachments":[{"fileName":"att_1.jpg","source":"manual","createdAt":1}]}]}""")
+
+        coVerify(exactly = 0) { attachmentDao.insert(any()) }
     }
 }

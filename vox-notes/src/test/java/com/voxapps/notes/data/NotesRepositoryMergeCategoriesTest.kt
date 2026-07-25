@@ -23,7 +23,7 @@ class NotesRepositoryMergeCategoriesTest {
     fun setup() {
         noteDao = mockk(relaxed = true)
         categoryDao = mockk(relaxed = true)
-        repository = NotesRepository(noteDao, categoryDao)
+        repository = NotesRepository(noteDao, categoryDao, mockk(relaxed = true), mockk(relaxed = true))
         coEvery { categoryDao.observeAll() } returns flowOf(listOf(groceries, cumparaturi, work))
     }
 

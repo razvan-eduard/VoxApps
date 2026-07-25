@@ -3,6 +3,8 @@
     <!-- Staged AI-attachment copy of a scanned photo, for the one-shot Commander LLM call —
          short-lived by design, so this is cache, not files. -->
     <cache-path name="ai_scans" path="ai_scans/" />
+    <!-- Zipped attachments bundle staged for a Hub export — see CalendarExportImportHandler.buildAttachmentsZip. -->
+    <cache-path name="exports" path="exports/" />
     <!-- Manually-added attachments on a calendar entry — see :core:attachments. -->
     <files-path name="attachments" path="attachments/" />
 </paths>
