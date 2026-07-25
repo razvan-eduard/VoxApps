@@ -1,8 +1,8 @@
 name: Update README Release Links
 
-# Keeps README.md's "Latest Releases" table (between the LATEST_RELEASES:START/END markers) pointing
-# at whatever's actually published, instead of a hand-typed tag that goes stale the moment any app's
-# version bumps.
+# Keeps README.md's "Build Status" table (between the LATEST_RELEASES:START/END markers) pointing
+# at whatever's actually published — tag, APK size, and download link — instead of hand-typed values
+# that go stale the moment any app's version bumps or a new release lands.
 #
 # workflow_run, not release: published: every release-*.yml creates its GitHub Release with the
 # default GITHUB_TOKEN (see their "Create release" steps) — and GitHub explicitly does not let an
@@ -48,7 +48,7 @@ jobs:
         with:
           ref: main
 
-      - name: Regenerate Latest Releases table
+      - name: Regenerate Build Status table
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./scripts/update_release_readme_links.sh
