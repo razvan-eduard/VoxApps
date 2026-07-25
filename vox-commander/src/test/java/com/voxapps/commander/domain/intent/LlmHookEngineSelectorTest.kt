@@ -60,13 +60,18 @@ class LlmHookEngineSelectorTest {
 
     @Test
     fun `OpenAI failure (null rawPrompt) produces a descriptive error`() = runTest {
+        // openAiEngine here is a bare AssistantEngine mock, not a real OpenAiInterpreter, so the
+        // selector's cast for lastErrorReason can't find a specific cause — "unknown error" is the
+        // correct fallback in that case. The specific-cause path (401 -> "invalid or revoked", a 5xx
+        // -> "server error", etc.) lives on OpenAiInterpreter itself, exercised by that class's own
+        // tests instead of through this generic-mock selector test.
         every { settingsRepo.getSettingsSnapshot() } returns settingsWith(Strings.AiProcessors.OPENAI)
         coEvery { openAiEngine.rawPrompt(any()) } returns null
 
         val outcome = selector.run("hi")
 
         assertTrue(outcome is RawPromptOutcome.Error)
-        assertEquals("OpenAI request failed (check API key)", (outcome as RawPromptOutcome.Error).reason)
+        assertEquals("OpenAI request failed: unknown error", (outcome as RawPromptOutcome.Error).reason)
     }
 
     @Test

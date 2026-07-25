@@ -10,9 +10,17 @@ import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.security.MessageDigest
+
+/** Generous — first-ever load of a multi-GB on-device model can genuinely take a while — this is a
+ *  safety net against a stuck/corrupt model wedging every request forever, not a normal-path budget.
+ *  See [LocalLlmInterpreter.mutex]'s doc comment for why a serialized call can still need one. */
+private const val LOCAL_LLM_TIMEOUT_MS = 90_000L
 
 /**
  * L2/L3 Engine: Local LLM interpretation using MediaPipe GenAI.
@@ -31,6 +39,18 @@ class LocalLlmInterpreter(
     private var loadedModelId: String? = null
     private var loadedEngineKey: String? = null
     @Volatile private var isProcessing = false
+
+    /** Serializes every call that touches [llmInference]/[baseSession] — this class is a single
+     *  process-wide singleton (see AppContainer), and [setupLlm]'s `if (llmInference != null) return`
+     *  is a check-then-act with no synchronization of its own. Without this, a burst of concurrent
+     *  callers (confirmed on-device: Expenses' "Force-check notifications now" forwarding several
+     *  matched notifications at once) each see `llmInference == null` and each call the native,
+     *  memory-heavy `LlmInference.createFromOptions(...)` concurrently — N full copies of the model
+     *  loading into RAM at once, which crashed the process outright in the observed repro (visible as
+     *  a silent PID change plus the pre-existing "stale XNNPACK cache" cleanup path firing, evidence
+     *  of a prior native crash) and meant every one of those N requests vanished with zero reply, since
+     *  nothing ever reached `LlmHookWorker`'s `catch` block to send one. */
+    private val mutex = Mutex()
 
     private fun setupLlm() {
         val snapshot = settingsRepo.getSettingsSnapshot()
@@ -86,93 +106,107 @@ class LocalLlmInterpreter(
         loadedEngineKey = engineKey
     }
 
-    override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? = withContext(Dispatchers.IO) {
+    override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? =
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) { doProcessCommand(spokenText, modelFilterLang) }
+            }
+        }
+
+    private fun doProcessCommand(spokenText: String, modelFilterLang: String?): NluIntent? {
         isProcessing = true
         try {
-        setupLlm()
-        val engine = llmInference ?: return@withContext null
+            setupLlm()
+            val engine = llmInference ?: return null
 
-        val settings = settingsRepo.getSettingsSnapshot()
-        val systemPrompt = PromptProvider.getNluSystemPrompt(settings, modelFilterLang, settingsRepo)
-        val userInput = PromptProvider.formatUserInput(spokenText)
-        val promptHash = sha256(systemPrompt)
+            val settings = settingsRepo.getSettingsSnapshot()
+            val systemPrompt = PromptProvider.getNluSystemPrompt(settings, modelFilterLang, settingsRepo)
+            val userInput = PromptProvider.formatUserInput(spokenText)
+            val promptHash = sha256(systemPrompt)
 
-        // Invalidate cached session if system prompt changed (apps, language, defaults, etc.)
-        if (cachedSystemPromptHash != promptHash) {
-            if (baseSession != null) {
-                Logger.log("System prompt changed — rebuilding cached session", TAG)
+            // Invalidate cached session if system prompt changed (apps, language, defaults, etc.)
+            if (cachedSystemPromptHash != promptHash) {
+                if (baseSession != null) {
+                    Logger.log("System prompt changed — rebuilding cached session", TAG)
+                    try { baseSession?.close() } catch (_: Exception) {}
+                    baseSession = null
+                }
+                cachedSystemPromptHash = promptHash
+            }
+
+            // Create base session with system prompt pre-loaded (cached across calls)
+            if (baseSession == null) {
+                try {
+                    val sessionOptions = LlmInferenceSession.LlmInferenceSessionOptions.builder()
+                        .setTopK(40)
+                        .setTemperature(0.1f)
+                        .build()
+                    val session = LlmInferenceSession.createFromOptions(engine, sessionOptions)
+                    session.addQueryChunk(systemPrompt)
+                    baseSession = session
+                    Logger.log("Base session created with cached system prompt (${systemPrompt.length} chars)", TAG)
+                } catch (e: Exception) {
+                    Logger.log("Failed to create base session: ${e.message}", TAG)
+                }
+            }
+
+            val session = baseSession
+            if (session == null) {
+                // Fallback: no session, use direct generateResponse
+                return try {
+                    val fullPrompt = "$systemPrompt\n$userInput"
+                    val response = engine.generateResponse(fullPrompt)
+                    NluIntentParser.parse(response)
+                } catch (e: Exception) {
+                    Logger.log("LLM generation failed (fallback): ${e.message}", TAG)
+                    null
+                }
+            }
+
+            // Clone the base session (reuses KV cache for system prompt), add user input, generate
+            var querySession: LlmInferenceSession? = null
+            return try {
+                querySession = session.cloneSession()
+                querySession.addQueryChunk(userInput)
+                val response = querySession.generateResponse()
+                Logger.log("LLM response: $response", TAG)
+                NluIntentParser.parse(response)
+            } catch (e: Exception) {
+                Logger.log("LLM generation failed: ${e.message}", TAG)
+                // If clone failed, the base session might be corrupted — invalidate it
                 try { baseSession?.close() } catch (_: Exception) {}
                 baseSession = null
+                cachedSystemPromptHash = null
+                null
+            } finally {
+                try { querySession?.close() } catch (_: Exception) {}
             }
-            cachedSystemPromptHash = promptHash
-        }
-
-        // Create base session with system prompt pre-loaded (cached across calls)
-        if (baseSession == null) {
-            try {
-                val sessionOptions = LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                    .setTopK(40)
-                    .setTemperature(0.1f)
-                    .build()
-                val session = LlmInferenceSession.createFromOptions(engine, sessionOptions)
-                session.addQueryChunk(systemPrompt)
-                baseSession = session
-                Logger.log("Base session created with cached system prompt (${systemPrompt.length} chars)", TAG)
-            } catch (e: Exception) {
-                Logger.log("Failed to create base session: ${e.message}", TAG)
-            }
-        }
-
-        val session = baseSession
-        if (session == null) {
-            // Fallback: no session, use direct generateResponse
-            try {
-                val fullPrompt = "$systemPrompt\n$userInput"
-                val response = engine.generateResponse(fullPrompt)
-                return@withContext NluIntentParser.parse(response)
-            } catch (e: Exception) {
-                Logger.log("LLM generation failed (fallback): ${e.message}", TAG)
-                return@withContext null
-            }
-        }
-
-        // Clone the base session (reuses KV cache for system prompt), add user input, generate
-        var querySession: LlmInferenceSession? = null
-        try {
-            querySession = session.cloneSession()
-            querySession.addQueryChunk(userInput)
-            val response = querySession.generateResponse()
-            Logger.log("LLM response: $response", TAG)
-            return@withContext NluIntentParser.parse(response)
-        } catch (e: Exception) {
-            Logger.log("LLM generation failed: ${e.message}", TAG)
-            // If clone failed, the base session might be corrupted — invalidate it
-            try { baseSession?.close() } catch (_: Exception) {}
-            baseSession = null
-            cachedSystemPromptHash = null
-            null
-        } finally {
-            try { querySession?.close() } catch (_: Exception) {}
-        }
         } finally {
             isProcessing = false
         }
     }
 
-    override suspend fun rawPrompt(promptText: String, imageUri: String?): String? = withContext(Dispatchers.IO) {
+    override suspend fun rawPrompt(promptText: String, imageUri: String?): String? =
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) { doRawPrompt(promptText) }
+            }
+        }
+
+    private fun doRawPrompt(promptText: String): String? {
         // MediaPipe GenAI on-device models aren't multimodal-capable today — imageUri is always null
         // here (RemoteModelRegistry.isMultimodal never reports true for a local engine unless it
         // declares "multimodal" in models.json, which none currently do), silently ignored otherwise.
         isProcessing = true
         try {
             setupLlm()
-            val engine = llmInference ?: return@withContext null
+            val engine = llmInference ?: return null
             // Deliberately does NOT touch baseSession/cachedSystemPromptHash — those are primed with
             // the NLU system prompt for processCommand()'s per-utterance path. A raw-prompt call has
             // a different "system" framing per task and is infrequent (manual button / scheduled
             // job), so it uses the same no-session fallback path processCommand() already has for
             // when no session is available, rather than corrupting or reusing the NLU session cache.
-            try {
+            return try {
                 engine.generateResponse(promptText)
             } catch (e: Exception) {
                 Logger.log("LLM rawPrompt generation failed: ${e.message}", TAG)

@@ -24,6 +24,16 @@ class OpenAiInterpreter(
 ) : AssistantEngine {
 
     private val TAG = Strings.Tags.OPENAI_INTERPRETER
+
+    /** Set right before [rawPrompt] returns null, so [LlmHookEngineSelector] can build an accurate
+     *  error message instead of a hardcoded, potentially-wrong guess — a 500 `server_error` (OpenAI's
+     *  own infrastructure having an issue) is not the same failure as a 401 (an actually-bad key), but
+     *  [rawPrompt]'s `String?` return can't distinguish them without a side channel like this one. Not
+     *  thread-safe against concurrent calls on the same instance, which is fine here: this hook path
+     *  only ever has one in-flight request at a time per engine (see [LlmHookWorker]). */
+    var lastErrorReason: String? = null
+        private set
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
@@ -49,6 +59,7 @@ class OpenAiInterpreter(
     override suspend fun rawPrompt(promptText: String, imageUri: String?): String? = withContext(Dispatchers.IO) {
         val apiKey = settingsRepo.getApiKeySync()
         if (apiKey.isNullOrBlank()) {
+            lastErrorReason = "API key is missing"
             Logger.log("OpenAI API Key is missing (rawPrompt)", TAG)
             return@withContext null
         }
@@ -98,10 +109,22 @@ class OpenAiInterpreter(
                     .getJSONObject("message")
                     .getString("content")
             } else {
+                // 401/403 is a genuinely bad/revoked key; 429 is a quota/rate-limit issue (also not
+                // fixed by re-checking the key); anything else (5xx in particular — confirmed
+                // on-device: a plain OpenAI-side "server_error", nothing to do with the key at all) is
+                // an OpenAI-side problem, not a local misconfiguration — surfaced as such rather than
+                // guessing "check API key" for every failure the way this used to.
+                lastErrorReason = when (response.code) {
+                    401, 403 -> "API key is invalid or revoked"
+                    429 -> "Rate limit or quota exceeded"
+                    in 500..599 -> "OpenAI server error (HTTP ${response.code}) — usually transient, try again shortly"
+                    else -> "HTTP ${response.code}"
+                }
                 Logger.log("OpenAI API Error: ${response.code} - $bodyString", TAG)
                 null
             }
         } catch (e: Exception) {
+            lastErrorReason = "Network error: ${e.message}"
             Logger.log("OpenAI Request Failed: ${e.message}", TAG)
             null
         }

@@ -3,6 +3,7 @@ package com.voxapps.commander.domain.intent
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.intent.interpreter.AssistantEngine
+import com.voxapps.commander.domain.intent.interpreter.OpenAiInterpreter
 import com.voxapps.commander.utils.Strings
 
 /**
@@ -38,7 +39,9 @@ class LlmHookEngineSelector(
             Strings.AiProcessors.OPENAI -> {
                 if (!cloudOk) RawPromptOutcome.Error("Cloud intelligence disabled")
                 else openAiEngine.rawPrompt(promptText, imageUri)?.let { RawPromptOutcome.Success(it) }
-                    ?: RawPromptOutcome.Error("OpenAI request failed (check API key)")
+                    ?: RawPromptOutcome.Error(
+                        "OpenAI request failed: ${(openAiEngine as? OpenAiInterpreter)?.lastErrorReason ?: "unknown error"}"
+                    )
             }
             Strings.AiProcessors.GEMINI_CLOUD -> {
                 if (!cloudOk) RawPromptOutcome.Error("Cloud intelligence disabled")
