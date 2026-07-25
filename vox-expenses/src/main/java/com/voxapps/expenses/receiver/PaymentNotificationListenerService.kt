@@ -11,6 +11,7 @@ import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParsePromptBuilder
+import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -125,13 +126,15 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         }
         Logger.d(TAG, "Captured notification from ${sbn.packageName}, forwarding for LLM triage (knownBankName=$knownBankName)")
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
+        val isLocalEngine = VoxCapabilityClient.isLocalEngine(applicationContext)
         val promptText = NotificationExpenseParsePromptBuilder.build(
             notificationTitle = title,
             notificationText = text,
             existingCategories = existingCategories,
             defaultCurrency = settings.defaultCurrency,
             languageCode = settings.language,
-            knownBankName = knownBankName
+            knownBankName = knownBankName,
+            isLocalEngine = isLocalEngine
         )
         val encodedKey = Base64.encodeToString(sbn.key.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         // knownBankName rides along the same way rather than trusting the LLM to echo it back

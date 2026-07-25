@@ -24,6 +24,7 @@ class CapabilityQueryReceiver : BroadcastReceiver() {
         val container = (context.applicationContext as VoxApplication).container
         val processor = container.settingsRepository.getSettingsSnapshot().aiProcessor
         val multimodal = RemoteModelRegistry.isMultimodal(processor)
-        setResult(Activity.RESULT_OK, VoxCapabilityClient.buildReply(multimodal).toJson(), null)
+        val local = RemoteModelRegistry.isLocalEngine(processor)
+        setResult(Activity.RESULT_OK, VoxCapabilityClient.buildReply(multimodal, local).toJson(), null)
     }
 }

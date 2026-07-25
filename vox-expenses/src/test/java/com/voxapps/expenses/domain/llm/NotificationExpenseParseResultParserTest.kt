@@ -85,6 +85,34 @@ class NotificationExpenseParseResultParserTest {
     }
 
     @Test
+    fun `a vendor exactly matching the prompt's few-shot example placeholder is stripped to null`() {
+        // Confirmed on-device: a small local model leaked "Acme Mart" (the prompt's fictional example
+        // vendor) into a real notification's parsed vendor even though that notification named a
+        // different, real merchant. A prompt-level "don't copy this" instruction isn't reliable enough
+        // to trust on its own, so this is stripped back out deterministically here.
+        val json = """{"isPayment":true,"totalAmount":45.9,"vendor":"${NotificationExpenseParsePromptBuilder.EXAMPLE_VENDOR_PLACEHOLDER}"}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertNull(result.vendor)
+    }
+
+    @Test
+    fun `a vendor placeholder match is case-insensitive`() {
+        val json = """{"isPayment":true,"totalAmount":45.9,"vendor":"acme mart"}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertNull(result.vendor)
+    }
+
+    @Test
+    fun `a title exactly matching the example placeholder is also stripped to null`() {
+        val json = """{"isPayment":true,"totalAmount":45.9,"title":"${NotificationExpenseParsePromptBuilder.EXAMPLE_VENDOR_PLACEHOLDER}"}"""
+        val result = NotificationExpenseParseResultParser.parse(json)!!
+
+        assertNull(result.title)
+    }
+
+    @Test
     fun `direction defaults to outgoing when the field is missing`() {
         val json = """{"isPayment":true,"totalAmount":45.9}"""
         val result = NotificationExpenseParseResultParser.parse(json)!!

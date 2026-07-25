@@ -33,10 +33,10 @@ object NotificationExpenseParseResultParser {
             } ?: return null
 
             Parsed(
-                title = o.optCleanString("title"),
+                title = o.optCleanString("title").dropIfExamplePlaceholder(),
                 totalAmount = totalAmount,
                 currency = o.optCleanString("currency"),
-                vendor = o.optCleanString("vendor"),
+                vendor = o.optCleanString("vendor").dropIfExamplePlaceholder(),
                 category = o.optCleanString("category"),
                 bank = o.optCleanString("bank"),
                 direction = o.optTransactionDirection()
@@ -45,4 +45,18 @@ object NotificationExpenseParseResultParser {
     } catch (e: Exception) {
         null
     }
+
+    /**
+     * A prompt-level "don't copy this" instruction can't be trusted to actually stop a small local
+     * model from leaking few-shot example content (confirmed on-device: a real notification with its
+     * own distinct merchant name still came back with the example's literal placeholder vendor). This
+     * is the deterministic backstop — strip the field back out in code regardless of what the model
+     * does, rather than relying on wording alone.
+     */
+    private fun String?.dropIfExamplePlaceholder(): String? =
+        if (this != null && this.equals(NotificationExpenseParsePromptBuilder.EXAMPLE_VENDOR_PLACEHOLDER, ignoreCase = true)) {
+            null
+        } else {
+            this
+        }
 }

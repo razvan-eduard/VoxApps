@@ -100,4 +100,63 @@ class NotificationExpenseParsePromptBuilderTest {
         assertTrue(prompt.contains("does not disqualify it on its own"))
         assertTrue(prompt.contains("ENTIRE notification content is just a balance figure"))
     }
+
+    @Test
+    fun `includes few-shot examples covering top-up and merchant-only-in-text cases`() {
+        // Confirmed on-device: a small local LLM reliably missed real transactions whose merchant
+        // name only appeared in the body text (not the title), and separately misclassified an
+        // account top-up as not-a-payment despite the prose already covering both cases — concrete
+        // examples were added specifically to anchor these two failure modes.
+        val prompt = NotificationExpenseParsePromptBuilder.build("t", "x", emptyList(), "RON", "en")
+        assertTrue(prompt.contains("Example 1"))
+        assertTrue(prompt.contains("Example 2"))
+        assertTrue(prompt.contains("Example 3"))
+        assertTrue(prompt.contains("top-up, auto-top-up, or \"added to your account\" message IS an incoming transaction") ||
+            prompt.contains("IS an incoming transaction"))
+    }
+
+    @Test
+    fun `warns the model not to copy the example vendor name, briefly`() {
+        // Confirmed on-device: the model leaked the example vendor name into a real notification's
+        // parsed vendor. A longer instruction (plus a 4th example) was tried and made things worse —
+        // the added prompt length pushed this 1.5B local model into degenerate near-empty output for
+        // every request. This one short clause is the prompt-level nudge; the real enforcement is the
+        // deterministic strip in NotificationExpenseParseResultParserTest.
+        val prompt = NotificationExpenseParsePromptBuilder.build("t", "x", emptyList(), "RON", "en")
+        assertTrue(prompt.contains("never copy \"${NotificationExpenseParsePromptBuilder.EXAMPLE_VENDOR_PLACEHOLDER}\""))
+    }
+
+    @Test
+    fun `defaults to the local-engine variant when isLocalEngine is not specified`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build("t", "x", emptyList(), "RON", "en")
+        assertTrue(prompt.contains("Example 1"))
+    }
+
+    @Test
+    fun `remote engine prompt omits the few-shot examples and the anti-copy clause`() {
+        // A cloud model (GPT-4o-mini, Gemini 1.5 Flash) doesn't share the small local model's failure
+        // modes these exist to work around — the examples and the anti-copy nudge are local-only.
+        val prompt = NotificationExpenseParsePromptBuilder.build(
+            "t", "x", emptyList(), "RON", "en", isLocalEngine = false
+        )
+        assertFalse(prompt.contains("Example 1"))
+        assertFalse(prompt.contains("Example 2"))
+        assertFalse(prompt.contains("Example 3"))
+        assertFalse(prompt.contains(NotificationExpenseParsePromptBuilder.EXAMPLE_VENDOR_PLACEHOLDER))
+        assertFalse(prompt.contains("never copy"))
+    }
+
+    @Test
+    fun `remote engine prompt still covers direction, escape hatch, and balance-line rules`() {
+        // Only the small-model-specific scaffolding (examples, anti-copy) should differ — the actual
+        // content rules (direction, JSON shape, balance-line handling) apply to every engine.
+        val prompt = NotificationExpenseParsePromptBuilder.build(
+            "t", "x", emptyList(), "RON", "en", isLocalEngine = false
+        )
+        assertTrue(prompt.contains("OUTGOING"))
+        assertTrue(prompt.contains("INCOMING"))
+        assertTrue(prompt.contains("\"isPayment\": false"))
+        assertTrue(prompt.contains("does not disqualify it on its own"))
+        assertTrue(prompt.contains("\"totalAmount\""))
+    }
 }

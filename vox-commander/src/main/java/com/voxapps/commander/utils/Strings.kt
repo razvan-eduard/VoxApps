@@ -50,6 +50,15 @@ object Strings {
          * then falls back to `models.json` for JSON-defined local engines.
          */
         val MULTIMODAL_CAPABLE = setOf(OPENAI, GEMINI_CLOUD)
+
+        /**
+         * Processors whose inference happens off-device. Everything else — [GEMINI_NATIVE] and every
+         * `models.json`-defined key — runs locally, see
+         * [com.voxapps.commander.data.remote.RemoteModelRegistry.isLocalEngine]. Kept as its own set
+         * (even though it happens to equal [MULTIMODAL_CAPABLE] today) since "leaves the device" and
+         * "accepts image input" are different questions that could diverge for a future engine.
+         */
+        val CLOUD_PROCESSORS = setOf(OPENAI, GEMINI_CLOUD)
     }
 
     object Routes {

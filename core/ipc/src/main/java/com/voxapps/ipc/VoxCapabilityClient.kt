@@ -21,13 +21,17 @@ object VoxCapabilityClient {
 
     private const val DEFAULT_TIMEOUT_MS = 3_000L
     private const val KEY_MULTIMODAL = "multimodal"
+    private const val KEY_LOCAL = "local"
 
     /**
-     * Fails safe to `false` on timeout or if Commander is unreachable — this check is meant to be an
-     * optimization (attach a photo when possible), not a requirement, so callers must never block or
-     * retry on it; a failed query is indistinguishable from "not multimodal" by design.
+     * [local] fails safe to `true` (not `false`) on timeout/unreachable, unlike [multimodal] — an
+     * inconclusive probe should make a caller pick the more defensive, small-model-tuned behavior
+     * (e.g. [com.voxapps.expenses.domain.llm.NotificationExpenseParsePromptBuilder]'s local-engine
+     * prompt variant) rather than assume a capable remote model that may not actually be there.
      */
-    suspend fun isMultimodal(context: Context, timeoutMs: Long = DEFAULT_TIMEOUT_MS): Boolean {
+    data class EngineCapabilities(val multimodal: Boolean, val local: Boolean)
+
+    private suspend fun query(context: Context, timeoutMs: Long): EngineCapabilities {
         val intent = Intent(VoxIpc.ACTION_CAPABILITY_QUERY).apply {
             setPackage(VoxAppsDiscovery.COMMANDER_PACKAGE)
         }
@@ -49,17 +53,36 @@ object VoxCapabilityClient {
             }
         } ?: run {
             Logger.d("VoxCapabilityClient", "Capability query timed out or Commander unreachable")
-            return false
+            return EngineCapabilities(multimodal = false, local = true)
         }
-        if (result?.ok != true) return false
+        if (result?.ok != true) return EngineCapabilities(multimodal = false, local = true)
         return try {
-            org.json.JSONObject(result.text).optBoolean(KEY_MULTIMODAL, false)
+            val o = org.json.JSONObject(result.text)
+            EngineCapabilities(
+                multimodal = o.optBoolean(KEY_MULTIMODAL, false),
+                local = o.optBoolean(KEY_LOCAL, true)
+            )
         } catch (e: Exception) {
-            false
+            EngineCapabilities(multimodal = false, local = true)
         }
     }
 
+    /**
+     * Fails safe to `false` on timeout or if Commander is unreachable — this check is meant to be an
+     * optimization (attach a photo when possible), not a requirement, so callers must never block or
+     * retry on it; a failed query is indistinguishable from "not multimodal" by design.
+     */
+    suspend fun isMultimodal(context: Context, timeoutMs: Long = DEFAULT_TIMEOUT_MS): Boolean =
+        query(context, timeoutMs).multimodal
+
+    /** See [EngineCapabilities.local] for the fail-safe direction (defaults to `true`, not `false`). */
+    suspend fun isLocalEngine(context: Context, timeoutMs: Long = DEFAULT_TIMEOUT_MS): Boolean =
+        query(context, timeoutMs).local
+
     /** Commander's own receiver builds its reply with this — kept here so both sides agree on shape. */
-    fun buildReply(multimodal: Boolean): VoxResult =
-        VoxResult(ok = true, text = org.json.JSONObject().put(KEY_MULTIMODAL, multimodal).toString())
+    fun buildReply(multimodal: Boolean, local: Boolean): VoxResult =
+        VoxResult(
+            ok = true,
+            text = org.json.JSONObject().put(KEY_MULTIMODAL, multimodal).put(KEY_LOCAL, local).toString()
+        )
 }

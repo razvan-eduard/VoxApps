@@ -367,6 +367,14 @@ object RemoteModelRegistry {
     fun isMultimodal(processor: String): Boolean =
         processor in Strings.AiProcessors.MULTIMODAL_CAPABLE || hasCapability(processor, "multimodal")
 
+    /**
+     * Whether [processor] runs on-device rather than calling out to a cloud API — mirrors
+     * [isMultimodal]'s hardcoded-cloud-first check, just inverted: only the fixed
+     * [Strings.AiProcessors.CLOUD_PROCESSORS] set leaves the device, so anything not in it (Gemini
+     * Nano, or any `models.json`-defined downloaded engine key) is local by elimination.
+     */
+    fun isLocalEngine(processor: String): Boolean = processor !in Strings.AiProcessors.CLOUD_PROCESSORS
+
     fun getDefaultWakeWordEngineKey(): String {
         return cachedSchema?.engines?.entries
             ?.firstOrNull { it.value.is_default_wake_word }?.key
