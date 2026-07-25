@@ -42,6 +42,7 @@
   "confirm_delete_default_msg": "You are about to delete the default offline fallback %s voice model: %s",
   "delete_button": "Delete",
   "cancel_button": "Cancel",
+  "done_button": "Done",
   "ok_button": "OK",
   "download_model_title": "Download Model",
   "download_model_msg": "Download and use selected model %s (%s)?",

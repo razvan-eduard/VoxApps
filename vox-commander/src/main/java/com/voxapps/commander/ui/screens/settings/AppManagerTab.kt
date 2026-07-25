@@ -155,12 +155,11 @@ fun AppManagerTab(
         AppSelectorDropdown(
             selectedPackages = returnApps,
             defaultPackage = null,
-            onToggleApp = { pkg ->
-                val updated = if (pkg in returnApps) returnApps - pkg else returnApps + pkg
+            onApply = { updated ->
                 returnApps = updated
                 scope.launch { settingsRepo.setReturnAfterActionApps(updated) }
             },
-            onSetDefault = {},
+            onApplyDefault = {},
             label = "Apps (${returnApps.size} selected)"
 
         )
@@ -232,12 +231,10 @@ private fun DefaultAppsContent(
                 AppSelectorDropdown(
                     selectedPackages = settings.domainAppPackages[domainName] ?: emptyList(),
                     defaultPackage = settings.defaultAppPackages[domainName],
-                    onToggleApp = { pkg ->
-                        val current = (settings.domainAppPackages[domainName] ?: emptyList()).toMutableList()
-                        if (pkg in current) current.remove(pkg) else current.add(pkg)
-                        scope.launch { settingsRepo.setDomainApps(domainName, current) }
+                    onApply = { updated ->
+                        scope.launch { settingsRepo.setDomainApps(domainName, updated) }
                     },
-                    onSetDefault = { pkg ->
+                    onApplyDefault = { pkg ->
                         scope.launch { settingsRepo.setDefaultAppPackage(domainName, pkg) }
                     },
                     domain = null,

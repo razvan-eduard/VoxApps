@@ -39,6 +39,7 @@
   "confirm_delete_default_msg": "Sie löschen das Standard-Offline-Fallback %s Sprachmodell: %s",
   "delete_button": "Löschen",
   "cancel_button": "Abbrechen",
+  "done_button": "Fertig",
   "ok_button": "OK",
   "download_model_title": "Modell herunterladen",
   "download_model_msg": "Gewähltes Modell %s (%s) herunterladen und verwenden?",

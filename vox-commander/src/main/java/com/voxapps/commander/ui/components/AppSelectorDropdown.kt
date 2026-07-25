@@ -102,7 +102,9 @@ private fun rememberAppPickerStrings(): AppPickerStrings {
             starredCountSummaryFormat = lm?.getString("apps_selected_starred_count") ?: "%d selected, %d starred",
             selected = lm?.getString("selected") ?: "Selected",
             setAsDefault = lm?.getString("set_as_default") ?: "Set as default",
-            removeDefault = lm?.getString("remove_default") ?: "Remove default"
+            removeDefault = lm?.getString("remove_default") ?: "Remove default",
+            done = lm?.getString("done_button") ?: "Done",
+            cancel = lm?.getString("cancel_button") ?: "Cancel"
         )
     }
 }
@@ -183,8 +185,8 @@ fun AppSelectorDropdown(
 fun AppSelectorDropdown(
     selectedPackages: List<String>,
     defaultPackage: String?,
-    onToggleApp: (String) -> Unit,
-    onSetDefault: (String?) -> Unit,
+    onApply: (List<String>) -> Unit,
+    onApplyDefault: (String?) -> Unit,
     modifier: Modifier = Modifier,
     domain: String? = null,
     label: String = "Select apps",
@@ -204,12 +206,16 @@ fun AppSelectorDropdown(
     AppPickerCard(
         apps = allApps.map { it.toPickerEntry() },
         selectedPackages = selectedPackages,
-        onToggleApp = { pkg ->
-            if (pkg == com.voxapps.commander.utils.PackageNames.SPOTIFY && pkg !in selectedPackages && !com.voxapps.commander.service.OAuth2Manager.isAuthorized("spotify")) {
-                spotifyOAuthAction = { onToggleApp(pkg) }
+        onApply = { updated ->
+            // Spotify requires OAuth before it can be newly added to the selection — checked once
+            // here against the final applied list (not per-tap, since selections are staged locally
+            // in the sheet now and only reach this callback once, on Done).
+            val spotify = com.voxapps.commander.utils.PackageNames.SPOTIFY
+            if (spotify in updated && spotify !in selectedPackages && !com.voxapps.commander.service.OAuth2Manager.isAuthorized("spotify")) {
+                spotifyOAuthAction = { onApply(updated) }
                 showSpotifyOAuthDialog = true
             } else {
-                onToggleApp(pkg)
+                onApply(updated)
             }
         },
         strings = strings,
@@ -217,7 +223,7 @@ fun AppSelectorDropdown(
         label = label,
         initialFilterMode = filterMode,
         defaultPackage = defaultPackage,
-        onSetDefault = onSetDefault
+        onApplyDefault = onApplyDefault
     )
 
     SpotifyOAuthDialog(

@@ -1,14 +1,13 @@
 package com.voxapps.apppicker
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -17,22 +16,25 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,14 +48,23 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Reusable app picker: expandable card whose header shows the current selection, tap to expand a
- * search box + all/user/system filter + scrollable checkbox/radio list. Ported from vox-commander's
- * original `AppSelectorDropdown` — this module carries only the generic rendering; app-specific
- * behavior (e.g. vox-commander's Spotify-OAuth interception or satellite-domain candidate
- * filtering) stays in each app's own thin wrapper around this composable.
+ * Reusable app picker: a card whose header shows the current selection, tap to open a full-screen
+ * modal sheet with a search box + all/user/system filter + scrollable checkbox/radio list, plus a
+ * Cancel/Done bar at the bottom. Ported from vox-commander's original `AppSelectorDropdown` — this
+ * module carries only the generic rendering; app-specific behavior (e.g. vox-commander's Spotify-OAuth
+ * interception or satellite-domain candidate filtering) stays in each app's own thin wrapper.
+ *
+ * A modal sheet (rather than expanding inline) is deliberate: callers place this card inside their
+ * own scrollable screen, at whatever position it lands — often well below the fold. Expanding inline
+ * left the search box and list fighting the parent screen's scroll position for visibility (confirmed
+ * on-device in vox-expenses' Notification Capture settings: at best only the tail end of the list was
+ * reachable). A full-screen modal sheet always opens fully visible regardless of where the card sits,
+ * and a Cancel/Done bar means selections only commit when the user explicitly confirms, rather than
+ * live-applying every tap (which also made "changed my mind" impossible without re-toggling).
  *
  * Single-select variant: pick one app (or none).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppPickerCard(
     apps: List<AppPickerEntry>,
@@ -69,64 +80,72 @@ fun AppPickerCard(
         apps.find { it.packageName == selectedPackage }
     }
 
-    var expanded by remember { mutableStateOf(false) }
+    var sheetOpen by remember { mutableStateOf(false) }
 
     OutlinedCard(
-        modifier = modifier.fillMaxWidth().animateContentSize(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { sheetOpen = true }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = selectedApp?.displayName
+                        ?: if (allowNone) strings.noneLabel else strings.notSelected,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (selectedApp != null) {
                     Text(
-                        text = label,
+                        text = selectedApp.packageName,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = selectedApp?.displayName
-                            ?: if (allowNone) strings.noneLabel else strings.notSelected,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (selectedApp != null) {
-                        Text(
-                            text = selectedApp.packageName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
                 }
-                Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (expanded) strings.collapse else strings.expand,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
+            Icon(
+                imageVector = Icons.Default.ExpandMore,
+                contentDescription = strings.expand,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
 
-            if (expanded) {
-                HorizontalDivider()
+    if (sheetOpen) {
+        var pendingSelection by remember { mutableStateOf(selectedApp) }
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(onDismissRequest = { sheetOpen = false }, sheetState = sheetState) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 AppPickerList(
                     apps = apps,
-                    selectedPackage = selectedPackage,
+                    selectedPackage = pendingSelection?.packageName,
                     allowNone = allowNone,
                     strings = strings,
-                    onSelect = { app ->
-                        onAppSelected(app)
-                        expanded = false
-                    },
-                    maxHeight = maxDropdownHeight
+                    onSelect = { app -> pendingSelection = app },
+                    modifier = Modifier.weight(1f)
+                )
+                ConfirmBar(
+                    strings = strings,
+                    onCancel = { sheetOpen = false },
+                    onDone = {
+                        onAppSelected(pendingSelection)
+                        sheetOpen = false
+                    }
                 )
             }
         }
@@ -135,87 +154,135 @@ fun AppPickerCard(
 
 /**
  * Multi-select variant with optional star support — either a single "default" app
- * ([defaultPackage]/[onSetDefault]) or a set of independently-toggled starred apps
- * ([starredPackages]/[onToggleStar], e.g. "which of these payment apps are banks"). At most one of
+ * ([defaultPackage]/[onApplyDefault]) or a set of independently-toggled starred apps
+ * ([starredPackages]/[onApplyStarred], e.g. "which of these payment apps are banks"). At most one of
  * the two star modes should be wired up per call site; leaving both null omits the star column
  * entirely (the right choice when the selection has no meaningful "starred" concept at all).
+ *
+ * Unlike the old per-tap `onToggleApp`, all changes are staged locally while the sheet is open and
+ * only reach the caller once, in full, when Done is tapped ([onApply] gets the complete final list —
+ * never called incrementally). This is deliberate, not just a style choice: replaying several
+ * incremental toggle calls in a loop at commit time would each close over the same stale
+ * `selectedPackages` snapshot (Compose doesn't recompose mid-callback), so only the last call would
+ * "win" and earlier toggles in the same batch would silently vanish. A single bulk callback with the
+ * full final list sidesteps that entirely — every real caller already persists via a "set the whole
+ * list" method (`setDomainApps`, `setPaymentSourcePackages`, etc.), so this is also simpler at the
+ * call site than the old manual diffing was.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppPickerCard(
     apps: List<AppPickerEntry>,
     selectedPackages: List<String>,
-    onToggleApp: (String) -> Unit,
+    onApply: (List<String>) -> Unit,
     strings: AppPickerStrings,
     modifier: Modifier = Modifier,
     label: String = "Select apps",
     initialFilterMode: String = "all",
     defaultPackage: String? = null,
-    onSetDefault: ((String?) -> Unit)? = null,
+    onApplyDefault: ((String?) -> Unit)? = null,
     starredPackages: Set<String> = emptySet(),
-    onToggleStar: ((String) -> Unit)? = null
+    onApplyStarred: ((Set<String>) -> Unit)? = null
 ) {
     val selectedApps = apps.filter { it.packageName in selectedPackages }
     val defaultApp = selectedApps.find { it.packageName == defaultPackage }
 
-    var expanded by remember { mutableStateOf(false) }
+    var sheetOpen by remember { mutableStateOf(false) }
 
     OutlinedCard(
-        modifier = modifier.fillMaxWidth().animateContentSize(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = when {
-                            selectedApps.isEmpty() -> strings.noAppsSelected
-                            defaultApp != null ->
-                                strings.defaultAppSummaryFormat.format(defaultApp.displayName, selectedApps.size - 1)
-                            // Star mode (starredPackages/onToggleStar wired instead of a single default) —
-                            // show how many of the selected apps are actually starred, rather than the
-                            // single-default fallback text (which talks about "no default", nonsensical
-                            // here since this call site never had a "default" concept to begin with).
-                            onToggleStar != null ->
-                                strings.starredCountSummaryFormat.format(selectedApps.size, starredPackages.size)
-                            else -> strings.appsSelectedNoDefaultFormat.format(selectedApps.size)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (expanded) strings.collapse else strings.expand,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { sheetOpen = true }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = when {
+                        selectedApps.isEmpty() -> strings.noAppsSelected
+                        defaultApp != null ->
+                            strings.defaultAppSummaryFormat.format(defaultApp.displayName, selectedApps.size - 1)
+                        // Star mode (starredPackages/onApplyStarred wired instead of a single default) —
+                        // show how many of the selected apps are actually starred, rather than the
+                        // single-default fallback text (which talks about "no default", nonsensical
+                        // here since this call site never had a "default" concept to begin with).
+                        onApplyStarred != null ->
+                            strings.starredCountSummaryFormat.format(selectedApps.size, starredPackages.size)
+                        else -> strings.appsSelectedNoDefaultFormat.format(selectedApps.size)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Icon(
+                imageVector = Icons.Default.ExpandMore,
+                contentDescription = strings.expand,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
 
-            if (expanded) {
-                HorizontalDivider()
+    if (sheetOpen) {
+        var pendingSelected by remember { mutableStateOf(selectedPackages.toSet()) }
+        var pendingDefault by remember { mutableStateOf(defaultPackage) }
+        var pendingStarred by remember { mutableStateOf(starredPackages) }
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+        ModalBottomSheet(onDismissRequest = { sheetOpen = false }, sheetState = sheetState) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 AppPickerListMulti(
                     apps = apps,
-                    selectedPackages = selectedPackages,
-                    defaultPackage = defaultPackage,
+                    selectedPackages = pendingSelected.toList(),
+                    onToggleApp = { pkg ->
+                        pendingSelected = if (pkg in pendingSelected) pendingSelected - pkg else pendingSelected + pkg
+                    },
+                    defaultPackage = pendingDefault,
+                    onSetDefault = onApplyDefault?.let { { pkg: String? -> pendingDefault = pkg } },
+                    starredPackages = pendingStarred,
+                    onToggleStar = onApplyStarred?.let { { pkg: String ->
+                        pendingStarred = if (pkg in pendingStarred) pendingStarred - pkg else pendingStarred + pkg
+                    } },
                     initialFilterMode = initialFilterMode,
                     strings = strings,
-                    onToggleApp = onToggleApp,
-                    onSetDefault = onSetDefault,
-                    starredPackages = starredPackages,
-                    onToggleStar = onToggleStar
+                    modifier = Modifier.weight(1f)
+                )
+                ConfirmBar(
+                    strings = strings,
+                    onCancel = { sheetOpen = false },
+                    onDone = {
+                        onApply(pendingSelected.toList())
+                        onApplyDefault?.invoke(pendingDefault)
+                        onApplyStarred?.invoke(pendingStarred)
+                        sheetOpen = false
+                    }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ConfirmBar(strings: AppPickerStrings, onCancel: () -> Unit, onDone: () -> Unit) {
+    HorizontalDivider()
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+            Text(strings.cancel)
+        }
+        Button(onClick = onDone, modifier = Modifier.weight(1f)) {
+            Text(strings.done)
         }
     }
 }
@@ -227,7 +294,7 @@ private fun AppPickerList(
     allowNone: Boolean,
     strings: AppPickerStrings,
     onSelect: (AppPickerEntry?) -> Unit,
-    maxHeight: Dp = 300.dp
+    modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var filterMode by remember { mutableStateOf("all") }
@@ -252,7 +319,7 @@ private fun AppPickerList(
         matchesSearch && matchesFilter
     }
 
-    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+    Column(modifier = modifier.padding(vertical = 8.dp)) {
         SearchFilterRow(
             searchQuery = searchQuery,
             onSearchChange = { searchQuery = it },
@@ -266,7 +333,7 @@ private fun AppPickerList(
         )
 
         Column(
-            modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState())
+            modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
         ) {
             if (allowNone) {
                 Row(
@@ -311,7 +378,8 @@ private fun AppPickerListMulti(
     onToggleApp: (String) -> Unit,
     onSetDefault: ((String?) -> Unit)?,
     starredPackages: Set<String> = emptySet(),
-    onToggleStar: ((String) -> Unit)? = null
+    onToggleStar: ((String) -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var currentFilter by remember { mutableStateOf(initialFilterMode) }
@@ -337,7 +405,7 @@ private fun AppPickerListMulti(
         (isSelected || matchesFilter) && matchesSearch
     }
 
-    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+    Column(modifier = modifier.padding(vertical = 8.dp)) {
         SearchFilterRow(
             searchQuery = searchQuery,
             onSearchChange = { searchQuery = it },
@@ -351,7 +419,7 @@ private fun AppPickerListMulti(
         )
 
         Column(
-            modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp).verticalScroll(rememberScrollState())
+            modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
         ) {
             if (filteredApps.isEmpty()) {
                 Text(strings.noAppsFound, modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

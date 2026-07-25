@@ -31,5 +31,7 @@ data class AppPickerStrings(
     val starredCountSummaryFormat: String,
     val selected: String,
     val setAsDefault: String,
-    val removeDefault: String
+    val removeDefault: String,
+    val done: String,
+    val cancel: String
 )

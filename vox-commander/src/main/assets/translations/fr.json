@@ -39,6 +39,7 @@
   "confirm_delete_default_msg": "Vous supprimez le modèle de secours par défaut %s : %s",
   "delete_button": "Supprimer",
   "cancel_button": "Annuler",
+  "done_button": "Terminé",
   "ok_button": "OK",
   "download_model_title": "Télécharger le modèle",
   "download_model_msg": "Télécharger et utiliser le modèle %s (%s) ?",

@@ -42,6 +42,7 @@
   "confirm_delete_default_msg": "Sunteți pe cale să ștergeți modelul de voce implicit fallback offline %s: %s",
   "delete_button": "Șterge",
   "cancel_button": "Anulează",
+  "done_button": "Gata",
   "ok_button": "OK",
   "download_model_title": "Descarcă Model",
   "download_model_msg": "Descărcați și folosiți modelul selectat %s (%s)?",

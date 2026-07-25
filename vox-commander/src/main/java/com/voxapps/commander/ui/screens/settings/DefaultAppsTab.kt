@@ -77,12 +77,10 @@ fun DefaultAppsTab(
                 AppSelectorDropdown(
                     selectedPackages = settings.domainAppPackages[domainInfo.name] ?: emptyList(),
                     defaultPackage = settings.defaultAppPackages[domainInfo.name],
-                    onToggleApp = { pkg ->
-                        val current = (settings.domainAppPackages[domainInfo.name] ?: emptyList()).toMutableList()
-                        if (pkg in current) current.remove(pkg) else current.add(pkg)
-                        scope.launch { settingsRepo.setDomainApps(domainInfo.name, current) }
+                    onApply = { updated ->
+                        scope.launch { settingsRepo.setDomainApps(domainInfo.name, updated) }
                     },
-                    onSetDefault = { pkg ->
+                    onApplyDefault = { pkg ->
                         scope.launch { settingsRepo.setDefaultAppPackage(domainInfo.name, pkg) }
                     },
                     domain = null,
