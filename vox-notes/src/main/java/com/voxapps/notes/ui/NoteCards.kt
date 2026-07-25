@@ -56,6 +56,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
@@ -79,6 +80,15 @@ private const val CARD_TINT_ALPHA = 0.18f
 
 private fun cardColor(category: Category?, base: Color): Color =
     category?.let { CategoryColors.fromStored(it.colorArgb).copy(alpha = CARD_TINT_ALPHA) } ?: base
+
+/** [factor] < 1 darkens by scaling HSV value — used for the open-for-editing note's border, so it
+ *  reads as "the same category, emphasized" rather than an unrelated accent color. */
+private fun Color.darker(factor: Float = 0.7f): Color {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(toArgb(), hsv)
+    hsv[2] *= factor
+    return Color(android.graphics.Color.HSVToColor(hsv))
+}
 
 /** Collapsed note: background tinted by category; title (if any) then body text. */
 @Composable
@@ -136,8 +146,19 @@ fun NoteEditorCard(
 ) {
     val languageManager = LocalLanguageManager.current
     val selectedCategory = categories.firstOrNull { it.id == categoryId }
+    // Nothing otherwise visually sets the open-for-editing note apart from the flat collapsed cards
+    // below it in the same list — a border in a darker shade of its own category color reads as
+    // "this category's note, emphasized" rather than an unrelated accent color, and still says
+    // something sensible when there's no category (darkened surfaceVariant).
+    val borderColor = selectedCategory
+        ?.let { CategoryColors.fromStored(it.colorArgb) }
+        ?.darker()
+        ?: MaterialTheme.colorScheme.outline
     Card(
-        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .border(2.dp, borderColor, MaterialTheme.shapes.medium),
         colors = CardDefaults.cardColors(
             containerColor = cardColor(selectedCategory, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
         )

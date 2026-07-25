@@ -8,6 +8,7 @@ import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.MatOfPoint2f
 import org.opencv.core.Point
+import org.opencv.core.Rect
 import org.opencv.core.Size
 import org.opencv.geometry.Geometry
 import org.opencv.imgproc.Imgproc
@@ -32,6 +33,18 @@ object DocumentCropper {
     private const val MIN_AREA_FRACTION = 0.15
 
     /**
+     * Fallback threshold for [crop]'s bounding-rect crop, once the stricter quad+perspective-warp
+     * path below finds nothing — confirmed on-device, a real photo taken in dim/uneven lighting can
+     * fragment the paper's outer edge enough that it never closes into a clean 4-corner contour even
+     * though the document is clearly, generously framed (one such shot topped out at ~7.6% by
+     * [MIN_AREA_FRACTION]'s stricter accounting), which previously meant [crop] silently returned the
+     * *entire, uncropped* photo instead of any crop at all. Lower than [MIN_AREA_FRACTION] since a
+     * plain bounding-rect crop only trims background, it doesn't correct perspective/skew, so being
+     * looser here is lower-risk than accepting a loose quad for the perspective warp would be.
+     */
+    private const val FALLBACK_MIN_AREA_FRACTION = 0.05
+
+    /**
      * User-adjustable trigger threshold for [hasDocumentQuad]'s live-preview check: analysis frames are
      * lower-resolution and less sharp (no focus lock, unlike a deliberate capture) — confirmed on-device,
      * the same scene that crops cleanly at capture resolution topped out well under 10% of the frame
@@ -53,8 +66,21 @@ object DocumentCropper {
         try {
             Utils.bitmapToMat(bitmap, rgba)
             Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
-            val corners = findDocumentQuad(gray, MIN_AREA_FRACTION) ?: return bitmap
-            return warp(rgba, corners)
+            findDocumentQuad(gray, MIN_AREA_FRACTION)?.let {
+                val result = warp(rgba, it)
+                Logger.d("DocumentCropper", "crop: quad warp -> ${result.width}x${result.height}")
+                return result
+            }
+            // Quad detection needs the full boundary to close into 4 clean corners — dim/uneven
+            // lighting can fragment it even when the document is clearly, generously framed (see
+            // FALLBACK_MIN_AREA_FRACTION's doc comment). A plain axis-aligned crop to the largest
+            // blob's bounding rect is still strictly better than keeping the whole background.
+            findLargestBlobRect(gray, FALLBACK_MIN_AREA_FRACTION)?.let { rect ->
+                Logger.d("DocumentCropper", "crop: bounding-rect fallback -> ${rect.width}x${rect.height}")
+                return Bitmap.createBitmap(bitmap, rect.x, rect.y, rect.width, rect.height)
+            }
+            Logger.d("DocumentCropper", "crop: no crop, returning original ${bitmap.width}x${bitmap.height}")
+            return bitmap
         } catch (t: Throwable) {
             return bitmap
         } finally {
@@ -84,6 +110,22 @@ object DocumentCropper {
      * stricter quad-based [crop] is unchanged — it still needs real corners for the perspective warp.
      */
     fun detectLiveBounds(gray: Mat, sensitivity: DetectionSensitivity): LiveBounds? {
+        val rect = findLargestBlobRect(gray, sensitivity.minAreaFraction) ?: return null
+        val width = gray.cols().toFloat()
+        val height = gray.rows().toFloat()
+        return LiveBounds(
+            left = rect.x / width,
+            top = rect.y / height,
+            right = (rect.x + rect.width) / width,
+            bottom = (rect.y + rect.height) / height
+        )
+    }
+
+    /** Pixel-space bounding rect of the largest bright, paper-colored blob in [gray], or `null` if
+     *  nothing covers at least [minAreaFraction] of the frame. Shared by [detectLiveBounds] (live
+     *  preview overlay, normalizes this to 0..1) and [crop]'s fallback (a plain bounding-rect crop
+     *  when the stricter quad detection below finds nothing). */
+    private fun findLargestBlobRect(gray: Mat, minAreaFraction: Double): Rect? {
         val blurred = Mat()
         val thresholded = Mat()
         val contours = mutableListOf<MatOfPoint>()
@@ -95,17 +137,9 @@ object DocumentCropper {
 
             val imageArea = gray.rows().toDouble() * gray.cols().toDouble()
             val largest = contours.maxByOrNull { Geometry.contourArea(it) } ?: return null
-            if (Geometry.contourArea(largest) / imageArea < sensitivity.minAreaFraction) return null
+            if (Geometry.contourArea(largest) / imageArea < minAreaFraction) return null
 
-            val rect = Geometry.boundingRect(largest)
-            val width = gray.cols().toFloat()
-            val height = gray.rows().toFloat()
-            return LiveBounds(
-                left = rect.x / width,
-                top = rect.y / height,
-                right = (rect.x + rect.width) / width,
-                bottom = (rect.y + rect.height) / height
-            )
+            return Geometry.boundingRect(largest)
         } finally {
             blurred.release(); thresholded.release(); hierarchy.release()
             contours.forEach { it.release() }

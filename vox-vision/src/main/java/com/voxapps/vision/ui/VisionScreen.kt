@@ -96,6 +96,11 @@ import java.util.concurrent.Executors
  *  paced by how long each frame's OpenCV processing takes on the device. */
 private const val ANALYSIS_INTERVAL_MS = 80L
 
+/** Max per-edge drift (as a 0..1 fraction of frame size) between consecutive ticks' [DocumentCropper.
+ *  LiveBounds] for auto-capture's stability counter to treat them as "the same document held in
+ *  place" rather than resetting — see its doc comment in LaunchedEffect(cameraController). */
+private const val BOUNDS_STABILITY_TOLERANCE = 0.05f
+
 /**
  * Maps the user's "Capture speed" setting to how many consecutive good-framing analysis ticks are
  * required before auto-capture fires — separate from [VisionSettingsRepository.autoTriggerSensitivityFlow],
@@ -260,10 +265,17 @@ fun VisionScreen(
     // caller's own task back to the front before finishing — see VoxOcrRequest.returnToCallerOnComplete.
     // getLaunchIntentForPackage is package-agnostic on purpose: Vision never needs to know any
     // specific caller's Activity class, keeping the "any first-party satellite" contract intact.
+    // Standalone (pendingRequest == null) reuses the same overlay for the same visual confirmation,
+    // but never finishes the Activity — the user stays in Vision to scan another document, possibly to
+    // a different target button, so this just clears the flag and lets the camera preview resume.
     LaunchedEffect(showScanSuccess) {
         if (!showScanSuccess) return@LaunchedEffect
         delay(1200)
-        if (pendingRequest?.returnToCallerOnComplete == true) {
+        if (pendingRequest == null) {
+            showScanSuccess = false
+            return@LaunchedEffect
+        }
+        if (pendingRequest.returnToCallerOnComplete) {
             context.packageManager.getLaunchIntentForPackage(pendingRequest.sourcePackage)?.let { launchIntent ->
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 context.startActivity(launchIntent)
@@ -316,16 +328,15 @@ fun VisionScreen(
         val stability = intArrayOf(0)
         val armed = booleanArrayOf(true)
         val lastAnalysisAt = longArrayOf(0L)
+        var lastBounds: DocumentCropper.LiveBounds? = null
         val mainExecutor = ContextCompat.getMainExecutor(context)
         cameraController.setImageAnalysisAnalyzer(analysisExecutor) { image ->
             val now = System.currentTimeMillis()
             if (!engineReadyState.value || isRecognizingState.value ||
-                pendingRequestState.value == null || // Don't auto-capture in manual/standalone mode
                 showScanSuccessState.value || // Already submitted — stop analyzing during the confirmation delay
                 now - lastAnalysisAt[0] < ANALYSIS_INTERVAL_MS // Floor only, not a target rate — see above
             ) {
                 image.close()
-                if (pendingRequestState.value == null) mainExecutor.execute { liveBounds = null }
                 return@setImageAnalysisAnalyzer
             }
             lastAnalysisAt[0] = now
@@ -344,17 +355,41 @@ fun VisionScreen(
             // Compose state writes and captureAndRecognize (which drives the camera + calls back into
             // Compose state) hop back to main — only the OpenCV Mat work above runs off-thread.
             mainExecutor.execute {
+                // The live rectangle itself is shown regardless of pendingRequest — standalone users
+                // get the same framing feedback — but only the "scan for another satellite" flow has a
+                // single, already-known destination to auto-capture *and auto-submit* to. Standalone
+                // always needs a deliberate tap on one of the target buttons: there's no way to
+                // auto-decide which of N installed targets to send to, and auto-capturing here anyway
+                // would just mean the eventual target-button tap re-captures a second photo, discarding
+                // this one.
                 liveBounds = bounds
 
                 if (bounds == null) {
                     armed[0] = true
                     stability[0] = 0
+                    lastBounds = null
                     return@execute
                 }
-                stability[0]++
+                if (pendingRequestState.value == null) return@execute
+
+                // "Stable" means the same document held roughly in place across consecutive frames,
+                // not just "something was found again" — panning across a cluttered scene can keep
+                // satisfying the area threshold with a *different* blob each tick, so a bare
+                // present/absent counter never resets and can reach the trigger threshold while the
+                // camera is still moving over nothing in particular.
+                val previous = lastBounds
+                val heldSteady = previous != null &&
+                    kotlin.math.abs(bounds.left - previous.left) < BOUNDS_STABILITY_TOLERANCE &&
+                    kotlin.math.abs(bounds.top - previous.top) < BOUNDS_STABILITY_TOLERANCE &&
+                    kotlin.math.abs(bounds.right - previous.right) < BOUNDS_STABILITY_TOLERANCE &&
+                    kotlin.math.abs(bounds.bottom - previous.bottom) < BOUNDS_STABILITY_TOLERANCE
+                lastBounds = bounds
+                stability[0] = if (heldSteady) stability[0] + 1 else 1
+
                 if (armed[0] && stability[0] >= stabilityThresholdState.value) {
                     armed[0] = false
                     stability[0] = 0
+                    lastBounds = null
                     liveBounds = null
                     Logger.d("VisionScreen", "Auto-capture triggered (stable framing)")
                     captureAndRecognize(
@@ -363,13 +398,7 @@ fun VisionScreen(
                         onResult = { text, imageUri, aiImageUri ->
                             rawText = text
                             lastScannedUri = imageUri
-                            // Only the "scan for another satellite" flow has a single, already-known
-                            // destination — so an auto-triggered capture there can go straight through and
-                            // hand control back to the caller. Standalone mode always needs a deliberate
-                            // tap: there's no way to auto-decide which of N installed targets to send to.
-                            // Reads the live pendingRequestState, not the closure-frozen pendingRequest
-                            // (see above).
-                            if (pendingRequestState.value != null) submitState.value(text, imageUri, aiImageUri)
+                            submitState.value(text, imageUri, aiImageUri)
                         }
                     )
                 }
@@ -497,8 +526,10 @@ fun VisionScreen(
                     // captureAndRecognize) — well before OCR itself finishes — so this appears
                     // immediately after the live rectangle vanishes on trigger, instead of leaving a
                     // gap where the preview just looks like it's doing nothing. Drawn last so it also
-                    // covers the FAB above.
-                    if (pendingRequest != null && isRecognizing) {
+                    // covers the FAB above. Shown for standalone target-button taps too, not just the
+                    // pendingRequest FAB/auto-capture — captureAndRecognize always drives isRecognizing
+                    // the same way regardless of caller.
+                    if (isRecognizing) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -547,6 +578,10 @@ fun VisionScreen(
                                         String.format(languageManager.getString("sent_to_target"), target.label),
                                         Toast.LENGTH_SHORT
                                     ).show()
+                                    // Same "it worked" flash the pendingRequest flow shows — see the
+                                    // LaunchedEffect(showScanSuccess) above for why standalone doesn't
+                                    // finish the Activity afterward.
+                                    showScanSuccess = true
                                 }
                             )
                         }
