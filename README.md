@@ -77,7 +77,7 @@ for how this table and the releases behind it are built.
 | **Vox Expenses** | [`expenses-v0.11`](https://github.com/razvan-eduard/VoxApps/releases/tag/expenses-v0.11) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/expenses-v0.11/VoxExpenses-expenses-v0.11.apk) |
 | **Vox Notes** | [`notes-v0.9`](https://github.com/razvan-eduard/VoxApps/releases/tag/notes-v0.9) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/notes-v0.9/VoxNotes-notes-v0.9.apk) |
 | **Vox Vision** | [`vision-v0.7`](https://github.com/razvan-eduard/VoxApps/releases/tag/vision-v0.7) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/vision-v0.7/VoxVision-vision-v0.7.apk) |
-| **Vox Hub** | [`hub-v0.6`](https://github.com/razvan-eduard/VoxApps/releases/tag/hub-v0.6) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/hub-v0.6/VoxHub-hub-v0.6.apk) |
+| **Vox Hub** | [`hub-v0.8`](https://github.com/razvan-eduard/VoxApps/releases/tag/hub-v0.8) | [Download APK](https://github.com/razvan-eduard/VoxApps/releases/download/hub-v0.8/VoxHub-hub-v0.8.apk) |
 
 <!-- LATEST_RELEASES:END -->
 
