@@ -1350,7 +1350,16 @@ command bus but carrying opaque prompt/result payloads instead of structured not
   configured as the user's primary AI processor (`aiProcessor` setting — the same selection
   [`IntentDecisionMap`](#4-natural-language-understanding-nlu) uses for its L2 step), calling
   `AssistantEngine.rawPrompt()` directly with **no L1/L3 fallback cascade** (this hook always targets a
-  single, currently-selected engine, not the triple-brain pipeline).
+  single, currently-selected engine, not the triple-brain pipeline). On an OpenAI failure it now
+  surfaces the actual HTTP-code-derived reason (`OpenAiInterpreter.lastErrorReason` — bad/revoked key,
+  rate limit, or a transient 5xx) instead of a hardcoded "check API key" for every failure.
+- **`LocalLlmInterpreter` serializes every call** (`processCommand`/`rawPrompt`) through a `Mutex` with
+  a generous 90s timeout. It's a process-wide singleton with a check-then-act `setupLlm()` and no
+  synchronization of its own; a burst of concurrent callers (confirmed on-device: Expenses' "Force-check
+  notifications now" forwarding several matched notifications at once) each saw the model unloaded and
+  each triggered a concurrent, memory-heavy `LlmInference.createFromOptions(...)` — N full copies of the
+  model loading into RAM at once, crashing the process and silently dropping every one of those
+  requests (nothing ever reached `LlmHookWorker`'s `catch` to send a reply).
 - **Reply** — `LlmHookWorker` applies only generic cleanup (`NluIntentParser.cleanGenericOutput`,
   stripping markdown/prose fences) to the LLM's raw text, wraps it in a `VoxLlmResult{task, status,
   rawJson}`, and delivers it as an **explicit-intent** broadcast (`ACTION_LLM_RESULT`, targeted at
@@ -1540,6 +1549,19 @@ single LLM call — never a second call.
   Commander's side, `VoxCapabilityClient.isMultimodal()` client-side) exposes this to any first-party
   app — deliberately separate from `VoxSatelliteSchema`/`OP_GET_SCHEMA`, since this is global Commander
   engine state, not per-satellite data.
+- **Local-vs-remote declaration.** The same query also reports `RemoteModelRegistry.isLocalEngine(processor)`
+  — the inverse of a small hardcoded cloud set (`Strings.AiProcessors.CLOUD_PROCESSORS = {OPENAI,
+  GEMINI_CLOUD}`; everything else, including Gemini Native and any `models.json`-defined downloaded
+  engine, is local by elimination) — alongside `multimodal` in one round-trip
+  (`VoxCapabilityClient.EngineCapabilities`). Callers use it to tune a prompt to the active engine's
+  capability tier rather than assuming one: `VoxCapabilityClient.isLocalEngine()` fails safe to `true`
+  on an inconclusive probe (the opposite direction from `isMultimodal()`'s fail-safe-`false`), since
+  picking the more defensive, small-model-tuned prompt is the safer default when the probe can't tell.
+  `NotificationExpenseParsePromptBuilder` (vox-expenses) is the worked example: its few-shot examples
+  and anti-copy clause — added to work around a small local model's demonstrated tendency to leak
+  literal example content into real output — are only included for a local engine; a cloud model
+  doesn't share that failure mode and gets a shorter, example-free prompt instead of a padded-out copy
+  of the local one.
 - **Resolution, not quality, is what controls token cost.** Vision's Settings gets two new
   preferences: **"Send photo to AI"** (off by default — real token cost on top of free local OCR) and
   **"Photo detail for AI"** (Low/Medium/High → 768/1024/1536px long edge). Only resolution changes
@@ -1803,7 +1825,7 @@ delta-then-merge).
 | `VoxLlmRequest` / `VoxLlmResult` | `core/ipc/src/main/java/com/voxapps/ipc/` |
 | `VoxOcrRequest` / `VoxOcrResult` | `core/ipc/src/main/java/com/voxapps/ipc/` |
 | `VoxSatelliteSchema` | `core/ipc/src/main/java/com/voxapps/ipc/VoxSatelliteSchema.kt` |
-| `VoxCapabilityClient` (multimodal capability query) | `core/ipc/src/main/java/com/voxapps/ipc/VoxCapabilityClient.kt` |
+| `VoxCapabilityClient` (multimodal + local-vs-remote engine capability query) | `core/ipc/src/main/java/com/voxapps/ipc/VoxCapabilityClient.kt` |
 | `VoxAppsDiscovery` / `VoxAppInfo` / `VoxSatelliteRegistry` (schema cache) | `domain/integration/` |
 | `SchemaChangedReceiver` (satellite push) / `CapabilityQueryReceiver` | `domain/integration/`, `service/` |
 | `SatelliteRouting` (pure decision) | `domain/integration/SatelliteRouting.kt` |
@@ -1826,6 +1848,7 @@ delta-then-merge).
 | `BackupZipWriter` / `BackupWorker` (multi-domain zip bundling, scheduled backups) | `vox-hub/.../domain/backup/` |
 | `AttachmentEntity` / `AttachmentDao` / `AttachmentFileStore` / `AttachmentsSection` (shared record attachments) | `core/attachments/src/main/java/com/voxapps/attachments/` |
 | `SyncIdentity` / `planMerge()` (shared merge algorithm) | `core/datahygiene/.../SyncMerge.kt` |
+| `RuleBasedDuplicateChecker` / `RuleField` / `DuplicateRule` (generic duplicate-rule engine) | `core/datahygiene/.../RuleBasedDuplicateChecker.kt` |
 | Per-app sync handlers | `vox-expenses/.../receiver/ExpensesSyncHandler.kt`, `vox-notes/.../receiver/NotesSyncHandler.kt`, `vox-calendar/.../receiver/CalendarSyncHandler.kt` |
 | `PairedPeer` / `SyncPeerStore` (persisted per-peer identity + key) | `vox-hub/.../domain/sync/` |
 | `PairingHceService` / `NfcPairingReader` / `NfcPairingProtocol` (NFC pairing) | `vox-hub/.../domain/sync/` |
@@ -2005,6 +2028,42 @@ or `.`) highlighted in red via a Compose `AnnotatedString`/`SpanStyle`, rather t
 
 See the [Satellite App Guide §6.6](SATELLITE_APP_GUIDE.md#66-data-hygiene-cleaning-records-before-insert)
 for the wiring pattern with code examples.
+
+### Generic duplicate-rule engine
+
+The same module also ships `RuleBasedDuplicateChecker<T>` — a `DuplicateChecker<T>` implementation
+modeled on email-client filters rather than a hardcoded field list: an app registers a `RuleField<T>`
+per comparable field (`id`, localization key, a `(candidate, existing) -> Boolean` matcher), the user
+builds named `DuplicateRule`s (a set of field ids combined with their own `RuleCombinator.AND`/`OR`),
+and however many rules exist combine via one global `AND`/`OR`. Evaluation: within each rule, its
+selected fields combine via that rule's own combinator; the rules combine via the global one; a rule
+whose fields don't resolve (an empty selection, or ids not present in the registered field list) never
+matches rather than throwing — the UI is responsible for blocking an empty-field rule from being saved.
+Three reusable field builders cover the common comparator shapes so a new entity's registry is mostly
+one-line declarations: `stringField` (`FieldCleaner`-normalized, null-on-either-side never matches,
+optional pluggable `FuzzyMatcher`), `exactField` (null-safe `==`), `timeWindowField`
+(`abs(delta) <= windowMillis`).
+
+`:core:datahygiene` has no Room/entity knowledge of its own — the field registry, where rules persist,
+and the rule-editing UI are each app's own responsibility. **vox-expenses** is the only current
+consumer: `ExpenseRuleFields` (the field registry — title/vendor/bank/location/comments as fuzzy-eligible
+string fields, totalAmount/currencyCode/categoryId/direction as exact fields, dateTime as a time-window
+field), `DuplicateRuleEntity`/`DuplicateRuleDao` (Room storage, `fieldIds: List<String>` via a
+comma-joined `TypeConverter`; migrated in with two default rules seeded — "same amount+currency+
+direction+time, plus title OR vendor" — reproducing the app's prior hardcoded behavior as two AND-rules
+OR'd together, both on upgrade and on a fresh install's `onCreate` callback), and
+`ui/settings/DuplicateRulesSection.kt` (rule list + edit sheet: field `FilterChip`s, per-rule AND/OR,
+per-rule fuzzy-vs-exact toggle, per-rule "applies automatically at save vs. review-only" toggle).
+
+vox-expenses' `ExpensesRepository.buildDuplicateChecker(config, automaticOnly)` fetches the enabled
+rules (optionally filtered to `appliesAutomatically` ones only), builds the field registry once, and
+evaluates each rule against its own fuzzy setting via a single-rule checker per rule, then ORs/ANDs all
+rule results per the stored global combinator. This replaced two previously-separate systems (an
+always-on exact-match `ExpenseDuplicateChecker`, since deleted, and a 3-checkbox near-duplicate add-on)
+with one pass — see the [Vox Expenses feature list](APPS_OVERVIEW.md#vox-expenses) for the user-facing
+behavior, including the automatic-protection Off/Local/Local+AI/AI modes and the "Manual review" toggle
+that stages an insert-time local-rule match into the same pending-review list `findLocalDuplicateGroups`
+already uses for the on-demand/scheduled check, instead of merging it silently.
 
 ---
 

@@ -89,29 +89,52 @@ bank/payment notifications, or entered by hand.
 - **Notification capture** — an opt-in `NotificationListenerService` inspects notifications only from
   apps the user explicitly allowlists (Settings → Notification capture); a matched notification is a
   **pending suggestion** the user must approve or dismiss unless "Auto-accept" is enabled, in which case
-  it's inserted directly (still a normal, editable expense row afterward). Duplicate-entry detection
-  (same title/amount/currency/vendor/bank/location/comments/category, compared by calendar day rather
-  than exact instant so a retried notification-capture doesn't create a second row) skips a repeat
-  insert. Notifications the listener missed (OS-killed process, dropped broadcast) get a "last chance"
-  capture on dismissal, plus a manual "Force-check notifications now" button (debounced — a rapid
-  double-tap can't dispatch the same notification twice) that bypasses the already-processed guard for
-  whatever's still in the notification shade. The source-app allowlist picker is a shared
-  `:core:apppicker` card (search + all/user/system filter) backed by a persisted launcher-apps cache —
-  scanned once ever, reloaded from cache on every later launch, with a manual "Rescan Apps" button for
-  when a new app is installed. The request to Commander is now durably queued rather than
-  fire-and-forget — see
+  it's inserted directly (still a normal, editable expense row afterward, and still subject to the
+  duplicate-rule engine below). The parsing prompt itself adapts to whichever LLM engine is currently
+  active — see **Notification-parse prompt tuning** below. Notifications the listener missed (OS-killed
+  process, dropped broadcast) get a "last chance" capture on dismissal, plus a manual "Force-check
+  notifications now" button (debounced — a rapid double-tap can't dispatch the same notification twice)
+  that bypasses the already-processed guard for whatever's still in the notification shade. The
+  source-app allowlist picker is a shared `:core:apppicker` card (full-screen modal with Cancel/Done
+  confirmation, search + all/user/system filter) backed by a persisted launcher-apps cache — scanned
+  once ever, reloaded from cache on every later launch, with a manual "Rescan Apps" button for when a
+  new app is installed (plus, on Honor/MagicOS devices, a warning and an App Info shortcut if the OEM's
+  own "get installed apps" permission gate is silently emptying the scanned list despite
+  `QUERY_ALL_PACKAGES` being granted, and a deep link into that OEM's own app-launch-management screen —
+  independent of stock battery-optimization exemption — since it can otherwise block the listener from
+  ever rebinding after the process is killed). The request to Commander is now durably queued rather
+  than fire-and-forget — see
   [Durable delivery: the pending-request queue](TECHNICAL_DOCUMENTATION.md#durable-delivery-the-pending-request-queue-voxllmrequestqueue)
   — so a notification is recovered automatically even if Commander was killed/stopped at capture time.
+- **Notification-parse prompt tuning** — the notification-capture prompt (`NotificationExpenseParsePromptBuilder`)
+  branches on whether Commander's currently-active engine is local or cloud (queried once per capture
+  via `VoxCapabilityClient.isLocalEngine`): a local engine gets the few-shot examples and a short
+  anti-copy clause that exist specifically to work around a small on-device model's demonstrated
+  tendency to leak literal example content into real output (backstopped by a deterministic code-side
+  strip regardless of what the model does); a cloud engine, which doesn't share that failure mode, gets
+  a shorter, example-free prompt instead of a padded-out copy of the local one.
 - **Transaction direction** — every expense is tagged outgoing (money spent) or incoming (money
   received/refunded); Reports splits **Total** (outgoing only) from **Received** instead of netting
   them into one misleading figure. Voice/scan/notification parsing infers direction from the source
   text (e.g. "refund," a bank credit notification) and defaults to outgoing when ambiguous.
-- **Near-duplicate detection** (Settings → Expense cleanup → Direct database matching, off by default,
-  separate from the AI-based cleanup below) — a same-day insert whose fields closely match an existing
-  row gets merged into it instead of creating a second entry, in **Exact** or **Fuzzy** match mode, with
-  a configurable time window (1–15 min) for how close in time two entries must be to be compared at all.
-  Deliberately not the LLM-hook cleanup path — this runs entirely locally, synchronously, on every
-  insert.
+- **Duplicate detection** (Settings → Expense cleanup) — a generic, user-configurable rule engine
+  (`RuleBasedDuplicateChecker`, shared via `:core:datahygiene` — see
+  [Generic duplicate-rule engine](TECHNICAL_DOCUMENTATION.md#generic-duplicate-rule-engine)), modeled on
+  email-client filters: any expense field (title, vendor, bank, location, comments, amount, currency,
+  category, direction, date/time) can be added to a named rule with its own AND/OR, multiple rules
+  combine via one global AND/OR, and each rule independently chooses exact-vs-fuzzy string matching and
+  a shared time window (1–15 min). Two default rules are pre-seeded reproducing the app's original
+  behavior (same amount+currency+direction+time, plus title OR vendor).
+  - **Automatic protection** (what runs on every insert) has four modes: **Off**, **Local** (silently
+    merges an obvious rule match), **Local + AI** (local merge plus a small AI-scoped confirmation
+    check queued for review), and **AI** (review-only, no local merge). A per-rule "applies
+    automatically at save" toggle scopes which rules participate here vs. review-only contexts.
+  - **Manual review** (only shown for Local/Local + AI) — when on, an insert-time local-rule match is
+    added to the same pending-review list "Check for duplicates now" produces, instead of merging
+    silently, so nothing changes without a look first.
+  - This replaced two previously-separate systems (an always-on exact-match checker comparing by
+    calendar day, and a 3-checkbox near-duplicate add-on) with the one rule engine above — see the
+    technical doc link for the full evaluation model.
 - **Category color adjacency + merchant category memory** — a freshly auto-created category's color is
   chosen to visibly differ from the most-recently-added expense's category (not just from the aggregate
   palette), and repeatedly correcting the same vendor to the same category (configurable 1×/3×/5×/10×
@@ -132,10 +155,11 @@ bank/payment notifications, or entered by hand.
 - **Category cleanup** (Settings → Categories) — "Remember merchant categories" toggle + 1×/3×/5×/10×
   threshold chips (see above), plus the same Commander LLM-hook pattern as Vox Notes: auto-merge finds
   and merges near-duplicate categories, on-demand or on a schedule
-- **Expense cleanup** (Settings → Expense cleanup) — two independent cards: **AI-based cleanup** (the
-  Commander LLM-hook pattern — *proposes* duplicate-expense groups for the user to review before
-  anything is deleted, on-demand or on a schedule) and **Direct database matching** (the
-  near-duplicate-detection toggle above, entirely local)
+- **Expense cleanup** (Settings → Expense cleanup) — one tab covering automatic protection and the
+  duplicate-rule engine (see **Duplicate detection** above), plus an on-demand **"Check for duplicates
+  now"** button and a **scheduled** equivalent, both of which stage matches into the same pending-review
+  list regardless of trigger — the Commander LLM-hook pattern, reviewed and approved per group before
+  anything merges or deletes
 - **Calendar view** (optional, off by default) — same shared `:core:calendar` module as Vox Notes, plus
   bank/vendor filters and an amount ascending/descending sort; sorting by amount isn't chronological, so
   it temporarily disables the calendar view (a dismissible chip restores it)

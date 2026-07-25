@@ -189,7 +189,8 @@ record.
 
 Encrypted on-device expense tracker. Three ways in — voice, receipt-scan OCR, or automatic capture from
 bank/payment notifications (now durably queued and retried, not fire-and-forget) — plus manual entry;
-transaction direction (Total vs. Received in Reports), configurable near-duplicate detection, merchant
+transaction direction (Total vs. Received in Reports), a user-configurable duplicate-rule engine
+(email-filter-style: any field, AND/OR, multiple rules, Off/Local/Local+AI/AI protection modes), merchant
 category memory (auto-applies a category after you correct the same vendor a few times), per-category
 spending limits with alerts, multi-currency reports, an optional calendar view, a home-screen widget,
 and sync with another phone via Vox Hub.

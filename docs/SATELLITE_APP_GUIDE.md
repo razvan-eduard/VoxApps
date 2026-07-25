@@ -45,7 +45,7 @@ handful of constants.
   speak it. Your app never calls a "speak" hook itself.
 - **`:core:datahygiene`** gives every satellite a shared way to clean garbage out of a record before
   it hits the database — auto-clean for LLM-derived saves, untouched for Hub import, confirm-first
-  for manual UI edits. See §6.6.
+  for manual UI edits (§6.6) — plus a generic, user-configurable duplicate-rule engine (§6.7).
 
 ---
 
@@ -728,6 +728,40 @@ This gating happens in the **caller**, never inside the shared repository's `add
 — those are used by both manual saves and Hub import with no way to tell them apart internally, so
 sanitizing inside the repository would incorrectly also rewrite imported data.
 
+### 6.7 Duplicate detection (`RuleBasedDuplicateChecker`)
+
+`:core:datahygiene` also ships a generic, entity-agnostic duplicate-rule engine — the same model email
+clients use for filters: register a `RuleField<T>` per comparable field on your entity, let the user
+build named `DuplicateRule`s (a set of fields combined with their own AND/OR), and combine however many
+rules exist with one global AND/OR. `RuleBasedDuplicateChecker<T>` (a `DuplicateChecker<T>`) evaluates
+it; an empty-fields rule or an empty rule list never matches, rather than throwing.
+
+```kotlin
+import com.voxapps.datahygiene.RuleField
+import com.voxapps.datahygiene.DuplicateRule
+import com.voxapps.datahygiene.RuleBasedDuplicateChecker
+import com.voxapps.datahygiene.RuleCombinator
+import com.voxapps.datahygiene.stringField   // FieldCleaner-normalized, optional fuzzy matching
+import com.voxapps.datahygiene.exactField    // null-safe ==
+import com.voxapps.datahygiene.timeWindowField // abs(delta) <= windowMillis
+
+class YourEntityRuleFields(fuzzyMatchEnabled: Boolean, timeWindowMillis: Long) {
+    val all: List<RuleField<YourEntity>> = listOf(
+        stringField("title", "field_title", fuzzyMatchEnabled, ::FuzzyNameMatcher) { it.title },
+        exactField("amount", "field_amount") { it.amount },
+        timeWindowField("dateTime", "field_date_time", timeWindowMillis) { it.dateTime }
+    )
+}
+```
+
+Everything entity-specific — the field registry, where rules are persisted (vox-expenses uses a Room
+entity/DAO, migrated in with default rules seeded to reproduce whatever hardcoded behavior it's
+replacing), and the rule-list/edit UI — is your app's own responsibility; the core module only supplies
+the field/rule/evaluation contracts. See `vox-expenses/.../data/ExpenseRuleFields.kt`,
+`DuplicateRuleEntity.kt`/`DuplicateRuleDao.kt`, and `ui/settings/DuplicateRulesSection.kt` for a
+complete worked example, including a Room migration that seeds defaults on both upgrade and fresh
+install.
+
 ---
 
 ## 7. The generic LLM hook (outside the create/extraction flow)
@@ -806,6 +840,22 @@ if (VoxCapabilityClient.isMultimodal(context)) {
 
 `isMultimodal()` fails safe to `false` on timeout — treat it as an optimization check, not something
 worth retrying.
+
+The same query also reports whether the currently-selected engine runs on-device or calls out to a
+cloud API — useful if your prompt has any scaffolding tuned for a small local model's weaknesses
+(e.g. few-shot examples anchoring a case a bigger model would generalize to from prose alone) that a
+capable remote model doesn't need and is better off without:
+
+```kotlin
+val local = VoxCapabilityClient.isLocalEngine(context) // fails safe to true — see below
+val prompt = if (local) buildLocalTunedPrompt(...) else buildLeanPrompt(...)
+```
+
+Fails safe to `true` (not `false`) on timeout/unreachable — the opposite direction from
+`isMultimodal()` — because an inconclusive probe should pick the more defensive, local-model-tuned
+prompt rather than assume a capable remote model that may not actually be there. See
+`NotificationExpenseParsePromptBuilder` in vox-expenses for a worked example of branching a prompt
+this way.
 
 ---
 
@@ -923,6 +973,10 @@ understanding it helps when debugging "my app doesn't show up" or "the wrong app
   `vox-expenses/.../data/ExpenseSanitizer.kt`, `vox-calendar/.../data/CalendarEntrySanitizer.kt`,
   `vox-notes/.../data/NoteSanitizer.kt` — and their wiring into each app's `LlmResultReceiver.kt` (LLM
   path) and edit screen (`ExpenseEditScreen.kt` / `EntryEditScreen.kt` / `NotesScreen.kt`, manual-UI path).
+- **Duplicate-rule engine** (§6.7): `core/datahygiene/src/main/java/com/voxapps/datahygiene/RuleBasedDuplicateChecker.kt`.
+  vox-expenses' concrete wiring: `data/ExpenseRuleFields.kt` (field registry), `data/DuplicateRuleEntity.kt`/
+  `DuplicateRuleDao.kt` (Room storage, migrated + default-seeded), `ui/settings/DuplicateRulesSection.kt`
+  (rule list/edit UI).
 - **VoxCommander's consuming side**: `vox-commander/src/main/java/com/voxapps/commander/domain/integration/`
   (`VoxSatelliteRegistry.kt`, `SatelliteRouting.kt`) and `.../domain/intent/handler/SatelliteHandler.kt`.
 - **Durable LLM request queue** (§7): `core/ipc/src/main/java/com/voxapps/ipc/` (`PendingLlmRequestEntity.kt`,
