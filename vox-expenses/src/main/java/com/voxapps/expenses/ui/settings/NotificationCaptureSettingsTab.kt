@@ -1,5 +1,8 @@
 package com.voxapps.expenses.ui.settings
 
+import android.content.ActivityNotFoundException
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
@@ -10,6 +13,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -57,6 +62,39 @@ import java.util.Date
  *  with no completion signal, so this is a simple guard against a double-tap dispatching (and, with
  *  auto-accept on, inserting) the same currently-visible notification twice. */
 private const val FORCE_CHECK_COOLDOWN_MILLIS = 5000L
+
+/**
+ * Best-effort deep link to Honor/Huawei's own "App launch management" screen — confirmed on-device
+ * (via logcat: "Service starting has been prevented by iaware or trustsbase") that this OEM's own
+ * background-process manager can block [PaymentNotificationListenerService] from ever rebinding
+ * after the process is killed, independently of (and not fixed by) the stock-Android battery
+ * optimization exemption already offered above. There's no public Intent action for this screen, so
+ * this targets the known component directly and falls back to this app's own App Info page — where
+ * some OEM skins surface the same "Auto-launch"/"Run in background" controls — if that component
+ * isn't present at all (e.g. a non-Honor/Huawei device).
+ */
+private fun openAppLaunchManagement(context: Context) {
+    val honorStartupManager = Intent().apply {
+        component = ComponentName(
+            "com.hihonor.systemmanager",
+            "com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
+        )
+    }
+    try {
+        context.startActivity(honorStartupManager)
+    } catch (e: ActivityNotFoundException) {
+        try {
+            context.startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:${context.packageName}")
+                )
+            )
+        } catch (e2: ActivityNotFoundException) {
+            Toast.makeText(context, "Couldn't open system settings", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
 
 /**
  * The riskiest permission this app asks for — a [android.service.notification.NotificationListenerService]
@@ -135,13 +173,24 @@ fun NotificationCaptureSettingsTab(
             // This screen's star toggle means "this is a bank app", not "the default app" — the
             // shared AppPickerCard star icon is generic, only the wording passed in here differs.
             setAsDefault = languageManager.getString("mark_as_bank"),
-            removeDefault = languageManager.getString("unmark_as_bank")
+            removeDefault = languageManager.getString("unmark_as_bank"),
+            done = languageManager.getString("done"),
+            cancel = languageManager.getString("cancel")
         )
     }
 
     val pendingEntries by stateManager.pendingNotificationExpenses.collectAsStateWithLifecycle(initialValue = emptyList())
 
-    Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    // This tab's caller (SettingsScreen) passes a plain Modifier.fillMaxSize() with no scroll of its
+    // own, and this was the only settings tab whose content could ever exceed one screen's height —
+    // confirmed on-device: the payment-source-apps picker's expanded search box + app list were being
+    // laid out below the visible viewport with no way to reach them, not actually empty.
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         Text(languageManager.getString("notification_capture_title"), style = MaterialTheme.typography.titleMedium)
         Text(
             languageManager.getString("notification_capture_desc"),
@@ -185,6 +234,27 @@ fun NotificationCaptureSettingsTab(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(languageManager.getString("disable_battery_optimization_button"), color = Color.White)
+        }
+
+        // Distinct from (and, on an affected OEM, more load-bearing than) the battery-optimization
+        // exemption above: Honor/Huawei's own "App launch management" gate can block this service
+        // from ever rebinding after the process is killed — confirmed on-device via logcat
+        // ("Service starting has been prevented by iaware or trustsbase") — independently of whatever
+        // ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS reports, since that's a separate, stock-Android
+        // mechanism this OEM's own manager sits on top of. No public Intent action reaches this
+        // screen directly, so this best-effort deep-links straight to that OEM's known component and
+        // falls back to this app's own App Info page (where "Launch" / "Auto-launch" controls live on
+        // some OEM skins) if that component isn't present at all.
+        Text(
+            languageManager.getString("app_launch_management_warning"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        OutlinedButton(
+            onClick = { openAppLaunchManagement(context) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(languageManager.getString("open_app_launch_management_button"))
         }
 
         OutlinedButton(
@@ -236,45 +306,70 @@ fun NotificationCaptureSettingsTab(
             Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
             Text(languageManager.getString("rescan_apps"))
         }
+        if (installedApps.isEmpty()) {
+            // Confirmed on-device: LauncherAppsCache.scan() (getInstalledApplications) is correctly
+            // implemented and QUERY_ALL_PACKAGES is granted at the stock-Android level, but this
+            // still comes back empty on Honor/MagicOS — logcat shows a separate OEM-only gate,
+            // ApplicationPackageManager.checkGetInstalledAppsPermissionStatus, denying the request.
+            // That toggle isn't exposed via a stable public Intent action, so the most reliable thing
+            // this app can do is point the user at its own App Info page, where this OEM surfaces the
+            // "Get installed apps" permission under Permissions / Other permissions.
+            Text(
+                languageManager.getString("installed_apps_empty_warning"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+            OutlinedButton(
+                onClick = {
+                    try {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                        )
+                    } catch (e: ActivityNotFoundException) {
+                        Toast.makeText(context, "Couldn't open system settings", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(languageManager.getString("open_app_permissions_button"))
+            }
+        }
         AppPickerCard(
             apps = installedApps,
             selectedPackages = paymentSourcePackages.toList(),
-            onToggleApp = { packageName ->
-                val updated = if (packageName in paymentSourcePackages) {
-                    paymentSourcePackages - packageName
-                } else {
-                    paymentSourcePackages + packageName
-                }
-                stateManager.setPaymentSourcePackages(updated)
-            },
+            onApply = { updated -> stateManager.setPaymentSourcePackages(updated.toSet()) },
             strings = appPickerStrings,
             modifier = Modifier.fillMaxWidth(),
             label = languageManager.getString("payment_source_apps_label"),
             starredPackages = bankingSourcePackages,
-            onToggleStar = { packageName ->
-                val updated = if (packageName in bankingSourcePackages) {
-                    bankingSourcePackages - packageName
-                } else {
-                    bankingSourcePackages + packageName
-                }
-                stateManager.setBankingSourcePackages(updated)
-            }
+            onApplyStarred = { updated -> stateManager.setBankingSourcePackages(updated) }
         )
 
         HorizontalDivider()
 
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("auto_accept_notification_expenses_label"), style = MaterialTheme.typography.labelLarge)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    languageManager.getString("auto_accept_notification_expenses_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    languageManager.getString("auto_accept_notification_expenses_label"),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = autoAcceptNotificationExpenses,
+                    onCheckedChange = { stateManager.setAutoAcceptNotificationExpenses(it) }
                 )
             }
-            Switch(
-                checked = autoAcceptNotificationExpenses,
-                onCheckedChange = { stateManager.setAutoAcceptNotificationExpenses(it) }
+            Text(
+                languageManager.getString("auto_accept_notification_expenses_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
