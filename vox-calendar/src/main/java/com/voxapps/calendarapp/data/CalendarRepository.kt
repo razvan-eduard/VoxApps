@@ -3,6 +3,7 @@ package com.voxapps.calendarapp.data
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.calendarapp.domain.reminders.ReminderScheduler
 import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.flow.Flow
@@ -18,6 +19,7 @@ class CalendarRepository(
     private val layerDao: CalendarLayerDao,
     private val tagDao: CalendarEntryTagDao,
     private val attachmentDao: AttachmentDao,
+    private val reminderDao: CalendarReminderDao,
     private val appContext: Context
 ) {
     val entriesWithTags: Flow<List<CalendarEntryWithTags>> = entryDao.observeEntriesWithTags()
@@ -44,6 +46,7 @@ class CalendarRepository(
         recurrenceUntilMillis: Long? = null,
         layerId: Long,
         tags: List<String> = emptyList(),
+        reminderOffsetsMinutes: List<Int> = emptyList(),
         now: Long = System.currentTimeMillis()
     ): Long {
         val id = entryDao.insert(
@@ -65,20 +68,24 @@ class CalendarRepository(
             )
         )
         insertTags(id, tags)
+        replaceReminders(id, reminderOffsetsMinutes)
         return id
     }
 
-    /** Replaces an entry's fields and its full tag set (simplest correct update semantics). */
-    suspend fun updateEntry(entry: CalendarEntry, tags: List<String>) {
+    /** Replaces an entry's fields, its full tag set, and its reminders (simplest correct update
+     *  semantics — mirrors the tag replacement already done here). */
+    suspend fun updateEntry(entry: CalendarEntry, tags: List<String>, reminderOffsetsMinutes: List<Int> = emptyList()) {
         entryDao.update(entry.copy(updatedAt = System.currentTimeMillis()))
         tagDao.deleteAllForEntry(entry.id)
         insertTags(entry.id, tags)
+        replaceReminders(entry.id, reminderOffsetsMinutes)
     }
 
     suspend fun deleteEntry(entry: CalendarEntry) {
         entryDao.delete(entry)
         entryDao.insertTombstone(CalendarEntryTombstone(entry.uid, System.currentTimeMillis()))
         deleteAttachmentsFor(entry.id)
+        cancelReminders(entry.id)
     }
 
     suspend fun deleteEntryById(id: Long) {
@@ -86,6 +93,36 @@ class CalendarRepository(
         entryDao.deleteById(id)
         if (uid != null) entryDao.insertTombstone(CalendarEntryTombstone(uid, System.currentTimeMillis()))
         deleteAttachmentsFor(id)
+        cancelReminders(id)
+    }
+
+    // --- REMINDERS (see :domain/reminders/ReminderScheduler; non-recurring entries only, v1) ---
+
+    suspend fun getEntryById(id: Long): CalendarEntry? = entryDao.getById(id)
+
+    suspend fun getRemindersForEntry(entryId: Long): List<CalendarReminder> = reminderDao.getForEntry(entryId)
+
+    suspend fun getAllReminders(): List<CalendarReminder> = reminderDao.getAll()
+
+    /** Cancels + deletes every existing reminder for [entryId], then inserts+schedules one row per
+     *  offset in [offsetsMinutes] against the entry's current (just-saved) start time. Used by both
+     *  create (offsets usually empty) and update (offsets may have changed). */
+    private suspend fun replaceReminders(entryId: Long, offsetsMinutes: List<Int>) {
+        cancelReminders(entryId)
+        if (offsetsMinutes.isEmpty()) return
+        val entry = entryDao.getById(entryId) ?: return
+        for (offset in offsetsMinutes.distinct()) {
+            val reminder = CalendarReminder(entryId = entryId, offsetMinutesBefore = offset)
+            val reminderId = reminderDao.insert(reminder)
+            ReminderScheduler.schedule(appContext, reminder.copy(id = reminderId), entry)
+        }
+    }
+
+    private suspend fun cancelReminders(entryId: Long) {
+        val removed = reminderDao.deleteForEntry(entryId)
+        for (reminder in removed) {
+            ReminderScheduler.cancel(appContext, reminder.id)
+        }
     }
 
     /** Best-effort cleanup of this entry's attachments (see :core:attachments) — a file-delete

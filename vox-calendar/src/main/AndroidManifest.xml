@@ -6,6 +6,14 @@
     <!-- Android 13+ suppresses toasts/notifications from backgrounded apps unless allowed — needed
          once a headless voice/LLM-created event wants to surface a toast. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Entry reminders: precise firing via AlarmManager.setExactAndAllowWhileIdle. Not a runtime
+         dialog on Android 12+ — see ReminderScheduler.canScheduleExactAlarms()/EntryEditScreen's
+         inline notice, which sends the user to Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM if this
+         hasn't been granted. Falls back to inexact scheduling rather than dropping the reminder. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Exact alarms are cleared on reboot — ReminderReceiver re-schedules every still-future
+         reminder on BOOT_COMPLETED. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!--
         The COMMAND/LLM_RESULT/LLM_PROCESS signature permissions guarding the receivers below are
@@ -112,6 +120,17 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/calendar_widget_info" />
+        </receiver>
+
+        <!-- Entry reminders: fires on both an exact-alarm broadcast (explicit intent from
+             ReminderScheduler, no intent-filter needed) and BOOT_COMPLETED (reschedules every
+             still-future reminder, since exact alarms don't survive a reboot). -->
+        <receiver
+            android:name=".domain.reminders.ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
         </receiver>
     </application>
 </manifest>

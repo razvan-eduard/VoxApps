@@ -26,6 +26,11 @@ interface CalendarEntryDao {
     @Insert
     suspend fun insert(entry: CalendarEntry): Long
 
+    /** Point lookup for contexts with no in-memory observed state to filter — e.g. ReminderReceiver
+     *  firing outside any active ViewModel/UI. */
+    @Query("SELECT * FROM calendar_entries WHERE id = :id")
+    suspend fun getById(id: Long): CalendarEntry?
+
     /** Reassigns all entries from a layer being deleted to the surviving default layer. */
     @Query("UPDATE calendar_entries SET layerId = :newLayerId WHERE layerId = :oldLayerId")
     suspend fun reassignLayer(oldLayerId: Long, newLayerId: Long)

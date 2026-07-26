@@ -15,8 +15,8 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [CalendarLayer::class, CalendarEntry::class, CalendarEntryTag::class, CalendarEntryTombstone::class,
-        PendingLlmRequestEntity::class, AttachmentEntity::class],
-    version = 4,
+        PendingLlmRequestEntity::class, AttachmentEntity::class, CalendarReminder::class],
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(CalendarConverters::class)
@@ -26,6 +26,7 @@ abstract class CalendarDatabase : RoomDatabase() {
     abstract fun calendarEntryTagDao(): CalendarEntryTagDao
     abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
     abstract fun attachmentDao(): AttachmentDao
+    abstract fun calendarReminderDao(): CalendarReminderDao
 
     companion object {
         @Volatile private var instance: CalendarDatabase? = null
@@ -72,6 +73,20 @@ abstract class CalendarDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS reminders (" +
+                        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "entryId INTEGER NOT NULL, " +
+                        "offsetMinutesBefore INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_reminders_entryId ON reminders(entryId)"
+                )
+            }
+        }
+
         /** Room backed by SQLCipher; passphrase comes from the Keystore-backed store. */
         fun get(context: Context): CalendarDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
@@ -84,7 +99,7 @@ abstract class CalendarDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, CalendarDatabase::class.java, "vox-calendar.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
         }
     }

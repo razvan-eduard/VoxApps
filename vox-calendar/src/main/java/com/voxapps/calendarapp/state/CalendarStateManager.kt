@@ -10,6 +10,7 @@ import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.CalendarLayerPalette
+import com.voxapps.calendarapp.data.CalendarReminder
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.data.RecurrenceFrequency
 import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepository
@@ -160,6 +161,7 @@ class CalendarStateManager internal constructor(
         recurrenceUntilMillis: Long?,
         layerId: Long,
         tags: List<String>,
+        reminderOffsetsMinutes: List<Int> = emptyList(),
         onResult: (Long) -> Unit = {}
     ) {
         scope.launch {
@@ -176,14 +178,15 @@ class CalendarStateManager internal constructor(
                     recurrenceFrequency = recurrenceFrequency,
                     recurrenceUntilMillis = recurrenceUntilMillis,
                     layerId = layerId,
-                    tags = tags
+                    tags = tags,
+                    reminderOffsetsMinutes = reminderOffsetsMinutes
                 )
             )
         }
     }
 
-    fun updateEntry(entry: CalendarEntry, tags: List<String>) {
-        scope.launch { calendarRepo.updateEntry(entry, tags) }
+    fun updateEntry(entry: CalendarEntry, tags: List<String>, reminderOffsetsMinutes: List<Int> = emptyList()) {
+        scope.launch { calendarRepo.updateEntry(entry, tags, reminderOffsetsMinutes) }
     }
 
     fun deleteEntry(entry: CalendarEntry) { scope.launch { calendarRepo.deleteEntry(entry) } }
@@ -225,6 +228,13 @@ class CalendarStateManager internal constructor(
             AttachmentFileStore.delete(context, CalendarAttachments.DIR, entity.fileName)
         }
     }
+
+    // --- Reminders (see domain/reminders/ReminderScheduler; non-recurring entries only, v1) ---
+
+    /** One-shot fetch for EntryEditScreen to seed its local reminder-selection state on open —
+     *  reminders aren't observed reactively anywhere else, unlike attachments. */
+    suspend fun getRemindersForEntry(entryId: Long): List<CalendarReminder> =
+        calendarRepo.getRemindersForEntry(entryId)
 
     private fun uiStateLayers(): List<CalendarLayer> =
         (_uiState.value as? CalendarUiState.Unlocked)?.layers ?: emptyList()

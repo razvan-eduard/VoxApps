@@ -1,6 +1,9 @@
 package com.voxapps.calendarapp.ui
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -53,6 +56,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +73,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.ui.AttachmentUiItem
@@ -80,6 +88,7 @@ import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.RecurrenceFrequency
 import com.voxapps.calendarapp.domain.localization.LanguageManager
+import com.voxapps.calendarapp.domain.reminders.ReminderScheduler
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.RecordSource
@@ -94,6 +103,16 @@ import java.time.ZonedDateTime
 import java.util.Date
 
 private val OffenseRed = Color(0xFFD32F2F)
+
+/** offsetMinutesBefore -> translation key. v1 preset set only (see plan) — no custom-minutes input. */
+private val REMINDER_PRESETS = listOf(
+    0 to "reminder_at_start",
+    5 to "reminder_5min",
+    15 to "reminder_15min",
+    30 to "reminder_30min",
+    60 to "reminder_1hour",
+    1440 to "reminder_1day"
+)
 
 private data class PendingCleanup(val entry: CalendarEntry, val tags: List<String>, val dirtyFields: List<DirtyField>)
 
@@ -143,6 +162,8 @@ fun EntryEditScreen(
     var recurrenceUntilMillis by remember { mutableStateOf(existing?.entry?.recurrenceUntilMillis) }
     val tags = remember { mutableStateListOf<String>().apply { addAll(existing?.tagNames ?: emptyList()) } }
     var tagInput by remember { mutableStateOf("") }
+    val reminderOffsets = remember { mutableStateListOf<Int>() }
+    var canScheduleExactAlarms by remember { mutableStateOf(ReminderScheduler.canScheduleExactAlarms(context)) }
 
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showStartTimePicker by remember { mutableStateOf(false) }
@@ -159,9 +180,32 @@ fun EntryEditScreen(
     // EntryAttachmentsSection instead).
     var pendingAttachments by remember { mutableStateOf<List<String>>(emptyList()) }
 
+    LaunchedEffect(existing?.entry?.id) {
+        val entryId = existing?.entry?.id ?: return@LaunchedEffect
+        reminderOffsets.addAll(stateManager.getRemindersForEntry(entryId).map { it.offsetMinutesBefore })
+    }
+
+    // Granting the exact-alarm permission happens in system Settings, outside this screen — recheck
+    // on every resume so the inline notice/button disappears the moment the user grants it, without
+    // needing to leave and re-enter this screen.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                canScheduleExactAlarms = ReminderScheduler.canScheduleExactAlarms(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     fun saveEntry(entry: CalendarEntry, entryTags: List<String>) {
+        // Reminders are v1-scoped to non-recurring entries only — a recurring entry's selection is
+        // never shown/editable (see the Reminders SectionCard below), so always pass an empty list
+        // for one rather than persisting a stale selection from before recurrence was turned on.
+        val effectiveReminderOffsets = if (entry.recurrenceFrequency == RecurrenceFrequency.NONE) reminderOffsets.toList() else emptyList()
         if (existing != null) {
-            stateManager.updateEntry(entry, entryTags)
+            stateManager.updateEntry(entry, entryTags, effectiveReminderOffsets)
         } else {
             stateManager.addEntry(
                 type = entry.type,
@@ -176,6 +220,7 @@ fun EntryEditScreen(
                 recurrenceUntilMillis = entry.recurrenceUntilMillis,
                 layerId = entry.layerId,
                 tags = entryTags,
+                reminderOffsetsMinutes = effectiveReminderOffsets,
                 onResult = { newId ->
                     pendingAttachments.forEach { fileName -> stateManager.addManualAttachment(newId, fileName) }
                     pendingAttachments = emptyList()
@@ -423,6 +468,50 @@ fun EntryEditScreen(
                                 ?: languageManager.getString("entry_recurrence_forever"),
                             onClick = { showUntilDatePicker = true }
                         )
+                    }
+                }
+            }
+
+            item {
+                SectionCard {
+                    SectionTitle(languageManager.getString("entry_reminders"))
+                    if (recurrence != RecurrenceFrequency.NONE) {
+                        Text(
+                            languageManager.getString("reminder_recurring_unsupported"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            REMINDER_PRESETS.forEach { (offset, labelKey) ->
+                                FilterChip(
+                                    selected = offset in reminderOffsets,
+                                    onClick = {
+                                        if (offset in reminderOffsets) reminderOffsets.remove(offset) else reminderOffsets.add(offset)
+                                    },
+                                    label = { Text(languageManager.getString(labelKey)) }
+                                )
+                            }
+                        }
+                        if (!canScheduleExactAlarms) {
+                            Column {
+                                Text(
+                                    languageManager.getString("reminder_exact_alarm_permission_needed"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                TextButton(
+                                    onClick = {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                                                .setData(Uri.fromParts("package", context.packageName, null))
+                                        )
+                                    }
+                                ) { Text(languageManager.getString("reminder_grant_permission")) }
+                            }
+                        }
                     }
                 }
             }

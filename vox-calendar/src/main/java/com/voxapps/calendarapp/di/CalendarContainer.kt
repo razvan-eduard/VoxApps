@@ -32,6 +32,7 @@ class CalendarContainer(context: Context) {
         database.calendarLayerDao(),
         database.calendarEntryTagDao(),
         attachmentDao,
+        database.calendarReminderDao(),
         appContext
     )
 
