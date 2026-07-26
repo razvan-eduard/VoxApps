@@ -1,10 +1,11 @@
-VoxCommander is an on-device voice assistant for Android. It handles wake word detection, speech-to-text (STT), and natural language understanding (NLU) all locally on your device.
+VoxCommander is a privacy-first, on-device voice assistant for Android. It serves as the intelligent core of the VoxApps ecosystem, orchestrating natural language understanding and intent routing entirely on your hardware.
 
-Features:
-- Wake Word Detection: Always-on listening with Vosk, Porcupine, or OpenWakeWord.
-- Speech-to-Text: On-device Whisper.cpp with multilingual support.
-- Natural Language Understanding: Triple AI Brain (Regex -> Primary LLM -> Offline fallback).
-- Intent Routing: Maps commands to system actions or companion Vox apps.
-- Privacy-focused: All processing happens on-device.
-
-VoxCommander is the heart of the VoxApps ecosystem, a collection of independent apps that can be controlled by voice.
+Key Features:
+- Wake Word Detection: Always-on listening using Vosk, Picovoice Porcupine, or the fully open-source OpenWakeWord (ONNX-based).
+- On-Device Whisper STT: High-accuracy speech-to-text powered by Whisper.cpp, running locally with multilingual support.
+- Triple AI Brain: A sophisticated NLU pipeline that uses L1 FastMap (regex rules), L2 Primary AI (Gemini Nano or Local LLM), and L3 Offline fallback for zero-latency command processing.
+- Intelligent Intent Routing: Automatically maps spoken commands to system controls, media playback (Spotify/YouTube), navigation (Waze/Google Maps), or companion Vox apps.
+- Satellite App Hub: Discovers and controls independent "satellite" apps like VoxNotes or VoxExpenses via a secure IPC contract.
+- External Voice Trigger: Integration with automation tools like MacroDroid or Tasker to trigger the assistant via hardware buttons or schedules.
+- 100% Private: No audio or transcription ever leaves your device. All processing is done locally, ensuring total data sovereignty.
+- Material 3 Overlay: A sleek, floating voice UI that provides real-time transcription and status updates over any app.

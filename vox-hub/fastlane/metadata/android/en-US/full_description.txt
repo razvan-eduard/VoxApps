@@ -1,10 +1,10 @@
-VoxHub is a lightweight backup and restore utility for the VoxApps ecosystem. It allows you to manage the data for all your installed Vox apps in one place.
+VoxHub is the central coordination utility for the VoxApps ecosystem, focusing on backup, restore, and private data synchronization. It maintains a "zero-knowledge" profile, holding no local database for your records.
 
-Features:
-- Universal Discovery: Automatically finds every installed Vox app that supports the backup contract.
-- Unified Backup: Bundles settings and data from multiple apps into a single, dated JSON file.
-- Selective Import: Preview record counts and choose which apps to restore.
-- App Wake-up: Automatically wakes up "stopped" apps to ensure they respond to backup requests.
-- Database-free: A lightweight utility that stays out of the way until you need it.
-
-Note: VoxHub does not store your data itself; it acts as a coordinator for the other apps in the VoxApps suite.
+Key Features:
+- Zero-Config App Discovery: Automatically identifies every installed Vox app (Notes, Expenses, Calendar, Vision) and provides a unified interface for data management.
+- Unified Encrypted Backups: Create dated ZIP bundles containing settings, data, and attachments from all selected apps. Supports scheduled backups with configurable retention.
+- Selective Import: Preview record counts from backup files and choose exactly which apps and data types to restore.
+- NFC/Bluetooth P2P Sync: The heart of the cloud-free experience. Pair two phones with a physical tap (NFC) to exchange identity and AES-256 keys, then sync your data bidirectionally via Bluetooth.
+- App Wake-up: Intelligent IPC handling that wakes up "stopped" companion apps to ensure they respond to backup and sync requests.
+- Privacy First: Operates without a central cloud. Your data moves directly between your devices or to your chosen local storage.
+- Lightweight: A minimal utility that stays out of the way until you need to secure your data.

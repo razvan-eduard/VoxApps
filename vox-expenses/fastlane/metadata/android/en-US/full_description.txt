@@ -1,12 +1,11 @@
-VoxExpenses is a standalone, encrypted on-device expense tracker. It offers multiple ways to capture expenses while keeping your financial data private.
+VoxExpenses is a standalone, encrypted on-device financial tracker that puts you in full control of your spending data. It offers multiple automated capture paths while maintaining absolute privacy.
 
-Features:
-- Triple Capture Path: Log expenses via voice (VoxCommander), receipt scanning (VoxVision), or notification capture from bank apps.
-- Encrypted Storage: Secured with Room, SQLCipher, and Keystore-backed passphrases.
-- Notification Capture: Opt-in service to suggest expenses from payment notifications (user-approved).
-- Spending Limits: Category-based budget alerts and period tracking.
-- Smart Cleanup: LLM-backed category merging and duplicate expense detection.
-- Reports: Visual breakdowns and home-currency conversion.
-- Calendar View: Integrated month-paged agenda view for your spending.
-
-Part of the VoxApps ecosystem. No cloud sync, no tracking.
+Key Features:
+- Triple Capture Path: Log expenses via natural language voice commands (VoxCommander), high-precision receipt scanning (VoxVision), or automatic capture from bank notifications.
+- Durable Notification Queue: An opt-in listener service that inspects payment notifications. Requests are durably queued and retried to ensure no transaction is missed, even if the app is stopped.
+- Rule-Based Duplicate Engine: A powerful, user-configurable engine modeled on email filters. Detect and merge duplicates based on amount, vendor, bank, or time windows with fuzzy matching support.
+- Data-Quality Scoring: Intelligent merge logic that prioritizes the most trustworthy source (Manual > Scan > Notification > Voice) when combining records.
+- Merchant Category Memory: Learns from your manual corrections to auto-apply categories to future transactions from the same vendor.
+- Multi-Currency Reports: Visual breakdowns and spending alerts with support for home-currency conversion and custom decimal separators.
+- P2P Sync: Secure, cloud-free bidirectional sync between two devices using NFC pairing and Bluetooth transfer.
+- SQLCipher Security: Your entire financial history is encrypted at rest.

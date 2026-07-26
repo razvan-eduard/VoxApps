@@ -1,11 +1,10 @@
-VoxNotes is a standalone, encrypted on-device notes app. Built with security in mind using SQLCipher, your notes stay private and protected.
+VoxNotes is a standalone, encrypted on-device notes app built for privacy and speed. It is part of the VoxApps ecosystem and can be controlled entirely by voice through VoxCommander.
 
-Features:
-- Encrypted storage: Uses Room with SQLCipher and Keystore-backed passphrases.
-- Categories: Organize notes with customizable categories and a coverflow picker.
-- Voice integration: Create and read notes via VoxCommander voice commands.
-- Smart cleanup: Uses LLM-backed hooks to merge categories and detect duplicate notes.
-- Calendar view: Optional month-paged agenda view for your notes.
-- Multi-language support.
-
-Part of the VoxApps ecosystem.
+Key Features:
+- SQLCipher Encryption: Your notes are encrypted at rest using industry-standard SQLCipher and protected by biometric authentication.
+- Smart Organization: Categories with a coverflow-style picker. The built-in AI cleanup hook helps you merge similar categories (e.g., "Shopping" and "Groceries") and find duplicate notes.
+- Scan-to-Note: Seamless integration with VoxVision allows you to scan physical documents, which are then titled and categorized by AI.
+- Calendar View: An optional month-paged agenda view provides a chronological perspective of your thoughts and records.
+- Rich Attachments: Support for multi-photo attachments with a zoomable thumbnail strip.
+- Cloud-Free Sync: Genuinely bidirectional peer-to-peer sync with another phone over NFC and Bluetooth. No cloud, no tracking, just your data on your devices.
+- Multi-language UI: Available in English, Romanian, German, and French.

@@ -1,11 +1,11 @@
-VoxCalendar is a standalone, encrypted on-device calendar. It combines a powerful agenda view with the simplicity of natural language event creation.
+VoxCalendar is a standalone, encrypted on-device calendar that combines professional organization with the simplicity of natural language.
 
-Features:
-- Natural Language: Create events like "dentist in a week" via VoxCommander voice commands.
-- Encrypted Storage: Uses SQLCipher to keep your schedule private.
-- Layered Views: Organize with colored, toggleable layers (e.g., Work, Personal).
-- Cross-App Day Linking: See your Notes and Expenses for any day directly in the calendar.
-- Standard Interop: ICS import and export via the biweekly library.
-- Multiple Views: Year, Month, Week, and Day layouts.
-
-Part of the VoxApps ecosystem. Privacy-first, offline-ready.
+Key Features:
+- Natural Language Scheduling: Create complex events and tasks just by speaking (e.g., "dentist in a week"). Dates and times are resolved locally via AI.
+- Layered Organization: Use colored, named layers (e.g., "Personal", "Work", "Project X") instead of a rigid category tree. Each layer is independently toggleable.
+- Cross-App Day Linking: A unique day-summary sheet that shows your VoxNotes and VoxExpenses alongside your calendar events for a complete view of your day.
+- Standard Interoperability: Import and export ICS files for compatibility with Google Calendar, Thunderbird, and Apple Calendar.
+- Multiple Views: Optimized layouts for Year, Month, Week, and Day views with a smooth, responsive interface.
+- Attachment Support: Attach photos, tickets, or confirmations to any event, stored securely on your device.
+- Secure P2P Sync: Sync your schedule across two phones using NFC and Bluetooth. No cloud login required.
+- SQLCipher Protected: Your schedule is your business. All data is encrypted with high-grade security.
