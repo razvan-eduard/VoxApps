@@ -1,0 +1,51 @@
+name: Deploy F-Droid Metadata
+
+on:
+  workflow_run:
+    workflows:
+      - "Build Commander Release APK"
+      - "Build Vox Notes Release APK"
+      - "Build Vox Expenses Release APK"
+      - "Build Vox Calendar Release APK"
+      - "Build Vox Hub Release APK"
+      - "Build Vox Vision Release APK"
+    types:
+      - completed
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout VoxApps
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout vox-fdroid-repo
+        uses: actions/checkout@v4
+        with:
+          repository: razvan-eduard/vox-fdroid-repo
+          path: fdroid-repo
+          token: ${{ secrets.FDROID_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Sync Metadata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Generate metadata locally in the VoxApps checkout
+          ./scripts/sync_fdroid_metadata.sh
+          
+          # Move it to the fdroid-repo checkout
+          cp -r metadata/* fdroid-repo/metadata/ || true
+          
+          cd fdroid-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add metadata/
+          if git diff --staged --quiet; then
+            echo "No metadata changes to commit."
+          else
+            git commit -m "Update metadata from VoxApps release"
+            git push
+          fi

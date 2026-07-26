@@ -15,7 +15,7 @@ android {
         applicationId = "com.voxapps.calendar"
         minSdk = 29
         targetSdk = 36
-        versionCode = 9
+        versionCode = 10
         versionName = "0.9"
         ndk { abiFilters += "arm64-v8a" }
     }
