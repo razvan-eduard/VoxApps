@@ -37,10 +37,15 @@ class FallbackCleanupTest {
         every { Log.w(any<String>(), any<String>()) } returns 0
         every { Log.e(any<String>(), any<String>()) } returns 0
 
-        // viewModelScope dispatches through Dispatchers.Main.immediate — without pinning it to a
-        // test dispatcher here, clearDefaultOfflineFallback()'s launch{} races against coVerify()
-        // below, riding on whatever Dispatchers.Main happens to be left as by other test classes in
-        // the same JVM fork (flaky in the full suite, invisible when this class runs in isolation).
+        // viewModelScope dispatches through Dispatchers.Main.immediate by default — without pinning
+        // it to a test dispatcher here, clearDefaultOfflineFallback()'s launch{} races against
+        // coVerify() below, riding on whatever Dispatchers.Main happens to be left as by other test
+        // classes in the same JVM fork (flaky in the full suite, invisible in isolation).
+        // deleteUnusedModels() launches on an *explicit* Dispatchers.IO instead, which setMain()
+        // never touches — that coroutine runs on a real background thread outside runTest's
+        // awareness, so coVerify() can race it too (passes locally, flaky under CI's contention).
+        // ModelManagementViewModel takes an injectable ioDispatcher for exactly this reason; pin it
+        // to the same unconfined test dispatcher below.
         Dispatchers.setMain(UnconfinedTestDispatcher())
 
         context = mockk(relaxed = true)
@@ -59,7 +64,8 @@ class FallbackCleanupTest {
             appStateManager,
             modelDownloader,
             languageManager,
-            context
+            context,
+            UnconfinedTestDispatcher()
         )
     }
 

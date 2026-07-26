@@ -20,6 +20,7 @@ import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.utils.FileHelper
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -40,7 +41,8 @@ class ModelManagementViewModel(
     private val appStateManager: AppStateManager,
     private val modelDownloader: ModelDownloader,
     private val languageManager: LanguageManager,
-    private val context: Context
+    private val context: Context,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
 
     private companion object {
@@ -290,7 +292,7 @@ class ModelManagementViewModel(
 
         val activeWakeModelId = snapshot.wakeWordModelPath?.let { java.io.File(it).name }
 
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(ioDispatcher) {
             modelDownloader.deleteUnusedModels(settingsRepo, activeVoiceModelId, activeIntentModelId, appStateManager, activeWakeModelId)
             appStateManager.refreshAll()
         }
@@ -341,7 +343,7 @@ class ModelManagementViewModel(
 
     private fun startProgressTracking(id: Long) {
         progressJob?.cancel()
-        progressJob = viewModelScope.launch(Dispatchers.IO) {
+        progressJob = viewModelScope.launch(ioDispatcher) {
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return@launch
             while (true) {
                 dm.query(DownloadManager.Query().setFilterById(id))?.use { cursor ->
