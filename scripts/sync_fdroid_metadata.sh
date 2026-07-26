@@ -3,7 +3,7 @@ set -e
 
 # Syncs GitHub release bodies (changelogs) and fastlane assets to F-Droid metadata structure.
 # Format: metadata/<applicationId>/en-US/changelogs/<versionCode>.txt
-# Assets: metadata/<applicationId>/en-US/icon.png, summary.txt, description.txt
+# Assets: metadata/<applicationId>/en-US/icon.png, summary.txt, description.txt, phoneScreenshots/*.png
 
 APPS=(
     "vox-commander:com.voxapps.commander:commander"
@@ -63,7 +63,7 @@ for entry in "${APPS[@]}"; do
         fi
     fi
 
-    # --- Sync Fastlane Assets (Icons and Descriptions) ---
+    # --- Sync Fastlane Assets (Icons, Descriptions, Screenshots) ---
     FASTLANE_DIR="$DIR/fastlane/metadata/android/en-US"
     TARGET_EN_DIR="$METADATA_DIR/$APP_ID/en-US"
     mkdir -p "$TARGET_EN_DIR"
@@ -84,6 +84,14 @@ for entry in "${APPS[@]}"; do
     if [ -f "$FASTLANE_DIR/full_description.txt" ]; then
         cp "$FASTLANE_DIR/full_description.txt" "$TARGET_EN_DIR/description.txt"
         echo "  Description synced."
+    fi
+
+    # Screenshots
+    if [ -d "$FASTLANE_DIR/images/phoneScreenshots" ]; then
+        mkdir -p "$TARGET_EN_DIR/phoneScreenshots"
+        # Copy all png files from phoneScreenshots
+        cp "$FASTLANE_DIR/images/phoneScreenshots"/*.png "$TARGET_EN_DIR/phoneScreenshots/" 2>/dev/null || true
+        echo "  Screenshots synced."
     fi
 done
 
