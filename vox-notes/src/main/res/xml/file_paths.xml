@@ -3,6 +3,9 @@
     <!-- Staged AI-attachment copy of a scanned photo, for the one-shot Commander LLM call —
          short-lived by design, so this is cache, not files. -->
     <cache-path name="ai_scans" path="ai_scans/" />
+    <!-- Temp file for a camera-captured attachment photo, before AttachmentFileStore.stage() copies
+         it into files/attachments/ — see :core:attachments' CameraCapture.kt. -->
+    <cache-path name="camera" path="camera/" />
     <!-- Zipped attachments bundle staged for a Hub export — see NotesExportImportHandler.buildAttachmentsZip. -->
     <cache-path name="exports" path="exports/" />
     <!-- Per-note attachments (scanned photo kept per NotesSettings.scanImageRetention, plus any

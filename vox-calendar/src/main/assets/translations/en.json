@@ -69,6 +69,8 @@
   "entry_location": "Location",
   "entry_layer": "Calendar",
   "attachments": "Attachments",
+  "attachment_choose_gallery": "Choose from gallery",
+  "attachment_take_photo": "Take photo",
   "entry_when": "When",
   "entry_due": "Due",
   "entry_start_date": "Start date",

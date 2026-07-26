@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="export_receipts" path="exports/" />
+    <!-- Temp file for a camera-captured attachment photo, before AttachmentFileStore.stage() copies
+         it into files/attachments/ — see :core:attachments' CameraCapture.kt. -->
+    <cache-path name="camera" path="camera/" />
     <!-- Staged receipt images (filesDir/receipts/rec_<uuid>.jpg) — granted to Commander for the
          multimodal photo attachment (section 7 of the collapsed voice-command plan). -->
     <files-path name="receipts" path="receipts/" />

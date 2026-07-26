@@ -1,6 +1,7 @@
 package com.voxapps.expenses.ui
 
 import android.content.Context
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -83,6 +84,7 @@ import android.widget.Toast
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.ui.AttachmentUiItem
 import com.voxapps.attachments.ui.AttachmentsSection
+import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpensesAttachments
@@ -874,18 +876,24 @@ private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?
             )
         }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+    fun handlePickedUri(uri: Uri?) {
         if (uri != null) {
             AttachmentFileStore.stage(context, uri, ExpensesAttachments.DIR)?.let { fileName ->
                 stateManager.addManualAttachment(expenseId, fileName)
             }
         }
     }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
+    val takePhoto = rememberCameraCaptureLauncher(ExpensesAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
     AttachmentsSection(
         title = languageManager.getString("attachments"),
         items = items,
         canAdd = manualEntities.size < 10,
-        onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onTakePhoto = takePhoto,
+        galleryLabel = languageManager.getString("attachment_choose_gallery"),
+        cameraLabel = languageManager.getString("attachment_take_photo"),
+        cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->
             manualEntities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
         },
@@ -912,18 +920,24 @@ private fun PendingExpenseAttachmentsSection(pendingAttachments: List<String>, o
             )
         }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+    fun handlePickedUri(uri: Uri?) {
         if (uri != null) {
             AttachmentFileStore.stage(context, uri, ExpensesAttachments.DIR)?.let { fileName ->
                 onChange(pendingAttachments + fileName)
             }
         }
     }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
+    val takePhoto = rememberCameraCaptureLauncher(ExpensesAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
     AttachmentsSection(
         title = languageManager.getString("attachments"),
         items = items,
         canAdd = pendingAttachments.size < 10,
-        onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onTakePhoto = takePhoto,
+        galleryLabel = languageManager.getString("attachment_choose_gallery"),
+        cameraLabel = languageManager.getString("attachment_take_photo"),
+        cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->
             pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->
                 AttachmentFileStore.delete(context, ExpensesAttachments.DIR, fileName)

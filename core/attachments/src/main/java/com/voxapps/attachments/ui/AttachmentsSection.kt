@@ -27,12 +27,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Photo
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -79,11 +81,17 @@ fun AttachmentsSection(
     title: String,
     items: List<AttachmentUiItem>,
     canAdd: Boolean,
-    onAdd: () -> Unit,
+    onPickFromGallery: () -> Unit,
+    onTakePhoto: () -> Unit,
+    galleryLabel: String,
+    cameraLabel: String,
+    cancelLabel: String,
     onRemove: (AttachmentUiItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (items.isEmpty() && !canAdd) return
+
+    var showChooser by remember { mutableStateOf(false) }
 
     // Defaults expanded only when there's already something to show — an empty section (nothing
     // attached yet) starts collapsed rather than showing an otherwise-empty-looking strip. Keyed on
@@ -181,7 +189,7 @@ fun AttachmentsSection(
                                     .size(88.dp)
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(MaterialTheme.colorScheme.surface)
-                                    .clickable(onClick = onAdd),
+                                    .clickable { showChooser = true },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Filled.Add, contentDescription = "Add attachment")
@@ -191,6 +199,23 @@ fun AttachmentsSection(
                 }
             }
         }
+    }
+
+    if (showChooser) {
+        AlertDialog(
+            onDismissRequest = { showChooser = false },
+            title = { Text(title) },
+            text = {
+                Column {
+                    TextButton(onClick = { showChooser = false; onPickFromGallery() }) { Text(galleryLabel) }
+                    TextButton(onClick = { showChooser = false; onTakePhoto() }) { Text(cameraLabel) }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showChooser = false }) { Text(cancelLabel) }
+            }
+        )
     }
 
     val toZoom = zoomedUri

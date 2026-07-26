@@ -28,6 +28,8 @@
     <!-- Android 13+ suppresses toasts from backgrounded apps unless notifications are allowed.
          Needed for the "toast on voice save" setting (the save is headless via broadcast). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Taking a photo directly for an attachment, via the system camera app. -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <!-- Lets the Notification Capture settings screen show the system's "Ignore battery
          optimizations?" dialog directly (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) — without
          this, some OEMs' aggressive background-process killers unbind PaymentNotificationListenerService

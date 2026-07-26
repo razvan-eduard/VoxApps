@@ -133,6 +133,8 @@
   "retry_original_scan": "Scanarea originală",
   "retry_attachment_n": "Atașament %1$d",
   "attachments": "Atașamente",
+  "attachment_choose_gallery": "Alege din galerie",
+  "attachment_take_photo": "Fă o poză",
   "scan_receipt": "Scanează bon",
   "commander_required_message": "Această funcție necesită ca Vox Commander să fie instalat și configurat",
   "vision_required_message": "Această funcție necesită ca Vox Vision să fie instalat",

@@ -136,6 +136,8 @@
   "retention_on_failure": "On failure",
   "retention_always": "Always",
   "attachments": "Attachments",
+  "attachment_choose_gallery": "Choose from gallery",
+  "attachment_take_photo": "Take photo",
   "manual_review_required": "Manual review required",
   "today": "Today",
   "debug_section": "Debug",

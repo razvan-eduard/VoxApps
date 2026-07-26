@@ -91,6 +91,8 @@
   "retry_original_scan": "Original-Scan",
   "retry_attachment_n": "Anhang %1$d",
   "attachments": "Anhänge",
+  "attachment_choose_gallery": "Aus Galerie wählen",
+  "attachment_take_photo": "Foto aufnehmen",
   "scan_receipt": "Beleg scannen",
   "commander_required_message": "Diese Funktion erfordert, dass Vox Commander installiert und konfiguriert ist",
   "vision_required_message": "Diese Funktion erfordert, dass Vox Vision installiert ist",

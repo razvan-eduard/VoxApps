@@ -112,6 +112,8 @@
   "retention_on_failure": "En cas d'échec",
   "retention_always": "Toujours",
   "attachments": "Pièces jointes",
+  "attachment_choose_gallery": "Choisir depuis la galerie",
+  "attachment_take_photo": "Prendre une photo",
   "manual_review_required": "Vérification manuelle requise",
   "today": "Aujourd'hui",
   "debug_section": "Débogage",

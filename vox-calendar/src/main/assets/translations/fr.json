@@ -68,6 +68,8 @@
   "entry_location": "Lieu",
   "entry_layer": "Calendrier",
   "attachments": "Pièces jointes",
+  "attachment_choose_gallery": "Choisir depuis la galerie",
+  "attachment_take_photo": "Prendre une photo",
   "entry_when": "Quand",
   "entry_due": "Échéance",
   "entry_start_date": "Date de début",

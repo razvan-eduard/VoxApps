@@ -7,6 +7,8 @@
     <!-- Android 13+ suppresses toasts from backgrounded apps unless notifications are allowed.
          Needed for the "toast on voice save" setting (the save is headless via broadcast). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Taking a photo directly for an attachment, via the system camera app. -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <!--
         The COMMAND/LLM_RESULT/OCR_RESULT/LLM_PROCESS signature permissions guarding the receivers
         below are declared once in :core:ipc's own manifest (shared across every Vox app) and folded

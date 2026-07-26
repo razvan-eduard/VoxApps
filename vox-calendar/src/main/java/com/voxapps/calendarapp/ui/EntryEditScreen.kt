@@ -81,6 +81,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.ui.AttachmentUiItem
 import com.voxapps.attachments.ui.AttachmentsSection
+import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
 import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntrySanitizer
@@ -747,18 +748,24 @@ private fun EntryAttachmentsSection(entryId: Long, stateManager: CalendarStateMa
             )
         }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+    fun handlePickedUri(uri: Uri?) {
         if (uri != null) {
             AttachmentFileStore.stage(context, uri, CalendarAttachments.DIR)?.let { fileName ->
                 stateManager.addManualAttachment(entryId, fileName)
             }
         }
     }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
+    val takePhoto = rememberCameraCaptureLauncher(CalendarAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
     AttachmentsSection(
         title = languageManager.getString("attachments"),
         items = items,
         canAdd = items.size < 10,
-        onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onTakePhoto = takePhoto,
+        galleryLabel = languageManager.getString("attachment_choose_gallery"),
+        cameraLabel = languageManager.getString("attachment_take_photo"),
+        cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->
             entities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
         }
@@ -784,18 +791,24 @@ private fun PendingEntryAttachmentsSection(pendingAttachments: List<String>, onC
             )
         }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+    fun handlePickedUri(uri: Uri?) {
         if (uri != null) {
             AttachmentFileStore.stage(context, uri, CalendarAttachments.DIR)?.let { fileName ->
                 onChange(pendingAttachments + fileName)
             }
         }
     }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
+    val takePhoto = rememberCameraCaptureLauncher(CalendarAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
     AttachmentsSection(
         title = languageManager.getString("attachments"),
         items = items,
         canAdd = pendingAttachments.size < 10,
-        onAdd = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onTakePhoto = takePhoto,
+        galleryLabel = languageManager.getString("attachment_choose_gallery"),
+        cameraLabel = languageManager.getString("attachment_take_photo"),
+        cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->
             pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->
                 AttachmentFileStore.delete(context, CalendarAttachments.DIR, fileName)

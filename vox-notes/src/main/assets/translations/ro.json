@@ -136,6 +136,8 @@
   "retention_on_failure": "La eșec",
   "retention_always": "Întotdeauna",
   "attachments": "Atașamente",
+  "attachment_choose_gallery": "Alege din galerie",
+  "attachment_take_photo": "Fă o poză",
   "manual_review_required": "Necesită verificare manuală",
   "today": "Astăzi",
   "debug_section": "Depanare",

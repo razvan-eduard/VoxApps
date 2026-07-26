@@ -68,6 +68,8 @@
   "entry_location": "Ort",
   "entry_layer": "Kalender",
   "attachments": "Anhänge",
+  "attachment_choose_gallery": "Aus Galerie wählen",
+  "attachment_take_photo": "Foto aufnehmen",
   "entry_when": "Wann",
   "entry_due": "Fällig",
   "entry_start_date": "Startdatum",
