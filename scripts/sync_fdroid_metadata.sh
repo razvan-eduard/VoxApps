@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-# Syncs GitHub release bodies (changelogs) to F-Droid metadata structure.
+# Syncs GitHub release bodies (changelogs) and fastlane assets to F-Droid metadata structure.
 # Format: metadata/<applicationId>/en-US/changelogs/<versionCode>.txt
+# Assets: metadata/<applicationId>/en-US/icon.png, summary.txt, description.txt
 
 APPS=(
     "vox-commander:com.voxapps.commander:commander"
@@ -33,37 +34,57 @@ for entry in "${APPS[@]}"; do
     LATEST_TAG=$(git tag -l "${TAG_PREFIX}-v*" --sort=-v:refname | head -n 1)
 
     if [ -z "$LATEST_TAG" ]; then
-        echo "  No tags found for $TAG_PREFIX, skipping."
-        continue
+        echo "  No tags found for $TAG_PREFIX, skipping changelog."
+    else
+        echo "  Latest tag: $LATEST_TAG"
+
+        # Extract versionCode from the build.gradle.kts
+        VERSION_CODE=$(grep 'versionCode' "$DIR/build.gradle.kts" | grep -oE '[0-9]+' || echo "")
+
+        if [ -z "$VERSION_CODE" ]; then
+            echo "  Warning: Could not find versionCode for $DIR, skipping changelog."
+        else
+            # Fetch release body from GitHub
+            echo "  Fetching release body for $LATEST_TAG..."
+            CHANGELOG=$(gh release view "$LATEST_TAG" --json body -q .body 2>/dev/null || echo "")
+
+            if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" == "null" ]; then
+                echo "  No release body found for $LATEST_TAG yet, using generic message."
+                CHANGELOG="Maintenance update and performance improvements."
+            fi
+
+            # Create directory structure for changelogs
+            CHANGELOG_DIR="$METADATA_DIR/$APP_ID/en-US/changelogs"
+            mkdir -p "$CHANGELOG_DIR"
+
+            # Write changelog file
+            echo "$CHANGELOG" > "$CHANGELOG_DIR/${VERSION_CODE}.txt"
+            echo "  Changelog written to $CHANGELOG_DIR/${VERSION_CODE}.txt"
+        fi
     fi
 
-    echo "  Latest tag: $LATEST_TAG"
+    # --- Sync Fastlane Assets (Icons and Descriptions) ---
+    FASTLANE_DIR="$DIR/fastlane/metadata/android/en-US"
+    TARGET_EN_DIR="$METADATA_DIR/$APP_ID/en-US"
+    mkdir -p "$TARGET_EN_DIR"
 
-    # Extract versionCode from the build.gradle.kts
-    # We use the current file since we expect it to match the latest state
-    VERSION_CODE=$(grep 'versionCode' "$DIR/build.gradle.kts" | grep -oE '[0-9]+' || echo "")
-
-    if [ -z "$VERSION_CODE" ]; then
-        echo "  Warning: Could not find versionCode for $DIR, skipping."
-        continue
+    # Icon
+    if [ -f "$FASTLANE_DIR/images/icon.png" ]; then
+        cp "$FASTLANE_DIR/images/icon.png" "$TARGET_EN_DIR/icon.png"
+        echo "  Icon synced."
     fi
 
-    # Fetch release body from GitHub. Don't fail if it doesn't exist yet (racing conditions)
-    echo "  Fetching release body for $LATEST_TAG..."
-    CHANGELOG=$(gh release view "$LATEST_TAG" --json body -q .body 2>/dev/null || echo "")
-
-    if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" == "null" ]; then
-        echo "  No release body found for $LATEST_TAG yet, using generic message."
-        CHANGELOG="Maintenance update and performance improvements."
+    # Summary (short description)
+    if [ -f "$FASTLANE_DIR/short_description.txt" ]; then
+        cp "$FASTLANE_DIR/short_description.txt" "$TARGET_EN_DIR/summary.txt"
+        echo "  Summary synced."
     fi
 
-    # Create directory structure
-    CHANGELOG_DIR="$METADATA_DIR/$APP_ID/en-US/changelogs"
-    mkdir -p "$CHANGELOG_DIR"
-
-    # Write changelog file
-    echo "$CHANGELOG" > "$CHANGELOG_DIR/${VERSION_CODE}.txt"
-    echo "  Changelog written to $CHANGELOG_DIR/${VERSION_CODE}.txt"
+    # Description (full description)
+    if [ -f "$FASTLANE_DIR/full_description.txt" ]; then
+        cp "$FASTLANE_DIR/full_description.txt" "$TARGET_EN_DIR/description.txt"
+        echo "  Description synced."
+    fi
 done
 
 echo "F-Droid metadata generation complete."
