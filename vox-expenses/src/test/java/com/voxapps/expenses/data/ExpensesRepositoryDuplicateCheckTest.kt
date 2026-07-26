@@ -165,4 +165,30 @@ class ExpensesRepositoryDuplicateCheckTest {
         assertEquals(11L, result)
         coVerify(exactly = 1) { expenseDao.insert(any()) }
     }
+
+    @Test
+    fun `an incoming top-up never merges with an outgoing payment of the same amount, even if the matched rule omits direction`() = runTest {
+        // Reproduces a real report: a 1000 RON top-up (incoming) and a 1000 RON payment (outgoing)
+        // merged because the matched rule only checked amount+currency, never direction. Direction is
+        // now an unconditional guard, not something a rule has to opt into checking.
+        val incomingTopUp = Expense(
+            id = 1, title = "Top-up", totalAmount = 1000.0, currencyCode = "RON", dateTime = 1000L,
+            direction = TransactionDirection.INCOMING
+        )
+        coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(incomingTopUp)
+        coEvery { expenseDao.insert(any()) } returns 22L
+        every { duplicateRuleDao.observeAll() } returns flowOf(listOf(rule(listOf("totalAmount"))))
+
+        val result = repository.addExpense(
+            title = "Payment", totalAmount = 1000.0, currencyCode = "RON", vendor = null,
+            bank = null, location = null, dateTime = 1000L, comments = null, categoryId = null,
+            direction = TransactionDirection.OUTGOING,
+            nearDuplicateCheckEnabled = true,
+            nearDuplicateConfig = NearDuplicateConfig(timeWindowMillis = TimeUnit.MINUTES.toMillis(2))
+        )
+
+        assertEquals(22L, result)
+        coVerify(exactly = 1) { expenseDao.insert(any()) }
+        coVerify(exactly = 0) { expenseDao.update(any()) }
+    }
 }

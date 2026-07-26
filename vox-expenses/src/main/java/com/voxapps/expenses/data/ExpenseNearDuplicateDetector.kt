@@ -23,22 +23,27 @@ fun ExpensesSettings.toNearDuplicateConfig(): NearDuplicateConfig = NearDuplicat
 )
 
 /**
- * Fills any blank/missing field on [existing] with [candidate]'s value for that same field — never
- * overwrites a field [existing] already has real content in, so the first-arrived record stays
- * authoritative wherever it already says something and only gains data it was missing. Excludes
- * identity/audit fields. Which content fields (title/vendor/amount/...) the rule that matched actually
- * required is irrelevant here — enrichment only ever fills genuine gaps, which is safe regardless of
- * what caused the match. Bumps [Expense.updatedAt] only when something actually changed.
+ * Merges [candidate] into [existing], field by field, preferring whichever side has the better data
+ * per [Expense.dataScore] (manual edits pinned, then capture-source trust tier, then completeness) —
+ * not always [existing] just because it arrived first. A field still only changes when the winning
+ * side actually has content there; a field neither side filled stays blank. Row identity (id/uid/
+ * createdAt) always stays [existing]'s regardless of which side's content wins, since [existing] is
+ * the row that actually gets written back to — this is what makes it safe to fold across more than
+ * two records (see [com.voxapps.expenses.data.ExpensesRepository.applyExpenseDeduplication]) without
+ * ever reassigning identity mid-fold. Bumps [Expense.updatedAt] only when something actually changed.
  */
 fun enrichWithNearDuplicate(existing: Expense, candidate: Expense): Expense {
+    val preferCandidate = candidate.dataScore() > existing.dataScore()
+    val primary = if (preferCandidate) candidate else existing
+    val secondary = if (preferCandidate) existing else candidate
     val merged = existing.copy(
-        title = FieldCleaner.clean(existing.title) ?: FieldCleaner.clean(candidate.title),
-        vendor = FieldCleaner.clean(existing.vendor) ?: FieldCleaner.clean(candidate.vendor),
-        bank = FieldCleaner.clean(existing.bank) ?: FieldCleaner.clean(candidate.bank),
-        location = FieldCleaner.clean(existing.location) ?: FieldCleaner.clean(candidate.location),
-        comments = FieldCleaner.clean(existing.comments) ?: FieldCleaner.clean(candidate.comments),
-        categoryId = existing.categoryId ?: candidate.categoryId,
-        receiptImageName = existing.receiptImageName ?: candidate.receiptImageName
+        title = FieldCleaner.clean(primary.title) ?: FieldCleaner.clean(secondary.title),
+        vendor = FieldCleaner.clean(primary.vendor) ?: FieldCleaner.clean(secondary.vendor),
+        bank = FieldCleaner.clean(primary.bank) ?: FieldCleaner.clean(secondary.bank),
+        location = FieldCleaner.clean(primary.location) ?: FieldCleaner.clean(secondary.location),
+        comments = FieldCleaner.clean(primary.comments) ?: FieldCleaner.clean(secondary.comments),
+        categoryId = primary.categoryId ?: secondary.categoryId,
+        receiptImageName = primary.receiptImageName ?: secondary.receiptImageName
     )
     return if (merged == existing) existing else merged.copy(updatedAt = System.currentTimeMillis())
 }

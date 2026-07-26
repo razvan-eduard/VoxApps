@@ -7,8 +7,10 @@ import android.widget.Toast
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
+import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
+import com.voxapps.expenses.data.NearDuplicateConfig
 import com.voxapps.expenses.data.toNearDuplicateConfig
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.domain.llm.CategoryMergeMappingParser
@@ -254,10 +256,11 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 nearDuplicateCheckEnabled = localModeActive && !settings.automaticProtectionReviewOnly,
                                 nearDuplicateConfig = settings.toNearDuplicateConfig(),
                                 merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
-                                merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
+                                merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold,
+                                source = ExpenseSource.NOTIFICATION
                             )
                             stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
-                            maybeRequestScopedDuplicateCheck(context, container, settings.duplicateCheckModeAutomatic, newExpenseId)
+                            maybeRequestScopedDuplicateCheck(context, container, settings.duplicateCheckModeAutomatic, newExpenseId, settings.toNearDuplicateConfig())
                         } else {
                             container.pendingNotificationExpenseRepository.addPending(
                                 PendingNotificationExpense(
@@ -354,11 +357,14 @@ class LlmResultReceiver : BroadcastReceiver() {
             nearDuplicateCheckEnabled = localModeActive && !settings.automaticProtectionReviewOnly,
             nearDuplicateConfig = settings.toNearDuplicateConfig(),
             merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
-            merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
+            merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold,
+            // This one helper handles both voice and scan tasks — imageName is only ever non-null for
+            // a scan (the receipt photo), never for voice, so it's already the exact signal needed.
+            source = if (imageName != null) ExpenseSource.SCAN else ExpenseSource.VOICE
         )
         stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
 
-        maybeRequestScopedDuplicateCheck(appContext, container, settings.duplicateCheckModeAutomatic, newExpenseId)
+        maybeRequestScopedDuplicateCheck(appContext, container, settings.duplicateCheckModeAutomatic, newExpenseId, settings.toNearDuplicateConfig())
 
         if (newExpenseId > 0 && parsed.itemsSumMismatch) {
             Logger.w(
@@ -467,7 +473,8 @@ class LlmResultReceiver : BroadcastReceiver() {
             comments = "LLM parsing failed for this scan.",
             categoryId = null,
             imageName = imageName,
-            isStub = true
+            isStub = true,
+            source = ExpenseSource.SCAN
         )
     }
 
@@ -509,23 +516,31 @@ class LlmResultReceiver : BroadcastReceiver() {
 
     /** Fires an async, scoped AI duplicate check for a freshly-inserted row when the automatic mode
      *  includes AI ([ExpensesSettings.MODE_LOCAL_AND_AI]/[ExpensesSettings.MODE_AI]) — scoped to just
-     *  the new row's own same-amount candidate cluster (see
-     *  [com.voxapps.expenses.data.ExpensesRepository.duplicateCandidateClusters]), not the whole
-     *  expense list, mirrors [com.voxapps.expenses.state.ExpensesStateManager]'s identical helper for
-     *  the manual-entry path. Never auto-applies — any result lands in the normal review list. */
+     *  the new row's own candidate cluster, not the whole expense list, mirrors
+     *  [com.voxapps.expenses.state.ExpensesStateManager]'s identical helper for the manual-entry path.
+     *  [MODE_LOCAL_AND_AI] recalls that cluster via the configured duplicate rules (automatic-only, see
+     *  [com.voxapps.expenses.data.ExpensesRepository.ruleBasedCandidateClusters]); pure [MODE_AI] has no
+     *  local component and recalls via a fixed amount/currency/direction match instead (see
+     *  [com.voxapps.expenses.data.ExpensesRepository.duplicateCandidateClusters]), never consulting the
+     *  rules at all. Never auto-applies — any result lands in the normal review list. */
     private fun maybeRequestScopedDuplicateCheck(
         context: Context,
         container: ExpensesContainer,
         automaticMode: String,
-        newExpenseId: Long
+        newExpenseId: Long,
+        nearDuplicateConfig: NearDuplicateConfig
     ) {
         val hasAiComponent = automaticMode == ExpensesSettings.MODE_LOCAL_AND_AI || automaticMode == ExpensesSettings.MODE_AI
         if (newExpenseId <= 0 || !hasAiComponent) return
         CoroutineScope(Dispatchers.IO).launch {
-            val candidates = container.expensesRepository.duplicateCandidateClusters(scopedToId = newExpenseId).flatten()
+            val candidates = if (automaticMode == ExpensesSettings.MODE_LOCAL_AND_AI) {
+                container.expensesRepository.ruleBasedCandidateClusters(nearDuplicateConfig, automaticOnly = true, scopedToId = newExpenseId).flatten()
+            } else {
+                container.expensesRepository.duplicateCandidateClusters(scopedToId = newExpenseId).flatten()
+            }
             if (candidates.size < 2) return@launch
             val summaries = candidates.map {
-                ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime)
+                ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
             }
             ExpenseDeduplicationRequestSender.send(context, container.pendingLlmRequestQueue, summaries, scoped = true)
         }
@@ -559,7 +574,11 @@ class LlmResultReceiver : BroadcastReceiver() {
             val keep = byId[group.keepId] ?: return@mapNotNull null
             val validDuplicateIds = group.duplicateIds.filter { id ->
                 val duplicate = byId[id]
-                duplicate != null && duplicate.totalAmount == keep.totalAmount && duplicate.currencyCode == keep.currencyCode
+                // direction is checked here too, not just amount/currency — an incoming top-up/refund
+                // and an outgoing payment of the same amount are two different real transactions, never
+                // a duplicate, and the AI's proposed groups are never trusted blindly regardless.
+                duplicate != null && duplicate.totalAmount == keep.totalAmount &&
+                    duplicate.currencyCode == keep.currencyCode && duplicate.direction == keep.direction
             }
             if (validDuplicateIds.isEmpty()) null else DuplicateGroup(group.keepId, validDuplicateIds)
         }

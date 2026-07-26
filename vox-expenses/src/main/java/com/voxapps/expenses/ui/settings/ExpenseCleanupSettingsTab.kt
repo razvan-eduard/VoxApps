@@ -1,6 +1,7 @@
 package com.voxapps.expenses.ui.settings
 
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -16,11 +17,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,12 +37,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.expenses.data.Expense
+import com.voxapps.expenses.data.ExpenseSource
+import com.voxapps.expenses.data.dataScore
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
 import com.voxapps.ipc.VoxAppsDiscovery
+import java.text.DateFormat
+import java.util.Date
 
 private data class ResolvedGroup(val group: DuplicateGroup, val keep: Expense, val duplicates: List<Expense>)
 
@@ -85,25 +90,47 @@ fun ExpenseCleanupSettingsTab(
     }
 
     var checkedGroups by remember(resolvedGroups) { mutableStateOf(resolvedGroups.indices.toSet()) }
+    // Which member of each group is kept, keyed by the pending suggestion's original keepId (stable
+    // across recompositions unlike a list index) — defaults to whichever member has the better data
+    // per Expense.dataScore (manual edits pinned, then capture-source trust tier, then completeness),
+    // not just whatever the detector/AI happened to pick as its anchor. The review UI below still lets
+    // the user override this per group.
+    var selectedKeepIdByGroup by remember(resolvedGroups) {
+        mutableStateOf(resolvedGroups.associate { resolved ->
+            val members = listOf(resolved.keep) + resolved.duplicates
+            resolved.group.keepId to members.maxBy { it.dataScore() }.id
+        })
+    }
 
-    val localTuningRelevant = settings.duplicateCheckModeManual != ExpensesSettings.MODE_AI ||
-        (settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_AI && settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_OFF)
+    // Only these paths actually consult the configured rules (ExpensesRepository.buildDuplicateChecker /
+    // findLocalDuplicateGroups / findLocalDuplicateGroupForRow): automatic protection's Local component
+    // (Local or Local+AI — both run the local silent-merge/review-only pass), and manual/scheduled check
+    // when set to pure Local. Manual/scheduled Local+AI's recall step deliberately does NOT use these
+    // rules — it groups candidates by a fixed amount+currency+direction match (ExpensesRepository.
+    // duplicateCandidateClusters), casting an intentionally wider net than the precise rules before the
+    // AI judges the result, so it's excluded here too.
+    val localTuningRelevant = settings.duplicateCheckModeManual == ExpensesSettings.MODE_LOCAL ||
+        settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL ||
+        settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL_AND_AI
 
     Column(
         modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(languageManager.getString("expense_cleanup_section_title"), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    languageManager.getString("expense_cleanup_section_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                HorizontalDivider()
+        // Plain text header, no enclosing Card — matches every other settings tab's root style
+        // (CategoriesSettingsTab, SpendingLimitsSettingsTab, ...); this tab used to wrap its entire
+        // content in one large Card, which is why it visually stood out from the rest of Settings as
+        // one solid tonal block instead of separate, individually-scoped sections.
+        Text(languageManager.getString("expense_cleanup_section_title"), style = MaterialTheme.typography.titleMedium)
+        Text(
+            languageManager.getString("expense_cleanup_section_desc"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
-                // --- Automatic (insert-time) protection ---
+        // --- Trigger: automatic (insert-time) protection ---
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(languageManager.getString("duplicate_check_automatic_label"), style = MaterialTheme.typography.labelLarge)
                 Text(
                     languageManager.getString("duplicate_check_automatic_desc"),
@@ -154,43 +181,45 @@ fun ExpenseCleanupSettingsTab(
                         }
                     }
                 }
+            }
+        }
 
-                HorizontalDivider()
-
-                // --- Local engine tuning — relevant whenever either mode above includes Local ---
-                val subAlpha = if (localTuningRelevant) 1f else 0.4f
-                Column(modifier = Modifier.alpha(subAlpha), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(languageManager.getString("near_duplicate_time_window_label"), style = MaterialTheme.typography.labelLarge)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val windowOptions = listOf(
-                            ExpensesSettings.NEAR_DUP_WINDOW_1M, ExpensesSettings.NEAR_DUP_WINDOW_2M,
-                            ExpensesSettings.NEAR_DUP_WINDOW_5M, ExpensesSettings.NEAR_DUP_WINDOW_10M,
-                            ExpensesSettings.NEAR_DUP_WINDOW_15M
-                        )
-                        windowOptions.forEach { minutes ->
-                            FilterChip(
-                                selected = settings.nearDuplicateTimeWindowMinutes == minutes,
-                                onClick = { stateManager.setNearDuplicateTimeWindowMinutes(minutes) },
-                                label = { Text(String.format(languageManager.getString("near_duplicate_interval_minutes"), minutes)) }
-                            )
-                        }
-                    }
-
-                    val duplicateRules by stateManager.duplicateRules.collectAsStateWithLifecycle(initialValue = emptyList())
-                    DuplicateRulesSection(
-                        rules = duplicateRules,
-                        globalCombinator = settings.duplicateRuleSetGlobalCombinator,
-                        onGlobalCombinatorChange = { stateManager.setDuplicateRuleSetGlobalCombinator(it) },
-                        onUpsertRule = { stateManager.upsertDuplicateRule(it) },
-                        onDeleteRule = { stateManager.deleteDuplicateRule(it) },
-                        onSetRuleEnabled = { id, enabled -> stateManager.setDuplicateRuleEnabled(id, enabled) },
-                        languageManager = languageManager
+        // --- Rules manager — relevant whenever either trigger above includes Local ---
+        val subAlpha = if (localTuningRelevant) 1f else 0.4f
+        Card(modifier = Modifier.fillMaxWidth().alpha(subAlpha)) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(languageManager.getString("near_duplicate_time_window_label"), style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val windowOptions = listOf(
+                        ExpensesSettings.NEAR_DUP_WINDOW_1M, ExpensesSettings.NEAR_DUP_WINDOW_2M,
+                        ExpensesSettings.NEAR_DUP_WINDOW_5M, ExpensesSettings.NEAR_DUP_WINDOW_10M,
+                        ExpensesSettings.NEAR_DUP_WINDOW_15M
                     )
+                    windowOptions.forEach { minutes ->
+                        FilterChip(
+                            selected = settings.nearDuplicateTimeWindowMinutes == minutes,
+                            onClick = { stateManager.setNearDuplicateTimeWindowMinutes(minutes) },
+                            label = { Text(String.format(languageManager.getString("near_duplicate_interval_minutes"), minutes)) }
+                        )
+                    }
                 }
 
-                HorizontalDivider()
+                val duplicateRules by stateManager.duplicateRules.collectAsStateWithLifecycle(initialValue = emptyList())
+                DuplicateRulesSection(
+                    rules = duplicateRules,
+                    globalCombinator = settings.duplicateRuleSetGlobalCombinator,
+                    onGlobalCombinatorChange = { stateManager.setDuplicateRuleSetGlobalCombinator(it) },
+                    onUpsertRule = { stateManager.upsertDuplicateRule(it) },
+                    onDeleteRule = { stateManager.deleteDuplicateRule(it) },
+                    onSetRuleEnabled = { id, enabled -> stateManager.setDuplicateRuleEnabled(id, enabled) },
+                    languageManager = languageManager
+                )
+            }
+        }
 
-                // --- Manual check ---
+        // --- Manual trigger ---
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(languageManager.getString("duplicate_check_manual_label"), style = MaterialTheme.typography.labelLarge)
                 Text(
                     languageManager.getString("duplicate_check_manual_desc"),
@@ -217,17 +246,19 @@ fun ExpenseCleanupSettingsTab(
                         Text(languageManager.getString("find_duplicate_expenses_button"))
                     }
                 }
+            }
+        }
 
-                HorizontalDivider()
-
-                // --- Scheduled check — reruns whatever the manual mode above is set to ---
+        // --- Schedule — reruns whatever the manual trigger's mode above is set to ---
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(languageManager.getString("scheduled_dedup_label"), style = MaterialTheme.typography.labelLarge)
                 Text(
                     languageManager.getString("scheduled_dedup_desc"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val options = listOf(
                         ExpensesSettings.INTERVAL_OFF to "scheduled_dedup_off",
                         ExpensesSettings.INTERVAL_DAILY to "scheduled_dedup_daily",
@@ -242,69 +273,86 @@ fun ExpenseCleanupSettingsTab(
                         )
                     }
                 }
+            }
+        }
 
-                // --- Pending suggestion review ---
-                if (resolvedGroups.isNotEmpty()) {
-                    HorizontalDivider()
-                    Text(languageManager.getString("duplicate_expenses_pending_title"), style = MaterialTheme.typography.labelLarge)
+        // --- Pending suggestion review ---
+        if (resolvedGroups.isNotEmpty()) {
+            Text(languageManager.getString("duplicate_expenses_pending_title"), style = MaterialTheme.typography.labelLarge)
 
-                    resolvedGroups.forEachIndexed { index, resolved ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(verticalAlignment = Alignment.Top) {
-                                    Checkbox(
-                                        checked = index in checkedGroups,
-                                        onCheckedChange = { checked ->
-                                            checkedGroups = if (checked) checkedGroups + index else checkedGroups - index
+            resolvedGroups.forEachIndexed { index, resolved ->
+                // All group members in one list so "which one survives" is just which radio
+                // button is selected, rather than a fixed keep/duplicates split — the detector's
+                // pick (resolved.group.keepId) is only the initial selection, not forced.
+                val members = remember(resolved) { listOf(resolved.keep) + resolved.duplicates }
+                val selectedId = selectedKeepIdByGroup[resolved.group.keepId] ?: resolved.group.keepId
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Checkbox(
+                                checked = index in checkedGroups,
+                                onCheckedChange = { checked ->
+                                    checkedGroups = if (checked) checkedGroups + index else checkedGroups - index
+                                }
+                            )
+                            Column(modifier = Modifier.padding(top = 12.dp).weight(1f)) {
+                                members.forEach { member ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth().clickable {
+                                            selectedKeepIdByGroup = selectedKeepIdByGroup + (resolved.group.keepId to member.id)
                                         }
-                                    )
-                                    Column(modifier = Modifier.padding(top = 12.dp).weight(1f)) {
-                                        Text(
-                                            languageManager.getString("keep_label"),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary
+                                    ) {
+                                        RadioButton(
+                                            selected = member.id == selectedId,
+                                            onClick = {
+                                                selectedKeepIdByGroup = selectedKeepIdByGroup + (resolved.group.keepId to member.id)
+                                            }
                                         )
-                                        Text(expensePreview(resolved.keep), style = MaterialTheme.typography.bodyMedium)
-
-                                        resolved.duplicates.forEach { dup ->
+                                        Column {
                                             Text(
-                                                languageManager.getString("duplicate_label"),
+                                                languageManager.getString(if (member.id == selectedId) "keep_label" else "duplicate_label"),
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.padding(top = 8.dp)
+                                                color = if (member.id == selectedId) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                             )
-                                            Text(expensePreview(dup), style = MaterialTheme.typography.bodySmall)
+                                            Text(expensePreview(member, languageManager), style = MaterialTheme.typography.bodyMedium)
                                         }
-                                    }
-                                    IconButton(onClick = { stateManager.dismissExpenseDuplicateGroup(resolved.group) }) {
-                                        Icon(
-                                            Icons.Filled.Close,
-                                            contentDescription = languageManager.getString("dismiss_group_content_description")
-                                        )
                                     }
                                 }
                             }
+                            IconButton(onClick = { stateManager.dismissExpenseDuplicateGroup(resolved.group) }) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = languageManager.getString("dismiss_group_content_description")
+                                )
+                            }
                         }
                     }
+                }
+            }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(
-                            onClick = { stateManager.dismissExpenseDeduplication() },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(languageManager.getString("dismiss_all_button"))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { stateManager.dismissExpenseDeduplication() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(languageManager.getString("dismiss_all_button"))
+                }
+                Button(
+                    onClick = {
+                        val checked = checkedGroups.mapNotNull { resolvedGroups.getOrNull(it) }
+                        val original = checked.map { it.group }
+                        val effective = checked.map { resolved ->
+                            val memberIds = listOf(resolved.keep.id) + resolved.duplicates.map { it.id }
+                            val keepId = selectedKeepIdByGroup[resolved.group.keepId] ?: resolved.group.keepId
+                            DuplicateGroup(keepId = keepId, duplicateIds = memberIds.filterNot { it == keepId })
                         }
-                        Button(
-                            onClick = {
-                                val approved = checkedGroups.mapNotNull { resolvedGroups.getOrNull(it)?.group }
-                                stateManager.approveExpenseDeduplication(approved)
-                            },
-                            enabled = checkedGroups.isNotEmpty(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(languageManager.getString("apply_selected_button"))
-                        }
-                    }
+                        stateManager.approveExpenseDeduplication(original, effective)
+                    },
+                    enabled = checkedGroups.isNotEmpty(),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(languageManager.getString("apply_selected_button"))
                 }
             }
         }
@@ -338,7 +386,21 @@ private fun DuplicateModeChipRow(
     }
 }
 
-private fun expensePreview(expense: Expense): String {
-    val label = expense.title?.takeIf { it.isNotBlank() } ?: expense.vendor ?: "—"
-    return "$label · ${formatAmount(expense.totalAmount, expense.currencyCode)}"
+private fun expensePreview(expense: Expense, languageManager: com.voxapps.expenses.domain.localization.LanguageManager): String {
+    val parts = mutableListOf<String>()
+    expense.title?.takeIf { it.isNotBlank() }?.let { parts += it }
+    parts += formatAmount(expense.totalAmount, expense.currencyCode)
+    expense.vendor?.takeIf { it.isNotBlank() }?.let { parts += it }
+    expense.bank?.takeIf { it.isNotBlank() }?.let { parts += it }
+    parts += DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(expense.dateTime))
+    // Same signal Expense.dataScore uses for the keep-picker's default selection — shown here so
+    // that default is explainable rather than a black box.
+    val sourceKey = when (expense.source) {
+        ExpenseSource.MANUAL -> "expense_source_manual"
+        ExpenseSource.SCAN -> "expense_source_scan"
+        ExpenseSource.NOTIFICATION -> "expense_source_notification"
+        ExpenseSource.VOICE -> "expense_source_voice"
+    }
+    parts += languageManager.getString(sourceKey)
+    return parts.joinToString(" · ")
 }

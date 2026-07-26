@@ -34,8 +34,8 @@ class ExpenseDeduplicationWorker(
                 container.expenseDeduplicationRepository.mergePendingGroups(groups)
             }
             ExpensesSettings.MODE_LOCAL_AND_AI -> {
-                val candidates = container.expensesRepository.duplicateCandidateClusters().flatten().map {
-                    ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime)
+                val candidates = container.expensesRepository.ruleBasedCandidateClusters(settings.toNearDuplicateConfig()).flatten().map {
+                    ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
                 }
                 if (candidates.isNotEmpty()) {
                     ExpenseDeduplicationRequestSender.send(applicationContext, container.pendingLlmRequestQueue, candidates)
@@ -43,7 +43,7 @@ class ExpenseDeduplicationWorker(
             }
             else -> {
                 val expenses = container.expensesRepository.expenses.first().map {
-                    ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime)
+                    ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
                 }
                 ExpenseDeduplicationRequestSender.send(applicationContext, container.pendingLlmRequestQueue, expenses)
             }

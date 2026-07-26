@@ -29,6 +29,11 @@ enum class TransactionDirection { OUTGOING, INCOMING }
  * devices can resolve a conflicting edit by last-write-wins. Rows from before these fields existed
  * backfill via ExpensesDatabase's MIGRATION_5_6 (a fresh generated [uid] per row, [updatedAt] copied
  * from [createdAt]).
+ * [source]/[manuallyEdited] feed [dataScore] (see ExpenseDataScore.kt) — which of two duplicate
+ * candidates has the better data, for picking a merge winner instead of always trusting whichever
+ * record arrived first. Rows from before these fields existed backfill to [ExpenseSource.MANUAL]/
+ * `false` via ExpensesDatabase's MIGRATION_12_13 — a reasonable "unknown, treat as baseline" default,
+ * no worse than the no-scoring behavior every row had before this feature existed.
  */
 @Entity(
     tableName = "expenses",
@@ -50,5 +55,7 @@ data class Expense(
     val receiptImageName: String? = null,
     val isStub: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val source: ExpenseSource = ExpenseSource.MANUAL,
+    val manuallyEdited: Boolean = false
 )

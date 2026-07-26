@@ -12,6 +12,7 @@ import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExchangeRateApiKeyStore
 import com.voxapps.expenses.data.ExpenseLineItem
+import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.MerchantCategoryMemory
 import com.voxapps.expenses.data.SpendingLimit
@@ -352,7 +353,9 @@ class ExpensesExportImportHandler(
                     // still present here and would otherwise get misdetected as duplicates of the
                     // very rows they're about to be replaced by — import must never be blocked by
                     // this check (RecordSource.HUB_IMPORT: another install's already-validated data).
-                    checkForDuplicate = false
+                    checkForDuplicate = false,
+                    source = e.optExpenseSource(),
+                    manuallyEdited = e.optBoolean("manuallyEdited", false)
                 )
                 expensesCreated++
 
@@ -504,6 +507,8 @@ private fun Expense.toJson(items: List<ExpenseLineItem>, attachments: List<Attac
     put("direction", direction.toJsonValue())
     put("receiptImageName", receiptImageName)
     put("createdAt", createdAt)
+    put("source", source.name)
+    put("manuallyEdited", manuallyEdited)
     put("items", JSONArray(items.map { it.toJson() }))
     put("attachments", JSONArray(attachments.map { it.toJson() }))
 }
@@ -526,6 +531,11 @@ private fun ExpenseLineItem.toJson(): JSONObject = JSONObject().apply {
 
 private fun JSONObject.optStringOrNull(key: String): String? =
     if (has(key) && !isNull(key)) optString(key) else null
+
+/** Lenient parse for a field that didn't exist before this export/import round-trip supported it —
+ *  older backups (and any unrecognized/corrupt value) fall back to [ExpenseSource.MANUAL]. */
+private fun JSONObject.optExpenseSource(key: String = "source"): ExpenseSource =
+    optStringOrNull(key)?.let { runCatching { ExpenseSource.valueOf(it) }.getOrNull() } ?: ExpenseSource.MANUAL
 
 private fun JSONObject.optDoubleOrNull(key: String): Double? =
     if (has(key) && !isNull(key)) optDouble(key) else null

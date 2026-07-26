@@ -61,6 +61,11 @@ class ExpensesRepository(
         val exactFields = ExpenseRuleFields(fuzzyMatchEnabled = false, timeWindowMillis = config.timeWindowMillis).all
         val fuzzyFields = ExpenseRuleFields(fuzzyMatchEnabled = true, timeWindowMillis = config.timeWindowMillis).all
         return DuplicateChecker { candidate, existing ->
+            // Unconditional, not opt-in per rule: an incoming top-up/refund and an outgoing payment of
+            // the same amount are two different real transactions, never a duplicate, regardless of
+            // which fields a user-configured rule happens to check. Confirmed on-device: a rule that
+            // didn't explicitly include "direction" let a 1000 RON top-up and a 1000 RON payment merge.
+            if (candidate.direction != existing.direction) return@DuplicateChecker false
             if (rules.isEmpty()) return@DuplicateChecker false
             val results = rules.map { rule ->
                 val fields = if (rule.fuzzyMatchEnabled) fuzzyFields else exactFields
@@ -160,7 +165,12 @@ class ExpensesRepository(
         nearDuplicateCheckEnabled: Boolean = false,
         nearDuplicateConfig: NearDuplicateConfig = NearDuplicateConfig(
             timeWindowMillis = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong())
-        )
+        ),
+        source: ExpenseSource = ExpenseSource.MANUAL,
+        // Only Hub import passes true — preserving the flag from the source device's row, since it
+        // was already a genuine human edit there. Every other caller creates a brand-new record no
+        // one has touched yet.
+        manuallyEdited: Boolean = false
     ): Long {
         return try {
             val candidate = Expense(
@@ -176,7 +186,9 @@ class ExpensesRepository(
                 direction = direction,
                 receiptImageName = imageName,
                 isStub = isStub,
-                createdAt = createdAt
+                createdAt = createdAt,
+                source = source,
+                manuallyEdited = manuallyEdited
             )
 
             if (checkForDuplicate && nearDuplicateCheckEnabled) {
@@ -221,9 +233,17 @@ class ExpensesRepository(
     }
 
     /** Bumps [Expense.updatedAt] to now — never trust a caller-supplied value here, since that's
-     *  exactly the field peer-to-peer sync's last-write-wins conflict resolution relies on. */
-    suspend fun updateExpense(expense: Expense, items: List<ExpenseLineItem>) {
-        expenseDao.update(expense.copy(updatedAt = System.currentTimeMillis()))
+     *  exactly the field peer-to-peer sync's last-write-wins conflict resolution relies on.
+     *  [markManuallyEdited] should be true only for a genuine human edit (the manual edit screen's
+     *  Save button) — an LLM-driven rewrite (e.g. the scan "retry cleanup" path) is not a human
+     *  confirming the data is correct, so it must not set [Expense.manuallyEdited], which
+     *  [dataScore] treats as an unconditional trust pin. */
+    suspend fun updateExpense(expense: Expense, items: List<ExpenseLineItem>, markManuallyEdited: Boolean = false) {
+        val updated = expense.copy(
+            updatedAt = System.currentTimeMillis(),
+            manuallyEdited = expense.manuallyEdited || markManuallyEdited
+        )
+        expenseDao.update(updated)
         lineItemDao.deleteAllForExpense(expense.id)
         if (items.isNotEmpty()) {
             lineItemDao.insertAll(items.mapIndexed { index, item -> item.copy(id = 0, expenseId = expense.id, position = index) })
@@ -309,7 +329,8 @@ class ExpensesRepository(
             timeWindowMillis = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong())
         ),
         merchantMemoryEnabled: Boolean = false,
-        merchantMemoryThreshold: Int = ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD
+        merchantMemoryThreshold: Int = ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD,
+        source: ExpenseSource = ExpenseSource.VOICE
     ): Long {
         val cats = categoryDao.observeAll().first()
 
@@ -342,7 +363,8 @@ class ExpensesRepository(
             title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, resolved.id, items, imageName,
             direction = direction,
             nearDuplicateCheckEnabled = nearDuplicateCheckEnabled,
-            nearDuplicateConfig = nearDuplicateConfig
+            nearDuplicateConfig = nearDuplicateConfig,
+            source = source
         )
     }
 
@@ -386,10 +408,26 @@ class ExpensesRepository(
         }
     }
 
+    /** Before deleting the non-kept rows, backfills the kept row's blank fields from theirs (see
+     *  [enrichWithNearDuplicate]), preferring whichever member actually has the better data per
+     *  [Expense.dataScore] rather than always keeping the kept row's own values untouched — approving
+     *  a review group used to just discard every field the discarded rows had. */
     suspend fun applyExpenseDeduplication(groups: List<DuplicateGroup>) {
+        val adoptedImageNames = mutableSetOf<String>()
+        for (g in groups) {
+            val keeper = expenseDao.getWithDetailsById(g.keepId)?.expense ?: continue
+            val others = g.duplicateIds.filter { it != g.keepId }.mapNotNull { expenseDao.getWithDetailsById(it)?.expense }
+            val merged = others.fold(keeper) { acc, other -> enrichWithNearDuplicate(acc, other) }
+            if (merged != keeper) {
+                expenseDao.update(merged)
+                merged.receiptImageName?.let { adoptedImageNames += it }
+            }
+        }
         val idsToDelete = groups.flatMap { g -> g.duplicateIds.filter { it != g.keepId } }.distinct()
         if (idsToDelete.isEmpty()) return
-        val imageNames = expenseDao.getReceiptImageNames(idsToDelete)
+        // Excludes any receipt image a merge above just adopted into a surviving row — otherwise this
+        // would delete the file out from under the row that now references it.
+        val imageNames = expenseDao.getReceiptImageNames(idsToDelete).filterNot { it in adoptedImageNames }
         val uids = expenseDao.getUidsByIds(idsToDelete)
         expenseDao.deleteByIds(idsToDelete)
         val now = System.currentTimeMillis()
@@ -437,18 +475,56 @@ class ExpensesRepository(
         return DuplicateGroup(keepId = match.id, duplicateIds = listOf(candidateId))
     }
 
-    /** Wide-net recall pass for the "local prepares a candidate list, AI judges it" hybrid mode —
-     *  groups by exactly the fields [ExpenseNearDuplicateDetector] hard-requires to even consider a
-     *  match (amount/currency/direction), deliberately ignoring the time window here: this step only
+    /** Wide-net recall pass for pure [ExpensesSettings.MODE_AI] only — that mode has no local
+     *  component and deliberately never consults the configured duplicate rules at all, so this groups
+     *  by a fixed amount/currency/direction match instead, ignoring the time window: this step only
      *  narrows what the AI has to reason over, it never decides anything itself, so casting a wider
-     *  net than the detector's own window is intentional (the AI is what has to draw the line between
+     *  net than any rule's own window is intentional (the AI is what has to draw the line between
      *  a genuine duplicate and a legitimate recurring same-amount charge, using the fuller context of
      *  a whole cluster rather than a single ambiguous pair). Pass [scopedToId] to narrow to just the
-     *  cluster containing one specific (freshly-inserted) row, for the insert-time automatic check. */
+     *  cluster containing one specific (freshly-inserted) row, for the insert-time automatic check.
+     *  [ExpensesSettings.MODE_LOCAL_AND_AI] uses [ruleBasedCandidateClusters] instead — its local half
+     *  is expected to actually respect the user's configured rules. */
     suspend fun duplicateCandidateClusters(scopedToId: Long? = null): List<List<Expense>> {
         val all = expensesSnapshot()
         val clusters = all.groupBy { Triple(it.totalAmount, it.currencyCode, it.direction) }
             .values.filter { it.size >= 2 }
         return if (scopedToId == null) clusters else clusters.filter { cluster -> cluster.any { it.id == scopedToId } }
+    }
+
+    /** [ExpensesSettings.MODE_LOCAL_AND_AI]'s recall pass — same rule engine [buildDuplicateChecker]
+     *  gives [ExpensesSettings.MODE_LOCAL] (any enabled rule matching a pair puts them in the same
+     *  cluster, respecting the user's own field selection and time window), rather than
+     *  [duplicateCandidateClusters]'s fixed amount/currency/direction grouping. The AI still makes the
+     *  final keep/duplicate call from each cluster; this only decides which expenses are worth showing
+     *  it. [automaticOnly] mirrors [findLocalDuplicateGroupForRow]'s filter — true for the insert-time
+     *  automatic check (only rules marked "applies automatically at save" apply), false for manual/
+     *  scheduled (every enabled rule applies, same as [findLocalDuplicateGroups]). Pass [scopedToId] to
+     *  narrow to just the cluster containing one specific (freshly-inserted) row. */
+    suspend fun ruleBasedCandidateClusters(
+        nearDuplicateConfig: NearDuplicateConfig,
+        automaticOnly: Boolean = false,
+        scopedToId: Long? = null
+    ): List<List<Expense>> {
+        val detector = buildDuplicateChecker(nearDuplicateConfig, automaticOnly)
+        val all = expensesSnapshot()
+        fun matches(a: Expense, b: Expense) = detector.isDuplicateOf(a, b) || detector.isDuplicateOf(b, a)
+        if (scopedToId != null) {
+            val target = all.find { it.id == scopedToId } ?: return emptyList()
+            val peers = all.filter { it.id != scopedToId && matches(it, target) }
+            return if (peers.isEmpty()) emptyList() else listOf(listOf(target) + peers)
+        }
+        val consumed = mutableSetOf<Long>()
+        val clusters = mutableListOf<List<Expense>>()
+        for (anchor in all.sortedBy { it.createdAt }) {
+            if (anchor.id in consumed) continue
+            val peers = all.filter { it.id != anchor.id && it.id !in consumed && matches(it, anchor) }
+            if (peers.isNotEmpty()) {
+                clusters += listOf(anchor) + peers
+                consumed += anchor.id
+                consumed += peers.map { it.id }
+            }
+        }
+        return clusters
     }
 }

@@ -10,6 +10,12 @@ class ExpensesConverters {
     @TypeConverter
     fun toDirection(value: String): TransactionDirection = TransactionDirection.valueOf(value)
 
+    @TypeConverter
+    fun fromExpenseSource(source: ExpenseSource): String = source.name
+
+    @TypeConverter
+    fun toExpenseSource(value: String): ExpenseSource = ExpenseSource.valueOf(value)
+
     /** [DuplicateRuleEntity.fieldIds] — a comma-joined string is enough for [ExpenseRuleFields]'
      *  plain-identifier ids (no commas possible in them), no Gson dependency needed for one column. */
     @TypeConverter

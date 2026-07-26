@@ -11,9 +11,11 @@ import com.voxapps.expenses.data.DuplicateRuleEntity
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
+import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.data.TransactionDirection
+import com.voxapps.expenses.data.NearDuplicateConfig
 import com.voxapps.expenses.data.toNearDuplicateConfig
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
@@ -226,6 +228,7 @@ class ExpensesStateManager internal constructor(
             val id = expensesRepo.addExpense(
                 title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, categoryId, items, imageName, isStub,
                 direction = direction,
+                source = ExpenseSource.MANUAL,
                 nearDuplicateCheckEnabled = silentMergeEnabled,
                 nearDuplicateConfig = nearDuplicateConfig
             )
@@ -234,34 +237,49 @@ class ExpensesStateManager internal constructor(
                 val group = expensesRepo.findLocalDuplicateGroupForRow(id, nearDuplicateConfig)
                 if (group != null) expenseDeduplicationRepo.mergePendingGroups(listOf(group))
             }
-            maybeRequestScopedDuplicateCheck(context, settings.duplicateCheckModeAutomatic, id)
+            maybeRequestScopedDuplicateCheck(context, settings.duplicateCheckModeAutomatic, id, nearDuplicateConfig)
         }
     }
 
     /** Fires an async, scoped AI duplicate check for a freshly-inserted row when the automatic mode
      *  includes AI ([ExpensesSettings.MODE_LOCAL_AND_AI]/[ExpensesSettings.MODE_AI]) — scoped to just
-     *  the new row's own same-amount candidate cluster (see
-     *  [ExpensesRepository.duplicateCandidateClusters]), not the whole expense list, so this is cheap
-     *  and only fires when there's already a plausible peer to compare against. Never auto-applies —
-     *  any result lands in the normal review list via [LlmResultReceiver], same as every other AI
-     *  suggestion. No-ops silently if [context] is null, [newExpenseId] isn't a real inserted row
-     *  (negative sentinel — a rejected/merged duplicate has nothing new to check), or the mode has no
-     *  AI component ([ExpensesSettings.MODE_OFF]/[ExpensesSettings.MODE_LOCAL]). */
-    private fun maybeRequestScopedDuplicateCheck(context: Context?, automaticMode: String, newExpenseId: Long) {
+     *  the new row's own candidate cluster, not the whole expense list, so this is cheap and only
+     *  fires when there's already a plausible peer to compare against. [MODE_LOCAL_AND_AI] recalls that
+     *  cluster via the configured duplicate rules ([ExpensesRepository.ruleBasedCandidateClusters],
+     *  automatic-only); pure [MODE_AI] has no local component and recalls via a fixed amount/currency/
+     *  direction match instead ([ExpensesRepository.duplicateCandidateClusters]), never consulting the
+     *  rules at all. Never auto-applies — any result lands in the normal review list via
+     *  [LlmResultReceiver], same as every other AI suggestion. No-ops silently if [context] is null,
+     *  [newExpenseId] isn't a real inserted row (negative sentinel — a rejected/merged duplicate has
+     *  nothing new to check), or the mode has no AI component ([ExpensesSettings.MODE_OFF]/
+     *  [ExpensesSettings.MODE_LOCAL]). */
+    private fun maybeRequestScopedDuplicateCheck(
+        context: Context?,
+        automaticMode: String,
+        newExpenseId: Long,
+        nearDuplicateConfig: NearDuplicateConfig
+    ) {
         val hasAiComponent = automaticMode == ExpensesSettings.MODE_LOCAL_AND_AI || automaticMode == ExpensesSettings.MODE_AI
         if (context == null || newExpenseId <= 0 || !hasAiComponent) return
         scope.launch {
-            val candidates = expensesRepo.duplicateCandidateClusters(scopedToId = newExpenseId).flatten()
+            val candidates = if (automaticMode == ExpensesSettings.MODE_LOCAL_AND_AI) {
+                expensesRepo.ruleBasedCandidateClusters(nearDuplicateConfig, automaticOnly = true, scopedToId = newExpenseId).flatten()
+            } else {
+                expensesRepo.duplicateCandidateClusters(scopedToId = newExpenseId).flatten()
+            }
             if (candidates.size < 2) return@launch
             val summaries = candidates.map {
-                ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime)
+                ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
             }
             ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, summaries, scoped = true)
         }
     }
 
+    /** The only genuine manual-edit path — see [ExpensesRepository.updateExpense]'s
+     *  [markManuallyEdited] doc for why this always passes true, unlike [LlmResultReceiver]'s
+     *  LLM-driven retry-cleanup update. */
     fun updateExpense(expense: Expense, items: List<ExpenseLineItem>) {
-        scope.launch { expensesRepo.updateExpense(expense, items) }
+        scope.launch { expensesRepo.updateExpense(expense, items, markManuallyEdited = true) }
     }
 
     fun deleteExpense(expense: Expense) { scope.launch { expensesRepo.deleteExpense(expense) } }
@@ -325,8 +343,8 @@ class ExpensesStateManager internal constructor(
                     expenseDeduplicationRepo.mergePendingGroups(groups)
                 }
                 ExpensesSettings.MODE_LOCAL_AND_AI -> {
-                    val candidates = expensesRepo.duplicateCandidateClusters().flatten().map {
-                        ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime)
+                    val candidates = expensesRepo.ruleBasedCandidateClusters(settings.toNearDuplicateConfig()).flatten().map {
+                        ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
                     }
                     if (candidates.isNotEmpty()) {
                         ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, candidates)
@@ -334,7 +352,7 @@ class ExpensesStateManager internal constructor(
                 }
                 else -> {
                     val all = expensesRepo.expenses.first().map {
-                        ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime)
+                        ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
                     }
                     ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, all)
                 }
@@ -344,12 +362,16 @@ class ExpensesStateManager internal constructor(
 
     val pendingExpenseDuplicateGroups: Flow<List<DuplicateGroup>> = expenseDeduplicationRepo.pendingGroupsFlow
 
-    fun approveExpenseDeduplication(groups: List<DuplicateGroup>) {
+    /** [effectiveGroups] is what actually gets applied (its `keepId` may differ from the pending
+     *  suggestion's if the user picked a different group member to keep in the review UI);
+     *  [originalGroups] is the pending suggestion exactly as stored, needed to find and remove the
+     *  right entries from [expenseDeduplicationRepo] regardless of that remap. */
+    fun approveExpenseDeduplication(originalGroups: List<DuplicateGroup>, effectiveGroups: List<DuplicateGroup>) {
         scope.launch {
-            expensesRepo.applyExpenseDeduplication(groups)
+            expensesRepo.applyExpenseDeduplication(effectiveGroups)
             // Only the groups just applied should disappear — clearing everything here used to
             // silently drop any unchecked/unapplied suggestion too (the actual "no way to merge" bug).
-            expenseDeduplicationRepo.removeGroups(groups)
+            expenseDeduplicationRepo.removeGroups(originalGroups)
         }
     }
 
@@ -382,10 +404,11 @@ class ExpensesStateManager internal constructor(
                 nearDuplicateCheckEnabled = settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_AI,
                 nearDuplicateConfig = settings.toNearDuplicateConfig(),
                 merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
-                merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold
+                merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold,
+                source = ExpenseSource.NOTIFICATION
             )
             pendingNotificationExpenseRepo.removePending(setOf(entry.id))
-            maybeRequestScopedDuplicateCheck(context, settings.duplicateCheckModeAutomatic, id)
+            maybeRequestScopedDuplicateCheck(context, settings.duplicateCheckModeAutomatic, id, settings.toNearDuplicateConfig())
         }
     }
 
