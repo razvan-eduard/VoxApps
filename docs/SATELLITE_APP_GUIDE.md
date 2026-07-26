@@ -762,6 +762,27 @@ the field/rule/evaluation contracts. See `vox-expenses/.../data/ExpenseRuleField
 complete worked example, including a Room migration that seeds defaults on both upgrade and fresh
 install.
 
+**Keep genuinely-invariant fields out of the opt-in rule list.** A rule's fields are entirely
+user-selectable — nothing stops a user (or a hand-edited default rule) from building a rule that
+doesn't check a field your domain considers non-negotiable. If two records can *never* be duplicates
+when some field differs (e.g. vox-expenses' `direction` — an incoming top-up and an outgoing payment of
+the same amount are two different real transactions, not a duplicate, confirmed by a real on-device
+report), enforce that as an unconditional check in your own wrapper around
+`RuleBasedDuplicateChecker.isDuplicateOf` — before consulting the rules at all — rather than trusting
+every rule to remember to include it.
+
+**Picking a merge winner** (`recordScore` / `RecordProvenance`, same file) — a second, independent
+building block for *which* record's data wins once two are confirmed duplicates, instead of always
+preferring whichever arrived first: `recordScore(manuallyEdited, provenance, completenessFields)`
+scores `10_000` for a human-edited record (an unconditional pin), plus your entity's own
+`RecordProvenance.trustTier` (a capture-source ranking you define — e.g. vox-expenses'
+`ExpenseSource.MANUAL(400) > SCAN(300) > NOTIFICATION(200) > VOICE(100)`), plus how many of the fields
+you pass in `completenessFields` are non-null. Not the same concept as `RecordSource` (§6.6) —
+`RecordSource` routes a save through the sanitize-or-confirm policy, `RecordProvenance` ranks data
+trustworthiness — the names are deliberately different to avoid conflating them. See
+`vox-expenses/.../data/ExpenseDataScore.kt` for a complete worked example, including how the score
+feeds both the actual field-merge logic and a review UI's default "keep" selection.
+
 ---
 
 ## 7. The generic LLM hook (outside the create/extraction flow)
@@ -977,6 +998,11 @@ understanding it helps when debugging "my app doesn't show up" or "the wrong app
   vox-expenses' concrete wiring: `data/ExpenseRuleFields.kt` (field registry), `data/DuplicateRuleEntity.kt`/
   `DuplicateRuleDao.kt` (Room storage, migrated + default-seeded), `ui/settings/DuplicateRulesSection.kt`
   (rule list/edit UI).
+- **Merge-quality scoring** (§6.7): `core/datahygiene/src/main/java/com/voxapps/datahygiene/RecordScore.kt`
+  (`RecordProvenance`, `recordScore()`). vox-expenses' concrete wiring: `data/ExpenseDataScore.kt`
+  (`ExpenseSource`, `Expense.dataScore()`), consumed by `data/ExpenseNearDuplicateDetector.kt`
+  (`enrichWithNearDuplicate`), `data/ExpensesRepository.kt` (`applyExpenseDeduplication`), and
+  `ui/settings/ExpenseCleanupSettingsTab.kt` (keep-picker default selection + source tag).
 - **VoxCommander's consuming side**: `vox-commander/src/main/java/com/voxapps/commander/domain/integration/`
   (`VoxSatelliteRegistry.kt`, `SatelliteRouting.kt`) and `.../domain/intent/handler/SatelliteHandler.kt`.
 - **Durable LLM request queue** (§7): `core/ipc/src/main/java/com/voxapps/ipc/` (`PendingLlmRequestEntity.kt`,

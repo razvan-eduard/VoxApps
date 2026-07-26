@@ -128,13 +128,27 @@ bank/payment notifications, or entered by hand.
   - **Automatic protection** (what runs on every insert) has four modes: **Off**, **Local** (silently
     merges an obvious rule match), **Local + AI** (local merge plus a small AI-scoped confirmation
     check queued for review), and **AI** (review-only, no local merge). A per-rule "applies
-    automatically at save" toggle scopes which rules participate here vs. review-only contexts.
+    automatically at save" toggle scopes which rules participate here vs. review-only contexts. The
+    AI-scoped recall step for **Local + AI** (both automatic and manual/scheduled) uses the same
+    configured rules to decide what's worth showing the AI, respecting your time window and field
+    choices; pure **AI** mode has no local component and deliberately never consults the rules at all,
+    recalling by a fixed amount/currency/direction match instead.
   - **Manual review** (only shown for Local/Local + AI) — when on, an insert-time local-rule match is
     added to the same pending-review list "Check for duplicates now" produces, instead of merging
     silently, so nothing changes without a look first.
   - This replaced two previously-separate systems (an always-on exact-match checker comparing by
     calendar day, and a 3-checkbox near-duplicate add-on) with the one rule engine above — see the
     technical doc link for the full evaluation model.
+- **Data-quality scoring for merges** — when two duplicates merge (silently, or approved from the
+  review list), which record's data wins per field is no longer just "whichever arrived first": each
+  expense is scored on how it was captured (Manual > Scan > Notification > Voice — manual entry is the
+  most trustworthy, voice the most error-prone for proper nouns like vendor names) plus how many
+  optional fields it actually has filled in, and a manually-edited record always outranks everything
+  else. The review list's "keep" selection defaults to whichever group member scores highest (still
+  overridable via the radio buttons) and shows each candidate's capture-source tag alongside its
+  total/bank/vendor/date-time, so the default is explainable rather than a black box. Approving a
+  review group now backfills the kept row's blank fields from its higher-scoring duplicates before
+  deleting them, instead of discarding that data outright.
 - **Category color adjacency + merchant category memory** — a freshly auto-created category's color is
   chosen to visibly differ from the most-recently-added expense's category (not just from the aggregate
   palette), and repeatedly correcting the same vendor to the same category (configurable 1×/3×/5×/10×

@@ -1849,6 +1849,8 @@ delta-then-merge).
 | `AttachmentEntity` / `AttachmentDao` / `AttachmentFileStore` / `AttachmentsSection` (shared record attachments) | `core/attachments/src/main/java/com/voxapps/attachments/` |
 | `SyncIdentity` / `planMerge()` (shared merge algorithm) | `core/datahygiene/.../SyncMerge.kt` |
 | `RuleBasedDuplicateChecker` / `RuleField` / `DuplicateRule` (generic duplicate-rule engine) | `core/datahygiene/.../RuleBasedDuplicateChecker.kt` |
+| `RecordProvenance` / `recordScore()` (generic merge-quality scoring) | `core/datahygiene/.../RecordScore.kt` |
+| `ExpenseSource` / `Expense.dataScore()` (vox-expenses' wiring) | `vox-expenses/.../data/ExpenseDataScore.kt` |
 | Per-app sync handlers | `vox-expenses/.../receiver/ExpensesSyncHandler.kt`, `vox-notes/.../receiver/NotesSyncHandler.kt`, `vox-calendar/.../receiver/CalendarSyncHandler.kt` |
 | `PairedPeer` / `SyncPeerStore` (persisted per-peer identity + key) | `vox-hub/.../domain/sync/` |
 | `PairingHceService` / `NfcPairingReader` / `NfcPairingProtocol` (NFC pairing) | `vox-hub/.../domain/sync/` |
@@ -2064,6 +2066,76 @@ with one pass — see the [Vox Expenses feature list](APPS_OVERVIEW.md#vox-expen
 behavior, including the automatic-protection Off/Local/Local+AI/AI modes and the "Manual review" toggle
 that stages an insert-time local-rule match into the same pending-review list `findLocalDuplicateGroups`
 already uses for the on-demand/scheduled check, instead of merging it silently.
+
+**`ruleBasedCandidateClusters(config, automaticOnly, scopedToId)`** — `MODE_LOCAL_AND_AI`'s recall pass
+(both automatic and manual/scheduled). Clusters expenses using the same `buildDuplicateChecker` engine
+`MODE_LOCAL` uses, so the AI-scoped confirmation check only ever fires for candidates the configured
+rules actually flagged, respecting the time window and field choices. Pure `MODE_AI` has no local
+component and keeps the older `duplicateCandidateClusters` (fixed amount/currency/direction grouping,
+no rule consultation at all) — this asymmetry is intentional, not a gap: `MODE_AI` is meant to bypass
+the rule engine entirely.
+
+**Direction is an unconditional guard, not an opt-in rule field.** `buildDuplicateChecker` rejects a
+candidate/existing pair outright whenever `direction` differs, before even consulting the configured
+rules — confirmed on-device: a rule that only checked amount+currency let a 1000 RON top-up (incoming)
+and a 1000 RON payment (outgoing) merge, since neither is a duplicate of the other regardless of what
+fields a rule happens to select. The same guard exists in two more places for the AI path: `ExpenseSummary`
+(the record sent to the LLM) now carries `direction`, and the prompt (`ExpenseDeduplicationPromptBuilder`)
+explicitly tags each entry `(incoming)`/`(outgoing)` and instructs the model to never cross-group them;
+`LlmResultReceiver.validateDuplicateGroups` (the anti-hallucination re-check on the AI's proposed groups)
+now also verifies `direction` matches, not just amount/currency.
+
+### Data-quality scoring for merges (`recordScore` / `Expense.dataScore`)
+
+Both the silent insert-time merge (`enrichWithNearDuplicate`) and the review-approved merge
+(`ExpensesRepository.applyExpenseDeduplication`) used to keep whichever record's field content was
+"first" (arrival order) rather than "best." `:core:datahygiene` now ships a generic building block for
+this, mirroring how contact-merge tools (Google/Apple Contacts) and CRM dedup actually rank duplicate
+records:
+
+- **`RecordProvenance`** (`core/datahygiene/.../RecordScore.kt`) — an interface with one member,
+  `trustTier: Int`. Distinct from `:core:datahygiene`'s existing `RecordSource` (`LLM`/`HUB_IMPORT`/
+  `MANUAL_UI`, used by `decideForSave` to route a save through the sanitize-or-confirm policy) — a
+  different concept (data trustworthiness vs. save routing) that happens to share the "where did this
+  come from" framing, deliberately named differently to avoid confusion.
+- **`recordScore(manuallyEdited, provenance, completenessFields)`** — `10_000` if `manuallyEdited`
+  (an unconditional pin — a human touching a record always outranks everything else), plus
+  `provenance.trustTier`, plus a count of non-null entries in `completenessFields` (the caller decides
+  which fields count, mirroring `RuleField`'s "app hand-writes its own field list" convention — this
+  module has no reflection-based field enumeration anywhere).
+
+**vox-expenses' wiring** (`data/ExpenseDataScore.kt`): `ExpenseSource` (`MANUAL(400)`, `SCAN(300)`,
+`NOTIFICATION(200)`, `VOICE(100)`) implements `RecordProvenance`; `Expense.dataScore()` calls
+`recordScore(manuallyEdited, source, listOf(title, vendor, bank, location, comments, categoryId))`.
+`Expense` gained `source`/`manuallyEdited` columns (migration v12→v13, existing rows backfill to
+`MANUAL`/`false`). `source` is set at every creation path (`MANUAL` for the manual edit screen,
+`VOICE`/`SCAN` for `LlmResultReceiver.createExpenseFromParsed` — already distinguished via
+`imageName != null`, `NOTIFICATION` for the notification-capture paths, preserved from the original
+device's JSON on Hub import). `manuallyEdited` is set only by `ExpensesStateManager.updateExpense` (the
+genuine manual-edit-screen Save path) via `ExpensesRepository.updateExpense`'s `markManuallyEdited`
+param — never by an LLM-driven rewrite (e.g. the scan "retry cleanup" path), and it's sticky (`||`'d
+with the existing value, never reset back to `false`).
+
+**`enrichWithNearDuplicate(existing, candidate)`** now compares `dataScore()` and lets the higher
+scorer's non-null field values win (falling back to the lower scorer's), instead of always preferring
+`existing`. Row identity (`id`/`uid`/`createdAt`) always stays `existing`'s regardless of which side's
+*content* wins — `.copy()` is always called on `existing`, never `candidate` — which is what makes it
+safe to `fold` across more than two records.
+
+**`applyExpenseDeduplication`** now folds `enrichWithNearDuplicate` across every discarded group member
+before deleting them, backfilling the kept row's blank fields from its higher-scoring duplicates —
+approving a review group used to just discard every field the non-kept rows had. A receipt image
+adopted into the surviving row this way is excluded from the subsequent file-delete pass (tracked via
+an `adoptedImageNames` set), so the merge can't delete a file the kept row now references.
+
+**Review UI** (`ExpenseCleanupSettingsTab.kt`): the keep-picker's default selection is now whichever
+group member has the highest `dataScore()`, not just whatever the detector/AI picked as its anchor id
+— still overridable via the per-member radio buttons already in place. `expensePreview()` shows each
+candidate's capture-source tag alongside total/bank/vendor/date-time, so the default is explainable
+rather than a black box. The whole tab was also restructured from one large enclosing `Card` (which
+made it visually stand out from every other Settings tab as a solid tonal block) into separate Cards
+per section — Automatic protection (trigger), Duplicate rules (rules manager), Manual check (manual
+trigger), Schedule — matching the plain-background-plus-per-item-card convention every other tab uses.
 
 ---
 
