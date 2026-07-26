@@ -19,6 +19,8 @@ import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -83,6 +85,7 @@ class NotesWidget : GlanceAppWidget() {
         val addIntent = Intent(context, NotesActivity::class.java).apply {
             putExtra(NotesActivity.EXTRA_QUICK_ADD, true)
         }
+        val openAppIntent = Intent(context, NotesActivity::class.java)
         val locale = Locale.forLanguageTag(container.settingsRepository.getSnapshot().language)
         val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
             VoxAppsDiscovery.isCommanderInstalled(context)
@@ -94,6 +97,7 @@ class NotesWidget : GlanceAppWidget() {
                     notes = recentNotes,
                     languageManager = container.languageManager,
                     addIntent = addIntent,
+                    openAppIntent = openAppIntent,
                     locale = locale,
                     scanEnabled = scanEnabled
                 )
@@ -122,6 +126,7 @@ private fun NotesWidgetContent(
     notes: List<NoteWithCategory>,
     languageManager: LanguageManager,
     addIntent: Intent,
+    openAppIntent: Intent,
     locale: Locale,
     scanEnabled: Boolean
 ) {
@@ -132,7 +137,9 @@ private fun NotesWidgetContent(
             .padding(12.dp)
     ) {
         Row(
-            modifier = GlanceModifier.fillMaxWidth(),
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .clickable(actionStartActivity(openAppIntent)),
             verticalAlignment = Alignment.Vertical.CenterVertically
         ) {
             Text(
@@ -206,7 +213,7 @@ private fun RecentNotesList(notes: List<NoteWithCategory>, languageManager: Lang
     val today = LocalDate.now(zoneId)
     val recent = notes
         .sortedByDescending { it.note.createdAt }
-        .take(6)
+        .take(20)
 
     if (recent.isEmpty()) {
         Text(
@@ -221,62 +228,64 @@ private fun RecentNotesList(notes: List<NoteWithCategory>, languageManager: Lang
     val grouped = recent.groupBy { Instant.ofEpochMilli(it.note.createdAt).atZone(zoneId).toLocalDate() }
     val context = LocalContext.current
 
-    Column {
-        grouped.forEach { (date, items) ->
+    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
+        items(grouped.entries.toList(), itemId = { it.key.toEpochDay() }) { (date, items) ->
             val isToday = date == today
-            DaySeparatorLabel(date, today, languageManager, locale)
-            Box(
-                modifier = GlanceModifier
-                    .fillMaxWidth()
-                    .height(if (isToday) 2.dp else 1.dp)
-                    .background(if (isToday) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
-            ) {}
-
-            items.forEach { item ->
-                val editIntent = Intent(context, NotesActivity::class.java).apply {
-                    putExtra(NotesActivity.EXTRA_EDIT_NOTE_ID, item.note.id)
-                }
-                val hasTitle = !item.note.title.isNullOrBlank()
-                val categoryColor = item.category?.let { CategoryColors.fromStored(it.colorArgb) }
-                Row(
+            Column {
+                DaySeparatorLabel(date, today, languageManager, locale)
+                Box(
                     modifier = GlanceModifier
                         .fillMaxWidth()
-                        .cornerRadius(6.dp)
-                        .let { m -> if (categoryColor != null) m.background(categoryColor.copy(alpha = ROW_TINT_ALPHA)) else m }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .clickable(actionStartActivity(editIntent)),
-                    verticalAlignment = Alignment.Vertical.CenterVertically
-                ) {
-                    if (hasTitle) {
-                        Text(
-                            text = item.note.title.orEmpty(),
-                            maxLines = 1,
-                            style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                            modifier = GlanceModifier.defaultWeight()
-                        )
-                        if (item.note.text.isNotBlank()) {
-                            Spacer(modifier = GlanceModifier.width(8.dp))
+                        .height(if (isToday) 2.dp else 1.dp)
+                        .background(if (isToday) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
+                ) {}
+
+                items.forEach { item ->
+                    val editIntent = Intent(context, NotesActivity::class.java).apply {
+                        putExtra(NotesActivity.EXTRA_EDIT_NOTE_ID, item.note.id)
+                    }
+                    val hasTitle = !item.note.title.isNullOrBlank()
+                    val categoryColor = item.category?.let { CategoryColors.fromStored(it.colorArgb) }
+                    Row(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .cornerRadius(6.dp)
+                            .let { m -> if (categoryColor != null) m.background(categoryColor.copy(alpha = ROW_TINT_ALPHA)) else m }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .clickable(actionStartActivity(editIntent)),
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
+                        if (hasTitle) {
+                            Text(
+                                text = item.note.title.orEmpty(),
+                                maxLines = 1,
+                                style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
+                                modifier = GlanceModifier.defaultWeight()
+                            )
+                            if (item.note.text.isNotBlank()) {
+                                Spacer(modifier = GlanceModifier.width(8.dp))
+                                Text(
+                                    text = item.note.text,
+                                    maxLines = 2,
+                                    style = TextStyle(
+                                        fontSize = 12.sp,
+                                        color = GlanceTheme.colors.outline,
+                                        textAlign = TextAlign.End
+                                    ),
+                                    modifier = GlanceModifier.defaultWeight()
+                                )
+                            }
+                        } else {
                             Text(
                                 text = item.note.text,
                                 maxLines = 2,
-                                style = TextStyle(
-                                    fontSize = 12.sp,
-                                    color = GlanceTheme.colors.outline,
-                                    textAlign = TextAlign.End
-                                ),
+                                style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
                                 modifier = GlanceModifier.defaultWeight()
                             )
                         }
-                    } else {
-                        Text(
-                            text = item.note.text,
-                            maxLines = 2,
-                            style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                            modifier = GlanceModifier.defaultWeight()
-                        )
                     }
+                    Spacer(modifier = GlanceModifier.height(2.dp))
                 }
-                Spacer(modifier = GlanceModifier.height(2.dp))
             }
         }
     }

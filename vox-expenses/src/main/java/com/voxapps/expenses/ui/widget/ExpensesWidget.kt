@@ -20,6 +20,8 @@ import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -86,6 +88,7 @@ class ExpensesWidget : GlanceAppWidget() {
         val addIntent = Intent(context, ExpensesActivity::class.java).apply {
             putExtra(ExpensesActivity.EXTRA_QUICK_ADD, true)
         }
+        val openAppIntent = Intent(context, ExpensesActivity::class.java)
         val settingsSnapshot = container.settingsRepository.getSnapshot()
         val locale = Locale.forLanguageTag(settingsSnapshot.language)
 
@@ -99,6 +102,7 @@ class ExpensesWidget : GlanceAppWidget() {
                     expenses = recentExpenses,
                     languageManager = container.languageManager,
                     addIntent = addIntent,
+                    openAppIntent = openAppIntent,
                     locale = locale,
                     scanEnabled = scanEnabled,
                     borderEnabled = settingsSnapshot.widgetBorderEnabled,
@@ -130,6 +134,7 @@ private fun ExpensesWidgetContent(
     expenses: List<ExpenseWithDetails>,
     languageManager: LanguageManager,
     addIntent: Intent,
+    openAppIntent: Intent,
     locale: Locale,
     scanEnabled: Boolean,
     borderEnabled: Boolean,
@@ -143,7 +148,9 @@ private fun ExpensesWidgetContent(
             .padding(12.dp)
     ) {
         Row(
-            modifier = GlanceModifier.fillMaxWidth(),
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .clickable(actionStartActivity(openAppIntent)),
             verticalAlignment = Alignment.Vertical.CenterVertically
         ) {
             Text(
@@ -227,7 +234,7 @@ private fun RecentExpensesList(
     val today = LocalDate.now(zoneId)
     val recent = expenses
         .sortedByDescending { it.expense.dateTime }
-        .take(6)
+        .take(20)
 
     if (recent.isEmpty()) {
         Text(
@@ -242,8 +249,8 @@ private fun RecentExpensesList(
     val grouped = recent.groupBy { Instant.ofEpochMilli(it.expense.dateTime).atZone(zoneId).toLocalDate() }
     val context = LocalContext.current
 
-    Column {
-        grouped.forEach { (date, items) ->
+    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
+        items(grouped.entries.toList(), itemId = { it.key.toEpochDay() }) { (date, items) ->
             val dayContent: @Composable () -> Unit = {
                 DaySeparatorLabel(date, today, languageManager, locale)
 

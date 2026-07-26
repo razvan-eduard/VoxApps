@@ -20,6 +20,8 @@ import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -84,6 +86,7 @@ class CalendarWidget : GlanceAppWidget() {
         val addIntent = Intent(context, CalendarActivity::class.java).apply {
             putExtra(CalendarActivity.EXTRA_QUICK_ADD, true)
         }
+        val openAppIntent = Intent(context, CalendarActivity::class.java)
         val settingsSnapshot = container.settingsRepository.getSnapshot()
         val locale = Locale.forLanguageTag(settingsSnapshot.language)
         val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
@@ -95,6 +98,7 @@ class CalendarWidget : GlanceAppWidget() {
                     uiState = uiState,
                     languageManager = container.languageManager,
                     addIntent = addIntent,
+                    openAppIntent = openAppIntent,
                     locale = locale,
                     scanEnabled = scanEnabled,
                     showEventDetails = settingsSnapshot.showEventDetailsInWidget,
@@ -126,6 +130,7 @@ private fun CalendarWidgetContent(
     uiState: CalendarUiState,
     languageManager: LanguageManager,
     addIntent: Intent,
+    openAppIntent: Intent,
     locale: Locale,
     scanEnabled: Boolean,
     showEventDetails: Boolean,
@@ -140,7 +145,9 @@ private fun CalendarWidgetContent(
             .padding(12.dp)
     ) {
         Row(
-            modifier = GlanceModifier.fillMaxWidth(),
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .clickable(actionStartActivity(openAppIntent)),
             verticalAlignment = Alignment.Vertical.CenterVertically
         ) {
             Text(
@@ -231,7 +238,7 @@ private fun UpcomingEntriesList(
     val upcoming = entries
         .filter { !it.entry.completed && (it.entry.endMillis ?: it.entry.startMillis) >= startOfToday }
         .sortedBy { it.entry.startMillis }
-        .take(6)
+        .take(20)
 
     if (upcoming.isEmpty()) {
         Text(
@@ -253,8 +260,8 @@ private fun UpcomingEntriesList(
         if (startDate.isBefore(today)) today else startDate
     }
 
-    Column {
-        grouped.forEach { (date, items) ->
+    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
+        items(grouped.entries.toList(), itemId = { it.key.toEpochDay() }) { (date, items) ->
             val dayContent: @Composable () -> Unit = {
                 DaySeparatorLabel(date, today, languageManager, locale)
 
