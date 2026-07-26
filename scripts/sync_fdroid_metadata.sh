@@ -16,12 +16,20 @@ APPS=(
 METADATA_DIR="metadata"
 mkdir -p "$METADATA_DIR"
 
+# Check if gh is authenticated
+if ! gh auth status >/dev/null 2>&1; then
+    if [ -z "$GH_TOKEN" ] && [ -z "$GITHUB_TOKEN" ]; then
+        echo "Error: gh CLI is not authenticated and GITHUB_TOKEN is not set."
+        exit 1
+    fi
+fi
+
 for entry in "${APPS[@]}"; do
     IFS=":" read -r DIR APP_ID TAG_PREFIX <<< "$entry"
 
-    echo "Processing $APP_ID (dir: $DIR, prefix: $TAG_PREFIX)..."
+    echo "Processing $APP_ID..."
 
-    # Get the latest tag for this app
+    # Get the latest tag for this app from the local repo (fetch-depth 0 ensured tags are there)
     LATEST_TAG=$(git tag -l "${TAG_PREFIX}-v*" --sort=-v:refname | head -n 1)
 
     if [ -z "$LATEST_TAG" ]; then
@@ -31,25 +39,22 @@ for entry in "${APPS[@]}"; do
 
     echo "  Latest tag: $LATEST_TAG"
 
-    # Extract versionCode from the build.gradle.kts of that tag
-    # (Actually, we want the versionCode of the release we are processing.
-    # Since we are usually running this AFTER a push that bumped it,
-    # we might want to just read the current file if we assume we just pushed.)
-    VERSION_CODE=$(grep 'versionCode' "$DIR/build.gradle.kts" | grep -oE '[0-9]+')
+    # Extract versionCode from the build.gradle.kts
+    # We use the current file since we expect it to match the latest state
+    VERSION_CODE=$(grep 'versionCode' "$DIR/build.gradle.kts" | grep -oE '[0-9]+' || echo "")
 
     if [ -z "$VERSION_CODE" ]; then
-        echo "  Could not find versionCode for $DIR, skipping."
+        echo "  Warning: Could not find versionCode for $DIR, skipping."
         continue
     fi
 
-    echo "  Version code: $VERSION_CODE"
-
-    # Fetch release body from GitHub
-    CHANGELOG=$(gh release view "$LATEST_TAG" --json body -q .body)
+    # Fetch release body from GitHub. Don't fail if it doesn't exist yet (racing conditions)
+    echo "  Fetching release body for $LATEST_TAG..."
+    CHANGELOG=$(gh release view "$LATEST_TAG" --json body -q .body 2>/dev/null || echo "")
 
     if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" == "null" ]; then
-        echo "  No release body found for $LATEST_TAG, using generic message."
-        CHANGELOG="Bug fixes and improvements."
+        echo "  No release body found for $LATEST_TAG yet, using generic message."
+        CHANGELOG="Maintenance update and performance improvements."
     fi
 
     # Create directory structure
@@ -61,4 +66,4 @@ for entry in "${APPS[@]}"; do
     echo "  Changelog written to $CHANGELOG_DIR/${VERSION_CODE}.txt"
 done
 
-echo "F-Droid metadata sync complete."
+echo "F-Droid metadata generation complete."

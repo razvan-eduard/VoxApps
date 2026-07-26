@@ -15,7 +15,10 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    # Only run if the triggering workflow succeeded
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
     steps:
       - name: Checkout VoxApps
         uses: actions/checkout@v4
@@ -27,6 +30,7 @@ jobs:
         with:
           repository: razvan-eduard/vox-fdroid-repo
           path: fdroid-repo
+          # Use a personal token if provided, fallback to GITHUB_TOKEN
           token: ${{ secrets.FDROID_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Sync Metadata
@@ -36,13 +40,19 @@ jobs:
           # Generate metadata locally in the VoxApps checkout
           ./scripts/sync_fdroid_metadata.sh
           
-          # Move it to the fdroid-repo checkout
-          cp -r metadata/* fdroid-repo/metadata/ || true
+          # Ensure target directory exists
+          mkdir -p fdroid-repo/metadata
+          
+          # Copy it to the fdroid-repo checkout
+          if [ -d "metadata" ]; then
+            cp -r metadata/* fdroid-repo/metadata/
+          fi
           
           cd fdroid-repo
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add metadata/
+          
           if git diff --staged --quiet; then
             echo "No metadata changes to commit."
           else

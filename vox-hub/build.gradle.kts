@@ -11,7 +11,7 @@ android {
         applicationId = "com.voxapps.hub"
         minSdk = 29
         targetSdk = 36
-        versionCode = 10
+        versionCode = 9
         versionName = "0.9"
     }
 
