@@ -16,8 +16,8 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    # Only run if the triggering workflow succeeded
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Only run if the triggering workflow succeeded OR if manually triggered
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: write
     steps:
@@ -31,7 +31,6 @@ jobs:
         with:
           repository: razvan-eduard/vox-fdroid-repo
           path: fdroid-repo
-          # Use a personal token if provided, fallback to GITHUB_TOKEN
           token: ${{ secrets.FDROID_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Sync Metadata
@@ -41,12 +40,15 @@ jobs:
           # Generate metadata locally in the VoxApps checkout
           ./scripts/sync_fdroid_metadata.sh
           
+          echo "Generated metadata structure:"
+          ls -R metadata/
+          
           # Ensure target directory exists
           mkdir -p fdroid-repo/metadata
           
-          # Copy it to the fdroid-repo checkout
+          # Use rsync style or simple cp with trailing dot to ensure merge
           if [ -d "metadata" ]; then
-            cp -r metadata/* fdroid-repo/metadata/
+            cp -RT metadata/ fdroid-repo/metadata/
           fi
           
           cd fdroid-repo

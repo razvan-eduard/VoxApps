@@ -3,7 +3,7 @@ set -e
 
 # Syncs GitHub release bodies (changelogs) and fastlane assets to F-Droid metadata structure.
 # Format: metadata/<applicationId>/en-US/changelogs/<versionCode>.txt
-# Assets: metadata/<applicationId>/en-US/icon.png, summary.txt, description.txt, phoneScreenshots/*.png
+# Assets: metadata/<applicationId>/en-US/icon.png, summary.txt, description.txt, images/phoneScreenshots/*.png
 
 APPS=(
     "vox-commander:com.voxapps.commander:commander"
@@ -15,6 +15,7 @@ APPS=(
 )
 
 METADATA_DIR="metadata"
+rm -rf "$METADATA_DIR"
 mkdir -p "$METADATA_DIR"
 
 # Check if gh is authenticated
@@ -30,7 +31,7 @@ for entry in "${APPS[@]}"; do
 
     echo "Processing $APP_ID..."
 
-    # Get the latest tag for this app from the local repo (fetch-depth 0 ensured tags are there)
+    # Get the latest tag for this app from the local repo
     LATEST_TAG=$(git tag -l "${TAG_PREFIX}-v*" --sort=-v:refname | head -n 1)
 
     if [ -z "$LATEST_TAG" ]; then
@@ -86,11 +87,10 @@ for entry in "${APPS[@]}"; do
         echo "  Description synced."
     fi
 
-    # Screenshots
+    # Screenshots (Standard F-Droid Fastlane structure: en-US/images/phoneScreenshots/)
     if [ -d "$FASTLANE_DIR/images/phoneScreenshots" ]; then
-        mkdir -p "$TARGET_EN_DIR/phoneScreenshots"
-        # Copy all png files from phoneScreenshots
-        cp "$FASTLANE_DIR/images/phoneScreenshots"/*.png "$TARGET_EN_DIR/phoneScreenshots/" 2>/dev/null || true
+        mkdir -p "$TARGET_EN_DIR/images/phoneScreenshots"
+        cp "$FASTLANE_DIR/images/phoneScreenshots"/*.png "$TARGET_EN_DIR/images/phoneScreenshots/" 2>/dev/null || true
         echo "  Screenshots synced."
     fi
 done
