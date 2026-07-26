@@ -91,12 +91,12 @@ for entry in "${APPS[@]}"; do
     # Note: We try both locations to be safe, but documentation often points to direct subfolder
     if [ -d "$FASTLANE_DIR/images/phoneScreenshots" ]; then
         mkdir -p "$TARGET_EN_DIR/phoneScreenshots"
-        cp "$FASTLANE_DIR/images/phoneScreenshots"/*.png "$TARGET_EN_DIR/phoneScreenshots/" 2>/dev/null || true
-        echo "  Screenshots synced to phoneScreenshots/."
-
-        # Also keep images/phoneScreenshots/ for Fastlane compatibility if needed
         mkdir -p "$TARGET_EN_DIR/images/phoneScreenshots"
-        cp "$FASTLANE_DIR/images/phoneScreenshots"/*.png "$TARGET_EN_DIR/images/phoneScreenshots/" 2>/dev/null || true
+        for ext in png jpg jpeg; do
+            cp "$FASTLANE_DIR/images/phoneScreenshots"/*.$ext "$TARGET_EN_DIR/phoneScreenshots/" 2>/dev/null || true
+            cp "$FASTLANE_DIR/images/phoneScreenshots"/*.$ext "$TARGET_EN_DIR/images/phoneScreenshots/" 2>/dev/null || true
+        done
+        echo "  Screenshots synced."
     fi
 done
 
