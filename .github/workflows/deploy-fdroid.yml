@@ -43,10 +43,13 @@ jobs:
           echo "Generated metadata structure:"
           ls -R metadata/
           
-          # Ensure target directory exists
+          # Clean destination metadata to ensure true sync (deletions propagate)
+          if [ -d "fdroid-repo/metadata" ]; then
+            rm -rf fdroid-repo/metadata/*
+          fi
           mkdir -p fdroid-repo/metadata
           
-          # Use rsync style or simple cp with trailing dot to ensure merge
+          # Copy new metadata
           if [ -d "metadata" ]; then
             cp -RT metadata/ fdroid-repo/metadata/
           fi
@@ -55,12 +58,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Use -f because metadata might be ignored in the destination repo's .gitignore
+          # Add everything, including deletions. -f is still needed for ignored paths.
+          # We add the whole metadata folder to capture new, modified and deleted files.
           git add -f metadata/
+          # To ensure deletions are captured for ignored files, we might need a more explicit add
+          git add -u metadata/ 2>/dev/null || true
           
           if git diff --staged --quiet; then
             echo "No metadata changes to commit."
           else
-            git commit -m "Update metadata from VoxApps release"
+            git commit -m "Update metadata from VoxApps release (true sync)"
             git push
           fi
