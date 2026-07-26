@@ -129,7 +129,7 @@ jobs:
             VoxCommander-${{ steps.version.outputs.tag }}.apk \
             "$RUNNER_TEMP/release.jks" \
             "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
-            vox-commander \
+            vox-apps \
             dlc-libs \
             "$MERGED_LIBS_DIR" \
             libonnxruntime.so libllm_inference_engine_jni.so libvosk.so libsherpa-onnx-jni.so
