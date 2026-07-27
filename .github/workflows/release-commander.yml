@@ -93,9 +93,11 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
 
-      - name: Build release APK (unsigned — signed after DLC stripping below)
+      - name: Build release APK and AAB (unsigned — signed after DLC stripping below)
         if: steps.check_bump.outputs.changed != 'false'
-        run: ./gradlew :vox-commander:assembleRelease --no-daemon
+        run: |
+          ./gradlew :vox-commander:assembleRelease --no-daemon
+          ./gradlew :vox-commander:bundleRelease --no-daemon
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -136,10 +138,14 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
 
-      - name: Set APK path output
+      - name: Set APK and AAB path output
         if: steps.check_bump.outputs.changed != 'false'
         id: rename
-        run: echo "apk_path=VoxCommander-${{ steps.version.outputs.tag }}.apk" >> $GITHUB_OUTPUT
+        run: |
+          echo "apk_path=VoxCommander-${{ steps.version.outputs.tag }}.apk" >> $GITHUB_OUTPUT
+          cp vox-commander/build/outputs/bundle/release/vox-commander-release.aab \
+             VoxCommander-${{ steps.version.outputs.tag }}.aab
+          echo "aab_path=VoxCommander-${{ steps.version.outputs.tag }}.aab" >> $GITHUB_OUTPUT
 
       - name: Generate CHANGELOG.md
         if: steps.check_bump.outputs.changed != 'false'
@@ -188,6 +194,7 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           files: |
             VoxCommander-*.apk
+            VoxCommander-*.aab
             CHANGELOG.md
             dlc-libs/*.so
           body_path: CHANGELOG.md
