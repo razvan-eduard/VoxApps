@@ -21,7 +21,6 @@ import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint2f
 import org.opencv.core.Point
 import org.opencv.core.Size
-import org.opencv.geometry.Geometry
 import org.opencv.imgproc.Imgproc
 import kotlin.math.hypot
 import kotlin.math.max
@@ -35,7 +34,7 @@ object QuadTextCrop {
         val rectPoints = box.points.map { Point(it.x.toDouble(), it.y.toDouble()) }
         val rectInput = MatOfPoint2f()
         rectInput.fromList(rectPoints)
-        val boundingBox = Geometry.minAreaRect(rectInput)
+        val boundingBox = Imgproc.minAreaRect(rectInput)
         rectInput.release()
 
         val boxPoints = Array(4) { Point() }
@@ -61,7 +60,7 @@ object QuadTextCrop {
                 Point(0.0, dstH.toDouble()),
             )
         )
-        val m = Geometry.getPerspectiveTransform(srcPts, dstPts)
+        val m = Imgproc.getPerspectiveTransform(srcPts, dstPts)
         srcPts.release()
         dstPts.release()
 

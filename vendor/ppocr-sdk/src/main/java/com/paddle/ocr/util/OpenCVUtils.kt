@@ -24,9 +24,7 @@ object OpenCVUtils {
     fun init(context: Context): Boolean {
         if (initialized) return true
         try {
-            // OpenCV 5.0's build produces libopencv_java5.so, not libopencv_java4.so (the .so name
-            // encodes OpenCV's major version — see scripts/build_opencv_android.sh).
-            System.loadLibrary("opencv_java5")
+            System.loadLibrary("opencv_java4")
             initialized = true
         } catch (e: UnsatisfiedLinkError) {
             Log.e("OpenCVUtils", "Failed to initialize OpenCV: ${e.message}")

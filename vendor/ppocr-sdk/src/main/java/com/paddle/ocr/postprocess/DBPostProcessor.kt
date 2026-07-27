@@ -24,7 +24,6 @@ import org.opencv.core.MatOfPoint
 import org.opencv.core.MatOfPoint2f
 import org.opencv.core.Point
 import org.opencv.core.Scalar
-import org.opencv.geometry.Geometry
 import org.opencv.imgproc.Imgproc
 
 object DBPostProcessor {
@@ -86,7 +85,7 @@ object DBPostProcessor {
                 val contour = contours[index]
                 val contour2f = MatOfPoint2f(*contour.toArray())
                 val rect = try {
-                    Geometry.minAreaRect(contour2f)
+                    Imgproc.minAreaRect(contour2f)
                 } finally {
                     contour2f.release()
                 }
@@ -107,7 +106,7 @@ object DBPostProcessor {
                 val expandedRect = MatOfPoint2f().let { expanded2f ->
                     try {
                         expanded2f.fromList(expandedPts)
-                        Geometry.minAreaRect(expanded2f)
+                        Imgproc.minAreaRect(expanded2f)
                     } finally {
                         expanded2f.release()
                     }
