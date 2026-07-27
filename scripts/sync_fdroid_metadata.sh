@@ -18,11 +18,10 @@ METADATA_DIR="metadata"
 rm -rf "$METADATA_DIR"
 mkdir -p "$METADATA_DIR"
 
-# Check if gh is authenticated
+# Check if gh is authenticated (still used for checks, though git log is primary now)
 if ! gh auth status >/dev/null 2>&1; then
     if [ -z "$GH_TOKEN" ] && [ -z "$GITHUB_TOKEN" ]; then
-        echo "Error: gh CLI is not authenticated and GITHUB_TOKEN is not set."
-        exit 1
+        echo "Warning: gh CLI is not authenticated. Some remote checks might fail."
     fi
 fi
 
@@ -31,8 +30,10 @@ for entry in "${APPS[@]}"; do
 
     echo "Processing $APP_ID..."
 
-    # Get the latest tag for this app from the local repo
-    LATEST_TAG=$(git tag -l "${TAG_PREFIX}-v*" --sort=-v:refname | head -n 1)
+    # Get the latest two tags for this app to generate a range
+    TAGS=$(git tag -l "${TAG_PREFIX}-v*" --sort=-v:refname | head -n 2)
+    LATEST_TAG=$(echo "$TAGS" | sed -n '1p')
+    PREV_TAG=$(echo "$TAGS" | sed -n '2p')
 
     if [ -z "$LATEST_TAG" ]; then
         echo "  No tags found for $TAG_PREFIX, skipping changelog."
@@ -45,12 +46,17 @@ for entry in "${APPS[@]}"; do
         if [ -z "$VERSION_CODE" ]; then
             echo "  Warning: Could not find versionCode for $DIR, skipping changelog."
         else
-            # Fetch release body from GitHub
-            echo "  Fetching release body for $LATEST_TAG..."
-            CHANGELOG=$(gh release view "$LATEST_TAG" --json body -q .body 2>/dev/null || echo "")
+            # Generate changelog using git log
+            if [ -n "$PREV_TAG" ]; then
+                echo "  Generating changelog from $PREV_TAG to $LATEST_TAG..."
+                CHANGELOG=$(git log "$PREV_TAG..$LATEST_TAG" --pretty=format:"- %s" --no-merges)
+            else
+                echo "  No previous tag found. Using last 1 commit for $LATEST_TAG..."
+                CHANGELOG=$(git log "$LATEST_TAG" -1 --pretty=format:"- %s" --no-merges)
+            fi
 
-            if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" == "null" ]; then
-                echo "  No release body found for $LATEST_TAG yet, using generic message."
+            if [ -z "$CHANGELOG" ]; then
+                echo "  Empty git log, falling back to generic message."
                 CHANGELOG="Maintenance update and performance improvements."
             fi
 
@@ -88,7 +94,6 @@ for entry in "${APPS[@]}"; do
     fi
 
     # Screenshots (Standard F-Droid structure: en-US/phoneScreenshots/)
-    # Note: We try both locations to be safe, but documentation often points to direct subfolder
     if [ -d "$FASTLANE_DIR/images/phoneScreenshots" ]; then
         mkdir -p "$TARGET_EN_DIR/phoneScreenshots"
         mkdir -p "$TARGET_EN_DIR/images/phoneScreenshots"

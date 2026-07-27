@@ -78,6 +78,34 @@ jobs:
           cp vox-vision/build/outputs/apk/release/vox-vision-release.apk \
              VoxVision-${{ steps.version.outputs.tag }}.apk
 
+      - name: Generate CHANGELOG.md
+        if: steps.check_bump.outputs.changed != 'false'
+        id: changelog
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          PREV_TAG=$(git tag -l "vision-v*" --sort=-v:refname | grep -v "$TAG" | head -n 1 || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          {
+            echo "# VoxVision ${TAG}"
+            echo ""
+            echo "## Changes"
+            echo ""
+            git log ${RANGE} --pretty=format:"- %s (%h)" --no-merges | grep -v "docs: update screenshots" | grep -v "fix: revert unnecessary versionCode" || echo "- Maintenance update"
+            echo ""
+            echo ""
+            echo "## Full Changelog"
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              echo "https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
+            else
+              echo "https://github.com/${{ github.repository }}/commits/${TAG}"
+            fi
+          } > CHANGELOG.md
+
       - name: Collect native libraries for DLC
         if: steps.check_bump.outputs.changed != 'false'
         run: |
@@ -99,8 +127,9 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           files: |
             VoxVision-*.apk
+            CHANGELOG.md
             dlc-libs/*.so
-          generate_release_notes: true
+          body_path: CHANGELOG.md
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
