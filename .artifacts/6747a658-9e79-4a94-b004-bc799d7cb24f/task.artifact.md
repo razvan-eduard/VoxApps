@@ -1,0 +1,5 @@
+- `[/]` Fix "100% on-device" claims across all documentation
+    - `[ ]` Update `README.md` to use "Local-First / Private by Design" terminology
+    - `[ ]` Update `privacy.html` in `vox-fdroid-repo` with comprehensive cloud-feature list
+    - `[ ]` Update XDA Forum BBCode posts with accurate messaging
+- `[ ]` Commit and push changes to both repositories
