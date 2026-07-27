@@ -7,7 +7,7 @@
 # VoxCommander
 
 <p align="center">
-  <strong>On-device voice assistant for Android — wake word, STT, NLU, and intent routing, all running locally.</strong>
+  <strong>On-device voice assistant for Android — local wake word, STT, and intent routing, with optional cloud AI.</strong>
 </p>
 
 <p align="center">

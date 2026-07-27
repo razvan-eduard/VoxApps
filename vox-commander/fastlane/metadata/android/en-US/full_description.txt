@@ -7,5 +7,5 @@ Key Features:
 - Intelligent Intent Routing: Automatically maps spoken commands to system controls, media playback (Spotify/YouTube), navigation (Waze/Google Maps), or companion Vox apps.
 - Satellite App Hub: Discovers and controls independent "satellite" apps like VoxNotes or VoxExpenses via a secure IPC contract.
 - External Voice Trigger: Integration with automation tools like MacroDroid or Tasker to trigger the assistant via hardware buttons or schedules.
-- 100% Private: No audio or transcription ever leaves your device. All processing is done locally, ensuring total data sovereignty.
+- Private by Design: Core processing is done locally, ensuring data sovereignty. Optional cloud features (OpenAI, Spotify) can be enabled by the user.
 - Material 3 Overlay: A sleek, floating voice UI that provides real-time transcription and status updates over any app.
