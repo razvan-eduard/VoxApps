@@ -1,25 +1,35 @@
-# Walkthrough: Corecție Arhitectură AI & Eliminare Halucinații
+# Walkthrough: Header Expandabil pentru Calendar (UX Pro)
 
-Am efectuat un audit complet al documentației și am eliminat referințele eronate la `llama.cpp`, corectând în același timp descrierea mecanismului de fallback (L3).
+Am transformat titlul calendarului (ex: "Iulie 2026") într-un buton interactiv care controlează deschiderea grilei lunare, oferind o experiență mult mai intuitivă și modernă.
 
 ## Modificări Efectuate
 
-### 1. Eliminare terminologie eronată ("llama.cpp")
-- Am eliminat orice mențiune de "llama.cpp" din `README.md`, `docs/TECHNICAL_DOCUMENTATION.md` și postările XDA.
-- Am confirmat că proiectul folosește SDK-ul oficial **MediaPipe GenAI** pentru rularea modelelor LLM locale.
+### 1. Componenta `MonthYearHeader` (Core)
+- Titlul este acum încadrat într-un container orizontal (pastilă) cu un fundal subtil.
+- Am adăugat o iconiță **Chevron** care se rotește automat la 180 de grade atunci când grila este deschisă.
+- Componenta a fost mutată din `internal` în `public` pentru a fi refolosită în toate modulele de calendar.
 
-### 2. Redefinire "Triple AI Brain"
-Am actualizat documentația tehnică pentru a reflecta logica reală din `IntentDecisionMap.kt`:
-- **L1 (FastMap)**: Rămâne stratul de regex instant.
-- **L2 (Primary AI)**: Este prima încercare folosind motorul ales de utilizator (Cloud sau Local).
-- **L3 (Offline Fallback)**: Este acum descris corect ca un **mecanism de tip retry**. Dacă L2 eșuează, sistemul încearcă automat al doilea motor configurat (de regulă unul local).
+### 2. Integrare în Vox Calendar App
+- **MonthGridView**: Folosește acum noul header pentru navigarea între luni și pentru colapsarea grilei.
+- **CalendarScreen**: Am eliminat butonul de toggle redundant din bara de sus. Acum, interacțiunea se face direct pe titlul central, sugerând clar starea de "expandat/restrâns".
 
-### 3. Corecție comentarii în cod
-- Am modificat un comentariu în [IntentDecisionMap.kt](file:///Users/swimnobody/StudioProjects/VoxApps/vox-commander/src/main/java/com/voxapps/commander/domain/intent/IntentDecisionMap.kt) care menționa eronat "Llama".
+### 3. UX Consistent
+- Atât în vizualizarea de tip Agendă (listă), cât și în cea de tip Grilă, titlul acționează ca un switch.
+- Am păstrat animațiile fluide pentru rotirea chevronului și tranziția între stări.
 
-## Rezultat
+## Rezultat Vizual (Concept)
 
-Documentația este acum sincronizată 1:1 cu implementarea tehnică, eliminând confuziile pentru utilizatori sau viitori dezvoltatori.
+```
+[       ( Iulie 2026 ⌄ )       ]  <-- Click aici pentru a deschide Grila
+--------------------------------
+[        Detailed Agenda       ]
+```
 
-> [!NOTE]
-> **Claritate tehnică**: L3 nu este o tehnologie separată (ca MediaPipe), ci o strategie de redondanță care poate folosi MediaPipe sau orice alt motor local/cloud configurat ca fallback.
+```
+[ <     ( Iulie 2026 ⌃ )     > ]  <-- Grila e deschisă. Click pentru a închide.
+--------------------------------
+[    Full 7-Column Grid        ]
+```
+
+> [!TIP]
+> Această schimbare transformă titlul dintr-un simplu text informativ într-un element central de control, reducând aglomerația din bara de instrumente (TopBar).

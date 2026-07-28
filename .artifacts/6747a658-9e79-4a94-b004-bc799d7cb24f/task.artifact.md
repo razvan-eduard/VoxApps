@@ -1,6 +1,5 @@
-- `[x]` Audit and correct AI architecture documentation
-    - `[x]` Update `README.md` to remove "llama.cpp" and clarify L1-L2-L3
-    - `[x]` Update `docs/TECHNICAL_DOCUMENTATION.md` to remove "llama.cpp" and fix L3 description
-    - `[x]` Update `XDA_POSTS_ACCURATE.artifact.md` to match the real architecture
-- `[x]` Final verification (Grep for "llama")
-- `[x]` Walkthrough of the corrections
+- `[ ]` Update `LICENSE` file with GNU GPLv3 text
+- `[ ]` Update `README.md` License section
+- `[ ]` Update XDA forum posts artifacts
+- `[ ]` Update F-Droid metadata in `vox-fdroid-repo`
+- `[ ]` Final verification of license mentions

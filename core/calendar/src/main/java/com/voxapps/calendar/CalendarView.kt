@@ -46,6 +46,8 @@ fun <T : CalendarItem> CalendarView(
     peekCount: Int = 3,
     locale: Locale = Locale.getDefault(),
     todayContentDescription: String = "Today",
+    isHeaderExpanded: Boolean = false,
+    onHeaderClick: (() -> Unit)? = null,
     itemContent: @Composable (T) -> Unit,
     emptyDayContent: (@Composable (LocalDate) -> Unit)? = null
 ) {
@@ -82,8 +84,10 @@ fun <T : CalendarItem> CalendarView(
         Box(modifier = Modifier.fillMaxWidth()) {
             MonthYearHeader(
                 month = pagerState.monthForPage(pagerState.pagerState.currentPage),
-                modifier = Modifier.fillMaxWidth().align(Alignment.Center),
-                locale = locale
+                modifier = Modifier.align(Alignment.Center),
+                locale = locale,
+                isExpanded = isHeaderExpanded,
+                onClick = onHeaderClick
             )
             IconButton(
                 onClick = ::navigateToToday,

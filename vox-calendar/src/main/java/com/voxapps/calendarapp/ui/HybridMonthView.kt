@@ -85,7 +85,7 @@ fun HybridMonthView(
             locale = locale,
             onDateSelected = onDateSelected,
             onHeaderClick = onToggleGridView,
-            modifier = Modifier.fillMaxWidth().weight(0.45f)
+            modifier = Modifier.fillMaxWidth() // Removed weight to allow dynamic height
         )
         
         HorizontalDivider(thickness = 1.dp)
@@ -98,7 +98,7 @@ fun HybridMonthView(
             locale = locale,
             onPeekItemClick = { /* already in current month */ },
             itemContent = itemContent,
-            modifier = Modifier.fillMaxWidth().weight(0.55f)
+            modifier = Modifier.fillMaxWidth().weight(1f) // Takes remaining space
         )
     }
 }

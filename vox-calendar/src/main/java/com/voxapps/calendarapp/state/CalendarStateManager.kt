@@ -79,6 +79,7 @@ class CalendarStateManager internal constructor(
                     availableTags = tags,
                     selectedTags = rt.selectedTags,
                     viewMode = rt.viewMode,
+                    isGridView = settings.isGridView,
                     selectedDateMillis = rt.selectedDateMillis
                 )
             }
@@ -129,6 +130,7 @@ class CalendarStateManager internal constructor(
     fun setWidgetBorderThicknessDp(thicknessDp: Int) { scope.launch { settingsRepo.setWidgetBorderThicknessDp(thicknessDp) } }
 
     fun setWidgetBorderColorArgb(colorArgb: Long) { scope.launch { settingsRepo.setWidgetBorderColorArgb(colorArgb) } }
+    fun setIsGridView(enabled: Boolean) { scope.launch { settingsRepo.setIsGridView(enabled) } }
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }
 
     // --- SESSION LOCK ---

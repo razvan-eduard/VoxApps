@@ -171,19 +171,43 @@ fun CalendarScreen(
                             stateManager.setViewMode(CalendarViewMode.DAY)
                         }
                     )
-                    CalendarViewMode.MONTH -> CalendarView(
-                        items = items,
-                        modifier = Modifier.fillMaxSize(),
-                        locale = locale,
-                        todayContentDescription = languageManager.getString("today"),
-                        itemContent = { item ->
-                            EntryRow(
-                                item = item,
-                                layer = layerById[item.entryWithTags.entry.layerId],
-                                onClick = { onEditEntry(item) }
+                    CalendarViewMode.MONTH -> {
+                        val toggleGridView = { stateManager.setIsGridView(!state.isGridView) }
+                        if (state.isGridView) {
+                            HybridMonthView(
+                                items = items,
+                                layers = state.layers,
+                                selectedDateMillis = state.selectedDateMillis,
+                                locale = locale,
+                                onDateSelected = { stateManager.setSelectedDate(it) },
+                                onToggleGridView = toggleGridView,
+                                itemContent = { item ->
+                                    EntryRow(
+                                        item = item,
+                                        layer = layerById[item.entryWithTags.entry.layerId],
+                                        onClick = { onEditEntry(item) }
+                                    )
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            CalendarView(
+                                items = items,
+                                modifier = Modifier.fillMaxSize(),
+                                locale = locale,
+                                todayContentDescription = languageManager.getString("today"),
+                                isHeaderExpanded = false,
+                                onHeaderClick = toggleGridView,
+                                itemContent = { item ->
+                                    EntryRow(
+                                        item = item,
+                                        layer = layerById[item.entryWithTags.entry.layerId],
+                                        onClick = { onEditEntry(item) }
+                                    )
+                                }
                             )
                         }
-                    )
+                    }
                     CalendarViewMode.WEEK -> WeekView(
                         items = items,
                         layers = state.layers,

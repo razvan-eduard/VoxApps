@@ -1,36 +1,34 @@
-# Plan de Implementare: Audit Complet și Corectare Documentație
+# Plan de Implementare: Tranziție Licență de la MIT la GPLv3
 
-Acest plan vizează eliminarea tuturor erorilor de terminologie ("llama.cpp") și clarificarea arhitecturii "Triple AI Brain" în `README.md` și `docs/TECHNICAL_DOCUMENTATION.md`, conform implementării reale din cod.
+Acest plan detaliază pașii necesari pentru a schimba licența întregului proiect VoxApps din MIT în GNU General Public License v3.0 (GPLv3).
 
-## Rezumat Audit (Cod vs. Doc)
+## Analiză de Compatibilitate
 
-| Componentă | Stare în Cod | Eroare în Doc (Găsită) | Corecție |
-|---|---|---|---|
-| **NLU L1** | Regex (FastMap) | OK | Rămâne neschimbat. |
-| **NLU L2** | Engine-ul primar ales de user (Cloud sau Local). | Menționa `llama.cpp` | Se va numi **"MediaPipe GenAI"** (pentru modele locale) sau **"Gemini/OpenAI"** (cloud). |
-| **NLU L3** | Mecanism de tip "Retry" cu un alt engine pre-configurat. | Menționa MediaPipe ca strat separat | Clarificare: L3 este un **mecanism de fallback**, nu o tehnologie separată. |
-| **Local LLM** | `com.google.mediapipe.tasks.genai` | `llama.cpp` | Eliminare orice referință la llama. |
+După scanarea dependențelor, am concluzionat că trecerea la GPLv3 este nu doar posibilă, ci și **recomandată pentru coerență legală**:
+
+1.  **NewPipeExtractor**: Această bibliotecă (folosită pentru YouTube) este deja sub licență **GPLv3**. Folosirea unei biblioteci GPLv3 într-un proiect MIT poate crea zone gri legale; trecerea întregului proiect la GPLv3 elimină orice ambiguitate.
+2.  **Dependențe MIT/Apache 2.0 (Whisper, OpenCV, Vosk)**: Aceste licențe sunt "permisive" și sunt 100% compatibile cu GPLv3. Poți include cod MIT/Apache într-un proiect GPLv3 fără probleme.
+3.  **Codul tău (VoxApps)**: Ca proprietar al drepturilor de autor, ai libertatea deplină de a schimba licența codului tău de la MIT la GPLv3.
 
 ## Schimbări Propuse
 
-### 1. [MODIFY] [TECHNICAL_DOCUMENTATION.md](file:///Users/swimnobody/StudioProjects/VoxApps/docs/TECHNICAL_DOCUMENTATION.md)
-- **Secțiunea 4 (NLU)**: Redefinirea L2 și L3. L2 este "Primary Attempt", L3 este "Fallback Attempt".
-- **Tabelul de Engine-uri**: Înlocuirea "Local LLM (llama.cpp)" cu **"On-device LLM (MediaPipe GenAI)"**.
-- **Secțiunea 18 (Dependencies)**: Eliminarea label-ului "(llama.cpp)".
+### 1. [MODIFY] `LICENSE` (Root)
+Înlocuirea textului actual MIT cu textul complet al licenței **GNU GPL v3.0**.
 
-### 2. [MODIFY] [README.md](file:///Users/swimnobody/StudioProjects/VoxApps/README.md)
-- **Features**: Clarificarea NLU: "Redundant pipeline (L1-L2-L3) with instant regex and hybrid local/cloud LLMs."
-- **Key Technologies**: Înlocuirea `llama.cpp` cu **MediaPipe GenAI**.
+### 2. [MODIFY] `README.md`
+Actualizarea secțiunii "License" pentru a reflecta noua licență și a explica faptul că aceasta oferă o protecție mai puternică împotriva închiderii codului în produse proprietare.
 
-### 3. [MODIFY] [XDA_POSTS_ACCURATE.artifact.md](file:///Users/swimnobody/StudioProjects/VoxApps/.artifacts/6747a658-9e79-4a94-b004-bc799d7cb24f/XDA_POSTS_ACCURATE.artifact.md)
-- Eliminarea referințelor la `llama.cpp` din descrierea "Triple AI Brain".
+### 3. [MODIFY] Metadate F-Droid & XDA
+Actualizarea fișierelor de metadate și a postărilor de pe forum pentru a schimba eticheta din "MIT" în "GPL-3.0-only".
 
 ## User Review Required
 
-> [!NOTE]
-> Am confirmat în `LocalLlmInterpreter.kt` că folosim exclusiv SDK-ul oficial **MediaPipe GenAI** de la Google pentru rularea modelelor locale `.bin`. Nu există nicio urmă de `llama.cpp` în codul tău.
+> [!WARNING]
+> **Efectul GPLv3**: Aceasta este o licență "Strong Copyleft". Înseamnă că oricine folosește codul tău într-o aplicație distribuită este **obligat** să facă la rândul său codul sursă public sub aceeași licență. Este o schimbare majoră de filosofie față de MIT.
 
-## Plan de Verificare
+## Plan de Execuție
 
-1. **Grep global**: `grep -r "llama" .` (trebuie să returneze 0 rezultate în afara folderului `.git`).
-2. **Review logică L3**: Recitirea descrierii L3 pentru a ne asigura că e prezentat ca un mecanism de siguranță, nu ca un engine fix.
+- [ ] Descărcarea și scrierea textului oficial GPLv3 în fișierul `LICENSE`.
+- [ ] Actualizarea header-ului din `README.md`.
+- [ ] Actualizarea `privacy.html` și a postărilor XDA (dacă menționează licența).
+- [ ] Verificare finală: Scanarea tuturor fișierelor pentru a nu lăsa referințe la "MIT" vechi.

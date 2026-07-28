@@ -34,6 +34,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        val IS_GRID_VIEW = booleanPreferencesKey("is_grid_view")
         val SHOW_EVENT_DETAILS_IN_WIDGET = booleanPreferencesKey("show_event_details_in_widget")
         val WIDGET_BORDER_ENABLED = booleanPreferencesKey("widget_border_enabled")
         val WIDGET_BORDER_THICKNESS_DP = intPreferencesKey("widget_border_thickness_dp")
@@ -53,6 +54,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: CalendarSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+            isGridView = prefs[Keys.IS_GRID_VIEW] ?: false,
             showEventDetailsInWidget = prefs[Keys.SHOW_EVENT_DETAILS_IN_WIDGET] ?: true,
             widgetBorderEnabled = prefs[Keys.WIDGET_BORDER_ENABLED] ?: true,
             widgetBorderThicknessDp = prefs[Keys.WIDGET_BORDER_THICKNESS_DP] ?: CalendarSettings.THICKNESS_MEDIUM,
@@ -117,6 +119,10 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
+    override suspend fun setIsGridView(enabled: Boolean) {
+        dataStore.edit { it[Keys.IS_GRID_VIEW] = enabled }
+    }
+
     override suspend fun setShowEventDetailsInWidget(enabled: Boolean) {
         dataStore.edit { it[Keys.SHOW_EVENT_DETAILS_IN_WIDGET] = enabled }
     }
@@ -149,6 +155,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
+            prefs[Keys.IS_GRID_VIEW] = settings.isGridView
             prefs[Keys.SHOW_EVENT_DETAILS_IN_WIDGET] = settings.showEventDetailsInWidget
             prefs[Keys.WIDGET_BORDER_ENABLED] = settings.widgetBorderEnabled
             prefs[Keys.WIDGET_BORDER_THICKNESS_DP] = settings.widgetBorderThicknessDp

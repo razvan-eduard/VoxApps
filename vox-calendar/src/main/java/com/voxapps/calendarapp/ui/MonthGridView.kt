@@ -11,29 +11,38 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kizitonwose.calendar.compose.HorizontalCalendar
 import com.kizitonwose.calendar.compose.rememberCalendarState
 import com.kizitonwose.calendar.core.CalendarDay
 import com.kizitonwose.calendar.core.DayPosition
+import com.kizitonwose.calendar.core.OutDateStyle
 import com.kizitonwose.calendar.core.firstDayOfWeekFromLocale
 import com.voxapps.calendar.CalendarDateUtils
+import com.voxapps.calendar.MonthYearHeader
 import com.voxapps.calendarapp.data.CalendarLayer
-import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 fun MonthGridView(
@@ -42,8 +51,10 @@ fun MonthGridView(
     selectedDateMillis: Long,
     locale: Locale,
     onDateSelected: (Long) -> Unit,
+    onHeaderClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val scope = rememberCoroutineScope()
     val selectedDate = remember(selectedDateMillis) { CalendarDateUtils.millisToLocalDate(selectedDateMillis) }
     val currentMonth = remember(selectedDate) { YearMonth.from(selectedDate) }
     val startMonth = remember { currentMonth.minusMonths(120) }
@@ -54,7 +65,8 @@ fun MonthGridView(
         startMonth = startMonth,
         endMonth = endMonth,
         firstVisibleMonth = currentMonth,
-        firstDayOfWeek = firstDayOfWeek
+        firstDayOfWeek = firstDayOfWeek,
+        outDateStyle = OutDateStyle.EndOfRow
     )
 
     // Sync state when selectedDate changes externally
@@ -68,6 +80,21 @@ fun MonthGridView(
     }
 
     Column(modifier = modifier) {
+        MonthHeaderWrapper(
+            calendarMonth = state.firstVisibleMonth.yearMonth,
+            locale = locale,
+            onPrevMonth = {
+                scope.launch {
+                    state.animateScrollToMonth(state.firstVisibleMonth.yearMonth.minusMonths(1))
+                }
+            },
+            onNextMonth = {
+                scope.launch {
+                    state.animateScrollToMonth(state.firstVisibleMonth.yearMonth.plusMonths(1))
+                }
+            },
+            onHeaderClick = onHeaderClick
+        )
         DaysOfWeekTitle(firstDayOfWeek = firstDayOfWeek, locale = locale)
         HorizontalCalendar(
             state = state,
@@ -86,6 +113,38 @@ fun MonthGridView(
 }
 
 @Composable
+private fun MonthHeaderWrapper(
+    calendarMonth: YearMonth,
+    locale: Locale,
+    onPrevMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+    onHeaderClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        IconButton(onClick = onPrevMonth) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null)
+        }
+        
+        MonthYearHeader(
+            month = calendarMonth,
+            locale = locale,
+            isExpanded = true,
+            onClick = onHeaderClick
+        )
+
+        IconButton(onClick = onNextMonth) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+        }
+    }
+}
+
+@Composable
 private fun DaysOfWeekTitle(firstDayOfWeek: java.time.DayOfWeek, locale: Locale) {
     val daysOfWeek = remember(firstDayOfWeek) {
         val days = java.time.DayOfWeek.entries.toMutableList()
@@ -96,7 +155,7 @@ private fun DaysOfWeekTitle(firstDayOfWeek: java.time.DayOfWeek, locale: Locale)
         for (dayOfWeek in daysOfWeek) {
             Text(
                 modifier = Modifier.weight(1f),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                textAlign = TextAlign.Center,
                 text = dayOfWeek.getDisplayName(TextStyle.SHORT, locale),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

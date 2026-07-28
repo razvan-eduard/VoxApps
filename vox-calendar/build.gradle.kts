@@ -77,6 +77,7 @@ dependencies {
     implementation(project(":core:schema-annotations"))
     ksp(project(":core:schema-processor"))
     implementation(project(":core:onboarding"))
+    implementation(libs.kizitonwose.calendar)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

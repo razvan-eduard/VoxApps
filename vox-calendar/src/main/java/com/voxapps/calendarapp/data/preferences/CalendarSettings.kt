@@ -41,6 +41,7 @@ data class CalendarSettings(
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,
     val onboardingCompleted: Boolean = false,
+    val isGridView: Boolean = false,
     val showEventDetailsInWidget: Boolean = true,
     val widgetBorderEnabled: Boolean = true,
     val widgetBorderThicknessDp: Int = THICKNESS_MEDIUM,

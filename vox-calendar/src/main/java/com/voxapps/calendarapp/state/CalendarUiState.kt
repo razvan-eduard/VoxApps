@@ -25,6 +25,7 @@ sealed interface CalendarUiState {
         val availableTags: List<String>,
         val selectedTags: Set<String>,
         val viewMode: CalendarViewMode,
+        val isGridView: Boolean,
         val selectedDateMillis: Long
     ) : CalendarUiState
 }
