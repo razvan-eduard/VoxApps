@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" />
+    <img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License: GPLv3" />
   </a>
 </p>
 
@@ -268,12 +268,12 @@ involved.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE). This covers the code in this repository; third-party dependencies keep
-their own licenses (see [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md) for the
-vendored/patched ones). `vox-commander` additionally bundles two proprietary components not covered by
-the MIT license above: the Spotify App Remote SDK (`vox-commander/libs/spotify-app-remote.aar`) and
-Picovoice Porcupine (`ai.picovoice:porcupine-android`) — both closed-source, each under its own vendor
-license.
+GNU GPLv3 — see [`LICENSE`](LICENSE). This covers the code in this repository; third-party
+dependencies keep their own licenses (see [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md)
+for the vendored/patched ones). `vox-commander` additionally bundles two proprietary components not
+covered by the GPLv3 license above: the Spotify App Remote SDK
+(`vox-commander/libs/spotify-app-remote.aar`) and Picovoice Porcupine
+(`ai.picovoice:porcupine-android`) — both closed-source, each under its own vendor license.
 
 [↖ Back to top](#readme-top)
 
