@@ -1,30 +1,36 @@
-# Plan de Implementare: Corectare Mesaj "100% On-Device" & Transparență
+# Plan de Implementare: Audit Complet și Corectare Documentație
 
-Acest plan vizează alinierea tuturor materialelor publice și a documentației cu realitatea tehnică a proiectului: VoxApps este **Local-First**, nu 100% Offline, deoarece oferă integrări opționale cu servicii cloud (OpenAI, Spotify, Rate de schimb, Căutare Web).
+Acest plan vizează eliminarea tuturor erorilor de terminologie ("llama.cpp") și clarificarea arhitecturii "Triple AI Brain" în `README.md` și `docs/TECHNICAL_DOCUMENTATION.md`, conform implementării reale din cod.
+
+## Rezumat Audit (Cod vs. Doc)
+
+| Componentă | Stare în Cod | Eroare în Doc (Găsită) | Corecție |
+|---|---|---|---|
+| **NLU L1** | Regex (FastMap) | OK | Rămâne neschimbat. |
+| **NLU L2** | Engine-ul primar ales de user (Cloud sau Local). | Menționa `llama.cpp` | Se va numi **"MediaPipe GenAI"** (pentru modele locale) sau **"Gemini/OpenAI"** (cloud). |
+| **NLU L3** | Mecanism de tip "Retry" cu un alt engine pre-configurat. | Menționa MediaPipe ca strat separat | Clarificare: L3 este un **mecanism de fallback**, nu o tehnologie separată. |
+| **Local LLM** | `com.google.mediapipe.tasks.genai` | `llama.cpp` | Eliminare orice referință la llama. |
 
 ## Schimbări Propuse
 
-### 1. Actualizare README.md (VoxApps)
-Voi nuanța afirmațiile care pot fi considerate înșelătoare:
-- Schimbare din "100% Private" în **"Private by Design / Local-First"**.
-- Clarificare în introducere: "Core processing is local, with optional opt-in cloud enhancements (OpenAI, Spotify, etc.)".
+### 1. [MODIFY] [TECHNICAL_DOCUMENTATION.md](file:///Users/swimnobody/StudioProjects/VoxApps/docs/TECHNICAL_DOCUMENTATION.md)
+- **Secțiunea 4 (NLU)**: Redefinirea L2 și L3. L2 este "Primary Attempt", L3 este "Fallback Attempt".
+- **Tabelul de Engine-uri**: Înlocuirea "Local LLM (llama.cpp)" cu **"On-device LLM (MediaPipe GenAI)"**.
+- **Secțiunea 18 (Dependencies)**: Eliminarea label-ului "(llama.cpp)".
 
-### 2. Actualizare privacy.html (vox-fdroid-repo)
-Voi corecta "Core Privacy Principle" pentru a fi 100% transparent:
-- Menționarea explicită a **ratelor de schimb valutar** (Currency Exchange Rates) ca fiind descărcate din cloud.
-- Menționarea explicită a **Search Providers** (Weather, News) ca fiind apeluri cloud.
-- Reformularea secțiunii "Core Principle" din "100% On-Device" în **"Privacy-First & Local-Processing Architecture"**.
+### 2. [MODIFY] [README.md](file:///Users/swimnobody/StudioProjects/VoxApps/README.md)
+- **Features**: Clarificarea NLU: "Redundant pipeline (L1-L2-L3) with instant regex and hybrid local/cloud LLMs."
+- **Key Technologies**: Înlocuirea `llama.cpp` cu **MediaPipe GenAI**.
 
-### 3. Actualizare Postări XDA (BBCode)
-Voi trece prin toate postările generate anterior și voi înlocui orice mențiune de "100% Private" sau "100% On-Device" cu termeni care reflectă natura hibridă, subliniind că datele sunt stocate local, dar anumite inteligențe pot fi cloud-based.
+### 3. [MODIFY] [XDA_POSTS_ACCURATE.artifact.md](file:///Users/swimnobody/StudioProjects/VoxApps/.artifacts/6747a658-9e79-4a94-b004-bc799d7cb24f/XDA_POSTS_ACCURATE.artifact.md)
+- Eliminarea referințelor la `llama.cpp` din descrierea "Triple AI Brain".
 
 ## User Review Required
 
-> [!WARNING]
-> **Riscuri Google Play**: Dacă spunem în descriere "100% Offline" și Google vede în cod apeluri către `api.openai.com` sau `api.spotify.com`, aplicația va fi suspendată pentru "Deceptive Behavior". Este vital să folosim limbajul corect: **"Local-first architecture with optional cloud features"**.
+> [!NOTE]
+> Am confirmat în `LocalLlmInterpreter.kt` că folosim exclusiv SDK-ul oficial **MediaPipe GenAI** de la Google pentru rularea modelelor locale `.bin`. Nu există nicio urmă de `llama.cpp` în codul tău.
 
 ## Plan de Verificare
 
-1. **Inspecție vizuală README**: Verificarea noilor paragrafe de avertizare.
-2. **Inspecție Privacy Policy**: Asigurarea că exchange rates și search sunt listate.
-3. **Audit XDA**: Verificarea tuturor celor 6 postări.
+1. **Grep global**: `grep -r "llama" .` (trebuie să returneze 0 rezultate în afara folderului `.git`).
+2. **Review logică L3**: Recitirea descrierii L3 pentru a ne asigura că e prezentat ca un mecanism de siguranță, nu ca un engine fix.

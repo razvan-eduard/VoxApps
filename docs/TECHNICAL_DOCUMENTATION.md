@@ -251,34 +251,31 @@ Whisper models are multilingual. `voiceLanguage` and `voiceLanguageAutoDetect` s
 
 ### Triple AI Brain (`IntentDecisionMap`)
 
-The NLU pipeline has three levels with fallback:
+The NLU pipeline uses a three-level redundant attempt mechanism:
 
 ```
-L1: FastMap (regex rules) — instant, no ML
+L1: FastMap (Regex rules) — Instant, non-ML matching
   ↓ miss
-L2: Primary selected engine — user's chosen AI
-  ↓ miss/failure
-L3: Offline fallback — user's configured fallback model
+L2: Primary AI Attempt — User's chosen primary engine (Cloud or Local)
+  ↓ failure (timeout, network error, or model crash)
+L3: Offline Fallback Attempt — User's configured secondary engine (usually Local)
 ```
 
 #### L1: FastMap (`FastMapEngine.kt`)
-
-- Regex-based pattern matching against user-defined rules
-- Rules stored in Room database (`FastIntentEntity`)
-- Each rule maps a regex pattern to a `NluIntent` directly
-- Confidence: always 1.0 (exact match)
-- Editable via UI (Settings → Rules)
+- Regex-based pattern matching against user-defined rules.
+- Confidence: always 1.0 (exact match).
+- Stored in Room (`FastIntentEntity`).
+- Editable via UI (Settings → Rules).
 
 #### L2: Primary Engine
-
-User selects via `aiProcessor` setting:
+The first AI attempt. User selects via `aiProcessor` setting:
 
 | Processor | Engine | Description |
 |-----------|--------|-------------|
-| `openai` | `OpenAiInterpreter` | OpenAI Chat Completions API (cloud) |
+| `openai` | `OpenAiInterpreter` | OpenAI Chat Completions API (Cloud) |
 | `gemini_native` | `GeminiNanoInterpreter` | Gemini Nano on-device (AICore) |
-| `gemini_cloud` | `GeminiCloudInterpreter` | Gemini Pro API (cloud) |
-| Custom LLM | `LocalLlmInterpreter` | llama.cpp via MediaPipe GenAI |
+| `gemini_cloud` | `GeminiCloudInterpreter` | Gemini Pro API (Cloud) |
+| Custom LLM | `LocalLlmInterpreter` | On-device LLM (MediaPipe GenAI) |
 
 All interpreters implement `AssistantEngine`:
 
@@ -288,9 +285,8 @@ interface AssistantEngine {
 }
 ```
 
-#### L3: Offline Fallback
-
-If L2 fails (no internet, model not loaded, API error), L3 tries the user's configured fallback model (`defaultIntentFallbackProcessor` + `defaultIntentFallbackModel`). Skips if same as L2.
+#### L3: Offline Fallback Mechanism
+If L2 fails (e.g., no internet for Cloud engines, or a Local engine crash), the system automatically retries using the engine configured in `defaultIntentFallbackProcessor`. This ensures the assistant remains functional in challenging environments. It skips the retry if the fallback engine is the same as the primary one.
 
 ### NluIntent Data Model
 
@@ -1165,7 +1161,7 @@ tasks.named("preBuild") {
 | Vosk Android | (via libs.versions) | Wake word + STT |
 | Whisper.cpp | (submodule, CMake) | On-device STT |
 | sherpa-onnx | v1.13.4 (JitPack) | Piper TTS |
-| MediaPipe GenAI | (via libs.versions) | Local LLM (llama.cpp) |
+| MediaPipe GenAI | (via libs.versions) | On-device LLM inference |
 | Google Generative AI | 0.9.0 | Gemini Nano |
 | Picovoice Porcupine | 4.0.2 | Wake word engine |
 | OpenWakeWord | v0.1.5 (rementia, vendored fork — `:core:wakeword`) | Wake word engine, RMS silence-gate patched |

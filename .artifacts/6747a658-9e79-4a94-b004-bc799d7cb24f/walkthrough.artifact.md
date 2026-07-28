@@ -1,29 +1,25 @@
-# Walkthrough: Generare Automată Android App Bundle (AAB)
+# Walkthrough: Corecție Arhitectură AI & Eliminare Halucinații
 
-Am actualizat infrastructura de CI/CD pentru a genera automat fișierele `.aab` semnate, necesare pentru publicarea în Google Play Store.
+Am efectuat un audit complet al documentației și am eliminat referințele eronate la `llama.cpp`, corectând în același timp descrierea mecanismului de fallback (L3).
 
 ## Modificări Efectuate
 
-### 1. Actualizare Workflow-uri GitHub Actions
-Am modificat toate cele 6 fișiere de release (`release-commander.yml`, `release-notes.yml`, etc.) pentru a include:
-- **`./gradlew bundleRelease`**: O comandă nouă care construiește App Bundle-ul.
-- **Semnare Automată**: Fișierele sunt semnate folosind cheia ta existentă `vox-apps` (via secretele GitHub deja configurate).
-- **Publicare pe GitHub**: Acum, fiecare release de pe GitHub va conține atât fișierul `.apk` clasic, cât și noul `.aab`.
+### 1. Eliminare terminologie eronată ("llama.cpp")
+- Am eliminat orice mențiune de "llama.cpp" din `README.md`, `docs/TECHNICAL_DOCUMENTATION.md` și postările XDA.
+- Am confirmat că proiectul folosește SDK-ul oficial **MediaPipe GenAI** pentru rularea modelelor LLM locale.
 
-### 2. Tratarea Cazurilor Speciale
-- **Vox Commander**: AAB-ul este generat complet (neshredded) pentru a asigura compatibilitatea maximă cu Play Store, în timp ce APK-ul rămâne optimizat (fără librării DLC).
+### 2. Redefinire "Triple AI Brain"
+Am actualizat documentația tehnică pentru a reflecta logica reală din `IntentDecisionMap.kt`:
+- **L1 (FastMap)**: Rămâne stratul de regex instant.
+- **L2 (Primary AI)**: Este prima încercare folosind motorul ales de utilizator (Cloud sau Local).
+- **L3 (Offline Fallback)**: Este acum descris corect ca un **mecanism de tip retry**. Dacă L2 eșuează, sistemul încearcă automat al doilea motor configurat (de regulă unul local).
+
+### 3. Corecție comentarii în cod
+- Am modificat un comentariu în [IntentDecisionMap.kt](file:///Users/swimnobody/StudioProjects/VoxApps/vox-commander/src/main/java/com/voxapps/commander/domain/intent/IntentDecisionMap.kt) care menționa eronat "Llama".
 
 ## Rezultat
 
-Acum ai fișierele pregătite pentru Google Play fără niciun efort manual suplimentar. La fiecare push care modifică versiunea sau la fiecare trigger manual, vei primi:
-- `VoxCommander-vX.X.aab`
-- `VoxNotes-vX.X.aab`
-- ... (și restul suitei)
+Documentația este acum sincronizată 1:1 cu implementarea tehnică, eliminând confuziile pentru utilizatori sau viitori dezvoltatori.
 
-## Verificare Execuție
-
-Am lansat un build de test pentru Commander:
-👉 [Build Commander Release APK #...](https://github.com/razvan-eduard/VoxApps/actions/runs/30278773984)
-
-> [!IMPORTANT]
-> Când urci acest prim `.aab` în Google Play Console, nu uita să alegi **"Use existing key"** pentru a păstra semnătura `vox-apps` și a menține compatibilitatea între aplicații.
+> [!NOTE]
+> **Claritate tehnică**: L3 nu este o tehnologie separată (ca MediaPipe), ci o strategie de redondanță care poate folosi MediaPipe sau orice alt motor local/cloud configurat ca fallback.

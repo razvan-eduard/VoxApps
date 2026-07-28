@@ -72,7 +72,7 @@ class IntentDecisionMap(
         }
 
         // --- LEVEL 3: Default Offline Fallback ---
-        // Triggered if L2 fails (e.g., no internet for Cloud, or Llama failed/not present)
+        // Triggered if L2 fails (e.g., no internet for Cloud, or Local engine failed/not present)
         val fallbackModel = snapshot.defaultIntentFallbackModel
         val fallbackProcessor = snapshot.defaultIntentFallbackProcessor
 

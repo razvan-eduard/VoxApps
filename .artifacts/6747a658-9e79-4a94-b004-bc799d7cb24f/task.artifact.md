@@ -1,5 +1,6 @@
-- `[/]` Fix "100% on-device" claims across all documentation
-    - `[ ]` Update `README.md` to use "Local-First / Private by Design" terminology
-    - `[ ]` Update `privacy.html` in `vox-fdroid-repo` with comprehensive cloud-feature list
-    - `[ ]` Update XDA Forum BBCode posts with accurate messaging
-- `[ ]` Commit and push changes to both repositories
+- `[x]` Audit and correct AI architecture documentation
+    - `[x]` Update `README.md` to remove "llama.cpp" and clarify L1-L2-L3
+    - `[x]` Update `docs/TECHNICAL_DOCUMENTATION.md` to remove "llama.cpp" and fix L3 description
+    - `[x]` Update `XDA_POSTS_ACCURATE.artifact.md` to match the real architecture
+- `[x]` Final verification (Grep for "llama")
+- `[x]` Walkthrough of the corrections

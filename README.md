@@ -80,7 +80,7 @@ needing a version bump — see
 - **Wake Word Detection** — Always-on listening via Vosk, Picovoice Porcupine, or OpenWakeWord
 - **External Trigger** — Automation apps (MacroDroid, Tasker) can trigger the voice assistant without saying the wake word
 - **Speech-to-Text** — Whisper, running entirely on-device, with multilingual support
-- **Natural Language Understanding** — Fast built-in matching for common commands, backed by an AI model for everything else, with an offline fallback if there's no network
+- **Natural Language Understanding** — Redundant pipeline (L1-L2-L3) with instant regex matching for common commands, backed by a user-selected Primary AI and an automated Offline Fallback mechanism.
 - **App Management** — Default apps per category, app aliases, custom categories, return-to-previous-app
 - **Vox Apps ecosystem** — Companion apps (e.g. Vox Notes) plug in automatically once installed, so you can control them by voice too
 - **Media Control** — Search/play/pause/next/prev for Spotify, YouTube, and any app selected as your audio default
@@ -224,7 +224,7 @@ involved.
 | UI | Jetpack Compose, Material 3 |
 | STT | Whisper.cpp (GGML, on-device) |
 | Wake Word | Vosk, Picovoice Porcupine, OpenWakeWord |
-| NLU | OpenAI API, Gemini Nano (on-device), Local LLM (MediaPipe GenAI) |
+| NLU | OpenAI API, Gemini Nano (on-device), On-device LLM (MediaPipe GenAI) |
 | TTS | Android TextToSpeech, Piper TTS |
 | Storage | DataStore, EncryptedSharedPreferences, Room (+ SQLCipher on the satellite apps) |
 | Media | Spotify, YouTube (NewPipe Extractor / Piped), MediaSession API |
