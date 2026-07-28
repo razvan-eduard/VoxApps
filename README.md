@@ -167,6 +167,12 @@ others by voice once they're installed (e.g. "add a note", "add an expense"). Ev
 short summary; see [`docs/APPS_OVERVIEW.md`](docs/APPS_OVERVIEW.md) for the full feature list of each
 app, with implementation-level detail.
 
+
+https://github.com/user-attachments/assets/ff61a5de-d59c-4bdf-aacc-55bb1034cc07
+
+
+
+
 ### 📝 Vox Notes
 
 Encrypted on-device notes app. Create notes by voice through Commander or by hand; AI-assisted category
@@ -174,6 +180,9 @@ cleanup and duplicate-note review (nothing auto-deleted without confirmation); a
 picker (scrollable presets + a full custom-color screen) with inline "+ New category…" creation right
 from the note editor; an optional calendar view instead of the plain list; a home-screen widget; syncs
 with another phone via Vox Hub.
+
+<img width="388" height="850" alt="voice-to-note" src="https://github.com/user-attachments/assets/9435dfd2-a394-41ea-9539-acc83353a47d" />
+
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-notes)
 
@@ -195,6 +204,10 @@ category memory (auto-applies a category after you correct the same vendor a few
 spending limits with alerts, multi-currency reports, an optional calendar view, a home-screen widget,
 and sync with another phone via Vox Hub.
 
+<img width="388" height="850" alt="invoice-to-expense" src="https://github.com/user-attachments/assets/244ed0fd-f71c-48cf-8f03-82d3726bf4df" />
+<img width="388" height="850" alt="voice-lidl-to-expense" src="https://github.com/user-attachments/assets/752bd7c7-79e3-4390-b1ef-d5c25daa2ca4" />
+
+
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-expenses)
 
 ### 📅 Vox Calendar
@@ -203,6 +216,9 @@ Encrypted on-device calendar. Colored, named layers instead of a rigid category 
 event/task creation through Commander ("dentist in a week"); ICS import/export for interop with Google
 Calendar/Thunderbird/Apple Calendar; a day view that also shows that day's Notes and Expenses; syncs
 with another phone via Vox Hub.
+
+<img width="388" height="850" alt="dentist-to-calendar" src="https://github.com/user-attachments/assets/d911d7cc-c46e-4de6-a78f-96c7bcdccad2" />
+
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-calendar)
 
