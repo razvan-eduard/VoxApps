@@ -94,3 +94,4 @@ google-services.json
 # RELEASE_KEYSTORE_PATH/RELEASE_KEYSTORE_PASSWORD yourself.
 *.jks
 *.keystore
+.artifacts/
