@@ -1,6 +1,8 @@
 package com.voxapps.expenses.state
 
 import android.content.Context
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
@@ -42,6 +44,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -56,13 +59,16 @@ class ExpensesStateManager internal constructor(
     private val spendingLimitAlertRepo: SpendingLimitAlertRepository,
     private val pendingLlmRequestQueue: VoxLlmRequestQueue,
     private val attachmentDao: AttachmentDao,
-    private val duplicateRuleDao: DuplicateRuleDao
+    private val duplicateRuleDao: DuplicateRuleDao,
+    appContext: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val workManager = WorkManager.getInstance(appContext)
 
     private data class Runtime(
         val selectedCategoryId: Long? = null,
         val sort: SortMode = SortMode.NEWEST,
+        val selectedDateMillis: Long = System.currentTimeMillis(),
         val dateFrom: Long? = null,
         val dateTo: Long? = null,
         val selectedBank: String? = null,
@@ -76,12 +82,19 @@ class ExpensesStateManager internal constructor(
     val uiState: StateFlow<ExpensesUiState> = _uiState.asStateFlow()
 
     init {
+        val nextRunMillisFlow = workManager.getWorkInfosForUniqueWorkFlow("expense_deduplication")
+            .map { infoList ->
+                infoList.firstOrNull { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
+                    ?.nextScheduleTimeMillis
+            }
+
         combine(
             settingsRepo.settingsFlow,
             expensesRepo.expensesWithDetails,
             expensesRepo.categories,
-            _runtime
-        ) { settings, expenses, categories, rt ->
+            _runtime,
+            nextRunMillisFlow
+        ) { settings, expenses, categories, rt, nextRunMillis ->
             val locked = settings.isBiometricRequired &&
                 !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
             if (locked) {
@@ -94,12 +107,15 @@ class ExpensesStateManager internal constructor(
                     categories = categories,
                     selectedCategoryId = rt.selectedCategoryId,
                     sort = rt.sort,
+                    isGridView = settings.isGridView,
+                    selectedDateMillis = rt.selectedDateMillis,
                     dateFrom = rt.dateFrom,
                     dateTo = rt.dateTo,
                     selectedBank = rt.selectedBank,
                     selectedVendor = rt.selectedVendor,
                     availableBanks = expenses.mapNotNull { it.expense.bank }.distinct().sorted(),
-                    availableVendors = expenses.mapNotNull { it.expense.vendor }.distinct().sorted()
+                    availableVendors = expenses.mapNotNull { it.expense.vendor }.distinct().sorted(),
+                    nextScheduledDedupMillis = nextRunMillis
                 )
             }
         }.onEach { _uiState.value = it }.launchIn(scope)
@@ -107,6 +123,7 @@ class ExpensesStateManager internal constructor(
 
     fun setCategoryFilter(categoryId: Long?) = _runtime.update { it.copy(selectedCategoryId = categoryId) }
     fun setSort(sort: SortMode) = _runtime.update { it.copy(sort = sort) }
+    fun setSelectedDate(millis: Long) = _runtime.update { it.copy(selectedDateMillis = millis) }
     fun setDateFilter(from: Long?, to: Long?) = _runtime.update { it.copy(dateFrom = from, dateTo = to) }
     fun clearDateFilter() = _runtime.update { it.copy(dateFrom = null, dateTo = null) }
     fun setBankFilter(bank: String?) = _runtime.update { it.copy(selectedBank = bank) }
@@ -138,6 +155,7 @@ class ExpensesStateManager internal constructor(
     fun setVatDisplayEnabled(enabled: Boolean) { scope.launch { settingsRepo.setVatDisplayEnabled(enabled) } }
     fun setDecimalSeparator(separator: String) { scope.launch { settingsRepo.setDecimalSeparator(separator) } }
     fun setCalendarViewEnabled(enabled: Boolean) { scope.launch { settingsRepo.setCalendarViewEnabled(enabled) } }
+    fun setIsGridView(enabled: Boolean) { scope.launch { settingsRepo.setIsGridView(enabled) } }
     fun setDebugToastsEnabled(enabled: Boolean) { scope.launch { settingsRepo.setDebugToastsEnabled(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setAttachPhotoOnRetry(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnRetry(enabled) } }
@@ -160,6 +178,8 @@ class ExpensesStateManager internal constructor(
     fun setWidgetBorderEnabled(enabled: Boolean) { scope.launch { settingsRepo.setWidgetBorderEnabled(enabled) } }
     fun setWidgetBorderThicknessDp(thicknessDp: Int) { scope.launch { settingsRepo.setWidgetBorderThicknessDp(thicknessDp) } }
     fun setWidgetBorderColorArgb(colorArgb: Long) { scope.launch { settingsRepo.setWidgetBorderColorArgb(colorArgb) } }
+
+    fun setBatchCleanupManualReview(enabled: Boolean) { scope.launch { settingsRepo.setBatchCleanupManualReview(enabled) } }
 
     /** Gate lives here (not in the repository) — mirrors the "repository has zero settings
      *  dependency" convention; [ExpensesRepository.recordManualCategoryChange] itself is
@@ -337,24 +357,29 @@ class ExpensesStateManager internal constructor(
     fun requestDuplicateCheck(context: Context) {
         scope.launch {
             val settings = settingsRepo.getSnapshot()
+            val autoApply = !settings.batchCleanupManualReview
             when (settings.duplicateCheckModeManual) {
                 ExpensesSettings.MODE_LOCAL -> {
                     val groups = expensesRepo.findLocalDuplicateGroups(settings.toNearDuplicateConfig())
-                    expenseDeduplicationRepo.mergePendingGroups(groups)
+                    if (autoApply) {
+                        expensesRepo.applyExpenseDeduplication(groups)
+                    } else {
+                        expenseDeduplicationRepo.mergePendingGroups(groups)
+                    }
                 }
                 ExpensesSettings.MODE_LOCAL_AND_AI -> {
                     val candidates = expensesRepo.ruleBasedCandidateClusters(settings.toNearDuplicateConfig()).flatten().map {
                         ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
                     }
                     if (candidates.isNotEmpty()) {
-                        ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, candidates)
+                        ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, candidates, autoApply = autoApply)
                     }
                 }
                 else -> {
                     val all = expensesRepo.expenses.first().map {
                         ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
                     }
-                    ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, all)
+                    ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, all, autoApply = autoApply)
                 }
             }
         }
@@ -471,11 +496,13 @@ class ExpensesStateManager internal constructor(
             spendingLimitAlertRepo: SpendingLimitAlertRepository,
             pendingLlmRequestQueue: VoxLlmRequestQueue,
             attachmentDao: AttachmentDao,
-            duplicateRuleDao: DuplicateRuleDao
+            duplicateRuleDao: DuplicateRuleDao,
+            appContext: Context
         ): ExpensesStateManager = instance ?: synchronized(this) {
             instance ?: ExpensesStateManager(
                 settingsRepo, expensesRepo, sessionManager, pendingCategoryMergeRepo, expenseDeduplicationRepo,
-                pendingNotificationExpenseRepo, spendingLimitAlertRepo, pendingLlmRequestQueue, attachmentDao, duplicateRuleDao
+                pendingNotificationExpenseRepo, spendingLimitAlertRepo, pendingLlmRequestQueue, attachmentDao, duplicateRuleDao,
+                appContext
             ).also { instance = it }
         }
     }

@@ -52,6 +52,7 @@ class NotesStateManager internal constructor(
     private data class Runtime(
         val selectedCategoryId: Long? = null,
         val sort: SortMode = SortMode.NEWEST,
+        val selectedDateMillis: Long = System.currentTimeMillis(),
         val dateFrom: Long? = null,
         val dateTo: Long? = null,
         val sessionTick: Int = 0
@@ -79,6 +80,8 @@ class NotesStateManager internal constructor(
                     categories = categories,
                     selectedCategoryId = rt.selectedCategoryId,
                     sort = rt.sort,
+                    isGridView = settings.isGridView,
+                    selectedDateMillis = rt.selectedDateMillis,
                     dateFrom = rt.dateFrom,
                     dateTo = rt.dateTo
                 )
@@ -89,6 +92,7 @@ class NotesStateManager internal constructor(
     // --- FILTERS ---
     fun setCategoryFilter(categoryId: Long?) = _runtime.update { it.copy(selectedCategoryId = categoryId) }
     fun setSort(sort: SortMode) = _runtime.update { it.copy(sort = sort) }
+    fun setSelectedDate(millis: Long) = _runtime.update { it.copy(selectedDateMillis = millis) }
     fun setDateFilter(from: Long?, to: Long?) = _runtime.update { it.copy(dateFrom = from, dateTo = to) }
     fun clearDateFilter() = _runtime.update { it.copy(dateFrom = null, dateTo = null) }
 
@@ -112,6 +116,7 @@ class NotesStateManager internal constructor(
         scope.launch { settingsRepo.setDebugToastsEnabled(enabled) }
     }
     fun setCalendarViewEnabled(enabled: Boolean) { scope.launch { settingsRepo.setCalendarViewEnabled(enabled) } }
+    fun setIsGridView(enabled: Boolean) { scope.launch { settingsRepo.setIsGridView(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setScanImageRetention(mode: String) { scope.launch { settingsRepo.setScanImageRetention(mode) } }
 

@@ -207,6 +207,13 @@ fun NotesScreen(
                 }
             }
         ) { pad ->
+            val dayDots = remember(state.notes) {
+                state.notes.groupBy {
+                    com.voxapps.calendar.CalendarDateUtils.millisToLocalDate(it.note.createdAt)
+                }.mapValues { (_, notes) ->
+                    notes.mapNotNull { it.category?.colorArgb }.distinct()
+                }
+            }
             Column(modifier = Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp)) {
                 FilterChipsRow(state = state, stateManager = stateManager)
                 if (calendarViewEnabled) {
@@ -215,6 +222,11 @@ fun NotesScreen(
                         modifier = Modifier.fillMaxSize(),
                         locale = java.util.Locale.forLanguageTag(language),
                         todayContentDescription = languageManager.getString("today"),
+                        selectedDateMillis = state.selectedDateMillis,
+                        isGridView = state.isGridView,
+                        onToggleGridView = { stateManager.setIsGridView(!state.isGridView) },
+                        onDateSelected = { stateManager.setSelectedDate(it) },
+                        dayDots = dayDots,
                         itemContent = { calItem ->
                             CollapsedNoteCard(
                                 item = calItem.nwc,

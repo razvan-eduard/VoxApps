@@ -23,6 +23,7 @@ interface NotesSettingsRepository {
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
     suspend fun setDebugToastsEnabled(enabled: Boolean)
     suspend fun setCalendarViewEnabled(enabled: Boolean)
+    suspend fun setIsGridView(enabled: Boolean)
     suspend fun setAttachPhotoOnScan(enabled: Boolean)
     suspend fun setScanImageRetention(mode: String)
     suspend fun setThemeDarkMode(mode: String)

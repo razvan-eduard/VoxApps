@@ -166,9 +166,11 @@
   "scheduled_dedup_label": "Verificare programată",
   "scheduled_dedup_desc": "Rulează verificarea manuală de mai sus și după un program recurent — folosește modul selectat acolo și tot propune sugestii spre analiza ta.",
   "scheduled_dedup_off": "Oprit",
+  "scheduled_dedup_hourly": "Orar",
   "scheduled_dedup_daily": "Zilnic",
   "scheduled_dedup_weekly": "Săptămânal",
   "scheduled_dedup_monthly": "Lunar",
+  "scheduled_dedup_next_run": "(Următoarea rulare: %s)",
   "duplicate_expenses_pending_title": "Revizuiește duplicatele propuse",
   "expense_cleanup_section_title": "Detectare duplicate",
   "expense_cleanup_section_desc": "Găsește cheltuielile salvate de două ori — din voce, scanare, introducere manuală sau notificări bancare capturate.",
@@ -322,10 +324,15 @@
   "today": "Astăzi",
   "tomorrow": "Mâine",
   "widget_no_recent_expenses": "Nicio cheltuială recentă",
+  "widget_nothing_today": "Nimic pentru astăzi",
   "debug_section": "Depanare",
   "add_test_data": "Adaugă date de test",
   "delete_all_expenses": "Șterge toate cheltuielile",
   "delete_all_expenses_desc": "Elimină definitiv toate înregistrările de cheltuieli de pe acest dispozitiv",
   "delete_all_confirm_title": "Ștergi TOATE cheltuielile?",
-  "delete_all_confirm_message": "Această acțiune va șterge definitiv orice înregistrare de cheltuială și produs. Acțiunea nu poate fi anulată."
+  "delete_all_confirm_message": "Această acțiune va șterge definitiv orice înregistrare de cheltuială și produs. Acțiunea nu poate fi anulată.",
+  "batch_manual_review_label": "Revizuire manuală",
+  "batch_manual_review_desc": "Dacă este oprit, orice duplicate găsite prin verificarea manuală sau programată vor fi unite automat fără confirmare.",
+  "find_duplicate_expenses_sent_auto_toast": "Se caută duplicate... vor fi unite automat dacă sunt găsite.",
+  "duplicate_check_local_auto_done_toast": "Verificare completă. Duplicatele au fost unite automat."
 }

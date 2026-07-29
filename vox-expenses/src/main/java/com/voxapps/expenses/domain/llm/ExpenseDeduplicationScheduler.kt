@@ -20,6 +20,7 @@ object ExpenseDeduplicationScheduler {
     fun reschedule(context: Context, interval: String) {
         val workManager = WorkManager.getInstance(context)
         val periodMillis = when (interval) {
+            ExpensesSettings.INTERVAL_HOURLY -> TimeUnit.HOURS.toMillis(1)
             ExpensesSettings.INTERVAL_DAILY -> TimeUnit.DAYS.toMillis(1)
             ExpensesSettings.INTERVAL_WEEKLY -> TimeUnit.DAYS.toMillis(7)
             ExpensesSettings.INTERVAL_MONTHLY -> TimeUnit.DAYS.toMillis(30)

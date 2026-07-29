@@ -29,6 +29,7 @@ interface ExpensesSettingsRepository {
     suspend fun setVatDisplayEnabled(enabled: Boolean)
     suspend fun setDecimalSeparator(separator: String)
     suspend fun setCalendarViewEnabled(enabled: Boolean)
+    suspend fun setIsGridView(enabled: Boolean)
     suspend fun setDebugToastsEnabled(enabled: Boolean)
     suspend fun setAppCache(json: String)
     suspend fun clearAppCache()
@@ -50,6 +51,7 @@ interface ExpensesSettingsRepository {
     suspend fun setWidgetBorderEnabled(enabled: Boolean)
     suspend fun setWidgetBorderThicknessDp(thicknessDp: Int)
     suspend fun setWidgetBorderColorArgb(colorArgb: Long)
+    suspend fun setBatchCleanupManualReview(enabled: Boolean)
 
     /**
      * Bulk overwrite, e.g. from a Vox Hub import — writes every portable field in one DataStore edit.

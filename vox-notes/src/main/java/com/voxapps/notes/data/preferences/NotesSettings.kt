@@ -50,6 +50,7 @@ data class NotesSettings(
     val debugLoggingEnabled: Boolean = false,
     val debugToastsEnabled: Boolean = false,
     val calendarViewEnabled: Boolean = false,
+    val isGridView: Boolean = false,
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,
     val onboardingCompleted: Boolean = false,

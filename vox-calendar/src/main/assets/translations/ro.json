@@ -3,6 +3,8 @@
   "calendar_title": "Calendar",
   "widget_app_name": "Calendar",
   "widget_add_button": "+ Eveniment",
+  "widget_up_next": "Urmează",
+  "widget_nothing_today": "Nimic pentru astăzi",
   "onboarding_welcome_tagline": "Calendar privat, criptat, cu straturi colorate, import/export ICS și evenimente create prin voce.",
   "onboarding_bullet1_title": "Create prin voce cu Vox Commander",
   "onboarding_bullet1_desc": "Spune \"dentist peste o săptămână\" și Vox Commander creează evenimentul, alegând stratul potrivit.",

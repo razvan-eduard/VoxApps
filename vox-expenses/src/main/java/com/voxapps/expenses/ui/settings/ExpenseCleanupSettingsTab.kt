@@ -46,7 +46,9 @@ import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
 import com.voxapps.ipc.VoxAppsDiscovery
 import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 
 private data class ResolvedGroup(val group: DuplicateGroup, val keep: Expense, val duplicates: List<Expense>)
 
@@ -62,6 +64,7 @@ fun ExpenseCleanupSettingsTab(
     settings: ExpensesSettings,
     expenses: List<Expense>,
     stateManager: ExpensesStateManager,
+    nextScheduledDedupMillis: Long?,
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
@@ -69,12 +72,17 @@ fun ExpenseCleanupSettingsTab(
     val pendingGroups by stateManager.pendingExpenseDuplicateGroups.collectAsStateWithLifecycle(initialValue = emptyList())
     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
     val manualModeNeedsCommander = settings.duplicateCheckModeManual != ExpensesSettings.MODE_LOCAL
+    val autoApply = !settings.batchCleanupManualReview
     val checkNowGate = rememberRequirementGate(
         satisfied = !manualModeNeedsCommander || commanderInstalled,
         requiredMessage = languageManager.getString("commander_required_message")
     ) {
         stateManager.requestDuplicateCheck(context)
-        val toastKey = if (manualModeNeedsCommander) "find_duplicate_expenses_sent_toast" else "duplicate_check_local_done_toast"
+        val toastKey = if (manualModeNeedsCommander) {
+            if (autoApply) "find_duplicate_expenses_sent_auto_toast" else "find_duplicate_expenses_sent_toast"
+        } else {
+            if (autoApply) "duplicate_check_local_auto_done_toast" else "duplicate_check_local_done_toast"
+        }
         Toast.makeText(context, languageManager.getString(toastKey), Toast.LENGTH_SHORT).show()
     }
 
@@ -127,6 +135,39 @@ fun ExpenseCleanupSettingsTab(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+
+        // --- Rules manager — relevant whenever either trigger above includes Local ---
+        val subAlpha = if (localTuningRelevant) 1f else 0.4f
+        Card(modifier = Modifier.fillMaxWidth().alpha(subAlpha)) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(languageManager.getString("near_duplicate_time_window_label"), style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val windowOptions = listOf(
+                        ExpensesSettings.NEAR_DUP_WINDOW_1M, ExpensesSettings.NEAR_DUP_WINDOW_2M,
+                        ExpensesSettings.NEAR_DUP_WINDOW_5M, ExpensesSettings.NEAR_DUP_WINDOW_10M,
+                        ExpensesSettings.NEAR_DUP_WINDOW_15M
+                    )
+                    windowOptions.forEach { minutes ->
+                        FilterChip(
+                            selected = settings.nearDuplicateTimeWindowMinutes == minutes,
+                            onClick = { stateManager.setNearDuplicateTimeWindowMinutes(minutes) },
+                            label = { Text(String.format(languageManager.getString("near_duplicate_interval_minutes"), minutes)) }
+                        )
+                    }
+                }
+
+                val duplicateRules by stateManager.duplicateRules.collectAsStateWithLifecycle(initialValue = emptyList())
+                DuplicateRulesSection(
+                    rules = duplicateRules,
+                    globalCombinator = settings.duplicateRuleSetGlobalCombinator,
+                    onGlobalCombinatorChange = { stateManager.setDuplicateRuleSetGlobalCombinator(it) },
+                    onUpsertRule = { stateManager.upsertDuplicateRule(it) },
+                    onDeleteRule = { stateManager.deleteDuplicateRule(it) },
+                    onSetRuleEnabled = { id, enabled -> stateManager.setDuplicateRuleEnabled(id, enabled) },
+                    languageManager = languageManager
+                )
+            }
+        }
 
         // --- Trigger: automatic (insert-time) protection ---
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -184,39 +225,6 @@ fun ExpenseCleanupSettingsTab(
             }
         }
 
-        // --- Rules manager — relevant whenever either trigger above includes Local ---
-        val subAlpha = if (localTuningRelevant) 1f else 0.4f
-        Card(modifier = Modifier.fillMaxWidth().alpha(subAlpha)) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(languageManager.getString("near_duplicate_time_window_label"), style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val windowOptions = listOf(
-                        ExpensesSettings.NEAR_DUP_WINDOW_1M, ExpensesSettings.NEAR_DUP_WINDOW_2M,
-                        ExpensesSettings.NEAR_DUP_WINDOW_5M, ExpensesSettings.NEAR_DUP_WINDOW_10M,
-                        ExpensesSettings.NEAR_DUP_WINDOW_15M
-                    )
-                    windowOptions.forEach { minutes ->
-                        FilterChip(
-                            selected = settings.nearDuplicateTimeWindowMinutes == minutes,
-                            onClick = { stateManager.setNearDuplicateTimeWindowMinutes(minutes) },
-                            label = { Text(String.format(languageManager.getString("near_duplicate_interval_minutes"), minutes)) }
-                        )
-                    }
-                }
-
-                val duplicateRules by stateManager.duplicateRules.collectAsStateWithLifecycle(initialValue = emptyList())
-                DuplicateRulesSection(
-                    rules = duplicateRules,
-                    globalCombinator = settings.duplicateRuleSetGlobalCombinator,
-                    onGlobalCombinatorChange = { stateManager.setDuplicateRuleSetGlobalCombinator(it) },
-                    onUpsertRule = { stateManager.upsertDuplicateRule(it) },
-                    onDeleteRule = { stateManager.deleteDuplicateRule(it) },
-                    onSetRuleEnabled = { id, enabled -> stateManager.setDuplicateRuleEnabled(id, enabled) },
-                    languageManager = languageManager
-                )
-            }
-        }
-
         // --- Manual trigger ---
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -252,7 +260,21 @@ fun ExpenseCleanupSettingsTab(
         // --- Schedule — reruns whatever the manual trigger's mode above is set to ---
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(languageManager.getString("scheduled_dedup_label"), style = MaterialTheme.typography.labelLarge)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        languageManager.getString("scheduled_dedup_label"),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (settings.scheduledExpenseDedupInterval != ExpensesSettings.INTERVAL_OFF && nextScheduledDedupMillis != null) {
+                        val format = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
+                        Text(
+                            text = String.format(languageManager.getString("scheduled_dedup_next_run"), format.format(Date(nextScheduledDedupMillis))),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
                 Text(
                     languageManager.getString("scheduled_dedup_desc"),
                     style = MaterialTheme.typography.bodySmall,
@@ -261,6 +283,7 @@ fun ExpenseCleanupSettingsTab(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val options = listOf(
                         ExpensesSettings.INTERVAL_OFF to "scheduled_dedup_off",
+                        ExpensesSettings.INTERVAL_HOURLY to "scheduled_dedup_hourly",
                         ExpensesSettings.INTERVAL_DAILY to "scheduled_dedup_daily",
                         ExpensesSettings.INTERVAL_WEEKLY to "scheduled_dedup_weekly",
                         ExpensesSettings.INTERVAL_MONTHLY to "scheduled_dedup_monthly"
@@ -272,6 +295,25 @@ fun ExpenseCleanupSettingsTab(
                             label = { Text(languageManager.getString(labelKey)) }
                         )
                     }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(languageManager.getString("batch_manual_review_label"), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            languageManager.getString("batch_manual_review_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.batchCleanupManualReview,
+                        onCheckedChange = { stateManager.setBatchCleanupManualReview(it) }
+                    )
                 }
             }
         }

@@ -1,4 +1,4 @@
-package com.voxapps.calendarapp.ui
+package com.voxapps.calendar
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,15 +30,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kizitonwose.calendar.compose.CalendarState
 import com.kizitonwose.calendar.compose.HorizontalCalendar
 import com.kizitonwose.calendar.compose.rememberCalendarState
 import com.kizitonwose.calendar.core.CalendarDay
 import com.kizitonwose.calendar.core.DayPosition
 import com.kizitonwose.calendar.core.OutDateStyle
 import com.kizitonwose.calendar.core.firstDayOfWeekFromLocale
-import com.voxapps.calendar.CalendarDateUtils
-import com.voxapps.calendar.MonthYearHeader
-import com.voxapps.calendarapp.data.CalendarLayer
+import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
@@ -46,38 +46,23 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun MonthGridView(
-    items: List<EntryCalendarItem>,
-    layers: List<CalendarLayer>,
     selectedDateMillis: Long,
     locale: Locale,
     onDateSelected: (Long) -> Unit,
     onHeaderClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    firstDayOfWeek: DayOfWeek = firstDayOfWeekFromLocale(),
+    state: CalendarState = rememberCalendarState(
+        startMonth = YearMonth.now().minusMonths(120),
+        endMonth = YearMonth.now().plusMonths(120),
+        firstVisibleMonth = YearMonth.now(),
+        firstDayOfWeek = firstDayOfWeek,
+        outDateStyle = OutDateStyle.EndOfRow
+    ),
+    dayDots: Map<LocalDate, List<Long>> = emptyMap()
 ) {
     val scope = rememberCoroutineScope()
     val selectedDate = remember(selectedDateMillis) { CalendarDateUtils.millisToLocalDate(selectedDateMillis) }
-    val currentMonth = remember(selectedDate) { YearMonth.from(selectedDate) }
-    val startMonth = remember { currentMonth.minusMonths(120) }
-    val endMonth = remember { currentMonth.plusMonths(120) }
-    val firstDayOfWeek = remember { firstDayOfWeekFromLocale() }
-
-    val state = rememberCalendarState(
-        startMonth = startMonth,
-        endMonth = endMonth,
-        firstVisibleMonth = currentMonth,
-        firstDayOfWeek = firstDayOfWeek,
-        outDateStyle = OutDateStyle.EndOfRow
-    )
-
-    // Sync state when selectedDate changes externally
-    LaunchedEffect(selectedDate) {
-        state.scrollToMonth(YearMonth.from(selectedDate))
-    }
-
-    val layerById = remember(layers) { layers.associateBy { it.id } }
-    val itemsByDay = remember(items) {
-        items.groupBy { CalendarDateUtils.millisToLocalDate(it.occurrenceStartMillis) }
-    }
 
     Column(modifier = modifier) {
         MonthHeaderWrapper(
@@ -103,9 +88,7 @@ fun MonthGridView(
                     day = day,
                     isSelected = selectedDate == day.date,
                     onClick = { onDateSelected(CalendarDateUtils.startOfDayMillis(it.date)) },
-                    dots = itemsByDay[day.date]?.mapNotNull { 
-                        layerById[it.entryWithTags.entry.layerId]?.colorArgb 
-                    }?.distinct() ?: emptyList()
+                    dots = dayDots[day.date] ?: emptyList()
                 )
             }
         )
@@ -123,7 +106,7 @@ private fun MonthHeaderWrapper(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -173,8 +156,8 @@ private fun DayCell(
 ) {
     Box(
         modifier = Modifier
-            .aspectRatio(1f)
-            .padding(2.dp)
+            .aspectRatio(1.4f)
+            .padding(horizontal = 1.5.dp, vertical = 1.5.dp)
             .clip(MaterialTheme.shapes.small)
             .background(
                 color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
@@ -187,7 +170,7 @@ private fun DayCell(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalArrangement = Arrangement.Center
         ) {
             Text(
                 text = day.date.dayOfMonth.toString(),
@@ -198,17 +181,18 @@ private fun DayCell(
                 } else {
                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                 },
-                fontSize = 14.sp
+                fontSize = 12.sp
             )
             if (day.position == DayPosition.MonthDate && dots.isNotEmpty()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 1.dp)
                 ) {
                     dots.take(4).forEach { colorArgb ->
                         Box(
                             modifier = Modifier
-                                .size(4.dp)
+                                .size(3.dp)
                                 .background(Color(colorArgb.toInt()), CircleShape)
                         )
                     }

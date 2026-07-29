@@ -124,9 +124,11 @@
   "scheduled_dedup_label": "Vérification planifiée",
   "scheduled_dedup_desc": "Exécute aussi la vérification manuelle ci-dessus selon une planification récurrente — utilise le mode sélectionné ci-dessus et propose toujours les suggestions pour validation.",
   "scheduled_dedup_off": "Désactivé",
+  "scheduled_dedup_hourly": "Horaire",
   "scheduled_dedup_daily": "Quotidien",
   "scheduled_dedup_weekly": "Hebdomadaire",
   "scheduled_dedup_monthly": "Mensuel",
+  "scheduled_dedup_next_run": "(Prochaine exécution : %s)",
   "duplicate_expenses_pending_title": "Examiner les doublons suggérés",
   "expense_cleanup_section_title": "Détection des doublons",
   "expense_cleanup_section_desc": "Repère les dépenses enregistrées deux fois — par voix, scan, saisie manuelle ou notification bancaire capturée.",
@@ -279,6 +281,7 @@
   "today": "Aujourd'hui",
   "tomorrow": "Demain",
   "widget_no_recent_expenses": "Aucune dépense récente",
+  "widget_nothing_today": "Rien pour aujourd'hui",
   "debug_section": "Débogage",
   "add_test_data": "Ajouter des données de test",
   "auto_accept_notification_expenses_desc": "Ignore l'étape de vérification — une notification correctement analysée est enregistrée immédiatement comme une dépense normale (toujours modifiable ensuite) au lieu d'attendre votre approbation.",
@@ -330,5 +333,9 @@
   "theme_light": "Clair",
   "theme_section": "Thème",
   "theme_system": "Système",
-  "unmark_as_bank": "Retirer la marque banque"
+  "unmark_as_bank": "Retirer la marque banque",
+  "batch_manual_review_label": "Examen manuel",
+  "batch_manual_review_desc": "Si cette option est désactivée, tous les doublons trouvés lors de l'examen manuel ou programmé seront fusionnés automatiquement sans confirmation.",
+  "find_duplicate_expenses_sent_auto_toast": "Recherche de doublons... ils seront fusionnés automatiquement s'ils sont trouvés.",
+  "duplicate_check_local_auto_done_toast": "Examen terminé. Les doublons ont été fusionnés automatiquement."
 }

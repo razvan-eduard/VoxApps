@@ -166,9 +166,11 @@
   "scheduled_dedup_label": "Scheduled check",
   "scheduled_dedup_desc": "Also run the manual check above on a recurring schedule — uses whichever mode is selected there, and still stages suggestions for your review.",
   "scheduled_dedup_off": "Off",
+  "scheduled_dedup_hourly": "Hourly",
   "scheduled_dedup_daily": "Daily",
   "scheduled_dedup_weekly": "Weekly",
   "scheduled_dedup_monthly": "Monthly",
+  "scheduled_dedup_next_run": "(Next run: %s)",
   "duplicate_expenses_pending_title": "Review suggested duplicates",
   "expense_cleanup_section_title": "Duplicate detection",
   "expense_cleanup_section_desc": "Catch expenses that were saved twice — from voice, scan, manual entry, or captured bank notifications.",
@@ -322,10 +324,15 @@
   "today": "Today",
   "tomorrow": "Tomorrow",
   "widget_no_recent_expenses": "No recent expenses",
+  "widget_nothing_today": "Nothing for today",
   "debug_section": "Debug",
   "add_test_data": "Add test data",
   "delete_all_expenses": "Delete all expenses",
   "delete_all_expenses_desc": "Permanently remove all expense records from this device",
   "delete_all_confirm_title": "Delete ALL expenses?",
-  "delete_all_confirm_message": "This will permanently delete every expense record and line item. This action cannot be undone."
+  "delete_all_confirm_message": "This will permanently delete every expense record and line item. This action cannot be undone.",
+  "batch_manual_review_label": "Manual review",
+  "batch_manual_review_desc": "If off, any duplicates found by the manual check or schedule will be merged automatically without confirmation.",
+  "find_duplicate_expenses_sent_auto_toast": "Checking for duplicates... they will be merged automatically if found.",
+  "duplicate_check_local_auto_done_toast": "Check complete. Duplicates merged automatically."
 }

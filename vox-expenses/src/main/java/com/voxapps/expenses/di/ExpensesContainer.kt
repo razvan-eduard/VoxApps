@@ -66,7 +66,8 @@ class ExpensesContainer(context: Context) {
         spendingLimitAlertRepository,
         pendingLlmRequestQueue,
         attachmentDao,
-        duplicateRuleDao
+        duplicateRuleDao,
+        appContext
     )
 
     val languageManager = LanguageManager(appContext).also {

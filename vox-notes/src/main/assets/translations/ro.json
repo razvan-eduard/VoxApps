@@ -21,6 +21,7 @@
   "categories": "Categorii",
   "all_notes": "Toate notițele",
   "add_note": "Adaugă notiță",
+  "toggle_grid_view": "Comută vizualizarea grilă",
   "scan_note": "Scanează o notiță",
   "commander_required_message": "Această funcție necesită ca Vox Commander să fie instalat și configurat",
   "vision_required_message": "Această funcție necesită ca Vox Vision să fie instalat",

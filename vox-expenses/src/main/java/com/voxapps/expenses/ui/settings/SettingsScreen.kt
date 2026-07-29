@@ -149,6 +149,7 @@ fun SettingsScreen(
                 settings = settings,
                 expenses = expenses,
                 stateManager = stateManager,
+                nextScheduledDedupMillis = (ui as? ExpensesUiState.Unlocked)?.nextScheduledDedupMillis,
                 modifier = mod
             )
             SettingsPage.CURRENCY -> CurrencySettingsTab(

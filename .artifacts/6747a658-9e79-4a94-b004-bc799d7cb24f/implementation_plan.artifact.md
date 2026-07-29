@@ -1,34 +1,29 @@
-# Plan de Implementare: Tranziție Licență de la MIT la GPLv3
+# Plan de Implementare: Afișare Zi Curentă (Chiar și Gole) în Widget-uri
 
-Acest plan detaliază pașii necesari pentru a schimba licența întregului proiect VoxApps din MIT în GNU General Public License v3.0 (GPLv3).
+Acest plan vizează asigurarea prezenței secțiunii "Today" în widget-urile de pe ecranul de pornire, chiar și atunci când nu există evenimente sau cheltuieli înregistrate pentru ziua respectivă.
 
-## Analiză de Compatibilitate
+## 1. Localizare (Strings)
+Vom adăuga o cheie comună pentru mesajul de stare goală:
+- **EN**: `widget_nothing_today`: "Nothing for today"
+- **RO**: `widget_nothing_today`: "Nimic pentru astăzi"
+- **DE**: `widget_nothing_today`: "Nichts für heute"
+- **FR**: `widget_nothing_today`: "Rien pour aujourd'hui"
 
-După scanarea dependențelor, am concluzionat că trecerea la GPLv3 este nu doar posibilă, ci și **recomandată pentru coerență legală**:
+## 2. Actualizare Logică Grupare (`CalendarWidget.kt` & `ExpensesWidget.kt`)
+- Vom modifica procesul de filtrare și grupare pentru a asigura că cheia `today` există mereu în harta de date.
+- Vom elimina `return early` atunci când lista totală este goală, forțând afișarea secțiunii "Today".
 
-1.  **NewPipeExtractor**: Această bibliotecă (folosită pentru YouTube) este deja sub licență **GPLv3**. Folosirea unei biblioteci GPLv3 într-un proiect MIT poate crea zone gri legale; trecerea întregului proiect la GPLv3 elimină orice ambiguitate.
-2.  **Dependențe MIT/Apache 2.0 (Whisper, OpenCV, Vosk)**: Aceste licențe sunt "permisive" și sunt 100% compatibile cu GPLv3. Poți include cod MIT/Apache într-un proiect GPLv3 fără probleme.
-3.  **Codul tău (VoxApps)**: Ca proprietar al drepturilor de autor, ai libertatea deplină de a schimba licența codului tău de la MIT la GPLv3.
-
-## Schimbări Propuse
-
-### 1. [MODIFY] `LICENSE` (Root)
-Înlocuirea textului actual MIT cu textul complet al licenței **GNU GPL v3.0**.
-
-### 2. [MODIFY] `README.md`
-Actualizarea secțiunii "License" pentru a reflecta noua licență și a explica faptul că aceasta oferă o protecție mai puternică împotriva închiderii codului în produse proprietare.
-
-### 3. [MODIFY] Metadate F-Droid & XDA
-Actualizarea fișierelor de metadate și a postărilor de pe forum pentru a schimba eticheta din "MIT" în "GPL-3.0-only".
+## 3. Stilizare Stare Goală
+Dacă grupul "Today" este gol:
+- Se va afișa header-ul tip "Pill" (conform designului anterior).
+- În interior, va apărea textul definit la punctul 1, stilizat discret cu `GlanceTheme.colors.onSurfaceVariant`.
 
 ## User Review Required
 
-> [!WARNING]
-> **Efectul GPLv3**: Aceasta este o licență "Strong Copyleft". Înseamnă că oricine folosește codul tău într-o aplicație distribuită este **obligat** să facă la rândul său codul sursă public sub aceeași licență. Este o schimbare majoră de filosofie față de MIT.
+> [!IMPORTANT]
+> **Prioritizarea "Today"**: Această schimbare va face ca widget-ul să nu mai fie niciodată complet gol sau să afișeze doar mesaje generice. "Today" va fi ancora vizuală permanentă a widget-ului.
 
-## Plan de Execuție
-
-- [ ] Descărcarea și scrierea textului oficial GPLv3 în fișierul `LICENSE`.
-- [ ] Actualizarea header-ului din `README.md`.
-- [ ] Actualizarea `privacy.html` și a postărilor XDA (dacă menționează licența).
-- [ ] Verificare finală: Scanarea tuturor fișierelor pentru a nu lăsa referințe la "MIT" vechi.
+## Plan de Verificare
+- [ ] Verificare pe dispozitiv: Dacă nu am evenimente azi, dar am mâine -> "Today" apare cu textul "Nothing for today", urmat de evenimentele de mâine.
+- [ ] Verificare pe dispozitiv: Dacă nu am niciun eveniment viitor -> Apare doar secțiunea "Today" goală.
+- [ ] Verificare consistență: Aceeași logică în ambele widget-uri (Calendar și Expenses).

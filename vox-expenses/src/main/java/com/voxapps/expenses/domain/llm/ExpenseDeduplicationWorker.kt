@@ -28,24 +28,29 @@ class ExpenseDeduplicationWorker(
     override suspend fun doWork(): Result {
         val container = (applicationContext as ExpensesApplication).container
         val settings = container.settingsRepository.getSnapshot()
+        val autoApply = !settings.batchCleanupManualReview
         when (settings.duplicateCheckModeManual) {
             ExpensesSettings.MODE_LOCAL -> {
                 val groups = container.expensesRepository.findLocalDuplicateGroups(settings.toNearDuplicateConfig())
-                container.expenseDeduplicationRepository.mergePendingGroups(groups)
+                if (autoApply) {
+                    container.expensesRepository.applyExpenseDeduplication(groups)
+                } else {
+                    container.expenseDeduplicationRepository.mergePendingGroups(groups)
+                }
             }
             ExpensesSettings.MODE_LOCAL_AND_AI -> {
                 val candidates = container.expensesRepository.ruleBasedCandidateClusters(settings.toNearDuplicateConfig()).flatten().map {
                     ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
                 }
                 if (candidates.isNotEmpty()) {
-                    ExpenseDeduplicationRequestSender.send(applicationContext, container.pendingLlmRequestQueue, candidates)
+                    ExpenseDeduplicationRequestSender.send(applicationContext, container.pendingLlmRequestQueue, candidates, autoApply = autoApply)
                 }
             }
             else -> {
                 val expenses = container.expensesRepository.expenses.first().map {
                     ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
                 }
-                ExpenseDeduplicationRequestSender.send(applicationContext, container.pendingLlmRequestQueue, expenses)
+                ExpenseDeduplicationRequestSender.send(applicationContext, container.pendingLlmRequestQueue, expenses, autoApply = autoApply)
             }
         }
         return Result.success()

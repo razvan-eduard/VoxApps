@@ -113,6 +113,13 @@ fun ExpensesScreen(
             }
         }
     ) { padding ->
+        val dayDots = remember(state.expenses) {
+            state.expenses.groupBy {
+                com.voxapps.calendar.CalendarDateUtils.millisToLocalDate(it.expense.dateTime)
+            }.mapValues { (_, expenses) ->
+                expenses.mapNotNull { it.category?.colorArgb }.distinct()
+            }
+        }
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (state.categories.isNotEmpty() || state.isAmountSort) {
                 Row(
@@ -163,6 +170,11 @@ fun ExpensesScreen(
                     modifier = Modifier.fillMaxSize(),
                     locale = java.util.Locale.forLanguageTag(language),
                     todayContentDescription = languageManager.getString("today"),
+                    selectedDateMillis = state.selectedDateMillis,
+                    isGridView = state.isGridView,
+                    onToggleGridView = { stateManager.setIsGridView(!state.isGridView) },
+                    onDateSelected = { stateManager.setSelectedDate(it) },
+                    dayDots = dayDots,
                     itemContent = { calItem ->
                         ExpenseCard(expenseWithDetails = calItem.ewd, onClick = { onEditExpense(calItem.ewd) })
                     }

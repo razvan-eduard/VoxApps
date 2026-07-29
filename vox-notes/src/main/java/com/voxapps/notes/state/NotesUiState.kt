@@ -21,6 +21,8 @@ sealed interface NotesUiState {
         val categories: List<Category>,
         val selectedCategoryId: Long?,
         val sort: SortMode,
+        val isGridView: Boolean,
+        val selectedDateMillis: Long,
         val dateFrom: Long?,
         val dateTo: Long?
     ) : NotesUiState {

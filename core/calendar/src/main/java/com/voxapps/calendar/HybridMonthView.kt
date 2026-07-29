@@ -1,4 +1,4 @@
-package com.voxapps.calendarapp.ui
+package com.voxapps.calendar
 
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Column
@@ -15,24 +15,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.voxapps.calendar.CalendarDateUtils
-import com.voxapps.calendar.CalendarMonthView
-import com.voxapps.calendarapp.data.CalendarLayer
+import com.kizitonwose.calendar.compose.rememberCalendarState
+import com.kizitonwose.calendar.core.OutDateStyle
+import com.kizitonwose.calendar.core.firstDayOfWeekFromLocale
+import java.time.LocalDate
 import java.time.YearMonth
 import java.util.Locale
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 
 @Composable
-fun HybridMonthView(
-    items: List<EntryCalendarItem>,
-    layers: List<CalendarLayer>,
+fun <T : CalendarItem> HybridMonthView(
+    items: List<T>,
     selectedDateMillis: Long,
     locale: Locale,
     onDateSelected: (Long) -> Unit,
     onToggleGridView: () -> Unit,
-    itemContent: @Composable (EntryCalendarItem) -> Unit,
-    modifier: Modifier = Modifier
+    itemContent: @Composable (T) -> Unit,
+    modifier: Modifier = Modifier,
+    pagerState: CalendarPagerState? = null,
+    dayDots: Map<LocalDate, List<Long>> = emptyMap()
 ) {
     val listState = rememberLazyListState()
     val isDragged by listState.interactionSource.collectIsDraggedAsState()
@@ -43,23 +45,50 @@ fun HybridMonthView(
     }
     val currentMonth = remember(selectedDate) { YearMonth.from(selectedDate) }
 
-    // Scroll the list when a date is selected in the grid
+    val gridState = rememberCalendarState(
+        startMonth = currentMonth.minusMonths(120),
+        endMonth = currentMonth.plusMonths(120),
+        firstVisibleMonth = currentMonth,
+        firstDayOfWeek = firstDayOfWeekFromLocale(),
+        outDateStyle = OutDateStyle.EndOfRow
+    )
+
+    // 1. Sync Grid -> Pager (Month level)
+    LaunchedEffect(gridState.firstVisibleMonth) {
+        val gridMonth = gridState.firstVisibleMonth.yearMonth
+        if (pagerState != null && pagerState.currentMonth != gridMonth) {
+            pagerState.pagerState.scrollToPage(pagerState.pageForMonth(gridMonth))
+        }
+    }
+
+    // 2. Sync Pager -> Grid (Month level)
+    if (pagerState != null) {
+        LaunchedEffect(pagerState.pagerState.currentPage) {
+            val pagerMonth = pagerState.currentMonth
+            if (gridState.firstVisibleMonth.yearMonth != pagerMonth) {
+                gridState.scrollToMonth(pagerMonth)
+            }
+        }
+    }
+
+    // 3. Sync Selection -> List Scroll
     LaunchedEffect(selectedDate) {
-        // Only trigger scroll if it's not already at that position and not being dragged
         val targetIndex = selectedDate.dayOfMonth - 1
         if (listState.firstVisibleItemIndex != targetIndex && !isDragged) {
             isAnimatingToDate = true
             listState.animateScrollToItem(targetIndex)
             isAnimatingToDate = false
         }
+        // Ensure grid also shows the month of the selected date
+        if (gridState.firstVisibleMonth.yearMonth != YearMonth.from(selectedDate)) {
+            gridState.scrollToMonth(YearMonth.from(selectedDate))
+        }
     }
 
-    // Sync grid selection when the list is scrolled manually
+    // 4. Sync List Scroll -> Selection
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex }
             .distinctUntilChanged()
-            // IMPORTANT: only sync list -> grid if the user is actually dragging or flinging,
-            // NOT during the programmatic animation triggered by the grid click.
             .filter { (isDragged || listState.isScrollInProgress) && !isAnimatingToDate }
             .collect { index ->
                 val dayOfMonth = index + 1
@@ -79,13 +108,13 @@ fun HybridMonthView(
 
     Column(modifier = modifier.fillMaxSize()) {
         MonthGridView(
-            items = items,
-            layers = layers,
             selectedDateMillis = selectedDateMillis,
             locale = locale,
             onDateSelected = onDateSelected,
             onHeaderClick = onToggleGridView,
-            modifier = Modifier.fillMaxWidth() // Removed weight to allow dynamic height
+            state = gridState,
+            dayDots = dayDots,
+            modifier = Modifier.fillMaxWidth()
         )
         
         HorizontalDivider(thickness = 1.dp)
@@ -98,7 +127,7 @@ fun HybridMonthView(
             locale = locale,
             onPeekItemClick = { /* already in current month */ },
             itemContent = itemContent,
-            modifier = Modifier.fillMaxWidth().weight(1f) // Takes remaining space
+            modifier = Modifier.fillMaxWidth().weight(1f)
         )
     }
 }

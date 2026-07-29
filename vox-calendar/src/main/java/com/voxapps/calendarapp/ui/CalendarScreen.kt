@@ -149,6 +149,14 @@ fun CalendarScreen(
                 windowEndMillis = now + WINDOW_FUTURE_DAYS * DAY_MILLIS
             )
         }
+        val dayDots = remember(items, state.layers) {
+            val layerById = state.layers.associateBy { it.id }
+            items.groupBy {
+                com.voxapps.calendar.CalendarDateUtils.millisToLocalDate(it.occurrenceStartMillis)
+            }.mapValues { (_, dayItems) ->
+                dayItems.mapNotNull { layerById[it.entryWithTags.entry.layerId]?.colorArgb }.distinct()
+            }
+        }
         Row(modifier = Modifier.padding(padding).fillMaxSize()) {
             if (sidebarVisible) {
                 Sidebar(
@@ -172,41 +180,24 @@ fun CalendarScreen(
                         }
                     )
                     CalendarViewMode.MONTH -> {
-                        val toggleGridView = { stateManager.setIsGridView(!state.isGridView) }
-                        if (state.isGridView) {
-                            HybridMonthView(
-                                items = items,
-                                layers = state.layers,
-                                selectedDateMillis = state.selectedDateMillis,
-                                locale = locale,
-                                onDateSelected = { stateManager.setSelectedDate(it) },
-                                onToggleGridView = toggleGridView,
-                                itemContent = { item ->
-                                    EntryRow(
-                                        item = item,
-                                        layer = layerById[item.entryWithTags.entry.layerId],
-                                        onClick = { onEditEntry(item) }
-                                    )
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            CalendarView(
-                                items = items,
-                                modifier = Modifier.fillMaxSize(),
-                                locale = locale,
-                                todayContentDescription = languageManager.getString("today"),
-                                isHeaderExpanded = false,
-                                onHeaderClick = toggleGridView,
-                                itemContent = { item ->
-                                    EntryRow(
-                                        item = item,
-                                        layer = layerById[item.entryWithTags.entry.layerId],
-                                        onClick = { onEditEntry(item) }
-                                    )
-                                }
-                            )
-                        }
+                        CalendarView(
+                            items = items,
+                            modifier = Modifier.fillMaxSize(),
+                            locale = locale,
+                            todayContentDescription = languageManager.getString("today"),
+                            selectedDateMillis = state.selectedDateMillis,
+                            isGridView = state.isGridView,
+                            onToggleGridView = { stateManager.setIsGridView(!state.isGridView) },
+                            onDateSelected = { stateManager.setSelectedDate(it) },
+                            dayDots = dayDots,
+                            itemContent = { item ->
+                                EntryRow(
+                                    item = item,
+                                    layer = layerById[item.entryWithTags.entry.layerId],
+                                    onClick = { onEditEntry(item) }
+                                )
+                            }
+                        )
                     }
                     CalendarViewMode.WEEK -> WeekView(
                         items = items,

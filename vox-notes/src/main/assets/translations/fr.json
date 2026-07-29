@@ -7,6 +7,7 @@
   "categories": "Catégories",
   "all_notes": "Toutes les notes",
   "add_note": "Ajouter une note",
+  "toggle_grid_view": "Basculer vers la vue grille",
   "scan_note": "Scanner une note",
   "commander_required_message": "Cette fonctionnalité nécessite que Vox Commander soit installé et configuré",
   "vision_required_message": "Cette fonctionnalité nécessite que Vox Vision soit installé",

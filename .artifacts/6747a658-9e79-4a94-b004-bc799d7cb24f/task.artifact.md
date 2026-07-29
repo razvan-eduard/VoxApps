@@ -1,5 +1,8 @@
-- `[ ]` Update `LICENSE` file with GNU GPLv3 text
-- `[ ]` Update `README.md` License section
-- `[ ]` Update XDA forum posts artifacts
-- `[ ]` Update F-Droid metadata in `vox-fdroid-repo`
-- `[ ]` Final verification of license mentions
+- `[x]` Always show "Today" in Widgets
+    - `[x]` Add `widget_nothing_today` translations to all modules
+    - `[x]` Update `CalendarWidget.kt` grouping logic (Force Today entry)
+    - `[x]` Update `ExpensesWidget.kt` grouping logic (Force Today entry)
+    - `[x]` Add "Nothing for today" text for empty day content
+- `[x]` Final UI Polish & Gap Optimization
+    - `[x]` Add proportional gap (1.5x border) between day groups (integrated in padding)
+- `[x]` Verify UI with empty and non-empty Today (Release Build & Install)

@@ -7,6 +7,7 @@
   "categories": "Kategorien",
   "all_notes": "Alle Notizen",
   "add_note": "Notiz hinzufügen",
+  "toggle_grid_view": "Gitteransicht umschalten",
   "scan_note": "Notiz scannen",
   "commander_required_message": "Diese Funktion erfordert, dass Vox Commander installiert und konfiguriert ist",
   "vision_required_message": "Diese Funktion erfordert, dass Vox Vision installiert ist",

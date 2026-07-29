@@ -33,6 +33,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
         val CALENDAR_VIEW_ENABLED = booleanPreferencesKey("calendar_view_enabled")
+        val IS_GRID_VIEW = booleanPreferencesKey("is_grid_view")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
@@ -53,6 +54,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
             debugToastsEnabled = prefs[Keys.DEBUG_TOASTS_ENABLED] ?: false,
             calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
+            isGridView = prefs[Keys.IS_GRID_VIEW] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: NotesSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
@@ -118,6 +120,10 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         dataStore.edit { it[Keys.CALENDAR_VIEW_ENABLED] = enabled }
     }
 
+    override suspend fun setIsGridView(enabled: Boolean) {
+        dataStore.edit { it[Keys.IS_GRID_VIEW] = enabled }
+    }
+
     override suspend fun setThemeDarkMode(mode: String) {
         dataStore.edit { it[Keys.THEME_DARK_MODE] = mode }
     }
@@ -155,6 +161,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
             prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.CALENDAR_VIEW_ENABLED] = settings.calendarViewEnabled
+            prefs[Keys.IS_GRID_VIEW] = settings.isGridView
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan

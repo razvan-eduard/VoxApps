@@ -41,6 +41,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val VAT_DISPLAY_ENABLED = booleanPreferencesKey("vat_display_enabled")
         val DECIMAL_SEPARATOR = stringPreferencesKey("decimal_separator")
         val CALENDAR_VIEW_ENABLED = booleanPreferencesKey("calendar_view_enabled")
+        val IS_GRID_VIEW = booleanPreferencesKey("is_grid_view")
         val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
         val APP_CACHE_JSON = stringPreferencesKey("app_cache_json")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
@@ -61,6 +62,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val WIDGET_BORDER_ENABLED = booleanPreferencesKey("widget_border_enabled")
         val WIDGET_BORDER_THICKNESS_DP = intPreferencesKey("widget_border_thickness_dp")
         val WIDGET_BORDER_COLOR_ARGB = longPreferencesKey("widget_border_color_argb")
+        val BATCH_CLEANUP_MANUAL_REVIEW = booleanPreferencesKey("batch_cleanup_manual_review")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -82,6 +84,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             vatDisplayEnabled = prefs[Keys.VAT_DISPLAY_ENABLED] ?: false,
             decimalSeparator = prefs[Keys.DECIMAL_SEPARATOR] ?: ExpensesSettings.DECIMAL_PERIOD,
             calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
+            isGridView = prefs[Keys.IS_GRID_VIEW] ?: false,
             debugToastsEnabled = prefs[Keys.DEBUG_TOASTS_ENABLED] ?: false,
             appCacheJson = prefs[Keys.APP_CACHE_JSON],
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: ExpensesSettings.THEME_SYSTEM,
@@ -104,7 +107,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
                 ?: ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD,
             widgetBorderEnabled = prefs[Keys.WIDGET_BORDER_ENABLED] ?: true,
             widgetBorderThicknessDp = prefs[Keys.WIDGET_BORDER_THICKNESS_DP] ?: ExpensesSettings.THICKNESS_MEDIUM,
-            widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first()
+            widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first(),
+            batchCleanupManualReview = prefs[Keys.BATCH_CLEANUP_MANUAL_REVIEW] ?: true
         )
     }
 
@@ -194,6 +198,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.CALENDAR_VIEW_ENABLED] = enabled }
     }
 
+    override suspend fun setIsGridView(enabled: Boolean) {
+        dataStore.edit { it[Keys.IS_GRID_VIEW] = enabled }
+    }
+
     override suspend fun setDebugToastsEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.DEBUG_TOASTS_ENABLED] = enabled }
     }
@@ -278,6 +286,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.WIDGET_BORDER_COLOR_ARGB] = colorArgb }
     }
 
+    override suspend fun setBatchCleanupManualReview(enabled: Boolean) {
+        dataStore.edit { it[Keys.BATCH_CLEANUP_MANUAL_REVIEW] = enabled }
+    }
+
     override suspend fun restoreSettings(settings: ExpensesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -301,6 +313,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.VAT_DISPLAY_ENABLED] = settings.vatDisplayEnabled
             prefs[Keys.DECIMAL_SEPARATOR] = settings.decimalSeparator
             prefs[Keys.CALENDAR_VIEW_ENABLED] = settings.calendarViewEnabled
+            prefs[Keys.IS_GRID_VIEW] = settings.isGridView
             prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
@@ -319,6 +332,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.WIDGET_BORDER_ENABLED] = settings.widgetBorderEnabled
             prefs[Keys.WIDGET_BORDER_THICKNESS_DP] = settings.widgetBorderThicknessDp
             prefs[Keys.WIDGET_BORDER_COLOR_ARGB] = settings.widgetBorderColorArgb
+            prefs[Keys.BATCH_CLEANUP_MANUAL_REVIEW] = settings.batchCleanupManualReview
             // appCacheJson intentionally untouched — see interface doc comment.
         }
     }

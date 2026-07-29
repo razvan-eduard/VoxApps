@@ -76,6 +76,7 @@ data class ExpensesSettings(
     val vatDisplayEnabled: Boolean = false,
     val decimalSeparator: String = DECIMAL_PERIOD,
     val calendarViewEnabled: Boolean = false,
+    val isGridView: Boolean = false,
     val debugToastsEnabled: Boolean = false,
     val appCacheJson: String? = null,
     val themeDarkMode: String = THEME_SYSTEM,
@@ -158,7 +159,8 @@ data class ExpensesSettings(
      *  [VoxColorPalette] rather than a hardcoded hex so it stays in sync with that palette. */
     val widgetBorderEnabled: Boolean = true,
     val widgetBorderThicknessDp: Int = THICKNESS_MEDIUM,
-    val widgetBorderColorArgb: Long = VoxColorPalette.presets.first()
+    val widgetBorderColorArgb: Long = VoxColorPalette.presets.first(),
+    val batchCleanupManualReview: Boolean = true
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -169,6 +171,7 @@ data class ExpensesSettings(
         const val DEFAULT_CURRENCY = "RON"
 
         const val INTERVAL_OFF = "OFF"
+        const val INTERVAL_HOURLY = "HOURLY"
         const val INTERVAL_DAILY = "DAILY"
         const val INTERVAL_WEEKLY = "WEEKLY"
         const val INTERVAL_MONTHLY = "MONTHLY"

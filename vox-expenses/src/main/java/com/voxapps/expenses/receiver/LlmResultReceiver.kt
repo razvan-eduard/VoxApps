@@ -161,9 +161,12 @@ class LlmResultReceiver : BroadcastReceiver() {
                             val expenses = container.expensesRepository.expenses.first()
                             val validated = validateDuplicateGroups(groups, expenses)
                             if (validated.isNotEmpty()) {
-                                val isInsertScoped = taskParts.getOrNull(1) == "INSERT_SCOPED"
+                                val taskSegments = task.split(":")
+                                val isInsertScoped = taskSegments.contains("INSERT_SCOPED")
+                                val isBatchAutoApply = taskSegments.contains("BATCH_AUTO_APPLY")
                                 val settings = container.settingsRepository.getSnapshot()
-                                if (isInsertScoped && settings.autoAcceptDuplicateMerges) {
+
+                                if ((isInsertScoped && settings.autoAcceptDuplicateMerges) || isBatchAutoApply) {
                                     container.expensesRepository.applyExpenseDeduplication(validated)
                                 } else {
                                     container.expenseDeduplicationRepository.mergePendingGroups(validated)
