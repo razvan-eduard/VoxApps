@@ -109,6 +109,7 @@
   "cleanup_confirm_title": "Curățăm înainte de salvare?",
   "cleanup_confirm_message": "Următoarele câmpuri conțin doar simboluri sau textul \"null\":",
   "auto_clean": "Curățare automată",
+  "entry_time_error": "Ora de sfârșit trebuie să fie după ora de început",
 
   "theme_section": "Temă",
   "theme_system": "Sistem",

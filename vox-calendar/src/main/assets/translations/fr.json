@@ -108,6 +108,7 @@
   "cleanup_confirm_title": "Nettoyer avant d'enregistrer ?",
   "cleanup_confirm_message": "Les champs suivants ne contiennent que des symboles ou le texte \"null\" :",
   "auto_clean": "Nettoyage automatique",
+  "entry_time_error": "L'heure de fin doit être postérieure à l'heure de début",
   "theme_section": "Thème",
   "theme_system": "Système",
   "theme_light": "Clair",

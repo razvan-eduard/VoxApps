@@ -108,6 +108,7 @@
   "cleanup_confirm_title": "Vor dem Speichern bereinigen?",
   "cleanup_confirm_message": "Die folgenden Felder enthalten nur Symbole oder den Text \"null\":",
   "auto_clean": "Automatisch bereinigen",
+  "entry_time_error": "Die Endzeit muss nach der Startzeit liegen",
   "theme_section": "Design",
   "theme_system": "System",
   "theme_light": "Hell",

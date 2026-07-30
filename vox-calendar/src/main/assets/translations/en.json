@@ -109,6 +109,7 @@
   "cleanup_confirm_title": "Clean up before saving?",
   "cleanup_confirm_message": "The following field(s) contain only symbols or the text \"null\":",
   "auto_clean": "Auto-clean",
+  "entry_time_error": "End time must be after start time",
 
   "theme_section": "Theme",
   "theme_system": "System",

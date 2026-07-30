@@ -156,7 +156,17 @@ fun EntryEditScreen(
     var title by remember { mutableStateOf(existing?.entry?.title ?: "") }
     var description by remember { mutableStateOf(existing?.entry?.description ?: "") }
     var location by remember { mutableStateOf(existing?.entry?.location ?: "") }
-    var startMillis by remember { mutableStateOf(existing?.entry?.startMillis ?: System.currentTimeMillis()) }
+    
+    val initialStartMillis = remember {
+        if (existing == null) {
+            val now = java.time.ZonedDateTime.now(zoneId)
+            val nextHour = now.truncatedTo(java.time.temporal.ChronoUnit.HOURS).plusHours(1)
+            nextHour.toInstant().toEpochMilli()
+        } else {
+            existing.entry.startMillis
+        }
+    }
+    var startMillis by remember { mutableStateOf(initialStartMillis) }
     var endMillis by remember { mutableStateOf(existing?.entry?.endMillis) }
     var allDay by remember { mutableStateOf(existing?.entry?.allDay ?: false) }
     var completed by remember { mutableStateOf(existing?.entry?.completed ?: false) }
@@ -169,10 +179,17 @@ fun EntryEditScreen(
 
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showStartTimePicker by remember { mutableStateOf(false) }
+    var isStartTimeSetManually by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
+    var isEndTimeSetManually by remember { mutableStateOf(false) }
     var showUntilDatePicker by remember { mutableStateOf(false) }
     var recurrenceMenuExpanded by remember { mutableStateOf(false) }
+    
+    val isTimeRangeInvalid = remember(type, startMillis, endMillis) {
+        type == CalendarEntryType.EVENT && endMillis?.let { startMillis >= it } == true
+    }
+    
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var pendingCleanup by remember { mutableStateOf<PendingCleanup?>(null) }
     // Photos staged (via AttachmentFileStore, no id needed for that) while composing a brand-new
@@ -237,11 +254,11 @@ fun EntryEditScreen(
     // just closes without writing anything, matching the old Save button's `enabled = title.isNotBlank()`
     // guard instead of silently creating an empty-titled entry.
     fun attemptSaveAndClose() {
-        if (title.isBlank()) {
+        if (title.isBlank() || isTimeRangeInvalid) {
             // Nothing will ever link these now — a no-op when editing an existing entry, since
             // pendingAttachments is only ever populated for a new, not-yet-saved one.
             discardPendingAttachments(pendingAttachments, context)
-            onDone()
+            if (title.isBlank()) onDone() // Close if title is blank, but don't close if only time is invalid
             return
         }
         val effectiveEnd = if (type == CalendarEntryType.EVENT) endMillis else null
@@ -322,7 +339,7 @@ fun EntryEditScreen(
                             Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
                         }
                     }
-                    IconButton(onClick = ::attemptSaveAndClose, enabled = title.isNotBlank()) {
+                    IconButton(onClick = ::attemptSaveAndClose, enabled = title.isNotBlank() && !isTimeRangeInvalid) {
                         Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
                     }
                 }
@@ -416,23 +433,51 @@ fun EntryEditScreen(
                             Text(languageManager.getString("entry_all_day"))
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-                            PaperTapField(
-                                label = languageManager.getString("entry_end_date"),
-                                value = endMillis?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
-                                    ?: languageManager.getString("none"),
-                                onClick = { showEndDatePicker = true },
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (!allDay) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
                                 PaperTapField(
-                                    label = languageManager.getString("entry_end_time"),
-                                    value = endMillis?.let { DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it)) }
+                                    label = languageManager.getString("entry_end_date"),
+                                    value = endMillis?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
                                         ?: languageManager.getString("none"),
-                                    onClick = { if (endMillis == null) endMillis = startMillis; showEndTimePicker = true },
+                                    onClick = { showEndDatePicker = true },
                                     modifier = Modifier.weight(1f)
                                 )
+                                if (!allDay) {
+                                    PaperTapField(
+                                        label = languageManager.getString("entry_end_time"),
+                                        value = endMillis?.let { DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it)) }
+                                            ?: languageManager.getString("none"),
+                                        onClick = { if (endMillis == null) endMillis = startMillis; showEndTimePicker = true },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
+                            
+                            if (endMillis != null) {
+                                IconButton(
+                                    onClick = { endMillis = null },
+                                    modifier = Modifier.padding(start = 8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = languageManager.getString("clear"),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+
+                        val currentEndMillis = endMillis
+                        if (currentEndMillis != null && startMillis >= currentEndMillis) {
+                            Text(
+                                text = languageManager.getString("entry_time_error"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
                         }
                     } else {
                         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -573,9 +618,11 @@ fun EntryEditScreen(
             onDismiss = { showStartTimePicker = false },
             onConfirm = { millis ->
                 startMillis = millis
+                isStartTimeSetManually = true
                 showStartTimePicker = false
             },
-            languageManager = languageManager
+            languageManager = languageManager,
+            defaultToZeroMinutes = existing == null && !isStartTimeSetManually
         )
     }
     if (showEndDatePicker) {
@@ -595,9 +642,11 @@ fun EntryEditScreen(
             onDismiss = { showEndTimePicker = false },
             onConfirm = { millis ->
                 endMillis = millis
+                isEndTimeSetManually = true
                 showEndTimePicker = false
             },
-            languageManager = languageManager
+            languageManager = languageManager,
+            defaultToZeroMinutes = existing == null && !isEndTimeSetManually
         )
     }
     if (showUntilDatePicker) {
@@ -712,11 +761,15 @@ private fun TimeOnlyPickerDialog(
     initialMillis: Long,
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit,
-    languageManager: com.voxapps.calendarapp.domain.localization.LanguageManager
+    languageManager: com.voxapps.calendarapp.domain.localization.LanguageManager,
+    defaultToZeroMinutes: Boolean = false
 ) {
     val zoneId = ZoneId.systemDefault()
     val initialTime = remember(initialMillis) { Instant.ofEpochMilli(initialMillis).atZone(zoneId).toLocalTime() }
-    val state = rememberTimePickerState(initialHour = initialTime.hour, initialMinute = initialTime.minute)
+    val state = rememberTimePickerState(
+        initialHour = initialTime.hour,
+        initialMinute = if (defaultToZeroMinutes) 0 else initialTime.minute
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(languageManager.getString("entry_start_time")) },
