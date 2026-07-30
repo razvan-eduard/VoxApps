@@ -187,7 +187,7 @@ fun EntryEditScreen(
     var recurrenceMenuExpanded by remember { mutableStateOf(false) }
     
     val isTimeRangeInvalid = remember(type, startMillis, endMillis) {
-        type == CalendarEntryType.EVENT && endMillis?.let { startMillis >= it } == true
+        isTimeRangeInvalid(type, startMillis, endMillis)
     }
     
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -724,6 +724,11 @@ private fun recurrenceLabelKey(freq: RecurrenceFrequency): String = when (freq) 
     RecurrenceFrequency.MONTHLY -> "recurrence_monthly"
     RecurrenceFrequency.YEARLY -> "recurrence_yearly"
 }
+
+/** An Event's end time can't be at-or-before its start time — Tasks have no end time to
+ *  validate. Pulled out as a pure function so it's unit-testable without a Composable. */
+internal fun isTimeRangeInvalid(type: CalendarEntryType, startMillis: Long, endMillis: Long?): Boolean =
+    type == CalendarEntryType.EVENT && endMillis?.let { startMillis >= it } == true
 
 private fun startOfDay(millis: Long, zoneId: ZoneId): Long =
     Instant.ofEpochMilli(millis).atZone(zoneId).toLocalDate().atStartOfDay(zoneId).toInstant().toEpochMilli()

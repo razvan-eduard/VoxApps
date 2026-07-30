@@ -14,6 +14,7 @@ import com.voxapps.calendarapp.CalendarActivity
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.domain.localization.LanguageManager
+import com.voxapps.design.notifications.NotificationChannelVersioning
 import com.voxapps.design.notifications.NotificationSoundPlayer
 import java.text.DateFormat
 import java.util.Date
@@ -78,25 +79,33 @@ object ReminderNotifier {
             "${CHANNEL_ID}_v${settings.notificationsChannelVersion}"
         }
 
-        if (manager.getNotificationChannel(channelId) != null) return
-
-        val importance = if (settings.notificationsSystemDefault) {
-            NotificationManager.IMPORTANCE_DEFAULT
-        } else {
-            NotificationManager.IMPORTANCE_HIGH
-        }
-
-        val channel = NotificationChannel(
-            channelId,
-            languageManager.getString("entry_reminders_channel_name"),
-            importance
-        ).apply {
-            if (!settings.notificationsSystemDefault) {
-                // Sound and vibration are handled manually by NotificationSoundPlayer
-                setSound(null, null)
-                enableVibration(false)
+        if (manager.getNotificationChannel(channelId) == null) {
+            val importance = if (settings.notificationsSystemDefault) {
+                NotificationManager.IMPORTANCE_DEFAULT
+            } else {
+                NotificationManager.IMPORTANCE_HIGH
             }
+
+            val channel = NotificationChannel(
+                channelId,
+                languageManager.getString("entry_reminders_channel_name"),
+                importance
+            ).apply {
+                if (!settings.notificationsSystemDefault) {
+                    // Sound and vibration are handled manually by NotificationSoundPlayer
+                    setSound(null, null)
+                    enableVibration(false)
+                }
+            }
+            manager.createNotificationChannel(channel)
         }
-        manager.createNotificationChannel(channel)
+
+        // A channel's sound/vibration/importance are immutable once created, so every settings
+        // change mints a new versioned channel instead of mutating the old one — left uncleaned,
+        // each change would permanently orphan the previous channel in system settings.
+        val staleIds = NotificationChannelVersioning.staleChannelIds(
+            manager.notificationChannels.map { it.id }, CHANNEL_ID, channelId
+        )
+        staleIds.forEach { manager.deleteNotificationChannel(it) }
     }
 }

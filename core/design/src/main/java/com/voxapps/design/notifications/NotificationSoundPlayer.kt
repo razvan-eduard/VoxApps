@@ -8,9 +8,29 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import com.voxapps.logging.Logger
+
+private const val TAG = "NotificationSoundPlayer"
 
 object NotificationSoundPlayer {
     private var activeMediaPlayer: MediaPlayer? = null
+
+    /** Number of times the sound repeats for each length setting — pulled out as a pure function
+     *  so it's unit-testable without a real MediaPlayer/Context. */
+    internal fun repeatCountFor(length: String): Int = when (length) {
+        "MEDIUM" -> 2
+        "LONG" -> 3
+        else -> 1
+    }
+
+    /** Vibration waveform (on/off durations in ms, starting with an initial delay of 0) for each
+     *  length setting — same testability reasoning as [repeatCountFor]. */
+    internal fun vibrationPatternFor(length: String): LongArray = when (length) {
+        "SHORT" -> longArrayOf(0, 200)
+        "MEDIUM" -> longArrayOf(0, 300, 200, 300)
+        "LONG" -> longArrayOf(0, 400, 200, 400, 200, 400)
+        else -> longArrayOf(0, 200)
+    }
 
     fun play(context: Context, soundUri: String?, volume: Int, length: String, vibrationEnabled: Boolean, soundOnly: Boolean = false) {
         // Stop any current preview playback
@@ -37,11 +57,7 @@ object NotificationSoundPlayer {
             }
             activeMediaPlayer = mediaPlayer
 
-            val repeatCount = when (length) {
-                "MEDIUM" -> 2
-                "LONG" -> 3
-                else -> 1
-            }
+            val repeatCount = repeatCountFor(length)
 
             var currentPlay = 0
             mediaPlayer.setOnCompletionListener {
@@ -55,7 +71,7 @@ object NotificationSoundPlayer {
             }
             mediaPlayer.start()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Logger.w(TAG, "Failed to play notification sound (uri=$uri)", e)
         }
 
         // 2. Vibrate
@@ -68,12 +84,7 @@ object NotificationSoundPlayer {
                 context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
             }
 
-            val pattern = when (length) {
-                "SHORT" -> longArrayOf(0, 200)
-                "MEDIUM" -> longArrayOf(0, 300, 200, 300)
-                "LONG" -> longArrayOf(0, 400, 200, 400, 200, 400)
-                else -> longArrayOf(0, 200)
-            }
+            val pattern = vibrationPatternFor(length)
 
             val attributes = AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ALARM)
