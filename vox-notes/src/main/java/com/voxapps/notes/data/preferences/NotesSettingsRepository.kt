@@ -29,6 +29,12 @@ interface NotesSettingsRepository {
     suspend fun setThemeDarkMode(mode: String)
     suspend fun setThemeColored(colored: Boolean)
     suspend fun setOnboardingCompleted(completed: Boolean)
+    suspend fun setNotificationsSystemDefault(enabled: Boolean)
+    suspend fun setNotificationsVibrationEnabled(enabled: Boolean)
+    suspend fun setNotificationsSoundUri(uri: String?)
+    suspend fun setNotificationsVolume(volume: Int)
+    suspend fun setNotificationsLength(length: String)
+    suspend fun setNotificationsChannelVersion(version: Int)
 
     /** Bulk overwrite, e.g. from a Vox Hub import — writes every field in one DataStore edit. */
     suspend fun restoreSettings(settings: NotesSettings)

@@ -46,7 +46,8 @@ class ReminderReceiver : BroadcastReceiver() {
         if (reminderId < 0 || entryId < 0) return
 
         val entry = container.calendarRepository.getEntryById(entryId) ?: return
-        ReminderNotifier.notify(context, container.languageManager, reminderId, entry)
+        val settings = container.settingsRepository.getSnapshot()
+        ReminderNotifier.notify(context, container.languageManager, reminderId, entry, settings)
     }
 
     private suspend fun rescheduleAll(context: Context) {

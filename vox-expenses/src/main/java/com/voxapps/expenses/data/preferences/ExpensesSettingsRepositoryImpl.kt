@@ -63,6 +63,12 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val WIDGET_BORDER_THICKNESS_DP = intPreferencesKey("widget_border_thickness_dp")
         val WIDGET_BORDER_COLOR_ARGB = longPreferencesKey("widget_border_color_argb")
         val BATCH_CLEANUP_MANUAL_REVIEW = booleanPreferencesKey("batch_cleanup_manual_review")
+        val NOTIFICATIONS_SYSTEM_DEFAULT = booleanPreferencesKey("notifications_system_default")
+        val NOTIFICATIONS_VIBRATION_ENABLED = booleanPreferencesKey("notifications_vibration_enabled")
+        val NOTIFICATIONS_SOUND_URI = stringPreferencesKey("notifications_sound_uri")
+        val NOTIFICATIONS_VOLUME = intPreferencesKey("notifications_volume")
+        val NOTIFICATIONS_LENGTH = stringPreferencesKey("notifications_length")
+        val NOTIFICATIONS_CHANNEL_VERSION = intPreferencesKey("notifications_channel_version")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -108,7 +114,13 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             widgetBorderEnabled = prefs[Keys.WIDGET_BORDER_ENABLED] ?: true,
             widgetBorderThicknessDp = prefs[Keys.WIDGET_BORDER_THICKNESS_DP] ?: ExpensesSettings.THICKNESS_MEDIUM,
             widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first(),
-            batchCleanupManualReview = prefs[Keys.BATCH_CLEANUP_MANUAL_REVIEW] ?: true
+            batchCleanupManualReview = prefs[Keys.BATCH_CLEANUP_MANUAL_REVIEW] ?: true,
+            notificationsSystemDefault = prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] ?: true,
+            notificationsVibrationEnabled = prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] ?: true,
+            notificationsSoundUri = prefs[Keys.NOTIFICATIONS_SOUND_URI],
+            notificationsVolume = prefs[Keys.NOTIFICATIONS_VOLUME] ?: 100,
+            notificationsLength = prefs[Keys.NOTIFICATIONS_LENGTH] ?: ExpensesSettings.LENGTH_SHORT,
+            notificationsChannelVersion = prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] ?: 1
         )
     }
 
@@ -290,6 +302,32 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.BATCH_CLEANUP_MANUAL_REVIEW] = enabled }
     }
 
+    override suspend fun setNotificationsSystemDefault(enabled: Boolean) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = enabled }
+    }
+
+    override suspend fun setNotificationsVibrationEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_VIBRATION_ENABLED] = enabled }
+    }
+
+    override suspend fun setNotificationsSoundUri(uri: String?) {
+        dataStore.edit {
+            if (uri == null) it.remove(Keys.NOTIFICATIONS_SOUND_URI) else it[Keys.NOTIFICATIONS_SOUND_URI] = uri
+        }
+    }
+
+    override suspend fun setNotificationsVolume(volume: Int) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_VOLUME] = volume }
+    }
+
+    override suspend fun setNotificationsLength(length: String) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_LENGTH] = length }
+    }
+
+    override suspend fun setNotificationsChannelVersion(version: Int) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_CHANNEL_VERSION] = version }
+    }
+
     override suspend fun restoreSettings(settings: ExpensesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -333,6 +371,16 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.WIDGET_BORDER_THICKNESS_DP] = settings.widgetBorderThicknessDp
             prefs[Keys.WIDGET_BORDER_COLOR_ARGB] = settings.widgetBorderColorArgb
             prefs[Keys.BATCH_CLEANUP_MANUAL_REVIEW] = settings.batchCleanupManualReview
+            prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = settings.notificationsSystemDefault
+            prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] = settings.notificationsVibrationEnabled
+            if (settings.notificationsSoundUri == null) {
+                prefs.remove(Keys.NOTIFICATIONS_SOUND_URI)
+            } else {
+                prefs[Keys.NOTIFICATIONS_SOUND_URI] = settings.notificationsSoundUri
+            }
+            prefs[Keys.NOTIFICATIONS_VOLUME] = settings.notificationsVolume
+            prefs[Keys.NOTIFICATIONS_LENGTH] = settings.notificationsLength
+            prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] = settings.notificationsChannelVersion
             // appCacheJson intentionally untouched — see interface doc comment.
         }
     }

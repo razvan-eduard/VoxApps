@@ -146,6 +146,46 @@ class NotesStateManager internal constructor(
     }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
     fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
+
+    fun setNotificationsSystemDefault(enabled: Boolean) {
+        scope.launch {
+            settingsRepo.setNotificationsSystemDefault(enabled)
+            if (!enabled) incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsVibrationEnabled(enabled: Boolean) {
+        scope.launch {
+            settingsRepo.setNotificationsVibrationEnabled(enabled)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsSoundUri(uri: String?) {
+        scope.launch {
+            settingsRepo.setNotificationsSoundUri(uri)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsVolume(volume: Int) {
+        scope.launch {
+            settingsRepo.setNotificationsVolume(volume)
+        }
+    }
+
+    fun setNotificationsLength(length: String) {
+        scope.launch {
+            settingsRepo.setNotificationsLength(length)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    private suspend fun incrementNotificationChannelVersion() {
+        val current = settingsRepo.getSnapshot().notificationsChannelVersion
+        settingsRepo.setNotificationsChannelVersion(current + 1)
+    }
+
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }
     fun seedDebugTestData() {
         scope.launch { com.voxapps.notes.domain.debug.DebugDataSeeder.seed(notesRepo) }

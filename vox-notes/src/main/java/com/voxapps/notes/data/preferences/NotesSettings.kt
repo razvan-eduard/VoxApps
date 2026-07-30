@@ -60,7 +60,13 @@ data class NotesSettings(
      *  standalone override (mirrors vox-expenses' identical toggle; Notes has no retry mechanism so
      *  there's no separate on-retry variant here). */
     val attachPhotoOnScan: Boolean = false,
-    val scanImageRetention: String = RETENTION_ON_FAILURE
+    val scanImageRetention: String = RETENTION_ON_FAILURE,
+    val notificationsSystemDefault: Boolean = true,
+    val notificationsVibrationEnabled: Boolean = true,
+    val notificationsSoundUri: String? = null,
+    val notificationsVolume: Int = 100,
+    val notificationsLength: String = LENGTH_SHORT,
+    val notificationsChannelVersion: Int = 1
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -81,5 +87,9 @@ data class NotesSettings(
         const val RETENTION_NEVER = "NEVER"
         const val RETENTION_ON_FAILURE = "ON_FAILURE"
         const val RETENTION_ALWAYS = "ALWAYS"
+
+        const val LENGTH_SHORT = "SHORT"
+        const val LENGTH_MEDIUM = "MEDIUM"
+        const val LENGTH_LONG = "LONG"
     }
 }

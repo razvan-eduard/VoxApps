@@ -28,6 +28,12 @@ interface CalendarSettingsRepository {
     suspend fun setWidgetBorderEnabled(enabled: Boolean)
     suspend fun setWidgetBorderThicknessDp(thicknessDp: Int)
     suspend fun setWidgetBorderColorArgb(colorArgb: Long)
+    suspend fun setNotificationsSystemDefault(enabled: Boolean)
+    suspend fun setNotificationsVibrationEnabled(enabled: Boolean)
+    suspend fun setNotificationsSoundUri(uri: String?)
+    suspend fun setNotificationsVolume(volume: Int)
+    suspend fun setNotificationsLength(length: String)
+    suspend fun setNotificationsChannelVersion(version: Int)
 
     /** Bulk overwrite, e.g. from a Vox Hub import — writes every portable field in one DataStore edit. */
     suspend fun restoreSettings(settings: CalendarSettings)

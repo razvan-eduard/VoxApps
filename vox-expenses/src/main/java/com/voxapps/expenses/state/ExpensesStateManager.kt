@@ -181,6 +181,45 @@ class ExpensesStateManager internal constructor(
 
     fun setBatchCleanupManualReview(enabled: Boolean) { scope.launch { settingsRepo.setBatchCleanupManualReview(enabled) } }
 
+    fun setNotificationsSystemDefault(enabled: Boolean) {
+        scope.launch {
+            settingsRepo.setNotificationsSystemDefault(enabled)
+            if (!enabled) incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsVibrationEnabled(enabled: Boolean) {
+        scope.launch {
+            settingsRepo.setNotificationsVibrationEnabled(enabled)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsSoundUri(uri: String?) {
+        scope.launch {
+            settingsRepo.setNotificationsSoundUri(uri)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsVolume(volume: Int) {
+        scope.launch {
+            settingsRepo.setNotificationsVolume(volume)
+        }
+    }
+
+    fun setNotificationsLength(length: String) {
+        scope.launch {
+            settingsRepo.setNotificationsLength(length)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    private suspend fun incrementNotificationChannelVersion() {
+        val current = settingsRepo.getSnapshot().notificationsChannelVersion
+        settingsRepo.setNotificationsChannelVersion(current + 1)
+    }
+
     /** Gate lives here (not in the repository) — mirrors the "repository has zero settings
      *  dependency" convention; [ExpensesRepository.recordManualCategoryChange] itself is
      *  unconditional. */

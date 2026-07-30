@@ -1,6 +1,12 @@
 package com.voxapps.expenses.ui.settings
 
+import android.app.Activity
+import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,7 +35,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.design.notifications.NotificationSoundPlayer
+import com.voxapps.design.settings.NotificationSettingsCard
 import com.voxapps.expenses.data.ExchangeRateRepository
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
@@ -41,7 +52,7 @@ import com.voxapps.logging.ui.LogsSettingsTab
 import com.voxapps.logging.ui.LogsTabStrings
 
 private enum class SettingsPage {
-    MENU, GENERAL, VOICE, CATEGORIES, EXPENSE_CLEANUP, CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, LOGS
+    MENU, GENERAL, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP, CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, LOGS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,6 +63,7 @@ fun SettingsScreen(
     exchangeRateRepository: ExchangeRateRepository,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val languageManager = LocalLanguageManager.current
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = ExpensesSettings())
     val ui by stateManager.uiState.collectAsStateWithLifecycle()
@@ -61,12 +73,33 @@ fun SettingsScreen(
 
     var page by remember { mutableStateOf(SettingsPage.MENU) }
 
+    val ringtonePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val uri = IntentCompat.getParcelableExtra(result.data!!, RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            stateManager.setNotificationsSoundUri(uri?.toString())
+        }
+    }
+
+    val triggerPreview = { soundOnly: Boolean, overrideVolume: Int?, overrideLength: String?, overrideVibration: Boolean? ->
+        NotificationSoundPlayer.play(
+            context = context,
+            soundUri = settings.notificationsSoundUri,
+            volume = overrideVolume ?: settings.notificationsVolume,
+            length = overrideLength ?: settings.notificationsLength,
+            vibrationEnabled = overrideVibration ?: settings.notificationsVibrationEnabled,
+            soundOnly = soundOnly
+        )
+    }
+
     // System back mirrors the top-bar arrow: subpage -> menu, menu -> expenses list.
     BackHandler { if (page == SettingsPage.MENU) onBack() else page = SettingsPage.MENU }
 
     val title = when (page) {
         SettingsPage.MENU -> languageManager.getString("settings")
         SettingsPage.GENERAL -> languageManager.getString("general")
+        SettingsPage.NOTIFICATIONS -> languageManager.getString("notifications_settings_title")
         SettingsPage.VOICE -> languageManager.getString("voice_settings_title")
         SettingsPage.CATEGORIES -> languageManager.getString("categories_settings_title")
         SettingsPage.EXPENSE_CLEANUP -> languageManager.getString("expense_cleanup_settings_title")
@@ -95,6 +128,11 @@ fun SettingsScreen(
                     headlineContent = { Text(languageManager.getString("general")) },
                     leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("notifications_settings_title")) },
+                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATIONS }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("voice_settings_title")) },
@@ -133,6 +171,31 @@ fun SettingsScreen(
                 )
             }
             SettingsPage.GENERAL -> GeneralSettingsTab(settings = settings, stateManager = stateManager, modifier = mod)
+            SettingsPage.NOTIFICATIONS -> Column(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
+                NotificationSettingsCard(
+                    systemDefault = settings.notificationsSystemDefault,
+                    vibrationEnabled = settings.notificationsVibrationEnabled,
+                    soundUri = settings.notificationsSoundUri,
+                    volume = settings.notificationsVolume,
+                    length = settings.notificationsLength,
+                    onSystemDefaultChange = { stateManager.setNotificationsSystemDefault(it) },
+                    onVibrationChange = { stateManager.setNotificationsVibrationEnabled(it) },
+                    onVolumeChange = { stateManager.setNotificationsVolume(it) },
+                    onLengthChange = { stateManager.setNotificationsLength(it) },
+                    onPickSound = {
+                        val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, languageManager.getString("notifications_sound_label"))
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, settings.notificationsSoundUri?.let { Uri.parse(it) })
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+                        }
+                        ringtonePickerLauncher.launch(intent)
+                    },
+                    onPreview = triggerPreview,
+                    getString = { languageManager.getString(it) }
+                )
+            }
             SettingsPage.VOICE -> VoiceSettingsTab(
                 settings = settings,
                 categories = categories,

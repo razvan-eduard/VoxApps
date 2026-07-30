@@ -331,8 +331,19 @@
   "delete_all_expenses_desc": "Permanently remove all expense records from this device",
   "delete_all_confirm_title": "Delete ALL expenses?",
   "delete_all_confirm_message": "This will permanently delete every expense record and line item. This action cannot be undone.",
-  "batch_manual_review_label": "Manual review",
-  "batch_manual_review_desc": "If off, any duplicates found by the manual check or schedule will be merged automatically without confirmation.",
-  "find_duplicate_expenses_sent_auto_toast": "Checking for duplicates... they will be merged automatically if found.",
-  "duplicate_check_local_auto_done_toast": "Check complete. Duplicates merged automatically."
+  "notifications_settings_title": "Notifications",
+  "notifications_system_default_label": "System default",
+  "notifications_system_default_desc": "Use Android system settings for reminders and alerts",
+  "notifications_vibration_label": "Vibration",
+  "notifications_vibration_desc": "Vibrate when a notification arrives",
+  "notifications_sound_label": "Sound",
+  "notifications_sound_desc": "Play a sound when a notification arrives",
+  "notifications_sound_default": "Default",
+  "notifications_volume_label": "Volume",
+  "notifications_volume_desc": "Notification volume level (bypasses system settings)",
+  "notifications_length_label": "Length",
+  "notifications_length_desc": "Duration and vibration pattern",
+  "notifications_length_short": "Short",
+  "notifications_length_medium": "Medium",
+  "notifications_length_long": "Long"
 }

@@ -39,6 +39,12 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
         val SCAN_IMAGE_RETENTION = stringPreferencesKey("scan_image_retention")
+        val NOTIFICATIONS_SYSTEM_DEFAULT = booleanPreferencesKey("notifications_system_default")
+        val NOTIFICATIONS_VIBRATION_ENABLED = booleanPreferencesKey("notifications_vibration_enabled")
+        val NOTIFICATIONS_SOUND_URI = stringPreferencesKey("notifications_sound_uri")
+        val NOTIFICATIONS_VOLUME = intPreferencesKey("notifications_volume")
+        val NOTIFICATIONS_LENGTH = stringPreferencesKey("notifications_length")
+        val NOTIFICATIONS_CHANNEL_VERSION = intPreferencesKey("notifications_channel_version")
     }
 
     override val settingsFlow: Flow<NotesSettings> = dataStore.data.map { prefs ->
@@ -59,7 +65,13 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
             attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
-            scanImageRetention = prefs[Keys.SCAN_IMAGE_RETENTION] ?: NotesSettings.RETENTION_ON_FAILURE
+            scanImageRetention = prefs[Keys.SCAN_IMAGE_RETENTION] ?: NotesSettings.RETENTION_ON_FAILURE,
+            notificationsSystemDefault = prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] ?: true,
+            notificationsVibrationEnabled = prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] ?: true,
+            notificationsSoundUri = prefs[Keys.NOTIFICATIONS_SOUND_URI],
+            notificationsVolume = prefs[Keys.NOTIFICATIONS_VOLUME] ?: 100,
+            notificationsLength = prefs[Keys.NOTIFICATIONS_LENGTH] ?: NotesSettings.LENGTH_SHORT,
+            notificationsChannelVersion = prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] ?: 1
         )
     }
 
@@ -144,6 +156,32 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         dataStore.edit { it[Keys.SCAN_IMAGE_RETENTION] = mode }
     }
 
+    override suspend fun setNotificationsSystemDefault(enabled: Boolean) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = enabled }
+    }
+
+    override suspend fun setNotificationsVibrationEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_VIBRATION_ENABLED] = enabled }
+    }
+
+    override suspend fun setNotificationsSoundUri(uri: String?) {
+        dataStore.edit {
+            if (uri == null) it.remove(Keys.NOTIFICATIONS_SOUND_URI) else it[Keys.NOTIFICATIONS_SOUND_URI] = uri
+        }
+    }
+
+    override suspend fun setNotificationsVolume(volume: Int) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_VOLUME] = volume }
+    }
+
+    override suspend fun setNotificationsLength(length: String) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_LENGTH] = length }
+    }
+
+    override suspend fun setNotificationsChannelVersion(version: Int) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_CHANNEL_VERSION] = version }
+    }
+
     override suspend fun restoreSettings(settings: NotesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -166,6 +204,16 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             prefs[Keys.THEME_COLORED] = settings.themeColored
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
             prefs[Keys.SCAN_IMAGE_RETENTION] = settings.scanImageRetention
+            prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = settings.notificationsSystemDefault
+            prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] = settings.notificationsVibrationEnabled
+            if (settings.notificationsSoundUri == null) {
+                prefs.remove(Keys.NOTIFICATIONS_SOUND_URI)
+            } else {
+                prefs[Keys.NOTIFICATIONS_SOUND_URI] = settings.notificationsSoundUri
+            }
+            prefs[Keys.NOTIFICATIONS_VOLUME] = settings.notificationsVolume
+            prefs[Keys.NOTIFICATIONS_LENGTH] = settings.notificationsLength
+            prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] = settings.notificationsChannelVersion
         }
     }
 

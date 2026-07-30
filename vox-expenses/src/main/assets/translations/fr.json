@@ -337,5 +337,20 @@
   "batch_manual_review_label": "Examen manuel",
   "batch_manual_review_desc": "Si cette option est désactivée, tous les doublons trouvés lors de l'examen manuel ou programmé seront fusionnés automatiquement sans confirmation.",
   "find_duplicate_expenses_sent_auto_toast": "Recherche de doublons... ils seront fusionnés automatiquement s'ils sont trouvés.",
-  "duplicate_check_local_auto_done_toast": "Examen terminé. Les doublons ont été fusionnés automatiquement."
+  "duplicate_check_local_auto_done_toast": "Examen terminé. Les doublons ont été fusionnés automatiquement.",
+  "notifications_settings_title": "Notifications",
+  "notifications_system_default_label": "Par défaut du système",
+  "notifications_system_default_desc": "Utiliser les paramètres du système Android pour les rappels et les alertes",
+  "notifications_vibration_label": "Vibration",
+  "notifications_vibration_desc": "Vibrer à l'arrivée d'une notification",
+  "notifications_sound_label": "Son",
+  "notifications_sound_desc": "Émettre un son à l'arrivée d'une notification",
+  "notifications_sound_default": "Par défaut",
+  "notifications_volume_label": "Volume",
+  "notifications_volume_desc": "Niveau sonore de la notification (ignore les paramètres système)",
+  "notifications_length_label": "Durée",
+  "notifications_length_desc": "Durée et modèle de vibration",
+  "notifications_length_short": "Courte",
+  "notifications_length_medium": "Moyenne",
+  "notifications_length_long": "Longue"
 }

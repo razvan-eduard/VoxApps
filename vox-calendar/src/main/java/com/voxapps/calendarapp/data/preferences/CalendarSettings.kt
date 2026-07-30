@@ -45,7 +45,13 @@ data class CalendarSettings(
     val showEventDetailsInWidget: Boolean = true,
     val widgetBorderEnabled: Boolean = true,
     val widgetBorderThicknessDp: Int = THICKNESS_MEDIUM,
-    val widgetBorderColorArgb: Long = VoxColorPalette.presets.first()
+    val widgetBorderColorArgb: Long = VoxColorPalette.presets.first(),
+    val notificationsSystemDefault: Boolean = true,
+    val notificationsVibrationEnabled: Boolean = true,
+    val notificationsSoundUri: String? = null,
+    val notificationsVolume: Int = 100,
+    val notificationsLength: String = LENGTH_SHORT,
+    val notificationsChannelVersion: Int = 1
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -61,5 +67,9 @@ data class CalendarSettings(
         const val THICKNESS_THIN = 1
         const val THICKNESS_MEDIUM = 2
         const val THICKNESS_THICK = 4
+
+        const val LENGTH_SHORT = "SHORT"
+        const val LENGTH_MEDIUM = "MEDIUM"
+        const val LENGTH_LONG = "LONG"
     }
 }

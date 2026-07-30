@@ -154,5 +154,20 @@
   "unlock": "Unlock",
   "unlock_title": "Unlock Vox Calendar",
   "unlock_subtitle": "Authenticate to view your calendar",
-  "widget_no_upcoming_entries": "No upcoming entries"
+  "widget_no_upcoming_entries": "No upcoming entries",
+  "notifications_settings_title": "Notifications",
+  "notifications_system_default_label": "System default",
+  "notifications_system_default_desc": "Use Android system settings for reminders and alerts",
+  "notifications_vibration_label": "Vibration",
+  "notifications_vibration_desc": "Vibrate when a notification arrives",
+  "notifications_sound_label": "Sound",
+  "notifications_sound_desc": "Play a sound when a notification arrives",
+  "notifications_sound_default": "Default",
+  "notifications_volume_label": "Volume",
+  "notifications_volume_desc": "Notification volume level (bypasses system settings)",
+  "notifications_length_label": "Length",
+  "notifications_length_desc": "Duration and vibration pattern",
+  "notifications_length_short": "Short",
+  "notifications_length_medium": "Medium",
+  "notifications_length_long": "Long"
 }

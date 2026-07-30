@@ -6,6 +6,7 @@
     <!-- Android 13+ suppresses toasts/notifications from backgrounded apps unless allowed — needed
          once a headless voice/LLM-created event wants to surface a toast. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Entry reminders: precise firing via AlarmManager.setExactAndAllowWhileIdle. Not a runtime
          dialog on Android 12+ — see ReminderScheduler.canScheduleExactAlarms()/EntryEditScreen's
          inline notice, which sends the user to Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM if this

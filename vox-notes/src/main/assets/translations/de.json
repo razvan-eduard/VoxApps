@@ -142,5 +142,20 @@
   "theme_dark": "Dunkel",
   "theme_light": "Hell",
   "theme_section": "Design",
-  "theme_system": "System"
+  "theme_system": "System",
+  "notifications_settings_title": "Benachrichtigungen",
+  "notifications_system_default_label": "Systemstandard",
+  "notifications_system_default_desc": "Android-Systemeinstellungen für Erinnerungen und Warnungen verwenden",
+  "notifications_vibration_label": "Vibration",
+  "notifications_vibration_desc": "Vibrieren, wenn eine Benachrichtigung eingeht",
+  "notifications_sound_label": "Ton",
+  "notifications_sound_desc": "Einen Ton abspielen, wenn eine Benachrichtigung eingeht",
+  "notifications_sound_default": "Standard",
+  "notifications_volume_label": "Lautstärke",
+  "notifications_volume_desc": "Lautstärke der Benachrichtigung (umgeht Systemeinstellungen)",
+  "notifications_length_label": "Länge",
+  "notifications_length_desc": "Dauer und Vibrationsmuster",
+  "notifications_length_short": "Kurz",
+  "notifications_length_medium": "Mittel",
+  "notifications_length_long": "Lang"
 }

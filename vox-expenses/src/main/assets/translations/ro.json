@@ -334,5 +334,20 @@
   "batch_manual_review_label": "Revizuire manuală",
   "batch_manual_review_desc": "Dacă este oprit, orice duplicate găsite prin verificarea manuală sau programată vor fi unite automat fără confirmare.",
   "find_duplicate_expenses_sent_auto_toast": "Se caută duplicate... vor fi unite automat dacă sunt găsite.",
-  "duplicate_check_local_auto_done_toast": "Verificare completă. Duplicatele au fost unite automat."
+  "duplicate_check_local_auto_done_toast": "Verificare completă. Duplicatele au fost unite automat.",
+  "notifications_settings_title": "Notificări",
+  "notifications_system_default_label": "Implicit de sistem",
+  "notifications_system_default_desc": "Folosește setările sistemului Android pentru memento-uri și alerte",
+  "notifications_vibration_label": "Vibrație",
+  "notifications_vibration_desc": "Vibrează la primirea unei notificări",
+  "notifications_sound_label": "Sunet",
+  "notifications_sound_desc": "Redă un sunet la primirea unei notificări",
+  "notifications_sound_default": "Implicit",
+  "notifications_volume_label": "Volum",
+  "notifications_volume_desc": "Nivelul volumului notificării (ignoră setările sistemului)",
+  "notifications_length_label": "Lungime",
+  "notifications_length_desc": "Durata și modelul de vibrație",
+  "notifications_length_short": "Scurt",
+  "notifications_length_medium": "Mediu",
+  "notifications_length_long": "Lung"
 }

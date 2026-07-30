@@ -66,16 +66,17 @@ class LlmResultReceiver : BroadcastReceiver() {
         val storedImageName = taskParts.getOrNull(1)
         val retryOfExpenseId = taskParts.getOrNull(2)?.toLongOrNull()
 
-        android.util.Log.println(android.util.Log.ASSERT, TAG, "LLM result: status=${result.status} task=${result.task} baseTask=$baseTask imageName=$storedImageName")
-        if (result.rawJson != null) {
-            android.util.Log.println(android.util.Log.ASSERT, TAG, "LLM rawJson length: ${result.rawJson!!.length}")
+        Logger.d(TAG, "LLM result: status=${result.status} task=${result.task} baseTask=$baseTask imageName=$storedImageName")
+        val rawJson = result.rawJson
+        if (rawJson != null) {
+            Logger.d(TAG, "LLM rawJson length: ${rawJson.length}")
         }
 
         when (baseTask) {
             LlmTasks.EXPENSE_PARSE, LlmTasks.EXPENSE_SCAN_CLEANUP -> {
                 val rawJson = result.rawJson
                 val isSuccess = result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null
-                val parsed = if (isSuccess) ExpenseParseResultParser.parse(rawJson!!) else null
+                val parsed = if (isSuccess) ExpenseParseResultParser.parse(rawJson) else null
                 
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {

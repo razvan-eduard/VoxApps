@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -335,7 +333,7 @@ fun GeneralSettingsTab(
         }
 
         if (showDeleteAllConfirm) {
-            AlertDialog(
+            androidx.compose.material3.AlertDialog(
                 onDismissRequest = { showDeleteAllConfirm = false },
                 title = { Text(languageManager.getString("delete_all_confirm_title")) },
                 text = { Text(languageManager.getString("delete_all_confirm_message")) },

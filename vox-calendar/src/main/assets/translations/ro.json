@@ -154,5 +154,20 @@
   "unlock": "Deblochează",
   "unlock_title": "Deblochează Vox Calendar",
   "unlock_subtitle": "Autentifică-te pentru a vedea calendarul",
-  "widget_no_upcoming_entries": "Nicio intrare viitoare"
+  "widget_no_upcoming_entries": "Nicio intrare viitoare",
+  "notifications_settings_title": "Notificări",
+  "notifications_system_default_label": "Implicit de sistem",
+  "notifications_system_default_desc": "Folosește setările sistemului Android pentru memento-uri și alerte",
+  "notifications_vibration_label": "Vibrație",
+  "notifications_vibration_desc": "Vibrează la primirea unei notificări",
+  "notifications_sound_label": "Sunet",
+  "notifications_sound_desc": "Redă un sunet la primirea unei notificări",
+  "notifications_sound_default": "Implicit",
+  "notifications_volume_label": "Volum",
+  "notifications_volume_desc": "Nivelul volumului notificării (ignoră setările sistemului)",
+  "notifications_length_label": "Lungime",
+  "notifications_length_desc": "Durata și modelul de vibrație",
+  "notifications_length_short": "Scurt",
+  "notifications_length_medium": "Mediu",
+  "notifications_length_long": "Lung"
 }

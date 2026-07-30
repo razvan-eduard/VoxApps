@@ -131,6 +131,47 @@ class CalendarStateManager internal constructor(
 
     fun setWidgetBorderColorArgb(colorArgb: Long) { scope.launch { settingsRepo.setWidgetBorderColorArgb(colorArgb) } }
     fun setIsGridView(enabled: Boolean) { scope.launch { settingsRepo.setIsGridView(enabled) } }
+
+    fun setNotificationsSystemDefault(enabled: Boolean) {
+        scope.launch {
+            settingsRepo.setNotificationsSystemDefault(enabled)
+            if (!enabled) incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsVibrationEnabled(enabled: Boolean) {
+        scope.launch {
+            settingsRepo.setNotificationsVibrationEnabled(enabled)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsSoundUri(uri: String?) {
+        scope.launch {
+            settingsRepo.setNotificationsSoundUri(uri)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsVolume(volume: Int) {
+        scope.launch {
+            settingsRepo.setNotificationsVolume(volume)
+            // No channel rotation needed for volume since we bypass it via MediaPlayer
+        }
+    }
+
+    fun setNotificationsLength(length: String) {
+        scope.launch {
+            settingsRepo.setNotificationsLength(length)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    private suspend fun incrementNotificationChannelVersion() {
+        val current = settingsRepo.getSnapshot().notificationsChannelVersion
+        settingsRepo.setNotificationsChannelVersion(current + 1)
+    }
+
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }
 
     // --- SESSION LOCK ---
