@@ -187,6 +187,15 @@ jobs:
             VoxCommander-*.apk
             CHANGELOG.md
 
+      - name: Force update tag to current commit
+        if: steps.check_bump.outputs.changed != 'false'
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f "$TAG"
+          git push origin "$TAG" --force
+
       - name: Create GitHub Release
         if: steps.check_bump.outputs.changed != 'false'
         uses: softprops/action-gh-release@v2
