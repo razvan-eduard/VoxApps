@@ -122,7 +122,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("app.cash.turbine:turbine:1.2.1")
     testImplementation("androidx.test:core:1.7.0")
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260719")
 }
 
 // Copy external_services.json from repo root into assets (single source of truth in root, mirrors
