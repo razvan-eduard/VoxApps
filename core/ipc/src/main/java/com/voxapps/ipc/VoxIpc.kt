@@ -136,6 +136,16 @@ object VoxIpc {
     const val OP_SYNC_EXPORT = "sync_export"
     const val OP_SYNC_MERGE = "sync_merge"
 
+    /**
+     * VoxConnect Bridge's media-control relay (Hub → Commander, over this same request-response
+     * channel) — Commander is the only app holding the notification-listener permission grant that
+     * media-session access requires (see `MediaSessionListenerService`), so a network client never
+     * touches media sessions directly; it always goes through Commander via this op.
+     * [VoxCommand.mediaAction] selects the action: "status" (returns now-playing metadata as JSON in
+     * [VoxResult.text]), "play", "pause", "next", "prev".
+     */
+    const val OP_MEDIA_CONTROL = "media_control"
+
     /** [VoxCommand.exportScope] values — which slice of an app's export payload to include. */
     const val EXPORT_SCOPE_SETTINGS = "settings"
     const val EXPORT_SCOPE_DATA = "data"

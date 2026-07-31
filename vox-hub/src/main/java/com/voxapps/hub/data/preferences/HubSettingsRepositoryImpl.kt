@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 
 class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
 
@@ -35,6 +36,10 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
         val LAST_BACKUP_ERROR = stringPreferencesKey("last_backup_error")
         val LAST_BACKUP_MISSING_APPS = stringSetPreferencesKey("last_backup_missing_apps")
         val APP_BACKUP_CONFIG_JSON = stringPreferencesKey("app_backup_config_json")
+        val VOXCONNECT_ENABLED = booleanPreferencesKey("voxconnect_enabled")
+        val VOXCONNECT_PORT = intPreferencesKey("voxconnect_port")
+        val VOXCONNECT_MEDIA_CONTROL_ENABLED = booleanPreferencesKey("voxconnect_media_control_enabled")
+        val VOXCONNECT_MONITORED_APPS_JSON = stringPreferencesKey("voxconnect_monitored_apps_json")
     }
 
     override val settingsFlow: Flow<HubSettings> = dataStore.data.map { prefs ->
@@ -49,7 +54,11 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
             lastBackupTimestamp = prefs[Keys.LAST_BACKUP_TIMESTAMP],
             lastBackupError = prefs[Keys.LAST_BACKUP_ERROR],
             lastBackupMissingApps = (prefs[Keys.LAST_BACKUP_MISSING_APPS] ?: emptySet()).sorted(),
-            appBackupConfigs = AppBackupConfig.decodeMap(prefs[Keys.APP_BACKUP_CONFIG_JSON] ?: "{}")
+            appBackupConfigs = AppBackupConfig.decodeMap(prefs[Keys.APP_BACKUP_CONFIG_JSON] ?: "{}"),
+            voxConnectEnabled = prefs[Keys.VOXCONNECT_ENABLED] ?: false,
+            voxConnectPort = prefs[Keys.VOXCONNECT_PORT] ?: HubSettings.VOXCONNECT_DEFAULT_PORT,
+            voxConnectMediaControlEnabled = prefs[Keys.VOXCONNECT_MEDIA_CONTROL_ENABLED] ?: false,
+            voxConnectMonitoredApps = decodeMonitoredApps(prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] ?: "{}")
         )
     }
 
@@ -111,5 +120,37 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
                 prefs[Keys.LAST_BACKUP_MISSING_APPS] = missingApps.toSet()
             }
         }
+    }
+
+    override suspend fun setVoxConnectEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.VOXCONNECT_ENABLED] = enabled }
+    }
+
+    override suspend fun setVoxConnectPort(port: Int) {
+        dataStore.edit { it[Keys.VOXCONNECT_PORT] = port }
+    }
+
+    override suspend fun setVoxConnectMediaControlEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.VOXCONNECT_MEDIA_CONTROL_ENABLED] = enabled }
+    }
+
+    override suspend fun setVoxConnectMonitoredApp(domain: String, monitored: Boolean) {
+        dataStore.edit { prefs ->
+            val current = decodeMonitoredApps(prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] ?: "{}")
+            prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] = encodeMonitoredApps(current + (domain to monitored))
+        }
+    }
+
+    private fun decodeMonitoredApps(json: String): Map<String, Boolean> = try {
+        val o = JSONObject(json)
+        o.keys().asSequence().associateWith { o.optBoolean(it, false) }
+    } catch (e: Exception) {
+        emptyMap()
+    }
+
+    private fun encodeMonitoredApps(map: Map<String, Boolean>): String {
+        val o = JSONObject()
+        map.forEach { (domain, monitored) -> o.put(domain, monitored) }
+        return o.toString()
     }
 }

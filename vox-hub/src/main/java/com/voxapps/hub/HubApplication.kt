@@ -41,5 +41,26 @@ class HubApplication : Application() {
                 Logger.setToastsEnabled(toastsEnabled)
             }
             .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Default))
+
+        // Start/stop the VoxConnect Bridge to track the enable toggle and port, same
+        // flow-collect-and-react shape as the logging flags above — this is the only place the
+        // server's lifecycle is driven from, so a setting change while the process is already
+        // running is picked up immediately, and a process restart with the toggle already on
+        // starts it back up without the user having to re-flip it.
+        if (initialSnapshot.voxConnectEnabled) {
+            container.voxConnectServer.start(initialSnapshot.voxConnectPort)
+        }
+        container.settingsRepository.settingsFlow
+            .map { it.voxConnectEnabled to it.voxConnectPort }
+            .distinctUntilChanged()
+            .onEach { (enabled, port) ->
+                if (enabled) {
+                    if (container.voxConnectServer.isRunning()) container.voxConnectServer.stop()
+                    container.voxConnectServer.start(port)
+                } else {
+                    container.voxConnectServer.stop()
+                }
+            }
+            .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Default))
     }
 }

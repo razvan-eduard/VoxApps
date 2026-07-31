@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +60,9 @@ import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.logging.Logger
 import com.voxapps.logging.ui.LogViewerCard
 import com.voxapps.logging.ui.LogViewerStrings
+import com.voxapps.voxconnect.PairedDeviceStore
+import com.voxapps.voxconnect.VoxConnectPairing
+import com.voxapps.voxconnect.VoxConnectServer
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -68,7 +72,7 @@ import java.util.Locale
  *  5 visible rows regardless of how many backups exist. */
 private const val BACKUP_ROW_HEIGHT = 64
 
-private enum class SettingsPage { MENU, GENERAL, THEME, LOGS }
+private enum class SettingsPage { MENU, GENERAL, THEME, LOGS, VOXCONNECT }
 
 /** Hub's settings screen: a menu/subpage split (mirrors the satellites' SettingsScreen shape) with
  *  scheduled-backup configuration + past-backups list under General, theme controls under Theme via
@@ -77,6 +81,9 @@ private enum class SettingsPage { MENU, GENERAL, THEME, LOGS }
 @Composable
 fun HubSettingsScreen(
     settingsRepo: HubSettingsRepository,
+    voxConnectServer: VoxConnectServer,
+    voxConnectPairing: VoxConnectPairing,
+    voxConnectDeviceStore: PairedDeviceStore,
     onBack: () -> Unit,
     onRestoreBackup: (File) -> Unit
 ) {
@@ -115,6 +122,7 @@ fun HubSettingsScreen(
         SettingsPage.GENERAL -> languageManager.getString("backup_schedule_section")
         SettingsPage.THEME -> languageManager.getString("theme_section")
         SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
+        SettingsPage.VOXCONNECT -> languageManager.getString("voxconnect_section")
     }
 
     Scaffold(
@@ -145,6 +153,11 @@ fun HubSettingsScreen(
                     headlineContent = { Text(languageManager.getString("logs_settings_title")) },
                     leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("voxconnect_section")) },
+                    leadingContent = { Icon(Icons.Filled.Wifi, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.VOXCONNECT }
                 )
             }
 
@@ -325,6 +338,19 @@ fun HubSettingsScreen(
                     )
                 }
             }
+
+            SettingsPage.VOXCONNECT -> VoxConnectSettingsCard(
+                settings = settings,
+                settingsRepo = settingsRepo,
+                voxConnectServer = voxConnectServer,
+                voxConnectPairing = voxConnectPairing,
+                voxConnectDeviceStore = voxConnectDeviceStore,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            )
         }
     }
 }

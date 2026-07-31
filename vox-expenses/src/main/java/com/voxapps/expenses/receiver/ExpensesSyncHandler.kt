@@ -4,6 +4,7 @@ import com.voxapps.datahygiene.SyncIdentity
 import com.voxapps.datahygiene.planMerge
 import com.voxapps.expenses.data.CategoryPalette
 import com.voxapps.expenses.data.Expense
+import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.llm.optTransactionDirection
@@ -22,9 +23,13 @@ import org.json.JSONObject
  * last-write-wins / delete-on-tombstone algorithm, never a blind overwrite.
  *
  * Categories travel by name, not id (a local Room sequence has no meaning on another phone) — same
- * convention [ExpensesExportImportHandler] already uses. Line items are deliberately NOT included in
- * the sync payload for v1: they have no sync identity of their own yet, so an itemized receipt syncs
- * as just its header fields (title/vendor/total/etc.) — a known, accepted limitation, not a bug.
+ * convention [ExpensesExportImportHandler] already uses. Line items travel *with* their parent
+ * expense rather than getting their own sync identity — they're never edited or addressed
+ * independently of the expense they belong to (the in-app edit flow already replaces an expense's
+ * entire line-item list atomically, see [ExpensesRepository.updateExpense]), so whichever version of
+ * the expense wins the last-write-wins comparison carries its line items along with it. No separate
+ * per-item merge pass, no per-item uid — consistent with [Expense] itself already being whole-record
+ * last-write-wins, not field-level merge.
  */
 class ExpensesSyncHandler(
     private val settingsRepo: ExpensesSettingsRepository,
@@ -37,20 +42,22 @@ class ExpensesSyncHandler(
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
         if (locked) return VoxResult(ok = false, text = ExpensesReadResponder.LOCKED_MESSAGE)
 
-        val categoryNameById = expensesRepo.categories.first().associate { it.id to it.name }
         val scopeSet = scopeNames?.takeIf { it.isNotEmpty() }?.map { it.lowercase() }?.toSet()
 
-        val changed = expensesRepo.expensesSnapshot()
-            .filter { it.updatedAt > since }
-            .filter { expense ->
+        // expensesWithDetails (the same joined query ExpensesExportImportHandler's OP_EXPORT path
+        // uses) resolves each expense's category and line items in one query — no separate
+        // categoryNameById map to build, and line items ride along for free.
+        val changed = expensesRepo.expensesWithDetails.first()
+            .filter { it.expense.updatedAt > since }
+            .filter { details ->
                 if (scopeSet == null) return@filter true
-                val name = expense.categoryId?.let { categoryNameById[it] } ?: return@filter false
+                val name = details.category?.name ?: return@filter false
                 name.lowercase() in scopeSet
             }
         val tombstones = expensesRepo.tombstonesSince(since)
 
         val json = JSONObject()
-        json.put("entries", JSONArray(changed.map { it.toSyncJson(it.categoryId?.let { id -> categoryNameById[id] }) }))
+        json.put("entries", JSONArray(changed.map { it.expense.toSyncJson(it.category?.name, it.items) }))
         json.put("tombstones", JSONArray(tombstones.map { JSONObject().put("uid", it.uid).put("deletedAt", it.deletedAt) }))
         return VoxResult(ok = true, text = json.toString())
     }
@@ -90,7 +97,7 @@ class ExpensesSyncHandler(
                     newId.takeIf { it > 0 }
                 }
             }
-            e.toExpense(categoryId)
+            e.toExpense(categoryId) to e.toLineItems()
         }
         val tombstonesJson = root.optJSONArray("tombstones") ?: JSONArray()
         val remoteTombstoneUids = (0 until tombstonesJson.length())
@@ -98,12 +105,13 @@ class ExpensesSyncHandler(
             .toSet()
 
         val local = expensesRepo.expensesSnapshot()
-        val plan = ExpenseSyncIdentity.planMerge(local, remoteEntries, remoteTombstoneUids)
+        val plan = ExpenseSyncIdentity.planMerge(local, remoteEntries.map { it.first }, remoteTombstoneUids)
+        val itemsByUid = remoteEntries.associate { (expense, items) -> expense.uid to items }
 
-        for (expense in plan.toInsert) expensesRepo.insertSyncedExpense(expense)
+        for (expense in plan.toInsert) expensesRepo.insertSyncedExpense(expense, itemsByUid[expense.uid].orEmpty())
         for (expense in plan.toUpdate) {
             val localId = expensesRepo.getIdByUid(expense.uid) ?: continue
-            expensesRepo.updateSyncedExpense(expense.copy(id = localId))
+            expensesRepo.updateSyncedExpense(expense.copy(id = localId), itemsByUid[expense.uid].orEmpty())
         }
         for (uid in plan.toDeleteUids) expensesRepo.deleteExpenseByUid(uid)
 
@@ -119,7 +127,7 @@ private object ExpenseSyncIdentity : SyncIdentity<Expense> {
     override fun updatedAtOf(record: Expense): Long = record.updatedAt
 }
 
-private fun Expense.toSyncJson(categoryName: String?): JSONObject = JSONObject().apply {
+private fun Expense.toSyncJson(categoryName: String?, items: List<ExpenseLineItem>): JSONObject = JSONObject().apply {
     put("uid", uid)
     put("title", title)
     put("totalAmount", totalAmount)
@@ -135,6 +143,39 @@ private fun Expense.toSyncJson(categoryName: String?): JSONObject = JSONObject()
     put("isStub", isStub)
     put("createdAt", createdAt)
     put("updatedAt", updatedAt)
+    put("lineItems", JSONArray(items.sortedBy { it.position }.map { it.toSyncJson() }))
+}
+
+/** No uid/updatedAt of its own — see [ExpensesSyncHandler]'s doc comment for why line items don't
+ *  need independent sync identity. */
+private fun ExpenseLineItem.toSyncJson(): JSONObject = JSONObject().apply {
+    put("name", name)
+    put("quantity", quantity)
+    put("unitPrice", unitPrice)
+    put("position", position)
+    netAmount?.let { put("netAmount", it) }
+    vatAmount?.let { put("vatAmount", it) }
+    grossAmount?.let { put("grossAmount", it) }
+}
+
+/** [expenseId] is set later by the repository once it knows which local row (new insert or
+ *  resolved-by-uid update) these items belong to — see [ExpensesRepository.insertSyncedExpense]/
+ *  [ExpensesRepository.updateSyncedExpense]. */
+private fun JSONObject.toLineItems(): List<ExpenseLineItem> {
+    val array = optJSONArray("lineItems") ?: return emptyList()
+    return (0 until array.length()).map { i ->
+        val item = array.getJSONObject(i)
+        ExpenseLineItem(
+            expenseId = 0,
+            name = item.optString("name"),
+            quantity = item.optDouble("quantity"),
+            unitPrice = item.optDouble("unitPrice"),
+            position = item.optInt("position"),
+            netAmount = if (item.has("netAmount") && !item.isNull("netAmount")) item.optDouble("netAmount") else null,
+            vatAmount = if (item.has("vatAmount") && !item.isNull("vatAmount")) item.optDouble("vatAmount") else null,
+            grossAmount = if (item.has("grossAmount") && !item.isNull("grossAmount")) item.optDouble("grossAmount") else null
+        )
+    }
 }
 
 private fun JSONObject.toExpense(categoryId: Long?): Expense = Expense(

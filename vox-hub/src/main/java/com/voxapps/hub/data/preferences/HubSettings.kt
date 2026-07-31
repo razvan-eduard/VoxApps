@@ -30,6 +30,16 @@ import com.voxapps.hub.domain.backup.AppBackupConfig
  *   shared configuration driving both the manual Export button and scheduled [com.voxapps.hub.domain.backup.BackupWorker]
  *   runs — replaces the old global scope radio + secrets/photos checkboxes + app checklist. An app
  *   missing from this map falls back to [AppBackupConfig.DEFAULT] (see [com.voxapps.hub.domain.backup.configFor]).
+ * - [voxConnectEnabled]/[voxConnectPort]: whether the VoxConnect Bridge (an embedded HTTP+WebSocket
+ *   server, see `core:voxconnect`'s `VoxConnectServer`) is running, and which port it listens on.
+ *   Device-local runtime state, not portable user data.
+ * - [voxConnectMediaControlEnabled]: whether media-control requests are relayed to Commander at
+ *   all — off by default, since it's a capability distinct from "which apps are monitored" (media
+ *   control isn't a satellite domain, it goes through Commander's own OS notification-listener
+ *   grant — see [com.voxapps.ipc.VoxIpc.OP_MEDIA_CONTROL]).
+ * - [voxConnectMonitoredApps]: per-domain opt-in for what a paired VoxConnect device may read/command
+ *   via `GET /apps`/`POST /command` — mirrors [appBackupConfigs]' shape (a flattened JSON map), just
+ *   a single boolean per domain since this slice doesn't need Backup's finer Settings/Data granularity.
  */
 @Immutable
 data class HubSettings(
@@ -43,7 +53,11 @@ data class HubSettings(
     val lastBackupTimestamp: Long? = null,
     val lastBackupError: String? = null,
     val lastBackupMissingApps: List<String> = emptyList(),
-    val appBackupConfigs: Map<String, AppBackupConfig> = emptyMap()
+    val appBackupConfigs: Map<String, AppBackupConfig> = emptyMap(),
+    val voxConnectEnabled: Boolean = false,
+    val voxConnectPort: Int = VOXCONNECT_DEFAULT_PORT,
+    val voxConnectMediaControlEnabled: Boolean = false,
+    val voxConnectMonitoredApps: Map<String, Boolean> = emptyMap()
 ) {
     companion object {
         const val THEME_SYSTEM = "SYSTEM"
@@ -60,5 +74,7 @@ data class HubSettings(
         const val RETENTION_5 = 5
         const val RETENTION_10 = 10
         const val RETENTION_UNLIMITED = -1
+
+        const val VOXCONNECT_DEFAULT_PORT = 8787
     }
 }

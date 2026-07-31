@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.voxapps.commander.VoxApplication
+import com.voxapps.commander.domain.media.MediaControlIpcHandler
 import com.voxapps.ipc.VoxCommand
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
@@ -33,6 +34,11 @@ class VoxCommandReceiver : BroadcastReceiver() {
         when (command.op) {
             VoxIpc.OP_PING -> {
                 setResult(Activity.RESULT_OK, VoxResult(ok = true, text = "pong").toJson(), null)
+            }
+
+            VoxIpc.OP_MEDIA_CONTROL -> {
+                val result = MediaControlIpcHandler.handle(context, command.mediaAction)
+                setResult(Activity.RESULT_OK, result.toJson(), null)
             }
 
             VoxIpc.OP_EXPORT -> {

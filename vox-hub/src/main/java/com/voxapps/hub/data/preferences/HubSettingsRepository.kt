@@ -35,4 +35,12 @@ interface HubSettingsRepository {
         error: String?,
         missingApps: List<String> = emptyList()
     )
+
+    suspend fun setVoxConnectEnabled(enabled: Boolean)
+    suspend fun setVoxConnectPort(port: Int)
+    suspend fun setVoxConnectMediaControlEnabled(enabled: Boolean)
+
+    /** Updates one domain's monitored flag, leaving every other domain's entry untouched — same
+     *  read-modify-write shape as [setAppBackupConfig]. */
+    suspend fun setVoxConnectMonitoredApp(domain: String, monitored: Boolean)
 }

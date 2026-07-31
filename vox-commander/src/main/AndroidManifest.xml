@@ -173,7 +173,7 @@
                 <action android:name="com.voxapps.action.VOX_COMMAND" />
             </intent-filter>
             <meta-data android:name="com.voxapps.vox.domain" android:value="commander" />
-            <meta-data android:name="com.voxapps.vox.actions" android:value="ping,export,import" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="ping,export,import,media_control" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Vox Commander" />
         </receiver>
 

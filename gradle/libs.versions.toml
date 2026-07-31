@@ -32,6 +32,8 @@ opencv = "4.5.3"
 camerax = "1.6.1"
 glanceAppwidget = "1.1.1"
 kizitonwoseCalendar = "2.6.0"
+ktor = "3.4.1"
+zxing = "3.5.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -91,6 +93,13 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 kizitonwose-calendar = { group = "com.kizitonwose.calendar", name = "compose", version.ref = "kizitonwoseCalendar" }
+
+# VoxConnect bridge: embedded HTTP+WebSocket server (core:voxconnect) and QR generation (display-only,
+# no scanning library needed — the desktop app is the one that scans).
+ktor-server-core = { group = "io.ktor", name = "ktor-server-core", version.ref = "ktor" }
+ktor-server-cio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktor" }
+ktor-server-websockets = { group = "io.ktor", name = "ktor-server-websockets", version.ref = "ktor" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

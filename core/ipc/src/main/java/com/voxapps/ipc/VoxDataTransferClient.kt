@@ -98,6 +98,20 @@ object VoxDataTransferClient {
     ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_READ, dateFrom = dateFrom, dateTo = dateTo), timeoutMs)
 
     /**
+     * Generic escape hatch: sends an arbitrary [VoxCommand] as-is and returns the raw [VoxResult] —
+     * used by callers (the VoxConnect Bridge) that need to forward a command built elsewhere rather
+     * than construct one of the named shapes above. Every named function in this object could be
+     * written in terms of this one; they aren't, purely so each call site keeps its specific
+     * field-by-field signature instead of a raw [VoxCommand].
+     */
+    suspend fun sendCommand(
+        context: Context,
+        packageName: String,
+        command: VoxCommand,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    ): VoxResult? = send(context, packageName, command, timeoutMs)
+
+    /**
      * Fire-and-forget push: a satellite calls this the instant its own dynamic context (categories,
      * currency, language, or equivalent) changes, so Commander's cache is corrected immediately
      * instead of waiting for a manual Refresh. Not a request-response — no reply is expected or

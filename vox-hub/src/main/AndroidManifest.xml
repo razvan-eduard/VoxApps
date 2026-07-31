@@ -22,6 +22,17 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
 
+    <!-- VoxConnect Bridge (see :core:voxconnect's VoxConnectServer): an embedded local HTTP+WebSocket
+         server a paired desktop app connects to over WiFi. Binding even a local listening socket
+         requires INTERNET on Android. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Scanning the pairing QR shown on the PC (see VoxConnectQrScanner) — the phone always has a
+         camera, unlike many desktop PCs, which is why pairing bootstrap goes this direction. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
     <application
         android:name=".HubApplication"
         android:allowBackup="false"

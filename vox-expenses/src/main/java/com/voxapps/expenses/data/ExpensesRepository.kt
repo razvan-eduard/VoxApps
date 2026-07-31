@@ -122,13 +122,30 @@ class ExpensesRepository(
 
     /** Insert-side of a sync merge: preserves [expense]'s uid/updatedAt verbatim — unlike [addExpense],
      *  which always mints a fresh uid and stamps updatedAt to "now" (correct for a locally *created*
-     *  row, wrong for one being replicated from a peer that already has real sync identity). */
-    suspend fun insertSyncedExpense(expense: Expense): Long = expenseDao.insert(expense.copy(id = 0))
+     *  row, wrong for one being replicated from a peer that already has real sync identity). [items]
+     *  travel with the expense rather than getting their own sync identity — see
+     *  [ExpensesSyncHandler]'s doc comment for why that's the correct model, not a shortcut. */
+    suspend fun insertSyncedExpense(expense: Expense, items: List<ExpenseLineItem> = emptyList()): Long {
+        val id = expenseDao.insert(expense.copy(id = 0))
+        if (id > 0 && items.isNotEmpty()) {
+            lineItemDao.insertAll(items.mapIndexed { index, item -> item.copy(id = 0, expenseId = id, position = index) })
+        }
+        return id
+    }
 
     /** Update-side of a sync merge: [expense] must already carry the *local* row's id (resolved via
      *  [getIdByUid] before calling this) — every other field, including updatedAt, comes from the
-     *  peer's newer version, since it won the last-write-wins comparison that got us here. */
-    suspend fun updateSyncedExpense(expense: Expense) = expenseDao.update(expense)
+     *  peer's newer version, since it won the last-write-wins comparison that got us here. [items]
+     *  unconditionally replace the local set (an empty list is a valid, correct result — it means the
+     *  peer's current state for this expense genuinely has no line items), mirroring [updateExpense]'s
+     *  delete-then-reinsert pattern exactly. */
+    suspend fun updateSyncedExpense(expense: Expense, items: List<ExpenseLineItem> = emptyList()) {
+        expenseDao.update(expense)
+        lineItemDao.deleteAllForExpense(expense.id)
+        if (items.isNotEmpty()) {
+            lineItemDao.insertAll(items.mapIndexed { index, item -> item.copy(id = 0, expenseId = expense.id, position = index) })
+        }
+    }
 
     /** Applies an incoming sync tombstone: deletes the local row by uid (a no-op if it's already
      *  gone or was never synced here) via the normal [deleteExpenseById] path, so a fresh local

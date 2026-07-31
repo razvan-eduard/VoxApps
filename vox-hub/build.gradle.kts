@@ -63,6 +63,10 @@ dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
+    implementation(project(":core:voxconnect"))
+    // PreviewView for the pairing QR scanner's camera preview (VoxConnectSettingsCard.kt) — the
+    // rest of CameraX comes from :core:voxconnect's own (implementation-scoped) dependency.
+    implementation(libs.androidx.camera.view)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

@@ -133,6 +133,14 @@ jobs:
           git tag -f "$TAG"
           git push origin "$TAG" --force
 
+      - name: Delete existing release for a fresh publish date
+        if: steps.check_bump.outputs.changed != 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          gh release delete "$TAG" --yes || true
+
       - name: Create GitHub Release
         if: steps.check_bump.outputs.changed != 'false'
         uses: softprops/action-gh-release@v2
