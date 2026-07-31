@@ -37,6 +37,9 @@ import com.kizitonwose.calendar.core.CalendarDay
 import com.kizitonwose.calendar.core.DayPosition
 import com.kizitonwose.calendar.core.OutDateStyle
 import com.kizitonwose.calendar.core.firstDayOfWeekFromLocale
+import com.voxapps.design.effects.ApplyTodayEffect
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -59,7 +62,13 @@ fun MonthGridView(
         firstDayOfWeek = firstDayOfWeek,
         outDateStyle = OutDateStyle.EndOfRow
     ),
-    dayDots: Map<LocalDate, List<Long>> = emptyMap()
+    dayDots: Map<LocalDate, List<Long>> = emptyMap(),
+    today: LocalDate = LocalDate.now(),
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
 ) {
     val scope = rememberCoroutineScope()
     val selectedDate = remember(selectedDateMillis) { CalendarDateUtils.millisToLocalDate(selectedDateMillis) }
@@ -87,8 +96,14 @@ fun MonthGridView(
                 DayCell(
                     day = day,
                     isSelected = selectedDate == day.date,
+                    isToday = day.date == today,
                     onClick = { onDateSelected(CalendarDateUtils.startOfDayMillis(it.date)) },
-                    dots = dayDots[day.date] ?: emptyList()
+                    dots = dayDots[day.date] ?: emptyList(),
+                    todayEffect = todayEffect,
+                    todayEffectStyle = todayEffectStyle,
+                    todayEffectPrimaryColor = todayEffectPrimaryColor,
+                    todayEffectSecondaryColor = todayEffectSecondaryColor,
+                    todayEffectSpeed = todayEffectSpeed
                 )
             }
         )
@@ -151,50 +166,67 @@ private fun DaysOfWeekTitle(firstDayOfWeek: java.time.DayOfWeek, locale: Locale)
 private fun DayCell(
     day: CalendarDay,
     isSelected: Boolean,
+    isToday: Boolean,
     onClick: (CalendarDay) -> Unit,
-    dots: List<Long>
+    dots: List<Long>,
+    todayEffect: TodayEffect,
+    todayEffectStyle: TodayEffectStyle,
+    todayEffectPrimaryColor: Color,
+    todayEffectSecondaryColor: Color?,
+    todayEffectSpeed: Float
 ) {
-    Box(
-        modifier = Modifier
-            .aspectRatio(1.4f)
-            .padding(horizontal = 1.5.dp, vertical = 1.5.dp)
-            .clip(MaterialTheme.shapes.small)
-            .background(
-                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
-            )
-            .clickable(
-                enabled = day.position == DayPosition.MonthDate,
-                onClick = { onClick(day) }
-            ),
-        contentAlignment = Alignment.Center
+    ApplyTodayEffect(
+        enabled = isToday && day.position == DayPosition.MonthDate,
+        elementName = "day_${day.date}",
+        effect = todayEffect,
+        style = todayEffectStyle,
+        shape = MaterialTheme.shapes.small,
+        primaryColor = todayEffectPrimaryColor,
+        secondaryColor = todayEffectSecondaryColor,
+        speedMultiplier = todayEffectSpeed
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Box(
+            modifier = Modifier
+                .aspectRatio(1.4f)
+                .padding(horizontal = 1.5.dp, vertical = 1.5.dp)
+                .clip(MaterialTheme.shapes.small)
+                .background(
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                )
+                .clickable(
+                    enabled = day.position == DayPosition.MonthDate,
+                    onClick = { onClick(day) }
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = day.date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = if (day.position == DayPosition.MonthDate) {
-                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                },
-                fontSize = 12.sp
-            )
-            if (day.position == DayPosition.MonthDate && dots.isNotEmpty()) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 1.dp)
-                ) {
-                    dots.take(4).forEach { colorArgb ->
-                        Box(
-                            modifier = Modifier
-                                .size(3.dp)
-                                .background(Color(colorArgb.toInt()), CircleShape)
-                        )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = day.date.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (day.position == DayPosition.MonthDate) {
+                        if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    },
+                    fontSize = 12.sp
+                )
+                if (day.position == DayPosition.MonthDate && dots.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 1.dp)
+                    ) {
+                        dots.take(4).forEach { colorArgb ->
+                            Box(
+                                modifier = Modifier
+                                    .size(3.dp)
+                                    .background(Color(colorArgb.toInt()), CircleShape)
+                            )
+                        }
                     }
                 }
             }

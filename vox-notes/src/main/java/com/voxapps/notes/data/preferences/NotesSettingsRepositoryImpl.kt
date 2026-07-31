@@ -6,8 +6,11 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +42,11 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
         val SCAN_IMAGE_RETENTION = stringPreferencesKey("scan_image_retention")
+        val TODAY_EFFECT = stringPreferencesKey("today_effect")
+        val TODAY_EFFECT_STYLE = stringPreferencesKey("today_effect_style")
+        val TODAY_EFFECT_COLOR = longPreferencesKey("today_effect_color")
+        val TODAY_EFFECT_COLOR_2 = longPreferencesKey("today_effect_color_2")
+        val TODAY_EFFECT_SPEED = floatPreferencesKey("today_effect_speed")
         val NOTIFICATIONS_SYSTEM_DEFAULT = booleanPreferencesKey("notifications_system_default")
         val NOTIFICATIONS_VIBRATION_ENABLED = booleanPreferencesKey("notifications_vibration_enabled")
         val NOTIFICATIONS_SOUND_URI = stringPreferencesKey("notifications_sound_uri")
@@ -66,6 +74,11 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
             attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
             scanImageRetention = prefs[Keys.SCAN_IMAGE_RETENTION] ?: NotesSettings.RETENTION_ON_FAILURE,
+            todayEffect = prefs[Keys.TODAY_EFFECT] ?: TodayEffect.NONE.name,
+            todayEffectStyle = prefs[Keys.TODAY_EFFECT_STYLE] ?: TodayEffectStyle.RING.name,
+            todayEffectColor = prefs[Keys.TODAY_EFFECT_COLOR] ?: NotesSettings.TODAY_EFFECT_DEFAULT_COLOR,
+            todayEffectColor2 = prefs[Keys.TODAY_EFFECT_COLOR_2],
+            todayEffectSpeed = prefs[Keys.TODAY_EFFECT_SPEED] ?: 1f,
             notificationsSystemDefault = prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] ?: true,
             notificationsVibrationEnabled = prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] ?: true,
             notificationsSoundUri = prefs[Keys.NOTIFICATIONS_SOUND_URI],
@@ -156,6 +169,28 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         dataStore.edit { it[Keys.SCAN_IMAGE_RETENTION] = mode }
     }
 
+    override suspend fun setTodayEffect(effect: String) {
+        dataStore.edit { it[Keys.TODAY_EFFECT] = effect }
+    }
+
+    override suspend fun setTodayEffectStyle(style: String) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_STYLE] = style }
+    }
+
+    override suspend fun setTodayEffectColor(colorArgb: Long) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_COLOR] = colorArgb }
+    }
+
+    override suspend fun setTodayEffectColor2(colorArgb: Long?) {
+        dataStore.edit {
+            if (colorArgb == null) it.remove(Keys.TODAY_EFFECT_COLOR_2) else it[Keys.TODAY_EFFECT_COLOR_2] = colorArgb
+        }
+    }
+
+    override suspend fun setTodayEffectSpeed(speed: Float) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_SPEED] = speed }
+    }
+
     override suspend fun setNotificationsSystemDefault(enabled: Boolean) {
         dataStore.edit { it[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = enabled }
     }
@@ -204,6 +239,15 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             prefs[Keys.THEME_COLORED] = settings.themeColored
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
             prefs[Keys.SCAN_IMAGE_RETENTION] = settings.scanImageRetention
+            prefs[Keys.TODAY_EFFECT] = settings.todayEffect
+            prefs[Keys.TODAY_EFFECT_STYLE] = settings.todayEffectStyle
+            prefs[Keys.TODAY_EFFECT_COLOR] = settings.todayEffectColor
+            if (settings.todayEffectColor2 == null) {
+                prefs.remove(Keys.TODAY_EFFECT_COLOR_2)
+            } else {
+                prefs[Keys.TODAY_EFFECT_COLOR_2] = settings.todayEffectColor2
+            }
+            prefs[Keys.TODAY_EFFECT_SPEED] = settings.todayEffectSpeed
             prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = settings.notificationsSystemDefault
             prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] = settings.notificationsVibrationEnabled
             if (settings.notificationsSoundUri == null) {

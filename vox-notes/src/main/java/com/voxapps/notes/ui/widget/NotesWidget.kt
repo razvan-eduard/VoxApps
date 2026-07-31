@@ -86,7 +86,11 @@ class NotesWidget : GlanceAppWidget() {
             putExtra(NotesActivity.EXTRA_QUICK_ADD, true)
         }
         val openAppIntent = Intent(context, NotesActivity::class.java)
-        val locale = Locale.forLanguageTag(container.settingsRepository.getSnapshot().language)
+        // Read the live flow, not getSnapshot() — that cached value is updated by its own
+        // independent collector, racing against the collector that triggers this very redraw
+        // (NotesContainer's combine()). A direct flow read has no such race (see CalendarWidget's
+        // identical fix for the full reasoning).
+        val locale = Locale.forLanguageTag(container.settingsRepository.settingsFlow.first().language)
         val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
             VoxAppsDiscovery.isCommanderInstalled(context)
 

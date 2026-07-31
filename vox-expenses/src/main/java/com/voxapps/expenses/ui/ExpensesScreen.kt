@@ -34,10 +34,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendar.CalendarView
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
@@ -57,7 +60,12 @@ fun ExpensesScreen(
     onAddExpense: () -> Unit,
     onEditExpense: (ExpenseWithDetails) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenReports: () -> Unit
+    onOpenReports: () -> Unit,
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
 ) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
@@ -175,6 +183,11 @@ fun ExpensesScreen(
                     onToggleGridView = { stateManager.setIsGridView(!state.isGridView) },
                     onDateSelected = { stateManager.setSelectedDate(it) },
                     dayDots = dayDots,
+                    todayEffect = todayEffect,
+                    todayEffectStyle = todayEffectStyle,
+                    todayEffectPrimaryColor = todayEffectPrimaryColor,
+                    todayEffectSecondaryColor = todayEffectSecondaryColor,
+                    todayEffectSpeed = todayEffectSpeed,
                     itemContent = { calItem ->
                         ExpenseCard(expenseWithDetails = calItem.ewd, onClick = { onEditExpense(calItem.ewd) })
                     }

@@ -14,6 +14,7 @@ import com.voxapps.ipc.VoxLlmRequestQueue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -52,11 +53,20 @@ class CalendarContainer(context: Context) {
     }
 
     init {
-        // Keeps CalendarWidget's home-screen snapshot in sync with every uiState change (add/edit/
-        // delete, lock/unlock, settings) — one central hook here instead of scattering updateAll()
-        // calls across every write path in CalendarStateManager/CalendarRepository.
+        // Keeps CalendarWidget's home-screen snapshot in sync with lock-state transitions (uiState),
+        // raw data changes (entriesWithTags — the widget reads this directly, independent of any
+        // in-app layer/tag filter, see CalendarWidget.kt's provideGlance doc comment), AND settings
+        // (settingsFlow — border/today-effect color, style, thickness etc. are all read fresh into
+        // the widget's content but nothing about changing them touches entries or uiState, so without
+        // watching settingsFlow too, a settings-only change would sit un-reflected until the next
+        // unrelated data change, the midnight worker, or the OS's 30-min update floor). Mirrors
+        // ExpensesContainer's identical combine().
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
-            calendarStateManager.uiState.collect { CalendarWidget().updateAll(appContext) }
+            combine(
+                calendarStateManager.uiState,
+                calendarRepository.entriesWithTags,
+                settingsRepository.settingsFlow
+            ) { _, _, _ -> }.collect { CalendarWidget().updateAll(appContext) }
         }
     }
 }

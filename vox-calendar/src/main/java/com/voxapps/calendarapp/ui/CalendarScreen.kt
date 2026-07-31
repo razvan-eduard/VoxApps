@@ -48,6 +48,8 @@ import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.state.CalendarViewMode
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
@@ -70,7 +72,12 @@ fun CalendarScreen(
     stateManager: CalendarStateManager,
     onAddEntry: () -> Unit,
     onEditEntry: (EntryCalendarItem) -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
 ) {
     val languageManager = LocalLanguageManager.current
     val layerById = remember(state.layers) { state.layers.associateBy { it.id } }
@@ -177,7 +184,12 @@ fun CalendarScreen(
                         onDayClick = { millis ->
                             stateManager.setSelectedDate(millis)
                             stateManager.setViewMode(CalendarViewMode.DAY)
-                        }
+                        },
+                        todayEffect = todayEffect,
+                        todayEffectStyle = todayEffectStyle,
+                        todayEffectPrimaryColor = todayEffectPrimaryColor,
+                        todayEffectSecondaryColor = todayEffectSecondaryColor,
+                        todayEffectSpeed = todayEffectSpeed
                     )
                     CalendarViewMode.MONTH -> {
                         CalendarView(
@@ -190,6 +202,11 @@ fun CalendarScreen(
                             onToggleGridView = { stateManager.setIsGridView(!state.isGridView) },
                             onDateSelected = { stateManager.setSelectedDate(it) },
                             dayDots = dayDots,
+                            todayEffect = todayEffect,
+                            todayEffectStyle = todayEffectStyle,
+                            todayEffectPrimaryColor = todayEffectPrimaryColor,
+                            todayEffectSecondaryColor = todayEffectSecondaryColor,
+                            todayEffectSpeed = todayEffectSpeed,
                             itemContent = { item ->
                                 EntryRow(
                                     item = item,
@@ -208,7 +225,12 @@ fun CalendarScreen(
                         onDayHeaderClick = { millis ->
                             stateManager.setSelectedDate(millis)
                             stateManager.setViewMode(CalendarViewMode.DAY)
-                        }
+                        },
+                        todayEffect = todayEffect,
+                        todayEffectStyle = todayEffectStyle,
+                        todayEffectPrimaryColor = todayEffectPrimaryColor,
+                        todayEffectSecondaryColor = todayEffectSecondaryColor,
+                        todayEffectSpeed = todayEffectSpeed
                     )
                     CalendarViewMode.DAY -> DayView(
                         items = items,
@@ -216,7 +238,12 @@ fun CalendarScreen(
                         selectedDateMillis = state.selectedDateMillis,
                         locale = locale,
                         onItemClick = onEditEntry,
-                        onOpenDaySummary = { daySummaryFor = it }
+                        onOpenDaySummary = { daySummaryFor = it },
+                        todayEffect = todayEffect,
+                        todayEffectStyle = todayEffectStyle,
+                        todayEffectPrimaryColor = todayEffectPrimaryColor,
+                        todayEffectSecondaryColor = todayEffectSecondaryColor,
+                        todayEffectSpeed = todayEffectSpeed
                     )
                 }
             }

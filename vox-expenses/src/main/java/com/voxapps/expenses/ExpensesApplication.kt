@@ -9,6 +9,7 @@ import com.voxapps.expenses.domain.llm.ExpenseParsePromptBuilder
 import com.voxapps.expenses.domain.llm.GeneratedParsedSchema
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.PendingLlmRequestScheduler
+import com.voxapps.expenses.domain.widget.WidgetMidnightRefreshScheduler
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxSatelliteSchema
 import com.voxapps.logging.Logger
@@ -37,6 +38,7 @@ class ExpensesApplication : Application() {
         ExpenseDeduplicationScheduler.reschedule(this, settingsSnapshot.scheduledExpenseDedupInterval)
         SpendingLimitScheduler.ensureScheduled(this)
         PendingLlmRequestScheduler.ensureScheduled(this)
+        WidgetMidnightRefreshScheduler.ensureScheduled(this)
 
         // Apply the persisted debug-logging flag immediately, then keep it in sync with any later
         // Settings toggle (mirrors vox-notes' NotesApplication).

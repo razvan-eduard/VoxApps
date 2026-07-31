@@ -75,12 +75,19 @@ class ExpensesContainer(context: Context) {
     }
 
     init {
-        // Keeps ExpensesWidget's home-screen snapshot fresh — reacts to both lock-state transitions
-        // (uiState) and data changes (expensesWithDetails), since the widget reads both independently
-        // of any in-app filter (see ExpensesWidget.kt's provideGlance doc comment).
+        // Keeps ExpensesWidget's home-screen snapshot fresh — reacts to lock-state transitions
+        // (uiState), data changes (expensesWithDetails, read independently of any in-app filter, see
+        // ExpensesWidget.kt's provideGlance doc comment), AND settings (settingsFlow — border/
+        // today-effect color, style, thickness etc. are all read fresh into the widget's content but
+        // nothing about changing them touches expenses or uiState, so without watching settingsFlow
+        // too, a settings-only change would sit un-reflected until the next unrelated data change,
+        // the midnight worker, or the OS's 30-min update floor).
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
-            combine(expensesStateManager.uiState, expensesRepository.expensesWithDetails) { _, _ -> }
-                .collect { ExpensesWidget().updateAll(appContext) }
+            combine(
+                expensesStateManager.uiState,
+                expensesRepository.expensesWithDetails,
+                settingsRepository.settingsFlow
+            ) { _, _, _ -> }.collect { ExpensesWidget().updateAll(appContext) }
         }
 
         // Warm the launcher-apps cache before any UI composes (mirrors vox-commander's AppContainer

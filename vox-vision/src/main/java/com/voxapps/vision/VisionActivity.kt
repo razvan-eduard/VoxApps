@@ -12,8 +12,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
+import com.voxapps.vision.data.preferences.VisionSettingsRepository
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.vision.ui.LocalLanguageManager
@@ -43,8 +45,16 @@ class VisionActivity : ComponentActivity() {
         Logger.d("VisionActivity", "onCreate: pendingState=$pendingState")
 
         setContent {
+            val themeDarkMode by container.settingsRepository.themeDarkModeFlow.collectAsStateWithLifecycle(
+                initialValue = VisionSettingsRepository.THEME_SYSTEM
+            )
+            val themeColored by container.settingsRepository.themeColoredFlow.collectAsStateWithLifecycle(initialValue = true)
+
             CompositionLocalProvider(LocalLanguageManager provides container.languageManager) {
-                VoxTheme(darkMode = VoxDarkMode.SYSTEM, colored = true) {
+                VoxTheme(
+                    darkMode = runCatching { VoxDarkMode.valueOf(themeDarkMode) }.getOrDefault(VoxDarkMode.SYSTEM),
+                    colored = themeColored
+                ) {
                     VisionRoot(
                         container = container,
                         pendingRequest = pendingState,

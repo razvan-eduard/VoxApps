@@ -49,6 +49,8 @@ import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.CategoryColors
 import com.voxapps.expenses.ui.formatAmount
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.showRequirementToast
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
@@ -89,7 +91,14 @@ class ExpensesWidget : GlanceAppWidget() {
             putExtra(ExpensesActivity.EXTRA_QUICK_ADD, true)
         }
         val openAppIntent = Intent(context, ExpensesActivity::class.java)
-        val settingsSnapshot = container.settingsRepository.getSnapshot()
+        // Read the live flow, not getSnapshot() — that cached value is updated by its own
+        // independent collector, racing against the collector that triggers this very redraw
+        // (ExpensesContainer's combine()). Both react to the same DataStore write with no ordering
+        // guarantee between them, so getSnapshot() could still return the previous value the instant
+        // this redraw fires — a settings change (e.g. picking a new today-effect) would then render
+        // one generation stale until something else happened to trigger a second redraw. A direct
+        // flow read has no such race.
+        val settingsSnapshot = container.settingsRepository.settingsFlow.first()
         val locale = Locale.forLanguageTag(settingsSnapshot.language)
 
         val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
@@ -107,7 +116,17 @@ class ExpensesWidget : GlanceAppWidget() {
                     scanEnabled = scanEnabled,
                     borderEnabled = settingsSnapshot.widgetBorderEnabled,
                     borderThicknessDp = settingsSnapshot.widgetBorderThicknessDp,
-                    borderColor = Color(settingsSnapshot.widgetBorderColorArgb.toInt())
+                    borderColor = Color(settingsSnapshot.widgetBorderColorArgb.toInt()),
+                    // todayEffectShowInWidget is a widget-only opt-out, independent of the in-app
+                    // effect — collapsing it to NONE here reuses the existing effect==NONE gate
+                    // below with no signature changes (mirrors CalendarWidget.kt).
+                    todayEffect = if (settingsSnapshot.todayEffectShowInWidget) {
+                        runCatching { TodayEffect.valueOf(settingsSnapshot.todayEffect) }.getOrDefault(TodayEffect.NONE)
+                    } else {
+                        TodayEffect.NONE
+                    },
+                    todayEffectStyle = runCatching { TodayEffectStyle.valueOf(settingsSnapshot.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
+                    todayEffectColor = Color(settingsSnapshot.todayEffectColor.toInt())
                 )
             }
         }
@@ -139,7 +158,10 @@ private fun ExpensesWidgetContent(
     scanEnabled: Boolean,
     borderEnabled: Boolean,
     borderThicknessDp: Int,
-    borderColor: Color
+    borderColor: Color,
+    todayEffect: TodayEffect,
+    todayEffectStyle: TodayEffectStyle,
+    todayEffectColor: Color
 ) {
     Column(
         modifier = GlanceModifier
@@ -180,7 +202,10 @@ private fun ExpensesWidgetContent(
                     style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant)
                 )
             } else {
-                RecentExpensesList(expenses, languageManager, locale, borderEnabled, borderThicknessDp, borderColor)
+                RecentExpensesList(
+                    expenses, languageManager, locale, borderEnabled, borderThicknessDp, borderColor,
+                    todayEffect, todayEffectStyle, todayEffectColor
+                )
             }
         }
 
@@ -228,7 +253,10 @@ private fun RecentExpensesList(
     locale: Locale,
     borderEnabled: Boolean,
     borderThicknessDp: Int,
-    borderColor: Color
+    borderColor: Color,
+    todayEffect: TodayEffect,
+    todayEffectStyle: TodayEffectStyle,
+    todayEffectColor: Color
 ) {
     val zoneId = ZoneId.systemDefault()
     val today = LocalDate.now(zoneId)
@@ -253,7 +281,15 @@ private fun RecentExpensesList(
     LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
         items(grouped.entries.toList(), itemId = { it.key.toEpochDay() }) { (date, items) ->
             val isToday = date == today
-            val gap = if (borderEnabled && !isToday) (8 + borderThicknessDp * 1.5f).dp else 8.dp
+            // Widgets (Glance/RemoteViews) can't run the animated pulse the in-app effect uses, so
+            // this is a static rendering of the same effect+style+color settings: RING/FULL draw
+            // today's card with the same bordered-card treatment other days get (when enabled)
+            // colored with todayEffectColor instead of borderColor; BACKGROUND/FULL additionally
+            // tint the card's own background with it.
+            val showTodayHighlight = isToday && todayEffect != TodayEffect.NONE && todayEffectStyle != TodayEffectStyle.NONE
+            val showTodayRing = showTodayHighlight && todayEffectStyle != TodayEffectStyle.BACKGROUND
+            val showTodayBackground = showTodayHighlight && todayEffectStyle != TodayEffectStyle.RING
+            val gap = if ((borderEnabled && !isToday) || showTodayRing) (8 + borderThicknessDp * 1.5f).dp else 8.dp
 
             val dayContent: @Composable () -> Unit = {
                 DaySeparatorLabel(date, today, languageManager, locale)
@@ -325,40 +361,64 @@ private fun RecentExpensesList(
                 }
             }
 
-            if (borderEnabled && !isToday) {
-                // Bordered card for historical days
-                Box(
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .padding(bottom = gap)
-                ) {
+            when {
+                (borderEnabled && !isToday) || showTodayRing -> {
+                    // Bordered card: historical days use borderColor, today (when the today-effect's
+                    // style calls for a ring) uses todayEffectColor instead.
+                    val ringColor = if (showTodayRing) todayEffectColor else borderColor
                     Box(
                         modifier = GlanceModifier
                             .fillMaxWidth()
-                            .cornerRadius(12.dp)
-                            .background(borderColor)
+                            .padding(bottom = gap)
                     ) {
                         Box(
                             modifier = GlanceModifier
                                 .fillMaxWidth()
-                                .padding(borderThicknessDp.dp)
+                                .cornerRadius(12.dp)
+                                .background(ringColor)
                         ) {
-                            Column(
+                            Box(
                                 modifier = GlanceModifier
                                     .fillMaxWidth()
-                                    .cornerRadius(10.dp)
-                                    .background(GlanceTheme.colors.surface)
-                                    .padding(8.dp)
+                                    .padding(borderThicknessDp.dp)
                             ) {
-                                dayContent()
+                                Column(
+                                    modifier = GlanceModifier
+                                        .fillMaxWidth()
+                                        .cornerRadius(10.dp)
+                                        .let { m ->
+                                            if (showTodayBackground) {
+                                                m.background(todayEffectColor.copy(alpha = TODAY_BACKGROUND_TINT_ALPHA))
+                                            } else {
+                                                m.background(GlanceTheme.colors.surface)
+                                            }
+                                        }
+                                        .padding(8.dp)
+                                ) {
+                                    dayContent()
+                                }
                             }
                         }
                     }
                 }
-            } else {
-                // Clean layout for Today (no border) or when border is disabled
-                Column(modifier = GlanceModifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).padding(bottom = gap)) {
-                    dayContent()
+                showTodayBackground -> {
+                    // Background-only highlight (today, style = BACKGROUND): no outer ring box.
+                    Column(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .cornerRadius(10.dp)
+                            .background(todayEffectColor.copy(alpha = TODAY_BACKGROUND_TINT_ALPHA))
+                            .padding(8.dp)
+                            .padding(bottom = gap)
+                    ) {
+                        dayContent()
+                    }
+                }
+                else -> {
+                    // Clean layout: no highlight for today, or border disabled and today-effect off.
+                    Column(modifier = GlanceModifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).padding(bottom = gap)) {
+                        dayContent()
+                    }
                 }
             }
         }
@@ -366,6 +426,7 @@ private fun RecentExpensesList(
 }
 
 private const val ROW_TINT_ALPHA = 0.18f
+private const val TODAY_BACKGROUND_TINT_ALPHA = 0.22f
 
 private fun dayLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale): String {
     val shortDate = date.format(DateTimeFormatter.ofPattern("d MMM", locale))

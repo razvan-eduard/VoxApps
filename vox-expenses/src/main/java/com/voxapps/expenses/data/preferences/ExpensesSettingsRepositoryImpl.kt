@@ -6,10 +6,13 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.voxapps.design.color.VoxColorPalette
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -62,6 +65,12 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val WIDGET_BORDER_ENABLED = booleanPreferencesKey("widget_border_enabled")
         val WIDGET_BORDER_THICKNESS_DP = intPreferencesKey("widget_border_thickness_dp")
         val WIDGET_BORDER_COLOR_ARGB = longPreferencesKey("widget_border_color_argb")
+        val TODAY_EFFECT = stringPreferencesKey("today_effect")
+        val TODAY_EFFECT_STYLE = stringPreferencesKey("today_effect_style")
+        val TODAY_EFFECT_COLOR = longPreferencesKey("today_effect_color")
+        val TODAY_EFFECT_COLOR_2 = longPreferencesKey("today_effect_color_2")
+        val TODAY_EFFECT_SPEED = floatPreferencesKey("today_effect_speed")
+        val TODAY_EFFECT_SHOW_IN_WIDGET = booleanPreferencesKey("today_effect_show_in_widget")
         val BATCH_CLEANUP_MANUAL_REVIEW = booleanPreferencesKey("batch_cleanup_manual_review")
         val NOTIFICATIONS_SYSTEM_DEFAULT = booleanPreferencesKey("notifications_system_default")
         val NOTIFICATIONS_VIBRATION_ENABLED = booleanPreferencesKey("notifications_vibration_enabled")
@@ -114,6 +123,12 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             widgetBorderEnabled = prefs[Keys.WIDGET_BORDER_ENABLED] ?: true,
             widgetBorderThicknessDp = prefs[Keys.WIDGET_BORDER_THICKNESS_DP] ?: ExpensesSettings.THICKNESS_MEDIUM,
             widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first(),
+            todayEffect = prefs[Keys.TODAY_EFFECT] ?: TodayEffect.NONE.name,
+            todayEffectStyle = prefs[Keys.TODAY_EFFECT_STYLE] ?: TodayEffectStyle.RING.name,
+            todayEffectColor = prefs[Keys.TODAY_EFFECT_COLOR] ?: ExpensesSettings.TODAY_EFFECT_DEFAULT_COLOR,
+            todayEffectColor2 = prefs[Keys.TODAY_EFFECT_COLOR_2],
+            todayEffectSpeed = prefs[Keys.TODAY_EFFECT_SPEED] ?: 1f,
+            todayEffectShowInWidget = prefs[Keys.TODAY_EFFECT_SHOW_IN_WIDGET] ?: true,
             batchCleanupManualReview = prefs[Keys.BATCH_CLEANUP_MANUAL_REVIEW] ?: true,
             notificationsSystemDefault = prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] ?: true,
             notificationsVibrationEnabled = prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] ?: true,
@@ -298,6 +313,32 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.WIDGET_BORDER_COLOR_ARGB] = colorArgb }
     }
 
+    override suspend fun setTodayEffect(effect: String) {
+        dataStore.edit { it[Keys.TODAY_EFFECT] = effect }
+    }
+
+    override suspend fun setTodayEffectStyle(style: String) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_STYLE] = style }
+    }
+
+    override suspend fun setTodayEffectColor(colorArgb: Long) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_COLOR] = colorArgb }
+    }
+
+    override suspend fun setTodayEffectColor2(colorArgb: Long?) {
+        dataStore.edit {
+            if (colorArgb == null) it.remove(Keys.TODAY_EFFECT_COLOR_2) else it[Keys.TODAY_EFFECT_COLOR_2] = colorArgb
+        }
+    }
+
+    override suspend fun setTodayEffectSpeed(speed: Float) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_SPEED] = speed }
+    }
+
+    override suspend fun setTodayEffectShowInWidget(enabled: Boolean) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_SHOW_IN_WIDGET] = enabled }
+    }
+
     override suspend fun setBatchCleanupManualReview(enabled: Boolean) {
         dataStore.edit { it[Keys.BATCH_CLEANUP_MANUAL_REVIEW] = enabled }
     }
@@ -370,6 +411,16 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.WIDGET_BORDER_ENABLED] = settings.widgetBorderEnabled
             prefs[Keys.WIDGET_BORDER_THICKNESS_DP] = settings.widgetBorderThicknessDp
             prefs[Keys.WIDGET_BORDER_COLOR_ARGB] = settings.widgetBorderColorArgb
+            prefs[Keys.TODAY_EFFECT] = settings.todayEffect
+            prefs[Keys.TODAY_EFFECT_STYLE] = settings.todayEffectStyle
+            prefs[Keys.TODAY_EFFECT_COLOR] = settings.todayEffectColor
+            if (settings.todayEffectColor2 == null) {
+                prefs.remove(Keys.TODAY_EFFECT_COLOR_2)
+            } else {
+                prefs[Keys.TODAY_EFFECT_COLOR_2] = settings.todayEffectColor2
+            }
+            prefs[Keys.TODAY_EFFECT_SPEED] = settings.todayEffectSpeed
+            prefs[Keys.TODAY_EFFECT_SHOW_IN_WIDGET] = settings.todayEffectShowInWidget
             prefs[Keys.BATCH_CLEANUP_MANUAL_REVIEW] = settings.batchCleanupManualReview
             prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = settings.notificationsSystemDefault
             prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] = settings.notificationsVibrationEnabled

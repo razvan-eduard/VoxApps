@@ -10,9 +10,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.effects.ApplyTodayEffect
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -28,30 +33,61 @@ import java.util.Locale
  * the phone's system locale, which can differ.
  */
 @Composable
-fun DayHeader(date: LocalDate, modifier: Modifier = Modifier, isEmpty: Boolean = false, locale: Locale = Locale.getDefault()) {
+fun DayHeader(
+    date: LocalDate,
+    modifier: Modifier = Modifier,
+    isEmpty: Boolean = false,
+    locale: Locale = Locale.getDefault(),
+    today: LocalDate = LocalDate.now(),
+    todayLabel: String = "Today",
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
+) {
     val alpha = if (isEmpty) 0.55f else 1f
+    val isToday = date == today
+    // Mirrors the widget's DaySeparatorLabel format ("Today, 31 Jul") instead of the plain weekday
+    // name other days get, so today's row reads the same way in both places.
+    val secondLineText = if (isToday) {
+        "$todayLabel, ${date.format(DateTimeFormatter.ofPattern("d MMM", locale))}"
+    } else {
+        date.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
+    }
 
     Row(
         modifier = modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         HorizontalDivider(modifier = Modifier.weight(1f))
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 12.dp)
+        ApplyTodayEffect(
+            enabled = isToday,
+            elementName = "day_header_list_$date",
+            effect = todayEffect,
+            style = todayEffectStyle,
+            primaryColor = todayEffectPrimaryColor,
+            secondaryColor = todayEffectSecondaryColor,
+            speedMultiplier = todayEffectSpeed,
+            shape = MaterialTheme.shapes.small
         ) {
-            Text(
-                text = date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = date.dayOfWeek.getDisplayName(TextStyle.FULL, locale),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
-                textAlign = TextAlign.Center
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            ) {
+                Text(
+                    text = date.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = secondLineText,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
         HorizontalDivider(modifier = Modifier.weight(1f))
     }

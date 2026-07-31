@@ -2,6 +2,8 @@ package com.voxapps.expenses.data.preferences
 
 import androidx.compose.runtime.Immutable
 import com.voxapps.design.color.VoxColorPalette
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 
 /**
  * Immutable snapshot of persisted Vox Expenses settings (mirrors vox-notes' NotesSettings). Fields are
@@ -160,6 +162,15 @@ data class ExpensesSettings(
     val widgetBorderEnabled: Boolean = true,
     val widgetBorderThicknessDp: Int = THICKNESS_MEDIUM,
     val widgetBorderColorArgb: Long = VoxColorPalette.presets.first(),
+    /** Which highlight effect (if any) draws around the in-app "today" card, and its color(s) —
+     *  mirrors vox-calendar's identical fields. Not yet implemented, see
+     *  `com.voxapps.design.effects.ApplyTodayEffect`. */
+    val todayEffect: String = TodayEffect.NONE.name,
+    val todayEffectStyle: String = TodayEffectStyle.RING.name,
+    val todayEffectColor: Long = TODAY_EFFECT_DEFAULT_COLOR,
+    val todayEffectColor2: Long? = null,
+    val todayEffectSpeed: Float = 1f,
+    val todayEffectShowInWidget: Boolean = true,
     val batchCleanupManualReview: Boolean = true,
     val notificationsSystemDefault: Boolean = true,
     val notificationsVibrationEnabled: Boolean = true,
@@ -214,6 +225,9 @@ data class ExpensesSettings(
         const val THICKNESS_THIN = 1
         const val THICKNESS_MEDIUM = 2
         const val THICKNESS_THICK = 4
+
+        /** A warm orange — a reasonable default for an as-yet-unimplemented fire/glow effect. */
+        const val TODAY_EFFECT_DEFAULT_COLOR = 0xFFFF6D00L
 
         const val LENGTH_SHORT = "SHORT"
         const val LENGTH_MEDIUM = "MEDIUM"

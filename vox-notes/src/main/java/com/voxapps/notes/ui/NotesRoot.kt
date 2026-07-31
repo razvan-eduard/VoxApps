@@ -6,9 +6,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.di.NotesContainer
 import com.voxapps.notes.state.NotesUiState
@@ -75,7 +78,12 @@ fun NotesRoot(
                                 onOpenSettings = { showSettings = true },
                                 quickAddTrigger = quickAddTrigger,
                                 editNoteId = editNoteId,
-                                editNoteTrigger = editNoteTrigger
+                                editNoteTrigger = editNoteTrigger,
+                                todayEffect = runCatching { TodayEffect.valueOf(settings.todayEffect) }.getOrDefault(TodayEffect.NONE),
+                                todayEffectStyle = runCatching { TodayEffectStyle.valueOf(settings.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
+                                todayEffectPrimaryColor = Color(settings.todayEffectColor.toInt()),
+                                todayEffectSecondaryColor = settings.todayEffectColor2?.let { Color(it.toInt()) },
+                                todayEffectSpeed = settings.todayEffectSpeed
                             )
                         }
                     }

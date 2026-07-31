@@ -66,6 +66,8 @@ import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NoteSanitizer
@@ -91,7 +93,12 @@ fun NotesScreen(
     // request. Counters, not plain values, so a repeat of the same request still re-fires.
     quickAddTrigger: Int = 0,
     editNoteId: Long = -1L,
-    editNoteTrigger: Int = 0
+    editNoteTrigger: Int = 0,
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
 ) {
     val languageManager = LocalLanguageManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -227,6 +234,11 @@ fun NotesScreen(
                         onToggleGridView = { stateManager.setIsGridView(!state.isGridView) },
                         onDateSelected = { stateManager.setSelectedDate(it) },
                         dayDots = dayDots,
+                        todayEffect = todayEffect,
+                        todayEffectStyle = todayEffectStyle,
+                        todayEffectPrimaryColor = todayEffectPrimaryColor,
+                        todayEffectSecondaryColor = todayEffectSecondaryColor,
+                        todayEffectSpeed = todayEffectSpeed,
                         itemContent = { calItem ->
                             CollapsedNoteCard(
                                 item = calItem.nwc,

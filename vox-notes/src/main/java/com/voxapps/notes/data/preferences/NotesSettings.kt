@@ -1,6 +1,8 @@
 package com.voxapps.notes.data.preferences
 
 import androidx.compose.runtime.Immutable
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 
 /**
  * Immutable snapshot of persisted VoxNotes settings (mirrors vox-commander's AppSettings).
@@ -61,6 +63,14 @@ data class NotesSettings(
      *  there's no separate on-retry variant here). */
     val attachPhotoOnScan: Boolean = false,
     val scanImageRetention: String = RETENTION_ON_FAILURE,
+    /** Which highlight effect (if any) draws around the in-app "today" card, and its color(s) —
+     *  mirrors vox-calendar's identical fields. Not yet implemented, see
+     *  `com.voxapps.design.effects.ApplyTodayEffect`. */
+    val todayEffect: String = TodayEffect.NONE.name,
+    val todayEffectStyle: String = TodayEffectStyle.RING.name,
+    val todayEffectColor: Long = TODAY_EFFECT_DEFAULT_COLOR,
+    val todayEffectColor2: Long? = null,
+    val todayEffectSpeed: Float = 1f,
     val notificationsSystemDefault: Boolean = true,
     val notificationsVibrationEnabled: Boolean = true,
     val notificationsSoundUri: String? = null,
@@ -91,5 +101,8 @@ data class NotesSettings(
         const val LENGTH_SHORT = "SHORT"
         const val LENGTH_MEDIUM = "MEDIUM"
         const val LENGTH_LONG = "LONG"
+
+        /** A warm orange — a reasonable default for an as-yet-unimplemented fire/glow effect. */
+        const val TODAY_EFFECT_DEFAULT_COLOR = 0xFFFF6D00L
     }
 }

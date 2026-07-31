@@ -50,12 +50,18 @@ class NotesContainer(context: Context) {
     }
 
     init {
-        // Keeps NotesWidget's home-screen snapshot fresh — reacts to both lock-state transitions
-        // (uiState) and data changes (notesWithCategory), since the widget reads both independently
-        // of any in-app filter (see NotesWidget.kt's provideGlance doc comment).
+        // Keeps NotesWidget's home-screen snapshot fresh — reacts to lock-state transitions
+        // (uiState), data changes (notesWithCategory, read independently of any in-app filter, see
+        // NotesWidget.kt's provideGlance doc comment), AND settings (settingsFlow — border color/
+        // thickness etc. are read fresh into the widget's content but nothing about changing them
+        // touches notes or uiState, so without watching settingsFlow too, a settings-only change
+        // would sit un-reflected until the next unrelated data change or the OS's 30-min update floor).
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
-            combine(notesStateManager.uiState, notesRepository.notesWithCategory) { _, _ -> }
-                .collect { NotesWidget().updateAll(appContext) }
+            combine(
+                notesStateManager.uiState,
+                notesRepository.notesWithCategory,
+                settingsRepository.settingsFlow
+            ) { _, _, _ -> }.collect { NotesWidget().updateAll(appContext) }
         }
     }
 }

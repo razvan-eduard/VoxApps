@@ -21,7 +21,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.Locale
@@ -48,6 +51,11 @@ fun <T : CalendarItem> CalendarView(
     onToggleGridView: (() -> Unit)? = null,
     onDateSelected: ((Long) -> Unit)? = null,
     dayDots: Map<LocalDate, List<Long>> = emptyMap(),
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f,
     itemContent: @Composable (T) -> Unit,
     emptyDayContent: (@Composable (LocalDate) -> Unit)? = null
 ) {
@@ -95,6 +103,12 @@ fun <T : CalendarItem> CalendarView(
             itemContent = itemContent,
             pagerState = pagerState,
             dayDots = dayDots,
+            todayLabel = todayContentDescription,
+            todayEffect = todayEffect,
+            todayEffectStyle = todayEffectStyle,
+            todayEffectPrimaryColor = todayEffectPrimaryColor,
+            todayEffectSecondaryColor = todayEffectSecondaryColor,
+            todayEffectSpeed = todayEffectSpeed,
             modifier = modifier
         )
     } else {
@@ -166,7 +180,13 @@ fun <T : CalendarItem> CalendarView(
                         locale = locale,
                         onPeekItemClick = ::navigateToItem,
                         itemContent = itemContent,
-                        emptyDayContent = emptyDayContent
+                        emptyDayContent = emptyDayContent,
+                        todayLabel = todayContentDescription,
+                        todayEffect = todayEffect,
+                        todayEffectStyle = todayEffectStyle,
+                        todayEffectPrimaryColor = todayEffectPrimaryColor,
+                        todayEffectSecondaryColor = todayEffectSecondaryColor,
+                        todayEffectSpeed = todayEffectSpeed
                     )
                 }
 

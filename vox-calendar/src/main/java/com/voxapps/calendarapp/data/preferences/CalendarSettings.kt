@@ -2,6 +2,8 @@ package com.voxapps.calendarapp.data.preferences
 
 import androidx.compose.runtime.Immutable
 import com.voxapps.design.color.VoxColorPalette
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 
 /**
  * Immutable snapshot of persisted Vox Calendar settings (mirrors vox-expenses' ExpensesSettings).
@@ -27,6 +29,11 @@ import com.voxapps.design.color.VoxColorPalette
  *   home-screen widget's day-cards draw an outline border, and its thickness/color if so. Border
  *   on by default (matches prior hardcoded behavior); color defaults to the first shared preset
  *   in [VoxColorPalette] rather than a hardcoded hex so it stays in sync with that palette.
+ * - [todayEffect]/[todayEffectColor]/[todayEffectColor2]: which highlight effect (if any) draws
+ *   around the in-app "today" card, and its color(s) — [todayEffectColor2] is only set when the
+ *   user turns on the gradient option, `null` otherwise. The effect itself is not yet implemented
+ *   (see `com.voxapps.design.effects.ApplyTodayEffect`); these fields exist so the settings UI and
+ *   call-site wiring are ready ahead of it.
  */
 @Immutable
 data class CalendarSettings(
@@ -46,6 +53,12 @@ data class CalendarSettings(
     val widgetBorderEnabled: Boolean = true,
     val widgetBorderThicknessDp: Int = THICKNESS_MEDIUM,
     val widgetBorderColorArgb: Long = VoxColorPalette.presets.first(),
+    val todayEffect: String = TodayEffect.NONE.name,
+    val todayEffectStyle: String = TodayEffectStyle.RING.name,
+    val todayEffectColor: Long = TODAY_EFFECT_DEFAULT_COLOR,
+    val todayEffectColor2: Long? = null,
+    val todayEffectSpeed: Float = 1f,
+    val todayEffectShowInWidget: Boolean = true,
     val notificationsSystemDefault: Boolean = true,
     val notificationsVibrationEnabled: Boolean = true,
     val notificationsSoundUri: String? = null,
@@ -67,6 +80,9 @@ data class CalendarSettings(
         const val THICKNESS_THIN = 1
         const val THICKNESS_MEDIUM = 2
         const val THICKNESS_THICK = 4
+
+        /** A warm orange — a reasonable default for an as-yet-unimplemented fire/glow effect. */
+        const val TODAY_EFFECT_DEFAULT_COLOR = 0xFFFF6D00L
 
         const val LENGTH_SHORT = "SHORT"
         const val LENGTH_MEDIUM = "MEDIUM"

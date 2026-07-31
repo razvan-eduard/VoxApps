@@ -19,9 +19,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.CalendarLayer
+import com.voxapps.design.effects.ApplyTodayEffect
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -35,7 +39,12 @@ fun DayView(
     selectedDateMillis: Long,
     locale: Locale,
     onItemClick: (EntryCalendarItem) -> Unit,
-    onOpenDaySummary: (Long) -> Unit
+    onOpenDaySummary: (Long) -> Unit,
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
 ) {
     val zoneId = ZoneId.systemDefault()
     val date = remember(selectedDateMillis) { Instant.ofEpochMilli(selectedDateMillis).atZone(zoneId).toLocalDate() }
@@ -56,18 +65,28 @@ fun DayView(
 
     Column(modifier = Modifier.fillMaxSize()) {
         // 1. Pinned Date Header
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+        ApplyTodayEffect(
+            enabled = date == today,
+            elementName = "day_header_$date",
+            effect = todayEffect,
+            style = todayEffectStyle,
+            primaryColor = todayEffectPrimaryColor,
+            secondaryColor = todayEffectSecondaryColor,
+            speedMultiplier = todayEffectSpeed
         ) {
-            Text(
-                text = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", locale)),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (date == today) FontWeight.Bold else FontWeight.Normal,
-                modifier = Modifier.weight(1f).padding(vertical = 12.dp)
-            )
-            IconButton(onClick = { onOpenDaySummary(selectedDateMillis) }) {
-                Icon(Icons.Filled.Summarize, contentDescription = languageManager.getString("day_summary_title"))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", locale)),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (date == today) FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier.weight(1f).padding(vertical = 12.dp)
+                )
+                IconButton(onClick = { onOpenDaySummary(selectedDateMillis) }) {
+                    Icon(Icons.Filled.Summarize, contentDescription = languageManager.getString("day_summary_title"))
+                }
             }
         }
 

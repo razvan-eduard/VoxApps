@@ -100,40 +100,6 @@ fun GeneralSettingsTab(
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-        // --- THEME ---
-        Text(text = languageManager.getString("theme_section") ?: "Theme", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val modes = listOf("SYSTEM", "LIGHT", "DARK")
-            val modeLabels = listOf(
-                languageManager.getString("theme_system") ?: "System",
-                languageManager.getString("theme_light") ?: "Light",
-                languageManager.getString("theme_dark") ?: "Dark"
-            )
-            modes.forEachIndexed { idx, mode ->
-                FilterChip(
-                    selected = uiState.themeDarkMode == mode,
-                    onClick = { appStateManager.setThemeDarkMode(mode) },
-                    label = { Text(modeLabels[idx]) }
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("theme_colored") ?: "Colored (Material You)", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    languageManager.getString("theme_colored_desc") ?: "Use system dynamic colors (Android 12+)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(checked = uiState.themeColored, onCheckedChange = { appStateManager.setThemeColored(it) })
-        }
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
         Text(text = languageManager.getString("language"), style = MaterialTheme.typography.labelLarge)
 
         Box {

@@ -14,8 +14,11 @@ import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.ui.onboarding.CalendarOnboardingFlow
 import com.voxapps.calendarapp.ui.settings.SettingsScreen
+import androidx.compose.ui.graphics.Color
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 
@@ -111,7 +114,12 @@ fun CalendarRoot(
                                 stateManager = container.calendarStateManager,
                                 onAddEntry = { editTarget = EditTarget.New },
                                 onEditEntry = { item -> editTarget = EditTarget.Existing(item.entryWithTags) },
-                                onOpenSettings = { showSettings = true }
+                                onOpenSettings = { showSettings = true },
+                                todayEffect = runCatching { TodayEffect.valueOf(settings.todayEffect) }.getOrDefault(TodayEffect.NONE),
+                                todayEffectStyle = runCatching { TodayEffectStyle.valueOf(settings.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
+                                todayEffectPrimaryColor = Color(settings.todayEffectColor.toInt()),
+                                todayEffectSecondaryColor = settings.todayEffectColor2?.let { Color(it.toInt()) },
+                                todayEffectSpeed = settings.todayEffectSpeed
                             )
                         }
                     }

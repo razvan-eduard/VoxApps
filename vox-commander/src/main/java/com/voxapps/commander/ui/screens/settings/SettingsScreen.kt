@@ -26,6 +26,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.design.VoxDarkMode
+import com.voxapps.design.settings.ThemeSettingsScreen
+import com.voxapps.design.settings.ThemeSettingsStrings
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.service.WakeWordService
 import com.voxapps.commander.domain.model.AppModel
@@ -63,7 +66,7 @@ fun SettingsContent(
     // REALTIME STATE - observe AppStateManager uiState for reactive updates
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     
-    val pagerState = rememberPagerState(pageCount = { 7 })
+    val pagerState = rememberPagerState(pageCount = { 8 })
 
     val isVoskLoading by modelManagementViewModel.isVoskLoading.collectAsStateWithLifecycle()
     val isVoskOffline by modelManagementViewModel.isVoskOffline.collectAsStateWithLifecycle()
@@ -114,7 +117,7 @@ fun SettingsContent(
                             },
                             modifier = Modifier.padding(bottom = 12.dp)
                         ) {
-                            val tabs = listOf("tab_general", "tab_ai_models", "tab_service", "tab_app_manager", "tab_integrations", "tab_permissions", "tab_advanced")
+                            val tabs = listOf("tab_general", "tab_ai_models", "tab_service", "tab_app_manager", "tab_integrations", "tab_permissions", "tab_advanced", "tab_theme")
                             
                             tabs.forEachIndexed { index, tabKey ->
                                 val selected = pagerState.currentPage == index
@@ -146,6 +149,22 @@ fun SettingsContent(
                                 modelManagementViewModel.clearDefaultOfflineFallback()
                             },
                             refreshTrigger = uiState.refreshTrigger
+                        )
+                    } else if (page == 7) { // Theme (ThemeSettingsScreen already scrolls itself, no outer scroll wrapper)
+                        ThemeSettingsScreen(
+                            darkMode = runCatching { VoxDarkMode.valueOf(uiState.themeDarkMode) }.getOrDefault(VoxDarkMode.SYSTEM),
+                            colored = uiState.themeColored,
+                            onDarkModeChange = { appStateManager.setThemeDarkMode(it.name) },
+                            onColoredChange = { appStateManager.setThemeColored(it) },
+                            strings = ThemeSettingsStrings(
+                                darkModeSectionLabel = languageManager.getString("theme_section"),
+                                themeSystemLabel = languageManager.getString("theme_system"),
+                                themeLightLabel = languageManager.getString("theme_light"),
+                                themeDarkLabel = languageManager.getString("theme_dark"),
+                                coloredLabel = languageManager.getString("theme_colored"),
+                                coloredDesc = languageManager.getString("theme_colored_desc")
+                            ),
+                            modifier = Modifier.fillMaxSize()
                         )
                     } else {
                         val focusManager = LocalFocusManager.current

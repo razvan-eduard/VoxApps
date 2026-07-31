@@ -24,6 +24,8 @@ class VisionSettingsRepository(context: Context) {
         val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
         val SEND_PHOTO_TO_AI = booleanPreferencesKey("send_photo_to_ai")
         val PHOTO_DETAIL_FOR_AI = stringPreferencesKey("photo_detail_for_ai")
+        val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
+        val THEME_COLORED = booleanPreferencesKey("theme_colored")
     }
 
     companion object {
@@ -32,6 +34,13 @@ class VisionSettingsRepository(context: Context) {
         const val DEFAULT_STABILITY = "medium"
         const val DEFAULT_FLASH = "auto"
         const val DEFAULT_PHOTO_DETAIL = "medium"
+
+        // Same "SYSTEM"/"LIGHT"/"DARK" string encoding as com.voxapps.design.VoxDarkMode.name — kept
+        // as plain strings here (rather than importing the enum) to match CalendarSettings'/
+        // HubSettings' data-layer convention of not depending on core:design's types directly.
+        const val THEME_SYSTEM = "SYSTEM"
+        const val THEME_LIGHT = "LIGHT"
+        const val THEME_DARK = "DARK"
 
         /**
          * Long-edge target pixels for each [photoDetailForAiFlow] level — the only thing that
@@ -122,5 +131,17 @@ class VisionSettingsRepository(context: Context) {
 
     suspend fun setPhotoDetailForAi(detail: String) {
         dataStore.edit { it[Keys.PHOTO_DETAIL_FOR_AI] = detail }
+    }
+
+    val themeDarkModeFlow: Flow<String> = dataStore.data.map { it[Keys.THEME_DARK_MODE] ?: THEME_SYSTEM }
+
+    suspend fun setThemeDarkMode(mode: String) {
+        dataStore.edit { it[Keys.THEME_DARK_MODE] = mode }
+    }
+
+    val themeColoredFlow: Flow<Boolean> = dataStore.data.map { it[Keys.THEME_COLORED] ?: true }
+
+    suspend fun setThemeColored(enabled: Boolean) {
+        dataStore.edit { it[Keys.THEME_COLORED] = enabled }
     }
 }

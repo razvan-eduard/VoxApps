@@ -28,6 +28,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.kizitonwose.calendar)
     implementation("androidx.compose.foundation:foundation")
+    implementation(project(":core:design"))
 
     testImplementation(libs.junit)
 }

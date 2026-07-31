@@ -14,10 +14,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.kizitonwose.calendar.compose.rememberCalendarState
 import com.kizitonwose.calendar.core.OutDateStyle
 import com.kizitonwose.calendar.core.firstDayOfWeekFromLocale
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.Locale
@@ -34,7 +37,13 @@ fun <T : CalendarItem> HybridMonthView(
     itemContent: @Composable (T) -> Unit,
     modifier: Modifier = Modifier,
     pagerState: CalendarPagerState? = null,
-    dayDots: Map<LocalDate, List<Long>> = emptyMap()
+    dayDots: Map<LocalDate, List<Long>> = emptyMap(),
+    todayLabel: String = "Today",
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
 ) {
     val listState = rememberLazyListState()
     val isDragged by listState.interactionSource.collectIsDraggedAsState()
@@ -114,9 +123,14 @@ fun <T : CalendarItem> HybridMonthView(
             onHeaderClick = onToggleGridView,
             state = gridState,
             dayDots = dayDots,
+            todayEffect = todayEffect,
+            todayEffectStyle = todayEffectStyle,
+            todayEffectPrimaryColor = todayEffectPrimaryColor,
+            todayEffectSecondaryColor = todayEffectSecondaryColor,
+            todayEffectSpeed = todayEffectSpeed,
             modifier = Modifier.fillMaxWidth()
         )
-        
+
         HorizontalDivider(thickness = 1.dp)
 
         CalendarMonthView(
@@ -127,6 +141,12 @@ fun <T : CalendarItem> HybridMonthView(
             locale = locale,
             onPeekItemClick = { /* already in current month */ },
             itemContent = itemContent,
+            todayLabel = todayLabel,
+            todayEffect = todayEffect,
+            todayEffectStyle = todayEffectStyle,
+            todayEffectPrimaryColor = todayEffectPrimaryColor,
+            todayEffectSecondaryColor = todayEffectSecondaryColor,
+            todayEffectSpeed = todayEffectSpeed,
             modifier = Modifier.fillMaxWidth().weight(1f)
         )
     }

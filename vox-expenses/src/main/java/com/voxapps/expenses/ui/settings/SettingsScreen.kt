@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,8 +40,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.design.VoxDarkMode
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.notifications.NotificationSoundPlayer
 import com.voxapps.design.settings.NotificationSettingsCard
+import com.voxapps.design.settings.ThemeSettingsScreen
+import com.voxapps.design.settings.ThemeSettingsStrings
+import com.voxapps.design.settings.TodayEffectSettings
+import com.voxapps.design.settings.TodayEffectStrings
 import com.voxapps.expenses.data.ExchangeRateRepository
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
@@ -52,7 +60,7 @@ import com.voxapps.logging.ui.LogsSettingsTab
 import com.voxapps.logging.ui.LogsTabStrings
 
 private enum class SettingsPage {
-    MENU, GENERAL, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP, CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, LOGS
+    MENU, GENERAL, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP, CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, LOGS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -99,6 +107,7 @@ fun SettingsScreen(
     val title = when (page) {
         SettingsPage.MENU -> languageManager.getString("settings")
         SettingsPage.GENERAL -> languageManager.getString("general")
+        SettingsPage.THEME -> languageManager.getString("theme_section")
         SettingsPage.NOTIFICATIONS -> languageManager.getString("notifications_settings_title")
         SettingsPage.VOICE -> languageManager.getString("voice_settings_title")
         SettingsPage.CATEGORIES -> languageManager.getString("categories_settings_title")
@@ -128,6 +137,11 @@ fun SettingsScreen(
                     headlineContent = { Text(languageManager.getString("general")) },
                     leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("theme_section")) },
+                    leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.THEME }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("notifications_settings_title")) },
@@ -171,6 +185,62 @@ fun SettingsScreen(
                 )
             }
             SettingsPage.GENERAL -> GeneralSettingsTab(settings = settings, stateManager = stateManager, modifier = mod)
+            SettingsPage.THEME -> ThemeSettingsScreen(
+                darkMode = runCatching { VoxDarkMode.valueOf(settings.themeDarkMode) }.getOrDefault(VoxDarkMode.SYSTEM),
+                colored = settings.themeColored,
+                onDarkModeChange = { stateManager.setThemeDarkMode(it.name) },
+                onColoredChange = { stateManager.setThemeColored(it) },
+                strings = ThemeSettingsStrings(
+                    darkModeSectionLabel = languageManager.getString("theme_section"),
+                    themeSystemLabel = languageManager.getString("theme_system"),
+                    themeLightLabel = languageManager.getString("theme_light"),
+                    themeDarkLabel = languageManager.getString("theme_dark"),
+                    coloredLabel = languageManager.getString("theme_colored"),
+                    coloredDesc = languageManager.getString("theme_colored_desc")
+                ),
+                todayEffect = TodayEffectSettings(
+                    effect = runCatching { TodayEffect.valueOf(settings.todayEffect) }.getOrDefault(TodayEffect.NONE),
+                    style = runCatching { TodayEffectStyle.valueOf(settings.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
+                    primaryColor = settings.todayEffectColor,
+                    secondaryColor = settings.todayEffectColor2,
+                    speedMultiplier = settings.todayEffectSpeed,
+                    showInWidget = settings.todayEffectShowInWidget,
+                    onEffectChange = { stateManager.setTodayEffect(it.name) },
+                    onStyleChange = { stateManager.setTodayEffectStyle(it.name) },
+                    onPrimaryColorChange = { stateManager.setTodayEffectColor(it) },
+                    onSecondaryColorChange = { stateManager.setTodayEffectColor2(it) },
+                    onSpeedMultiplierChange = { stateManager.setTodayEffectSpeed(it) },
+                    onShowInWidgetChange = { stateManager.setTodayEffectShowInWidget(it) },
+                    strings = TodayEffectStrings(
+                        sectionLabel = languageManager.getString("today_effect_section"),
+                        noneLabel = languageManager.getString("today_effect_none"),
+                        fireLabel = languageManager.getString("today_effect_fire"),
+                        glowLabel = languageManager.getString("today_effect_glow"),
+                        wavesLabel = languageManager.getString("today_effect_waves"),
+                        rainbowLabel = languageManager.getString("today_effect_rainbow"),
+                        neonPulseLabel = languageManager.getString("today_effect_neon_pulse"),
+                        styleLabel = languageManager.getString("today_effect_style"),
+                        styleNoneLabel = languageManager.getString("today_effect_style_none"),
+                        ringLabel = languageManager.getString("today_effect_style_ring"),
+                        backgroundLabel = languageManager.getString("today_effect_style_background"),
+                        fullLabel = languageManager.getString("today_effect_style_full"),
+                        primaryColorLabel = languageManager.getString("today_effect_color"),
+                        gradientLabel = languageManager.getString("today_effect_gradient"),
+                        gradientDesc = languageManager.getString("today_effect_gradient_desc"),
+                        secondaryColorLabel = languageManager.getString("today_effect_color_2"),
+                        customColorDialogTitle = languageManager.getString("custom_color_title"),
+                        customColorUseLabel = languageManager.getString("use_color_button"),
+                        customColorCancelLabel = languageManager.getString("cancel"),
+                        cancelLabel = languageManager.getString("cancel"),
+                        hueLabel = languageManager.getString("hue_label"),
+                        saturationLabel = languageManager.getString("saturation_label"),
+                        brightnessLabel = languageManager.getString("brightness_label"),
+                        speedLabel = languageManager.getString("today_effect_speed"),
+                        showInWidgetLabel = languageManager.getString("today_effect_show_in_widget")
+                    )
+                ),
+                modifier = mod
+            )
             SettingsPage.NOTIFICATIONS -> Column(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
                 NotificationSettingsCard(
                     systemDefault = settings.notificationsSystemDefault,
