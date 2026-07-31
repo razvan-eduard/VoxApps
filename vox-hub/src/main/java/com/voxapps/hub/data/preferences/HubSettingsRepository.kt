@@ -26,6 +26,13 @@ interface HubSettingsRepository {
     suspend fun setAppBackupConfig(packageName: String, config: AppBackupConfig)
 
     /** Called by [com.voxapps.hub.domain.backup.BackupWorker] when a scheduled run finishes,
-     *  success or failure — this is the only way the user learns a background run failed. */
-    suspend fun recordBackupResult(success: Boolean, timestampMillis: Long, error: String?)
+     *  success or failure — this is the only way the user learns a background run failed.
+     *  [missingApps] is non-empty when the run produced a zip but one or more apps didn't make it
+     *  in (never woke up, or their export failed) — see [HubSettings.lastBackupMissingApps]. */
+    suspend fun recordBackupResult(
+        success: Boolean,
+        timestampMillis: Long,
+        error: String?,
+        missingApps: List<String> = emptyList()
+    )
 }

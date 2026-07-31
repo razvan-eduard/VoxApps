@@ -51,6 +51,8 @@
   "backup_restore_action": "Wiederherstellen",
   "backup_failed_banner_title": "Geplante Sicherung fehlgeschlagen",
   "backup_failed_banner_message": "Die Sicherung am %1$s wurde nicht abgeschlossen: %2$s",
+  "backup_partial_banner_title": "Geplante Sicherung fehlt bei einigen Apps",
+  "backup_partial_banner_message": "Die Sicherung am %1$s enthielt nicht: %2$s",
   "dismiss_button": "Verwerfen",
   "logs_settings_title": "Protokolle",
   "debug_logging": "Debug-Protokollierung",

@@ -51,6 +51,8 @@
   "backup_restore_action": "Restaurează",
   "backup_failed_banner_title": "Backup-ul programat a eșuat",
   "backup_failed_banner_message": "Backup-ul din %1$s nu s-a finalizat: %2$s",
+  "backup_partial_banner_title": "Backup-ul programat nu include toate aplicațiile",
+  "backup_partial_banner_message": "Backup-ul din %1$s nu a inclus: %2$s",
   "dismiss_button": "Respinge",
   "logs_settings_title": "Jurnale",
   "debug_logging": "Jurnalizare depanare",

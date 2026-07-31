@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.voxapps.hub.domain.backup.AppBackupConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,7 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
         val LAST_BACKUP_SUCCESS = booleanPreferencesKey("last_backup_success")
         val LAST_BACKUP_TIMESTAMP = longPreferencesKey("last_backup_timestamp")
         val LAST_BACKUP_ERROR = stringPreferencesKey("last_backup_error")
+        val LAST_BACKUP_MISSING_APPS = stringSetPreferencesKey("last_backup_missing_apps")
         val APP_BACKUP_CONFIG_JSON = stringPreferencesKey("app_backup_config_json")
     }
 
@@ -46,6 +48,7 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
             lastBackupSuccess = prefs[Keys.LAST_BACKUP_SUCCESS],
             lastBackupTimestamp = prefs[Keys.LAST_BACKUP_TIMESTAMP],
             lastBackupError = prefs[Keys.LAST_BACKUP_ERROR],
+            lastBackupMissingApps = (prefs[Keys.LAST_BACKUP_MISSING_APPS] ?: emptySet()).sorted(),
             appBackupConfigs = AppBackupConfig.decodeMap(prefs[Keys.APP_BACKUP_CONFIG_JSON] ?: "{}")
         )
     }
@@ -92,11 +95,21 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
         }
     }
 
-    override suspend fun recordBackupResult(success: Boolean, timestampMillis: Long, error: String?) {
+    override suspend fun recordBackupResult(
+        success: Boolean,
+        timestampMillis: Long,
+        error: String?,
+        missingApps: List<String>
+    ) {
         dataStore.edit { prefs ->
             prefs[Keys.LAST_BACKUP_SUCCESS] = success
             prefs[Keys.LAST_BACKUP_TIMESTAMP] = timestampMillis
             if (error == null) prefs.remove(Keys.LAST_BACKUP_ERROR) else prefs[Keys.LAST_BACKUP_ERROR] = error
+            if (missingApps.isEmpty()) {
+                prefs.remove(Keys.LAST_BACKUP_MISSING_APPS)
+            } else {
+                prefs[Keys.LAST_BACKUP_MISSING_APPS] = missingApps.toSet()
+            }
         }
     }
 }

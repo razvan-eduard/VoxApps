@@ -20,6 +20,12 @@ import com.voxapps.hub.domain.backup.AppBackupConfig
  *   scheduled run, null until the first one completes. Surfaced as a dismissible banner in
  *   [com.voxapps.hub.ui.HubScreen] when a run failed — there's no other way to learn about it since
  *   the worker runs with no UI visible.
+ * - [lastBackupMissingApps]: labels of apps [com.voxapps.hub.domain.backup.BackupWorker] couldn't
+ *   reach (never woke up in time) or whose export failed on the most recent run that still produced
+ *   a zip for the apps that *did* respond. Distinct from [lastBackupSuccess] = false (no zip at all)
+ *   — a non-empty list here means the run "succeeded" but is missing data, which gets its own
+ *   warning banner in [com.voxapps.hub.ui.HubScreen] rather than being indistinguishable from a
+ *   clean run.
  * - [appBackupConfigs]: per-package [AppBackupConfig] (Settings/Data/API keys/Attachments), the single
  *   shared configuration driving both the manual Export button and scheduled [com.voxapps.hub.domain.backup.BackupWorker]
  *   runs — replaces the old global scope radio + secrets/photos checkboxes + app checklist. An app
@@ -36,6 +42,7 @@ data class HubSettings(
     val lastBackupSuccess: Boolean? = null,
     val lastBackupTimestamp: Long? = null,
     val lastBackupError: String? = null,
+    val lastBackupMissingApps: List<String> = emptyList(),
     val appBackupConfigs: Map<String, AppBackupConfig> = emptyMap()
 ) {
     companion object {

@@ -51,6 +51,8 @@
   "backup_restore_action": "Restore",
   "backup_failed_banner_title": "Scheduled backup failed",
   "backup_failed_banner_message": "The backup on %1$s didn't complete: %2$s",
+  "backup_partial_banner_title": "Scheduled backup is missing some apps",
+  "backup_partial_banner_message": "The backup on %1$s didn't include: %2$s",
   "dismiss_button": "Dismiss",
   "logs_settings_title": "Logs",
   "debug_logging": "Debug logging",

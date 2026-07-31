@@ -106,6 +106,7 @@ fun HubScreen(
     // *later* failure re-shows even if an earlier one was dismissed.
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = HubSettings())
     var dismissedFailureTimestamp by remember { mutableStateOf<Long?>(null) }
+    var dismissedPartialTimestamp by remember { mutableStateOf<Long?>(null) }
 
     var apps by remember { mutableStateOf<List<VoxAppInfo>>(emptyList()) }
     var isExporting by remember { mutableStateOf(false) }
@@ -470,6 +471,42 @@ fun HubScreen(
                         )
                         TextButton(
                             onClick = { dismissedFailureTimestamp = backupTimestamp },
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            Text(languageManager.getString("dismiss_button"))
+                        }
+                    }
+                }
+            }
+            // A scheduled run can "succeed" (produce a zip) while still missing one or more apps
+            // that never woke up in time or whose export failed — see pingUntilReady/BackupWorker's
+            // doc comments. Distinct banner from the failure one above (warning tone, not error)
+            // since there IS a usable backup, just an incomplete one.
+            if (settings.lastBackupSuccess == true && settings.lastBackupMissingApps.isNotEmpty() &&
+                backupTimestamp != null && backupTimestamp != dismissedPartialTimestamp
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            languageManager.getString("backup_partial_banner_title"),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            String.format(
+                                languageManager.getString("backup_partial_banner_message"),
+                                SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(backupTimestamp)),
+                                settings.lastBackupMissingApps.joinToString(", ")
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        TextButton(
+                            onClick = { dismissedPartialTimestamp = backupTimestamp },
                             modifier = Modifier.padding(top = 4.dp)
                         ) {
                             Text(languageManager.getString("dismiss_button"))

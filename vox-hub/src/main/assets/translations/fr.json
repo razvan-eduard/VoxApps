@@ -51,6 +51,8 @@
   "backup_restore_action": "Restaurer",
   "backup_failed_banner_title": "Échec de la sauvegarde planifiée",
   "backup_failed_banner_message": "La sauvegarde du %1$s ne s'est pas terminée : %2$s",
+  "backup_partial_banner_title": "La sauvegarde planifiée n'inclut pas toutes les applications",
+  "backup_partial_banner_message": "La sauvegarde du %1$s n'a pas inclus : %2$s",
   "dismiss_button": "Ignorer",
   "logs_settings_title": "Journaux",
   "debug_logging": "Journalisation de débogage",

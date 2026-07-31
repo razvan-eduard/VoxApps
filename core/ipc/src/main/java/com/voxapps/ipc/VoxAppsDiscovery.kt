@@ -129,4 +129,29 @@ object VoxAppsDiscovery {
             false
         }
     }
+
+    /**
+     * Like [ping], but for callers (namely [com.voxapps.hub.domain.backup.BackupWorker]'s scheduled
+     * run) that need to wait out a killed satellite's cold start rather than give up after one short
+     * attempt. A single [ping] already cold-starts the target (explicit broadcast to a manifest
+     * receiver survives background-broadcast limits), but a short timeout can fire before Hilt/Room/
+     * WorkManager init on the *satellite's* side finishes — especially when several satellites are
+     * cold-starting back-to-back in the same background run. Retries with a fresh ping each time
+     * (each is a brand-new explicit broadcast, cheap to resend) until one succeeds or [totalTimeoutMs]
+     * is exhausted, so a slow-but-eventually-successful wake-up is treated as reachable instead of
+     * being silently skipped.
+     */
+    suspend fun pingUntilReady(
+        context: Context,
+        packageName: String,
+        totalTimeoutMs: Long = 30_000L,
+        attemptTimeoutMs: Long = 5_000L
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + totalTimeoutMs
+        while (true) {
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining <= 0) return false
+            if (ping(context, packageName, timeoutMs = minOf(attemptTimeoutMs, remaining))) return true
+        }
+    }
 }
