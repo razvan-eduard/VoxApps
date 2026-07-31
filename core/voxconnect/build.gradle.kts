@@ -45,6 +45,6 @@ dependencies {
     // org.json ships in android.jar at compile time; unit tests need the real implementation
     // (the android.jar stub throws "Stub!"), mirroring core/ipc's own test setup.
     testImplementation(libs.junit)
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260719")
     testImplementation(libs.kotlinx.coroutines.test)
 }

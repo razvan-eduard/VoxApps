@@ -121,5 +121,5 @@ dependencies {
     testImplementation("androidx.test:core:1.7.0")
     // org.json ships in android.jar at compile time; unit tests need the real implementation
     // (mirrors :core:ipc, which needed this for the exact same reason).
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260719")
 }
