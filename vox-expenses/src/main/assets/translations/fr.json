@@ -311,6 +311,8 @@
   "delete_expense_message": "Cette dépense et ses postes seront définitivement supprimés.",
   "delete_expense_title": "Supprimer la dépense ?",
   "delete_item_message": "Ce poste sera supprimé.",
+  "delete_attachment_title": "Supprimer la photo ?",
+  "delete_attachment_message": "Cette photo jointe sera supprimée.",
   "delete_item_title": "Supprimer le poste ?",
   "expense_category": "Catégorie",
   "expense_date": "Date",

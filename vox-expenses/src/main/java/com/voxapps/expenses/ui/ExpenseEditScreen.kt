@@ -976,6 +976,8 @@ private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
     val takePhoto = rememberCameraCaptureLauncher(ExpensesAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
 
+    var pendingRemoveAttachment by remember { mutableStateOf<AttachmentUiItem?>(null) }
+
     AttachmentsSection(
         title = languageManager.getString("attachments"),
         items = items,
@@ -985,13 +987,23 @@ private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
         cameraLabel = languageManager.getString("attachment_take_photo"),
         cancelLabel = languageManager.getString("cancel"),
-        onRemove = { item ->
-            manualEntities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
-        },
+        onRemove = { item -> pendingRemoveAttachment = item },
         modifier = Modifier.padding(bottom = 12.dp),
         onAction = ::rescanAttachmentForLineItems,
         actionContentDescription = languageManager.getString("rescan_lineitems_action")
     )
+
+    pendingRemoveAttachment?.let { item ->
+        ConfirmDeleteDialog(
+            title = languageManager.getString("delete_attachment_title"),
+            message = languageManager.getString("delete_attachment_message"),
+            onConfirm = {
+                manualEntities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
+                pendingRemoveAttachment = null
+            },
+            onDismiss = { pendingRemoveAttachment = null }
+        )
+    }
 }
 
 /** Attachments UI for a not-yet-saved expense: stages picked photos into this app's files dir via
@@ -1022,6 +1034,7 @@ private fun PendingExpenseAttachmentsSection(pendingAttachments: List<String>, o
     }
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
     val takePhoto = rememberCameraCaptureLauncher(ExpensesAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
+    var pendingRemoveAttachment by remember { mutableStateOf<AttachmentUiItem?>(null) }
     AttachmentsSection(
         title = languageManager.getString("attachments"),
         items = items,
@@ -1031,14 +1044,23 @@ private fun PendingExpenseAttachmentsSection(pendingAttachments: List<String>, o
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
         cameraLabel = languageManager.getString("attachment_take_photo"),
         cancelLabel = languageManager.getString("cancel"),
-        onRemove = { item ->
-            pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->
-                AttachmentFileStore.delete(context, ExpensesAttachments.DIR, fileName)
-                onChange(pendingAttachments - fileName)
-            }
-        },
+        onRemove = { item -> pendingRemoveAttachment = item },
         modifier = Modifier.padding(bottom = 12.dp)
     )
+    pendingRemoveAttachment?.let { item ->
+        ConfirmDeleteDialog(
+            title = languageManager.getString("delete_attachment_title"),
+            message = languageManager.getString("delete_attachment_message"),
+            onConfirm = {
+                pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->
+                    AttachmentFileStore.delete(context, ExpensesAttachments.DIR, fileName)
+                    onChange(pendingAttachments - fileName)
+                }
+                pendingRemoveAttachment = null
+            },
+            onDismiss = { pendingRemoveAttachment = null }
+        )
+    }
 }
 
 /** A tappable "this is what the rescanned photo found for this field" chip, shown at the end of a

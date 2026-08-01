@@ -55,6 +55,8 @@
   "delete_expense_message": "Această cheltuială și articolele ei vor fi șterse definitiv.",
   "delete_item_title": "Ștergi articolul?",
   "delete_item_message": "Acest articol va fi eliminat.",
+  "delete_attachment_title": "Ștergi fotografia?",
+  "delete_attachment_message": "Această fotografie atașată va fi eliminată.",
   "delete_category_title": "Ștergi categoria?",
   "delete_category_message": "Cheltuielile din această categorie vor rămâne necategorisite. Cheltuielile în sine nu sunt șterse.",
   "cleanup_confirm_title": "Curățăm înainte de salvare?",

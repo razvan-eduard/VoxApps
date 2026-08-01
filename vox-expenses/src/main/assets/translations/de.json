@@ -311,6 +311,8 @@
   "delete_expense_message": "Diese Ausgabe und ihre Posten werden dauerhaft gelöscht.",
   "delete_expense_title": "Ausgabe löschen?",
   "delete_item_message": "Dieser Posten wird entfernt.",
+  "delete_attachment_title": "Foto löschen?",
+  "delete_attachment_message": "Dieses angehängte Foto wird entfernt.",
   "delete_item_title": "Posten löschen?",
   "expense_category": "Kategorie",
   "expense_date": "Datum",

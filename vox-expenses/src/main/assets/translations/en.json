@@ -55,6 +55,8 @@
   "delete_expense_message": "This expense and its line items will be permanently deleted.",
   "delete_item_title": "Delete item?",
   "delete_item_message": "This line item will be removed.",
+  "delete_attachment_title": "Delete photo?",
+  "delete_attachment_message": "This attached photo will be removed.",
   "delete_category_title": "Delete category?",
   "delete_category_message": "Expenses in this category will become uncategorized. The expenses themselves are not deleted.",
   "cleanup_confirm_title": "Clean up before saving?",
