@@ -137,6 +137,16 @@ object VoxIpc {
     const val OP_SYNC_MERGE = "sync_merge"
 
     /**
+     * VoxConnect Bridge's dynamic form-schema fetch — a satellite replies with a JSON description of
+     * its record type's editable fields (key/label/type/required, and live category/layer name
+     * options for `category`-typed fields), so the desktop client can render a generic edit form
+     * instead of a hand-coded one per domain. Same request-response channel as [OP_PING]/
+     * [OP_GET_SCHEMA]; deliberately a separate op from [OP_GET_SCHEMA] — that one describes NLU
+     * prompt behavior, this one describes form fields, and the two payload shapes are unrelated.
+     */
+    const val OP_GET_FIELD_SCHEMA = "get_field_schema"
+
+    /**
      * VoxConnect Bridge's media-control relay (Hub → Commander, over this same request-response
      * channel) — Commander is the only app holding the notification-listener permission grant that
      * media-session access requires (see `MediaSessionListenerService`), so a network client never

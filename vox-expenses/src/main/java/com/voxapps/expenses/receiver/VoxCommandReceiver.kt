@@ -10,6 +10,7 @@ import com.voxapps.expenses.domain.llm.ExpenseParseRequestSender
 import com.voxapps.expenses.domain.llm.GeneratedParsedSchema
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.ipc.VoxCommand
+import com.voxapps.ipc.VoxFormSchema
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
 import com.voxapps.ipc.VoxSatelliteSchema
@@ -174,6 +175,54 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         pending.setResultData(handler.merge(command.text.orEmpty()).toJson())
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            VoxIpc.OP_GET_FIELD_SCHEMA -> {
+                // Field keys/types mirror ExpensesSyncHandler.toSyncJson() exactly — this describes
+                // the same wire shape sync_export/sync_merge already use, not a new one.
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val categoryNames = container.expensesRepository.categories.first().map { it.name }
+                        val schema = VoxFormSchema.domainSchema(
+                            domain = "expenses",
+                            titleField = "title",
+                            titleFallbackField = "vendor",
+                            subtitleFields = listOf("categoryName"),
+                            sortField = "dateTime",
+                            fields = listOf(
+                                VoxFormSchema.field("title", "Title", "text"),
+                                VoxFormSchema.field("totalAmount", "Total amount", "number", required = true),
+                                VoxFormSchema.field("currencyCode", "Currency", "text"),
+                                VoxFormSchema.field("vendor", "Vendor", "text"),
+                                VoxFormSchema.field("bank", "Bank", "text"),
+                                VoxFormSchema.field("location", "Location", "text"),
+                                VoxFormSchema.field("comments", "Comments", "text"),
+                                VoxFormSchema.field("dateTime", "Date", "datetime", required = true),
+                                VoxFormSchema.field("categoryName", "Category", "category", options = categoryNames),
+                                VoxFormSchema.field(
+                                    "direction", "Direction", "enum",
+                                    required = true, options = listOf("OUTGOING", "INCOMING")
+                                ),
+                                VoxFormSchema.field(
+                                    "lineItems", "Line items", "list",
+                                    itemFields = listOf(
+                                        VoxFormSchema.field("name", "Name", "text"),
+                                        VoxFormSchema.field("quantity", "Qty", "number"),
+                                        VoxFormSchema.field("unitPrice", "Unit price", "number"),
+                                        VoxFormSchema.field("netAmount", "Net", "number"),
+                                        VoxFormSchema.field("vatAmount", "VAT", "number"),
+                                        VoxFormSchema.field("grossAmount", "Gross", "number"),
+                                    )
+                                ),
+                                VoxFormSchema.field("receiptImageName", "Receipt", "readonly"),
+                            )
+                        )
+                        pending.setResultData(VoxResult(ok = true, text = schema.toString()).toJson())
                     } finally {
                         pending.finish()
                     }

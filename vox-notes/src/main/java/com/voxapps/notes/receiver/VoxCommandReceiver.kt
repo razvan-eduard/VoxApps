@@ -6,12 +6,14 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import com.voxapps.ipc.VoxCommand
+import com.voxapps.ipc.VoxFormSchema
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
 import com.voxapps.ipc.VoxSatelliteSchema
 import com.voxapps.notes.NotesApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -162,6 +164,31 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         pending.setResultData(handler.merge(command.text.orEmpty()).toJson())
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            VoxIpc.OP_GET_FIELD_SCHEMA -> {
+                // Field keys/types mirror NotesSyncHandler's export JSON exactly.
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val categoryNames = container.notesRepository.categories.first().map { it.name }
+                        val schema = VoxFormSchema.domainSchema(
+                            domain = "notes",
+                            titleField = "title",
+                            titleFallbackField = "text",
+                            subtitleFields = listOf("categoryName"),
+                            sortField = "updatedAt",
+                            fields = listOf(
+                                VoxFormSchema.field("title", "Title", "text"),
+                                VoxFormSchema.field("text", "Text", "text", required = true),
+                                VoxFormSchema.field("categoryName", "Category", "category", options = categoryNames),
+                            )
+                        )
+                        pending.setResultData(VoxResult(ok = true, text = schema.toString()).toJson())
                     } finally {
                         pending.finish()
                     }

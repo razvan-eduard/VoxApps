@@ -24,9 +24,23 @@
 
     <!-- VoxConnect Bridge (see :core:voxconnect's VoxConnectServer): an embedded local HTTP+WebSocket
          server a paired desktop app connects to over WiFi. Binding even a local listening socket
-         requires INTERNET on Android. -->
+         requires INTERNET on Android. WAKE_LOCK + ACCESS_WIFI_STATE back a WifiLock/WakeLock held
+         only while the bridge is running — confirmed on-device that without it, the WiFi radio's
+         power-save mode on screen-off wedges the embedded server's accept loop until the app is
+         force-restarted (the process itself isn't killed; new connections just stop completing). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- VoxConnectForegroundService keeps the bridge server alive as a real foreground service
+         (persistent notification) instead of a plain background component — see that class's doc
+         comment for why. POST_NOTIFICATIONS is required at runtime on API 33+ for the notification
+         to actually display; requested from VoxConnectSettingsCard when the bridge is enabled. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Scanning the pairing QR shown on the PC (see VoxConnectQrScanner) — the phone always has a
          camera, unlike many desktop PCs, which is why pairing bootstrap goes this direction. -->
@@ -40,6 +54,7 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.VoxHub">
 
         <activity
@@ -80,5 +95,11 @@
                 android:name="android.nfc.cardemulation.host_apdu_service"
                 android:resource="@xml/apduservice" />
         </service>
+
+        <!-- See VoxConnectForegroundService's class doc comment. -->
+        <service
+            android:name=".domain.voxconnect.VoxConnectForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

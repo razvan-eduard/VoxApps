@@ -82,7 +82,7 @@
             <!-- Capability advertising: Commander reads this at scan time to route the "expenses"
                  NLU domain here (create/read), with no per-app config on Commander's side. -->
             <meta-data android:name="com.voxapps.vox.domain" android:value="expenses" />
-            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import,get_schema,sync_export,sync_merge" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import,get_schema,sync_export,sync_merge,get_field_schema" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Expenses" />
             <meta-data
                 android:name="com.voxapps.vox.nluHint"

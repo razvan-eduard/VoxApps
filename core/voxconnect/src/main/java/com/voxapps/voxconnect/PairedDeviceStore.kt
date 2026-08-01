@@ -52,6 +52,13 @@ class PairedDeviceStore(context: Context) {
         saveDevices(getDevices().filterNot { it.deviceId == deviceId })
     }
 
+    /** Renames an already-paired device (its stored [PairedDevice.label] only — deviceId/
+     *  sessionKey/pairedAt are untouched, so the desktop's existing session keeps working). A
+     *  no-op if [deviceId] isn't currently paired. */
+    fun renameDevice(deviceId: String, newLabel: String) {
+        saveDevices(getDevices().map { if (it.deviceId == deviceId) it.copy(label = newLabel) else it })
+    }
+
     private fun saveDevices(devices: List<PairedDevice>) {
         val array = JSONArray(devices.map { it.toJson() })
         prefs.edit().putString(KEY_DEVICES, array.toString()).apply()
