@@ -24,11 +24,13 @@ import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
+import com.voxapps.expenses.ui.widget.ExpensesWidget
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.logging.Logger
+import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -123,6 +125,13 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                             }
                         }
+                        // Without this, the home-screen widget's refresh depends entirely on
+                        // ExpensesContainer's independent reactive collector noticing the DB write
+                        // and finishing its own async updateAll() — which isn't tied to this
+                        // receiver's goAsync() window at all, so the process is free to be reclaimed
+                        // the instant pending.finish() returns, racing ahead of that redraw. Awaiting
+                        // it here, inside the same wake window that made the write, closes that race.
+                        ExpensesWidget().updateAll(context.applicationContext)
                     } finally {
                         pending.finish()
                     }
@@ -169,6 +178,9 @@ class LlmResultReceiver : BroadcastReceiver() {
 
                                 if ((isInsertScoped && settings.autoAcceptDuplicateMerges) || isBatchAutoApply) {
                                     container.expensesRepository.applyExpenseDeduplication(validated)
+                                    // See the EXPENSE_PARSE branch's comment above — same
+                                    // goAsync()/process-death race for the widget refresh.
+                                    ExpensesWidget().updateAll(context.applicationContext)
                                 } else {
                                     container.expenseDeduplicationRepository.mergePendingGroups(validated)
                                 }
@@ -265,6 +277,13 @@ class LlmResultReceiver : BroadcastReceiver() {
                             )
                             stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
                             maybeRequestScopedDuplicateCheck(context, container, settings.duplicateCheckModeAutomatic, newExpenseId, settings.toNearDuplicateConfig())
+                            // See the EXPENSE_PARSE branch's comment above — same
+                            // goAsync()/process-death race for the widget refresh. This is the path
+                            // a bank/card notification (e.g. Pluxee, a bank app) actually takes when
+                            // autoAcceptNotificationExpenses is on, so it's the one most exposed to
+                            // the race: nothing keeps this process (woken only for the broadcast, no
+                            // foreground UI) alive past pending.finish() otherwise.
+                            ExpensesWidget().updateAll(context.applicationContext)
                         } else {
                             container.pendingNotificationExpenseRepository.addPending(
                                 PendingNotificationExpense(
