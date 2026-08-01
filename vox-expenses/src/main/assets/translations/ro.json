@@ -154,6 +154,8 @@
   "rescan_lineitems_multimodal_required": "Este nevoie de un motor AI multimodal pentru a citi fotografia",
   "toast_lineitems_rescanned": "Produsele au fost actualizate",
   "toast_lineitems_rescan_empty": "Nu s-au găsit produse în această fotografie",
+  "lineitems_suggestion_found": "O rescanare a găsit produse pentru acest bon",
+  "lineitems_suggestion_apply_n": "Adaugă %1$d",
   "retry_pick_photo": "Ce fotografie ar trebui să vadă AI?",
   "retry_original_scan": "Scanarea originală",
   "retry_attachment_n": "Atașament %1$d",

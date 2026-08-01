@@ -99,6 +99,7 @@ import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSanitizer
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
+import com.voxapps.expenses.data.PendingLineItemsJson
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
@@ -199,9 +200,15 @@ fun ExpenseEditScreen(
     // current local value below render a chip; tapping one sets the local field to match, which
     // makes that field's diff go to false on the next recomposition — the chip just disappears, no
     // separate "applied" tracking needed.
-    val pendingSuggestion by (existing?.expense?.id?.let { stateManager.observePendingFieldSuggestion(it) }
-        ?: emptyFlow())
-        .collectAsStateWithLifecycle(initialValue = null)
+    // remember(...) here is load-bearing, not style: without it this Flow is a NEW object every
+    // recomposition, and collectAsStateWithLifecycle's internal produceState is keyed on the Flow
+    // instance — a fresh object every recomposition cancels and restarts the collection every single
+    // recomposition, which made this look like it never updated on an already-open screen (confirmed
+    // bug report: neither the line-items nor any other field's suggestion ever appeared live).
+    val pendingSuggestionFlow = remember(existing?.expense?.id) {
+        existing?.expense?.id?.let { stateManager.observePendingFieldSuggestion(it) } ?: emptyFlow()
+    }
+    val pendingSuggestion by pendingSuggestionFlow.collectAsStateWithLifecycle(initialValue = null)
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var showNewCategoryDialog by remember { mutableStateOf(false) }
     var direction by remember { mutableStateOf(existing?.expense?.direction ?: TransactionDirection.OUTGOING) }
@@ -579,6 +586,43 @@ fun ExpenseEditScreen(
                         }) {
                             Icon(Icons.Filled.Add, contentDescription = null)
                             Text(languageManager.getString("add_item"))
+                        }
+                    }
+
+                    // Line items found by a rescan (see PendingFieldSuggestion.itemsJson's doc
+                    // comment) — a full-list "apply all" action, not a per-field diff like the
+                    // scalar fields above, since there's no meaningful per-item comparison against
+                    // whatever's already in the draft. itemsSuggestionApplied hides the banner once
+                    // tapped (resets whenever a genuinely new suggestion arrives).
+                    val suggestedItems = remember(pendingSuggestion?.itemsJson) {
+                        PendingLineItemsJson.decode(pendingSuggestion?.itemsJson)
+                    }
+                    var itemsSuggestionApplied by remember(pendingSuggestion?.itemsJson) { mutableStateOf(false) }
+                    if (suggestedItems.isNotEmpty() && !itemsSuggestionApplied) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                languageManager.getString("lineitems_suggestion_found"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            FieldSuggestionChip(
+                                String.format(languageManager.getString("lineitems_suggestion_apply_n"), suggestedItems.size)
+                            ) {
+                                suggestedItems.forEach { parsedItem ->
+                                    items.add(
+                                        LineItemDraft(
+                                            name = parsedItem.name,
+                                            quantityText = formatDecimal(parsedItem.quantity, useComma),
+                                            unitPriceText = formatDecimal(parsedItem.unitPrice, useComma),
+                                            netAmountText = parsedItem.netAmount?.let { formatDecimal(it, useComma) } ?: "",
+                                            vatAmountText = parsedItem.vatAmount?.let { formatDecimal(it, useComma) } ?: "",
+                                            grossAmountText = parsedItem.grossAmount?.let { formatDecimal(it, useComma) } ?: ""
+                                        )
+                                    )
+                                }
+                                itemsSuggestionApplied = true
+                            }
                         }
                     }
 

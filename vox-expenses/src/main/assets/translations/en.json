@@ -154,6 +154,8 @@
   "rescan_lineitems_multimodal_required": "This requires a multimodal AI engine to read the photo",
   "toast_lineitems_rescanned": "Line items updated",
   "toast_lineitems_rescan_empty": "No line items found in that photo",
+  "lineitems_suggestion_found": "A rescan found line items for this receipt",
+  "lineitems_suggestion_apply_n": "Add %1$d",
   "retry_pick_photo": "Which photo should the AI see?",
   "retry_original_scan": "Original scan",
   "retry_attachment_n": "Attachment %1$d",

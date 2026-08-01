@@ -92,6 +92,8 @@
   "rescan_lineitems_multimodal_required": "Dafür ist eine multimodale KI-Engine erforderlich, um das Foto zu lesen",
   "toast_lineitems_rescanned": "Positionen aktualisiert",
   "toast_lineitems_rescan_empty": "In diesem Foto wurden keine Positionen gefunden",
+  "lineitems_suggestion_found": "Ein erneuter Scan hat Positionen für diesen Beleg gefunden",
+  "lineitems_suggestion_apply_n": "%1$d hinzufügen",
   "retry_pick_photo": "Welches Foto soll die KI sehen?",
   "retry_original_scan": "Original-Scan",
   "retry_attachment_n": "Anhang %1$d",

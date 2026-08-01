@@ -12,6 +12,7 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.expenses.data.NearDuplicateConfig
 import com.voxapps.expenses.data.PendingFieldSuggestion
+import com.voxapps.expenses.data.PendingLineItemsJson
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.toNearDuplicateConfig
 import com.voxapps.expenses.di.ExpensesContainer
@@ -309,12 +310,14 @@ class LlmResultReceiver : BroadcastReceiver() {
 
             LlmTasks.EXPENSE_LINEITEMS_RESCAN -> {
                 // A photo attached to an already-saved expense after the fact — see
-                // ExpenseScanCleanupRequestSender.sendLineItemsRescan's doc comment. Line items are
-                // written directly (there's rarely anything to lose by replacing them — an expense
-                // rescanned for this reason usually had none). Every OTHER field is deliberately NOT
-                // auto-applied — instead staged as a PendingFieldSuggestion for ExpenseEditScreen to
-                // show as a tappable chip, since these fields were likely already reviewed by the user
-                // and an LLM read of a photo shouldn't silently overwrite them.
+                // ExpenseScanCleanupRequestSender.sendLineItemsRescan's doc comment. Nothing here is
+                // applied directly to the Expense/line-item tables — everything (including items) is
+                // staged as a PendingFieldSuggestion for ExpenseEditScreen to show as a tappable
+                // chip/banner. An earlier version wrote items straight to the DB; that made an
+                // already-open edit screen look like nothing happened, since its line-items list is a
+                // local snapshot that never observes the database (see PendingFieldSuggestion's doc
+                // comment) — routing through the same live-observed suggestion row every other field
+                // already uses fixes that, and also means items are reviewable like everything else.
                 val expenseId = taskParts.getOrNull(1)?.toLongOrNull()
                 val rawJson = result.rawJson
                 // requireTotalAmount=false: a photo with no clearly printed total shouldn't discard
@@ -341,22 +344,6 @@ class LlmResultReceiver : BroadcastReceiver() {
                         }
                         var didSomething = false
                         if (parsed != null && existing != null) {
-                            if (parsed.items.isNotEmpty()) {
-                                val items = parsed.items.map {
-                                    ExpenseLineItem(
-                                        expenseId = existing.expense.id,
-                                        name = it.name,
-                                        quantity = it.quantity,
-                                        unitPrice = it.unitPrice,
-                                        netAmount = it.netAmount,
-                                        vatAmount = it.vatAmount,
-                                        grossAmount = it.grossAmount
-                                    )
-                                }
-                                container.expensesRepository.updateExpense(existing.expense, items)
-                                ExpensesWidget().updateAll(context.applicationContext)
-                                didSomething = true
-                            }
                             buildFieldSuggestion(parsed, existing)?.let {
                                 container.expensesRepository.setPendingFieldSuggestion(it)
                                 didSomething = true
@@ -593,9 +580,12 @@ class LlmResultReceiver : BroadcastReceiver() {
         val dateTime = if (parsed.date != null || parsed.time != null) {
             mergeDateTime(parsed.date, parsed.time).takeIf { it != expense.dateTime }
         } else null
+        // No meaningful per-item diff against whatever's currently in the draft (unlike the scalar
+        // fields above) — the full parsed list, offered as one apply-all-or-nothing suggestion.
+        val itemsJson = PendingLineItemsJson.encode(parsed.items)
 
         if (title == null && vendor == null && bank == null && location == null && currencyCode == null &&
-            category == null && totalAmount == null && dateTime == null
+            category == null && totalAmount == null && dateTime == null && itemsJson == null
         ) {
             return null
         }
@@ -608,7 +598,8 @@ class LlmResultReceiver : BroadcastReceiver() {
             currencyCode = currencyCode,
             category = category,
             location = location,
-            dateTime = dateTime
+            dateTime = dateTime,
+            itemsJson = itemsJson
         )
     }
 

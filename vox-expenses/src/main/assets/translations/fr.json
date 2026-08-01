@@ -92,6 +92,8 @@
   "rescan_lineitems_multimodal_required": "Cela nécessite un moteur d'IA multimodal pour lire la photo",
   "toast_lineitems_rescanned": "Articles mis à jour",
   "toast_lineitems_rescan_empty": "Aucun article trouvé sur cette photo",
+  "lineitems_suggestion_found": "Une nouvelle analyse a trouvé des articles pour ce reçu",
+  "lineitems_suggestion_apply_n": "Ajouter %1$d",
   "retry_pick_photo": "Quelle photo l'IA doit-elle voir ?",
   "retry_original_scan": "Scan original",
   "retry_attachment_n": "Pièce jointe %1$d",

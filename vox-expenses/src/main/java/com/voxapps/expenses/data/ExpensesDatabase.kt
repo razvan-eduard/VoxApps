@@ -17,7 +17,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
     entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class,
         ExpenseTombstone::class, MerchantCategoryMemory::class, PendingLlmRequestEntity::class,
         AttachmentEntity::class, DuplicateRuleEntity::class, PendingFieldSuggestion::class],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -219,6 +219,15 @@ abstract class ExpensesDatabase : RoomDatabase() {
             }
         }
 
+        // Line items move into the same review-and-apply suggestion flow as every other rescanned
+        // field, instead of being written directly (see PendingFieldSuggestion's doc comment for why
+        // that made an already-open ExpenseEditScreen look stale after a rescan).
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE pending_field_suggestions ADD COLUMN itemsJson TEXT")
+            }
+        }
+
         fun get(context: Context): ExpensesDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
         }
@@ -228,7 +237,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                 // A brand-new install never runs a Migration (Room creates the full current schema
                 // directly from the @Entity annotations) — this seeds the same default rules for that
                 // path too, so a fresh install and an upgraded one both start with working duplicate
