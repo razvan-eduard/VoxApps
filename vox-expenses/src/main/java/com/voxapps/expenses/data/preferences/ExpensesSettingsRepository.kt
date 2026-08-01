@@ -38,6 +38,7 @@ interface ExpensesSettingsRepository {
     suspend fun setOnboardingCompleted(completed: Boolean)
     suspend fun setAttachPhotoOnScan(enabled: Boolean)
     suspend fun setAttachPhotoOnRetry(enabled: Boolean)
+    suspend fun setAutoRescanOnFirstAttachment(enabled: Boolean)
     suspend fun setAutoOpenScannedExpense(enabled: Boolean)
     suspend fun setLocationPrefillEnabled(enabled: Boolean)
     suspend fun setDuplicateCheckModeManual(mode: String)

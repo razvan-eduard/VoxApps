@@ -11,6 +11,8 @@ import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.expenses.data.NearDuplicateConfig
+import com.voxapps.expenses.data.PendingFieldSuggestion
+import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.toNearDuplicateConfig
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.domain.llm.CategoryMergeMappingParser
@@ -307,17 +309,24 @@ class LlmResultReceiver : BroadcastReceiver() {
 
             LlmTasks.EXPENSE_LINEITEMS_RESCAN -> {
                 // A photo attached to an already-saved expense after the fact — see
-                // ExpenseScanCleanupRequestSender.sendLineItemsRescan's doc comment. Deliberately
-                // narrower than updateExpenseFromRetry: only the target expense's line items change,
-                // every other field (title/amount/vendor/category/etc, all already reviewed by the
-                // user) is left exactly as-is.
+                // ExpenseScanCleanupRequestSender.sendLineItemsRescan's doc comment. Line items are
+                // written directly (there's rarely anything to lose by replacing them — an expense
+                // rescanned for this reason usually had none). Every OTHER field is deliberately NOT
+                // auto-applied — instead staged as a PendingFieldSuggestion for ExpenseEditScreen to
+                // show as a tappable chip, since these fields were likely already reviewed by the user
+                // and an LLM read of a photo shouldn't silently overwrite them.
                 val expenseId = taskParts.getOrNull(1)?.toLongOrNull()
                 val rawJson = result.rawJson
+                // requireTotalAmount=false: a photo with no clearly printed total shouldn't discard
+                // genuinely-found line items (or other fields) along with it.
                 val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
-                    ExpenseParseResultParser.parse(rawJson)
+                    ExpenseParseResultParser.parse(rawJson, requireTotalAmount = false)
                 } else {
                     Logger.w(TAG, "Line-items rescan failed: ${result.error}")
                     null
+                }
+                if (parsed == null && rawJson != null) {
+                    Logger.w(TAG, "Line-items rescan: reply didn't parse as valid JSON: $rawJson")
                 }
 
                 val pending = goAsync()
@@ -325,24 +334,35 @@ class LlmResultReceiver : BroadcastReceiver() {
                     try {
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
                         val existing = expenseId?.let { container.expensesRepository.getExpenseById(it) }
-                        val toastKey = if (parsed != null && existing != null && parsed.items.isNotEmpty()) {
-                            val items = parsed.items.map {
-                                ExpenseLineItem(
-                                    expenseId = existing.expense.id,
-                                    name = it.name,
-                                    quantity = it.quantity,
-                                    unitPrice = it.unitPrice,
-                                    netAmount = it.netAmount,
-                                    vatAmount = it.vatAmount,
-                                    grossAmount = it.grossAmount
-                                )
-                            }
-                            container.expensesRepository.updateExpense(existing.expense, items)
-                            ExpensesWidget().updateAll(context.applicationContext)
-                            "toast_lineitems_rescanned"
-                        } else {
-                            "toast_lineitems_rescan_empty"
+                        if (existing == null) {
+                            Logger.w(TAG, "Line-items rescan target expense $expenseId no longer exists")
+                        } else if (parsed != null) {
+                            Logger.d(TAG, "Line-items rescan for expense $expenseId: parsed ${parsed.items.size} item(s)")
                         }
+                        var didSomething = false
+                        if (parsed != null && existing != null) {
+                            if (parsed.items.isNotEmpty()) {
+                                val items = parsed.items.map {
+                                    ExpenseLineItem(
+                                        expenseId = existing.expense.id,
+                                        name = it.name,
+                                        quantity = it.quantity,
+                                        unitPrice = it.unitPrice,
+                                        netAmount = it.netAmount,
+                                        vatAmount = it.vatAmount,
+                                        grossAmount = it.grossAmount
+                                    )
+                                }
+                                container.expensesRepository.updateExpense(existing.expense, items)
+                                ExpensesWidget().updateAll(context.applicationContext)
+                                didSomething = true
+                            }
+                            buildFieldSuggestion(parsed, existing)?.let {
+                                container.expensesRepository.setPendingFieldSuggestion(it)
+                                didSomething = true
+                            }
+                        }
+                        val toastKey = if (didSomething) "toast_lineitems_rescanned" else "toast_lineitems_rescan_empty"
                         withContext(Dispatchers.Main) {
                             Toast.makeText(context, container.languageManager.getString(toastKey), Toast.LENGTH_SHORT).show()
                         }
@@ -546,6 +566,49 @@ class LlmResultReceiver : BroadcastReceiver() {
             imageName = imageName,
             isStub = true,
             source = ExpenseSource.SCAN
+        )
+    }
+
+    /** Diffs [parsed] against [existing]'s current field values, returning a [PendingFieldSuggestion]
+     *  with only the fields that genuinely differ (or fill a current blank) set — never null,
+     *  never-blank, never-unchanged fields stay null so ExpenseEditScreen only renders a chip where
+     *  there's an actual difference to offer. Returns null (nothing to persist) if every field
+     *  already matches. Category is compared by name (the record's current category, if any) since
+     *  [ExpenseParseResultParser.Parsed.category] is a raw name, not an id. */
+    private fun buildFieldSuggestion(parsed: ExpenseParseResultParser.Parsed, existing: ExpenseWithDetails): PendingFieldSuggestion? {
+        val expense = existing.expense
+        fun String?.diffOrNull(current: String?): String? {
+            val clean = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            return clean.takeIf { !it.equals(current?.trim(), ignoreCase = false) }
+        }
+        val title = parsed.title.diffOrNull(expense.title)
+        val vendor = parsed.vendor.diffOrNull(expense.vendor)
+        val bank = parsed.bank.diffOrNull(expense.bank)
+        val location = parsed.location.diffOrNull(expense.location)
+        val currencyCode = parsed.currency?.uppercase()?.diffOrNull(expense.currencyCode)
+        val category = parsed.category.diffOrNull(existing.category?.name)
+        val totalAmount = if (!parsed.totalAmount.isNaN() && parsed.totalAmount != expense.totalAmount) {
+            parsed.totalAmount
+        } else null
+        val dateTime = if (parsed.date != null || parsed.time != null) {
+            mergeDateTime(parsed.date, parsed.time).takeIf { it != expense.dateTime }
+        } else null
+
+        if (title == null && vendor == null && bank == null && location == null && currencyCode == null &&
+            category == null && totalAmount == null && dateTime == null
+        ) {
+            return null
+        }
+        return PendingFieldSuggestion(
+            expenseId = expense.id,
+            title = title,
+            vendor = vendor,
+            bank = bank,
+            totalAmount = totalAmount,
+            currencyCode = currencyCode,
+            category = category,
+            location = location,
+            dateTime = dateTime
         )
     }
 

@@ -12,6 +12,7 @@ import com.voxapps.expenses.data.DuplicateRuleDao
 import com.voxapps.expenses.data.DuplicateRuleEntity
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Expense
+import com.voxapps.expenses.data.PendingFieldSuggestion
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesRepository
@@ -159,6 +160,7 @@ class ExpensesStateManager internal constructor(
     fun setDebugToastsEnabled(enabled: Boolean) { scope.launch { settingsRepo.setDebugToastsEnabled(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setAttachPhotoOnRetry(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnRetry(enabled) } }
+    fun setAutoRescanOnFirstAttachment(enabled: Boolean) { scope.launch { settingsRepo.setAutoRescanOnFirstAttachment(enabled) } }
     fun setAutoOpenScannedExpense(enabled: Boolean) { scope.launch { settingsRepo.setAutoOpenScannedExpense(enabled) } }
     fun setLocationPrefillEnabled(enabled: Boolean) { scope.launch { settingsRepo.setLocationPrefillEnabled(enabled) } }
     fun setDuplicateCheckModeManual(mode: String) { scope.launch { settingsRepo.setDuplicateCheckModeManual(mode) } }
@@ -526,6 +528,14 @@ class ExpensesStateManager internal constructor(
             attachmentDao.delete(entity.id)
             AttachmentFileStore.delete(context, ExpensesAttachments.DIR, entity.fileName)
         }
+    }
+
+    // --- Pending field suggestions (from a line-items rescan on an already-saved expense) ---
+    fun observePendingFieldSuggestion(expenseId: Long): Flow<PendingFieldSuggestion?> =
+        expensesRepo.observePendingFieldSuggestion(expenseId)
+
+    fun clearPendingFieldSuggestion(expenseId: Long) {
+        scope.launch { expensesRepo.clearPendingFieldSuggestion(expenseId) }
     }
 
     companion object {

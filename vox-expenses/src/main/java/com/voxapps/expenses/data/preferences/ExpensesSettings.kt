@@ -93,6 +93,13 @@ data class ExpensesSettings(
      *  failed parse) is a distinct, less frequent code path — a user might want the photo attached
      *  on a fresh scan but not want it re-sent every retry, or vice versa. */
     val attachPhotoOnRetry: Boolean = false,
+    /** Off by default. When on, attaching the FIRST photo to an already-saved expense that
+     *  currently has none at all (no original receipt scan, no manual attachment — see
+     *  ExpenseAttachmentsSection's eligibility check) automatically triggers the same line-items
+     *  rescan the manual chip does, no tap needed. Once the expense has at least one attachment,
+     *  adding more never auto-triggers, even with this on — only the transition from zero to one
+     *  does. Deleting attachments back down to zero makes it eligible again. */
+    val autoRescanOnFirstAttachment: Boolean = false,
     /** Off by default — new, forced-navigation behavior a user must opt into. When on, as soon as a
      *  scanned receipt's LLM cleanup successfully creates its expense (not a voice-created one — see
      *  [com.voxapps.expenses.receiver.LlmResultReceiver]'s scan-specific branch), Expenses navigates

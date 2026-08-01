@@ -16,8 +16,8 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 @Database(
     entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class,
         ExpenseTombstone::class, MerchantCategoryMemory::class, PendingLlmRequestEntity::class,
-        AttachmentEntity::class, DuplicateRuleEntity::class],
-    version = 13,
+        AttachmentEntity::class, DuplicateRuleEntity::class, PendingFieldSuggestion::class],
+    version = 14,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -30,6 +30,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
     abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
     abstract fun attachmentDao(): AttachmentDao
     abstract fun duplicateRuleDao(): DuplicateRuleDao
+    abstract fun pendingFieldSuggestionDao(): PendingFieldSuggestionDao
 
     companion object {
         @Volatile private var instance: ExpensesDatabase? = null
@@ -204,6 +205,20 @@ abstract class ExpensesDatabase : RoomDatabase() {
             }
         }
 
+        // Feeds the tappable field-suggestion chips shown after a photo is rescanned for line items
+        // on an already-saved expense (see PendingFieldSuggestion's doc comment) — one row per
+        // expense, upserted on every rescan, cleared on save.
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS pending_field_suggestions (" +
+                        "expenseId INTEGER NOT NULL PRIMARY KEY, " +
+                        "title TEXT, vendor TEXT, bank TEXT, totalAmount REAL, currencyCode TEXT, " +
+                        "category TEXT, location TEXT, dateTime INTEGER)"
+                )
+            }
+        }
+
         fun get(context: Context): ExpensesDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
         }
@@ -213,7 +228,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                 // A brand-new install never runs a Migration (Room creates the full current schema
                 // directly from the @Entity annotations) — this seeds the same default rules for that
                 // path too, so a fresh install and an upgraded one both start with working duplicate

@@ -339,6 +339,8 @@
   "attach_photo_on_scan_desc": "Send the receipt photo to the AI alongside the recognized text (needs Vision's \"send photo to AI\" setting on too, and a multimodal engine configured)",
   "attach_photo_on_retry": "Process photo with AI on retry",
   "attach_photo_on_retry_desc": "Also send the photo when retrying a failed scan's cleanup, not just on the first attempt",
+  "auto_rescan_on_first_attachment": "Auto-extract line items from the first attached photo",
+  "auto_rescan_on_first_attachment_desc": "Only when the expense currently has no photo at all — attaching another one later won't re-trigger it",
   "auto_open_scanned_expense": "Auto-open scanned expense",
   "auto_open_scanned_expense_desc": "Jump straight to the new expense's edit screen for review as soon as a scanned receipt finishes processing, instead of staying on the list.",
   "location_section": "Location",

@@ -242,6 +242,26 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
+        // --- Auto-trigger a line-items rescan the moment an expense gets its FIRST photo attached
+        // after being saved (see ExpensesSettings.autoRescanOnFirstAttachment's doc comment for the
+        // zero-to-one eligibility rule). ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("auto_rescan_on_first_attachment"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("auto_rescan_on_first_attachment_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.autoRescanOnFirstAttachment,
+                onCheckedChange = { stateManager.setAutoRescanOnFirstAttachment(it) }
+            )
+        }
+
+        HorizontalDivider()
+
         // --- Auto-open a scanned receipt's expense once it's actually created (LLM cleanup is
         // async, so this can't happen at scan time itself — see LlmResultReceiver). ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

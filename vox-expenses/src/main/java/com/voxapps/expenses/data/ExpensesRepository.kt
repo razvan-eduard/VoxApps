@@ -39,12 +39,24 @@ class ExpensesRepository(
     private val merchantCategoryMemoryDao: MerchantCategoryMemoryDao,
     private val appContext: Context,
     private val attachmentDao: AttachmentDao,
-    private val duplicateRuleDao: DuplicateRuleDao
+    private val duplicateRuleDao: DuplicateRuleDao,
+    private val pendingFieldSuggestionDao: PendingFieldSuggestionDao
 ) {
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
     val expensesWithDetails: Flow<List<ExpenseWithDetails>> = expenseDao.observeExpensesWithDetails()
     val categories: Flow<List<Category>> = categoryDao.observeAll()
     val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll()
+
+    /** See [PendingFieldSuggestion]'s doc comment — the source for ExpenseEditScreen's tappable
+     *  field-suggestion chips after a line-items rescan. */
+    fun observePendingFieldSuggestion(expenseId: Long): Flow<PendingFieldSuggestion?> =
+        pendingFieldSuggestionDao.observe(expenseId)
+
+    suspend fun setPendingFieldSuggestion(suggestion: PendingFieldSuggestion) =
+        pendingFieldSuggestionDao.upsert(suggestion)
+
+    suspend fun clearPendingFieldSuggestion(expenseId: Long) =
+        pendingFieldSuggestionDao.clear(expenseId)
 
     /** Builds the current duplicate checker from whatever rules are persisted right now — fetched
      *  fresh on every call rather than cached, since rules can change between checks and this

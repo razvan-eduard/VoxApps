@@ -43,7 +43,8 @@ class ExpensesContainer(context: Context) {
         database.merchantCategoryMemoryDao(),
         appContext,
         attachmentDao,
-        duplicateRuleDao
+        duplicateRuleDao,
+        database.pendingFieldSuggestionDao()
     )
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())

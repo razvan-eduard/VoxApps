@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -46,6 +47,8 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -111,6 +114,7 @@ import com.voxapps.datahygiene.decideForSave
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.DateFormat
@@ -190,6 +194,14 @@ fun ExpenseEditScreen(
     var comments by remember { mutableStateOf(existing?.expense?.comments ?: "") }
     var dateTime by remember { mutableStateOf(existing?.expense?.dateTime ?: System.currentTimeMillis()) }
     var categoryId by remember { mutableStateOf(existing?.expense?.categoryId) }
+    // From a line-items rescan on this (already-saved) expense — see PendingFieldSuggestion's doc
+    // comment. Null on a brand-new expense (nothing to observe yet). Only fields differing from the
+    // current local value below render a chip; tapping one sets the local field to match, which
+    // makes that field's diff go to false on the next recomposition — the chip just disappears, no
+    // separate "applied" tracking needed.
+    val pendingSuggestion by (existing?.expense?.id?.let { stateManager.observePendingFieldSuggestion(it) }
+        ?: emptyFlow())
+        .collectAsStateWithLifecycle(initialValue = null)
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var showNewCategoryDialog by remember { mutableStateOf(false) }
     var direction by remember { mutableStateOf(existing?.expense?.direction ?: TransactionDirection.OUTGOING) }
@@ -216,6 +228,10 @@ fun ExpenseEditScreen(
         }
         if (existing != null) {
             stateManager.updateExpense(expense, lineItems)
+            // Whatever the rescan suggested is now moot either way — applied suggestions are
+            // already reflected in `expense`, and anything left un-applied shouldn't linger past
+            // this save to be offered again against a record that's moved on.
+            stateManager.clearPendingFieldSuggestion(expense.id)
         } else {
             stateManager.addExpense(
                 title = expense.title,
@@ -374,22 +390,34 @@ fun ExpenseEditScreen(
                     PaperField(
                         label = languageManager.getString("expense_title_optional"),
                         value = title,
-                        onValueChange = { title = it }
+                        onValueChange = { title = it },
+                        suggestion = pendingSuggestion?.title?.takeIf { it != title }?.let { suggested ->
+                            { FieldSuggestionChip(suggested) { title = suggested } }
+                        }
                     )
                     PaperField(
                         label = languageManager.getString("expense_vendor"),
                         value = vendor,
-                        onValueChange = { vendor = it }
+                        onValueChange = { vendor = it },
+                        suggestion = pendingSuggestion?.vendor?.takeIf { it != vendor }?.let { suggested ->
+                            { FieldSuggestionChip(suggested) { vendor = suggested } }
+                        }
                     )
                     PaperField(
                         label = languageManager.getString("expense_bank"),
                         value = bank,
-                        onValueChange = { bank = it }
+                        onValueChange = { bank = it },
+                        suggestion = pendingSuggestion?.bank?.takeIf { it != bank }?.let { suggested ->
+                            { FieldSuggestionChip(suggested) { bank = suggested } }
+                        }
                     )
                     PaperField(
                         label = languageManager.getString("expense_location"),
                         value = location,
-                        onValueChange = { location = it }
+                        onValueChange = { location = it },
+                        suggestion = pendingSuggestion?.location?.takeIf { it != location }?.let { suggested ->
+                            { FieldSuggestionChip(suggested) { location = suggested } }
+                        }
                     )
                     PaperTapField(
                         label = languageManager.getString("expense_date"),
@@ -402,6 +430,13 @@ fun ExpenseEditScreen(
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp)
                             )
+                        },
+                        suggestion = pendingSuggestion?.dateTime?.takeIf { it != dateTime }?.let { suggested ->
+                            {
+                                FieldSuggestionChip(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(suggested))) {
+                                    dateTime = suggested
+                                }
+                            }
                         }
                     )
                     PaperTapField(
@@ -418,6 +453,12 @@ fun ExpenseEditScreen(
                         }
                     )
                     Box {
+                        // Only offered when the suggested name matches an EXISTING category
+                        // (case-insensitive) — no auto-create here, unlike the voice/scan-create
+                        // paths, to keep applying a suggestion a synchronous, no-surprises action.
+                        val suggestedCategory = pendingSuggestion?.category?.let { name ->
+                            categories.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                        }?.takeIf { it.id != categoryId }
                         PaperTapField(
                             label = languageManager.getString("expense_category"),
                             value = categories.firstOrNull { it.id == categoryId }?.name ?: languageManager.getString("none"),
@@ -429,6 +470,9 @@ fun ExpenseEditScreen(
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
                                 )
+                            },
+                            suggestion = suggestedCategory?.let { cat ->
+                                { FieldSuggestionChip(cat.name) { categoryId = cat.id } }
                             }
                         )
                         DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
@@ -473,13 +517,20 @@ fun ExpenseEditScreen(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             valueColor = amountColor,
                             dividerColor = amountColor.copy(alpha = if (totalMismatch) 1f else 0.4f),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            suggestion = pendingSuggestion?.totalAmount
+                                ?.let { formatDecimal(it, useComma) }
+                                ?.takeIf { it != totalText }
+                                ?.let { suggested -> { FieldSuggestionChip(suggested) { totalText = suggested } } }
                         )
                         PaperField(
                             label = languageManager.getString("expense_currency"),
                             value = currency,
                             onValueChange = { currency = it.uppercase().take(3) },
-                            modifier = Modifier.weight(0.6f)
+                            modifier = Modifier.weight(0.6f),
+                            suggestion = pendingSuggestion?.currencyCode?.takeIf { it != currency }?.let { suggested ->
+                                { FieldSuggestionChip(suggested) { currency = suggested } }
+                            }
                         )
                     }
                     if (totalMismatch) {
@@ -877,38 +928,53 @@ private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?
             )
         }
     }
-    fun handlePickedUri(uri: Uri?) {
-        if (uri != null) {
-            AttachmentFileStore.stage(context, uri, ExpensesAttachments.DIR)?.let { fileName ->
-                stateManager.addManualAttachment(expenseId, fileName)
-            }
-        }
-    }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
-    val takePhoto = rememberCameraCaptureLauncher(ExpensesAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
-
     // Extracts line items from an attached photo into this already-saved expense — the photo may
     // have been added well after the expense was created (voice/notification-created expenses have
     // no receipt at all), so unlike the original scan there's no OCR text, only the image itself; see
     // ExpenseScanCleanupRequestSender.sendLineItemsRescan's doc comment for why that's image-only.
-    fun rescanAttachmentForLineItems(item: AttachmentUiItem) {
+    // Shared by the manual per-attachment chip and the auto-trigger-on-first-photo setting below.
+    fun triggerRescan(dirName: String, fileName: String, silent: Boolean) {
         val container = (context.applicationContext as ExpensesApplication).container
         scope.launch {
-            val attachmentUri = if (item.id == -1L) {
-                MultimodalAttachmentResolver.resolve(context, receiptImageName, attachEnabled = true)
-            } else {
-                manualEntities.firstOrNull { it.id == item.id }?.let {
-                    MultimodalAttachmentResolver.resolveArbitraryFile(context, ExpensesAttachments.DIR, it.fileName, attachEnabled = true)
-                }
-            }
+            val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(context, dirName, fileName, attachEnabled = true)
             if (attachmentUri == null) {
-                Toast.makeText(context, languageManager.getString("rescan_lineitems_multimodal_required"), Toast.LENGTH_LONG).show()
+                if (!silent) {
+                    Toast.makeText(context, languageManager.getString("rescan_lineitems_multimodal_required"), Toast.LENGTH_LONG).show()
+                }
                 return@launch
             }
             ExpenseScanCleanupRequestSender.sendLineItemsRescan(context, container, expenseId, attachmentUri)
             Toast.makeText(context, languageManager.getString("rescan_lineitems_started"), Toast.LENGTH_SHORT).show()
         }
     }
+
+    fun rescanAttachmentForLineItems(item: AttachmentUiItem) {
+        if (item.id == -1L) {
+            receiptImageName?.let { triggerRescan("receipts", it, silent = false) }
+        } else {
+            manualEntities.firstOrNull { it.id == item.id }?.let { triggerRescan(ExpensesAttachments.DIR, it.fileName, silent = false) }
+        }
+    }
+
+    fun handlePickedUri(uri: Uri?) {
+        if (uri != null) {
+            // Eligibility read BEFORE staging: `items` is this composition's snapshot of what the
+            // record had prior to this pick (the DB write below hasn't round-tripped back through
+            // the observing Flow yet) — exactly the "currently zero attachments" check the
+            // auto-rescan setting needs (see ExpensesSettings.autoRescanOnFirstAttachment's doc
+            // comment for the zero-to-one rule).
+            val wasEmpty = items.isEmpty()
+            AttachmentFileStore.stage(context, uri, ExpensesAttachments.DIR)?.let { fileName ->
+                stateManager.addManualAttachment(expenseId, fileName)
+                val container = (context.applicationContext as ExpensesApplication).container
+                if (wasEmpty && container.settingsRepository.getSnapshot().autoRescanOnFirstAttachment) {
+                    triggerRescan(ExpensesAttachments.DIR, fileName, silent = true)
+                }
+            }
+        }
+    }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
+    val takePhoto = rememberCameraCaptureLauncher(ExpensesAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
 
     AttachmentsSection(
         title = languageManager.getString("attachments"),
@@ -975,6 +1041,28 @@ private fun PendingExpenseAttachmentsSection(pendingAttachments: List<String>, o
     )
 }
 
+/** A tappable "this is what the rescanned photo found for this field" chip, shown at the end of a
+ *  [PaperField]/[PaperTapField] row when [ExpenseEditScreen]'s pending-suggestion diff finds a
+ *  difference for that field. Same green-chip idiom as vox-commander's FastMap rule-editor token
+ *  chips (RulesManagerScreen's TokenSelectorSection) — permanently "on" styling rather than a
+ *  toggle, since tapping here fires [onClick] once and the chip disappears (the caller applies the
+ *  suggested value to local state, which makes the underlying diff go to false on the next
+ *  recomposition — no separate dismissed/applied tracking needed). */
+@Composable
+private fun FieldSuggestionChip(value: String, onClick: () -> Unit) {
+    FilterChip(
+        selected = true,
+        onClick = onClick,
+        label = { Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        shape = RoundedCornerShape(16.dp),
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = Color(0xFF4CAF50),
+            selectedLabelColor = Color.White
+        ),
+        modifier = Modifier.padding(start = 6.dp).widthIn(max = 140.dp)
+    )
+}
+
 @Composable
 private fun PaperField(
     label: String,
@@ -985,28 +1073,35 @@ private fun PaperField(
     singleLine: Boolean = true,
     minLines: Int = 1,
     valueColor: Color = MaterialTheme.colorScheme.primary,
-    dividerColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    dividerColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+    // A rescanned photo's suggested replacement for this field — see FieldSuggestionChip's doc
+    // comment. Null (the default) renders nothing, so every other caller of this shared field is
+    // unaffected.
+    suggestion: (@Composable () -> Unit)? = null
 ) {
     Column(modifier = modifier) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Box(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
-            if (value.isEmpty()) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (value.isEmpty()) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    )
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = valueColor),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    keyboardOptions = keyboardOptions,
+                    singleLine = singleLine,
+                    minLines = minLines,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = valueColor),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                keyboardOptions = keyboardOptions,
-                singleLine = singleLine,
-                minLines = minLines,
-                modifier = Modifier.fillMaxWidth()
-            )
+            suggestion?.invoke()
         }
         Spacer(Modifier.height(4.dp))
         HorizontalDivider(color = dividerColor, thickness = 1.dp)
@@ -1019,7 +1114,8 @@ private fun PaperTapField(
     value: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    trailingIcon: @Composable () -> Unit = {}
+    trailingIcon: @Composable () -> Unit = {},
+    suggestion: (@Composable () -> Unit)? = null
 ) {
     Column(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1033,6 +1129,7 @@ private fun PaperTapField(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)
             )
+            suggestion?.invoke()
             trailingIcon()
         }
         Spacer(Modifier.height(4.dp))

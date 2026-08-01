@@ -62,9 +62,17 @@ object ExpenseParseResultParser {
         return null
     }
 
-    fun parse(json: String): Parsed? = try {
+    /**
+     * [requireTotalAmount] is only ever false for [LlmTasks.EXPENSE_LINEITEMS_RESCAN] (see
+     * [com.voxapps.expenses.receiver.LlmResultReceiver]) — a photo with no clear printed total
+     * shouldn't discard genuinely-found line items (or other fields) along with it. [Double.NaN] is
+     * a distinguishable "not found" sentinel in that case (never a real amount) — callers that care
+     * check `!totalAmount.isNaN()` rather than treating it as a real, suggestible value.
+     */
+    fun parse(json: String, requireTotalAmount: Boolean = true): Parsed? = try {
         val o = JSONObject(json)
-        val totalAmount = o.optNullableDouble("totalAmount") ?: return null
+        val totalAmount = o.optNullableDouble("totalAmount")
+            ?: (if (requireTotalAmount) return null else Double.NaN)
 
         val itemsArray = o.optJSONArray("items") ?: JSONArray()
         val items = (0 until itemsArray.length()).mapNotNull { i ->
