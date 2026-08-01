@@ -66,6 +66,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.SpanStyle
@@ -74,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -146,6 +148,7 @@ fun EntryEditScreen(
     existing: CalendarEntryWithTags?,
     defaultLayer: CalendarLayer,
     stateManager: CalendarStateManager,
+    availableTags: List<String>,
     onDone: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
@@ -174,6 +177,7 @@ fun EntryEditScreen(
     var recurrenceUntilMillis by remember { mutableStateOf(existing?.entry?.recurrenceUntilMillis) }
     val tags = remember { mutableStateListOf<String>().apply { addAll(existing?.tagNames ?: emptyList()) } }
     var tagInput by remember { mutableStateOf("") }
+    var tagMenuExpanded by remember { mutableStateOf(false) }
     val reminderOffsets = remember { mutableStateListOf<Int>() }
     var canScheduleExactAlarms by remember { mutableStateOf(ReminderScheduler.canScheduleExactAlarms(context)) }
 
@@ -579,20 +583,50 @@ fun EntryEditScreen(
                             }
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = tagInput,
-                            onValueChange = { tagInput = it },
-                            label = { Text(languageManager.getString("entry_add_tag")) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = {
-                            val clean = tagInput.trim()
-                            if (clean.isNotEmpty() && clean !in tags) tags.add(clean)
-                            tagInput = ""
-                        }) {
-                            Icon(Icons.Filled.Add, contentDescription = languageManager.getString("entry_add_tag"))
+                    Box {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = tagInput,
+                                onValueChange = {
+                                    tagInput = it
+                                    tagMenuExpanded = true
+                                },
+                                label = { Text(languageManager.getString("entry_add_tag")) },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .onFocusChanged { if (it.isFocused) tagMenuExpanded = true }
+                            )
+                            IconButton(onClick = {
+                                val clean = tagInput.trim()
+                                if (clean.isNotEmpty() && clean !in tags) tags.add(clean)
+                                tagInput = ""
+                                tagMenuExpanded = false
+                            }) {
+                                Icon(Icons.Filled.Add, contentDescription = languageManager.getString("entry_add_tag"))
+                            }
+                        }
+                        // Every tag already used on any other entry, filtered as the user types —
+                        // focusing the (possibly empty) field surfaces the full list so existing tags
+                        // are reusable/discoverable instead of retyped (and risking near-duplicates).
+                        val tagSuggestions = availableTags.filter {
+                            it !in tags && (tagInput.isBlank() || it.contains(tagInput, ignoreCase = true))
+                        }
+                        DropdownMenu(
+                            expanded = tagMenuExpanded && tagSuggestions.isNotEmpty(),
+                            onDismissRequest = { tagMenuExpanded = false },
+                            properties = PopupProperties(focusable = false)
+                        ) {
+                            tagSuggestions.forEach { suggestion ->
+                                DropdownMenuItem(
+                                    text = { Text(suggestion) },
+                                    onClick = {
+                                        tags.add(suggestion)
+                                        tagInput = ""
+                                        tagMenuExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }

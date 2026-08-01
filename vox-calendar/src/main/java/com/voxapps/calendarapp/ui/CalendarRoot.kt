@@ -100,6 +100,7 @@ fun CalendarRoot(
                                 existing = (target as? EditTarget.Existing)?.entry,
                                 defaultLayer = defaultLayer,
                                 stateManager = container.calendarStateManager,
+                                availableTags = state.availableTags,
                                 onDone = { editTarget = null }
                             )
                             showSettings -> SettingsScreen(
