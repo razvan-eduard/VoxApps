@@ -89,4 +89,38 @@ class ExpenseScanCleanupPromptBuilderTest {
         assertTrue(prompt.contains("\"totalAmount\""))
         assertTrue(prompt.contains("\"items\""))
     }
+
+    @Test
+    fun `imageOnly drops the OCR framing and text block, keeping the shared extraction rules`() {
+        val prompt = ExpenseScanCleanupPromptBuilder.build(
+            rawText = "",
+            existingCategories = listOf("Mancare"),
+            defaultCurrency = "RON",
+            languageCode = "en",
+            imageOnly = true
+        )
+
+        assertTrue(prompt.contains("no OCR text is available"))
+        assertFalse(prompt.contains("OCR text:"))
+        assertFalse(prompt.contains("extracted via OCR from a receipt"))
+        // Still reuses every shared instruction — this isn't a from-scratch prompt.
+        assertTrue(prompt.contains("DISTRIBUTIVE"))
+        assertTrue(prompt.contains("CUMULATIVE"))
+        assertTrue(prompt.contains("Mancare"))
+        assertTrue(prompt.contains("\"items\""))
+    }
+
+    @Test
+    fun `imageOnly false (default) keeps the original OCR framing and text block`() {
+        val prompt = ExpenseScanCleanupPromptBuilder.build(
+            rawText = "TOTAL 12.50",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en"
+        )
+
+        assertTrue(prompt.contains("extracted via OCR from a receipt"))
+        assertTrue(prompt.contains("OCR text: TOTAL 12.50"))
+        assertFalse(prompt.contains("no OCR text is available"))
+    }
 }

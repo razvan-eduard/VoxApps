@@ -14,7 +14,13 @@ object ExpenseScanCleanupPromptBuilder {
         defaultCurrency: String,
         languageCode: String,
         preParsedDate: String? = null,
-        preParsedTime: String? = null
+        preParsedTime: String? = null,
+        // True for a photo attached to an already-saved expense after the fact (see
+        // LlmTasks.EXPENSE_LINEITEMS_RESCAN) — there's no OCR text at all in that case, only a
+        // multimodal image attachment, so the framing paragraph and trailing "OCR text: ..." block
+        // (both of which assume OCR text exists) are swapped/dropped instead of just left blank,
+        // which would otherwise read as self-contradictory to the model.
+        imageOnly: Boolean = false
     ): String {
         val categoriesLine = if (existingCategories.isEmpty()) {
             "No categories exist yet."
@@ -42,12 +48,24 @@ object ExpenseScanCleanupPromptBuilder {
             """.trimIndent()
         }
 
-        return """
+        val framingParagraph = if (imageOnly) {
+            """
+            You are given a photo of a receipt or invoice — no OCR text is available for it. Look at
+            the image directly and read its actual content.
+            """.trimIndent()
+        } else {
+            """
             The following text was extracted via OCR from a receipt or invoice and may contain
             formatting noise, line-break artifacts, misrecognized characters, or short garbled
             fragments picked up from clutter around the document — identify the receipt's actual
-            content and discard anything that clearly isn't part of it. 
-            
+            content and discard anything that clearly isn't part of it.
+            """.trimIndent()
+        }
+        val ocrTextBlock = if (imageOnly) "" else "\n\nOCR text: $rawText"
+
+        return """
+            $framingParagraph
+
             $instructionBlock
 
             Extract it into a structured expense record: infer a short title, the vendor/store name,
@@ -103,9 +121,7 @@ object ExpenseScanCleanupPromptBuilder {
             "vendor": "...", "bank": "...", "location": "...", "category": "...", "date": "YYYY-MM-DD",
             "time": "HH:mm", "direction": "outgoing", "items": [{"name": "...", "quantity": 1,
             "unitPrice": 12.5, "netAmount": null, "vatAmount": null, "grossAmount": null}]}, no prose,
-            no markdown. Omit/null "bank" and "location" if not printed — never guess either.
-
-            OCR text: $rawText
+            no markdown. Omit/null "bank" and "location" if not printed — never guess either.$ocrTextBlock
         """.trimIndent()
     }
 }

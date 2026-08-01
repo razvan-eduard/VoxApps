@@ -853,6 +853,7 @@ private fun StubRetryBanner(expenseId: Long, imageName: String?, stateManager: E
 private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?, stateManager: ExpensesStateManager) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val manualEntities by stateManager.observeAttachments(expenseId).collectAsStateWithLifecycle(initialValue = emptyList())
     val items = remember(receiptImageName, manualEntities) {
         buildList {
@@ -885,6 +886,30 @@ private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?
     }
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
     val takePhoto = rememberCameraCaptureLauncher(ExpensesAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
+
+    // Extracts line items from an attached photo into this already-saved expense — the photo may
+    // have been added well after the expense was created (voice/notification-created expenses have
+    // no receipt at all), so unlike the original scan there's no OCR text, only the image itself; see
+    // ExpenseScanCleanupRequestSender.sendLineItemsRescan's doc comment for why that's image-only.
+    fun rescanAttachmentForLineItems(item: AttachmentUiItem) {
+        val container = (context.applicationContext as ExpensesApplication).container
+        scope.launch {
+            val attachmentUri = if (item.id == -1L) {
+                MultimodalAttachmentResolver.resolve(context, receiptImageName, attachEnabled = true)
+            } else {
+                manualEntities.firstOrNull { it.id == item.id }?.let {
+                    MultimodalAttachmentResolver.resolveArbitraryFile(context, ExpensesAttachments.DIR, it.fileName, attachEnabled = true)
+                }
+            }
+            if (attachmentUri == null) {
+                Toast.makeText(context, languageManager.getString("rescan_lineitems_multimodal_required"), Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            ExpenseScanCleanupRequestSender.sendLineItemsRescan(context, container, expenseId, attachmentUri)
+            Toast.makeText(context, languageManager.getString("rescan_lineitems_started"), Toast.LENGTH_SHORT).show()
+        }
+    }
+
     AttachmentsSection(
         title = languageManager.getString("attachments"),
         items = items,
@@ -897,7 +922,9 @@ private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?
         onRemove = { item ->
             manualEntities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
         },
-        modifier = Modifier.padding(bottom = 12.dp)
+        modifier = Modifier.padding(bottom = 12.dp),
+        onAction = ::rescanAttachmentForLineItems,
+        actionContentDescription = languageManager.getString("rescan_lineitems_action")
     )
 }
 

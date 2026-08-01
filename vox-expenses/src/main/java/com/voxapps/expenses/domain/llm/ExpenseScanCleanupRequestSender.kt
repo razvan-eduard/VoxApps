@@ -63,4 +63,35 @@ object ExpenseScanCleanupRequestSender {
             attachmentUri = attachmentUri
         )
     }
+
+    /**
+     * A photo attached to an already-saved expense after the fact — see
+     * [LlmTasks.EXPENSE_LINEITEMS_RESCAN]. Unlike [send], there's no OCR text at all here (the photo
+     * was never run through Vision's camera+OCR activity), so [attachmentUri] is required and the
+     * prompt is built image-only (see [ExpenseScanCleanupPromptBuilder]'s `imageOnly` param) —
+     * [com.voxapps.expenses.receiver.LlmResultReceiver] updates only that expense's line items on
+     * reply, leaving every other field untouched.
+     */
+    suspend fun sendLineItemsRescan(context: Context, container: ExpensesContainer, expenseId: Long, attachmentUri: String) {
+        val existingCategories = container.expensesRepository.categories.first().map { it.name }
+        val settings = container.settingsRepository.getSnapshot()
+
+        val promptText = ExpenseScanCleanupPromptBuilder.build(
+            rawText = "",
+            existingCategories = existingCategories,
+            defaultCurrency = settings.defaultCurrency,
+            languageCode = settings.language,
+            imageOnly = true
+        )
+
+        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for line-items rescan (expenseId=$expenseId)")
+        container.pendingLlmRequestQueue.enqueueAndSend(
+            context = context,
+            sourcePackage = context.packageName,
+            task = "${LlmTasks.EXPENSE_LINEITEMS_RESCAN}:$expenseId",
+            promptText = promptText,
+            targetPackage = COMMANDER_PACKAGE,
+            attachmentUri = attachmentUri
+        )
+    }
 }

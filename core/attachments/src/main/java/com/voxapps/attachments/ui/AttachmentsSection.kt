@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Photo
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -87,7 +88,14 @@ fun AttachmentsSection(
     cameraLabel: String,
     cancelLabel: String,
     onRemove: (AttachmentUiItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // Generic (not e.g. "onRescan") since this is a shared component — an optional second per-item
+    // icon button next to the remove "X", hidden entirely when null so existing callers (calendar,
+    // notes) that don't pass it are unaffected. actionContentDescription is required together with
+    // onAction so a caller that opts in can't ship an unlabeled icon button.
+    onAction: ((AttachmentUiItem) -> Unit)? = null,
+    actionIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Filled.Refresh,
+    actionContentDescription: String? = null
 ) {
     if (items.isEmpty() && !canAdd) return
 
@@ -176,6 +184,24 @@ fun AttachmentsSection(
                                     Icon(
                                         Icons.Filled.Close,
                                         contentDescription = "Remove",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                            if (onAction != null) {
+                                IconButton(
+                                    onClick = { onAction(item) },
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .align(Alignment.TopStart)
+                                        .background(
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                            RoundedCornerShape(50)
+                                        )
+                                ) {
+                                    Icon(
+                                        actionIcon,
+                                        contentDescription = actionContentDescription,
                                         modifier = Modifier.size(14.dp)
                                     )
                                 }

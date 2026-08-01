@@ -24,4 +24,11 @@ object LlmTasks {
      *  Strictest confirmation gate of all three input channels — there's no explicit user action at
      *  all triggering this one. See [PendingNotificationExpenseRepository]. */
     const val NOTIFICATION_EXPENSE_PARSE = "NOTIFICATION_EXPENSE_PARSE"
+
+    /** A photo attached to an ALREADY-SAVED expense (after the fact, e.g. the expense was created
+     *  from a voice utterance or an auto-accepted bank notification with no receipt) -> line items
+     *  only. Image-only: unlike [EXPENSE_SCAN_CLEANUP], there's no OCR text — the photo was never run
+     *  through Vision's camera+OCR activity, so this relies entirely on a multimodal LLM reading the
+     *  attached image. The reply updates ONLY the target expense's line items, nothing else. */
+    const val EXPENSE_LINEITEMS_RESCAN = "EXPENSE_LINEITEMS_RESCAN"
 }

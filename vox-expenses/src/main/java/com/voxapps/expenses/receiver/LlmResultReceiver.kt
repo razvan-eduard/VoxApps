@@ -304,6 +304,54 @@ class LlmResultReceiver : BroadcastReceiver() {
                     }
                 }
             }
+
+            LlmTasks.EXPENSE_LINEITEMS_RESCAN -> {
+                // A photo attached to an already-saved expense after the fact — see
+                // ExpenseScanCleanupRequestSender.sendLineItemsRescan's doc comment. Deliberately
+                // narrower than updateExpenseFromRetry: only the target expense's line items change,
+                // every other field (title/amount/vendor/category/etc, all already reviewed by the
+                // user) is left exactly as-is.
+                val expenseId = taskParts.getOrNull(1)?.toLongOrNull()
+                val rawJson = result.rawJson
+                val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
+                    ExpenseParseResultParser.parse(rawJson)
+                } else {
+                    Logger.w(TAG, "Line-items rescan failed: ${result.error}")
+                    null
+                }
+
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        val existing = expenseId?.let { container.expensesRepository.getExpenseById(it) }
+                        val toastKey = if (parsed != null && existing != null && parsed.items.isNotEmpty()) {
+                            val items = parsed.items.map {
+                                ExpenseLineItem(
+                                    expenseId = existing.expense.id,
+                                    name = it.name,
+                                    quantity = it.quantity,
+                                    unitPrice = it.unitPrice,
+                                    netAmount = it.netAmount,
+                                    vatAmount = it.vatAmount,
+                                    grossAmount = it.grossAmount
+                                )
+                            }
+                            container.expensesRepository.updateExpense(existing.expense, items)
+                            ExpensesWidget().updateAll(context.applicationContext)
+                            "toast_lineitems_rescanned"
+                        } else {
+                            "toast_lineitems_rescan_empty"
+                        }
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, container.languageManager.getString(toastKey), Toast.LENGTH_SHORT).show()
+                        }
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
             else -> {
                 Logger.d(TAG, "Ignoring unknown LLM task: ${result.task}")
                 // Still a definitive reply even though this task type isn't recognized — clear its
