@@ -31,7 +31,7 @@ onnxruntime = "1.28.0"
 opencv = "4.5.3"
 camerax = "1.6.1"
 glanceAppwidget = "1.1.1"
-kizitonwoseCalendar = "2.6.0"
+kizitonwoseCalendar = "2.10.1"
 ktor = "3.4.1"
 zxing = "3.5.4"
 
