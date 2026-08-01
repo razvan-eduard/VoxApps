@@ -31,5 +31,5 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     // Matches the version vox-commander itself depends on (Piper/sherpa-onnx) — same artifact,
     // one resolved version, no duplicate-class risk.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
 }
