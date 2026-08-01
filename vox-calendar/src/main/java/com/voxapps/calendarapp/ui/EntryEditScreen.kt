@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -75,7 +76,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -583,50 +583,57 @@ fun EntryEditScreen(
                             }
                         }
                     }
-                    Box {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = tagInput,
-                                onValueChange = {
-                                    tagInput = it
-                                    tagMenuExpanded = true
-                                },
-                                label = { Text(languageManager.getString("entry_add_tag")) },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .onFocusChanged { if (it.isFocused) tagMenuExpanded = true }
-                            )
-                            IconButton(onClick = {
-                                val clean = tagInput.trim()
-                                if (clean.isNotEmpty() && clean !in tags) tags.add(clean)
-                                tagInput = ""
-                                tagMenuExpanded = false
-                            }) {
-                                Icon(Icons.Filled.Add, contentDescription = languageManager.getString("entry_add_tag"))
-                            }
-                        }
-                        // Every tag already used on any other entry, filtered as the user types —
-                        // focusing the (possibly empty) field surfaces the full list so existing tags
-                        // are reusable/discoverable instead of retyped (and risking near-duplicates).
-                        val tagSuggestions = availableTags.filter {
-                            it !in tags && (tagInput.isBlank() || it.contains(tagInput, ignoreCase = true))
-                        }
-                        DropdownMenu(
-                            expanded = tagMenuExpanded && tagSuggestions.isNotEmpty(),
-                            onDismissRequest = { tagMenuExpanded = false },
-                            properties = PopupProperties(focusable = false)
+                    // Every tag already used on any other entry, filtered as the user types —
+                    // focusing the (possibly empty) field surfaces the full list so existing tags
+                    // are reusable/discoverable instead of retyped (and risking near-duplicates).
+                    // Rendered as a card that expands directly above the input — not a popup menu —
+                    // so it reads as the field itself growing upward, and stays open across multiple
+                    // taps (no per-tap collapse) so several tags can be picked in one go.
+                    val tagSuggestions = availableTags.filter {
+                        it !in tags && (tagInput.isBlank() || it.contains(tagInput, ignoreCase = true))
+                    }
+                    AnimatedVisibility(visible = tagMenuExpanded && tagSuggestions.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            tagSuggestions.forEach { suggestion ->
-                                DropdownMenuItem(
-                                    text = { Text(suggestion) },
-                                    onClick = {
-                                        tags.add(suggestion)
-                                        tagInput = ""
-                                        tagMenuExpanded = false
-                                    }
-                                )
+                            FlowRow(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                tagSuggestions.forEach { suggestion ->
+                                    InputChip(
+                                        selected = false,
+                                        onClick = {
+                                            tags.add(suggestion)
+                                            tagInput = ""
+                                        },
+                                        label = { Text(suggestion) }
+                                    )
+                                }
                             }
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = tagInput,
+                            onValueChange = {
+                                tagInput = it
+                                tagMenuExpanded = true
+                            },
+                            label = { Text(languageManager.getString("entry_add_tag")) },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .onFocusChanged { tagMenuExpanded = it.isFocused }
+                        )
+                        IconButton(onClick = {
+                            val clean = tagInput.trim()
+                            if (clean.isNotEmpty() && clean !in tags) tags.add(clean)
+                            tagInput = ""
+                        }) {
+                            Icon(Icons.Filled.Add, contentDescription = languageManager.getString("entry_add_tag"))
                         }
                     }
                 }
