@@ -509,7 +509,7 @@ class ExpensesStateManager internal constructor(
     fun observeAttachments(expenseId: Long): Flow<List<AttachmentEntity>> =
         attachmentDao.observeFor(ExpensesAttachments.RECORD_TYPE, expenseId)
 
-    fun addManualAttachment(expenseId: Long, fileName: String) {
+    fun addManualAttachment(expenseId: Long, fileName: String, groupId: String? = null, groupOrder: Int = 0) {
         scope.launch {
             attachmentDao.insert(
                 AttachmentEntity(
@@ -517,7 +517,9 @@ class ExpensesStateManager internal constructor(
                     recordId = expenseId,
                     fileName = fileName,
                     source = AttachmentSource.MANUAL,
-                    createdAt = System.currentTimeMillis()
+                    createdAt = System.currentTimeMillis(),
+                    groupId = groupId,
+                    groupOrder = groupOrder
                 )
             )
         }
@@ -527,6 +529,15 @@ class ExpensesStateManager internal constructor(
         scope.launch {
             attachmentDao.delete(entity.id)
             AttachmentFileStore.delete(context, ExpensesAttachments.DIR, entity.fileName)
+        }
+    }
+
+    /** Cancels a burst mid-capture (see [com.voxapps.attachments.ui.rememberBurstCaptureLauncher]) —
+     *  deletes every row+file already committed under [groupId] for this expense. */
+    fun deleteAttachmentGroup(expenseId: Long, groupId: String, context: Context) {
+        scope.launch {
+            val deleted = attachmentDao.deleteGroup(ExpensesAttachments.RECORD_TYPE, expenseId, groupId)
+            deleted.forEach { AttachmentFileStore.delete(context, ExpensesAttachments.DIR, it.fileName) }
         }
     }
 

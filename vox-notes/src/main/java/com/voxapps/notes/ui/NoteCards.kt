@@ -28,9 +28,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -68,13 +71,19 @@ import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
 import com.voxapps.attachments.ui.AttachmentUiItem
 import com.voxapps.attachments.ui.AttachmentsSection
+import com.voxapps.attachments.ui.GroupDeleteConfig
 import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
+import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
+import com.voxapps.design.SpeedDialAction
 import com.voxapps.design.color.VoxColorSwatchPicker
+import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.notes.data.Category
 import com.voxapps.notes.data.CategoryPalette
 import com.voxapps.notes.data.NoteWithCategory
 import com.voxapps.notes.data.NotesAttachments
+import com.voxapps.notes.domain.llm.LlmTasks
 import com.voxapps.notes.state.NotesStateManager
+import java.util.UUID
 import kotlin.math.abs
 
 /** Low-alpha tint applied to a note card's background from its category color. */
@@ -273,35 +282,75 @@ private fun NoteAttachmentsHost(noteId: Long, stateManager: NotesStateManager) {
     val context = LocalContext.current
     val entities by stateManager.observeAttachments(noteId).collectAsStateWithLifecycle(initialValue = emptyList())
     val items = remember(entities) {
+        val groupSizes = entities.mapNotNull { it.groupId }.groupingBy { it }.eachCount()
         entities.map { e ->
+            val groupSize = e.groupId?.let { groupSizes[it] } ?: 0
             AttachmentUiItem(
                 id = e.id,
                 uri = AttachmentFileStore.uriFor(context, NotesAttachments.FILE_PROVIDER_AUTHORITY, NotesAttachments.DIR, e.fileName),
-                removable = e.source == AttachmentSource.MANUAL
+                removable = e.source == AttachmentSource.MANUAL,
+                groupLabel = if (groupSize > 1) "${e.groupOrder + 1}/$groupSize" else null,
+                groupKey = e.groupId,
+                groupSource = e.source
             )
         }
     }
-    fun handlePickedUri(uri: Uri?) {
-        if (uri != null) {
+    fun handlePickedUris(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val groupId = if (uris.size > 1) UUID.randomUUID().toString() else null
+        uris.forEachIndexed { index, uri ->
             AttachmentFileStore.stage(context, uri, NotesAttachments.DIR)?.let { fileName ->
-                stateManager.addManualAttachment(noteId, fileName)
+                stateManager.addManualAttachment(noteId, fileName, groupId, index)
             }
         }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
-    val takePhoto = rememberCameraCaptureLauncher(NotesAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
+    val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> handlePickedUris(uris) }
+    // Zero attachments yet: single + stitch (a stitch group is one document, whole-group delete
+    // only — see AttachmentUiItem.groupSource). Already has attachments: single + batch, each new
+    // photo independent (Notes never runs OCR/LLM on attachments at all — see LlmTasks.
+    // NOTE_ATTACHMENT_CAPTURE's doc comment, so "batch" here differs from Expenses' only in that
+    // there's no rescan-suggestion step, just independent staging).
+    val takePhotoSingle = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.NOTE_ATTACHMENT_CAPTURE}:$noteId", hint = null, produceOCR = false,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE
+    )
+    val takePhotoStitch = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.NOTE_ATTACHMENT_CAPTURE}:$noteId", hint = null, produceOCR = false,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH
+    )
+    val takePhotoBatch = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.NOTE_ATTACHMENT_CAPTURE}:$noteId", hint = null, produceOCR = false,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
+    )
+    val captureActions = if (items.isEmpty()) {
+        listOf(
+            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
+            SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch"), takePhotoStitch)
+        )
+    } else {
+        listOf(
+            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
+            SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch"), takePhotoBatch)
+        )
+    }
     AttachmentsSection(
         title = languageManager.getString("attachments"),
         items = items,
         canAdd = items.count { it.removable } < 10,
-        onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-        onTakePhoto = takePhoto,
+        onPickFromGallery = { pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        captureActions = captureActions,
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
-        cameraLabel = languageManager.getString("attachment_take_photo"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->
             entities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
-        }
+        },
+        groupDelete = GroupDeleteConfig(
+            onDeleteGroup = { groupId -> stateManager.deleteAttachmentGroup(noteId, groupId, context) },
+            confirmTitle = languageManager.getString("delete_attachment_group_title"),
+            confirmMessage = languageManager.getString("delete_attachment_group_message"),
+            confirmLabel = languageManager.getString("delete"),
+            cancelLabel = languageManager.getString("cancel")
+        )
     )
 }
 
@@ -338,9 +387,11 @@ private fun PendingNoteAttachmentsHost(pendingAttachments: List<String>, onChang
         items = items,
         canAdd = pendingAttachments.size < 10,
         onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-        onTakePhoto = takePhoto,
+        // Draft (not-yet-saved) note attachments still use the plain system camera, not Vision —
+        // out of scope for the single/stitch/batch speed dial (no OCR/record concept exists yet for
+        // a draft), so this is just the one existing "take photo" action, unchanged behavior.
+        captureActions = listOf(SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("attachment_take_photo"), takePhoto)),
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
-        cameraLabel = languageManager.getString("attachment_take_photo"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->
             pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->

@@ -156,6 +156,8 @@
   "scan_save_failed": "Konnte nicht gespeichert werden — bitte erneut versuchen",
   "attach_photo_on_scan": "Foto beim Scannen mit KI verarbeiten",
   "attach_photo_on_scan_desc": "Sendet das gescannte Foto zusammen mit dem erkannten Text an die KI (erfordert auch Visions Einstellung „Foto an KI senden“ und eine multimodale Engine)",
+  "delete_attachment_group_title": "Diese ganze Gruppe löschen?",
+  "delete_attachment_group_message": "Alle Fotos in dieser Gruppe werden entfernt.",
   "widget_show_event_details": "Details im Widget anzeigen",
   "widget_show_event_details_desc": "Zeigt die Beschreibung jedes Termins unter dem Titel im Homescreen-Widget an. Deaktivieren für eine kompaktere Liste.",
   "widget_border_section": "Widget-Rahmen",
@@ -185,5 +187,8 @@
   "notifications_length_desc": "Dauer und Vibrationsmuster",
   "notifications_length_short": "Kurz",
   "notifications_length_medium": "Mittel",
-  "notifications_length_long": "Lang"
+  "notifications_length_long": "Lang",
+  "capture_mode_single": "Einzelaufnahme",
+  "capture_mode_stitch": "Zusammenfügen",
+  "capture_mode_batch": "Stapel"
 }

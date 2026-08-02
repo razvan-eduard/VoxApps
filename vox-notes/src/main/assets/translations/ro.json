@@ -153,6 +153,8 @@
   "retention_never": "Niciodată",
   "retention_on_failure": "La eșec",
   "retention_always": "Întotdeauna",
+  "delete_attachment_group_title": "Ștergi tot acest grup?",
+  "delete_attachment_group_message": "Toate fotografiile din acest grup vor fi eliminate.",
   "attachments": "Atașamente",
   "attachment_choose_gallery": "Alege din galerie",
   "attachment_take_photo": "Fă o poză",
@@ -174,5 +176,8 @@
   "notifications_length_desc": "Durata și modelul de vibrație",
   "notifications_length_short": "Scurt",
   "notifications_length_medium": "Mediu",
-  "notifications_length_long": "Lung"
+  "notifications_length_long": "Lung",
+  "capture_mode_single": "O singură poză",
+  "capture_mode_stitch": "Îmbinare",
+  "capture_mode_batch": "Lot"
 }

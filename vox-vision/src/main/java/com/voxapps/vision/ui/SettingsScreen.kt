@@ -50,14 +50,16 @@ import kotlinx.coroutines.launch
 private enum class SettingsPage { MENU, GENERAL, THEME, LOGS }
 
 private val SENSITIVITY_LEVELS = listOf("low", "medium", "high")
-private val STABILITY_LEVELS = listOf("low", "medium", "high")
 private val PHOTO_DETAIL_LEVELS = listOf("low", "medium", "high")
+private val STITCH_STRICTNESS_LEVELS = listOf("strict", "medium", "lazy")
+private val AUTO_CAPTURE_DELAYS = listOf(0, 1, 2, 3, 5) // 0 = Manual
 
 /**
- * Two picklists: which OCR script/language zone is active (see
+ * Vision's settings: which OCR script/language zone is active (see
  * [com.voxapps.vision.domain.OcrModelRegistry]) — switching zones downloads the new zone's model and
- * deletes the previous one, only one ever sits on disk — and how eagerly the live preview
- * auto-triggers a capture (see [com.voxapps.vision.ocr.DocumentCropper.DetectionSensitivity]).
+ * deletes the previous one, only one ever sits on disk — how eagerly the live preview considers a
+ * frame "framed" at all (see [com.voxapps.vision.ocr.DocumentCropper.DetectionSensitivity]), and how
+ * long a framed document must hold before auto-capture fires (or Manual to disable it), among others.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -72,8 +74,8 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
     val activeSensitivity by container.settingsRepository.autoTriggerSensitivityFlow.collectAsStateWithLifecycle(
         initialValue = VisionSettingsRepository.DEFAULT_SENSITIVITY
     )
-    val activeStability by container.settingsRepository.autoTriggerStabilityFlow.collectAsStateWithLifecycle(
-        initialValue = VisionSettingsRepository.DEFAULT_STABILITY
+    val activeAutoCaptureDelay by container.settingsRepository.autoCaptureDelaySecondsFlow.collectAsStateWithLifecycle(
+        initialValue = VisionSettingsRepository.DEFAULT_AUTO_CAPTURE_DELAY
     )
     val debugLoggingEnabled by container.settingsRepository.debugLoggingEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
     val debugToastsEnabled by container.settingsRepository.debugToastsEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
@@ -86,6 +88,9 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
         initialValue = VisionSettingsRepository.THEME_SYSTEM
     )
     val themeColored by container.settingsRepository.themeColoredFlow.collectAsStateWithLifecycle(initialValue = true)
+    val stitchStrictness by container.settingsRepository.stitchContinuityStrictnessFlow.collectAsStateWithLifecycle(
+        initialValue = VisionSettingsRepository.DEFAULT_STITCH_STRICTNESS
+    )
     var switching by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -270,23 +275,33 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
             }
 
             Text(
-                languageManager.getString("capture_speed"),
+                languageManager.getString("auto_capture_delay"),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = 24.dp)
             )
-            STABILITY_LEVELS.forEach { level ->
+            Text(
+                languageManager.getString("auto_capture_delay_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            AUTO_CAPTURE_DELAYS.forEach { delay ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .selectable(
-                            selected = level == activeStability,
-                            onClick = { scope.launch { container.settingsRepository.setAutoTriggerStability(level) } }
+                            selected = delay == activeAutoCaptureDelay,
+                            onClick = { scope.launch { container.settingsRepository.setAutoCaptureDelaySeconds(delay) } }
                         )
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    RadioButton(selected = level == activeStability, onClick = null)
-                    Text(languageManager.getString("capture_speed_$level"), modifier = Modifier.padding(start = 8.dp))
+                    RadioButton(selected = delay == activeAutoCaptureDelay, onClick = null)
+                    Text(
+                        languageManager.getString(
+                            if (delay == VisionSettingsRepository.AUTO_CAPTURE_MANUAL) "auto_capture_manual" else "auto_capture_${delay}s"
+                        ),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
                 }
             }
 
@@ -330,6 +345,34 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
                         RadioButton(selected = level == photoDetailForAi, onClick = null)
                         Text(languageManager.getString("photo_detail_$level"), modifier = Modifier.padding(start = 8.dp))
                     }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(top = 24.dp))
+
+            Text(
+                languageManager.getString("stitch_continuity_strictness"),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            Text(
+                languageManager.getString("stitch_continuity_strictness_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            STITCH_STRICTNESS_LEVELS.forEach { level ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = level == stitchStrictness,
+                            onClick = { scope.launch { container.settingsRepository.setStitchContinuityStrictness(level) } }
+                        )
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = level == stitchStrictness, onClick = null)
+                    Text(languageManager.getString("stitch_strictness_$level"), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }

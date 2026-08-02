@@ -257,7 +257,7 @@ class CalendarStateManager internal constructor(
     fun observeAttachments(entryId: Long): Flow<List<AttachmentEntity>> =
         attachmentDao.observeFor(CalendarAttachments.RECORD_TYPE, entryId)
 
-    fun addManualAttachment(entryId: Long, fileName: String) {
+    fun addManualAttachment(entryId: Long, fileName: String, groupId: String? = null, groupOrder: Int = 0) {
         scope.launch {
             attachmentDao.insert(
                 AttachmentEntity(
@@ -265,7 +265,9 @@ class CalendarStateManager internal constructor(
                     recordId = entryId,
                     fileName = fileName,
                     source = AttachmentSource.MANUAL,
-                    createdAt = System.currentTimeMillis()
+                    createdAt = System.currentTimeMillis(),
+                    groupId = groupId,
+                    groupOrder = groupOrder
                 )
             )
         }
@@ -275,6 +277,15 @@ class CalendarStateManager internal constructor(
         scope.launch {
             attachmentDao.delete(entity.id)
             AttachmentFileStore.delete(context, CalendarAttachments.DIR, entity.fileName)
+        }
+    }
+
+    /** Cancels a burst mid-capture (see [com.voxapps.attachments.ui.rememberBurstCaptureLauncher]) —
+     *  deletes every row+file already committed under [groupId] for this entry. */
+    fun deleteAttachmentGroup(entryId: Long, groupId: String, context: Context) {
+        scope.launch {
+            val deleted = attachmentDao.deleteGroup(CalendarAttachments.RECORD_TYPE, entryId, groupId)
+            deleted.forEach { AttachmentFileStore.delete(context, CalendarAttachments.DIR, it.fileName) }
         }
     }
 

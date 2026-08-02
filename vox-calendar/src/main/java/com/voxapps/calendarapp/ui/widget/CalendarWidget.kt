@@ -50,6 +50,7 @@ import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.showRequirementToast
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.calendarapp.domain.localization.LanguageManager
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.ui.LayerColors
@@ -141,18 +142,34 @@ class CalendarWidget : GlanceAppWidget() {
     }
 }
 
-class CalendarWidgetScanAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val container = (context.applicationContext as CalendarApplication).container
-        val languageManager = container.languageManager
-        when {
-            !VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) ->
-                showRequirementToast(context, languageManager.getString("vision_required_message"))
-            !VoxAppsDiscovery.isCommanderInstalled(context) ->
-                showRequirementToast(context, languageManager.getString("commander_required_message"))
-            else -> CalendarScanRequestSender.send(context)
-        }
+// Glance/RemoteViews has no expand-in-place speed dial like a real Compose FAB can render — the
+// widget instead shows 3 small static icons (single/stitch/batch), each its own ActionCallback
+// sharing this one gated launch helper.
+private suspend fun runWidgetScan(context: Context, captureMode: String) {
+    val container = (context.applicationContext as CalendarApplication).container
+    val languageManager = container.languageManager
+    when {
+        !VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) ->
+            showRequirementToast(context, languageManager.getString("vision_required_message"))
+        !VoxAppsDiscovery.isCommanderInstalled(context) ->
+            showRequirementToast(context, languageManager.getString("commander_required_message"))
+        else -> CalendarScanRequestSender.send(context, captureMode)
     }
+}
+
+class CalendarWidgetScanSingleAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_SINGLE)
+}
+
+class CalendarWidgetScanStitchAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_STITCH)
+}
+
+class CalendarWidgetScanBatchAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_BATCH)
 }
 
 @Composable
@@ -189,13 +206,26 @@ private fun CalendarWidgetContent(
                 style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = GlanceTheme.colors.onSurface)
             )
             Spacer(modifier = GlanceModifier.defaultWeight())
+            val scanIconTint = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant)
             Image(
                 provider = ImageProvider(R.drawable.ic_scan),
-                contentDescription = languageManager.getString("scan_action"),
-                colorFilter = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant),
-                modifier = GlanceModifier
-                    .size(18.dp)
-                    .clickable(actionRunCallback<CalendarWidgetScanAction>())
+                contentDescription = languageManager.getString("capture_mode_single"),
+                colorFilter = scanIconTint,
+                modifier = GlanceModifier.size(16.dp).clickable(actionRunCallback<CalendarWidgetScanSingleAction>())
+            )
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Image(
+                provider = ImageProvider(R.drawable.ic_stitch),
+                contentDescription = languageManager.getString("capture_mode_stitch"),
+                colorFilter = scanIconTint,
+                modifier = GlanceModifier.size(16.dp).clickable(actionRunCallback<CalendarWidgetScanStitchAction>())
+            )
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Image(
+                provider = ImageProvider(R.drawable.ic_batch),
+                contentDescription = languageManager.getString("capture_mode_batch"),
+                colorFilter = scanIconTint,
+                modifier = GlanceModifier.size(16.dp).clickable(actionRunCallback<CalendarWidgetScanBatchAction>())
             )
         }
 

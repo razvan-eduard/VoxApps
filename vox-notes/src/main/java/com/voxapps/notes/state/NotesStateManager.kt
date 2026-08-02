@@ -124,7 +124,7 @@ class NotesStateManager internal constructor(
     fun observeAttachments(noteId: Long): Flow<List<AttachmentEntity>> =
         attachmentDao.observeFor(NotesAttachments.RECORD_TYPE, noteId)
 
-    fun addManualAttachment(noteId: Long, fileName: String) {
+    fun addManualAttachment(noteId: Long, fileName: String, groupId: String? = null, groupOrder: Int = 0) {
         scope.launch {
             attachmentDao.insert(
                 AttachmentEntity(
@@ -132,7 +132,9 @@ class NotesStateManager internal constructor(
                     recordId = noteId,
                     fileName = fileName,
                     source = AttachmentSource.MANUAL,
-                    createdAt = System.currentTimeMillis()
+                    createdAt = System.currentTimeMillis(),
+                    groupId = groupId,
+                    groupOrder = groupOrder
                 )
             )
         }
@@ -142,6 +144,15 @@ class NotesStateManager internal constructor(
         scope.launch {
             attachmentDao.delete(entity.id)
             AttachmentFileStore.delete(context, NotesAttachments.DIR, entity.fileName)
+        }
+    }
+
+    /** Cancels a burst mid-capture (see [com.voxapps.attachments.ui.rememberBurstCaptureLauncher]) —
+     *  deletes every row+file already committed under [groupId] for this note. */
+    fun deleteAttachmentGroup(noteId: Long, groupId: String, context: Context) {
+        scope.launch {
+            val deleted = attachmentDao.deleteGroup(NotesAttachments.RECORD_TYPE, noteId, groupId)
+            deleted.forEach { AttachmentFileStore.delete(context, NotesAttachments.DIR, it.fileName) }
         }
     }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }

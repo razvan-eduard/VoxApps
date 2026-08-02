@@ -120,4 +120,6 @@ dependencies {
 
     // DLC native library downloading
     implementation(libs.okhttp)
+
+    testImplementation(libs.junit)
 }

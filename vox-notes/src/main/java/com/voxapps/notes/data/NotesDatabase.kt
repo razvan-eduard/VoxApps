@@ -14,7 +14,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [Note::class, Category::class, NoteTombstone::class, PendingLlmRequestEntity::class, AttachmentEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class NotesDatabase : RoomDatabase() {
@@ -102,6 +102,16 @@ abstract class NotesDatabase : RoomDatabase() {
             }
         }
 
+        // Lets several photos captured/picked in one burst/selection be tied together as a single
+        // multi-page attachment group (see AttachmentEntity's doc comment) — null groupId (every
+        // pre-existing row) means "a group of one", unchanged behavior.
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE attachments ADD COLUMN groupId TEXT")
+                db.execSQL("ALTER TABLE attachments ADD COLUMN groupOrder INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         /** Room backed by SQLCipher; passphrase comes from the Keystore-backed store. */
         fun get(context: Context): NotesDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
@@ -114,7 +124,7 @@ abstract class NotesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, NotesDatabase::class.java, "vox-notes.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
         }
     }

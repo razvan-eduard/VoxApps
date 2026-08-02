@@ -20,13 +20,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -75,6 +80,7 @@ import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.notes.data.NoteWithCategory
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.notes.domain.llm.ScanRequestSender
 import com.voxapps.notes.domain.localization.LanguageManager
 import com.voxapps.notes.state.NotesStateManager
@@ -180,14 +186,43 @@ fun NotesScreen(
                         // silently failing (or crashing, for the Vision case).
                         val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
                         val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+                        var showScanMenu by remember { mutableStateOf(false) }
                         val scanGate = rememberRequirementGate(
                             satisfied = visionInstalled && commanderInstalled,
                             requiredMessage = languageManager.getString(
                                 if (!visionInstalled) "vision_required_message" else "commander_required_message"
                             )
-                        ) { ScanRequestSender.send(context) }
-                        IconButton(onClick = scanGate.onClick, modifier = Modifier.alpha(scanGate.alpha)) {
-                            Icon(Icons.Filled.DocumentScanner, contentDescription = languageManager.getString("scan_note"))
+                        ) { showScanMenu = true }
+                        Box {
+                            IconButton(onClick = scanGate.onClick, modifier = Modifier.alpha(scanGate.alpha)) {
+                                Icon(Icons.Filled.DocumentScanner, contentDescription = languageManager.getString("scan_note"))
+                            }
+                            DropdownMenu(expanded = showScanMenu, onDismissRequest = { showScanMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(languageManager.getString("capture_mode_single")) },
+                                    leadingIcon = { Icon(Icons.Filled.PhotoCamera, contentDescription = null) },
+                                    onClick = {
+                                        showScanMenu = false
+                                        ScanRequestSender.send(context, VoxOcrRequest.CAPTURE_MODE_SINGLE)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(languageManager.getString("capture_mode_stitch")) },
+                                    leadingIcon = { Icon(Icons.Filled.Layers, contentDescription = null) },
+                                    onClick = {
+                                        showScanMenu = false
+                                        ScanRequestSender.send(context, VoxOcrRequest.CAPTURE_MODE_STITCH)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(languageManager.getString("capture_mode_batch")) },
+                                    leadingIcon = { Icon(Icons.Filled.BurstMode, contentDescription = null) },
+                                    onClick = {
+                                        showScanMenu = false
+                                        ScanRequestSender.send(context, VoxOcrRequest.CAPTURE_MODE_BATCH)
+                                    }
+                                )
+                            }
                         }
                         IconButton(onClick = { showDateSheet = true }) {
                             Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("sort_and_filter"))

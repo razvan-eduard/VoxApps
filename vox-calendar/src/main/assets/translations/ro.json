@@ -156,6 +156,8 @@
   "scan_save_failed": "Nu s-a putut salva — încearcă din nou",
   "attach_photo_on_scan": "Procesează foto cu AI la scanare",
   "attach_photo_on_scan_desc": "Trimite fotografia scanată către AI alături de textul recunoscut (necesită și setarea „trimite foto către AI” din Vision și un motor multimodal configurat)",
+  "delete_attachment_group_title": "Ștergi tot acest grup?",
+  "delete_attachment_group_message": "Toate fotografiile din acest grup vor fi eliminate.",
   "widget_show_event_details": "Afișează detaliile în widget",
   "widget_show_event_details_desc": "Afișează descrierea fiecărui eveniment sub titlu în widgetul de pe ecranul principal. Dezactivează pentru o listă mai compactă.",
   "widget_border_section": "Chenar widget",
@@ -185,5 +187,8 @@
   "notifications_length_desc": "Durata și modelul de vibrație",
   "notifications_length_short": "Scurt",
   "notifications_length_medium": "Mediu",
-  "notifications_length_long": "Lung"
+  "notifications_length_long": "Lung",
+  "capture_mode_single": "O singură poză",
+  "capture_mode_stitch": "Îmbinare",
+  "capture_mode_batch": "Lot"
 }

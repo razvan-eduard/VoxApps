@@ -112,6 +112,8 @@
   "retention_never": "Jamais",
   "retention_on_failure": "En cas d'échec",
   "retention_always": "Toujours",
+  "delete_attachment_group_title": "Supprimer tout ce groupe ?",
+  "delete_attachment_group_message": "Toutes les photos de ce groupe seront supprimées.",
   "attachments": "Pièces jointes",
   "attachment_choose_gallery": "Choisir depuis la galerie",
   "attachment_take_photo": "Prendre une photo",
@@ -174,5 +176,8 @@
   "notifications_length_desc": "Durée et modèle de vibration",
   "notifications_length_short": "Courte",
   "notifications_length_medium": "Moyenne",
-  "notifications_length_long": "Longue"
+  "notifications_length_long": "Longue",
+  "capture_mode_single": "Photo unique",
+  "capture_mode_stitch": "Assemblage",
+  "capture_mode_batch": "Lot"
 }

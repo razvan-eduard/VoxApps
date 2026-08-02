@@ -156,6 +156,8 @@
   "scan_save_failed": "Couldn't save — please try again",
   "attach_photo_on_scan": "Process photo with AI on scan",
   "attach_photo_on_scan_desc": "Send the scanned photo to the AI alongside the recognized text (needs Vision's \"send photo to AI\" setting on too, and a multimodal engine configured)",
+  "delete_attachment_group_title": "Delete this whole group?",
+  "delete_attachment_group_message": "Every photo in this group will be removed.",
   "widget_show_event_details": "Show details in widget",
   "widget_show_event_details_desc": "Show each event's description under its title in the home-screen widget. Turn off for a more compact list.",
   "widget_border_section": "Widget border",
@@ -185,5 +187,8 @@
   "notifications_length_desc": "Duration and vibration pattern",
   "notifications_length_short": "Short",
   "notifications_length_medium": "Medium",
-  "notifications_length_long": "Long"
+  "notifications_length_long": "Long",
+  "capture_mode_single": "Single shot",
+  "capture_mode_stitch": "Stitch",
+  "capture_mode_batch": "Batch"
 }

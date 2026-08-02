@@ -4,10 +4,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSource
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.expenses.data.NearDuplicateConfig
@@ -65,11 +68,17 @@ class LlmResultReceiver : BroadcastReceiver() {
         val (task, requestId) = VoxLlmRequestQueue.splitRequestId(result.task)
 
         // Recover task and optional physical asset name (format "TASK:IMAGE_NAME" or, for a stub
-        // retry, "TASK:IMAGE_NAME:RETRY_OF_EXPENSE_ID").
+        // retry, "TASK:IMAGE_NAME:RETRY_OF_EXPENSE_ID") — or, for a pending Scan capture (see
+        // ExpenseScanCleanupRequestSender.sendPendingCreate), "TASK:pending:GROUP_ID:FILE_NAMES",
+        // a distinct shape carrying no imageName/retryOfExpenseId at all since neither concept
+        // applies (there's no legacy receipt field to set, and nothing to retry yet).
         val taskParts = task.split(":")
         val baseTask = taskParts[0]
-        val storedImageName = taskParts.getOrNull(1)
-        val retryOfExpenseId = taskParts.getOrNull(2)?.toLongOrNull()
+        val isPendingScanCreate = baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && taskParts.getOrNull(1) == "pending"
+        val storedImageName = if (isPendingScanCreate) null else taskParts.getOrNull(1)
+        val retryOfExpenseId = if (isPendingScanCreate) null else taskParts.getOrNull(2)?.toLongOrNull()
+        val pendingGroupId = if (isPendingScanCreate) taskParts.getOrNull(2)?.takeIf { it.isNotEmpty() } else null
+        val pendingFileNames = if (isPendingScanCreate) taskParts.getOrNull(3)?.split(",")?.filter { it.isNotBlank() } ?: emptyList() else emptyList()
 
         Logger.d(TAG, "LLM result: status=${result.status} task=${result.task} baseTask=$baseTask imageName=$storedImageName")
         val rawJson = result.rawJson
@@ -94,6 +103,9 @@ class LlmResultReceiver : BroadcastReceiver() {
                             updateExpenseFromRetry(context.applicationContext, container, parsed, retryOfExpenseId)
                         } else if (parsed != null) {
                             val newId = createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName)
+                            if (isPendingScanCreate && newId > 0) {
+                                linkPendingScanAttachments(container, newId, pendingFileNames, pendingGroupId)
+                            }
                             // Scan-specific — a voice-created expense keeps today's behavior (an
                             // optional save toast, no forced navigation). Commander's cleanup is
                             // async, so this is the earliest point Expenses can actually know the
@@ -116,6 +128,20 @@ class LlmResultReceiver : BroadcastReceiver() {
                             // Create a "stub" record so the user doesn't lose the photo and open it.
                             Logger.w(TAG, "LLM failed for scan, entering recovery mode for $storedImageName. Error: ${result.error}")
                             val id = createStubExpense(container, storedImageName)
+                            withContext(Dispatchers.Main) {
+                                val errorMsg = result.error ?: "Unknown parsing error"
+                                Toast.makeText(context, "${container.languageManager.getString("manual_review_required")} ($errorMsg)", Toast.LENGTH_LONG).show()
+                            }
+                            launchExpensesForEdit(context.applicationContext, id)
+                        } else if (isPendingScanCreate && pendingFileNames.isNotEmpty()) {
+                            // Same recovery flow as the legacy imageName case above, generalized to
+                            // N pages: LLM failed but every page is already staged as a plain
+                            // attachment — create a stub so the user doesn't lose them, and link them
+                            // once the id is known (mirrors the success path's linking, just off the
+                            // failure branch instead).
+                            Logger.w(TAG, "LLM failed for pending scan, entering recovery mode for ${pendingFileNames.size} page(s). Error: ${result.error}")
+                            val id = createStubExpense(container, imageName = null)
+                            linkPendingScanAttachments(container, id, pendingFileNames, pendingGroupId)
                             withContext(Dispatchers.Main) {
                                 val errorMsg = result.error ?: "Unknown parsing error"
                                 Toast.makeText(context, "${container.languageManager.getString("manual_review_required")} ($errorMsg)", Toast.LENGTH_LONG).show()
@@ -319,6 +345,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                 // comment) — routing through the same live-observed suggestion row every other field
                 // already uses fixes that, and also means items are reviewable like everything else.
                 val expenseId = taskParts.getOrNull(1)?.toLongOrNull()
+                val sourceGroupId = taskParts.getOrNull(2)?.takeIf { it.isNotEmpty() }
                 val rawJson = result.rawJson
                 // requireTotalAmount=false: a photo with no clearly printed total shouldn't discard
                 // genuinely-found line items (or other fields) along with it.
@@ -330,6 +357,11 @@ class LlmResultReceiver : BroadcastReceiver() {
                 }
                 if (parsed == null && rawJson != null) {
                     Logger.w(TAG, "Line-items rescan: reply didn't parse as valid JSON: $rawJson")
+                } else if (rawJson != null) {
+                    // Full reply, not just the parsed item count — lets a mismatch between what the
+                    // model returned and what ended up in `parsed.items` be told apart from the model
+                    // itself only finding some of the receipt's items in the first place.
+                    Logger.d(TAG, "Line-items rescan raw reply: $rawJson")
                 }
 
                 val pending = goAsync()
@@ -341,11 +373,14 @@ class LlmResultReceiver : BroadcastReceiver() {
                             Logger.w(TAG, "Line-items rescan target expense $expenseId no longer exists")
                         } else if (parsed != null) {
                             Logger.d(TAG, "Line-items rescan for expense $expenseId: parsed ${parsed.items.size} item(s)")
+                            parsed.items.forEach {
+                                Logger.d(TAG, "  item: name=\"${it.name}\" qty=${it.quantity} unitPrice=${it.unitPrice} net=${it.netAmount} vat=${it.vatAmount} gross=${it.grossAmount}")
+                            }
                         }
                         var didSomething = false
                         if (parsed != null && existing != null) {
                             buildFieldSuggestion(parsed, existing)?.let {
-                                container.expensesRepository.setPendingFieldSuggestion(it)
+                                container.expensesRepository.setPendingFieldSuggestion(it.copy(sourceGroupId = sourceGroupId))
                                 didSomething = true
                             }
                         }
@@ -536,7 +571,7 @@ class LlmResultReceiver : BroadcastReceiver() {
 
     private suspend fun createStubExpense(
         container: ExpensesContainer,
-        imageName: String
+        imageName: String?
     ): Long {
         val settings = container.settingsRepository.getSnapshot()
         // Stub: 0.0 amount is valid but needs manual entry.
@@ -554,6 +589,32 @@ class LlmResultReceiver : BroadcastReceiver() {
             isStub = true,
             source = ExpenseSource.SCAN
         )
+    }
+
+    /** Links a pending Scan capture's already-staged pages (see [com.voxapps.expenses.receiver.OcrResultReceiver]'s
+     *  pending-scan branches) as ordinary AttachmentEntity rows against [expenseId] now that its id is
+     *  known — win or lose (see both call sites above): a failed parse still gets its photo(s) linked
+     *  to the resulting stub, matching the legacy imageName-based recovery flow's own "never lose the
+     *  photo" behavior, just generalized from one field to N ordinary attachments. */
+    private suspend fun linkPendingScanAttachments(
+        container: ExpensesContainer,
+        expenseId: Long,
+        fileNames: List<String>,
+        groupId: String?
+    ) {
+        fileNames.forEachIndexed { index, fileName ->
+            container.attachmentDao.insert(
+                AttachmentEntity(
+                    recordType = ExpensesAttachments.RECORD_TYPE,
+                    recordId = expenseId,
+                    fileName = fileName,
+                    source = AttachmentSource.MANUAL,
+                    createdAt = System.currentTimeMillis(),
+                    groupId = groupId,
+                    groupOrder = index
+                )
+            )
+        }
     }
 
     /** Diffs [parsed] against [existing]'s current field values, returning a [PendingFieldSuggestion]

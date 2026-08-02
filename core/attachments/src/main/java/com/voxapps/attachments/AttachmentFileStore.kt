@@ -36,5 +36,10 @@ object AttachmentFileStore {
 
     fun delete(context: Context, dirName: String, fileName: String) {
         file(context, dirName, fileName).delete()
+        // Harmless no-op for every caller that never creates one (calendar/notes attachments have no
+        // such convention) — only vox-expenses' rescan/retry-with-a-different-photo features ever
+        // stage OCR text as a same-named .txt sibling next to an attachment file. Deleting the
+        // attachment should take that with it rather than leaving it permanently orphaned.
+        File(file(context, dirName, fileName).parentFile, fileName.substringBeforeLast('.') + ".txt").delete()
     }
 }

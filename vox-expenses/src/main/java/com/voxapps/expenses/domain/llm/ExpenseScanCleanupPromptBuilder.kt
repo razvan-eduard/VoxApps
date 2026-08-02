@@ -14,13 +14,7 @@ object ExpenseScanCleanupPromptBuilder {
         defaultCurrency: String,
         languageCode: String,
         preParsedDate: String? = null,
-        preParsedTime: String? = null,
-        // True for a photo attached to an already-saved expense after the fact (see
-        // LlmTasks.EXPENSE_LINEITEMS_RESCAN) — there's no OCR text at all in that case, only a
-        // multimodal image attachment, so the framing paragraph and trailing "OCR text: ..." block
-        // (both of which assume OCR text exists) are swapped/dropped instead of just left blank,
-        // which would otherwise read as self-contradictory to the model.
-        imageOnly: Boolean = false
+        preParsedTime: String? = null
     ): String {
         val categoriesLine = if (existingCategories.isEmpty()) {
             "No categories exist yet."
@@ -48,20 +42,18 @@ object ExpenseScanCleanupPromptBuilder {
             """.trimIndent()
         }
 
-        val framingParagraph = if (imageOnly) {
-            """
-            You are given a photo of a receipt or invoice — no OCR text is available for it. Look at
-            the image directly and read its actual content.
-            """.trimIndent()
-        } else {
-            """
+        val framingParagraph = """
             The following text was extracted via OCR from a receipt or invoice and may contain
             formatting noise, line-break artifacts, misrecognized characters, or short garbled
             fragments picked up from clutter around the document — identify the receipt's actual
-            content and discard anything that clearly isn't part of it.
+            content and discard anything that clearly isn't part of it. It may also contain one or
+            more "--- [photo stitch seam ...] ---" markers: the receipt was photographed as several
+            overlapping close-up shots and stitched into one text automatically, and a marker shows
+            where two shots were joined. Treat the text as one continuous document across each
+            marker — a line item split across a marker, or a word/line duplicated right next to one,
+            should still be read as a single item, not two.
             """.trimIndent()
-        }
-        val ocrTextBlock = if (imageOnly) "" else "\n\nOCR text: $rawText"
+        val ocrTextBlock = "\n\nOCR text: $rawText"
 
         return """
             $framingParagraph
@@ -74,6 +66,18 @@ object ExpenseScanCleanupPromptBuilder {
             is enough — prefer just the city over a full street address; omit/null if no location is
             printed anywhere, never guess or infer one from the vendor name alone), and the individual
             product line items (name, quantity — default 1 if not stated, unit price) if clearly present.
+
+            IMPORTANT: list EVERY product line you can identify, in the order they appear, even if two
+            lines look identical (same name and price) — a receipt can legitimately print several
+            separate line items with the same generic name and price (e.g. different flavors/variants
+            of the same product, each scanned as its own "1 x" line, where the receipt only prints a
+            generic category name and not the specific variant), and if the text was stitched from
+            several overlapping photos it may also genuinely contain the same printed line more than
+            once. You cannot reliably tell these cases apart from the text alone — so never guess:
+            do NOT merge, deduplicate, sum quantities, or skip a line because it looks like a repeat of
+            one you already listed. List it again exactly as printed, as its own separate item with its
+            own quantity exactly as printed for that line (usually 1). A human reviews the full list
+            afterward and merges anything that's actually a duplicate — that decision is never yours.
             If a line item's net amount (fără TVA), VAT amount,
             and gross/total amount are ALL separately printed for that line, also include them as
             "netAmount", "vatAmount", "grossAmount" on that item — but only when the document actually

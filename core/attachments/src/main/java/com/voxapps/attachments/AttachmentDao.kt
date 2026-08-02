@@ -43,4 +43,16 @@ interface AttachmentDao {
 
     @Query("DELETE FROM attachments WHERE recordType = :recordType AND recordId = :recordId")
     suspend fun deleteAllForInternal(recordType: String, recordId: Long)
+
+    /** For cancelling a burst mid-capture (see [com.voxapps.attachments.ui.rememberBurstCaptureLauncher])
+     *  — same "return the deleted rows so the caller can also delete their backing files" shape as
+     *  [deleteAllFor], just scoped to one group instead of the whole record. */
+    suspend fun deleteGroup(recordType: String, recordId: Long, groupId: String): List<AttachmentEntity> {
+        val rows = getFor(recordType, recordId).filter { it.groupId == groupId }
+        deleteGroupInternal(recordType, recordId, groupId)
+        return rows
+    }
+
+    @Query("DELETE FROM attachments WHERE recordType = :recordType AND recordId = :recordId AND groupId = :groupId")
+    suspend fun deleteGroupInternal(recordType: String, recordId: Long, groupId: String)
 }

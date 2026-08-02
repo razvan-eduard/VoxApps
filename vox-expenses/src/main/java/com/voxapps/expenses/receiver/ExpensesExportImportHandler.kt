@@ -370,7 +370,9 @@ class ExpensesExportImportHandler(
                                 recordId = newExpenseId,
                                 fileName = fileName,
                                 source = a.optString("source", AttachmentSource.MANUAL),
-                                createdAt = a.optLong("createdAt", System.currentTimeMillis())
+                                createdAt = a.optLong("createdAt", System.currentTimeMillis()),
+                                groupId = a.optStringOrNull("groupId"),
+                                groupOrder = a.optInt("groupOrder", 0)
                             )
                         )
                     }
@@ -517,6 +519,8 @@ private fun AttachmentEntity.toJson(): JSONObject = JSONObject().apply {
     put("fileName", fileName)
     put("source", source)
     put("createdAt", createdAt)
+    put("groupId", groupId)
+    put("groupOrder", groupOrder)
 }
 
 private fun ExpenseLineItem.toJson(): JSONObject = JSONObject().apply {

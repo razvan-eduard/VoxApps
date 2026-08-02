@@ -6,7 +6,9 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.logging.Logger
 import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.ipc.VoxAppsDiscovery
@@ -14,34 +16,78 @@ import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.notes.NotesApplication
+import com.voxapps.notes.di.NotesContainer
 import com.voxapps.notes.domain.llm.LlmTasks
 import com.voxapps.notes.domain.llm.NoteScanCleanupPromptBuilder
+import com.voxapps.notes.domain.llm.ScanRequestSender
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 
 private const val TAG = "OcrResultReceiver"
 private const val COMMANDER_PACKAGE = "com.voxapps.commander"
 private const val NOTES_FILE_PROVIDER_AUTHORITY = "com.voxapps.notes.fileprovider"
 
 /**
- * Notes' end of Vision's generic OCR hook: receives the raw scanned text back from Vision (the
- * "Scanează o notiță" flow) and forwards it to Commander's generic LLM hook for cleanup — the actual
- * note gets created when that cleanup reply lands in [LlmResultReceiver] (see its
- * `LlmTasks.NOTE_SCAN_CLEANUP` branch). Guarded by the shared
- * `com.voxapps.vox.permission.OCR_RESULT` signature permission (declared once in `:core:ipc`).
+ * Notes' end of Vision's generic OCR hook — two distinct task families, dispatched by prefix (not
+ * exact match, so a colon-suffixed task like an attachment capture's `:$noteId` still routes
+ * correctly): [LlmTasks.NOTE_SCAN_CLEANUP] (the "Scanează o notiță" flow — forwards the raw scanned
+ * text to Commander's generic LLM hook for cleanup; the actual note gets created when that cleanup
+ * reply lands in [LlmResultReceiver]) and [LlmTasks.NOTE_ATTACHMENT_CAPTURE] (adding a photo to a
+ * note — always produceOCR=false here, so this just stages the photo(s) and commits AttachmentEntity
+ * row(s), no LLM round-trip at all). Guarded by the shared `com.voxapps.vox.permission.OCR_RESULT`
+ * signature permission (declared once in `:core:ipc`). Mirrors vox-calendar's `OcrResultReceiver`.
  */
 class OcrResultReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != VoxIpc.ACTION_OCR_RESULT) return
         val result = VoxOcrResult.fromJson(intent.getStringExtra(VoxIpc.EXTRA_OCR_PAYLOAD)) ?: return
+        val taskParts = result.task.split(":")
+        val baseTask = taskParts.getOrNull(0)
 
-        if (result.task != LlmTasks.NOTE_SCAN_CLEANUP) {
+        if (baseTask == LlmTasks.NOTE_ATTACHMENT_CAPTURE) {
+            if (result.status != VoxOcrResult.STATUS_SUCCESS || result.imageUris.isEmpty()) {
+                Logger.w(TAG, "Attachment capture succeeded with no image — nothing to stage")
+                return
+            }
+            val container = (context.applicationContext as NotesApplication).container
+            val pending = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    handleAttachmentCapture(context, container, taskParts, result.imageUris)
+                } finally {
+                    pending.finish()
+                }
+            }
+            return
+        }
+
+        if (baseTask != LlmTasks.NOTE_SCAN_CLEANUP) {
             Logger.d(TAG, "Ignoring unknown OCR task: ${result.task}")
+            return
+        }
+
+        // A batch Scan session's single reply (see VoxOcrRequest.CAPTURE_MODE_BATCH) — capture-only,
+        // no OCR ran, so there's no text to forward yet. Fire one headless OCR request per photo;
+        // each of THOSE replies lands right back in this same branch (now carrying real text) and
+        // creates its own independent note — no other receiver changes needed for batch.
+        if (result.status == VoxOcrResult.STATUS_SUCCESS && result.rawText == null && result.imageUris.isNotEmpty()) {
+            val pending = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    result.imageUris.forEach { imageUri ->
+                        ScanRequestSender.sendHeadlessBatchPageOcr(context, Uri.parse(imageUri))
+                    }
+                    Logger.d(TAG, "Batch scan: fired independent headless OCR for ${result.imageUris.size} photo(s)")
+                } finally {
+                    pending.finish()
+                }
+            }
             return
         }
 
@@ -84,10 +130,10 @@ class OcrResultReceiver : BroadcastReceiver() {
 
                 // Unconditionally staged (regardless of scanImageRetention) — mirrors vox-expenses'
                 // OcrResultReceiver, and for the same reason: we don't yet know success/failure, and
-                // Vision's own grant on result.imageUri may not outlive this call. LlmResultReceiver
-                // decides whether to keep it (create an AttachmentEntity) or delete it once the real
-                // outcome is known, per NotesSettings.scanImageRetention.
-                val stagedImageName = result.imageUri?.let { uriString ->
+                // Vision's own grant on result.imageUris.first() may not outlive this call.
+                // LlmResultReceiver decides whether to keep it (create an AttachmentEntity) or delete
+                // it once the real outcome is known, per NotesSettings.scanImageRetention.
+                val stagedImageName = result.imageUris.firstOrNull()?.let { uriString ->
                     AttachmentFileStore.stage(context, Uri.parse(uriString), NotesAttachments.DIR)
                 }
                 val taskWithMeta = if (stagedImageName != null) {
@@ -109,6 +155,43 @@ class OcrResultReceiver : BroadcastReceiver() {
                 pending.finish()
             }
         }
+    }
+
+    /** Stages every returned photo and commits it as a real AttachmentEntity row — no OCR text
+     *  involved at all, Notes never requests it for attachments (see [LlmTasks.
+     *  NOTE_ATTACHMENT_CAPTURE]'s doc comment). A 2+ photo reply (a stitch group — see
+     *  [com.voxapps.ipc.VoxOcrRequest.CAPTURE_MODE_STITCH]) shares one groupId and is marked
+     *  [AttachmentSource.STITCHED] so the zoom view only offers whole-group delete for it; a batch
+     *  reply's photos are independent (ungrouped, [AttachmentSource.MANUAL]) — mirrors vox-calendar's
+     *  OcrResultReceiver.handleAttachmentCapture. Task string shape:
+     *  "$NOTE_ATTACHMENT_CAPTURE:$noteId". */
+    private suspend fun handleAttachmentCapture(context: Context, container: NotesContainer, taskParts: List<String>, imageUris: List<String>) {
+        val noteId = taskParts.getOrNull(1)?.toLongOrNull()
+        if (noteId == null) {
+            Logger.w(TAG, "Attachment capture missing noteId: ${taskParts.joinToString(":")}")
+            return
+        }
+        val stagedFileNames = imageUris.mapNotNull { AttachmentFileStore.stage(context, Uri.parse(it), NotesAttachments.DIR) }
+        if (stagedFileNames.isEmpty()) {
+            Logger.e(TAG, "Failed to stage any attachment capture image")
+            return
+        }
+        val groupId = if (stagedFileNames.size > 1) UUID.randomUUID().toString() else null
+        val source = if (groupId != null) AttachmentSource.STITCHED else AttachmentSource.MANUAL
+        stagedFileNames.forEachIndexed { index, fileName ->
+            container.attachmentDao.insert(
+                AttachmentEntity(
+                    recordType = NotesAttachments.RECORD_TYPE,
+                    recordId = noteId,
+                    fileName = fileName,
+                    source = source,
+                    createdAt = System.currentTimeMillis(),
+                    groupId = groupId,
+                    groupOrder = index
+                )
+            )
+        }
+        Logger.d(TAG, "Attachment capture staged ${stagedFileNames.size} photo(s) for note $noteId (group=$groupId)")
     }
 
     /** Copies Vision's already-downscaled AI-attachment image (a URI Vision granted *this* app read

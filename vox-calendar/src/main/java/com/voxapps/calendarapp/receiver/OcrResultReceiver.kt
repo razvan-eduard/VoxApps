@@ -6,13 +6,19 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.AttachmentSource
+import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarScanCleanupPromptBuilder
+import com.voxapps.calendarapp.domain.llm.CalendarScanRequestSender
 import com.voxapps.calendarapp.domain.llm.LlmTasks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,27 +26,69 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 
 private const val TAG = "OcrResultReceiver"
 private const val COMMANDER_PACKAGE = "com.voxapps.commander"
 private const val CALENDAR_FILE_PROVIDER_AUTHORITY = "com.voxapps.calendar.fileprovider"
 
 /**
- * Calendar's end of Vision's generic OCR hook: receives the raw scanned text back from Vision (the
- * "Scan an event" flow) and forwards it to Commander's generic LLM hook for cleanup — the actual
- * entry gets created when that cleanup reply lands in [LlmResultReceiver] (see its
- * `LlmTasks.CALENDAR_SCAN_CLEANUP` branch, which reuses the same entry-creation path as voice).
- * Guarded by the shared `com.voxapps.vox.permission.OCR_RESULT` signature permission (declared once
- * in `:core:ipc`). Mirrors vox-notes' `OcrResultReceiver`.
+ * Calendar's end of Vision's generic OCR hook — two distinct task families, dispatched by prefix
+ * (not exact match, so a colon-suffixed task like an attachment capture's `:$entryId` still routes
+ * correctly): [LlmTasks.CALENDAR_SCAN_CLEANUP] (the "Scan an event" flow — forwards the raw scanned
+ * text to Commander's generic LLM hook for cleanup; the actual entry gets created when that cleanup
+ * reply lands in [LlmResultReceiver]) and [LlmTasks.CALENDAR_ATTACHMENT_CAPTURE] (adding a photo to
+ * an entry — always produceOCR=false here, so this just stages the photo(s) and commits
+ * AttachmentEntity row(s), no LLM round-trip at all). Guarded by the shared
+ * `com.voxapps.vox.permission.OCR_RESULT` signature permission (declared once in `:core:ipc`).
+ * Mirrors vox-notes' `OcrResultReceiver`.
  */
 class OcrResultReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != VoxIpc.ACTION_OCR_RESULT) return
         val result = VoxOcrResult.fromJson(intent.getStringExtra(VoxIpc.EXTRA_OCR_PAYLOAD)) ?: return
+        val taskParts = result.task.split(":")
+        val baseTask = taskParts.getOrNull(0)
 
-        if (result.task != LlmTasks.CALENDAR_SCAN_CLEANUP) {
+        if (baseTask == LlmTasks.CALENDAR_ATTACHMENT_CAPTURE) {
+            if (result.status != VoxOcrResult.STATUS_SUCCESS || result.imageUris.isEmpty()) {
+                Logger.w(TAG, "Attachment capture succeeded with no image — nothing to stage")
+                return
+            }
+            val container = (context.applicationContext as CalendarApplication).container
+            val pending = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    handleAttachmentCapture(context, container, taskParts, result.imageUris)
+                } finally {
+                    pending.finish()
+                }
+            }
+            return
+        }
+
+        if (baseTask != LlmTasks.CALENDAR_SCAN_CLEANUP) {
             Logger.d(TAG, "Ignoring unknown OCR task: ${result.task}")
+            return
+        }
+
+        // A batch Scan session's single reply (see VoxOcrRequest.CAPTURE_MODE_BATCH) — capture-only,
+        // no OCR ran, so there's no text to forward yet. Fire one headless OCR request per photo;
+        // each of THOSE replies lands right back in this same branch (now carrying real text) and
+        // creates its own independent entry — no other receiver changes needed for batch.
+        if (result.status == VoxOcrResult.STATUS_SUCCESS && result.rawText == null && result.imageUris.isNotEmpty()) {
+            val pending = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    result.imageUris.forEach { imageUri ->
+                        CalendarScanRequestSender.sendHeadlessBatchPageOcr(context, Uri.parse(imageUri))
+                    }
+                    Logger.d(TAG, "Batch scan: fired independent headless OCR for ${result.imageUris.size} photo(s)")
+                } finally {
+                    pending.finish()
+                }
+            }
             return
         }
 
@@ -95,6 +143,43 @@ class OcrResultReceiver : BroadcastReceiver() {
                 pending.finish()
             }
         }
+    }
+
+    /** Stages every returned photo and commits it as a real AttachmentEntity row — no OCR text
+     *  involved at all, Calendar never requests it for attachments (see [LlmTasks.
+     *  CALENDAR_ATTACHMENT_CAPTURE]'s doc comment). A 2+ photo reply (a stitch group — see
+     *  [com.voxapps.ipc.VoxOcrRequest.CAPTURE_MODE_STITCH]) shares one groupId and is marked
+     *  [AttachmentSource.STITCHED] so the zoom view only offers whole-group delete for it; a batch
+     *  reply's photos are independent (ungrouped, [AttachmentSource.MANUAL]) — mirrors vox-expenses'
+     *  OcrResultReceiver.handleAttachmentCapture. Task string shape:
+     *  "$CALENDAR_ATTACHMENT_CAPTURE:$entryId". */
+    private suspend fun handleAttachmentCapture(context: Context, container: CalendarContainer, taskParts: List<String>, imageUris: List<String>) {
+        val entryId = taskParts.getOrNull(1)?.toLongOrNull()
+        if (entryId == null) {
+            Logger.w(TAG, "Attachment capture missing entryId: ${taskParts.joinToString(":")}")
+            return
+        }
+        val stagedFileNames = imageUris.mapNotNull { AttachmentFileStore.stage(context, Uri.parse(it), CalendarAttachments.DIR) }
+        if (stagedFileNames.isEmpty()) {
+            Logger.e(TAG, "Failed to stage any attachment capture image")
+            return
+        }
+        val groupId = if (stagedFileNames.size > 1) UUID.randomUUID().toString() else null
+        val source = if (groupId != null) AttachmentSource.STITCHED else AttachmentSource.MANUAL
+        stagedFileNames.forEachIndexed { index, fileName ->
+            container.attachmentDao.insert(
+                AttachmentEntity(
+                    recordType = CalendarAttachments.RECORD_TYPE,
+                    recordId = entryId,
+                    fileName = fileName,
+                    source = source,
+                    createdAt = System.currentTimeMillis(),
+                    groupId = groupId,
+                    groupOrder = index
+                )
+            )
+        }
+        Logger.d(TAG, "Attachment capture staged ${stagedFileNames.size} photo(s) for entry $entryId (group=$groupId)")
     }
 
     /** Copies Vision's already-downscaled AI-attachment image (a URI Vision granted *this* app read

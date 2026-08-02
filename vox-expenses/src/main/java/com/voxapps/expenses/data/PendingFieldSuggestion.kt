@@ -36,7 +36,13 @@ data class PendingFieldSuggestion(
     val category: String? = null,
     val location: String? = null,
     val dateTime: Long? = null,
-    val itemsJson: String? = null
+    val itemsJson: String? = null,
+    // The attachment group (see AttachmentEntity.groupId) whose rescan produced this suggestion, if
+    // any — null for a rescan of a single ungrouped attachment, or a suggestion from a non-scan
+    // source. Lets dismissing the line-items suggestion also remove the scan that produced it (see
+    // ExpenseEditScreen's items-suggestion dismiss) instead of leaving those photos permanently
+    // attached with nothing left to apply their suggestion from.
+    val sourceGroupId: String? = null
 )
 
 /** Hand-rolled org.json (de)serialization for [PendingFieldSuggestion.itemsJson] — matches this

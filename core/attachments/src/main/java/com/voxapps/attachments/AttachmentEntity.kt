@@ -10,6 +10,12 @@ import androidx.room.PrimaryKey
 object AttachmentSource {
     const val SCANNED = "scanned"
     const val MANUAL = "manual"
+    // A group of 2+ photos from a single stitch capture session (see
+    // com.voxapps.ipc.VoxOcrRequest.CAPTURE_MODE_STITCH) — every member shares this value.
+    // Conceptually one document split across shots, unlike a same-groupId gallery multi-select
+    // (which stays MANUAL): the UI only offers whole-group delete for a STITCHED group, never
+    // per-photo — see AttachmentUiItem.groupSource and AttachmentsSection's zoom view.
+    const val STITCHED = "stitched"
 }
 
 /**
@@ -34,5 +40,11 @@ data class AttachmentEntity(
     @ColumnInfo(name = "recordId") val recordId: Long,
     val fileName: String,
     val source: String,
-    val createdAt: Long
+    val createdAt: Long,
+    // A UUID shared by every photo captured/picked in the same burst/selection — null (the default,
+    // every pre-existing row) means "a group of one", same as any freshly-added single attachment.
+    // [groupOrder] is only meaningful when this is non-null: stable capture/selection position within
+    // the group, since createdAt alone can collide within the same millisecond for a fast burst.
+    val groupId: String? = null,
+    val groupOrder: Int = 0
 )

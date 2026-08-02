@@ -29,10 +29,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -83,7 +86,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.ui.AttachmentUiItem
 import com.voxapps.attachments.ui.AttachmentsSection
+import com.voxapps.attachments.ui.GroupDeleteConfig
 import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
+import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
+import com.voxapps.design.SpeedDialAction
+import com.voxapps.ipc.VoxOcrRequest
+import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.calendarapp.domain.llm.LlmTasks
 import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntrySanitizer
@@ -105,6 +114,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Date
+import java.util.UUID
 
 private val OffenseRed = Color(0xFFD32F2F)
 
@@ -839,35 +849,75 @@ private fun EntryAttachmentsSection(entryId: Long, stateManager: CalendarStateMa
     val context = LocalContext.current
     val entities by stateManager.observeAttachments(entryId).collectAsStateWithLifecycle(initialValue = emptyList())
     val items = remember(entities) {
+        val groupSizes = entities.mapNotNull { it.groupId }.groupingBy { it }.eachCount()
         entities.map { e ->
+            val groupSize = e.groupId?.let { groupSizes[it] } ?: 0
             AttachmentUiItem(
                 id = e.id,
                 uri = AttachmentFileStore.uriFor(context, CalendarAttachments.FILE_PROVIDER_AUTHORITY, CalendarAttachments.DIR, e.fileName),
-                removable = true
+                removable = true,
+                groupLabel = if (groupSize > 1) "${e.groupOrder + 1}/$groupSize" else null,
+                groupKey = e.groupId,
+                groupSource = e.source
             )
         }
     }
-    fun handlePickedUri(uri: Uri?) {
-        if (uri != null) {
+    fun handlePickedUris(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val groupId = if (uris.size > 1) UUID.randomUUID().toString() else null
+        uris.forEachIndexed { index, uri ->
             AttachmentFileStore.stage(context, uri, CalendarAttachments.DIR)?.let { fileName ->
-                stateManager.addManualAttachment(entryId, fileName)
+                stateManager.addManualAttachment(entryId, fileName, groupId, index)
             }
         }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
-    val takePhoto = rememberCameraCaptureLauncher(CalendarAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
+    val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> handlePickedUris(uris) }
+    // Zero attachments yet: single + stitch (a stitch group is one document, whole-group delete
+    // only — see AttachmentUiItem.groupSource). Already has attachments: single + batch, each new
+    // photo independent (Calendar never runs OCR/LLM on attachments at all — see LlmTasks.
+    // CALENDAR_ATTACHMENT_CAPTURE's doc comment, so "batch" here differs from Expenses' only in that
+    // there's no rescan-suggestion step, just independent staging).
+    val takePhotoSingle = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.CALENDAR_ATTACHMENT_CAPTURE}:$entryId", hint = null, produceOCR = false,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE
+    )
+    val takePhotoStitch = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.CALENDAR_ATTACHMENT_CAPTURE}:$entryId", hint = null, produceOCR = false,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH
+    )
+    val takePhotoBatch = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.CALENDAR_ATTACHMENT_CAPTURE}:$entryId", hint = null, produceOCR = false,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
+    )
+    val captureActions = if (items.isEmpty()) {
+        listOf(
+            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
+            SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch"), takePhotoStitch)
+        )
+    } else {
+        listOf(
+            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
+            SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch"), takePhotoBatch)
+        )
+    }
     AttachmentsSection(
         title = languageManager.getString("attachments"),
         items = items,
         canAdd = items.size < 10,
-        onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-        onTakePhoto = takePhoto,
+        onPickFromGallery = { pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        captureActions = captureActions,
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
-        cameraLabel = languageManager.getString("attachment_take_photo"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->
             entities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
-        }
+        },
+        groupDelete = GroupDeleteConfig(
+            onDeleteGroup = { groupId -> stateManager.deleteAttachmentGroup(entryId, groupId, context) },
+            confirmTitle = languageManager.getString("delete_attachment_group_title"),
+            confirmMessage = languageManager.getString("delete_attachment_group_message"),
+            confirmLabel = languageManager.getString("delete"),
+            cancelLabel = languageManager.getString("cancel")
+        )
     )
 }
 
@@ -904,9 +954,11 @@ private fun PendingEntryAttachmentsSection(pendingAttachments: List<String>, onC
         items = items,
         canAdd = pendingAttachments.size < 10,
         onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-        onTakePhoto = takePhoto,
+        // Draft (not-yet-saved) entry attachments still use the plain system camera, not Vision —
+        // out of scope for the single/stitch/batch speed dial (no OCR/record concept exists yet for
+        // a draft), so this is just the one existing "take photo" action, unchanged behavior.
+        captureActions = listOf(SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("attachment_take_photo"), takePhoto)),
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
-        cameraLabel = languageManager.getString("attachment_take_photo"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->
             pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->

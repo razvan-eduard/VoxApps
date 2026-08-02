@@ -30,6 +30,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -37,6 +38,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -66,6 +69,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -85,10 +89,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.widget.Toast
 import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.attachments.ui.AttachmentUiItem
 import com.voxapps.attachments.ui.AttachmentsSection
+import com.voxapps.attachments.ui.GroupDeleteConfig
 import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
+import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
+import com.voxapps.design.SpeedDialAction
 import com.voxapps.design.color.VoxColorSwatchPicker
+import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Category
@@ -99,11 +108,14 @@ import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSanitizer
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
+import com.voxapps.expenses.data.PendingFieldSuggestion
 import com.voxapps.expenses.data.PendingLineItemsJson
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
+import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
+import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.MultimodalAttachmentResolver
 import com.voxapps.expenses.domain.location.ExpensesLocationHelper
 import com.voxapps.expenses.domain.localization.LanguageManager
@@ -112,10 +124,13 @@ import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.RecordSource
 import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
+import com.voxapps.textmatch.FuzzyNameMatcher
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.DateFormat
@@ -124,6 +139,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.util.Date
+import java.util.UUID
 
 private val ConfirmGreen = Color(0xFF4CAF50)
 private val OffenseRed = Color(0xFFD32F2F)
@@ -135,6 +151,21 @@ private data class LineItemDraft(
     var netAmountText: String = "",
     var vatAmountText: String = "",
     var grossAmountText: String = ""
+)
+
+/** Everything a back-press dirty-check needs to compare — see `isDirty()` in ExpenseEditScreen. */
+private data class EditSnapshot(
+    val title: String,
+    val totalText: String,
+    val currency: String,
+    val vendor: String,
+    val bank: String,
+    val location: String,
+    val comments: String,
+    val dateTime: Long,
+    val categoryId: Long?,
+    val direction: TransactionDirection,
+    val items: List<LineItemDraft>
 )
 
 private fun LineItemDraft.subtotal(useComma: Boolean): Double =
@@ -209,6 +240,44 @@ fun ExpenseEditScreen(
         existing?.expense?.id?.let { stateManager.observePendingFieldSuggestion(it) } ?: emptyFlow()
     }
     val pendingSuggestion by pendingSuggestionFlow.collectAsStateWithLifecycle(initialValue = null)
+    // Per-field "no thanks" — tapping a chip's x hides just that field's suggestion without applying
+    // it. Keyed on the whole pendingSuggestion object so a genuinely new rescan (a new DB row) starts
+    // with a clean slate rather than inheriting dismissals aimed at the old suggestion's values.
+    val dismissedSuggestionFields = remember(pendingSuggestion) { mutableStateSetOf<String>() }
+    // Attachment groups added (by a Vision capture or gallery multi-pick) during THIS screen visit —
+    // tracked so "Discard" can remove them along with the pending suggestion instead of leaving newly
+    // scanned photos permanently attached to a record the user chose not to keep changes on. A capture
+    // session's photos land via OcrResultReceiver's own broadcast handling (see
+    // ExpenseAttachmentsSection's takePhotoSingle/Stitch/Batch doc comment), with no direct callback
+    // into this screen for "a new group was just added" — so this compares each attachments emission
+    // against whatever was already there the first time this screen saw them instead.
+    val attachmentsFlow = remember(existing?.expense?.id) {
+        existing?.expense?.id?.let { stateManager.observeAttachments(it) } ?: emptyFlow()
+    }
+    val currentAttachments by attachmentsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val knownGroupIdsAtOpen = remember { mutableStateOf<Set<String>?>(null) }
+    val sessionAddedGroupIds = remember { mutableStateListOf<String>() }
+    // Establishes the baseline from one real, awaited DB read — NOT from currentAttachments' state
+    // above, whose collectAsStateWithLifecycle(initialValue = emptyList()) placeholder fires
+    // (synchronously, before the Flow's real first emission) on every composition. Using that as the
+    // baseline made reopening a record that already had a saved stitch group treat the whole
+    // (pre-existing, legitimate) group as "added this session" — confirmed bug: Save, reopen, tap
+    // back with nothing touched, and the discard-confirm dialog still offered to delete those old
+    // photos. `first()` on the same underlying Flow always returns its true current value.
+    LaunchedEffect(existing?.expense?.id) {
+        knownGroupIdsAtOpen.value = existing?.expense?.id?.let { id ->
+            stateManager.observeAttachments(id).first().mapNotNull { it.groupId }.toSet()
+        } ?: emptySet()
+    }
+    LaunchedEffect(currentAttachments, knownGroupIdsAtOpen.value) {
+        val groupIdsNow = currentAttachments.mapNotNull { it.groupId }.toSet()
+        val known = knownGroupIdsAtOpen.value
+        if (known == null) {
+            // Baseline not established yet — wait for it rather than guessing.
+        } else {
+            (groupIdsNow - known).forEach { if (it !in sessionAddedGroupIds) sessionAddedGroupIds.add(it) }
+        }
+    }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var showNewCategoryDialog by remember { mutableStateOf(false) }
     var direction by remember { mutableStateOf(existing?.expense?.direction ?: TransactionDirection.OUTGOING) }
@@ -289,8 +358,51 @@ fun ExpenseEditScreen(
     }
 
     val itemsSum = items.sumOf { it.subtotal(useComma) }
+
+    // Exact name+price duplicates are already merged before items ever reach this screen (see
+    // ExpenseParseResultParser.dedupeItems) — this only flags NAME-similar rows that weren't merged
+    // (different price, or a near-miss OCR spelling), which is deliberately ambiguous enough that a
+    // human should look rather than have it silently merged or silently ignored.
+    val possibleDuplicateIndices = remember(items.toList()) {
+        val flagged = mutableSetOf<Int>()
+        for (i in items.indices) {
+            val nameI = items[i].name
+            if (nameI.isBlank()) continue
+            for (j in i + 1 until items.size) {
+                val nameJ = items[j].name
+                if (nameJ.isBlank()) continue
+                if (FuzzyNameMatcher.namesMatch(nameI, nameJ)) {
+                    flagged += i
+                    flagged += j
+                }
+            }
+        }
+        flagged
+    }
     val totalMismatch = items.isNotEmpty() &&
         (parseDecimalOrNull(totalText, useComma)?.let { ExpenseAmountMismatch.isMismatch(it, itemsSum) } ?: false)
+
+    // Snapshot of every editable field at screen-open time, so back can tell whether there's
+    // actually anything to prompt about — closing an untouched screen (just viewing, or a
+    // freshly-created blank draft) shouldn't interrupt with a dialog.
+    val initialSnapshot = remember {
+        EditSnapshot(title, totalText, currency, vendor, bank, location, comments, dateTime, categoryId, direction, items.toList())
+    }
+    fun isDirty(): Boolean =
+        EditSnapshot(title, totalText, currency, vendor, bank, location, comments, dateTime, categoryId, direction, items.toList()) != initialSnapshot ||
+            // A pending suggestion row surviving means there's still something Discard needs to
+            // clear even if no field's been touched — a chip left untapped changes no local value,
+            // so the diff above alone would silently miss it (the exact bug: chips visible, back
+            // closes with no prompt, suggestion row untouched, still there on reopen).
+            pendingSuggestion != null ||
+            // Same reasoning for photos captured/picked this session (see sessionAddedGroupIds' doc
+            // comment) — they're written straight to the DB, not staged, so nothing in the
+            // EditSnapshot diff above ever reflects them. Without this, a session that only ever
+            // added a scan (rescan still pending, or never landed at all — e.g. it crashed) reads as
+            // "not dirty", back skips the confirm dialog entirely, and the photos are stuck attached
+            // with no chance to discard them.
+            sessionAddedGroupIds.isNotEmpty()
+    var showDiscardConfirm by remember { mutableStateOf(false) }
 
     // Shared by the checkmark button, the back arrow, and the system back gesture/button — this
     // screen has no separate "discard changes" path, so leaving it any way always tries to save
@@ -303,6 +415,12 @@ fun ExpenseEditScreen(
             // Nothing will ever link these now — a no-op when editing an existing expense, since
             // pendingAttachments is only ever populated for a new, not-yet-saved one.
             discardPendingAttachments(pendingAttachments, context)
+            // Nothing is actually being saved here (no valid total), so this is a discard in
+            // everything but name — same sessionAddedGroupIds cleanup as the real Discard path (see
+            // isDirty()'s doc comment), otherwise photos captured this visit orphan permanently.
+            existing?.expense?.id?.let { expenseId ->
+                sessionAddedGroupIds.forEach { groupId -> stateManager.deleteAttachmentGroup(expenseId, groupId, context) }
+            }
             onDone()
             return
         }
@@ -343,14 +461,26 @@ fun ExpenseEditScreen(
         }
     }
 
-    BackHandler { attemptSaveAndClose() }
+    // Back arrow / system back / gesture: prompt only if something actually changed since opening —
+    // an untouched screen (nothing typed, or just viewing an existing expense) closes straight away,
+    // same as before this dialog existed.
+    fun handleBackPress() {
+        if (isDirty()) {
+            showDiscardConfirm = true
+        } else {
+            discardPendingAttachments(pendingAttachments, context)
+            onDone()
+        }
+    }
+
+    BackHandler { handleBackPress() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(languageManager.getString(if (existing != null) "edit_expense" else "new_expense")) },
                 navigationIcon = {
-                    IconButton(onClick = ::attemptSaveAndClose) {
+                    IconButton(onClick = ::handleBackPress) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = languageManager.getString("back"))
                     }
                 },
@@ -379,7 +509,7 @@ fun ExpenseEditScreen(
             }
             if (existing?.expense?.id != null) {
                 item {
-                    ExpenseAttachmentsSection(existing.expense.id, imageName, stateManager)
+                    ExpenseAttachmentsSection(existing.expense.id, imageName, stateManager, pendingSuggestion)
                 }
             } else {
                 item {
@@ -398,32 +528,32 @@ fun ExpenseEditScreen(
                         label = languageManager.getString("expense_title_optional"),
                         value = title,
                         onValueChange = { title = it },
-                        suggestion = pendingSuggestion?.title?.takeIf { it != title }?.let { suggested ->
-                            { FieldSuggestionChip(suggested) { title = suggested } }
+                        suggestion = pendingSuggestion?.title?.takeIf { it != title && "title" !in dismissedSuggestionFields }?.let { suggested ->
+                            { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "title" }) { title = suggested } }
                         }
                     )
                     PaperField(
                         label = languageManager.getString("expense_vendor"),
                         value = vendor,
                         onValueChange = { vendor = it },
-                        suggestion = pendingSuggestion?.vendor?.takeIf { it != vendor }?.let { suggested ->
-                            { FieldSuggestionChip(suggested) { vendor = suggested } }
+                        suggestion = pendingSuggestion?.vendor?.takeIf { it != vendor && "vendor" !in dismissedSuggestionFields }?.let { suggested ->
+                            { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "vendor" }) { vendor = suggested } }
                         }
                     )
                     PaperField(
                         label = languageManager.getString("expense_bank"),
                         value = bank,
                         onValueChange = { bank = it },
-                        suggestion = pendingSuggestion?.bank?.takeIf { it != bank }?.let { suggested ->
-                            { FieldSuggestionChip(suggested) { bank = suggested } }
+                        suggestion = pendingSuggestion?.bank?.takeIf { it != bank && "bank" !in dismissedSuggestionFields }?.let { suggested ->
+                            { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "bank" }) { bank = suggested } }
                         }
                     )
                     PaperField(
                         label = languageManager.getString("expense_location"),
                         value = location,
                         onValueChange = { location = it },
-                        suggestion = pendingSuggestion?.location?.takeIf { it != location }?.let { suggested ->
-                            { FieldSuggestionChip(suggested) { location = suggested } }
+                        suggestion = pendingSuggestion?.location?.takeIf { it != location && "location" !in dismissedSuggestionFields }?.let { suggested ->
+                            { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "location" }) { location = suggested } }
                         }
                     )
                     PaperTapField(
@@ -438,9 +568,12 @@ fun ExpenseEditScreen(
                                 modifier = Modifier.size(20.dp)
                             )
                         },
-                        suggestion = pendingSuggestion?.dateTime?.takeIf { it != dateTime }?.let { suggested ->
+                        suggestion = pendingSuggestion?.dateTime?.takeIf { it != dateTime && "dateTime" !in dismissedSuggestionFields }?.let { suggested ->
                             {
-                                FieldSuggestionChip(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(suggested))) {
+                                FieldSuggestionChip(
+                                    DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(suggested)),
+                                    onDismiss = { dismissedSuggestionFields += "dateTime" }
+                                ) {
                                     dateTime = suggested
                                 }
                             }
@@ -465,7 +598,7 @@ fun ExpenseEditScreen(
                         // paths, to keep applying a suggestion a synchronous, no-surprises action.
                         val suggestedCategory = pendingSuggestion?.category?.let { name ->
                             categories.firstOrNull { it.name.equals(name, ignoreCase = true) }
-                        }?.takeIf { it.id != categoryId }
+                        }?.takeIf { it.id != categoryId && "category" !in dismissedSuggestionFields }
                         PaperTapField(
                             label = languageManager.getString("expense_category"),
                             value = categories.firstOrNull { it.id == categoryId }?.name ?: languageManager.getString("none"),
@@ -479,7 +612,7 @@ fun ExpenseEditScreen(
                                 )
                             },
                             suggestion = suggestedCategory?.let { cat ->
-                                { FieldSuggestionChip(cat.name) { categoryId = cat.id } }
+                                { FieldSuggestionChip(cat.name, onDismiss = { dismissedSuggestionFields += "category" }) { categoryId = cat.id } }
                             }
                         )
                         DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
@@ -527,22 +660,24 @@ fun ExpenseEditScreen(
                             modifier = Modifier.weight(1f),
                             suggestion = pendingSuggestion?.totalAmount
                                 ?.let { formatDecimal(it, useComma) }
-                                ?.takeIf { it != totalText }
-                                ?.let { suggested -> { FieldSuggestionChip(suggested) { totalText = suggested } } }
+                                ?.takeIf { it != totalText && "totalAmount" !in dismissedSuggestionFields }
+                                ?.let { suggested ->
+                                    { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "totalAmount" }) { totalText = suggested } }
+                                }
                         )
                         PaperField(
                             label = languageManager.getString("expense_currency"),
                             value = currency,
                             onValueChange = { currency = it.uppercase().take(3) },
                             modifier = Modifier.weight(0.6f),
-                            suggestion = pendingSuggestion?.currencyCode?.takeIf { it != currency }?.let { suggested ->
-                                { FieldSuggestionChip(suggested) { currency = suggested } }
+                            suggestion = pendingSuggestion?.currencyCode?.takeIf { it != currency && "currencyCode" !in dismissedSuggestionFields }?.let { suggested ->
+                                { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "currencyCode" }) { currency = suggested } }
                             }
                         )
                     }
                     if (totalMismatch) {
                         Text(
-                            languageManager.getString("expense_total_mismatch"),
+                            "${languageManager.getString("expense_total_mismatch")} (${formatDecimal(itemsSum, useComma)})",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -592,13 +727,15 @@ fun ExpenseEditScreen(
                     // Line items found by a rescan (see PendingFieldSuggestion.itemsJson's doc
                     // comment) — a full-list "apply all" action, not a per-field diff like the
                     // scalar fields above, since there's no meaningful per-item comparison against
-                    // whatever's already in the draft. itemsSuggestionApplied hides the banner once
-                    // tapped (resets whenever a genuinely new suggestion arrives).
+                    // whatever's already in the draft. appliedItemsJson (NOT remember(key)-scoped —
+                    // deliberately a single persistent slot, compared by value against the current
+                    // suggestion) hides the banner once tapped/dismissed for that exact itemsJson
+                    // content; a genuinely new suggestion (different itemsJson) still shows it again.
                     val suggestedItems = remember(pendingSuggestion?.itemsJson) {
                         PendingLineItemsJson.decode(pendingSuggestion?.itemsJson)
                     }
-                    var itemsSuggestionApplied by remember(pendingSuggestion?.itemsJson) { mutableStateOf(false) }
-                    if (suggestedItems.isNotEmpty() && !itemsSuggestionApplied) {
+                    var appliedItemsJson by remember { mutableStateOf<String?>(null) }
+                    if (suggestedItems.isNotEmpty() && pendingSuggestion?.itemsJson != appliedItemsJson) {
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 languageManager.getString("lineitems_suggestion_found"),
@@ -607,7 +744,19 @@ fun ExpenseEditScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             FieldSuggestionChip(
-                                String.format(languageManager.getString("lineitems_suggestion_apply_n"), suggestedItems.size)
+                                String.format(languageManager.getString("lineitems_suggestion_apply_n"), suggestedItems.size),
+                                onDismiss = {
+                                    // Dismissing the suggestion also removes the scan that produced it
+                                    // (see PendingFieldSuggestion.sourceGroupId's doc comment) — the
+                                    // user rejected the rescan's findings, so the photos it was based on
+                                    // shouldn't linger attached with no suggestion left to act on them.
+                                    val groupId = pendingSuggestion?.sourceGroupId
+                                    if (existing != null && groupId != null) {
+                                        stateManager.deleteAttachmentGroup(existing.expense.id, groupId, context)
+                                    }
+                                    existing?.expense?.id?.let { stateManager.clearPendingFieldSuggestion(it) }
+                                    appliedItemsJson = pendingSuggestion?.itemsJson
+                                }
                             ) {
                                 suggestedItems.forEach { parsedItem ->
                                     items.add(
@@ -621,9 +770,18 @@ fun ExpenseEditScreen(
                                         )
                                     )
                                 }
-                                itemsSuggestionApplied = true
+                                appliedItemsJson = pendingSuggestion?.itemsJson
                             }
                         }
+                    }
+
+                    if (possibleDuplicateIndices.isNotEmpty()) {
+                        Text(
+                            languageManager.getString("possible_duplicate_items_warning"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
                     }
 
                     if (items.isNotEmpty()) {
@@ -635,6 +793,7 @@ fun ExpenseEditScreen(
                             item = draftItem,
                             vatDisplayEnabled = vatDisplayEnabled,
                             languageManager = languageManager,
+                            possibleDuplicate = index in possibleDuplicateIndices,
                             onCommit = { items[index] = it },
                             onDelete = { pendingDeleteItemIndex = index }
                         )
@@ -690,6 +849,33 @@ fun ExpenseEditScreen(
             text = {
                 TimePicker(state = timePickerState)
             }
+        )
+    }
+
+    if (showDiscardConfirm) {
+        ConfirmDiscardDialog(
+            onSave = {
+                showDiscardConfirm = false
+                attemptSaveAndClose()
+            },
+            onDiscard = {
+                showDiscardConfirm = false
+                discardPendingAttachments(pendingAttachments, context)
+                // Photos captured/picked during this visit are exactly the kind of not-yet-committed
+                // change "discard" should throw away too (see sessionAddedGroupIds' doc comment) —
+                // without this they stayed permanently attached even though the scan they existed for
+                // was rejected.
+                existing?.expense?.id?.let { expenseId ->
+                    sessionAddedGroupIds.forEach { groupId -> stateManager.deleteAttachmentGroup(expenseId, groupId, context) }
+                }
+                // A pending rescan suggestion (chips + line-items banner) is exactly the kind of
+                // not-yet-applied change "discard" should throw away too — otherwise it just
+                // reappears next time this record is opened, since it's a separate DB row that
+                // saving (not discarding) is the only other thing that clears.
+                existing?.expense?.id?.let { stateManager.clearPendingFieldSuggestion(it) }
+                onDone()
+            },
+            onCancel = { showDiscardConfirm = false }
         )
     }
 
@@ -815,52 +1001,54 @@ private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium)
 }
 
-/** One photo this expense could send to the LLM on retry: the original scan, or a manually-added
- *  attachment (see :core:attachments). [dirName]/[fileName] locate the actual file for
- *  [MultimodalAttachmentResolver]; [isOriginalScan] picks which resolver function/downscaling
- *  convention applies. */
-private data class RetryPhotoCandidate(
-    val label: String,
-    val dirName: String,
-    val fileName: String,
-    val isOriginalScan: Boolean
-)
-
+/** No more picker — retry now always operates on everything currently attached to this never-
+ *  reviewed stub, exactly like rescan operates on a photo's whole group elsewhere: there is nothing
+ *  left to distinguish "the original scan" from "a manually-added photo," since every Expenses
+ *  attachment already gets its own OCR text at capture time. [imageName] is only still meaningful for
+ *  a legacy (pre-attachment-model) stub that has no manual attachments at all — its OCR text was
+ *  already saved next to that scan photo at creation time, so retrying it needs no fresh Vision round
+ *  trip; a stub with manual attachments retries all of them together instead. */
 @Composable
 private fun StubRetryBanner(expenseId: Long, imageName: String?, stateManager: ExpensesStateManager, onDone: () -> Unit) {
     val context = LocalContext.current
     val languageManager = LocalLanguageManager.current
     val scope = rememberCoroutineScope()
     var retrying by remember { mutableStateOf(false) }
-    var showPicker by remember { mutableStateOf(false) }
     val manualAttachments by stateManager.observeAttachments(expenseId).collectAsStateWithLifecycle(initialValue = emptyList())
 
-    fun sendRetry(candidate: RetryPhotoCandidate) {
-        val rawTextFile = imageName?.let {
-            File(File(context.filesDir, "receipts"), it.substringBeforeLast('.') + ".txt")
-        }
-        val rawText = rawTextFile?.takeIf { it.exists() }?.readText()
-        if (imageName == null || rawText.isNullOrBlank()) {
+    fun sendRetry() {
+        if (manualAttachments.isNotEmpty()) {
+            // Fires a fresh headless-OCR retry request per attachment — OcrResultReceiver's
+            // isRetryWithPhoto branch waits for every one of them, then combines the whole batch
+            // (--- Page N --- separated, same shape as a group rescan) into one direct-overwrite.
+            retrying = true
+            manualAttachments.forEach { entity ->
+                val uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, ExpensesAttachments.DIR, entity.fileName)
+                ExpenseScanRequestSender.sendHeadlessRetryOcr(context, expenseId, ExpensesAttachments.DIR, entity.fileName, uri)
+            }
+        } else if (imageName != null) {
+            val rawTextFile = File(File(context.filesDir, "receipts"), imageName.substringBeforeLast('.') + ".txt")
+            val rawText = rawTextFile.takeIf { it.exists() }?.readText()
+            if (rawText.isNullOrBlank()) {
+                Toast.makeText(context, languageManager.getString("retry_cleanup_no_saved_text"), Toast.LENGTH_LONG).show()
+                return
+            }
+            retrying = true
+            val container = (context.applicationContext as ExpensesApplication).container
+            scope.launch {
+                // Same staged AI copy OcrResultReceiver already prepared for the original scan (if
+                // Vision's own setting produced one) — gated on its own attachPhotoOnRetry toggle,
+                // separate from attachPhotoOnScan (see ExpensesSettings' doc comments for why retry is
+                // treated as a distinct decision).
+                val attachOnRetry = container.settingsRepository.getSnapshot().attachPhotoOnRetry
+                val attachmentUri = MultimodalAttachmentResolver.resolve(context, imageName, attachOnRetry)
+                ExpenseScanCleanupRequestSender.send(
+                    context, container, rawText, imageName, retryOfExpenseId = expenseId, attachmentUri = attachmentUri
+                )
+            }
+        } else {
             Toast.makeText(context, languageManager.getString("retry_cleanup_no_saved_text"), Toast.LENGTH_LONG).show()
             return
-        }
-        retrying = true
-        val container = (context.applicationContext as ExpensesApplication).container
-        scope.launch {
-            // Same staged AI copy OcrResultReceiver already prepared for the original scan (if
-            // Vision's own setting produced one) — gated on its own attachPhotoOnRetry toggle,
-            // separate from attachPhotoOnScan (see ExpensesSettings' doc comments for why retry is
-            // treated as a distinct decision). Applies to a manually-picked candidate too, so the
-            // toggle stays a single "attach a photo on retry, yes/no" decision either way.
-            val attachOnRetry = container.settingsRepository.getSnapshot().attachPhotoOnRetry
-            val attachmentUri = if (candidate.isOriginalScan) {
-                MultimodalAttachmentResolver.resolve(context, imageName, attachOnRetry)
-            } else {
-                MultimodalAttachmentResolver.resolveArbitraryFile(context, candidate.dirName, candidate.fileName, attachOnRetry)
-            }
-            ExpenseScanCleanupRequestSender.send(
-                context, container, rawText, imageName, retryOfExpenseId = expenseId, attachmentUri = attachmentUri
-            )
         }
         Toast.makeText(context, languageManager.getString("retrying_scan"), Toast.LENGTH_SHORT).show()
         onDone()
@@ -885,72 +1073,47 @@ private fun StubRetryBanner(expenseId: Long, imageName: String?, stateManager: E
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
-            Button(
-                enabled = !retrying,
-                onClick = {
-                    // Only the original scan exists as a candidate unless manual attachments have
-                    // also been added — in that common case, behave exactly as before (no picker).
-                    if (manualAttachments.isEmpty() || imageName == null) {
-                        sendRetry(RetryPhotoCandidate(languageManager.getString("retry_original_scan"), "receipts", imageName.orEmpty(), isOriginalScan = true))
-                    } else {
-                        showPicker = true
-                    }
-                }
-            ) {
+            Button(enabled = !retrying, onClick = { sendRetry() }) {
                 Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(languageManager.getString("retry_cleanup"))
             }
         }
     }
-
-    if (showPicker && imageName != null) {
-        val candidates = remember(manualAttachments) {
-            listOf(RetryPhotoCandidate(languageManager.getString("retry_original_scan"), "receipts", imageName, isOriginalScan = true)) +
-                manualAttachments.mapIndexed { index, entity ->
-                    RetryPhotoCandidate(
-                        String.format(languageManager.getString("retry_attachment_n"), index + 1),
-                        ExpensesAttachments.DIR,
-                        entity.fileName,
-                        isOriginalScan = false
-                    )
-                }
-        }
-        AlertDialog(
-            onDismissRequest = { showPicker = false },
-            title = { Text(languageManager.getString("retry_pick_photo")) },
-            text = {
-                Column {
-                    candidates.forEach { candidate ->
-                        TextButton(
-                            onClick = {
-                                showPicker = false
-                                sendRetry(candidate)
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(candidate.label, modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showPicker = false }) { Text(languageManager.getString("cancel")) }
-            }
-        )
-    }
 }
 
 /** Unifies the original receipt scan (if any — first, non-removable) with manually-added
  *  attachments (see :core:attachments) into one section, per the shared AttachmentsSection UI. */
 @Composable
-private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?, stateManager: ExpensesStateManager) {
+private fun ExpenseAttachmentsSection(
+    expenseId: Long,
+    receiptImageName: String?,
+    stateManager: ExpensesStateManager,
+    pendingSuggestion: PendingFieldSuggestion?
+) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val manualEntities by stateManager.observeAttachments(expenseId).collectAsStateWithLifecycle(initialValue = emptyList())
+    // Blocks a second rescan trigger (manual icon or auto-trigger-on-first-photo) while one is
+    // already in flight for this expense — without this, rescanning two different attachments back
+    // to back races two LLM replies against PendingFieldSuggestion's single per-expense row, and
+    // whichever lands second silently discards everything the first one found (REPLACE, not merge).
+    // Cleared once a fresh suggestion reply actually lands (pendingSuggestion changes); the timeout
+    // below is a safety net so a lost/failed request (Commander crash, dropped broadcast) doesn't
+    // leave rescanning permanently blocked for the rest of this screen visit.
+    var rescanInFlight by remember { mutableStateOf(false) }
+    LaunchedEffect(pendingSuggestion) {
+        rescanInFlight = false
+    }
+    LaunchedEffect(rescanInFlight) {
+        if (rescanInFlight) {
+            delay(45_000)
+            rescanInFlight = false
+        }
+    }
     val items = remember(receiptImageName, manualEntities) {
+        val groupSizes = manualEntities.mapNotNull { it.groupId }.groupingBy { it }.eachCount()
         buildList {
             if (!receiptImageName.isNullOrBlank()) {
                 add(
@@ -963,62 +1126,120 @@ private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?
             }
             addAll(
                 manualEntities.map { e ->
+                    val groupSize = e.groupId?.let { groupSizes[it] } ?: 0
                     AttachmentUiItem(
                         id = e.id,
                         uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, ExpensesAttachments.DIR, e.fileName),
-                        removable = true
+                        removable = true,
+                        groupLabel = if (groupSize > 1) "${e.groupOrder + 1}/$groupSize" else null,
+                        groupKey = e.groupId,
+                        groupSource = e.source
                     )
                 }
             )
         }
     }
-    // Extracts line items from an attached photo into this already-saved expense — the photo may
-    // have been added well after the expense was created (voice/notification-created expenses have
-    // no receipt at all), so unlike the original scan there's no OCR text, only the image itself; see
-    // ExpenseScanCleanupRequestSender.sendLineItemsRescan's doc comment for why that's image-only.
-    // Shared by the manual per-attachment chip and the auto-trigger-on-first-photo setting below.
-    fun triggerRescan(dirName: String, fileName: String, silent: Boolean) {
-        val container = (context.applicationContext as ExpensesApplication).container
-        scope.launch {
-            val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(context, dirName, fileName, attachEnabled = true)
-            if (attachmentUri == null) {
-                if (!silent) {
-                    Toast.makeText(context, languageManager.getString("rescan_lineitems_multimodal_required"), Toast.LENGTH_LONG).show()
-                }
-                return@launch
+    // Extracts fields/line items from an attached photo into this already-saved expense — the photo
+    // may have been added well after the expense was created (voice/notification-created expenses
+    // have no receipt at all). Vision OCRs it headlessly first, no camera UI (see
+    // ExpenseScanRequestSender.sendHeadlessRescan) — OcrResultReceiver's EXPENSE_LINEITEMS_RESCAN
+    // branch then sends that text, plus the photo itself gated on attachPhotoOnRetry, to the LLM: the
+    // exact same two-step "OCR then LLM" shape "Retry cleanup" already uses, just staged as a review
+    // suggestion on reply instead of a direct overwrite (see LlmTasks.EXPENSE_LINEITEMS_RESCAN's doc
+    // comment for why). Shared by the manual per-attachment chip and the auto-trigger setting below.
+    // Takes every group member at once (not one call per photo) since [rescanInFlight] gates one
+    // LOGICAL rescan operation per expense at a time — a group's photos all belong to the same
+    // operation, so they share a single guard check/set instead of each racing it independently
+    // (which would silently drop every member after the first). See OcrResultReceiver's
+    // EXPENSE_LINEITEMS_RESCAN branch for how the resulting per-photo OCR replies get recombined.
+    fun triggerRescan(dirName: String, fileNames: List<String>, silent: Boolean) {
+        if (fileNames.isEmpty()) return
+        if (rescanInFlight) {
+            if (!silent) {
+                Toast.makeText(context, languageManager.getString("rescan_lineitems_already_in_progress"), Toast.LENGTH_SHORT).show()
             }
-            ExpenseScanCleanupRequestSender.sendLineItemsRescan(context, container, expenseId, attachmentUri)
+            return
+        }
+        rescanInFlight = true
+        fileNames.forEach { fileName ->
+            val uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, dirName, fileName)
+            ExpenseScanRequestSender.sendHeadlessRescan(context, expenseId, dirName, fileName, uri)
+        }
+        if (!silent) {
             Toast.makeText(context, languageManager.getString("rescan_lineitems_started"), Toast.LENGTH_SHORT).show()
         }
     }
 
     fun rescanAttachmentForLineItems(item: AttachmentUiItem) {
         if (item.id == -1L) {
-            receiptImageName?.let { triggerRescan("receipts", it, silent = false) }
+            receiptImageName?.let { triggerRescan("receipts", listOf(it), silent = false) }
         } else {
-            manualEntities.firstOrNull { it.id == item.id }?.let { triggerRescan(ExpensesAttachments.DIR, it.fileName, silent = false) }
+            val tapped = manualEntities.firstOrNull { it.id == item.id } ?: return
+            val groupFileNames = tapped.groupId?.let { gid ->
+                manualEntities.filter { it.groupId == gid }.sortedBy { it.groupOrder }.map { it.fileName }
+            } ?: listOf(tapped.fileName)
+            triggerRescan(ExpensesAttachments.DIR, groupFileNames, silent = false)
         }
     }
 
-    fun handlePickedUri(uri: Uri?) {
-        if (uri != null) {
-            // Eligibility read BEFORE staging: `items` is this composition's snapshot of what the
-            // record had prior to this pick (the DB write below hasn't round-tripped back through
-            // the observing Flow yet) — exactly the "currently zero attachments" check the
-            // auto-rescan setting needs (see ExpensesSettings.autoRescanOnFirstAttachment's doc
-            // comment for the zero-to-one rule).
-            val wasEmpty = items.isEmpty()
-            AttachmentFileStore.stage(context, uri, ExpensesAttachments.DIR)?.let { fileName ->
-                stateManager.addManualAttachment(expenseId, fileName)
-                val container = (context.applicationContext as ExpensesApplication).container
-                if (wasEmpty && container.settingsRepository.getSnapshot().autoRescanOnFirstAttachment) {
-                    triggerRescan(ExpensesAttachments.DIR, fileName, silent = true)
-                }
+    fun settingsSnapshot() = (context.applicationContext as ExpensesApplication).container.settingsRepository.getSnapshot()
+    fun autoRescanEnabled() = settingsSnapshot().autoRescanOnFirstAttachment
+
+    // Gallery multi-select: several photos picked at once become one group (a single pick stays
+    // groupId = null, identical to today's one-photo attach). `wasEmpty`/whether to auto-rescan is
+    // decided once for the whole batch — synchronous within this one call, so there's no Flow-timing
+    // gap to worry about (unlike the live-capture burst below, where shots land asynchronously across
+    // several recompositions).
+    fun handlePickedUris(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val wasEmpty = items.isEmpty()
+        val groupId = if (uris.size > 1) UUID.randomUUID().toString() else null
+        val stagedFileNames = uris.mapIndexedNotNull { index, uri ->
+            AttachmentFileStore.stage(context, uri, ExpensesAttachments.DIR)?.also { fileName ->
+                stateManager.addManualAttachment(expenseId, fileName, groupId, index)
             }
         }
+        if (wasEmpty && stagedFileNames.isNotEmpty() && autoRescanEnabled()) {
+            triggerRescan(ExpensesAttachments.DIR, stagedFileNames, silent = true)
+        }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
-    val takePhoto = rememberCameraCaptureLauncher(ExpensesAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
+
+    // OcrResultReceiver's EXPENSE_ATTACHMENT_CAPTURE branch now owns the whole "stage the captured
+    // photo(s), OCR whatever doesn't already have text, and — only when this was the expense's very
+    // first attachment and auto-rescan is on — auto-combine+send" flow entirely on its own (mirrors
+    // handlePickedUris' own wasEmpty/autoRescanEnabled gate for a gallery pick). Nothing left for this
+    // composable to react to once capture finishes — Vision's own capture session owns the whole
+    // "keep shooting" loop too, so these calls are just "launch and forget."
+    val takePhotoSingle = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.EXPENSE_ATTACHMENT_CAPTURE}:$expenseId", hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE
+    )
+    val takePhotoStitch = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.EXPENSE_ATTACHMENT_CAPTURE}:$expenseId", hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH
+    )
+    val takePhotoBatch = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.EXPENSE_ATTACHMENT_CAPTURE}:$expenseId", hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
+    )
+    // Zero attachments yet: offer single + stitch — either one triggers the "first attachment
+    // updates the record" auto-flow above (a stitch group here is genuinely one document, one JSON —
+    // see OcrResultReceiver.handleAttachmentCapture). Already has attachments: switch to single +
+    // batch — a single addition just stages passively (no auto-rescan, matches today's behavior for
+    // an n-th photo), while batch gives each new photo its own independent rescan suggestion, never
+    // combined with the existing data (see the same receiver branch's batch sub-path).
+    val captureActions = if (items.isEmpty()) {
+        listOf(
+            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
+            SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch"), takePhotoStitch)
+        )
+    } else {
+        listOf(
+            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
+            SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch"), takePhotoBatch)
+        )
+    }
+    val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> handlePickedUris(uris) }
 
     var pendingRemoveAttachment by remember { mutableStateOf<AttachmentUiItem?>(null) }
 
@@ -1026,15 +1247,22 @@ private fun ExpenseAttachmentsSection(expenseId: Long, receiptImageName: String?
         title = languageManager.getString("attachments"),
         items = items,
         canAdd = manualEntities.size < 10,
-        onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-        onTakePhoto = takePhoto,
+        onPickFromGallery = {
+            pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        },
+        captureActions = captureActions,
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
-        cameraLabel = languageManager.getString("attachment_take_photo"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item -> pendingRemoveAttachment = item },
         modifier = Modifier.padding(bottom = 12.dp),
-        onAction = ::rescanAttachmentForLineItems,
-        actionContentDescription = languageManager.getString("rescan_lineitems_action")
+        onRescan = ::rescanAttachmentForLineItems,
+        groupDelete = GroupDeleteConfig(
+            onDeleteGroup = { groupId -> stateManager.deleteAttachmentGroup(expenseId, groupId, context) },
+            confirmTitle = languageManager.getString("delete_attachment_group_title"),
+            confirmMessage = languageManager.getString("delete_attachment_group_message"),
+            confirmLabel = languageManager.getString("delete"),
+            cancelLabel = languageManager.getString("cancel")
+        )
     )
 
     pendingRemoveAttachment?.let { item ->
@@ -1084,9 +1312,11 @@ private fun PendingExpenseAttachmentsSection(pendingAttachments: List<String>, o
         items = items,
         canAdd = pendingAttachments.size < 10,
         onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-        onTakePhoto = takePhoto,
+        // Draft (not-yet-saved) expense attachments still use the plain system camera, not Vision —
+        // out of scope for the single/stitch/batch speed dial (no OCR/record concept exists yet for
+        // a draft), so this is just the one existing "take photo" action, unchanged behavior.
+        captureActions = listOf(SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("attachment_take_photo"), takePhoto)),
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
-        cameraLabel = languageManager.getString("attachment_take_photo"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item -> pendingRemoveAttachment = item },
         modifier = Modifier.padding(bottom = 12.dp)
@@ -1113,19 +1343,29 @@ private fun PendingExpenseAttachmentsSection(pendingAttachments: List<String>, o
  *  chips (RulesManagerScreen's TokenSelectorSection) — permanently "on" styling rather than a
  *  toggle, since tapping here fires [onClick] once and the chip disappears (the caller applies the
  *  suggested value to local state, which makes the underlying diff go to false on the next
- *  recomposition — no separate dismissed/applied tracking needed). */
+ *  recomposition — no separate dismissed/applied tracking needed). [onDismiss], when supplied, renders
+ *  a small trailing "x" that rejects the suggestion instead of applying it — the caller is expected to
+ *  record that rejection itself (see `dismissedSuggestionFields` in ExpenseEditScreen), since this
+ *  composable has no notion of "which field" it's showing a suggestion for. */
 @Composable
-private fun FieldSuggestionChip(value: String, onClick: () -> Unit) {
+private fun FieldSuggestionChip(value: String, onDismiss: (() -> Unit)? = null, onClick: () -> Unit) {
     FilterChip(
         selected = true,
         onClick = onClick,
         label = { Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        trailingIcon = onDismiss?.let {
+            {
+                IconButton(onClick = it, modifier = Modifier.size(18.dp)) {
+                    Icon(Icons.Filled.Close, contentDescription = LocalLanguageManager.current.getString("dismiss_suggestion"), tint = Color.White)
+                }
+            }
+        },
         shape = RoundedCornerShape(16.dp),
         colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = Color(0xFF4CAF50),
             selectedLabelColor = Color.White
         ),
-        modifier = Modifier.padding(start = 6.dp).widthIn(max = 140.dp)
+        modifier = Modifier.padding(start = 6.dp).widthIn(max = if (onDismiss != null) 170.dp else 140.dp)
     )
 }
 
@@ -1220,6 +1460,27 @@ private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () ->
 }
 
 @Composable
+private fun ConfirmDiscardDialog(onSave: () -> Unit, onDiscard: () -> Unit, onCancel: () -> Unit) {
+    val languageManager = LocalLanguageManager.current
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(languageManager.getString("discard_changes_title")) },
+        text = { Text(languageManager.getString("discard_changes_message")) },
+        confirmButton = {
+            TextButton(onClick = onSave) { Text(languageManager.getString("save")) }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDiscard) {
+                    Text(languageManager.getString("discard"), color = OffenseRed)
+                }
+                TextButton(onClick = onCancel) { Text(languageManager.getString("cancel")) }
+            }
+        }
+    )
+}
+
+@Composable
 private fun ConfirmCleanupDialog(dirtyFields: List<DirtyField>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val languageManager = LocalLanguageManager.current
     AlertDialog(
@@ -1279,6 +1540,7 @@ private fun LineItemCard(
     item: LineItemDraft,
     vatDisplayEnabled: Boolean,
     languageManager: com.voxapps.expenses.domain.localization.LanguageManager,
+    possibleDuplicate: Boolean = false,
     onCommit: (LineItemDraft) -> Unit,
     onDelete: () -> Unit
 ) {
@@ -1300,6 +1562,7 @@ private fun LineItemCard(
                         item.name.ifBlank { "—" },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        color = if (possibleDuplicate) MaterialTheme.colorScheme.error else Color.Unspecified,
                         modifier = Modifier.weight(1.4f)
                     )
                     Text(item.quantityText, modifier = Modifier.weight(0.7f))

@@ -2,6 +2,7 @@ package com.voxapps.expenses.domain.llm
 
 import com.voxapps.datahygiene.optCleanString
 import com.voxapps.expenses.data.TransactionDirection
+import com.voxapps.logging.Logger
 import com.voxapps.schema.VoxExtractionSchema
 import org.json.JSONArray
 import org.json.JSONObject
@@ -12,6 +13,8 @@ import org.json.JSONObject
  * [parse] returns null (discard, don't create a broken expense) if it's missing or unparseable.
  */
 object ExpenseParseResultParser {
+    private const val TAG = "ExpenseParseResultParser"
+
     data class ParsedItem(
         val name: String,
         val quantity: Double,
@@ -76,10 +79,22 @@ object ExpenseParseResultParser {
 
         val itemsArray = o.optJSONArray("items") ?: JSONArray()
         val items = (0 until itemsArray.length()).mapNotNull { i ->
-            val item = itemsArray.optJSONObject(i) ?: return@mapNotNull null
-            val name = item.optCleanString("name") ?: return@mapNotNull null
+            val item = itemsArray.optJSONObject(i)
+            if (item == null) {
+                Logger.w(TAG, "Dropping items[$i]: not a JSON object")
+                return@mapNotNull null
+            }
+            val name = item.optCleanString("name")
+            if (name == null) {
+                Logger.w(TAG, "Dropping items[$i]: missing/blank \"name\" ($item)")
+                return@mapNotNull null
+            }
             val quantity = item.optNullableDouble("quantity") ?: 1.0
-            val unitPrice = item.optNullableDouble("unitPrice") ?: return@mapNotNull null
+            val unitPrice = item.optNullableDouble("unitPrice")
+            if (unitPrice == null) {
+                Logger.w(TAG, "Dropping items[$i] \"$name\": missing/unparseable \"unitPrice\" ($item)")
+                return@mapNotNull null
+            }
             ParsedItem(
                 name = name,
                 quantity = quantity,

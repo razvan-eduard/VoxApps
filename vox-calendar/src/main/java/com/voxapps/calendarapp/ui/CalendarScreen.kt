@@ -14,13 +14,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -53,6 +58,7 @@ import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.ipc.VoxOcrRequest
 import java.text.DateFormat
 import java.time.Instant
 import java.time.ZoneId
@@ -105,35 +111,64 @@ fun CalendarScreen(
                     // identical gate.
                     val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
                     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+                    var showScanMenu by remember { mutableStateOf(false) }
                     val scanGate = rememberRequirementGate(
                         satisfied = visionInstalled && commanderInstalled,
                         requiredMessage = languageManager.getString(
                             if (!visionInstalled) "vision_required_message" else "commander_required_message"
                         )
-                    ) { CalendarScanRequestSender.send(context) }
-                    Surface(
-                        onClick = scanGate.onClick,
-                        shape = RoundedCornerShape(percent = 50),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(end = 4.dp)
-                            .alpha(scanGate.alpha)
-                            .semantics { contentDescription = languageManager.getString("scan_calendar_entry") }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) { showScanMenu = true }
+                    Box {
+                        Surface(
+                            onClick = scanGate.onClick,
+                            shape = RoundedCornerShape(percent = 50),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 4.dp)
+                                .alpha(scanGate.alpha)
+                                .semantics { contentDescription = languageManager.getString("scan_calendar_entry") }
                         ) {
-                            Icon(
-                                Icons.Filled.DocumentScanner,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(18.dp)
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.DocumentScanner,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    languageManager.getString("scan_action"),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+                        DropdownMenu(expanded = showScanMenu, onDismissRequest = { showScanMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(languageManager.getString("capture_mode_single")) },
+                                leadingIcon = { Icon(Icons.Filled.PhotoCamera, contentDescription = null) },
+                                onClick = {
+                                    showScanMenu = false
+                                    CalendarScanRequestSender.send(context, VoxOcrRequest.CAPTURE_MODE_SINGLE)
+                                }
                             )
-                            Text(
-                                languageManager.getString("scan_action"),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                style = MaterialTheme.typography.labelLarge
+                            DropdownMenuItem(
+                                text = { Text(languageManager.getString("capture_mode_stitch")) },
+                                leadingIcon = { Icon(Icons.Filled.Layers, contentDescription = null) },
+                                onClick = {
+                                    showScanMenu = false
+                                    CalendarScanRequestSender.send(context, VoxOcrRequest.CAPTURE_MODE_STITCH)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(languageManager.getString("capture_mode_batch")) },
+                                leadingIcon = { Icon(Icons.Filled.BurstMode, contentDescription = null) },
+                                onClick = {
+                                    showScanMenu = false
+                                    CalendarScanRequestSender.send(context, VoxOcrRequest.CAPTURE_MODE_BATCH)
+                                }
                             )
                         }
                     }

@@ -112,6 +112,8 @@
   "retention_never": "Nie",
   "retention_on_failure": "Bei Fehler",
   "retention_always": "Immer",
+  "delete_attachment_group_title": "Diese ganze Gruppe löschen?",
+  "delete_attachment_group_message": "Alle Fotos in dieser Gruppe werden entfernt.",
   "attachments": "Anhänge",
   "attachment_choose_gallery": "Aus Galerie wählen",
   "attachment_take_photo": "Foto aufnehmen",
@@ -174,5 +176,8 @@
   "notifications_length_desc": "Dauer und Vibrationsmuster",
   "notifications_length_short": "Kurz",
   "notifications_length_medium": "Mittel",
-  "notifications_length_long": "Lang"
+  "notifications_length_long": "Lang",
+  "capture_mode_single": "Einzelaufnahme",
+  "capture_mode_stitch": "Zusammenfügen",
+  "capture_mode_batch": "Stapel"
 }

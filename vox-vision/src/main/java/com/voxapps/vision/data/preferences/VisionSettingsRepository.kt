@@ -3,6 +3,7 @@ package com.voxapps.vision.data.preferences
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -18,7 +19,7 @@ class VisionSettingsRepository(context: Context) {
     private object Keys {
         val OCR_ZONE = stringPreferencesKey("ocr_zone")
         val AUTO_TRIGGER_SENSITIVITY = stringPreferencesKey("auto_trigger_sensitivity")
-        val AUTO_TRIGGER_STABILITY = stringPreferencesKey("auto_trigger_stability")
+        val AUTO_CAPTURE_DELAY_SECONDS = intPreferencesKey("auto_capture_delay_seconds")
         val FLASH_MODE = stringPreferencesKey("flash_mode")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
@@ -26,14 +27,23 @@ class VisionSettingsRepository(context: Context) {
         val PHOTO_DETAIL_FOR_AI = stringPreferencesKey("photo_detail_for_ai")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
+        val STITCH_CONTINUITY_STRICTNESS = stringPreferencesKey("stitch_continuity_strictness")
     }
 
     companion object {
         const val DEFAULT_ZONE = "latin"
         const val DEFAULT_SENSITIVITY = "medium"
-        const val DEFAULT_STABILITY = "medium"
+        /** Sentinel for [autoCaptureDelaySecondsFlow] — auto-capture never fires, only the manual
+         *  capture button does. */
+        const val AUTO_CAPTURE_MANUAL = 0
+        const val DEFAULT_AUTO_CAPTURE_DELAY = 2
         const val DEFAULT_FLASH = "auto"
         const val DEFAULT_PHOTO_DETAIL = "medium"
+        // LAZY (not medium) is the out-of-the-box default — the realistic stitch shot is one short
+        // receipt line at a time, and LAZY's lower overlap-ratio requirement (vs. medium/strict) gives
+        // more headroom for OCR noise or a partial (not whole-line) overlap between shots. See
+        // com.voxapps.vision.ocr.ContinuityMatcher's Strictness doc comments for the full reasoning.
+        const val DEFAULT_STITCH_STRICTNESS = "lazy"
 
         // Same "SYSTEM"/"LIGHT"/"DARK" string encoding as com.voxapps.design.VoxDarkMode.name — kept
         // as plain strings here (rather than importing the enum) to match CalendarSettings'/
@@ -78,16 +88,18 @@ class VisionSettingsRepository(context: Context) {
 
     /**
      * Separate from [autoTriggerSensitivityFlow] — that controls how easily a SINGLE frame counts as
-     * "a document is framed" (contour size threshold); this controls how many CONSECUTIVE good frames
-     * are required before auto-capture actually fires (see [com.voxapps.vision.ui.captureStabilityTicks]).
-     * Low = fires fast but may capture a slightly blurred/not-yet-settled crop; High = waits longer for
-     * a well-defined crop, better OCR quality at the cost of a slower capture.
+     * "a document is framed" (contour size threshold) at all; this controls what happens once a
+     * document has been framed: [AUTO_CAPTURE_MANUAL] means capture never fires on its own (only the
+     * manual capture button does), any other value is the number of seconds the framing must hold
+     * before auto-capture fires on its own — see `com.voxapps.vision.ui.VisionScreen`'s
+     * `LaunchedEffect(cameraController)`. Replaces the old implicit tick-count "capture speed" setting
+     * with an explicit, user-facing delay.
      */
-    val autoTriggerStabilityFlow: Flow<String> =
-        dataStore.data.map { it[Keys.AUTO_TRIGGER_STABILITY] ?: DEFAULT_STABILITY }
+    val autoCaptureDelaySecondsFlow: Flow<Int> =
+        dataStore.data.map { it[Keys.AUTO_CAPTURE_DELAY_SECONDS] ?: DEFAULT_AUTO_CAPTURE_DELAY }
 
-    suspend fun setAutoTriggerStability(stability: String) {
-        dataStore.edit { it[Keys.AUTO_TRIGGER_STABILITY] = stability }
+    suspend fun setAutoCaptureDelaySeconds(seconds: Int) {
+        dataStore.edit { it[Keys.AUTO_CAPTURE_DELAY_SECONDS] = seconds }
     }
 
     val flashModeFlow: Flow<String> = dataStore.data.map { it[Keys.FLASH_MODE] ?: DEFAULT_FLASH }
@@ -143,5 +155,15 @@ class VisionSettingsRepository(context: Context) {
 
     suspend fun setThemeColored(enabled: Boolean) {
         dataStore.edit { it[Keys.THEME_COLORED] = enabled }
+    }
+
+    /** "strict" | "medium" | "lazy" — how much word-overlap [com.voxapps.vision.ocr.ContinuityMatcher]
+     *  requires between consecutive stitch shots before accepting the new one without a retake prompt.
+     *  See [com.voxapps.ipc.VoxOcrRequest.CAPTURE_MODE_STITCH]'s doc comment for the feature itself. */
+    val stitchContinuityStrictnessFlow: Flow<String> =
+        dataStore.data.map { it[Keys.STITCH_CONTINUITY_STRICTNESS] ?: DEFAULT_STITCH_STRICTNESS }
+
+    suspend fun setStitchContinuityStrictness(strictness: String) {
+        dataStore.edit { it[Keys.STITCH_CONTINUITY_STRICTNESS] = strictness }
     }
 }

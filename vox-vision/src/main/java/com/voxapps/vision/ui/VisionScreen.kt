@@ -14,15 +14,14 @@ import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,9 +29,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -41,7 +42,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -56,12 +57,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,22 +71,28 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.voxapps.design.DoubleBackToExitHandler
-import com.voxapps.design.rememberRequirementGate
+import com.voxapps.design.SpeedDialAction
+import com.voxapps.design.SpeedDialFab
 import androidx.core.content.FileProvider
 import java.io.File
 import java.util.UUID
 import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.vision.data.preferences.VisionSettingsRepository
 import com.voxapps.vision.di.VisionContainer
 import com.voxapps.vision.domain.OcrResultSender
 import com.voxapps.vision.domain.ScanTargetDiscovery
+import com.voxapps.vision.ocr.ContinuityMatcher
 import com.voxapps.vision.ocr.DocumentCropper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.opencv.core.Core
 import org.opencv.core.CvType
@@ -97,24 +105,54 @@ import java.util.concurrent.Executors
 private const val ANALYSIS_INTERVAL_MS = 80L
 
 /** Max per-edge drift (as a 0..1 fraction of frame size) between consecutive ticks' [DocumentCropper.
- *  LiveBounds] for auto-capture's stability counter to treat them as "the same document held in
- *  place" rather than resetting — see its doc comment in LaunchedEffect(cameraController). */
+ *  LiveBounds] for auto-capture's framing countdown to treat them as "the same document held in
+ *  place" rather than restarting — see LaunchedEffect(cameraController). */
 private const val BOUNDS_STABILITY_TOLERANCE = 0.05f
 
 /**
- * Maps the user's "Capture speed" setting to how many consecutive good-framing analysis ticks are
- * required before auto-capture fires — separate from [VisionSettingsRepository.autoTriggerSensitivityFlow],
- * which controls how easily a SINGLE frame counts as "framed" in the first place. At the original
- * fixed value (3 ticks * 400ms = 1.2s, now "low") capture often fired before the document was
- * well-cropped/focused, feeding OCR a slightly-off frame and producing garbled text (e.g. a legitimate
- * item's name coming out as a two-letter fragment) — "high" (7 ticks, ~2.8s) gives the framing more
- * time to settle first, at the cost of a slower capture.
+ * Guards every native OpenCV/OCR entry point this screen calls into — the live-preview analyzer's
+ * [DocumentCropper.detectLiveBounds] (on its own dedicated [Executors.newSingleThreadExecutor] thread)
+ * and the capture pipeline's [DocumentCropper.crop]/OCR-engine `recognize()` calls (on `Dispatchers.IO`
+ * threads, see [finishRecognition]). Before stitch mode existed, attachment captures never ran OCR
+ * (always `produceOCR=false`), so the analyzer thread and the capture pipeline never both did heavy
+ * native work at the same wall-clock moment. Stitch forces OCR on (see [effectiveProduceOCR]), which
+ * opened exactly that window — the Compose-state gates below (`isRecognizing`/`engineReady`/
+ * `showScanSuccess`) only block *new* analyzer ticks from being scheduled, they don't stop an
+ * already-running tick's native calls from overlapping a concurrent capture's native calls, which
+ * produced a native SIGSEGV inside libopencv on-device. A coroutine [Mutex] rather than a plain
+ * `java.util.concurrent.locks.Lock` is deliberate: the OCR call ([finishRecognition]) needs a suspend
+ * function (the OCR engine's `recognize()`) to run *inside* the locked section, and the Kotlin compiler
+ * flags that as a hard error for a plain `Lock`/`synchronized` ("suspension point is inside a critical
+ * section" — a real hazard for blocking locks, since a suspended coroutine might resume on a different
+ * thread, risking dispatcher-pool starvation). `Mutex` is coroutine-aware and has no such restriction.
+ * The live-preview analyzer callback isn't itself a suspend function, so it acquires the mutex via
+ * `runBlocking` — safe here specifically because [analysisExecutor] is this screen's own dedicated,
+ * private single thread, not a shared pool, so blocking it briefly has no starvation risk elsewhere;
+ * it only delays the next preview frame, which is already an accepted tradeoff.
  */
-private fun captureStabilityTicks(setting: String): Int = when (setting) {
-    "low" -> 3
-    "high" -> 7
-    else -> 5 // medium / unknown
+private val nativeCvLock = Mutex()
+
+/** A stitch shot whose text failed the continuity check against the previous accepted shot — held
+ *  here while the user decides retake vs. use-anyway (see [VisionScreen]'s `submit`). */
+private data class StitchCandidate(val text: String, val imageUri: String, val aiImageUri: String?)
+
+/** BATCH never runs OCR live (a fast tap-tap-tap capture loop — see
+ *  [VoxOcrRequest.CAPTURE_MODE_BATCH]'s doc comment); STITCH always does, regardless of the request's
+ *  own [VoxOcrRequest.produceOCR], since the continuity check needs text after every shot. SINGLE
+ *  keeps [VoxOcrRequest.produceOCR]'s own meaning unchanged. */
+private fun effectiveProduceOCR(captureMode: String, requestedProduceOCR: Boolean): Boolean = when (captureMode) {
+    VoxOcrRequest.CAPTURE_MODE_BATCH -> false
+    VoxOcrRequest.CAPTURE_MODE_STITCH -> true
+    else -> requestedProduceOCR
 }
+
+/** Joins a stitch session's per-shot texts into the one combined string that goes out as
+ *  [VoxOcrResult.rawText] — same `--- Page N ---` separator convention this codebase's other
+ *  page-combining call sites use (see e.g. `LineItemsRescanCombiner.combineGroupText` in
+ *  vox-expenses), so the LLM on the receiving end sees one clearly-segmented text and produces
+ *  exactly one JSON result, never per-shot fragments. */
+private fun combineStitchText(texts: List<String>): String =
+    texts.joinToString(ContinuityMatcher.STITCH_SEAM_MARKER)
 
 /**
  * Camera capture -> on-device OCR (PaddleOCR via [VisionContainer.ocrEngineForZone]) -> editable text
@@ -123,15 +161,20 @@ private fun captureStabilityTicks(setting: String): Int = when (setting) {
  * can receive a scan (see [ScanTargetDiscovery]), routing through that satellite's own scan-cleanup
  * LLM pipeline exactly like the pendingRequest reply does.
  *
- * Capture can be triggered manually (the "Scan" button, kept as a fallback for poor lighting or
- * irregular documents) or automatically: a low-frequency [ImageAnalysis] pass reuses
- * [DocumentCropper.hasDocumentQuad] on live preview frames, and once a document-sized quad is found
- * consistently for [captureStabilityTicks] ticks in a row, capture fires on its own. Auto-capture only
- * refills the recognized-text field, same as a manual tap — sending/saving the note is still a
- * deliberate final action, so a document left in frame after a successful auto-scan can't cause a
- * runaway loop of auto-submits (it can still re-trigger a harmless re-scan; the `armed` latch below
- * requires the frame to first go quad-less before arming the next auto-capture, to avoid burning
- * battery re-scanning the same still document every [captureStabilityTicks] ticks).
+ * Capture can be triggered manually (the FAB, always available whenever a target is chosen) or
+ * automatically: an [ImageAnalysis] pass reuses [DocumentCropper.detectLiveBounds] on live preview
+ * frames, and once a document is framed continuously for the user's configured
+ * [VisionSettingsRepository.autoCaptureDelaySecondsFlow] (Manual disables this entirely — only the FAB
+ * captures), capture fires on its own. Auto-capture only refills the recognized-text field, same as a
+ * manual tap — sending/saving the note is still a deliberate final action, so a document left in frame
+ * after a successful auto-scan can't cause a runaway loop of auto-submits (it can still re-trigger a
+ * harmless re-scan; the framing timer requires the frame to first go bounds-less, or jump to a
+ * different blob, before restarting the countdown). Both the live rectangle and auto-capture are
+ * skipped entirely for [VoxOcrRequest.CAPTURE_MODE_STITCH] — each stitch shot is a deliberate
+ * close-up of one segment of a larger document, not a whole framed page, so there's no full-page quad
+ * to detect; stitch is manual-FAB-only. [DocumentCropper.crop] itself still runs for stitch shots same
+ * as any other mode — its quad+perspective-warp path just finds nothing (safely) for a close-up and
+ * falls through to its own bounding-rect-around-the-largest-blob fallback.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -143,6 +186,14 @@ fun VisionScreen(
     onOpenSettings: () -> Unit,
     finishActivity: () -> Unit
 ) {
+    // A caller with an already-existing image (see VoxOcrRequest.imageUri) wants OCR text only, no
+    // camera UI at all — short-circuits before any of the camera/permission/preview setup below,
+    // which this path never needs.
+    if (pendingRequest?.imageUri != null) {
+        HeadlessOcrScreen(container = container, pendingRequest = pendingRequest, finishActivity = finishActivity)
+        return
+    }
+
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -158,7 +209,36 @@ fun VisionScreen(
 
     var rawText by remember { mutableStateOf("") }
     var lastScannedUri by remember { mutableStateOf<String?>(null) }
-    
+    // BATCH: accumulates cropped photo URIs across the session — see VoxOcrRequest.CAPTURE_MODE_BATCH's
+    // doc comment. OCR never runs per shot in this mode, so there's no text to track alongside these;
+    // the whole list goes out in one VoxOcrResult when the user taps Done.
+    var batchUris by remember { mutableStateOf<List<String>>(emptyList()) }
+    // STITCH: accumulates accepted shots' URIs and their already-OCR'd text in parallel (same index
+    // meaning in both lists) — see VoxOcrRequest.CAPTURE_MODE_STITCH's doc comment. stitchTexts holds
+    // each shot's FULL raw text — needed as-is so the NEXT shot's continuity/overlap check always
+    // compares against the true tail of what was actually photographed, not an already-trimmed
+    // version. stitchTrimmedTexts holds what actually goes into the final combined result: shot 0's
+    // full text, then each later shot with its physically-overlapping lead-in cut (see
+    // ContinuityMatcher.trimOverlap) so the rows the user deliberately re-photographed for overlap
+    // aren't duplicated in the output.
+    var stitchUris by remember { mutableStateOf<List<String>>(emptyList()) }
+    var stitchTexts by remember { mutableStateOf<List<String>>(emptyList()) }
+    var stitchTrimmedTexts by remember { mutableStateOf<List<String>>(emptyList()) }
+    // A just-captured stitch shot whose text failed the continuity check against the previous
+    // accepted shot — non-null blocks further shooting until the user picks retake or use-anyway.
+    var stitchRetakeCandidate by remember { mutableStateOf<StitchCandidate?>(null) }
+    // Standalone mode's per-target speed dial (see the target-picker Row further down) synthesizes a
+    // fake PendingScanRequest here once the user picks a target+mode, instead of duplicating the
+    // whole capture/batch/stitch state machine above for the "no real caller" case — every existing
+    // pendingRequest-driven branch below reads `effectivePendingRequest` instead of the raw parameter,
+    // so a standalone target selection gets the exact same single/batch/stitch behavior a real
+    // satellite request would. The one place this still needs special-casing is the finish-vs-stay
+    // decision in LaunchedEffect(showScanSuccess), which checks the raw `pendingRequest` parameter —
+    // there's no real caller to hand control back to for a synthesized session, so it resets back to
+    // the target picker instead of finishing the Activity.
+    var standaloneTarget by remember { mutableStateOf<PendingScanRequest?>(null) }
+    val effectivePendingRequest = pendingRequest ?: standaloneTarget
+
     val flashSetting by container.settingsRepository.flashModeFlow.collectAsStateWithLifecycle(
         initialValue = VisionSettingsRepository.DEFAULT_FLASH
     )
@@ -170,7 +250,16 @@ fun VisionScreen(
 
     var cameraGranted by remember { mutableStateOf(hasCameraPermission()) }
     var isRecognizing by remember { mutableStateOf(false) }
+    // The just-captured frame, shown frozen (instead of a plain gray/black overlay) behind the
+    // processing spinner below — set the instant capture succeeds (see captureAndRecognize's
+    // onCaptured), well before crop/OCR finish, and cleared once isRecognizing flips back off.
+    var capturedFrameBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var liveBounds by remember { mutableStateOf<DocumentCropper.LiveBounds?>(null) }
+    // Whole seconds remaining before auto-capture fires, or null when not counting down (Manual mode,
+    // or no document currently framed) — drives the small countdown label near the live rectangle
+    // overlay (see the Canvas block below) so a multi-second auto-capture delay doesn't read as Vision
+    // silently doing nothing.
+    var autoCaptureCountdownSeconds by remember { mutableStateOf<Int?>(null) }
     var engineReady by remember { mutableStateOf(false) }
     // Shown right before finishing for any pendingRequest-driven scan (see `submit` below) — without
     // this, the app just vanishes the instant a scan succeeds, with zero feedback that anything
@@ -187,9 +276,16 @@ fun VisionScreen(
     // the auto-capture analyzer below (a stale-closure bug, fixed alongside this) never re-armed a
     // fresh auto-submit for the new caller either. Runs on first composition too (a no-op, rawText
     // already starts empty).
-    LaunchedEffect(pendingRequest) {
+    LaunchedEffect(effectivePendingRequest) {
         rawText = ""
         lastScannedUri = null
+        batchUris = emptyList()
+        stitchUris = emptyList()
+        stitchTexts = emptyList()
+        stitchTrimmedTexts = emptyList()
+        stitchRetakeCandidate = null
+        liveBounds = null
+        autoCaptureCountdownSeconds = null
     }
 
     // Pre-warms the OCR engine (and, as a side effect, the OpenCV native lib) as soon as the camera
@@ -235,44 +331,152 @@ fun VisionScreen(
     val scanTargets = remember { ScanTargetDiscovery.discover(context) }
     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
 
+    val stitchStrictnessSetting by container.settingsRepository.stitchContinuityStrictnessFlow.collectAsStateWithLifecycle(
+        initialValue = VisionSettingsRepository.DEFAULT_STITCH_STRICTNESS
+    )
+    // rememberUpdatedState since `submit` may be invoked from the auto-capture analyzer's closure
+    // below (registered once, never rebuilt) via `submitState` — see that closure's own doc comment
+    // for why a bare capture of a Compose-state-derived value would go stale there.
+    val stitchStrictnessState = rememberUpdatedState(ContinuityMatcher.strictnessFromSetting(stitchStrictnessSetting))
+
     // Shared by the manual final button (pendingRequest case) and auto-capture's hands-free
     // completion below. Standalone mode has no single "submit" action anymore — the user picks a
     // destination button instead (see the Column of per-target buttons further down).
     val submit: (String, String?, String?) -> Unit = { text, imageUri, aiImageUri ->
-        val trimmed = text.trim()
-        // showScanSuccess now gates finishActivity() by ~1.2s (see LaunchedEffect below) instead of
-        // it happening synchronously right here — without this guard, the still-live auto-capture
-        // analyzer can re-arm and fire again during that window, sending a second (or third...)
-        // OcrResultSender.send for the same scan.
-        if (!showScanSuccess && (trimmed.isNotEmpty() || imageUri != null) && pendingRequest != null) {
-            OcrResultSender.send(
-                context,
-                pendingRequest.sourcePackage,
-                VoxOcrResult(
-                    task = pendingRequest.task,
-                    status = VoxOcrResult.STATUS_SUCCESS,
-                    rawText = trimmed.takeIf { it.isNotEmpty() } ?: "Image scan",
-                    imageUri = imageUri,
-                    aiImageUri = aiImageUri
-                )
-            )
-            showScanSuccess = true
+        when (effectivePendingRequest?.captureMode) {
+            VoxOcrRequest.CAPTURE_MODE_BATCH -> {
+                // Accumulate silently and keep the camera live for the next shot — no
+                // OcrResultSender.send/showScanSuccess/finish here at all. See completeMultiShot
+                // below for the single reply that eventually goes out, once the user taps Done.
+                if (imageUri != null) batchUris = batchUris + imageUri
+            }
+            VoxOcrRequest.CAPTURE_MODE_STITCH -> {
+                if (imageUri != null) {
+                    if (stitchTexts.isEmpty()) {
+                        // First shot has nothing to compare against yet — always accepted, and nothing
+                        // to trim (it's the anchor every later shot's overlap gets measured against).
+                        stitchUris = stitchUris + imageUri
+                        stitchTexts = stitchTexts + text
+                        stitchTrimmedTexts = stitchTrimmedTexts + text
+                    } else {
+                        // alignForStitch's non-null-ness IS the continuity decision — see
+                        // ContinuityMatcher.findAlignment's doc comment. It also may retroactively
+                        // shrink the previous shot's own stored trimmed text (dropping trailing OCR
+                        // noise from a bisected row that only became visible once this shot's seam was
+                        // found), hence replacing stitchTrimmedTexts' last entry, not just appending.
+                        val alignment = ContinuityMatcher.alignForStitch(stitchTrimmedTexts.last(), text, stitchStrictnessState.value)
+                        if (alignment != null) {
+                            Logger.d(
+                                "VisionScreen",
+                                "Stitch alignment: previous(before)=\"${stitchTrimmedTexts.last().takeLast(80)}\" " +
+                                    "-> previous(after)=\"${alignment.previousTrimmed.takeLast(80)}\" " +
+                                    "| next(before)=\"${text.take(80)}\" -> next(after)=\"${alignment.nextTrimmed.take(80)}\""
+                            )
+                            stitchUris = stitchUris + imageUri
+                            stitchTexts = stitchTexts + text
+                            stitchTrimmedTexts = stitchTrimmedTexts.dropLast(1) +
+                                alignment.previousTrimmed + alignment.nextTrimmed
+                        } else {
+                            // Never silently drop a shot — the heuristic is fallible, so the user gets
+                            // an explicit retake-or-use-anyway choice instead (see the bar UI below).
+                            stitchRetakeCandidate = StitchCandidate(text, imageUri, aiImageUri)
+                        }
+                    }
+                }
+            }
+            else -> {
+                val trimmed = text.trim()
+                // showScanSuccess now gates finishActivity() by ~1.2s (see LaunchedEffect below)
+                // instead of it happening synchronously right here — without this guard, the
+                // still-live auto-capture analyzer can re-arm and fire again during that window,
+                // sending a second (or third...) OcrResultSender.send for the same scan.
+                if (!showScanSuccess && (trimmed.isNotEmpty() || imageUri != null) && effectivePendingRequest != null) {
+                    OcrResultSender.send(
+                        context,
+                        effectivePendingRequest.sourcePackage,
+                        VoxOcrResult(
+                            task = effectivePendingRequest.task,
+                            status = VoxOcrResult.STATUS_SUCCESS,
+                            rawText = trimmed.takeIf { it.isNotEmpty() } ?: "Image scan",
+                            imageUris = listOfNotNull(imageUri),
+                            aiImageUri = aiImageUri
+                        )
+                    )
+                    showScanSuccess = true
+                }
+            }
         }
     }
     val submitState = rememberUpdatedState(submit)
+
+    // The batch/stitch session's single reply, fired once the user taps Done — reuses the same
+    // showScanSuccess/relaunch/finish sequence below unchanged. Batch never has text (see
+    // VoxOcrRequest.CAPTURE_MODE_BATCH); stitch joins every accepted shot's already-verified,
+    // already-overlap-trimmed text (stitchTrimmedTexts, not the raw stitchTexts — see
+    // ContinuityMatcher.trimOverlap) into one combined rawText (see combineStitchText) — the caller
+    // only ever sees one string, same as a plain single-shot reply, regardless of how many shots it
+    // took to build it.
+    val completeMultiShot: () -> Unit = {
+        if (effectivePendingRequest != null && !showScanSuccess) {
+            when (effectivePendingRequest.captureMode) {
+                VoxOcrRequest.CAPTURE_MODE_BATCH -> if (batchUris.isNotEmpty()) {
+                    OcrResultSender.send(
+                        context,
+                        effectivePendingRequest.sourcePackage,
+                        VoxOcrResult(task = effectivePendingRequest.task, status = VoxOcrResult.STATUS_SUCCESS, imageUris = batchUris)
+                    )
+                    showScanSuccess = true
+                }
+                VoxOcrRequest.CAPTURE_MODE_STITCH -> if (stitchUris.isNotEmpty()) {
+                    OcrResultSender.send(
+                        context,
+                        effectivePendingRequest.sourcePackage,
+                        VoxOcrResult(
+                            task = effectivePendingRequest.task,
+                            status = VoxOcrResult.STATUS_SUCCESS,
+                            rawText = combineStitchText(stitchTrimmedTexts),
+                            imageUris = stitchUris
+                        )
+                    )
+                    showScanSuccess = true
+                }
+            }
+        }
+    }
+    // Discards the in-progress session without ever sending a reply — nothing was staged
+    // caller-side yet (unlike the old per-shot-round-trip design), so there's nothing for the
+    // caller to clean up; the already-cropped cache files are simply left for the OS to reclaim,
+    // same acceptable-risk tradeoff already made elsewhere for an abandoned in-flight scan. A real
+    // caller's session finishes the Activity same as before; a synthesized standalone target
+    // selection just returns to the target picker instead — there's no caller to hand control back
+    // to, and the user likely wants to try a different target or mode.
+    val cancelMultiShot: () -> Unit = {
+        batchUris = emptyList()
+        stitchUris = emptyList()
+        stitchTexts = emptyList()
+        stitchTrimmedTexts = emptyList()
+        stitchRetakeCandidate = null
+        if (pendingRequest != null) {
+            finishActivity()
+        } else {
+            standaloneTarget = null
+        }
+    }
 
     // Holds the confirmation on screen briefly, then (if the caller asked for it) brings that
     // caller's own task back to the front before finishing — see VoxOcrRequest.returnToCallerOnComplete.
     // getLaunchIntentForPackage is package-agnostic on purpose: Vision never needs to know any
     // specific caller's Activity class, keeping the "any first-party satellite" contract intact.
-    // Standalone (pendingRequest == null) reuses the same overlay for the same visual confirmation,
-    // but never finishes the Activity — the user stays in Vision to scan another document, possibly to
-    // a different target button, so this just clears the flag and lets the camera preview resume.
+    // Standalone (real pendingRequest == null — covers both a fully idle standalone screen and a
+    // just-completed synthesized standaloneTarget session) reuses the same overlay for the same
+    // visual confirmation, but never finishes the Activity — the user stays in Vision, returned to
+    // the target picker, ready to scan another document to a different target/mode.
     LaunchedEffect(showScanSuccess) {
         if (!showScanSuccess) return@LaunchedEffect
         delay(1200)
         if (pendingRequest == null) {
             showScanSuccess = false
+            standaloneTarget = null
             return@LaunchedEffect
         }
         if (pendingRequest.returnToCallerOnComplete) {
@@ -287,6 +491,12 @@ fun VisionScreen(
     val isRecognizingState = rememberUpdatedState(isRecognizing)
     val engineReadyState = rememberUpdatedState(engineReady)
     val showScanSuccessState = rememberUpdatedState(showScanSuccess)
+    // Same stale-closure risk as pendingRequestState below: the auto-capture analyzer closure is set
+    // up once and never rebuilt, so a bare `flashMode` reference inside it would freeze at whatever
+    // the flash setting was when the screen first opened — changing it afterward (in Settings, or via
+    // this screen's own flash toggle) would then never take effect for auto-capture, only for the
+    // manual capture button (a plain onClick, rebuilt every recomposition, unaffected by this).
+    val flashModeState = rememberUpdatedState(flashMode)
     // The analyzer callback below is registered once inside LaunchedEffect(cameraController), which
     // never re-runs (cameraController's identity never changes) — a bare `pendingRequest` reference
     // in that closure would freeze at whatever it was on the *first* composition. If Vision started
@@ -294,7 +504,10 @@ fun VisionScreen(
     // from a different caller arrived while Vision was already open, the stale closure either never
     // auto-submitted at all, or would have submitted back to the wrong caller. rememberUpdatedState
     // keeps this read live.
-    val pendingRequestState = rememberUpdatedState(pendingRequest)
+    val pendingRequestState = rememberUpdatedState(effectivePendingRequest)
+    // Blocks the analyzer from auto-firing another shot while a stitch retake decision is pending —
+    // same reasoning as showScanSuccessState below, just for a different "camera should pause" state.
+    val stitchRetakeCandidateState = rememberUpdatedState(stitchRetakeCandidate)
     val sensitivitySetting by container.settingsRepository.autoTriggerSensitivityFlow.collectAsStateWithLifecycle(
         initialValue = VisionSettingsRepository.DEFAULT_SENSITIVITY
     )
@@ -305,10 +518,10 @@ fun VisionScreen(
             else -> DocumentCropper.DetectionSensitivity.MEDIUM
         }
     )
-    val stabilitySetting by container.settingsRepository.autoTriggerStabilityFlow.collectAsStateWithLifecycle(
-        initialValue = VisionSettingsRepository.DEFAULT_STABILITY
+    val autoCaptureDelaySetting by container.settingsRepository.autoCaptureDelaySecondsFlow.collectAsStateWithLifecycle(
+        initialValue = VisionSettingsRepository.DEFAULT_AUTO_CAPTURE_DELAY
     )
-    val stabilityThresholdState = rememberUpdatedState(captureStabilityTicks(stabilitySetting))
+    val autoCaptureDelayState = rememberUpdatedState(autoCaptureDelaySetting)
 
     LaunchedEffect(flashMode) {
         cameraController.imageCaptureFlashMode = flashMode
@@ -325,8 +538,12 @@ fun VisionScreen(
     }
 
     LaunchedEffect(cameraController) {
-        val stability = intArrayOf(0)
-        val armed = booleanArrayOf(true)
+        // Wall-clock timestamp (millis) of the moment a document was first detected in the current
+        // continuous framing — 0L means "not currently counting down" (no document framed, or it was
+        // just reset because the framing jumped to a different blob). Replaces the old tick-counter
+        // (`stability[0]`/`armed[0]`) now that the delay is a user-facing number of seconds rather than
+        // an implicit analyzer-tick count — see VisionSettingsRepository.autoCaptureDelaySecondsFlow.
+        val framedSinceMs = longArrayOf(0L)
         val lastAnalysisAt = longArrayOf(0L)
         var lastBounds: DocumentCropper.LiveBounds? = null
         val mainExecutor = ContextCompat.getMainExecutor(context)
@@ -334,6 +551,12 @@ fun VisionScreen(
             val now = System.currentTimeMillis()
             if (!engineReadyState.value || isRecognizingState.value ||
                 showScanSuccessState.value || // Already submitted — stop analyzing during the confirmation delay
+                stitchRetakeCandidateState.value != null || // Awaiting a stitch retake decision
+                // Stitch shots are deliberately close-up captures of one segment of a larger document,
+                // not a whole framed page — there's no document-sized quad to detect, so the live
+                // rectangle/auto-capture-by-framing feature is meaningless here (and running it would
+                // still burn CPU + take the native lock for no benefit). Stitch is manual-FAB-only.
+                pendingRequestState.value?.captureMode == VoxOcrRequest.CAPTURE_MODE_STITCH ||
                 now - lastAnalysisAt[0] < ANALYSIS_INTERVAL_MS // Floor only, not a target rate — see above
             ) {
                 image.close()
@@ -342,8 +565,15 @@ fun VisionScreen(
             lastAnalysisAt[0] = now
 
             val bounds = try {
-                yPlaneToGrayMat(image).let { mat ->
-                    try { DocumentCropper.detectLiveBounds(mat, sensitivityState.value) } finally { mat.release() }
+                // See nativeCvLock's doc comment — serializes this against finishRecognition's own
+                // OpenCV/OCR calls so no two threads are ever inside native OpenCV code at once. This
+                // callback isn't a suspend function, hence runBlocking (safe here — see the doc comment).
+                runBlocking {
+                    nativeCvLock.withLock {
+                        yPlaneToGrayMat(image).let { mat ->
+                            try { DocumentCropper.detectLiveBounds(mat, sensitivityState.value) } finally { mat.release() }
+                        }
+                    }
                 }
             } catch (t: Throwable) {
                 Logger.e("VisionScreen", "Framing analysis failed", t)
@@ -365,18 +595,18 @@ fun VisionScreen(
                 liveBounds = bounds
 
                 if (bounds == null) {
-                    armed[0] = true
-                    stability[0] = 0
+                    framedSinceMs[0] = 0L
                     lastBounds = null
+                    autoCaptureCountdownSeconds = null
                     return@execute
                 }
                 if (pendingRequestState.value == null) return@execute
 
                 // "Stable" means the same document held roughly in place across consecutive frames,
                 // not just "something was found again" — panning across a cluttered scene can keep
-                // satisfying the area threshold with a *different* blob each tick, so a bare
-                // present/absent counter never resets and can reach the trigger threshold while the
-                // camera is still moving over nothing in particular.
+                // satisfying the area threshold with a *different* blob each tick, so a fresh framing
+                // start (not a cancel — bounds is still non-null) resets the countdown rather than
+                // letting an unrelated blob's earlier start time count toward this one.
                 val previous = lastBounds
                 val heldSteady = previous != null &&
                     kotlin.math.abs(bounds.left - previous.left) < BOUNDS_STABILITY_TOLERANCE &&
@@ -384,23 +614,43 @@ fun VisionScreen(
                     kotlin.math.abs(bounds.right - previous.right) < BOUNDS_STABILITY_TOLERANCE &&
                     kotlin.math.abs(bounds.bottom - previous.bottom) < BOUNDS_STABILITY_TOLERANCE
                 lastBounds = bounds
-                stability[0] = if (heldSteady) stability[0] + 1 else 1
+                if (framedSinceMs[0] == 0L || !heldSteady) {
+                    framedSinceMs[0] = now
+                }
 
-                if (armed[0] && stability[0] >= stabilityThresholdState.value) {
-                    armed[0] = false
-                    stability[0] = 0
+                val delaySeconds = autoCaptureDelayState.value
+                if (delaySeconds == VisionSettingsRepository.AUTO_CAPTURE_MANUAL) {
+                    // Manual: never auto-fires, only the FAB captures — no countdown to show either.
+                    autoCaptureCountdownSeconds = null
+                    return@execute
+                }
+
+                val elapsedMs = now - framedSinceMs[0]
+                val delayMs = delaySeconds * 1000L
+                if (elapsedMs >= delayMs) {
+                    framedSinceMs[0] = 0L
                     lastBounds = null
                     liveBounds = null
-                    Logger.d("VisionScreen", "Auto-capture triggered (stable framing)")
+                    autoCaptureCountdownSeconds = null
+                    Logger.d("VisionScreen", "Auto-capture triggered (${delaySeconds}s delay elapsed)")
                     captureAndRecognize(
-                        context, scope, cameraController, container,
-                        onRecognizing = { isRecognizing = it },
+                        context, scope, cameraController, container, flashModeState.value,
+                        produceOCR = pendingRequestState.value?.let {
+                            effectiveProduceOCR(it.captureMode, it.produceOCR)
+                        } ?: true,
+                        onRecognizing = { recognizing ->
+                            isRecognizing = recognizing
+                            if (!recognizing) capturedFrameBitmap = null
+                        },
+                        onCaptured = { capturedFrameBitmap = it },
                         onResult = { text, imageUri, aiImageUri ->
                             rawText = text
                             lastScannedUri = imageUri
                             submitState.value(text, imageUri, aiImageUri)
                         }
                     )
+                } else {
+                    autoCaptureCountdownSeconds = ((delayMs - elapsedMs) / 1000L).toInt() + 1
                 }
             }
         }
@@ -441,12 +691,80 @@ fun VisionScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (pendingRequest != null) {
+            if (effectivePendingRequest != null) {
                 Text(
-                    pendingRequest.hint
-                        ?: String.format(languageManager.getString("scanning_for_caller"), pendingRequest.sourcePackage),
+                    effectivePendingRequest.hint
+                        ?: String.format(languageManager.getString("scanning_for_caller"), effectivePendingRequest.sourcePackage),
                     style = MaterialTheme.typography.labelLarge
                 )
+            }
+
+            // Batch/stitch's whole "keep shooting" loop lives entirely inside this screen — the
+            // shutter FAB below doubles as "add another", and this bar is how the session actually
+            // ends: Done sends the one accumulated VoxOcrResult and Cancel discards everything with
+            // no reply sent. Stitch additionally shows a retake-or-use-anyway prompt in place of this
+            // bar whenever a shot just failed the continuity check.
+            val retakeCandidate = stitchRetakeCandidate
+            if (effectivePendingRequest?.captureMode == VoxOcrRequest.CAPTURE_MODE_STITCH && retakeCandidate != null) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        languageManager.getString("stitch_discontinuity_warning"),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { stitchRetakeCandidate = null },
+                            modifier = Modifier.weight(1f)
+                        ) { Text(languageManager.getString("stitch_retake")) }
+                        Button(
+                            onClick = {
+                                // The continuity check already failed for this shot, so alignForStitch's
+                                // own (identical) search will very likely also find nothing — that's the
+                                // correct, safe outcome here: we have no confident overlap boundary, so
+                                // keep both texts whole rather than risk cutting off content the check
+                                // couldn't actually confirm.
+                                val alignment = ContinuityMatcher.alignForStitch(stitchTrimmedTexts.last(), retakeCandidate.text, stitchStrictnessState.value)
+                                stitchUris = stitchUris + retakeCandidate.imageUri
+                                stitchTexts = stitchTexts + retakeCandidate.text
+                                stitchTrimmedTexts = if (alignment != null) {
+                                    stitchTrimmedTexts.dropLast(1) + alignment.previousTrimmed + alignment.nextTrimmed
+                                } else {
+                                    stitchTrimmedTexts + retakeCandidate.text
+                                }
+                                stitchRetakeCandidate = null
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text(languageManager.getString("stitch_use_anyway")) }
+                    }
+                }
+            } else if (effectivePendingRequest?.captureMode == VoxOcrRequest.CAPTURE_MODE_BATCH ||
+                effectivePendingRequest?.captureMode == VoxOcrRequest.CAPTURE_MODE_STITCH
+            ) {
+                val capturedCount = if (effectivePendingRequest.captureMode == VoxOcrRequest.CAPTURE_MODE_BATCH) batchUris.size else stitchUris.size
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        String.format(languageManager.getString("multi_shot_captured_count"), capturedCount),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = cancelMultiShot) {
+                            Text(languageManager.getString("multi_shot_cancel"))
+                        }
+                        Button(onClick = completeMultiShot, enabled = capturedCount > 0) {
+                            Text(languageManager.getString("multi_shot_done"))
+                        }
+                    }
+                }
             }
 
             if (cameraGranted) {
@@ -489,17 +807,44 @@ fun VisionScreen(
                             )
                         }
                     }
-                    // Manual bypass for the hands-free auto-capture flow (pendingRequest != null
-                    // only — standalone mode already has its own per-target capture buttons below).
-                    // Hidden once showScanSuccess is up so it can't queue a second capture underneath
-                    // the confirmation overlay (a plain Box there doesn't consume touches on its own).
-                    if (pendingRequest != null && !showScanSuccess) {
+                    // See VisionSettingsRepository.autoCaptureDelaySecondsFlow — with no cue at all, a
+                    // multi-second auto-capture delay would read as Vision silently doing nothing.
+                    val countdown = autoCaptureCountdownSeconds
+                    if (countdown != null) {
+                        Text(
+                            String.format(languageManager.getString("auto_capture_countdown"), countdown),
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 24.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                    // Manual bypass for the hands-free auto-capture flow (effectivePendingRequest !=
+                    // null only — standalone mode's target picker is shown below instead when there's
+                    // no target+mode chosen yet). Hidden once showScanSuccess is up so it can't queue
+                    // a second capture underneath the confirmation overlay (a plain Box there doesn't
+                    // consume touches on its own), and hidden while a stitch retake decision is
+                    // pending — same reasoning.
+                    if (effectivePendingRequest != null && !showScanSuccess && stitchRetakeCandidate == null) {
                         FloatingActionButton(
                             onClick = {
-                                if (!isRecognizing) {
+                                // engineReady mirrors the analyzer's own engineReadyState gate (see
+                                // LaunchedEffect(cameraController)) — without it, a fast manual tap
+                                // right after this screen opens could invoke the OCR engine before
+                                // container.ocrEngineForZone(...) has finished its cold-start init.
+                                if (!isRecognizing && engineReady) {
                                     captureAndRecognize(
-                                        context, scope, cameraController, container,
-                                        onRecognizing = { isRecognizing = it },
+                                        context, scope, cameraController, container, flashMode,
+                                        produceOCR = effectiveProduceOCR(effectivePendingRequest.captureMode, effectivePendingRequest.produceOCR),
+                                        skipCrop = effectivePendingRequest.captureMode == VoxOcrRequest.CAPTURE_MODE_STITCH,
+                                        onRecognizing = { recognizing ->
+                                            isRecognizing = recognizing
+                                            if (!recognizing) capturedFrameBitmap = null
+                                        },
+                                        onCaptured = { capturedFrameBitmap = it },
                                         onResult = { text, imageUri, aiImageUri ->
                                             rawText = text
                                             lastScannedUri = imageUri
@@ -530,13 +875,27 @@ fun VisionScreen(
                     // pendingRequest FAB/auto-capture — captureAndRecognize always drives isRecognizing
                     // the same way regardless of caller.
                     if (isRecognizing) {
+                        val frozenFrame = capturedFrameBitmap
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.55f)),
+                            modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = Color.White)
+                            if (frozenFrame != null) {
+                                Image(
+                                    bitmap = frozenFrame.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = if (frozenFrame != null) 0.35f else 0.55f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Color.White)
+                            }
                         }
                     }
                 }
@@ -544,70 +903,54 @@ fun VisionScreen(
                 Text(languageManager.getString("camera_permission_required"))
             }
 
-            // [Manual Mode Only] Action buttons and result text
-            if (pendingRequest == null) {
-                // Horizontal row for Send buttons
+            // [Target picker — no target+mode chosen yet] One speed dial per installed satellite,
+            // offering single/stitch/batch (see VoxOcrRequest.captureMode) — picking any action
+            // synthesizes `standaloneTarget`, which everything above (camera UI, capture bar, FAB)
+            // then drives exactly like a real caller's pendingRequest.
+            if (effectivePendingRequest == null) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     scanTargets.forEach { target ->
-                        val targetGate = rememberRequirementGate(
-                            satisfied = commanderInstalled,
-                            requiredMessage = languageManager.getString("commander_required_message")
-                        ) {
-                            captureAndRecognize(
-                                context, scope, cameraController, container,
-                                onRecognizing = { isRecognizing = it },
-                                onResult = { text, imageUri, aiImageUri ->
-                                    val trimmed = text.trim()
-                                    OcrResultSender.send(
-                                        context, target.packageName,
-                                        VoxOcrResult(
-                                            task = target.task,
-                                            status = VoxOcrResult.STATUS_SUCCESS,
-                                            rawText = trimmed.takeIf { it.isNotEmpty() } ?: "Image scan",
-                                            imageUri = imageUri,
-                                            aiImageUri = aiImageUri
-                                        )
-                                    )
-                                    rawText = trimmed
-                                    lastScannedUri = imageUri
-                                    Toast.makeText(
-                                        context,
-                                        String.format(languageManager.getString("sent_to_target"), target.label),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    // Same "it worked" flash the pendingRequest flow shows — see the
-                                    // LaunchedEffect(showScanSuccess) above for why standalone doesn't
-                                    // finish the Activity afterward.
-                                    showScanSuccess = true
-                                }
-                            )
-                        }
-                        Button(
-                            onClick = targetGate.onClick,
-                            enabled = !isRecognizing,
-                            modifier = Modifier.weight(1f).alpha(targetGate.alpha) // Equal width for both buttons
-                        ) {
-                            if (isRecognizing) {
-                                CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
+                        fun pickMode(mode: String) {
+                            if (commanderInstalled) {
+                                standaloneTarget = PendingScanRequest(
+                                    sourcePackage = target.packageName,
+                                    task = target.task,
+                                    hint = target.label,
+                                    returnToCallerOnComplete = false,
+                                    imageUri = null,
+                                    produceOCR = true,
+                                    captureMode = mode
+                                )
                             } else {
-                                Text(target.label, maxLines = 1)
+                                Toast.makeText(context, languageManager.getString("commander_required_message"), Toast.LENGTH_SHORT).show()
                             }
                         }
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(target.label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            SpeedDialFab(
+                                actions = listOf(
+                                    SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single")) {
+                                        pickMode(VoxOcrRequest.CAPTURE_MODE_SINGLE)
+                                    },
+                                    SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch")) {
+                                        pickMode(VoxOcrRequest.CAPTURE_MODE_STITCH)
+                                    },
+                                    SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch")) {
+                                        pickMode(VoxOcrRequest.CAPTURE_MODE_BATCH)
+                                    }
+                                ),
+                                mainIcon = Icons.Filled.PhotoCamera,
+                                mainContentDescription = target.label
+                            )
+                        }
                     }
-                }
-
-                // OCR Text result at the bottom, scrollable area if it gets long
-                Box(modifier = Modifier.heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
-                    OutlinedTextField(
-                        value = rawText,
-                        onValueChange = { rawText = it },
-                        label = { Text(languageManager.getString("scan_stub_label")) },
-                        modifier = Modifier.fillMaxWidth(),
-                        readOnly = false
-                    )
                 }
             }
         }
@@ -615,6 +958,60 @@ fun VisionScreen(
     if (showScanSuccess) {
         ScanSuccessOverlay(text = languageManager.getString("scan_successful"))
     }
+    }
+}
+
+/** The [PendingScanRequest.imageUri] branch of [VisionScreen] — no camera, no permission prompt, just
+ *  decode the given image, run it through the same OCR pipeline a live capture would, and reply. Runs
+ *  once per distinct [pendingRequest] (keyed on the whole object, so a second request while this one's
+ *  still in flight — e.g. a fast onNewIntent — starts its own fresh run rather than being ignored). */
+@Composable
+private fun HeadlessOcrScreen(
+    container: VisionContainer,
+    pendingRequest: PendingScanRequest,
+    finishActivity: () -> Unit
+) {
+    val context = LocalContext.current
+    val languageManager = LocalLanguageManager.current
+
+    LaunchedEffect(pendingRequest) {
+        val (text, imageUri, aiImageUri) = try {
+            recognizeExistingImage(context, container, android.net.Uri.parse(pendingRequest.imageUri), pendingRequest.produceOCR)
+        } catch (t: Throwable) {
+            Logger.e("VisionScreen", "Headless OCR failed", t)
+            Triple("", null, null)
+        }
+        val trimmed = text.trim()
+        OcrResultSender.send(
+            context,
+            pendingRequest.sourcePackage,
+            VoxOcrResult(
+                task = pendingRequest.task,
+                status = if (trimmed.isNotEmpty() || imageUri != null) VoxOcrResult.STATUS_SUCCESS else VoxOcrResult.STATUS_ERROR,
+                rawText = trimmed.takeIf { it.isNotEmpty() },
+                imageUris = listOfNotNull(imageUri),
+                aiImageUri = aiImageUri,
+                error = if (trimmed.isEmpty() && imageUri == null) "OCR failed" else null
+            )
+        )
+        if (pendingRequest.returnToCallerOnComplete) {
+            context.packageManager.getLaunchIntentForPackage(pendingRequest.sourcePackage)?.let { launchIntent ->
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                context.startActivity(launchIntent)
+            }
+        }
+        finishActivity()
+    }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator()
+            Text(
+                text = languageManager.getString("reading_photo"),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+        }
     }
 }
 
@@ -647,16 +1044,138 @@ private fun ScanSuccessOverlay(text: String) {
 private suspend fun currentZoneOrDefault(container: VisionContainer): String =
     container.settingsRepository.ocrZoneFlow.first()
 
-/** Shared by the manual "Scan" button and the auto-capture analyzer so both go through one path. */
+/** Crop, stage, and recognize text on [bitmap] — shared by the live camera-capture path
+ *  ([captureAndRecognize]) and the headless existing-file path ([recognizeExistingImage]), so both
+ *  produce the exact same (text, imageUri, aiImageUri) shape regardless of where the bitmap came
+ *  from. Throws on failure — callers already wrap this in their own try/catch.
+ *
+ *  [skipCrop] bypasses [DocumentCropper.crop] entirely, using [bitmap] as-is — for
+ *  [VoxOcrRequest.CAPTURE_MODE_STITCH] specifically. Two things independently point at [crop]'s own
+ *  OpenCV pipeline (Canny/GaussianBlur/findContours) as the source of the native SIGSEGV crash
+ *  confirmed on-device during stitch testing: (1) both crash tombstones captured so far show the
+ *  *identical* 8-frame libopencv_imgproc/libopencv_core backtrace, on two different threads, one of
+ *  them captured while the live-preview analyzer — the only other native-OpenCV caller — was
+ *  provably disabled for the whole session (stitch mode turns it off entirely, see
+ *  [VisionScreen]'s class doc comment), ruling out [nativeCvLock]'s analyzer-vs-capture race as the
+ *  cause of *this* crash; (2) a close-up stitch shot is exactly the kind of image (no full document
+ *  boundary, often small/oddly-proportioned after any crop) most likely to hit a degenerate case in
+ *  that pipeline. Since stitch never needed document-boundary detection in the first place (each shot
+ *  is a deliberate close-up of a segment, not a whole page), skipping [crop] entirely for stitch both
+ *  sidesteps the crash and matches what stitch actually needs — regardless of the exact faulting
+ *  instruction inside OpenCV, which the stripped release .so gives no symbols for. Single/batch still
+ *  call [crop] normally; if the same crash ever surfaces there too, the fix is a defensive
+ *  dimension/sanity check inside [DocumentCropper.crop] itself before it touches Canny/findContours,
+ *  not another mode-specific bypass. */
+private suspend fun finishRecognition(
+    context: Context,
+    container: VisionContainer,
+    bitmap: android.graphics.Bitmap,
+    produceOCR: Boolean = true,
+    skipCrop: Boolean = false
+): Triple<String, String?, String?> {
+    val zone = currentZoneOrDefault(container)
+    val engine = container.ocrEngineForZone(zone)
+    // See nativeCvLock's doc comment — serializes this against the live-preview analyzer's own
+    // OpenCV calls so no two threads are ever inside native OpenCV code at once. Kept even though
+    // skipCrop now removes the only known trigger for stitch specifically — batch/single still call
+    // crop() and still benefit from this serialization against the analyzer.
+    val cropped = if (skipCrop) {
+        bitmap
+    } else {
+        withContext(Dispatchers.IO) { nativeCvLock.withLock { DocumentCropper.crop(bitmap) } }
+    }
+
+    // Save image synchronously to internal cache for sharing via FileProvider
+    val imageUri = withContext(Dispatchers.IO) {
+        try {
+            val cacheDir = File(context.cacheDir, "receipts").apply { mkdirs() }
+            val file = File(cacheDir, "rec_${java.util.UUID.randomUUID()}.jpg")
+            java.io.FileOutputStream(file).use { out ->
+                cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            FileProvider.getUriForFile(context, "com.voxapps.vision.fileprovider", file).toString()
+        } catch (e: Exception) {
+            Logger.e("VisionScreen", "Failed to save image", e)
+            null
+        }
+    }
+
+    // Separate, deliberately smaller copy for LLM attachment — off by default
+    // (see VisionSettingsRepository.sendPhotoToAiFlow's doc comment) since it
+    // costs real tokens on top of the free text above. Downscaled to the user's
+    // configured "photo detail" resolution — that's the only thing that actually
+    // reduces LLM image-token cost (JPEG quality/color depth don't factor into
+    // OpenAI/Gemini's tile-based image tokenization, only pixel dimensions do).
+    val aiImageUri = withContext(Dispatchers.IO) {
+        if (!container.settingsRepository.sendPhotoToAiFlow.first()) return@withContext null
+        try {
+            val detail = container.settingsRepository.photoDetailForAiFlow.first()
+            val targetLongEdge = VisionSettingsRepository.targetLongEdgePx(detail)
+            val scaled = downscaleToLongEdge(cropped, targetLongEdge)
+            val cacheDir = File(context.cacheDir, "receipts").apply { mkdirs() }
+            val file = File(cacheDir, "ai_${java.util.UUID.randomUUID()}.jpg")
+            java.io.FileOutputStream(file).use { out ->
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            FileProvider.getUriForFile(context, "com.voxapps.vision.fileprovider", file).toString()
+        } catch (e: Exception) {
+            Logger.e("VisionScreen", "Failed to prepare AI-attachment image", e)
+            null
+        }
+    }
+
+    Logger.d("VisionScreen", "Recognizing with zone=$zone")
+    // Same lock as the crop step above — the OCR engine's own native OpenCV/inference work must not
+    // overlap the live-preview analyzer either. Wrapped in our own withContext(Dispatchers.IO) (rather
+    // than relying on whatever dispatcher finishRecognition happens to be called from) so lock/unlock
+    // are guaranteed to run on the same thread regardless of caller — nested withContext calls on the
+    // same dispatcher instance don't redispatch, so engine.recognize()'s own internal
+    // withContext(Dispatchers.IO) stays on this exact thread too.
+    val text = if (produceOCR) {
+        withContext(Dispatchers.IO) { nativeCvLock.withLock { engine.recognize(cropped) } }
+    } else {
+        ""
+    }
+    Logger.d("VisionScreen", "Recognized text: $text")
+    return Triple(text, imageUri, aiImageUri)
+}
+
+/** Headless counterpart to [captureAndRecognize] — decodes an already-existing image (no camera
+ *  frame) and runs it through the same [finishRecognition] pipeline. */
+private suspend fun recognizeExistingImage(
+    context: Context,
+    container: VisionContainer,
+    sourceUri: android.net.Uri,
+    produceOCR: Boolean = true
+): Triple<String, String?, String?> {
+    val bitmap = withContext(Dispatchers.IO) {
+        context.contentResolver.openInputStream(sourceUri)?.use { BitmapFactory.decodeStream(it) }
+    } ?: throw IllegalStateException("Could not decode image at $sourceUri")
+    return finishRecognition(context, container, bitmap, produceOCR)
+}
+
+/** Shared by the manual "Scan" button and the auto-capture analyzer so both go through one path.
+ *  See [finishRecognition]'s [skipCrop] doc comment. */
 private fun captureAndRecognize(
     context: Context,
     scope: CoroutineScope,
     cameraController: LifecycleCameraController,
     container: VisionContainer,
+    flashMode: Int,
+    produceOCR: Boolean = true,
+    skipCrop: Boolean = false,
     onRecognizing: (Boolean) -> Unit,
+    onCaptured: (android.graphics.Bitmap) -> Unit = {},
     onResult: (String, String?, String?) -> Unit
 ) {
-    Logger.d("VisionScreen", "Scan tapped")
+    // Reapplied here, not just left to LaunchedEffect(flashMode) — CameraX's LifecycleCameraController
+    // can silently reset imageCaptureFlashMode internally when it rebinds use cases (e.g. after a
+    // lifecycle/permission change), and that rebind isn't something our flashMode-keyed effect would
+    // ever notice, since the VALUE it's keyed on hasn't changed even though the controller's own
+    // property has been reset underneath it. Setting it fresh immediately before every capture closes
+    // that gap regardless of whether the mismatch already happened.
+    cameraController.imageCaptureFlashMode = flashMode
+    Logger.d("VisionScreen", "Scan tapped, flashMode=$flashMode (controller now reports ${cameraController.imageCaptureFlashMode})")
     onRecognizing(true)
     cameraController.takePicture(
         ContextCompat.getMainExecutor(context),
@@ -665,54 +1184,10 @@ private fun captureAndRecognize(
                 Logger.d("VisionScreen", "Capture succeeded, size=${image.width}x${image.height} format=${image.format} rotation=${image.imageInfo.rotationDegrees}")
                 val bitmap = imageProxyToBitmap(image)
                 image.close()
+                onCaptured(bitmap)
                 scope.launch {
                     try {
-                        val zone = currentZoneOrDefault(container)
-                        val engine = container.ocrEngineForZone(zone)
-                        val cropped = withContext(Dispatchers.IO) { DocumentCropper.crop(bitmap) }
-                        
-                        // Save image synchronously to internal cache for sharing via FileProvider
-                        val imageUri = withContext(Dispatchers.IO) {
-                            try {
-                                val cacheDir = File(context.cacheDir, "receipts").apply { mkdirs() }
-                                val file = File(cacheDir, "rec_${java.util.UUID.randomUUID()}.jpg")
-                                java.io.FileOutputStream(file).use { out ->
-                                    cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
-                                }
-                                FileProvider.getUriForFile(context, "com.voxapps.vision.fileprovider", file).toString()
-                            } catch (e: Exception) {
-                                Logger.e("VisionScreen", "Failed to save image", e)
-                                null
-                            }
-                        }
-
-                        // Separate, deliberately smaller copy for LLM attachment — off by default
-                        // (see VisionSettingsRepository.sendPhotoToAiFlow's doc comment) since it
-                        // costs real tokens on top of the free text above. Downscaled to the user's
-                        // configured "photo detail" resolution — that's the only thing that actually
-                        // reduces LLM image-token cost (JPEG quality/color depth don't factor into
-                        // OpenAI/Gemini's tile-based image tokenization, only pixel dimensions do).
-                        val aiImageUri = withContext(Dispatchers.IO) {
-                            if (!container.settingsRepository.sendPhotoToAiFlow.first()) return@withContext null
-                            try {
-                                val detail = container.settingsRepository.photoDetailForAiFlow.first()
-                                val targetLongEdge = VisionSettingsRepository.targetLongEdgePx(detail)
-                                val scaled = downscaleToLongEdge(cropped, targetLongEdge)
-                                val cacheDir = File(context.cacheDir, "receipts").apply { mkdirs() }
-                                val file = File(cacheDir, "ai_${java.util.UUID.randomUUID()}.jpg")
-                                java.io.FileOutputStream(file).use { out ->
-                                    scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
-                                }
-                                FileProvider.getUriForFile(context, "com.voxapps.vision.fileprovider", file).toString()
-                            } catch (e: Exception) {
-                                Logger.e("VisionScreen", "Failed to prepare AI-attachment image", e)
-                                null
-                            }
-                        }
-
-                        Logger.d("VisionScreen", "Recognizing with zone=$zone")
-                        val text = engine.recognize(cropped)
-                        Logger.d("VisionScreen", "Recognized text: $text")
+                        val (text, imageUri, aiImageUri) = finishRecognition(context, container, bitmap, produceOCR, skipCrop)
                         onResult(text, imageUri, aiImageUri)
                     } catch (t: Throwable) {
                         Logger.e("VisionScreen", "Recognition failed", t)

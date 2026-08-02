@@ -156,6 +156,8 @@
   "scan_save_failed": "Échec de l'enregistrement — veuillez réessayer",
   "attach_photo_on_scan": "Traiter la photo avec l'IA lors du scan",
   "attach_photo_on_scan_desc": "Envoyer la photo scannée avec le texte reconnu à l'IA (nécessite aussi le réglage « envoyer la photo à l'IA » de Vision et un moteur multimodal configuré)",
+  "delete_attachment_group_title": "Supprimer tout ce groupe ?",
+  "delete_attachment_group_message": "Toutes les photos de ce groupe seront supprimées.",
   "widget_show_event_details": "Afficher les détails dans le widget",
   "widget_show_event_details_desc": "Afficher la description de chaque événement sous son titre dans le widget de l'écran d'accueil. Désactivez pour une liste plus compacte.",
   "widget_border_section": "Bordure du widget",
@@ -185,5 +187,8 @@
   "notifications_length_desc": "Durée et modèle de vibration",
   "notifications_length_short": "Courte",
   "notifications_length_medium": "Moyenne",
-  "notifications_length_long": "Longue"
+  "notifications_length_long": "Longue",
+  "capture_mode_single": "Photo unique",
+  "capture_mode_stitch": "Assemblage",
+  "capture_mode_batch": "Lot"
 }

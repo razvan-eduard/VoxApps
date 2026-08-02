@@ -15,6 +15,7 @@ import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequest
 import com.voxapps.ipc.VoxLlmResult
+import java.io.File
 
 /**
  * Runs the actual (potentially slow) LLM call for a request handed off by [LlmHookReceiver], then
@@ -45,7 +46,22 @@ class LlmHookWorker(
     }
 
     override suspend fun doWork(): Result {
-        val request = VoxLlmRequest.fromJson(inputData.getString(VoxIpc.EXTRA_LLM_PAYLOAD))
+        // See EXTRA_LLM_PAYLOAD_FILE's doc comment (LlmHookReceiver.kt) — the actual payload was staged
+        // to a cache file to stay under WorkManager Data's hard 10 KB cap; read it back and clean up
+        // regardless of what happens afterward (a leftover file here would just accumulate forever).
+        val payloadPath = inputData.getString(EXTRA_LLM_PAYLOAD_FILE)
+        val payloadJson = payloadPath?.let { path ->
+            try {
+                val file = File(path)
+                val text = file.readText()
+                file.delete()
+                text
+            } catch (e: Exception) {
+                Logger.log("LlmHookWorker: failed reading payload file: ${e.message}", TAG)
+                null
+            }
+        }
+        val request = VoxLlmRequest.fromJson(payloadJson)
         if (request == null) {
             Logger.log("LlmHookWorker: no valid request in input data", TAG)
             return Result.failure()

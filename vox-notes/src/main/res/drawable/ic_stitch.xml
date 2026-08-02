@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple "stacked pages" glyph for the widget's stitch capture action (see VoxOcrRequest.
+     CAPTURE_MODE_STITCH) — three diagonally-cascading squares, all one fillColor so the stepped
+     outer silhouette alone reads as a layered stack once ColorFilter.tint is applied at runtime
+     (same flat-mask convention as ic_scan.xml — no internal edges needed or possible under a tint). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M2,2 H14 V14 H2 Z M7,7 H19 V19 H7 Z M12,12 H22 V22 H12 Z" />
+</vector>

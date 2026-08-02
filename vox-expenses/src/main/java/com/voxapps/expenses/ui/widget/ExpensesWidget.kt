@@ -39,12 +39,13 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
+import com.voxapps.attachments.VisionAttachmentCapture
 import com.voxapps.expenses.ExpensesActivity
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.R
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.TransactionDirection
-import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
+import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.CategoryColors
@@ -54,6 +55,7 @@ import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.showRequirementToast
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.ipc.VoxOcrRequest
 import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.flow.first
 import java.time.Instant
@@ -133,18 +135,36 @@ class ExpensesWidget : GlanceAppWidget() {
     }
 }
 
-class ExpensesWidgetScanAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val container = (context.applicationContext as ExpensesApplication).container
-        val languageManager = container.languageManager
-        when {
-            !VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) ->
-                showRequirementToast(context, languageManager.getString("vision_required_message"))
-            !VoxAppsDiscovery.isCommanderInstalled(context) ->
-                showRequirementToast(context, languageManager.getString("commander_required_message"))
-            else -> ExpenseScanRequestSender.send(context)
-        }
+// Glance/RemoteViews has no expand-in-place speed dial like a real Compose FAB can render (see
+// core:design's SpeedDialFab, used everywhere else) — the widget instead shows 3 small static icons
+// (single/stitch/batch), each its own ActionCallback sharing this one gated launch helper.
+private suspend fun runWidgetScan(context: Context, captureMode: String) {
+    val container = (context.applicationContext as ExpensesApplication).container
+    val languageManager = container.languageManager
+    when {
+        !VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) ->
+            showRequirementToast(context, languageManager.getString("vision_required_message"))
+        !VoxAppsDiscovery.isCommanderInstalled(context) ->
+            showRequirementToast(context, languageManager.getString("commander_required_message"))
+        else -> VisionAttachmentCapture.launch(
+            context, "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", null, produceOCR = true, captureMode = captureMode
+        )
     }
+}
+
+class ExpensesWidgetScanSingleAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_SINGLE)
+}
+
+class ExpensesWidgetScanStitchAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_STITCH)
+}
+
+class ExpensesWidgetScanBatchAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_BATCH)
 }
 
 @Composable
@@ -180,16 +200,29 @@ private fun ExpensesWidgetContent(
                 style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = GlanceTheme.colors.onSurface)
             )
             Spacer(modifier = GlanceModifier.defaultWeight())
+            // Dimmed (not hidden) when Vision/Commander aren't installed — tapping any of them still
+            // works, runWidgetScan shows an explanatory toast instead of launching Vision; Glance has
+            // no alpha modifier, so a muted tint stands in for "disabled".
+            val scanIconTint = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant)
             Image(
                 provider = ImageProvider(R.drawable.ic_scan),
-                contentDescription = languageManager.getString("scan_receipt"),
-                // Dimmed (not hidden) when Vision/Commander aren't installed — tapping it still
-                // works, ExpensesWidgetScanAction shows an explanatory toast instead of launching
-                // Vision; Glance has no alpha modifier, so a muted tint stands in for "disabled".
-                colorFilter = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant),
-                modifier = GlanceModifier
-                    .size(18.dp)
-                    .clickable(actionRunCallback<ExpensesWidgetScanAction>())
+                contentDescription = languageManager.getString("capture_mode_single"),
+                colorFilter = scanIconTint,
+                modifier = GlanceModifier.size(16.dp).clickable(actionRunCallback<ExpensesWidgetScanSingleAction>())
+            )
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Image(
+                provider = ImageProvider(R.drawable.ic_stitch),
+                contentDescription = languageManager.getString("capture_mode_stitch"),
+                colorFilter = scanIconTint,
+                modifier = GlanceModifier.size(16.dp).clickable(actionRunCallback<ExpensesWidgetScanStitchAction>())
+            )
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Image(
+                provider = ImageProvider(R.drawable.ic_batch),
+                contentDescription = languageManager.getString("capture_mode_batch"),
+                colorFilter = scanIconTint,
+                modifier = GlanceModifier.size(16.dp).clickable(actionRunCallback<ExpensesWidgetScanBatchAction>())
             )
         }
 
