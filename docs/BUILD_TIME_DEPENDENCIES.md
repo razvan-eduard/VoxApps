@@ -100,6 +100,17 @@ why these two are genuinely different constraints, not accidental drift).
 - No dedicated check/sync script exists for this one (Dependabot's own weekly PRs are sufficient since
   it reliably tracks Maven Central, unlike Vosk/NewPipeExtractor's JitPack coordinates) — the only
   addition versus a normal dependency is the auto-merge carve-out above.
+- `NativeLibManagerInstrumentedTest` (`vox-vision/src/androidTest`, `vox-commander/src/androidTest`) —
+  a real on-device instrumented test that calls `NativeLibManager.init()` and asserts `Status.READY`,
+  which would have caught this exact regression (a JVM unit test structurally cannot — the crash only
+  happens when a real device's linker resolves the actual `.so` files). Run manually via
+  `./gradlew :vox-vision:connectedDebugAndroidTest :vox-commander:connectedDebugAndroidTest` against a
+  real device/emulator when reviewing an onnxruntime-android bump. **Not wired into CI**: a real
+  device/emulator CI gate was attempted (`dependabot-automerge.yml`, since reverted) and abandoned —
+  every combination of GitHub-hosted runner (macOS+HVF, ARM64 Linux+KVM, ARM64 Linux without
+  acceleration, x86_64 Linux cross-arch, macOS same-arch software) failed to boot a full Android system
+  image within a practical timeout, confirmed via live runs across all five. Firebase Test Lab (a real
+  device farm) would work but needs a new GCP/Firebase account + billing — not set up.
 
 ---
 

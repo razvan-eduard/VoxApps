@@ -3,16 +3,6 @@ name: Dependabot Auto-Merge
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  # Manual-only escape hatch to exercise the native-lib-verify path (real arm64-v8a emulator) on
-  # demand, without waiting for an actual Dependabot PR touching onnxruntime-android — there's no
-  # PR context on a manual dispatch, so merge/notify-failure below are skipped entirely for this
-  # trigger (nothing to merge/comment on); this only ever runs detect + native-lib-verify.
-  workflow_dispatch:
-    inputs:
-      test_native_verify:
-        description: 'Force the native-lib-verify path (arm64-v8a emulator) for a manual test run'
-        type: boolean
-        default: true
 
 permissions:
   contents: write
@@ -25,35 +15,40 @@ jobs:
   # resolves, never that the actual .so still dlopen's correctly on a real device. That gap is
   # exactly how onnxruntime-android 1.27.0/1.28.0 (both shipping a broken arm64-v8a build) went
   # straight to main auto-merged: a fully green CI run the whole time, despite crashing OCR/
-  # wake-word/TTS on every real device. This job routes PRs touching that dependency to
-  # native-lib-verify (a real arm64-v8a emulator, not just a JVM test) instead of standard-check —
-  # every other dependency keeps auto-merging exactly as before.
+  # wake-word/TTS on every real device. This job skips the usual auto-merge for PRs touching that
+  # dependency and asks for a manual on-device build+install instead. A real device/emulator CI
+  # gate was attempted and abandoned — see docs/BUILD_TIME_DEPENDENCIES.md's onnxruntime-android
+  # section for why: no combination of GitHub-hosted runner (macOS+HVF, ARM64 Linux+KVM, ARM64
+  # Linux without acceleration, x86_64 Linux cross-arch, macOS same-arch software) could boot a
+  # full Android system image within a practical CI timeout — every path hit a hard wall,
+  # confirmed via live runs, not something fixable by tuning flags further. Every other dependency
+  # keeps auto-merging exactly as before.
   detect:
-    if: github.actor == 'dependabot[bot]' || github.event_name == 'workflow_dispatch'
+    if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     outputs:
-      needs_native_verify: ${{ steps.check.outputs.needs_native_verify }}
+      needs_manual_review: ${{ steps.check.outputs.needs_manual_review }}
     steps:
       - id: check
         run: |
           BRANCH="${{ github.event.pull_request.head.ref }}"
-          if [[ "$BRANCH" == *"onnxruntime"* ]] || [[ "${{ github.event.inputs.test_native_verify }}" == "true" ]]; then
-            echo "needs_native_verify=true" >> "$GITHUB_OUTPUT"
+          if [[ "$BRANCH" == *"onnxruntime"* ]]; then
+            echo "needs_manual_review=true" >> "$GITHUB_OUTPUT"
           else
-            echo "needs_native_verify=false" >> "$GITHUB_OUTPUT"
+            echo "needs_manual_review=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: "Comment: real-device verification required"
-        if: steps.check.outputs.needs_native_verify == 'true' && github.event_name == 'pull_request'
+      - name: "Comment: manual on-device verification required"
+        if: steps.check.outputs.needs_manual_review == 'true'
         run: |
-          gh pr comment "$PR_URL" --body "⚠️ This bumps \`onnxruntime-android\`, a native/ABI-sensitive dependency — a past version (1.27.0/1.28.0) shipped a broken arm64-v8a build that crashed every OCR/wake-word/TTS engine at runtime despite compiling and passing unit tests cleanly. Routing this PR to a real arm64-v8a emulator run (NativeLibManagerInstrumentedTest, both apps) instead of the usual JVM-only checks — auto-merge only proceeds if that passes."
+          gh pr comment "$PR_URL" --body "⚠️ This bumps \`onnxruntime-android\`, a native/ABI-sensitive dependency — a past version (1.27.0/1.28.0) shipped a broken arm64-v8a build that crashed every OCR/wake-word/TTS engine at runtime despite compiling and passing unit tests cleanly. Auto-merge is skipped for this dependency; please build a release APK, install on a real device, and confirm OCR (vox-vision) and/or wake-word + TTS (vox-commander) actually work before merging manually."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   standard-check:
     needs: detect
-    if: needs.detect.outputs.needs_native_verify == 'false'
+    if: needs.detect.outputs.needs_manual_review != 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -110,113 +105,18 @@ jobs:
         id: compile
         run: ./gradlew compileDebugKotlin assembleDebug --no-daemon
 
-  # Only reached for PRs bumping onnxruntime-android (see detect above). Runs a real arm64-v8a
-  # Android emulator on macos-latest, in software (unaccelerated) mode. Four combinations have
-  # been tried on GitHub-hosted runners:
-  #   - macos-latest + HVF acceleration: emulator installs fine, but the guest never gets HVF
-  #     passthrough (HV_UNSUPPORTED, emulator never boots — confirmed live).
-  #   - ubuntu-24.04-arm + KVM: no /dev/kvm exposed to the guest at all (confirmed live).
-  #   - ubuntu-24.04-arm, no acceleration needed: Google doesn't publish an `emulator` host-tool
-  #     package for linux-aarch64 at all ("Failed to find package 'emulator'" — confirmed live) —
-  #     a dead end independent of acceleration.
-  #   - ubuntu-latest (x86_64) + cross-architecture TCG for an arm64-v8a guest: the emulator
-  #     genuinely can install and attempt to boot, but cross-arch instruction translation didn't
-  #     finish within a 1200s timeout (confirmed live) — too slow to be practical.
-  # This is the last untested combination: macOS's emulator binary DOES install correctly (unlike
-  # ARM64 Linux), and same-architecture software emulation (arm64-v8a guest on an Apple Silicon
-  # arm64 host) should be far less painful than the cross-architecture case that already timed
-  # out. Free for this repo (public, GPLv3 — GitHub Actions minutes are unlimited for public
-  # repos, including macOS runners). Exercises NativeLibManagerInstrumentedTest in both vox-vision
-  # and vox-commander — a real on-device dlopen of the actual essential native libs, the only
-  # thing that would have caught the 1.27.0/1.28.0 regression (both versions compiled and passed
-  # unit tests cleanly; the crash was runtime-only, on-device-only).
-  native-lib-verify:
-    needs: detect
-    if: needs.detect.outputs.needs_native_verify == 'true'
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout PR branch (with submodules)
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.ref }}
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      # packages defaults to "tools platform-tools" -- the legacy "tools" meta-package's
-      # dependency resolution is unreliable across hosts (confirmed broken outright on
-      # linux-aarch64); we don't need it anyway -- reactivecircus/android-emulator-runner
-      # installs the actual emulator binary + system image itself.
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-licenses: true
-          packages: 'platform-tools'
-
-      - name: Install NDK and CMake
-        run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
-
-      - name: Install Vulkan-Headers/SPIRV-Headers/Shaderc for whisper build (Homebrew, native on macOS)
-        run: brew install vulkan-headers spirv-headers shaderc
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Run instrumented tests on a real arm64-v8a emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          target: google_apis
-          arch: arm64-v8a
-          disable-animations: true
-          # Default boot timeout (600s) is tuned for hardware-accelerated boots — software (TCG)
-          # emulation needs more headroom.
-          emulator-boot-timeout: 1200
-          # -no-accel: HVF passthrough isn't available to the guest on GitHub's macOS runners
-          # (HV_UNSUPPORTED, confirmed live) — same-architecture (arm64-v8a guest on an Apple
-          # Silicon arm64 host) software emulation should still be far more tolerable than the
-          # cross-architecture case (arm64-v8a on an x86_64 host) that already timed out.
-          emulator-options: -no-window -no-accel -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: ./gradlew :vox-vision:connectedDebugAndroidTest :vox-commander:connectedDebugAndroidTest --no-daemon
-
-  merge:
-    needs: [detect, standard-check, native-lib-verify]
-    if: |
-      always() && github.actor == 'dependabot[bot]' &&
-      (
-        (needs.detect.outputs.needs_native_verify == 'false' && needs.standard-check.result == 'success') ||
-        (needs.detect.outputs.needs_native_verify == 'true' && needs.native-lib-verify.result == 'success')
-      )
-    runs-on: ubuntu-latest
-    steps:
       - name: Squash merge PR to main
+        if: success()
         run: |
           gh pr merge "$PR_URL" --squash --delete-branch
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  notify-failure:
-    needs: [detect, standard-check, native-lib-verify]
-    if: |
-      always() && github.actor == 'dependabot[bot]' &&
-      (
-        (needs.detect.outputs.needs_native_verify == 'false' && needs.standard-check.result == 'failure') ||
-        (needs.detect.outputs.needs_native_verify == 'true' && needs.native-lib-verify.result == 'failure')
-      )
-    runs-on: ubuntu-latest
-    steps:
-      - name: Comment on failure
+      - name: Notify on failure
+        if: failure()
         run: |
-          gh pr comment "$PR_URL" --body "❌ Tests failed on the PR branch. Auto-merge skipped. Please fix the issues before merging."
+          gh pr comment "$PR_URL" --body "❌ Tests or compilation failed on the PR branch. Auto-merge skipped. Please fix the issues before merging."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
