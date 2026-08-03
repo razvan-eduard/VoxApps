@@ -110,18 +110,17 @@ jobs:
         id: compile
         run: ./gradlew compileDebugKotlin assembleDebug --no-daemon
 
-  # Only reached for PRs bumping onnxruntime-android (see detect above). Runs on a real,
-  # hardware-accelerated arm64-v8a Android emulator — ubuntu-24.04-arm is a native ARM64 Linux
-  # host with KVM, so an arm64-v8a system image gets real hardware acceleration matching our
-  # actual shipped ABI. (An earlier attempt used macos-latest on the theory that Apple Silicon
-  # runners give free HVF-accelerated arm64 emulation — that doesn't work: GitHub's macOS runners
-  # run inside their own hypervisor with no nested-virtualization passthrough, so HVF fails with
-  # HV_UNSUPPORTED and the emulator never boots. ARM64 Linux runners have no such nesting problem.)
-  # Free for this repo (public, GPLv3 — GitHub Actions minutes are unlimited for public repos,
-  # including ARM64 Linux runners). Exercises NativeLibManagerInstrumentedTest in both vox-vision
-  # and vox-commander — a real on-device dlopen of the actual essential native libs, the only
-  # thing that would have caught the 1.27.0/1.28.0 regression (both versions compiled and passed
-  # unit tests cleanly; the crash was runtime-only, on-device-only).
+  # Only reached for PRs bumping onnxruntime-android (see detect above). Runs on a real arm64-v8a
+  # Android emulator (software/TCG, unaccelerated) — neither GitHub's macOS runners (no HVF
+  # passthrough into the guest, confirmed via a live run: HV_UNSUPPORTED, emulator never boots)
+  # nor its ARM64 Linux runners (no /dev/kvm exposed at all, confirmed via a live run) support
+  # hardware-accelerated virtualization for the guest, so ubuntu-24.04-arm here is chosen for
+  # "same-architecture TCG is much less slow than cross-architecture TCG would be" rather than
+  # for KVM. Free for this repo (public, GPLv3 — GitHub Actions minutes are unlimited for public
+  # repos, including ARM64 Linux runners). Exercises NativeLibManagerInstrumentedTest in both
+  # vox-vision and vox-commander — a real on-device dlopen of the actual essential native libs,
+  # the only thing that would have caught the 1.27.0/1.28.0 regression (both versions compiled
+  # and passed unit tests cleanly; the crash was runtime-only, on-device-only).
   native-lib-verify:
     needs: detect
     if: needs.detect.outputs.needs_native_verify == 'true'
@@ -178,20 +177,6 @@ jobs:
           sudo cmake --install build
           sudo ln -sf /usr/bin/glslc /usr/local/bin/glslc 2>/dev/null || true
 
-      # KVM device access isn't granted by default on GitHub-hosted Linux runners — without this,
-      # the emulator falls back to unaccelerated software emulation (or fails outright depending
-      # on the image), defeating the point of using a native ARM64 host.
-      - name: Enable KVM
-        run: |
-          if [ ! -e /dev/kvm ]; then
-            echo "::error::/dev/kvm does not exist on this runner — KVM is unavailable here."
-            ls -la /dev/kvm* 2>&1 || true
-            exit 1
-          fi
-          ls -la /dev/kvm
-          sudo chmod 666 /dev/kvm
-          ls -la /dev/kvm
-
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -202,7 +187,16 @@ jobs:
           target: google_apis
           arch: arm64-v8a
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          # Default boot timeout (600s) is tuned for hardware-accelerated boots — software (TCG)
+          # emulation needs more headroom.
+          emulator-boot-timeout: 1200
+          # -no-accel: neither GitHub's macOS runners (no HVF passthrough) nor its ARM64 Linux
+          # runners (no /dev/kvm at all) expose hardware virtualization to the guest — confirmed
+          # via two separate live-run failures (HV_UNSUPPORTED on macOS, missing /dev/kvm here).
+          # Software (TCG) emulation is slow but works; same-architecture (arm64-v8a guest on an
+          # arm64 host) TCG is far less painful than the cross-architecture translation an x86
+          # host would need for this ABI.
+          emulator-options: -no-window -no-accel -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: ./gradlew :vox-vision:connectedDebugAndroidTest :vox-commander:connectedDebugAndroidTest --no-daemon
 
   merge:
