@@ -95,3 +95,4 @@ google-services.json
 *.jks
 *.keystore
 .artifacts/
+.gradle_home/

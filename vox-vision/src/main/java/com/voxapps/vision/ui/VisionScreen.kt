@@ -619,8 +619,10 @@ fun VisionScreen(
                 }
 
                 val delaySeconds = autoCaptureDelayState.value
-                if (delaySeconds == VisionSettingsRepository.AUTO_CAPTURE_MANUAL) {
-                    // Manual: never auto-fires, only the FAB captures — no countdown to show either.
+                if (delaySeconds == VisionSettingsRepository.AUTO_CAPTURE_MANUAL ||
+                    pendingRequestState.value?.captureMode == VoxOcrRequest.CAPTURE_MODE_BATCH
+                ) {
+                    // Manual or BATCH: never auto-fires, only the FAB captures — no countdown to show either.
                     autoCaptureCountdownSeconds = null
                     return@execute
                 }

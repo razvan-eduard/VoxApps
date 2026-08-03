@@ -17,7 +17,7 @@ import java.io.File
  */
 object NativeLibManager {
     private const val TAG = "NativeLibManager"
-    private const val LIB_DIR_NAME = "native_libs"
+    private const val LIB_DIR_PREFIX = "native_libs_"
     private const val RELEASE_BASE = "https://github.com/razvan-eduard/VoxApps/releases/download/"
 
     // Order matters: loadAll() below uses System.load() (not loadLibrary()), which — unlike the
@@ -49,7 +49,22 @@ object NativeLibManager {
 
     enum class Status { IDLE, CHECKING, DOWNLOADING, READY, ERROR }
 
-    private fun getLibDir(context: Context): File = File(context.filesDir, LIB_DIR_NAME)
+    private fun getLibDir(context: Context): File =
+        File(context.filesDir, "$LIB_DIR_PREFIX${getReleaseTag(context)}")
+
+    private fun cleanupOldVersions(context: Context) {
+        val currentDirName = "$LIB_DIR_PREFIX${getReleaseTag(context)}"
+        context.filesDir.listFiles()?.forEach { file ->
+            if (file.isDirectory && file.name.startsWith(LIB_DIR_PREFIX) && file.name != currentDirName) {
+                Logger.d(TAG, "Cleaning up old native libs version: ${file.name}")
+                file.deleteRecursively()
+            }
+            // Also cleanup the legacy non-versioned directory if it exists
+            if (file.isDirectory && file.name == "native_libs") {
+                file.deleteRecursively()
+            }
+        }
+    }
 
     private fun getReleaseTag(context: Context): String {
         return try {
@@ -77,6 +92,8 @@ object NativeLibManager {
     suspend fun init(context: Context) = withContext(Dispatchers.IO) {
         if (_status.value == Status.READY) return@withContext
         _status.value = Status.CHECKING
+        
+        cleanupOldVersions(context)
         
         if (areLibsPresent(context)) {
             try {

@@ -73,8 +73,7 @@ fun NotesRoot(
                             NotesScreen(
                                 state = state,
                                 stateManager = container.notesStateManager,
-                                calendarViewEnabled = settings.calendarViewEnabled,
-                                language = settings.language,
+                                settings = settings,
                                 onOpenSettings = { showSettings = true },
                                 quickAddTrigger = quickAddTrigger,
                                 editNoteId = editNoteId,

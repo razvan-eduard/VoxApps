@@ -111,7 +111,7 @@ fun CalendarRoot(
                             )
                             else -> CalendarScreen(
                                 state = state,
-                                language = container.settingsRepository.getSnapshot().language,
+                                settings = settings,
                                 stateManager = container.calendarStateManager,
                                 onAddEntry = { editTarget = EditTarget.New },
                                 onEditEntry = { item -> editTarget = EditTarget.Existing(item.entryWithTags) },

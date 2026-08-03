@@ -1,8 +1,10 @@
 package com.voxapps.calendarapp.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,10 +13,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BurstMode
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Menu
@@ -24,12 +27,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -39,26 +39,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.calendar.CalendarView
 import com.voxapps.calendarapp.data.CalendarLayer
-import com.voxapps.calendarapp.domain.llm.CalendarScanRequestSender
+import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.state.CalendarViewMode
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.design.SpeedDialAction
+import com.voxapps.design.SpeedDialFab
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
-import com.voxapps.design.rememberRequirementGate
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrRequest
+import com.voxapps.calendarapp.domain.llm.LlmTasks
 import java.text.DateFormat
 import java.time.Instant
 import java.time.ZoneId
@@ -74,7 +75,7 @@ private const val DAY_MILLIS = 24 * 3600_000L
 @Composable
 fun CalendarScreen(
     state: CalendarUiState.Unlocked,
-    language: String,
+    settings: CalendarSettings,
     stateManager: CalendarStateManager,
     onAddEntry: () -> Unit,
     onEditEntry: (EntryCalendarItem) -> Unit,
@@ -87,11 +88,45 @@ fun CalendarScreen(
 ) {
     val languageManager = LocalLanguageManager.current
     val layerById = remember(state.layers) { state.layers.associateBy { it.id } }
-    val locale = Locale.forLanguageTag(language)
+    val locale = Locale.forLanguageTag(settings.language)
     var daySummaryFor by remember { mutableStateOf<Long?>(null) }
     var sidebarVisible by remember { mutableStateOf(false) }
 
     DoubleBackToExitHandler(message = languageManager.getString("press_back_again_to_exit"))
+
+    val context = LocalContext.current
+    val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
+    val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+
+    val scanSingle = rememberVisionCaptureLauncher(
+        baseTask = LlmTasks.CALENDAR_SCAN_CLEANUP, hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE
+    )
+    val scanStitch = rememberVisionCaptureLauncher(
+        baseTask = LlmTasks.CALENDAR_SCAN_CLEANUP, hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH
+    )
+    val scanBatch = rememberVisionCaptureLauncher(
+        baseTask = LlmTasks.CALENDAR_SCAN_CLEANUP, hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
+    )
+
+    fun gatedScan(action: () -> Unit) {
+        if (visionInstalled && commanderInstalled) {
+            action()
+        } else {
+            com.voxapps.design.showRequirementToast(
+                context,
+                languageManager.getString(if (!visionInstalled) "vision_required_message" else "commander_required_message")
+            )
+        }
+    }
+
+    val scanActions = listOf(
+        SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single")) { gatedScan(scanSingle) },
+        SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch")) { gatedScan(scanStitch) },
+        SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch")) { gatedScan(scanBatch) }
+    )
 
     Scaffold(
         topBar = {
@@ -103,75 +138,6 @@ fun CalendarScreen(
                     }
                 },
                 actions = {
-                    val context = LocalContext.current
-                    // Scan needs Vision installed to even launch, and Commander installed for the
-                    // OCR-cleanup step that runs after — stays visible but dimmed, with an
-                    // explanatory toast on tap naming whichever one is missing, rather than silently
-                    // failing (or crashing, for the Vision case). Mirrors vox-notes'/vox-expenses'
-                    // identical gate.
-                    val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
-                    val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
-                    var showScanMenu by remember { mutableStateOf(false) }
-                    val scanGate = rememberRequirementGate(
-                        satisfied = visionInstalled && commanderInstalled,
-                        requiredMessage = languageManager.getString(
-                            if (!visionInstalled) "vision_required_message" else "commander_required_message"
-                        )
-                    ) { showScanMenu = true }
-                    Box {
-                        Surface(
-                            onClick = scanGate.onClick,
-                            shape = RoundedCornerShape(percent = 50),
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 4.dp)
-                                .alpha(scanGate.alpha)
-                                .semantics { contentDescription = languageManager.getString("scan_calendar_entry") }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    Icons.Filled.DocumentScanner,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    languageManager.getString("scan_action"),
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        }
-                        DropdownMenu(expanded = showScanMenu, onDismissRequest = { showScanMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text(languageManager.getString("capture_mode_single")) },
-                                leadingIcon = { Icon(Icons.Filled.PhotoCamera, contentDescription = null) },
-                                onClick = {
-                                    showScanMenu = false
-                                    CalendarScanRequestSender.send(context, VoxOcrRequest.CAPTURE_MODE_SINGLE)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(languageManager.getString("capture_mode_stitch")) },
-                                leadingIcon = { Icon(Icons.Filled.Layers, contentDescription = null) },
-                                onClick = {
-                                    showScanMenu = false
-                                    CalendarScanRequestSender.send(context, VoxOcrRequest.CAPTURE_MODE_STITCH)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(languageManager.getString("capture_mode_batch")) },
-                                leadingIcon = { Icon(Icons.Filled.BurstMode, contentDescription = null) },
-                                onClick = {
-                                    showScanMenu = false
-                                    CalendarScanRequestSender.send(context, VoxOcrRequest.CAPTURE_MODE_BATCH)
-                                }
-                            )
-                        }
-                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
                     }
@@ -179,8 +145,16 @@ fun CalendarScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddEntry) {
-                Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_item"))
+            Column(horizontalAlignment = Alignment.End) {
+                SpeedDialFab(
+                    actions = scanActions,
+                    mainIcon = Icons.Filled.DocumentScanner,
+                    mainContentDescription = languageManager.getString("scan_action"),
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                FloatingActionButton(onClick = onAddEntry) {
+                    Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_item"))
+                }
             }
         }
     ) { padding ->
