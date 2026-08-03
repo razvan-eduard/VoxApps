@@ -208,21 +208,21 @@ private fun ExpensesWidgetContent(
                 provider = ImageProvider(R.drawable.ic_scan),
                 contentDescription = languageManager.getString("capture_mode_single"),
                 colorFilter = scanIconTint,
-                modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<ExpensesWidgetScanSingleAction>())
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<ExpensesWidgetScanSingleAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_stitch),
                 contentDescription = languageManager.getString("capture_mode_stitch"),
                 colorFilter = scanIconTint,
-                modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<ExpensesWidgetScanStitchAction>())
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<ExpensesWidgetScanStitchAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_batch),
                 contentDescription = languageManager.getString("capture_mode_batch"),
                 colorFilter = scanIconTint,
-                modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<ExpensesWidgetScanBatchAction>())
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<ExpensesWidgetScanBatchAction>())
             )
         }
 

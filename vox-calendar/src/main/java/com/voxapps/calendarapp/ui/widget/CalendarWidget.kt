@@ -211,21 +211,21 @@ private fun CalendarWidgetContent(
                 provider = ImageProvider(R.drawable.ic_scan),
                 contentDescription = languageManager.getString("capture_mode_single"),
                 colorFilter = scanIconTint,
-                modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<CalendarWidgetScanSingleAction>())
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<CalendarWidgetScanSingleAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_stitch),
                 contentDescription = languageManager.getString("capture_mode_stitch"),
                 colorFilter = scanIconTint,
-                modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<CalendarWidgetScanStitchAction>())
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<CalendarWidgetScanStitchAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_batch),
                 contentDescription = languageManager.getString("capture_mode_batch"),
                 colorFilter = scanIconTint,
-                modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<CalendarWidgetScanBatchAction>())
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<CalendarWidgetScanBatchAction>())
             )
         }
 

@@ -173,21 +173,21 @@ private fun NotesWidgetContent(
                 provider = ImageProvider(R.drawable.ic_scan),
                 contentDescription = languageManager.getString("capture_mode_single"),
                 colorFilter = scanIconTint,
-                modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<NotesWidgetScanSingleAction>())
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanSingleAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_stitch),
                 contentDescription = languageManager.getString("capture_mode_stitch"),
                 colorFilter = scanIconTint,
-                modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<NotesWidgetScanStitchAction>())
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanStitchAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_batch),
                 contentDescription = languageManager.getString("capture_mode_batch"),
                 colorFilter = scanIconTint,
-                modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<NotesWidgetScanBatchAction>())
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanBatchAction>())
             )
         }
 

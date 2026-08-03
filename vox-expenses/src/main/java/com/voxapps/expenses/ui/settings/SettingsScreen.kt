@@ -45,6 +45,7 @@ import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.notifications.NotificationSoundPlayer
 import com.voxapps.design.settings.NotificationSettingsCard
+import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
 import com.voxapps.design.settings.ThemeSettingsStrings
 import com.voxapps.design.settings.TodayEffectSettings
@@ -133,26 +134,36 @@ fun SettingsScreen(
         val mod = Modifier.fillMaxSize().padding(pad)
         when (page) {
             SettingsPage.MENU -> Column(mod) {
+                SettingsSectionHeader(languageManager.getString("settings_section_general"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("general")) },
                     leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                 )
+                SettingsSectionHeader(languageManager.getString("settings_section_appearance"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("theme_section")) },
                     leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.THEME }
                 )
+                SettingsSectionHeader(languageManager.getString("settings_section_notifications"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("notifications_settings_title")) },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATIONS }
                 )
+                SettingsSectionHeader(languageManager.getString("settings_section_capture"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("voice_settings_title")) },
                     leadingContent = { Icon(Icons.Filled.Mic, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.VOICE }
                 )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("notification_capture_title")) },
+                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATION_CAPTURE }
+                )
+                SettingsSectionHeader(languageManager.getString("settings_section_data"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("categories_settings_title")) },
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.MergeType, contentDescription = null) },
@@ -169,15 +180,11 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CURRENCY }
                 )
                 ListItem(
-                    headlineContent = { Text(languageManager.getString("notification_capture_title")) },
-                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
-                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATION_CAPTURE }
-                )
-                ListItem(
                     headlineContent = { Text(languageManager.getString("spending_limits_title")) },
                     leadingContent = { Icon(Icons.Filled.Shield, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SPENDING_LIMITS }
                 )
+                SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("logs_settings_title")) },
                     leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },

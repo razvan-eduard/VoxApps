@@ -46,6 +46,7 @@ import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.notifications.NotificationSoundPlayer
 import com.voxapps.design.settings.NotificationSettingsCard
+import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
 import com.voxapps.design.settings.ThemeSettingsStrings
 import com.voxapps.design.settings.TodayEffectSettings
@@ -116,26 +117,31 @@ fun SettingsScreen(
         when (page) {
             SettingsPage.MENU -> {
                 Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                    SettingsSectionHeader(languageManager.getString("settings_section_general"))
                     ListItem(
                         headlineContent = { Text(languageManager.getString("general")) },
                         leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
                         modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                     )
+                    SettingsSectionHeader(languageManager.getString("settings_section_appearance"))
                     ListItem(
                         headlineContent = { Text(languageManager.getString("theme_section")) },
                         leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null) },
                         modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.THEME }
                     )
+                    SettingsSectionHeader(languageManager.getString("settings_section_notifications"))
                     ListItem(
                         headlineContent = { Text(languageManager.getString("notifications_settings_title")) },
                         leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                         modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATIONS }
                     )
+                    SettingsSectionHeader(languageManager.getString("settings_section_data"))
                     ListItem(
                         headlineContent = { Text(languageManager.getString("ics_settings_title")) },
                         leadingContent = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
                         modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.ICS }
                     )
+                    SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
                     ListItem(
                         headlineContent = { Text(languageManager.getString("logs_settings_title")) },
                         leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },

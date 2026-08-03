@@ -48,6 +48,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
+import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
 import com.voxapps.design.settings.ThemeSettingsStrings
 import com.voxapps.hub.data.preferences.HubSettings
@@ -139,25 +140,29 @@ fun HubSettingsScreen(
     ) { padding ->
         when (page) {
             SettingsPage.MENU -> Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                SettingsSectionHeader(languageManager.getString("settings_section_general"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("backup_schedule_section")) },
                     leadingContent = { Icon(Icons.Filled.Backup, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                 )
+                SettingsSectionHeader(languageManager.getString("settings_section_appearance"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("theme_section")) },
                     leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.THEME }
                 )
-                ListItem(
-                    headlineContent = { Text(languageManager.getString("logs_settings_title")) },
-                    leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
-                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
-                )
+                SettingsSectionHeader(languageManager.getString("settings_section_integrations"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("voxconnect_section")) },
                     leadingContent = { Icon(Icons.Filled.Wifi, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.VOXCONNECT }
+                )
+                SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("logs_settings_title")) },
+                    leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
                 )
             }
 
