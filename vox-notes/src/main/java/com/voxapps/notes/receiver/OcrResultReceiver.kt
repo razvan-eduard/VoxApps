@@ -19,7 +19,6 @@ import com.voxapps.notes.NotesApplication
 import com.voxapps.notes.di.NotesContainer
 import com.voxapps.notes.domain.llm.LlmTasks
 import com.voxapps.notes.domain.llm.NoteScanCleanupPromptBuilder
-import com.voxapps.notes.domain.llm.ScanRequestSender
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -72,18 +71,25 @@ class OcrResultReceiver : BroadcastReceiver() {
             return
         }
 
-        // A batch Scan session's single reply (see VoxOcrRequest.CAPTURE_MODE_BATCH) — capture-only,
-        // no OCR ran, so there's no text to forward yet. Fire one headless OCR request per photo;
-        // each of THOSE replies lands right back in this same branch (now carrying real text) and
-        // creates its own independent note — no other receiver changes needed for batch.
-        if (result.status == VoxOcrResult.STATUS_SUCCESS && result.rawText == null && result.imageUris.isNotEmpty()) {
+        // A batch Scan session's single reply (see VoxOcrRequest.CAPTURE_MODE_BATCH) — Vision now
+        // OCRs every photo itself before replying (see VoxOcrResult.rawTexts' doc comment for why:
+        // the old design sent imageUris only and expected this receiver to relaunch Vision once per
+        // photo afterward, which Android's background-execution restrictions silently block). Each
+        // (imageUri, text) pair becomes its own independent note, same forwarding-to-Commander logic
+        // as a single-shot reply, just looped.
+        if (result.status == VoxOcrResult.STATUS_SUCCESS && result.rawText == null && result.rawTexts.isNotEmpty()) {
+            val container = (context.applicationContext as NotesApplication).container
+            if (!VoxAppsDiscovery.isCommanderInstalled(context)) {
+                Toast.makeText(context, container.languageManager.getString("commander_required_message"), Toast.LENGTH_SHORT).show()
+                return
+            }
             val pending = goAsync()
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    result.imageUris.forEach { imageUri ->
-                        ScanRequestSender.sendHeadlessBatchPageOcr(context, Uri.parse(imageUri))
+                    result.imageUris.zip(result.rawTexts).forEach { (imageUri, text) ->
+                        if (text.isNotBlank()) forwardScanToCommander(context, container, text, imageUri)
                     }
-                    Logger.d(TAG, "Batch scan: fired independent headless OCR for ${result.imageUris.size} photo(s)")
+                    Logger.d(TAG, "Batch scan: created ${result.rawTexts.count { it.isNotBlank() }} note(s) from ${result.imageUris.size} photo(s)")
                 } finally {
                     pending.finish()
                 }
@@ -115,46 +121,62 @@ class OcrResultReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val existingCategories = container.notesRepository.categories.first().map { it.name }
-                val settings = container.settingsRepository.getSnapshot()
-                val language = settings.language
-
-                // No receipt-record equivalent here (unlike Expenses) and no retry mechanism, so the
-                // AI-attachment copy only ever needs to live long enough for this one call — staged
-                // into cache, not persisted. Gated on our own attachPhotoOnScan toggle (checked here)
-                // and Vision having actually provided a downscaled copy in the first place (its own
-                // "send photo to AI" setting); the multimodal-engine check happens inside the grant.
-                val attachmentUri = if (settings.attachPhotoOnScan) {
-                    result.aiImageUri?.let { aiUriString -> stageAndGrantAiCopy(context, aiUriString) }
-                } else null
-
-                // Unconditionally staged (regardless of scanImageRetention) — mirrors vox-expenses'
-                // OcrResultReceiver, and for the same reason: we don't yet know success/failure, and
-                // Vision's own grant on result.imageUris.first() may not outlive this call.
-                // LlmResultReceiver decides whether to keep it (create an AttachmentEntity) or delete
-                // it once the real outcome is known, per NotesSettings.scanImageRetention.
-                val stagedImageName = result.imageUris.firstOrNull()?.let { uriString ->
-                    AttachmentFileStore.stage(context, Uri.parse(uriString), NotesAttachments.DIR)
-                }
-                val taskWithMeta = if (stagedImageName != null) {
-                    "${LlmTasks.NOTE_SCAN_CLEANUP}:$stagedImageName"
-                } else {
-                    LlmTasks.NOTE_SCAN_CLEANUP
-                }
-
-                container.pendingLlmRequestQueue.enqueueAndSend(
-                    context = context,
-                    sourcePackage = context.packageName,
-                    task = taskWithMeta,
-                    promptText = NoteScanCleanupPromptBuilder.build(rawText, existingCategories, language),
-                    targetPackage = COMMANDER_PACKAGE,
-                    data = listOf(rawText),
-                    attachmentUri = attachmentUri
-                )
+                forwardScanToCommander(context, container, rawText, result.imageUris.firstOrNull(), result.aiImageUri)
             } finally {
                 pending.finish()
             }
         }
+    }
+
+    /** One scanned photo's text -> one new note, forwarded to Commander's generic LLM hook for
+     *  cleanup (the note itself gets created once that cleanup reply lands in [LlmResultReceiver]).
+     *  Shared by a single/stitch reply (exactly one call) and a batch reply (looped, one call per
+     *  accepted photo — see the batch branch above). */
+    private suspend fun forwardScanToCommander(
+        context: Context,
+        container: com.voxapps.notes.di.NotesContainer,
+        rawText: String,
+        imageUri: String?,
+        aiImageUri: String? = null
+    ) {
+        val existingCategories = container.notesRepository.categories.first().map { it.name }
+        val settings = container.settingsRepository.getSnapshot()
+        val language = settings.language
+
+        // No receipt-record equivalent here (unlike Expenses) and no retry mechanism, so the
+        // AI-attachment copy only ever needs to live long enough for this one call — staged
+        // into cache, not persisted. Gated on our own attachPhotoOnScan toggle (checked here)
+        // and Vision having actually provided a downscaled copy in the first place (its own
+        // "send photo to AI" setting); the multimodal-engine check happens inside the grant.
+        // A batch reply's per-photo AI copy isn't currently produced by Vision (aiImageUri is
+        // null for those calls) — same limitation the old headless-relaunch design had.
+        val attachmentUri = if (settings.attachPhotoOnScan) {
+            aiImageUri?.let { aiUriString -> stageAndGrantAiCopy(context, aiUriString) }
+        } else null
+
+        // Unconditionally staged (regardless of scanImageRetention) — mirrors vox-expenses'
+        // OcrResultReceiver, and for the same reason: we don't yet know success/failure, and
+        // Vision's own grant on imageUri may not outlive this call. LlmResultReceiver decides
+        // whether to keep it (create an AttachmentEntity) or delete it once the real outcome is
+        // known, per NotesSettings.scanImageRetention.
+        val stagedImageName = imageUri?.let { uriString ->
+            AttachmentFileStore.stage(context, Uri.parse(uriString), NotesAttachments.DIR)
+        }
+        val taskWithMeta = if (stagedImageName != null) {
+            "${LlmTasks.NOTE_SCAN_CLEANUP}:$stagedImageName"
+        } else {
+            LlmTasks.NOTE_SCAN_CLEANUP
+        }
+
+        container.pendingLlmRequestQueue.enqueueAndSend(
+            context = context,
+            sourcePackage = context.packageName,
+            task = taskWithMeta,
+            promptText = NoteScanCleanupPromptBuilder.build(rawText, existingCategories, language),
+            targetPackage = COMMANDER_PACKAGE,
+            data = listOf(rawText),
+            attachmentUri = attachmentUri
+        )
     }
 
     /** Stages every returned photo and commits it as a real AttachmentEntity row — no OCR text

@@ -419,13 +419,38 @@ fun VisionScreen(
     val completeMultiShot: () -> Unit = {
         if (effectivePendingRequest != null && !showScanSuccess) {
             when (effectivePendingRequest.captureMode) {
+                // Batch capture itself never runs OCR live (effectiveProduceOCR forces it off, so the
+                // capture loop above stays fast) — instead every accepted photo gets OCR'd right here,
+                // once, the moment the user taps Done. This still runs inside Vision's own foreground
+                // Activity (the tap that triggered it), so it can't hit the background-execution walls
+                // a caller-side headless relaunch does (see VoxOcrResult.rawTexts' doc comment) — the
+                // old design sent imageUris only and made every caller relaunch Vision once per photo
+                // afterward, which is exactly what those walls block.
                 VoxOcrRequest.CAPTURE_MODE_BATCH -> if (batchUris.isNotEmpty()) {
-                    OcrResultSender.send(
-                        context,
-                        effectivePendingRequest.sourcePackage,
-                        VoxOcrResult(task = effectivePendingRequest.task, status = VoxOcrResult.STATUS_SUCCESS, imageUris = batchUris)
-                    )
-                    showScanSuccess = true
+                    isRecognizing = true
+                    scope.launch {
+                        val texts = batchUris.map { uriString ->
+                            try {
+                                val (text, _, _) = recognizeExistingImage(context, container, android.net.Uri.parse(uriString), produceOCR = true)
+                                text
+                            } catch (t: Throwable) {
+                                Logger.e("VisionScreen", "Batch page OCR failed for $uriString", t)
+                                ""
+                            }
+                        }
+                        isRecognizing = false
+                        OcrResultSender.send(
+                            context,
+                            effectivePendingRequest.sourcePackage,
+                            VoxOcrResult(
+                                task = effectivePendingRequest.task,
+                                status = VoxOcrResult.STATUS_SUCCESS,
+                                imageUris = batchUris,
+                                rawTexts = texts
+                            )
+                        )
+                        showScanSuccess = true
+                    }
                 }
                 VoxOcrRequest.CAPTURE_MODE_STITCH -> if (stitchUris.isNotEmpty()) {
                     OcrResultSender.send(
@@ -762,7 +787,7 @@ fun VisionScreen(
                         OutlinedButton(onClick = cancelMultiShot) {
                             Text(languageManager.getString("multi_shot_cancel"))
                         }
-                        Button(onClick = completeMultiShot, enabled = capturedCount > 0) {
+                        Button(onClick = completeMultiShot, enabled = capturedCount > 0 && !isRecognizing) {
                             Text(languageManager.getString("multi_shot_done"))
                         }
                     }

@@ -11,11 +11,11 @@ private const val TAG = "ExpenseScanRequestSender"
 
 /**
  * Headless (existing-image, no camera UI) Vision requests for Expenses — rescans/retries of a photo
- * already staged on disk. Live-camera captures for a new scan or an attachment now go through
- * [com.voxapps.attachments.VisionAttachmentCapture]/`rememberVisionCaptureLauncher` instead (see
- * [com.voxapps.expenses.ui.ExpensesScreen]/[com.voxapps.expenses.ui.ExpenseEditScreen]); this object
- * is purely for the headless follow-up steps [com.voxapps.expenses.receiver.OcrResultReceiver] fires
- * once a batch/stitch reply lands.
+ * already staged on disk, both triggered from Expenses' own foreground screen (the attachments
+ * section's rescan icon / "Retry cleanup" banner). Live-camera captures for a new scan or an
+ * attachment go through [com.voxapps.attachments.VisionAttachmentCapture]/
+ * `rememberVisionCaptureLauncher` instead (see [com.voxapps.expenses.ui.ExpensesScreen]/
+ * [com.voxapps.expenses.ui.ExpenseEditScreen]).
  */
 object ExpenseScanRequestSender {
     /**
@@ -49,18 +49,6 @@ object ExpenseScanRequestSender {
      */
     fun sendHeadlessRetryOcr(context: Context, expenseId: Long, dirName: String, fileName: String, imageUri: Uri) {
         launchHeadlessOcr(context, imageUri, task = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:retry:$expenseId:$dirName:$fileName")
-    }
-
-    /**
-     * One photo of a batch Scan session's per-photo OCR step (see
-     * [com.voxapps.expenses.receiver.OcrResultReceiver.handlePendingScanCreate]'s batch branch) —
-     * headless OCR against an already-staged (batch capture never runs OCR live — see
-     * [com.voxapps.ipc.VoxOcrRequest.CAPTURE_MODE_BATCH]) photo. No expense id and no group exist:
-     * each batch entry becomes its own fully independent expense the moment this reply lands, so the
-     * task string only needs to carry [fileName] — nothing to wait for or combine.
-     */
-    fun sendHeadlessPendingBatchPageOcr(context: Context, fileName: String, imageUri: Uri) {
-        launchHeadlessOcr(context, imageUri, task = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-batch-page:$fileName")
     }
 
     private fun launchHeadlessOcr(context: Context, imageUri: Uri, task: String) {

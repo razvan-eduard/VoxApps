@@ -60,10 +60,6 @@ class OcrResultReceiver : BroadcastReceiver() {
         // non-null one means single or stitch — either way exactly one already-known text for
         // everything captured, so one new expense gets created directly.
         val isPendingScanCreate = baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && taskParts.getOrNull(1) == "pending-create"
-        // "EXPENSE_SCAN_CLEANUP:pending-batch-page:$fileName" — one photo's headless-OCR reply from a
-        // batch Scan session (see handlePendingScanCreate's batch branch) — creates its own
-        // independent expense the moment its text is back, never waits on/combines with siblings.
-        val isPendingScanBatchPage = baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && taskParts.getOrNull(1) == "pending-batch-page"
         // A batch reply (Vision never ran OCR) needs no text to proceed; every other family requires
         // it — computed once here since several guards below need to branch on it.
         val isBatchReply = (isAttachmentCapture || isPendingScanCreate) && result.rawText == null
@@ -89,10 +85,9 @@ class OcrResultReceiver : BroadcastReceiver() {
         // Rare edge case (the Scan entry point itself already checks this before ever launching
         // Vision) — Commander could still get uninstalled mid-scan. Nothing downstream can do
         // anything without it, so skip straight to telling the user why instead of staging a photo
-        // that would never actually become an expense. Attachment capture and a batch reply's
-        // initial landing don't call Commander at all from this receiver (see the branches below,
-        // and handleAttachmentCapture's batch sub-path, which fires a headless *rescan* — not a
-        // direct Commander call — per photo) — every other family still needs it upfront.
+        // that would never actually become an expense. Attachment capture's own downstream
+        // Commander calls (see handleAttachmentCapture below) happen after staging regardless, so
+        // this upfront check would only block staging unnecessarily — skipped for that family.
         if (!isAttachmentCapture && !isBatchReply && !VoxAppsDiscovery.isCommanderInstalled(context)) {
             Toast.makeText(context, container.languageManager.getString("commander_required_message"), Toast.LENGTH_SHORT).show()
             return
@@ -102,21 +97,17 @@ class OcrResultReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 if (isAttachmentCapture) {
-                    handleAttachmentCapture(context, container, taskParts, result.imageUris, rawText)
+                    handleAttachmentCapture(context, container, taskParts, result.imageUris, rawText, result.rawTexts)
                     return@launch
                 }
                 if (isPendingScanCreate) {
-                    handlePendingScanCreate(context, container, result.imageUris, rawText)
+                    handlePendingScanCreate(context, container, result.imageUris, rawText, result.rawTexts)
                     return@launch
                 }
                 // Every other task family already required non-blank text to reach this point (see
                 // the guard above) — Kotlin just can't track that conditional guarantee across the
                 // isAttachmentCapture/isPendingScanCreate branches, so re-bind it non-null here.
                 val text = rawText!!
-                if (isPendingScanBatchPage) {
-                    handlePendingScanBatchPage(context, container, taskParts, text)
-                    return@launch
-                }
                 if (isRetryWithPhoto) {
                     val expenseId = taskParts.getOrNull(2)?.toLongOrNull()
                     val attachDirName = taskParts.getOrNull(3)
@@ -230,7 +221,8 @@ class OcrResultReceiver : BroadcastReceiver() {
         container: ExpensesContainer,
         taskParts: List<String>,
         imageUris: List<String>,
-        rawText: String?
+        rawText: String?,
+        rawTexts: List<String> = emptyList()
     ) {
         val expenseId = taskParts.getOrNull(1)?.toLongOrNull()
         if (expenseId == null) {
@@ -248,7 +240,10 @@ class OcrResultReceiver : BroadcastReceiver() {
         }
 
         if (rawText == null) {
-            stagedFileNames.forEach { fileName ->
+            // Vision OCR'd every batch photo itself before replying (see VoxOcrResult.rawTexts' doc
+            // comment) — no headless per-photo relaunch needed anymore, so each photo's own
+            // rescan-suggestion fires directly off the text Vision already provided.
+            stagedFileNames.forEachIndexed { index, fileName ->
                 container.attachmentDao.insert(
                     AttachmentEntity(
                         recordType = ExpensesAttachments.RECORD_TYPE,
@@ -260,8 +255,13 @@ class OcrResultReceiver : BroadcastReceiver() {
                         groupOrder = 0
                     )
                 )
-                val uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, ExpensesAttachments.DIR, fileName)
-                ExpenseScanRequestSender.sendHeadlessRescan(context, expenseId, ExpensesAttachments.DIR, fileName, uri)
+                val text = rawTexts.getOrNull(index)
+                if (!text.isNullOrBlank()) {
+                    writeOcrTextSibling(context, ExpensesAttachments.DIR, fileName, text)
+                    val settings = container.settingsRepository.getSnapshot()
+                    val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(context, ExpensesAttachments.DIR, fileName, settings.attachPhotoOnRetry)
+                    ExpenseScanCleanupRequestSender.sendLineItemsRescan(context, container, expenseId, text, attachmentUri)
+                }
             }
             Logger.d(TAG, "Batch attachment capture staged ${stagedFileNames.size} independent photo(s) for expense $expenseId")
             return
@@ -303,7 +303,7 @@ class OcrResultReceiver : BroadcastReceiver() {
      *   everything, write that one text as the (possible) group's first file's sibling, and create
      *   ONE new expense from it directly — no headless round trip needed, Vision already did the OCR.
      */
-    private suspend fun handlePendingScanCreate(context: Context, container: ExpensesContainer, imageUris: List<String>, rawText: String?) {
+    private suspend fun handlePendingScanCreate(context: Context, container: ExpensesContainer, imageUris: List<String>, rawText: String?, rawTexts: List<String> = emptyList()) {
         val fileNames = imageUris.mapNotNull { AttachmentFileStore.stage(context, Uri.parse(it), ExpensesAttachments.DIR) }
         if (fileNames.isEmpty()) {
             Logger.e(TAG, "Failed to stage any pending scan image")
@@ -314,11 +314,19 @@ class OcrResultReceiver : BroadcastReceiver() {
         }
 
         if (rawText == null) {
-            fileNames.forEach { fileName ->
-                val uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, ExpensesAttachments.DIR, fileName)
-                ExpenseScanRequestSender.sendHeadlessPendingBatchPageOcr(context, fileName, uri)
+            // Vision OCR'd every batch photo itself before replying (see VoxOcrResult.rawTexts' doc
+            // comment) — each photo becomes its own independent expense directly, no headless
+            // per-photo relaunch/round-trip needed anymore.
+            val settings = container.settingsRepository.getSnapshot()
+            fileNames.forEachIndexed { index, fileName ->
+                val text = rawTexts.getOrNull(index)
+                if (!text.isNullOrBlank()) {
+                    writeOcrTextSibling(context, ExpensesAttachments.DIR, fileName, text)
+                    val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(context, ExpensesAttachments.DIR, fileName, settings.attachPhotoOnScan)
+                    ExpenseScanCleanupRequestSender.sendPendingCreate(context, container, text, listOf(fileName), groupId = null, attachmentUri = attachmentUri)
+                }
             }
-            Logger.d(TAG, "Pending scan batch: staged ${fileNames.size} photo(s), firing independent headless OCR for each")
+            Logger.d(TAG, "Pending scan batch: created ${fileNames.count { rawTexts.getOrNull(fileNames.indexOf(it))?.isNotBlank() == true }} expense(s) from ${fileNames.size} photo(s)")
             return
         }
 
@@ -328,21 +336,5 @@ class OcrResultReceiver : BroadcastReceiver() {
         val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(context, ExpensesAttachments.DIR, fileNames.first(), settings.attachPhotoOnScan)
         ExpenseScanCleanupRequestSender.sendPendingCreate(context, container, rawText, fileNames, groupId, attachmentUri)
         Logger.d(TAG, "Pending scan (${fileNames.size} photo(s)) staged and creation request sent")
-    }
-
-    /** One photo's headless-OCR reply from a batch Scan session (see [handlePendingScanCreate]'s
-     *  batch branch) — immediately creates its own independent expense, no waiting on siblings at
-     *  all (batch entries never combine). */
-    private suspend fun handlePendingScanBatchPage(context: Context, container: ExpensesContainer, taskParts: List<String>, rawText: String) {
-        val fileName = taskParts.getOrNull(2)
-        if (fileName == null) {
-            Logger.w(TAG, "Pending scan batch page task missing fileName: ${taskParts.joinToString(":")}")
-            return
-        }
-        writeOcrTextSibling(context, ExpensesAttachments.DIR, fileName, rawText)
-        val settings = container.settingsRepository.getSnapshot()
-        val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(context, ExpensesAttachments.DIR, fileName, settings.attachPhotoOnScan)
-        ExpenseScanCleanupRequestSender.sendPendingCreate(context, container, rawText, listOf(fileName), groupId = null, attachmentUri = attachmentUri)
-        Logger.d(TAG, "Pending scan batch page created its own expense (file=$fileName)")
     }
 }
