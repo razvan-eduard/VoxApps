@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -38,6 +39,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
 import com.voxapps.notes.NotesActivity
 import com.voxapps.notes.NotesApplication
 import com.voxapps.notes.R
@@ -168,25 +170,28 @@ private fun NotesWidgetContent(
                 style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = GlanceTheme.colors.onSurface)
             )
             Spacer(modifier = GlanceModifier.defaultWeight())
-            val scanIconTint = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant)
+            val disabledTint = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant)
+            val singleTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFE53935))) else disabledTint
+            val stitchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFFBC02D))) else disabledTint
+            val batchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFF43A047))) else disabledTint
             Image(
                 provider = ImageProvider(R.drawable.ic_scan),
                 contentDescription = languageManager.getString("capture_mode_single"),
-                colorFilter = scanIconTint,
+                colorFilter = singleTint,
                 modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanSingleAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_stitch),
                 contentDescription = languageManager.getString("capture_mode_stitch"),
-                colorFilter = scanIconTint,
+                colorFilter = stitchTint,
                 modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanStitchAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_batch),
                 contentDescription = languageManager.getString("capture_mode_batch"),
-                colorFilter = scanIconTint,
+                colorFilter = batchTint,
                 modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanBatchAction>())
             )
         }
@@ -262,67 +267,96 @@ private fun RecentNotesList(notes: List<NoteWithCategory>, languageManager: Lang
     val grouped = recent.groupBy { Instant.ofEpochMilli(it.note.createdAt).atZone(zoneId).toLocalDate() }
     val context = LocalContext.current
 
-    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-        items(grouped.entries.toList(), itemId = { it.key.toEpochDay() }) { (date, items) ->
-            val isToday = date == today
-            Column {
-                DaySeparatorLabel(date, today, languageManager, locale)
-                Box(
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .height(if (isToday) 2.dp else 1.dp)
-                        .background(if (isToday) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
-                ) {}
+    // Flattened so every day-header and every note is its own LazyColumn item — confirmed on-device
+    // (screenshot + a temporary item-count log): nesting a whole day's notes inside a single lazy item
+    // (one Column with a variable-length .forEach of note Rows) silently truncates that item's content
+    // once a day has "enough" notes (a 4-note day rendered fully, a 13-note day rendered only 2) — this
+    // is Glance/RemoteViews capping how much a single non-lazy composable subtree can contain, not a
+    // scroll or data problem. Each row needs to be its own lazy item for Glance to actually virtualize
+    // it instead of flattening a whole day into one oversized static subtree.
+    val rows = buildList {
+        for ((date, items) in grouped) {
+            add(WidgetRow.DayHeader(date))
+            items.forEach { add(WidgetRow.NoteRow(it)) }
+        }
+    }
 
-                items.forEach { item ->
+    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
+        items(rows, itemId = { it.itemId }) { row ->
+            when (row) {
+                is WidgetRow.DayHeader -> {
+                    val isToday = row.date == today
+                    Column {
+                        DaySeparatorLabel(row.date, today, languageManager, locale)
+                        Box(
+                            modifier = GlanceModifier
+                                .fillMaxWidth()
+                                .height(if (isToday) 2.dp else 1.dp)
+                                .background(if (isToday) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
+                        ) {}
+                    }
+                }
+                is WidgetRow.NoteRow -> {
+                    val item = row.item
                     val editIntent = Intent(context, NotesActivity::class.java).apply {
                         putExtra(NotesActivity.EXTRA_EDIT_NOTE_ID, item.note.id)
                     }
                     val hasTitle = !item.note.title.isNullOrBlank()
                     val categoryColor = item.category?.let { CategoryColors.fromStored(it.colorArgb) }
-                    Row(
-                        modifier = GlanceModifier
-                            .fillMaxWidth()
-                            .cornerRadius(6.dp)
-                            .let { m -> if (categoryColor != null) m.background(categoryColor.copy(alpha = ROW_TINT_ALPHA)) else m }
-                            .padding(horizontal = 6.dp, vertical = 4.dp)
-                            .clickable(actionStartActivity(editIntent)),
-                        verticalAlignment = Alignment.Vertical.CenterVertically
-                    ) {
-                        if (hasTitle) {
-                            Text(
-                                text = item.note.title.orEmpty(),
-                                maxLines = 1,
-                                style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                                modifier = GlanceModifier.defaultWeight()
-                            )
-                            if (item.note.text.isNotBlank()) {
-                                Spacer(modifier = GlanceModifier.width(8.dp))
+                    Column {
+                        Row(
+                            modifier = GlanceModifier
+                                .fillMaxWidth()
+                                .cornerRadius(6.dp)
+                                .let { m -> if (categoryColor != null) m.background(categoryColor.copy(alpha = ROW_TINT_ALPHA)) else m }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .clickable(actionStartActivity(editIntent)),
+                            verticalAlignment = Alignment.Vertical.CenterVertically
+                        ) {
+                            if (hasTitle) {
+                                Text(
+                                    text = item.note.title.orEmpty(),
+                                    maxLines = 1,
+                                    style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
+                                    modifier = GlanceModifier.defaultWeight()
+                                )
+                                if (item.note.text.isNotBlank()) {
+                                    Spacer(modifier = GlanceModifier.width(8.dp))
+                                    Text(
+                                        text = item.note.text,
+                                        maxLines = 2,
+                                        style = TextStyle(
+                                            fontSize = 12.sp,
+                                            color = GlanceTheme.colors.outline,
+                                            textAlign = TextAlign.End
+                                        ),
+                                        modifier = GlanceModifier.defaultWeight()
+                                    )
+                                }
+                            } else {
                                 Text(
                                     text = item.note.text,
                                     maxLines = 2,
-                                    style = TextStyle(
-                                        fontSize = 12.sp,
-                                        color = GlanceTheme.colors.outline,
-                                        textAlign = TextAlign.End
-                                    ),
+                                    style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
                                     modifier = GlanceModifier.defaultWeight()
                                 )
                             }
-                        } else {
-                            Text(
-                                text = item.note.text,
-                                maxLines = 2,
-                                style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                                modifier = GlanceModifier.defaultWeight()
-                            )
                         }
+                        Spacer(modifier = GlanceModifier.height(2.dp))
                     }
-                    Spacer(modifier = GlanceModifier.height(2.dp))
                 }
             }
         }
     }
+}
+
+/** One flattened row in the widget's note list — see [RecentNotesList]'s doc comment for why this
+ *  flattening exists. [itemId] must be stable and unique across both variants: day epoch-days are
+ *  always >= 0, so headers are encoded negative to guarantee no collision with note row ids (which are
+ *  Room auto-increment ids, always positive). */
+private sealed class WidgetRow(val itemId: Long) {
+    class DayHeader(val date: LocalDate) : WidgetRow(-(date.toEpochDay()) - 1)
+    class NoteRow(val item: NoteWithCategory) : WidgetRow(item.note.id)
 }
 
 private const val ROW_TINT_ALPHA = 0.18f

@@ -39,6 +39,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
 import com.voxapps.calendarapp.CalendarActivity
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.R
@@ -206,25 +207,28 @@ private fun CalendarWidgetContent(
                 style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = GlanceTheme.colors.onSurface)
             )
             Spacer(modifier = GlanceModifier.defaultWeight())
-            val scanIconTint = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant)
+            val disabledTint = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant)
+            val singleTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFE53935))) else disabledTint
+            val stitchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFFBC02D))) else disabledTint
+            val batchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFF43A047))) else disabledTint
             Image(
                 provider = ImageProvider(R.drawable.ic_scan),
                 contentDescription = languageManager.getString("capture_mode_single"),
-                colorFilter = scanIconTint,
+                colorFilter = singleTint,
                 modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<CalendarWidgetScanSingleAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_stitch),
                 contentDescription = languageManager.getString("capture_mode_stitch"),
-                colorFilter = scanIconTint,
+                colorFilter = stitchTint,
                 modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<CalendarWidgetScanStitchAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_batch),
                 contentDescription = languageManager.getString("capture_mode_batch"),
-                colorFilter = scanIconTint,
+                colorFilter = batchTint,
                 modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<CalendarWidgetScanBatchAction>())
             )
         }

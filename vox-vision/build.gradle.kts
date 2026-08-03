@@ -11,8 +11,8 @@ android {
         applicationId = "com.voxapps.vision"
         minSdk = 29
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.13"
+        versionCode = 14
+        versionName = "0.14"
         // Without this, onnxruntime-android ships all 4 ABIs (~73MB combined) even though OpenCV/
         // PaddleOCR are only ever built for arm64-v8a — mirrors the same restriction Notes/Expenses/
         // Calendar already apply.
@@ -101,6 +101,11 @@ dependencies {
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
     implementation(project(":vendor:ppocr-sdk"))
+    // ML-based document corner detector (see vendor/docquad-sdk/NOTICE) — brings in
+    // ai.onnxruntime.* transitively; libonnxruntime.so itself is already excluded from packaging
+    // above and loaded via NativeLibManager's DLC download instead, same as ppocr-sdk's own use of
+    // this artifact.
+    implementation(project(":vendor:docquad-sdk"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

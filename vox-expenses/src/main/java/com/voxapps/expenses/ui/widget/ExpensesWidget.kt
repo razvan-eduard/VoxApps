@@ -39,6 +39,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
 import com.voxapps.attachments.VisionAttachmentCapture
 import com.voxapps.expenses.ExpensesActivity
 import com.voxapps.expenses.ExpensesApplication
@@ -202,26 +203,31 @@ private fun ExpensesWidgetContent(
             Spacer(modifier = GlanceModifier.defaultWeight())
             // Dimmed (not hidden) when Vision/Commander aren't installed — tapping any of them still
             // works, runWidgetScan shows an explanatory toast instead of launching Vision; Glance has
-            // no alpha modifier, so a muted tint stands in for "disabled".
-            val scanIconTint = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant)
+            // no alpha modifier, so a muted tint stands in for "disabled". Enabled, each mode gets its
+            // own color (red/single, yellow/stitch, green/batch) so the three are distinguishable at a
+            // glance, not just by shape.
+            val disabledTint = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant)
+            val singleTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFE53935))) else disabledTint
+            val stitchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFFBC02D))) else disabledTint
+            val batchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFF43A047))) else disabledTint
             Image(
                 provider = ImageProvider(R.drawable.ic_scan),
                 contentDescription = languageManager.getString("capture_mode_single"),
-                colorFilter = scanIconTint,
+                colorFilter = singleTint,
                 modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<ExpensesWidgetScanSingleAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_stitch),
                 contentDescription = languageManager.getString("capture_mode_stitch"),
-                colorFilter = scanIconTint,
+                colorFilter = stitchTint,
                 modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<ExpensesWidgetScanStitchAction>())
             )
             Spacer(modifier = GlanceModifier.width(6.dp))
             Image(
                 provider = ImageProvider(R.drawable.ic_batch),
                 contentDescription = languageManager.getString("capture_mode_batch"),
-                colorFilter = scanIconTint,
+                colorFilter = batchTint,
                 modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<ExpensesWidgetScanBatchAction>())
             )
         }

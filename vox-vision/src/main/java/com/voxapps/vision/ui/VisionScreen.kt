@@ -64,6 +64,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -104,10 +105,72 @@ import java.util.concurrent.Executors
  *  paced by how long each frame's OpenCV processing takes on the device. */
 private const val ANALYSIS_INTERVAL_MS = 80L
 
+/** Floor used instead of [ANALYSIS_INTERVAL_MS] once the ML corner detector (see
+ *  [com.voxapps.vision.ml.docquad.DocQuadDetector]) is loaded — a color-bitmap conversion plus a
+ *  forward pass through DocQuadNet-256 is meaningfully heavier per-tick than the classical
+ *  grayscale-threshold check, so this paces it less aggressively. ~5 detections/sec is plenty for a
+ *  live "is a document framed" overlay — the box only needs to look fluid, not track at full analysis
+ *  framerate. */
+private const val ML_ANALYSIS_INTERVAL_MS = 200L
+
 /** Max per-edge drift (as a 0..1 fraction of frame size) between consecutive ticks' [DocumentCropper.
  *  LiveBounds] for auto-capture's framing countdown to treat them as "the same document held in
- *  place" rather than restarting — see LaunchedEffect(cameraController). */
+ *  place" rather than restarting — see LaunchedEffect(cameraController). Also used by [boundsClose] to
+ *  decide whether two consecutive *raw* detections agree closely enough to trust a new drawn position. */
 private const val BOUNDS_STABILITY_TOLERANCE = 0.05f
+
+/** Consecutive no-detection ticks required before clearing the drawn live-preview box — see
+ *  LaunchedEffect(cameraController)'s `consecutiveMisses` doc comment. */
+private const val LIVE_BOUNDS_MISS_GRACE = 3
+
+private fun boundsClose(a: DocumentCropper.LiveBounds, b: DocumentCropper.LiveBounds): Boolean =
+    kotlin.math.abs(a.left - b.left) < BOUNDS_STABILITY_TOLERANCE &&
+        kotlin.math.abs(a.top - b.top) < BOUNDS_STABILITY_TOLERANCE &&
+        kotlin.math.abs(a.right - b.right) < BOUNDS_STABILITY_TOLERANCE &&
+        kotlin.math.abs(a.bottom - b.bottom) < BOUNDS_STABILITY_TOLERANCE
+
+/**
+ * Corrects [bounds] — normalized 0..1 coordinates of the *full* analysis frame — for PreviewView's
+ * FIT_CENTER letterboxing, so the drawn box (which shares the same full-size Canvas as the preview
+ * box) lines up with where the video content actually sits within that box instead of assuming the
+ * video fills it edge to edge. Confirmed on-device via logging both sides: the analysis frame's
+ * rotated aspect ratio (e.g. 960x1280 = 0.75) and the actual measured preview box (e.g. 1184x2022 =
+ * 0.586) routinely differ — with FIT_CENTER (see the PreviewView factory's doc comment for why that's
+ * used over the default FILL_CENTER), the mismatch shows up as letterbox/pillarbox bars rather than a
+ * crop, so every detection stays representable (nothing gets clipped away) — this only needs to
+ * offset and rescale into the letterboxed sub-rectangle, never drop a result.
+ */
+private fun remapForPreviewCrop(
+    bounds: DocumentCropper.LiveBounds,
+    analysisAspect: Float,
+    previewBoxSize: androidx.compose.ui.unit.IntSize
+): DocumentCropper.LiveBounds? {
+    if (previewBoxSize.width <= 0 || previewBoxSize.height <= 0 || analysisAspect <= 0f) return bounds
+    val viewAspect = previewBoxSize.width.toFloat() / previewBoxSize.height.toFloat()
+    return when {
+        analysisAspect > viewAspect -> {
+            // Analysis frame relatively wider than the view — FIT_CENTER letterboxes top/bottom,
+            // video content fills the box's full width.
+            val visibleFraction = viewAspect / analysisAspect
+            val padTopBottom = (1f - visibleFraction) / 2f
+            bounds.copy(
+                top = (padTopBottom + bounds.top * visibleFraction).coerceIn(0f, 1f),
+                bottom = (padTopBottom + bounds.bottom * visibleFraction).coerceIn(0f, 1f)
+            )
+        }
+        analysisAspect < viewAspect -> {
+            // Analysis frame relatively taller than the view — FIT_CENTER pillarboxes left/right,
+            // video content fills the box's full height.
+            val visibleFraction = analysisAspect / viewAspect
+            val padLeftRight = (1f - visibleFraction) / 2f
+            bounds.copy(
+                left = (padLeftRight + bounds.left * visibleFraction).coerceIn(0f, 1f),
+                right = (padLeftRight + bounds.right * visibleFraction).coerceIn(0f, 1f)
+            )
+        }
+        else -> bounds
+    }
+}
 
 /**
  * Guards every native OpenCV/OCR entry point this screen calls into — the live-preview analyzer's
@@ -198,6 +261,7 @@ fun VisionScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val languageManager = LocalLanguageManager.current
+    val fixedRotationDegrees = remember { backCameraSensorOrientation(context) }
 
     // Only the standalone case (no caller waiting) uses the double-press-to-exit pattern — when a
     // satellite launched Vision for a scan, a single back press should return control to it
@@ -255,6 +319,16 @@ fun VisionScreen(
     // onCaptured), well before crop/OCR finish, and cleared once isRecognizing flips back off.
     var capturedFrameBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var liveBounds by remember { mutableStateOf<DocumentCropper.LiveBounds?>(null) }
+    // Pixel size of the camera preview box as actually laid out on screen — needed to correct
+    // detectLiveBounds' normalized coordinates (0..1 of the *analysis* frame) for PreviewView's
+    // default FILL_CENTER crop. Confirmed on-device (logged both sides): the analysis frame is
+    // 1280x960 (rotated 90°, so 960x1280 upright — aspect 0.75), while the actual preview box
+    // measured 1184x2022 (aspect 0.586) — a real, sustained mismatch, not a one-off. FILL_CENTER
+    // crops ~11% off each side of the wider analysis frame to fill the narrower box, so drawing
+    // bounds as raw fractions of the full analysis frame (as if the whole frame were visible) placed
+    // the live rectangle wherever the *uncropped* frame's coordinates fell — visibly wrong, and
+    // increasingly wrong the further a detection was from center. See remapForPreviewCrop.
+    var previewBoxSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     // Whole seconds remaining before auto-capture fires, or null when not counting down (Manual mode,
     // or no document currently framed) — drives the small countdown label near the live rectangle
     // overlay (see the Canvas block below) so a multi-second auto-capture delay doesn't read as Vision
@@ -295,6 +369,9 @@ fun VisionScreen(
         if (cameraGranted) {
             try {
                 container.ocrEngineForZone(currentZoneOrDefault(container))
+                // Best-effort; DocumentCropper.crop() falls back to classical detection on its own
+                // if this hasn't finished (or failed) by the time a photo is captured.
+                withContext(Dispatchers.IO) { DocumentCropper.init(context) }
                 engineReady = true
                 Logger.d("VisionScreen", "Engine pre-warm succeeded")
             } catch (t: Throwable) {
@@ -431,6 +508,16 @@ fun VisionScreen(
                     scope.launch {
                         val texts = batchUris.map { uriString ->
                             try {
+                                // skipCrop deliberately left false (the default) here, unlike stitch
+                                // below. An earlier attempt set this true on the theory that re-cropping
+                                // an already-cropped image was triggering a native OpenCV SIGSEGV —
+                                // wrong theory: the actual crash (confirmed via on-device tombstones) is
+                                // inside PaddleOCR's own preprocessing resize step, which runs either
+                                // way, and skipCrop=true made it *more* likely to hit by feeding that
+                                // resize step the larger near-full-resolution image instead of crop()'s
+                                // smaller, normalized output. Batch sessions completed successfully
+                                // (notes created) with skipCrop=false before that change; keep this
+                                // path as it was confirmed working.
                                 val (text, _, _) = recognizeExistingImage(context, container, android.net.Uri.parse(uriString), produceOCR = true)
                                 text
                             } catch (t: Throwable) {
@@ -453,17 +540,27 @@ fun VisionScreen(
                     }
                 }
                 VoxOcrRequest.CAPTURE_MODE_STITCH -> if (stitchUris.isNotEmpty()) {
-                    OcrResultSender.send(
-                        context,
-                        effectivePendingRequest.sourcePackage,
-                        VoxOcrResult(
-                            task = effectivePendingRequest.task,
-                            status = VoxOcrResult.STATUS_SUCCESS,
-                            rawText = combineStitchText(stitchTrimmedTexts),
-                            imageUris = stitchUris
+                    // Stitch's text is already fully assembled live (combined on every accepted shot),
+                    // so sending the reply is near-instant — without a deliberate pause here, the live
+                    // camera preview would jump straight to the success overlay with no processing cue
+                    // at all, unlike batch (which visibly freezes for as long as its OCR loop takes).
+                    // This gives both modes the same "camera froze, something happened" moment.
+                    isRecognizing = true
+                    scope.launch {
+                        delay(400)
+                        OcrResultSender.send(
+                            context,
+                            effectivePendingRequest.sourcePackage,
+                            VoxOcrResult(
+                                task = effectivePendingRequest.task,
+                                status = VoxOcrResult.STATUS_SUCCESS,
+                                rawText = combineStitchText(stitchTrimmedTexts),
+                                imageUris = stitchUris
+                            )
                         )
-                    )
-                    showScanSuccess = true
+                        isRecognizing = false
+                        showScanSuccess = true
+                    }
                 }
             }
         }
@@ -571,9 +668,28 @@ fun VisionScreen(
         val framedSinceMs = longArrayOf(0L)
         val lastAnalysisAt = longArrayOf(0L)
         var lastBounds: DocumentCropper.LiveBounds? = null
+        // Raw-detection-vs-raw-detection agreement gate for what's actually drawn — separate from
+        // [lastBounds]'s auto-capture-countdown bookkeeping below. Confirmed on-device (screen
+        // recording + per-frame pixel analysis of the drawn box's position): findLargestBlobRect's
+        // "biggest bright blob wins" heuristic can pick a *different* candidate blob almost every tick
+        // in a cluttered scene (the document one frame, a bright patch of background the next), making
+        // the displayed rectangle teleport between unrelated positions rather than tracking one object
+        // — e.g. one real recording's box left-edge jumped 1200px -> 1032px -> 56px -> 56px -> 1040px
+        // within under 2 seconds. Only accepting a new position once two consecutive raw detections
+        // agree filters out exactly that kind of one-tick fluke without needing a better detector.
+        var lastRawBounds: DocumentCropper.LiveBounds? = null
+        var consecutiveMisses = 0
         val mainExecutor = ContextCompat.getMainExecutor(context)
         cameraController.setImageAnalysisAnalyzer(analysisExecutor) { image ->
             val now = System.currentTimeMillis()
+            // ML inference is meaningfully heavier per-frame than the classical checks (color bitmap
+            // conversion + a real forward pass through DocQuadNet-256, vs. a cheap grayscale
+            // threshold+contour scan) — once it's loaded, this uses a longer floor so the live
+            // rectangle stays fluid without hammering the CPU on every single analysis tick. The box
+            // itself doesn't need to redraw at the full analysis rate to *look* smooth — see
+            // lastRawBounds' two-consecutive-ticks-agree gate below, which already only moves it once
+            // a new position is confirmed anyway.
+            val effectiveIntervalMs = if (DocumentCropper.isMlDetectorLoaded()) ML_ANALYSIS_INTERVAL_MS else ANALYSIS_INTERVAL_MS
             if (!engineReadyState.value || isRecognizingState.value ||
                 showScanSuccessState.value || // Already submitted — stop analyzing during the confirmation delay
                 stitchRetakeCandidateState.value != null || // Awaiting a stitch retake decision
@@ -582,21 +698,44 @@ fun VisionScreen(
                 // rectangle/auto-capture-by-framing feature is meaningless here (and running it would
                 // still burn CPU + take the native lock for no benefit). Stitch is manual-FAB-only.
                 pendingRequestState.value?.captureMode == VoxOcrRequest.CAPTURE_MODE_STITCH ||
-                now - lastAnalysisAt[0] < ANALYSIS_INTERVAL_MS // Floor only, not a target rate — see above
+                now - lastAnalysisAt[0] < effectiveIntervalMs // Floor only, not a target rate — see above
             ) {
                 image.close()
                 return@setImageAnalysisAnalyzer
             }
             lastAnalysisAt[0] = now
 
+            // Rotated (upright) analysis-frame aspect ratio — needed to correct for PreviewView's
+            // FILL_CENTER crop before the detected box is drawn. Captured before image.close() below.
+            val analysisAspect = if (fixedRotationDegrees == 90 || fixedRotationDegrees == 270) {
+                image.height.toFloat() / image.width.toFloat()
+            } else {
+                image.width.toFloat() / image.height.toFloat()
+            }
+            val mlBitmap = if (DocumentCropper.isMlDetectorLoaded()) {
+                try {
+                    yuvImageProxyToColorBitmap(image, fixedRotationDegrees)
+                } catch (t: Throwable) {
+                    Logger.e("VisionScreen", "Live color-bitmap conversion for ML detection failed", t)
+                    null
+                }
+            } else {
+                null
+            }
             val bounds = try {
                 // See nativeCvLock's doc comment — serializes this against finishRecognition's own
                 // OpenCV/OCR calls so no two threads are ever inside native OpenCV code at once. This
                 // callback isn't a suspend function, hence runBlocking (safe here — see the doc comment).
+                // ONNX inference itself isn't behind this lock (it's a separate native library from
+                // OpenCV, no shared state to race), only the OpenCV Mat work classical detection needs.
                 runBlocking {
                     nativeCvLock.withLock {
-                        yPlaneToGrayMat(image).let { mat ->
-                            try { DocumentCropper.detectLiveBounds(mat, sensitivityState.value) } finally { mat.release() }
+                        yPlaneToGrayMat(image, fixedRotationDegrees).let { mat ->
+                            try {
+                                DocumentCropper.detectLiveBounds(mat, sensitivityState.value, mlBitmap)
+                            } finally {
+                                mat.release()
+                            }
                         }
                     }
                 }
@@ -605,6 +744,7 @@ fun VisionScreen(
                 null
             } finally {
                 image.close()
+                mlBitmap?.recycle()
             }
 
             // Compose state writes and captureAndRecognize (which drives the camera + calls back into
@@ -617,14 +757,34 @@ fun VisionScreen(
                 // auto-decide which of N installed targets to send to, and auto-capturing here anyway
                 // would just mean the eventual target-button tap re-captures a second photo, discarding
                 // this one.
-                liveBounds = bounds
-
-                if (bounds == null) {
+                // Corrected for PreviewView's crop before anything downstream (stability tracking,
+                // auto-capture countdown, drawing) touches it — see previewBoxSize's doc comment and
+                // remapForPreviewCrop. null here means the raw detection, once cropped to what's
+                // actually visible, doesn't survive at all (entirely outside the visible region).
+                val correctedBounds = bounds?.let { remapForPreviewCrop(it, analysisAspect, previewBoxSize) }
+                if (correctedBounds == null) {
+                    // A few consecutive misses (not just one) before clearing the drawn box — a
+                    // single dropped frame shouldn't blank out an otherwise-good, held-steady framing.
+                    consecutiveMisses++
+                    lastRawBounds = null
+                    if (consecutiveMisses >= LIVE_BOUNDS_MISS_GRACE) {
+                        liveBounds = null
+                    }
                     framedSinceMs[0] = 0L
                     lastBounds = null
                     autoCaptureCountdownSeconds = null
                     return@execute
                 }
+                consecutiveMisses = 0
+                val rawAgrees = lastRawBounds?.let { boundsClose(correctedBounds, it) } ?: false
+                lastRawBounds = correctedBounds
+                // Only move the drawn box once two consecutive raw ticks agree — see lastRawBounds'
+                // doc comment. First-ever detection (liveBounds still null) is shown immediately
+                // rather than waiting a tick, so framing feedback doesn't feel laggy on first framing.
+                if (rawAgrees || liveBounds == null) {
+                    liveBounds = correctedBounds
+                }
+
                 if (pendingRequestState.value == null) return@execute
 
                 // "Stable" means the same document held roughly in place across consecutive frames,
@@ -633,12 +793,8 @@ fun VisionScreen(
                 // start (not a cancel — bounds is still non-null) resets the countdown rather than
                 // letting an unrelated blob's earlier start time count toward this one.
                 val previous = lastBounds
-                val heldSteady = previous != null &&
-                    kotlin.math.abs(bounds.left - previous.left) < BOUNDS_STABILITY_TOLERANCE &&
-                    kotlin.math.abs(bounds.top - previous.top) < BOUNDS_STABILITY_TOLERANCE &&
-                    kotlin.math.abs(bounds.right - previous.right) < BOUNDS_STABILITY_TOLERANCE &&
-                    kotlin.math.abs(bounds.bottom - previous.bottom) < BOUNDS_STABILITY_TOLERANCE
-                lastBounds = bounds
+                val heldSteady = previous != null && boundsClose(correctedBounds, previous)
+                lastBounds = correctedBounds
                 if (framedSinceMs[0] == 0L || !heldSteady) {
                     framedSinceMs[0] = now
                 }
@@ -661,13 +817,27 @@ fun VisionScreen(
                     autoCaptureCountdownSeconds = null
                     Logger.d("VisionScreen", "Auto-capture triggered (${delaySeconds}s delay elapsed)")
                     captureAndRecognize(
-                        context, scope, cameraController, container, flashModeState.value,
+                        context, scope, cameraController, container, flashModeState.value, fixedRotationDegrees,
                         produceOCR = pendingRequestState.value?.let {
                             effectiveProduceOCR(it.captureMode, it.produceOCR)
                         } ?: true,
                         onRecognizing = { recognizing ->
-                            isRecognizing = recognizing
-                            if (!recognizing) capturedFrameBitmap = null
+                            if (recognizing) {
+                                isRecognizing = true
+                            } else {
+                                // Not cleared immediately — confirmed via screen recording that
+                                // CameraX's Preview briefly renders an unrotated (raw sensor
+                                // orientation) frame right as it resumes after a capture on this
+                                // device, regardless of PreviewView's implementation mode. Keeping the
+                                // opaque freeze overlay up a little longer than strictly needed hides
+                                // that resume glitch instead of exposing it the instant recognition
+                                // finishes.
+                                scope.launch {
+                                    delay(350)
+                                    capturedFrameBitmap = null
+                                    isRecognizing = false
+                                }
+                            }
                         },
                         onCaptured = { capturedFrameBitmap = it },
                         onResult = { text, imageUri, aiImageUri ->
@@ -801,11 +971,28 @@ fun VisionScreen(
                         .weight(1f) // Fills available vertical space
                         .clip(RoundedCornerShape(16.dp))
                         .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
+                        .onSizeChanged { previewBoxSize = it }
                 ) {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
                             PreviewView(ctx).apply {
+                                // PERFORMANCE (the default) renders via TextureView, which on some
+                                // devices briefly shows a single unrotated (raw sensor orientation)
+                                // frame while the Preview use case rebinds after a capture — visible as
+                                // the live feed flashing sideways for an instant. COMPATIBLE renders via
+                                // SurfaceView instead, which doesn't hit this — confirmed via a screen
+                                // recording showing the sideways flash mid-batch-session, between shots.
+                                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                                // Default (FILL_CENTER) crops the preview to fill this box, cropping
+                                // off whatever doesn't fit its aspect ratio. Confirmed on-device that
+                                // box's measured aspect (e.g. 1184x2022) routinely differs from the
+                                // analysis stream's own aspect (e.g. 960x1280 upright) — FILL_CENTER's
+                                // crop meant the live detection box (computed against the *full*
+                                // analysis frame) didn't line up with what FILL_CENTER actually chose
+                                // to show. FIT_CENTER shows the whole frame letterboxed instead of
+                                // cropping it, which remapForPreviewCrop's math assumes.
+                                scaleType = PreviewView.ScaleType.FIT_CENTER
                                 controller = cameraController
                                 cameraController.bindToLifecycle(lifecycleOwner)
                             }
@@ -864,7 +1051,7 @@ fun VisionScreen(
                                 // container.ocrEngineForZone(...) has finished its cold-start init.
                                 if (!isRecognizing && engineReady) {
                                     captureAndRecognize(
-                                        context, scope, cameraController, container, flashMode,
+                                        context, scope, cameraController, container, flashMode, fixedRotationDegrees,
                                         produceOCR = effectiveProduceOCR(effectivePendingRequest.captureMode, effectivePendingRequest.produceOCR),
                                         skipCrop = effectivePendingRequest.captureMode == VoxOcrRequest.CAPTURE_MODE_STITCH,
                                         onRecognizing = { recognizing ->
@@ -918,7 +1105,16 @@ fun VisionScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = if (frozenFrame != null) 0.35f else 0.55f)),
+                                    // When frozenFrame is non-null, the opaque Image above it already
+                                    // fully hides the live camera feed, so this scrim is purely a dark
+                                    // tint under the spinner. When it's null (always true for a
+                                    // batch/stitch Done tap — capturedFrameBitmap gets cleared back to
+                                    // null right after each shot's own OCR finishes, long before Done is
+                                    // ever tapped), this scrim is the ONLY thing standing between the
+                                    // viewer and the live preview — a translucent alpha here let the
+                                    // still-moving camera feed show right through it, undermining the
+                                    // whole point of freezing on Done. Fully opaque in that case instead.
+                                    .background(Color.Black.copy(alpha = if (frozenFrame != null) 0.35f else 1f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 CircularProgressIndicator(color = Color.White)
@@ -1173,12 +1369,25 @@ private suspend fun recognizeExistingImage(
     context: Context,
     container: VisionContainer,
     sourceUri: android.net.Uri,
-    produceOCR: Boolean = true
+    produceOCR: Boolean = true,
+    skipCrop: Boolean = false
 ): Triple<String, String?, String?> {
     val bitmap = withContext(Dispatchers.IO) {
         context.contentResolver.openInputStream(sourceUri)?.use { BitmapFactory.decodeStream(it) }
     } ?: throw IllegalStateException("Could not decode image at $sourceUri")
-    return finishRecognition(context, container, bitmap, produceOCR)
+    try {
+        return finishRecognition(context, container, bitmap, produceOCR, skipCrop)
+    } finally {
+        // Unlike captureAndRecognize's bitmap (which stays alive on screen as the frozen-frame
+        // overlay), nothing outside this function ever holds a reference to this one — safe to
+        // recycle immediately rather than waiting on GC. Matters specifically for a batch/stitch
+        // Done-tap loop calling this several times in a row: each full-resolution (~4064x3048,
+        // ~48MB decoded) bitmap left for the GC to eventually reclaim accumulates real native-heap
+        // pressure across iterations. Confirmed on-device: a 4-photo batch's completion loop
+        // finished photo 1 cleanly, then the whole process died with a native (Binder-death, no
+        // Java stack trace) crash starting photo 2.
+        if (!bitmap.isRecycled) bitmap.recycle()
+    }
 }
 
 /** Shared by the manual "Scan" button and the auto-capture analyzer so both go through one path.
@@ -1189,6 +1398,7 @@ private fun captureAndRecognize(
     cameraController: LifecycleCameraController,
     container: VisionContainer,
     flashMode: Int,
+    fixedRotationDegrees: Int,
     produceOCR: Boolean = true,
     skipCrop: Boolean = false,
     onRecognizing: (Boolean) -> Unit,
@@ -1208,8 +1418,11 @@ private fun captureAndRecognize(
         ContextCompat.getMainExecutor(context),
         object : ImageCapture.OnImageCapturedCallback() {
             override fun onCaptureSuccess(image: ImageProxy) {
-                Logger.d("VisionScreen", "Capture succeeded, size=${image.width}x${image.height} format=${image.format} rotation=${image.imageInfo.rotationDegrees}")
-                val bitmap = imageProxyToBitmap(image)
+                // fixedRotationDegrees (not image.imageInfo.rotationDegrees) drives the actual
+                // correction — logging CameraX's own live value alongside it purely to keep the
+                // mismatch visible if it ever recurs. See backCameraSensorOrientation's doc comment.
+                Logger.d("VisionScreen", "Capture succeeded, size=${image.width}x${image.height} format=${image.format} cameraXRotation=${image.imageInfo.rotationDegrees} fixedRotation=$fixedRotationDegrees")
+                val bitmap = imageProxyToBitmap(image, fixedRotationDegrees)
                 image.close()
                 onCaptured(bitmap)
                 scope.launch {
@@ -1245,15 +1458,95 @@ private fun downscaleToLongEdge(bitmap: android.graphics.Bitmap, targetLongEdge:
     return android.graphics.Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
 }
 
-private fun imageProxyToBitmap(image: ImageProxy): android.graphics.Bitmap {
+private fun imageProxyToBitmap(image: ImageProxy, rotationDegrees: Int): android.graphics.Bitmap {
     val buffer = image.planes[0].buffer
     val bytes = ByteArray(buffer.remaining())
     buffer.get(bytes)
     val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-    val rotation = image.imageInfo.rotationDegrees
-    if (rotation == 0) return decoded
-    val matrix = android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
+    if (rotationDegrees == 0) return decoded
+    val matrix = android.graphics.Matrix().apply { postRotate(rotationDegrees.toFloat()) }
     return android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+}
+
+/**
+ * The back camera's fixed hardware mounting angle (CameraCharacteristics.SENSOR_ORIENTATION) — a
+ * per-device hardware constant, unlike CameraX's own [ImageProxy.getImageInfo]'s rotationDegrees,
+ * which LifecycleCameraController drives from a live accelerometer-based OrientationEventListener
+ * (see androidx.camera.view.RotationProvider) that can misjudge the phone's tilt shot to shot,
+ * especially when photographing something held at an angle rather than a phone held dead level.
+ * Confirmed on-device: within one batch session, consecutive captures alternated between
+ * rotationDegrees 90 and 0 with the phone held the same way throughout, and the "0" shots came back
+ * as raw, unrotated (landscape) sensor frames — CameraX believed the phone was in landscape for
+ * those specific shots. Since this app is locked to portrait (screenOrientation="portrait") and
+ * always uses the back camera, the correct rotation is always this one fixed value; querying it once
+ * from CameraCharacteristics and using it for every capture sidesteps CameraX's live tracking
+ * entirely instead of trying to stabilize it. LifecycleCameraController exposes no public API to
+ * override or disable that listener, so this is the only fix available short of replacing it with a
+ * manually-bound ProcessCameraProvider setup.
+ */
+/**
+ * Converts a YUV_420_888 [ImageProxy] (the live analysis stream's format — unlike capture's single
+ * JPEG-compressed plane, this has 3 separate Y/U/V planes with their own row/pixel strides) to an
+ * upright RGB [Bitmap], for feeding the live rectangle's ML corner detector (see
+ * [DocumentCropper.detectLiveBounds]'s `colorBitmapForMl` parameter), which needs real color/texture
+ * information the single-channel grayscale Mat [yPlaneToGrayMat] builds doesn't carry. A direct
+ * per-pixel ITU-R BT.601 conversion rather than round-tripping through [android.graphics.YuvImage]'s
+ * JPEG compress+decode, which is measurably slower for a per-frame live-preview cost.
+ */
+private fun yuvImageProxyToColorBitmap(image: ImageProxy, rotationDegrees: Int): android.graphics.Bitmap {
+    val width = image.width
+    val height = image.height
+    val yPlane = image.planes[0]
+    val uPlane = image.planes[1]
+    val vPlane = image.planes[2]
+    val yBuffer = yPlane.buffer
+    val uBuffer = uPlane.buffer
+    val vBuffer = vPlane.buffer
+    val yRowStride = yPlane.rowStride
+    val uRowStride = uPlane.rowStride
+    val vRowStride = vPlane.rowStride
+    val uPixelStride = uPlane.pixelStride
+    val vPixelStride = vPlane.pixelStride
+
+    val argb = IntArray(width * height)
+    for (row in 0 until height) {
+        val yRowStart = row * yRowStride
+        val uvRow = row / 2
+        val uRowStart = uvRow * uRowStride
+        val vRowStart = uvRow * vRowStride
+        for (col in 0 until width) {
+            val y = (yBuffer.get(yRowStart + col).toInt() and 0xFF) - 16
+            val uvCol = col / 2
+            val u = (uBuffer.get(uRowStart + uvCol * uPixelStride).toInt() and 0xFF) - 128
+            val v = (vBuffer.get(vRowStart + uvCol * vPixelStride).toInt() and 0xFF) - 128
+
+            val r = (1.164 * y + 1.596 * v).toInt().coerceIn(0, 255)
+            val g = (1.164 * y - 0.813 * v - 0.391 * u).toInt().coerceIn(0, 255)
+            val b = (1.164 * y + 2.018 * u).toInt().coerceIn(0, 255)
+            argb[row * width + col] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+        }
+    }
+
+    val bitmap = android.graphics.Bitmap.createBitmap(argb, width, height, android.graphics.Bitmap.Config.ARGB_8888)
+    if (rotationDegrees == 0) return bitmap
+    val matrix = android.graphics.Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+    return android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+}
+
+private fun backCameraSensorOrientation(context: Context): Int {
+    return try {
+        val manager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+        val backId = manager.cameraIdList.firstOrNull { id ->
+            manager.getCameraCharacteristics(id)
+                .get(android.hardware.camera2.CameraCharacteristics.LENS_FACING) == android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK
+        }
+        backId
+            ?.let { manager.getCameraCharacteristics(it).get(android.hardware.camera2.CameraCharacteristics.SENSOR_ORIENTATION) }
+            ?: 90
+    } catch (t: Throwable) {
+        Logger.e("VisionScreen", "Failed to query back camera sensor orientation, defaulting to 90", t)
+        90
+    }
 }
 
 /**
@@ -1262,11 +1555,17 @@ private fun imageProxyToBitmap(image: ImageProxy): android.graphics.Bitmap {
  * full YUV->RGB conversion + Bitmap allocation the actual capture path needs, since contour detection
  * only needs luminance. Handles row-stride padding (the Y-plane's stride can exceed the image width).
  *
- * Rotated to match [ImageProxy.getImageInfo]'s `rotationDegrees` — i.e. the same upright orientation
- * the user sees in the preview — so [DocumentCropper.detectLiveBounds]'s returned box can be drawn
- * directly over the preview without the caller needing to redo the rotation math itself.
+ * Rotated by [rotationDegrees] — the same fixed, hardware [CameraCharacteristics.SENSOR_ORIENTATION]
+ * value ([backCameraSensorOrientation]) used for captures, *not* [ImageProxy.getImageInfo]'s own
+ * `rotationDegrees` — so [DocumentCropper.detectLiveBounds]'s returned box can be drawn directly over
+ * the preview without the caller needing to redo the rotation math itself. Confirmed on-device: using
+ * the live per-frame value here reproduced the exact same accelerometer misread already root-caused
+ * for capture rotation (see [imageProxyToBitmap]'s doc comment) — an occasional wrongly-rotated
+ * analysis frame makes the detected box's coordinates transposed relative to the correctly-oriented
+ * preview, rendering as a box that's the wrong shape or partially off-screen even when the document is
+ * well-centered.
  */
-private fun yPlaneToGrayMat(image: ImageProxy): Mat {
+private fun yPlaneToGrayMat(image: ImageProxy, rotationDegrees: Int): Mat {
     val plane = image.planes[0]
     val buffer = plane.buffer
     val bytes = ByteArray(buffer.remaining())
@@ -1282,7 +1581,7 @@ private fun yPlaneToGrayMat(image: ImageProxy): Mat {
         c
     }
     val rotated = Mat()
-    return when (image.imageInfo.rotationDegrees) {
+    return when (rotationDegrees) {
         90 -> { Core.rotate(cropped, rotated, Core.ROTATE_90_CLOCKWISE); cropped.release(); rotated }
         180 -> { Core.rotate(cropped, rotated, Core.ROTATE_180); cropped.release(); rotated }
         270 -> { Core.rotate(cropped, rotated, Core.ROTATE_90_COUNTERCLOCKWISE); cropped.release(); rotated }

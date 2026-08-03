@@ -15,8 +15,6 @@
 package com.paddle.ocr.util
 
 import org.opencv.core.Mat
-import org.opencv.core.Size
-import org.opencv.imgproc.Imgproc
 
 object ImageUtils {
 
@@ -45,8 +43,41 @@ object ImageUtils {
 
         newH = maxOf(MathUtils.roundHalfToEven(newH / 32.0) * 32, 32)
         newW = maxOf(MathUtils.roundHalfToEven(newW / 32.0) * 32, 32)
-        val dst = Mat()
-        Imgproc.resize(src, dst, Size(newW.toDouble(), newH.toDouble()), 0.0, 0.0, Imgproc.INTER_LINEAR)
+        return nearestNeighborResize(src, newW, newH)
+    }
+
+    // VoxApps patch: Imgproc.resize() has a confirmed native SIGSEGV in the vendored
+    // libopencv_imgproc.so build used by this app (SEGV_ACCERR at a tagged-pointer address —
+    // Scudo's hardened allocator catching an out-of-bounds native read), reproduced on-device across
+    // multiple call sites and confirmed unaffected by Core.setUseOptimized(false), i.e. it isn't gated
+    // behind OpenCV's IPP/optimized-path flag. It's intermittent (depends on where the allocator
+    // happens to place the buffer, not on input size or call count), consistent with a genuine
+    // out-of-bounds read in that .so's resize kernel. This does the same spatial resize by hand over
+    // the Mat's raw bytes instead, so it never touches that native routine. Channel-count agnostic
+    // (works for the 3-channel BGR/RGB Mats this function actually receives) since it doesn't need to
+    // know color order, only bytes-per-pixel.
+    private fun nearestNeighborResize(src: Mat, newW: Int, newH: Int): Mat {
+        val channels = src.channels()
+        val srcH = src.rows()
+        val srcW = src.cols()
+        val srcData = ByteArray(srcH * srcW * channels)
+        src.get(0, 0, srcData)
+
+        val dstData = ByteArray(newH * newW * channels)
+        for (y in 0 until newH) {
+            val srcY = (y * srcH / newH).coerceIn(0, srcH - 1)
+            val srcRowOffset = srcY * srcW * channels
+            val dstRowOffset = y * newW * channels
+            for (x in 0 until newW) {
+                val srcX = (x * srcW / newW).coerceIn(0, srcW - 1)
+                val srcOffset = srcRowOffset + srcX * channels
+                val dstOffset = dstRowOffset + x * channels
+                System.arraycopy(srcData, srcOffset, dstData, dstOffset, channels)
+            }
+        }
+
+        val dst = Mat(newH, newW, src.type())
+        dst.put(0, 0, dstData)
         return dst
     }
 }
