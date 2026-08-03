@@ -141,10 +141,18 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      # packages defaults to "tools platform-tools" -- the legacy "tools" meta-package
+      # declares a dependency on "emulator" that Google's SDK repository manifest doesn't
+      # resolve for linux-aarch64 hosts under that old bundling scheme, failing the whole
+      # step (confirmed via a live run: "Warning: Dependant package with key emulator not
+      # found!"). We don't need the deprecated "tools" package at all --
+      # reactivecircus/android-emulator-runner installs the actual emulator binary + system
+      # image itself.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           accept-android-licenses: true
+          packages: 'platform-tools'
 
       - name: Install NDK and CMake
         run: |
