@@ -110,21 +110,25 @@ jobs:
         id: compile
         run: ./gradlew compileDebugKotlin assembleDebug --no-daemon
 
-  # Only reached for PRs bumping onnxruntime-android (see detect above). Runs on a real arm64-v8a
-  # Android emulator (software/TCG, unaccelerated) — neither GitHub's macOS runners (no HVF
-  # passthrough into the guest, confirmed via a live run: HV_UNSUPPORTED, emulator never boots)
-  # nor its ARM64 Linux runners (no /dev/kvm exposed at all, confirmed via a live run) support
-  # hardware-accelerated virtualization for the guest, so ubuntu-24.04-arm here is chosen for
-  # "same-architecture TCG is much less slow than cross-architecture TCG would be" rather than
-  # for KVM. Free for this repo (public, GPLv3 — GitHub Actions minutes are unlimited for public
-  # repos, including ARM64 Linux runners). Exercises NativeLibManagerInstrumentedTest in both
-  # vox-vision and vox-commander — a real on-device dlopen of the actual essential native libs,
-  # the only thing that would have caught the 1.27.0/1.28.0 regression (both versions compiled
-  # and passed unit tests cleanly; the crash was runtime-only, on-device-only).
+  # Only reached for PRs bumping onnxruntime-android (see detect above). Runs a real arm64-v8a
+  # Android emulator on plain ubuntu-latest (x86_64), via full cross-architecture software (TCG)
+  # emulation — slow, but the only combination that actually works on GitHub-hosted runners after
+  # three other attempts each hit a hard wall: macos-latest can't get HVF passthrough into the
+  # guest (HV_UNSUPPORTED, emulator never boots — confirmed live); ubuntu-24.04-arm has no
+  # /dev/kvm exposed at all (confirmed live); and even without needing KVM, Google doesn't publish
+  # an `emulator` host-tool package for linux-aarch64 at all ("Failed to find package 'emulator'"
+  # — confirmed live), so the ARM64 Linux path is a dead end independent of acceleration. Plain
+  # ubuntu-latest is the standard, well-supported combination for this action — it just can't be
+  # hardware-accelerated for an arm64-v8a guest on an x86_64 host either way, so -no-accel is
+  # required regardless of which Linux runner is used. Free for this repo (public, GPLv3 — GitHub
+  # Actions minutes are unlimited for public repos). Exercises NativeLibManagerInstrumentedTest in
+  # both vox-vision and vox-commander — a real on-device dlopen of the actual essential native
+  # libs, the only thing that would have caught the 1.27.0/1.28.0 regression (both versions
+  # compiled and passed unit tests cleanly; the crash was runtime-only, on-device-only).
   native-lib-verify:
     needs: detect
     if: needs.detect.outputs.needs_native_verify == 'true'
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout PR branch (with submodules)
