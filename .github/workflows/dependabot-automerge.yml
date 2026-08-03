@@ -111,18 +111,21 @@ jobs:
         run: ./gradlew compileDebugKotlin assembleDebug --no-daemon
 
   # Only reached for PRs bumping onnxruntime-android (see detect above). Runs on a real,
-  # hardware-accelerated arm64-v8a Android emulator — macos-latest resolves to an Apple Silicon
-  # (arm64) host, so an arm64-v8a system image runs natively (HVF-accelerated), not the slow
-  # software-emulated path an x86 host would need. Free for this repo (public, GPLv3 — GitHub
-  # Actions minutes, including macOS runners, are unlimited for public repos). Exercises
-  # NativeLibManagerInstrumentedTest in both vox-vision and vox-commander — a real on-device
-  # dlopen of the actual essential native libs, the only thing that would have caught the
-  # 1.27.0/1.28.0 regression (both versions compiled and passed unit tests cleanly; the crash was
-  # runtime-only, on-device-only).
+  # hardware-accelerated arm64-v8a Android emulator — ubuntu-24.04-arm is a native ARM64 Linux
+  # host with KVM, so an arm64-v8a system image gets real hardware acceleration matching our
+  # actual shipped ABI. (An earlier attempt used macos-latest on the theory that Apple Silicon
+  # runners give free HVF-accelerated arm64 emulation — that doesn't work: GitHub's macOS runners
+  # run inside their own hypervisor with no nested-virtualization passthrough, so HVF fails with
+  # HV_UNSUPPORTED and the emulator never boots. ARM64 Linux runners have no such nesting problem.)
+  # Free for this repo (public, GPLv3 — GitHub Actions minutes are unlimited for public repos,
+  # including ARM64 Linux runners). Exercises NativeLibManagerInstrumentedTest in both vox-vision
+  # and vox-commander — a real on-device dlopen of the actual essential native libs, the only
+  # thing that would have caught the 1.27.0/1.28.0 regression (both versions compiled and passed
+  # unit tests cleanly; the crash was runtime-only, on-device-only).
   native-lib-verify:
     needs: detect
     if: needs.detect.outputs.needs_native_verify == 'true'
-    runs-on: macos-latest
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout PR branch (with submodules)
@@ -148,8 +151,33 @@ jobs:
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
 
-      - name: Install Vulkan-Headers/SPIRV-Headers/Shaderc for whisper build (Homebrew, native on macOS)
-        run: brew install vulkan-headers spirv-headers shaderc
+      - name: Symlink SDK for whisper build script
+        run: |
+          mkdir -p ~/Library/Android/sdk
+          ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
+
+      - name: Install SPIRV-Headers and Shaderc for whisper Vulkan build
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq glslc libshaderc-dev
+          git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git /tmp/spirv-headers
+          cd /tmp/spirv-headers
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local
+          sudo cmake --install build
+          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vulkan-headers
+          cd /tmp/vulkan-headers
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local
+          sudo cmake --install build
+          sudo ln -sf /usr/bin/glslc /usr/local/bin/glslc 2>/dev/null || true
+
+      # KVM device access isn't granted by default on GitHub-hosted Linux runners — without this,
+      # the emulator falls back to unaccelerated software emulation (or fails outright depending
+      # on the image), defeating the point of using a native ARM64 host.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
