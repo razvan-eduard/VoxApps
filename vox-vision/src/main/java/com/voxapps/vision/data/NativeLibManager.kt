@@ -176,7 +176,7 @@ object NativeLibManager {
     fun loadAll(context: Context) {
         val systemDir = File(context.applicationInfo.nativeLibraryDir)
         val libDir = getLibDir(context)
-        
+
         for (libName in ESSENTIAL_LIBS) {
             val systemFile = File(systemDir, libName)
             if (systemFile.exists()) {

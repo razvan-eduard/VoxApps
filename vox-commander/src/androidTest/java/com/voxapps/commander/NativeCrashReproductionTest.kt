@@ -6,8 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.domain.intent.interpreter.LocalLlmInterpreter
-import com.voxapps.commander.utils.Logger
-import com.whispercpp.whisper.WhisperLib
+import com.whispercpp.whisper.WhisperContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
@@ -162,19 +161,6 @@ class NativeCrashReproductionTest {
      */
     @Test
     fun `whisper_ggmlCpuInit_sigillCrashReproduction`() {
-        // Check if whisper libs are available
-        val whisperLib = WhisperLib
-        val isAvailable = try {
-            whisperLib.isSystemLibAvailable(context)
-        } catch (e: Exception) {
-            false
-        }
-
-        if (!isAvailable) {
-            android.util.Log.w("NativeCrashTest", "Whisper libs not available — skipping SIGILL test")
-            return
-        }
-
         android.util.Log.i("NativeCrashTest", "Starting Whisper ggml_cpu_init — may SIGILL on this device")
 
         // This calls whisper_init_from_file_with_params which goes through:
@@ -189,17 +175,12 @@ class NativeCrashReproductionTest {
         }
 
         // This is the call that triggers SIGILL in ggml_cpu_init
-        val context = whisperLib.initContext(modelFile.absolutePath)
+        val whisperContext = WhisperContext.createContextFromFile(modelFile.absolutePath, useGpu = false)
 
         // If we reach here without crash, the SIGILL issue is fixed
-        android.util.Log.i("NativeCrashTest", "Whisper initContext completed without SIGILL — context=$context")
-        assertNotNull("Whisper context should be created", context)
-
-        try {
-            context?.close()
-        } catch (e: Exception) {
-            android.util.Log.w("NativeCrashTest", "Error closing whisper context: ${e.message}")
-        }
+        android.util.Log.i("NativeCrashTest", "Whisper initContext completed without SIGILL")
+        assertNotNull("Whisper context should be created", whisperContext)
+        whisperContext.release()
     }
 
     /**
@@ -207,18 +188,6 @@ class NativeCrashReproductionTest {
      */
     @Test
     fun `whisper_corruptedModel_doesNotCrash`() {
-        val whisperLib = WhisperLib
-        val isAvailable = try {
-            whisperLib.isSystemLibAvailable(context)
-        } catch (e: Exception) {
-            false
-        }
-
-        if (!isAvailable) {
-            android.util.Log.w("NativeCrashTest", "Whisper libs not available — skipping corrupted model test")
-            return
-        }
-
         // Create a fake/corrupted model file
         val modelDir = context.getExternalFilesDir(null)
         val fakeModel = File(modelDir, "fake_test_model.bin")
@@ -226,19 +195,16 @@ class NativeCrashReproductionTest {
 
         android.util.Log.i("NativeCrashTest", "Testing whisper init with corrupted model")
 
-        // This should either return null or throw an exception, NOT crash with SIGSEGV
-        var context: com.whispercpp.whisper.WhisperContext? = null
+        // This should throw (createContextFromFile throws RuntimeException on a null native
+        // pointer), NOT crash with SIGSEGV
+        var whisperContext: WhisperContext? = null
         try {
-            context = whisperLib.initContext(fakeModel.absolutePath)
-            // If it returns non-null with a corrupted model, that's also problematic
-            android.util.Log.w("NativeCrashTest", "Whisper init returned non-null for corrupted model: $context")
-        } catch (e: Exception) {
+            whisperContext = WhisperContext.createContextFromFile(fakeModel.absolutePath, useGpu = false)
+            android.util.Log.w("NativeCrashTest", "Whisper init returned non-null for corrupted model: $whisperContext")
+        } catch (e: RuntimeException) {
             android.util.Log.i("NativeCrashTest", "Whisper init correctly threw exception for corrupted model: ${e.message}")
-        } catch (t: Throwable) {
-            android.util.Log.e("NativeCrashTest", "Whisper init crashed with corrupted model: ${t.message}")
-            throw t
         } finally {
-            try { context?.close() } catch (_: Exception) {}
+            whisperContext?.release()
             fakeModel.delete()
         }
     }
@@ -283,14 +249,14 @@ class NativeCrashReproductionTest {
     private fun getSettingsRepo(): SettingsRepository {
         val appContext = context.applicationContext
         // Use the real AppContainer to get the real SettingsRepository
-        val container = (appContext as? com.voxapps.commander.VoxCommanderApp)?.container
+        val container = (appContext as? com.voxapps.commander.VoxApplication)?.container
             ?: throw IllegalStateException("Could not get AppContainer")
         return container.settingsRepository
     }
 
     private fun getModelDownloader(): ModelDownloader {
         val appContext = context.applicationContext
-        val container = (appContext as? com.voxapps.commander.VoxCommanderApp)?.container
+        val container = (appContext as? com.voxapps.commander.VoxApplication)?.container
             ?: throw IllegalStateException("Could not get AppContainer")
         return container.modelDownloader
     }

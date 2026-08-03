@@ -6,12 +6,12 @@
 > *build-time mechanism* — what gets fetched, built, or patched before compilation, and how it stays
 > in sync with upstream — as its own cross-cutting topic.
 
-VoxApps depends on six native/ML libraries that aren't simple Maven artifacts. Each falls into one of
+VoxApps depends on seven native/ML libraries that aren't simple Maven artifacts. Each falls into one of
 two patterns:
 
 | Pattern | Meaning | Used by |
 |---|---|---|
-| **A — binary dependency, version-check only** | A normal Maven/JitPack artifact; no source vendored, nothing compiled locally. A script just checks whether a newer published version exists. | Vosk, NewPipeExtractor |
+| **A — binary dependency, version-check only** | A normal Maven/JitPack artifact; no source vendored, nothing compiled locally. A script just checks whether a newer published version exists. | Vosk, NewPipeExtractor, onnxruntime-android |
 | **B — vendored source, built and/or patched locally** | The actual source (unmodified, or with a small local patch) lives in this repo/is compiled from a submodule at build time, because the upstream binary is broken, unmaintained, or missing a feature we need. | Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk |
 
 ## At a glance
@@ -20,6 +20,7 @@ two patterns:
 |---|---|---|---|---|---|---|---|
 | Vosk | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckVosk` | `sync-vosk.yml` (weekly) |
 | NewPipeExtractor | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckNewPipeExtractor` | `sync-newpipe-extractor.yml` (weekly) |
+| onnxruntime-android | `vox-vision` (via `vendor/ppocr-sdk`), `core/wakeword` | — (Maven Central coordinate) | — | No | No | none | Dependabot (weekly) — **never auto-merged**, see below |
 | Whisper.cpp | `vox-commander/src/main/cpp/whisper.cpp` | *is* the submodule | *is* the submodule | No | Yes (CMake, every build if stale) | `autoCompileWhisper` | `sync-whisper.yml` (monthly, compile-check only) |
 | OpenWakeWord | `core/wakeword` | `vendor/openwakeword-android-kt` (submodule) | `core/wakeword/src/...` | Yes — RMS silence gate | No (plain Kotlin/ONNX Runtime) | `autoCheckOpenWakeWord` | `sync-openwakeword.yml` (weekly) |
 | OpenCV | `vendor/ppocr-sdk/opencv/` (gitignored output) | `vendor/opencv` (submodule) | — (build output only, not vendored as source) | No | Yes (CMake, skips only if the built commit matches the pinned submodule commit — see below) | `autoCompileOpenCv` | `sync-opencv.yml` (weekly) |
@@ -67,6 +68,38 @@ reliably track this JitPack-style coordinate either.
   confirm YouTube search/extraction still works against YouTube's current page structure — that's
   exactly the kind of breakage this library needs frequent updates for — only that its API surface
   still resolves and compiles.
+
+---
+
+## Pattern A: onnxruntime-android (binary dependency, never auto-merged)
+
+`com.microsoft.onnxruntime:onnxruntime-android` (resolved via Maven Central) — the ONNX inference
+engine behind Vision's OCR (`vendor/ppocr-sdk`), Commander's OpenWakeWord wake-word detection
+(`core/wakeword`), and indirectly Piper TTS (`sherpa-onnx`, which bundles its own separate copy of
+`libonnxruntime.so` inside its own AAR rather than resolving this Maven coordinate — see
+`vox-commander/build.gradle.kts`'s `pickFirst`/dependencies comments for how that second copy is kept
+version-compatible with this one). Same shape as Vosk/NewPipeExtractor otherwise: no source vendored,
+nothing compiled locally, Dependabot tracks it reliably (unlike their JitPack coordinates).
+
+**Unlike Vosk/NewPipeExtractor, this one is never auto-merged**, despite fitting the "Pattern A" shape —
+because it's genuinely native/ABI-sensitive in a way plain-API-surface Maven dependencies aren't. This
+was learned the hard way: `dependabot-automerge.yml`'s gate (`assembleDebug` + `testDebugUnitTest`, JVM-
+only, no real device involved) auto-merged a bump to a version (1.27.0, later 1.28.0) whose arm64-v8a
+build was broken — `libonnxruntime4j_jni.so` couldn't resolve the symbol `OrtGetApiBase` from
+`libonnxruntime.so` at `dlopen` time on a real device, silently breaking OCR/wake-word/TTS everywhere
+this dependency is used, with a fully green CI run the whole time. Currently pinned to `1.21.1`
+(`gradle/libs.versions.toml`'s `onnxruntime` entry for `vox-vision`; `core/wakeword` pins independently
+to `1.27.0` to match sherpa-onnx's own bundled copy instead — see that module's `build.gradle.kts` for
+why these two are genuinely different constraints, not accidental drift).
+
+- **`.github/workflows/dependabot-automerge.yml`** — carries a specific carve-out: if a Dependabot PR's
+  branch name contains `onnxruntime`, auto-merge is skipped and a PR comment asks for a real on-device
+  build + install + OCR/wake-word/TTS check before merging manually — the same "green build can't
+  verify behavior" philosophy every Pattern B dependency below already follows, applied here because
+  the actual risk profile turned out to match theirs despite the Pattern A shape.
+- No dedicated check/sync script exists for this one (Dependabot's own weekly PRs are sufficient since
+  it reliably tracks Maven Central, unlike Vosk/NewPipeExtractor's JitPack coordinates) — the only
+  addition versus a normal dependency is the auto-merge carve-out above.
 
 ---
 

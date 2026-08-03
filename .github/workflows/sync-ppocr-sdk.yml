@@ -55,8 +55,30 @@ jobs:
             echo "has_update=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Bump submodule (sparse + shallow at the new commit) + re-vendor sources
+      # The branch name is deterministic (derived from the target SHA), so if upstream hasn't
+      # moved further since a previous run opened a PR for this exact SHA (still unmerged,
+      # awaiting human review), has_update is correctly still "true" but recreating + pushing the
+      # same branch name collides with the existing one (non-fast-forward rejection). Skip
+      # cleanly in that case — there's already an open PR covering this exact target, nothing new
+      # to do until a human reviews it.
+      - name: Check for an already-open PR for this target
         if: steps.versions.outputs.has_update == 'true'
+        id: dedup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_SHA="${{ steps.versions.outputs.latest_sha }}"
+          BRANCH="chore/sync-ppocr-sdk-${LATEST_SHA:0:9}"
+          EXISTING=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' || true)
+          if [ -n "$EXISTING" ]; then
+            echo "PR #$EXISTING already open for $BRANCH — skipping re-sync"
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump submodule (sparse + shallow at the new commit) + re-vendor sources
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: bump
         run: |
           LATEST_SHA="${{ steps.versions.outputs.latest_sha }}"
@@ -86,7 +108,7 @@ jobs:
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Apply the byte-loading patch
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: apply
         run: |
           if git apply --check vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch 2>/tmp/apply-reject.txt; then
@@ -99,36 +121,36 @@ jobs:
           fi
 
       - name: Set up JDK 17
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Set up Android SDK
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         uses: android-actions/setup-android@v3
         with:
           accept-android-licenses: true
 
       - name: Install NDK and CMake (needed to build OpenCV, a compile-time dependency of ppocr-sdk)
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
 
       - name: Symlink SDK for the OpenCV build script (hardcodes the macOS SDK path)
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           mkdir -p ~/Library/Android/sdk
           ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
 
       - name: Fetch vendor/opencv submodule (needed to build OpenCV before ppocr-sdk can compile)
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: git submodule update --init vendor/opencv
 
       - name: Grant execute permission for gradlew
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: chmod +x gradlew
 
       # Only run the build when the patch applied cleanly — a conflict already means "needs manual
@@ -136,7 +158,7 @@ jobs:
       # (ppocr-sdk's Kotlin source imports its generated org.opencv.* bindings, unlike OpenWakeWord's
       # self-contained module) — expect this step to take a few minutes.
       - name: Compile (only if the patch applied cleanly)
-        if: steps.versions.outputs.has_update == 'true' && steps.apply.outputs.status == 'clean'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true' && steps.apply.outputs.status == 'clean'
         id: build
         run: |
           if ./gradlew :vendor:ppocr-sdk:compileDebugKotlin :vox-vision:compileDebugKotlin \
@@ -148,7 +170,7 @@ jobs:
           fi
 
       - name: Commit re-vendor + submodule bump
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -157,7 +179,7 @@ jobs:
           git push origin "${{ steps.bump.outputs.branch }}"
 
       - name: Prepare PR body
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           APPLY_STATUS="${{ steps.apply.outputs.status }}"
           BUILD_STATUS="${{ steps.build.outputs.status }}"
@@ -187,7 +209,7 @@ jobs:
           } > /tmp/pr-body.md
 
       - name: Open PR
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

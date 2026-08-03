@@ -17,6 +17,7 @@ android {
         // PaddleOCR are only ever built for arm64-v8a — mirrors the same restriction Notes/Expenses/
         // Calendar already apply.
         ndk { abiFilters += "arm64-v8a" }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // CI-only release signing: RELEASE_KEYSTORE_PATH is only set in the release-*.yml workflows
@@ -122,4 +123,11 @@ dependencies {
     implementation(libs.okhttp)
 
     testImplementation(libs.junit)
+
+    // Instrumented tests — real on-device runs, needed for NativeLibManagerInstrumentedTest to
+    // catch native-linking regressions (UnsatisfiedLinkError etc.) that a JVM-only unit test or a
+    // plain compile can never observe (see docs/BUILD_TIME_DEPENDENCIES.md's onnxruntime-android
+    // section).
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.kotlinx.coroutines.android)
 }

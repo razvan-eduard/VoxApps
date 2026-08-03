@@ -3,15 +3,57 @@ name: Dependabot Auto-Merge
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  # Manual-only escape hatch to exercise the native-lib-verify path (real arm64-v8a emulator) on
+  # demand, without waiting for an actual Dependabot PR touching onnxruntime-android — there's no
+  # PR context on a manual dispatch, so merge/notify-failure below are skipped entirely for this
+  # trigger (nothing to merge/comment on); this only ever runs detect + native-lib-verify.
+  workflow_dispatch:
+    inputs:
+      test_native_verify:
+        description: 'Force the native-lib-verify path (arm64-v8a emulator) for a manual test run'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  test-and-merge:
-    # Only run on Dependabot PRs
-    if: github.actor == 'dependabot[bot]'
+  # onnxruntime-android is a native/ABI-sensitive dependency like the six already documented in
+  # docs/BUILD_TIME_DEPENDENCIES.md (Whisper/OpenWakeWord/OpenCV/ppocr-sdk/Vosk/NewPipeExtractor) —
+  # a green compileDebugKotlin/testDebugUnitTest only proves the Kotlin/Java API surface still
+  # resolves, never that the actual .so still dlopen's correctly on a real device. That gap is
+  # exactly how onnxruntime-android 1.27.0/1.28.0 (both shipping a broken arm64-v8a build) went
+  # straight to main auto-merged: a fully green CI run the whole time, despite crashing OCR/
+  # wake-word/TTS on every real device. This job routes PRs touching that dependency to
+  # native-lib-verify (a real arm64-v8a emulator, not just a JVM test) instead of standard-check —
+  # every other dependency keeps auto-merging exactly as before.
+  detect:
+    if: github.actor == 'dependabot[bot]' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      needs_native_verify: ${{ steps.check.outputs.needs_native_verify }}
+    steps:
+      - id: check
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          if [[ "$BRANCH" == *"onnxruntime"* ]] || [[ "${{ github.event.inputs.test_native_verify }}" == "true" ]]; then
+            echo "needs_native_verify=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_native_verify=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: "Comment: real-device verification required"
+        if: steps.check.outputs.needs_native_verify == 'true' && github.event_name == 'pull_request'
+        run: |
+          gh pr comment "$PR_URL" --body "⚠️ This bumps \`onnxruntime-android\`, a native/ABI-sensitive dependency — a past version (1.27.0/1.28.0) shipped a broken arm64-v8a build that crashed every OCR/wake-word/TTS engine at runtime despite compiling and passing unit tests cleanly. Routing this PR to a real arm64-v8a emulator run (NativeLibManagerInstrumentedTest, both apps) instead of the usual JVM-only checks — auto-merge only proceeds if that passes."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  standard-check:
+    needs: detect
+    if: needs.detect.outputs.needs_native_verify == 'false'
     runs-on: ubuntu-latest
 
     steps:
@@ -68,18 +110,90 @@ jobs:
         id: compile
         run: ./gradlew compileDebugKotlin assembleDebug --no-daemon
 
+  # Only reached for PRs bumping onnxruntime-android (see detect above). Runs on a real,
+  # hardware-accelerated arm64-v8a Android emulator — macos-latest resolves to an Apple Silicon
+  # (arm64) host, so an arm64-v8a system image runs natively (HVF-accelerated), not the slow
+  # software-emulated path an x86 host would need. Free for this repo (public, GPLv3 — GitHub
+  # Actions minutes, including macOS runners, are unlimited for public repos). Exercises
+  # NativeLibManagerInstrumentedTest in both vox-vision and vox-commander — a real on-device
+  # dlopen of the actual essential native libs, the only thing that would have caught the
+  # 1.27.0/1.28.0 regression (both versions compiled and passed unit tests cleanly; the crash was
+  # runtime-only, on-device-only).
+  native-lib-verify:
+    needs: detect
+    if: needs.detect.outputs.needs_native_verify == 'true'
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout PR branch (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-licenses: true
+
+      - name: Install NDK and CMake
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Install Vulkan-Headers/SPIRV-Headers/Shaderc for whisper build (Homebrew, native on macOS)
+        run: brew install vulkan-headers spirv-headers shaderc
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run instrumented tests on a real arm64-v8a emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: arm64-v8a
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: ./gradlew :vox-vision:connectedDebugAndroidTest :vox-commander:connectedDebugAndroidTest --no-daemon
+
+  merge:
+    needs: [detect, standard-check, native-lib-verify]
+    if: |
+      always() && github.actor == 'dependabot[bot]' &&
+      (
+        (needs.detect.outputs.needs_native_verify == 'false' && needs.standard-check.result == 'success') ||
+        (needs.detect.outputs.needs_native_verify == 'true' && needs.native-lib-verify.result == 'success')
+      )
+    runs-on: ubuntu-latest
+    steps:
       - name: Squash merge PR to main
-        if: success()
         run: |
           gh pr merge "$PR_URL" --squash --delete-branch
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Notify on failure
-        if: failure()
+  notify-failure:
+    needs: [detect, standard-check, native-lib-verify]
+    if: |
+      always() && github.actor == 'dependabot[bot]' &&
+      (
+        (needs.detect.outputs.needs_native_verify == 'false' && needs.standard-check.result == 'failure') ||
+        (needs.detect.outputs.needs_native_verify == 'true' && needs.native-lib-verify.result == 'failure')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on failure
         run: |
-          gh pr comment "$PR_URL" --body "❌ Tests or compilation failed on the PR branch. Auto-merge skipped. Please fix the issues before merging."
+          gh pr comment "$PR_URL" --body "❌ Tests failed on the PR branch. Auto-merge skipped. Please fix the issues before merging."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -49,12 +49,13 @@ android {
 
     buildTypes {
         debug {
-            // core:wakeword and vox-commander both declare onnxruntime-android directly, so their
-            // native libs collide as two sources for the same path — pickFirst avoids a build
-            // failure. Scoped to debug only: release excludes libonnxruntime.so entirely (DLC'd
-            // instead), and a pickFirst for a path that's also excluded silently wins over the
-            // exclude, which was quietly keeping the 28MB lib bundled in "release" despite the
-            // exclude rule below appearing to remove it.
+            // core:wakeword's onnxruntime-android dependency and sherpa-onnx's own AAR (which
+            // bundles its own separate, independently-built libonnxruntime.so — not resolved via
+            // the onnxruntime-android Maven coordinate at all) collide as two sources for the same
+            // path — pickFirst avoids a build failure. Scoped to debug only: release excludes
+            // libonnxruntime.so entirely (DLC'd instead), and a pickFirst for a path that's also
+            // excluded silently wins over the exclude, which was quietly keeping the 28MB lib
+            // bundled in "release" despite the exclude rule below appearing to remove it.
             packaging {
                 jniLibs {
                     pickFirsts += setOf(
@@ -178,12 +179,15 @@ dependencies {
     // OpenWakeWord (fully open-source, ONNX-based wake word detection) — local fork with an RMS
     // silence gate patch (see core/wakeword/NOTICE); pristine upstream kept at
     // vendor/openwakeword-android-kt for sync (scripts/check_openwakeword_version.sh).
-    // core:wakeword already declares onnxruntime-android 1.27.0 (16KB-page-size-aligned, required
-    // for Android 15+) — vox-commander's own source never imports ai.onnxruntime.* directly, so a
-    // second direct declaration here was a redundant duplicate dependency, not a real requirement.
-    // Two sources contributing the same native libs is exactly the kind of ambiguity that made
-    // libonnxruntime.so's arm64-v8a packaging/exclude behavior unreliable (see release excludes
-    // above) — removing the duplicate leaves a single, unambiguous source.
+    // core:wakeword already declares onnxruntime-android directly (pinned there, independent of
+    // vox-vision's own gradle/libs.versions.toml pin — see core/wakeword/build.gradle.kts for why
+    // it must match sherpa-onnx's bundled copy instead) — vox-commander's own source never imports
+    // ai.onnxruntime.* directly, so a second direct declaration here was a redundant duplicate
+    // dependency, not a real requirement. Two sources contributing the same native libs is exactly
+    // the kind of ambiguity that made libonnxruntime.so's arm64-v8a packaging/exclude behavior
+    // unreliable (see release excludes above) — removing the duplicate leaves a single Maven-
+    // resolved source (sherpa-onnx's AAR still separately bundles its own copy of the same path,
+    // and currently wins the merge — see the pickFirst comment above).
     implementation(project(":core:wakeword"))
     implementation(project(":core:audio"))
     // Piper TTS via sherpa-onnx (on-device neural TTS)

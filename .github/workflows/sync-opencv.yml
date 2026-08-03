@@ -40,7 +40,14 @@ jobs:
             | grep -oE "refs/tags/[0-9]+\.[0-9]+\.[0-9]+$" \
             | sed 's#refs/tags/##' \
             | sort -V | tail -1)
-          LATEST_SHA=$(git ls-remote --tags --refs "$UPSTREAM_URL" "refs/tags/$LATEST_TAG" | awk '{print $1}')
+          # Annotated tags (e.g. 5.0.0 on opencv/opencv) have a separate tag-object SHA, distinct
+          # from the commit SHA the submodule actually pins — ls-remote's own dereferenced
+          # "refs/tags/X^{}" entry gives the commit SHA directly. Query both refs and take the
+          # last line: for an annotated tag that's the ^{} (peeled) entry; for a lightweight tag
+          # (no separate object) there's only one line either way. Comparing the tag-object SHA
+          # against CURRENT_SHA (always a commit SHA, from git ls-tree) would never match even
+          # with zero actual changes, permanently stuck at has_update=true.
+          LATEST_SHA=$(git ls-remote --tags "$UPSTREAM_URL" "refs/tags/$LATEST_TAG" "refs/tags/$LATEST_TAG^{}" | tail -1 | awk '{print $1}')
 
           echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
           echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
@@ -120,15 +127,26 @@ jobs:
 
       - name: Commit submodule bump
         if: steps.versions.outputs.has_update == 'true'
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add vendor/opencv
+          # Defensive no-op guard: has_update should now be accurate (see the ls-remote fix
+          # above), but if the submodule checkout ever ends up already matching what's staged
+          # (e.g. a manual bump landed between the version check and this step), skip cleanly
+          # instead of failing on "nothing to commit".
+          if git diff --cached --quiet; then
+            echo "Nothing to commit — vendor/opencv already at the target commit. Skipping PR."
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           git commit -m "chore: bump vendor/opencv submodule to ${{ steps.versions.outputs.latest_tag }}"
           git push origin "${{ steps.bump.outputs.branch }}"
+          echo "committed=true" >> "$GITHUB_OUTPUT"
 
       - name: Prepare PR body
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.commit.outputs.committed == 'true'
         run: |
           BUILD_STATUS="${{ steps.build.outputs.status }}"
           CURRENT_SHORT="${{ steps.versions.outputs.current_sha }}"
@@ -150,7 +168,7 @@ jobs:
           } > /tmp/pr-body.md
 
       - name: Open PR
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.commit.outputs.committed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
