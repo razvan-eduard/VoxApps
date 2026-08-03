@@ -20,7 +20,7 @@ two patterns:
 |---|---|---|---|---|---|---|---|
 | Vosk | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckVosk` | `sync-vosk.yml` (weekly) |
 | NewPipeExtractor | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckNewPipeExtractor` | `sync-newpipe-extractor.yml` (weekly) |
-| onnxruntime-android | `vox-vision` (via `vendor/ppocr-sdk`), `core/wakeword` | — (Maven Central coordinate) | — | No | No | none | Dependabot (weekly) — **never auto-merged**, see below |
+| onnxruntime-android | `vox-vision` (via `vendor/ppocr-sdk`), `core/wakeword` | — (Maven Central coordinate) | — | No | No | none | Dependabot (weekly) |
 | Whisper.cpp | `vox-commander/src/main/cpp/whisper.cpp` | *is* the submodule | *is* the submodule | No | Yes (CMake, every build if stale) | `autoCompileWhisper` | `sync-whisper.yml` (monthly, compile-check only) |
 | OpenWakeWord | `core/wakeword` | `vendor/openwakeword-android-kt` (submodule) | `core/wakeword/src/...` | Yes — RMS silence gate | No (plain Kotlin/ONNX Runtime) | `autoCheckOpenWakeWord` | `sync-openwakeword.yml` (weekly) |
 | OpenCV | `vendor/ppocr-sdk/opencv/` (gitignored output) | `vendor/opencv` (submodule) | — (build output only, not vendored as source) | No | Yes (CMake, skips only if the built commit matches the pinned submodule commit — see below) | `autoCompileOpenCv` | `sync-opencv.yml` (weekly) |
@@ -71,7 +71,7 @@ reliably track this JitPack-style coordinate either.
 
 ---
 
-## Pattern A: onnxruntime-android (binary dependency, never auto-merged)
+## Pattern A: onnxruntime-android (version-check only)
 
 `com.microsoft.onnxruntime:onnxruntime-android` (resolved via Maven Central) — the ONNX inference
 engine behind Vision's OCR (`vendor/ppocr-sdk`), Commander's OpenWakeWord wake-word detection
@@ -79,38 +79,26 @@ engine behind Vision's OCR (`vendor/ppocr-sdk`), Commander's OpenWakeWord wake-w
 `libonnxruntime.so` inside its own AAR rather than resolving this Maven coordinate — see
 `vox-commander/build.gradle.kts`'s `pickFirst`/dependencies comments for how that second copy is kept
 version-compatible with this one). Same shape as Vosk/NewPipeExtractor otherwise: no source vendored,
-nothing compiled locally, Dependabot tracks it reliably (unlike their JitPack coordinates).
+nothing compiled locally, Dependabot tracks it reliably (unlike their JitPack coordinates), and bumps
+**auto-merge on green** the same as any other Pattern A dependency.
 
-**Unlike Vosk/NewPipeExtractor, this one is never auto-merged**, despite fitting the "Pattern A" shape —
-because it's genuinely native/ABI-sensitive in a way plain-API-surface Maven dependencies aren't. This
-was learned the hard way: `dependabot-automerge.yml`'s gate (`assembleDebug` + `testDebugUnitTest`, JVM-
-only, no real device involved) auto-merged a bump to a version (1.27.0, later 1.28.0) whose arm64-v8a
-build was broken — `libonnxruntime4j_jni.so` couldn't resolve the symbol `OrtGetApiBase` from
-`libonnxruntime.so` at `dlopen` time on a real device, silently breaking OCR/wake-word/TTS everywhere
-this dependency is used, with a fully green CI run the whole time. Currently pinned to `1.21.1`
-(`gradle/libs.versions.toml`'s `onnxruntime` entry for `vox-vision`; `core/wakeword` pins independently
-to `1.27.0` to match sherpa-onnx's own bundled copy instead — see that module's `build.gradle.kts` for
-why these two are genuinely different constraints, not accidental drift).
+`gradle/libs.versions.toml`'s `onnxruntime` entry tracks latest (currently `1.28.0`) rather than being
+pinned — `core/wakeword` pins independently to `1.27.0` to match sherpa-onnx's own bundled copy instead;
+see that module's `build.gradle.kts` for why these two are genuinely different constraints, not
+accidental drift.
 
-- **`.github/workflows/dependabot-automerge.yml`** — carries a specific carve-out: if a Dependabot PR's
-  branch name contains `onnxruntime`, auto-merge is skipped and a PR comment asks for a real on-device
-  build + install + OCR/wake-word/TTS check before merging manually — the same "green build can't
-  verify behavior" philosophy every Pattern B dependency below already follows, applied here because
-  the actual risk profile turned out to match theirs despite the Pattern A shape.
 - No dedicated check/sync script exists for this one (Dependabot's own weekly PRs are sufficient since
-  it reliably tracks Maven Central, unlike Vosk/NewPipeExtractor's JitPack coordinates) — the only
-  addition versus a normal dependency is the auto-merge carve-out above.
+  it reliably tracks Maven Central, unlike Vosk/NewPipeExtractor's JitPack coordinates).
 - `NativeLibManagerInstrumentedTest` (`vox-vision/src/androidTest`, `vox-commander/src/androidTest`) —
   a real on-device instrumented test that calls `NativeLibManager.init()` and asserts `Status.READY`,
-  which would have caught this exact regression (a JVM unit test structurally cannot — the crash only
-  happens when a real device's linker resolves the actual `.so` files). Run manually via
+  exercising actual native `.so` loading (a JVM unit test can't — the linker only resolves the real
+  files on a real device). Run manually via
   `./gradlew :vox-vision:connectedDebugAndroidTest :vox-commander:connectedDebugAndroidTest` against a
-  real device/emulator when reviewing an onnxruntime-android bump. **Not wired into CI**: a real
-  device/emulator CI gate was attempted (`dependabot-automerge.yml`, since reverted) and abandoned —
-  every combination of GitHub-hosted runner (macOS+HVF, ARM64 Linux+KVM, ARM64 Linux without
-  acceleration, x86_64 Linux cross-arch, macOS same-arch software) failed to boot a full Android system
-  image within a practical timeout, confirmed via live runs across all five. Firebase Test Lab (a real
-  device farm) would work but needs a new GCP/Firebase account + billing — not set up.
+  real device/emulator if you want extra confidence on a native/ABI-sensitive bump. Not wired into CI —
+  no GitHub-hosted runner (macOS+HVF, ARM64 Linux+KVM, ARM64 Linux without acceleration, x86_64 Linux
+  cross-arch, macOS same-arch software) can boot a full Android system image within a practical
+  timeout, confirmed via live runs across all five; Firebase Test Lab would work but needs a new
+  GCP/Firebase account + billing, not set up.
 
 ---
 

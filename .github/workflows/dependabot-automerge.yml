@@ -9,46 +9,8 @@ permissions:
   pull-requests: write
 
 jobs:
-  # onnxruntime-android is a native/ABI-sensitive dependency like the six already documented in
-  # docs/BUILD_TIME_DEPENDENCIES.md (Whisper/OpenWakeWord/OpenCV/ppocr-sdk/Vosk/NewPipeExtractor) —
-  # a green compileDebugKotlin/testDebugUnitTest only proves the Kotlin/Java API surface still
-  # resolves, never that the actual .so still dlopen's correctly on a real device. That gap is
-  # exactly how onnxruntime-android 1.27.0/1.28.0 (both shipping a broken arm64-v8a build) went
-  # straight to main auto-merged: a fully green CI run the whole time, despite crashing OCR/
-  # wake-word/TTS on every real device. This job skips the usual auto-merge for PRs touching that
-  # dependency and asks for a manual on-device build+install instead. A real device/emulator CI
-  # gate was attempted and abandoned — see docs/BUILD_TIME_DEPENDENCIES.md's onnxruntime-android
-  # section for why: no combination of GitHub-hosted runner (macOS+HVF, ARM64 Linux+KVM, ARM64
-  # Linux without acceleration, x86_64 Linux cross-arch, macOS same-arch software) could boot a
-  # full Android system image within a practical CI timeout — every path hit a hard wall,
-  # confirmed via live runs, not something fixable by tuning flags further. Every other dependency
-  # keeps auto-merging exactly as before.
-  detect:
-    if: github.actor == 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    outputs:
-      needs_manual_review: ${{ steps.check.outputs.needs_manual_review }}
-    steps:
-      - id: check
-        run: |
-          BRANCH="${{ github.event.pull_request.head.ref }}"
-          if [[ "$BRANCH" == *"onnxruntime"* ]]; then
-            echo "needs_manual_review=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "needs_manual_review=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: "Comment: manual on-device verification required"
-        if: steps.check.outputs.needs_manual_review == 'true'
-        run: |
-          gh pr comment "$PR_URL" --body "⚠️ This bumps \`onnxruntime-android\`, a native/ABI-sensitive dependency — a past version (1.27.0/1.28.0) shipped a broken arm64-v8a build that crashed every OCR/wake-word/TTS engine at runtime despite compiling and passing unit tests cleanly. Auto-merge is skipped for this dependency; please build a release APK, install on a real device, and confirm OCR (vox-vision) and/or wake-word + TTS (vox-commander) actually work before merging manually."
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   standard-check:
-    needs: detect
-    if: needs.detect.outputs.needs_manual_review != 'true'
+    if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
 
     steps:
