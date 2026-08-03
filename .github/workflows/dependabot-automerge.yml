@@ -111,24 +111,29 @@ jobs:
         run: ./gradlew compileDebugKotlin assembleDebug --no-daemon
 
   # Only reached for PRs bumping onnxruntime-android (see detect above). Runs a real arm64-v8a
-  # Android emulator on plain ubuntu-latest (x86_64), via full cross-architecture software (TCG)
-  # emulation — slow, but the only combination that actually works on GitHub-hosted runners after
-  # three other attempts each hit a hard wall: macos-latest can't get HVF passthrough into the
-  # guest (HV_UNSUPPORTED, emulator never boots — confirmed live); ubuntu-24.04-arm has no
-  # /dev/kvm exposed at all (confirmed live); and even without needing KVM, Google doesn't publish
-  # an `emulator` host-tool package for linux-aarch64 at all ("Failed to find package 'emulator'"
-  # — confirmed live), so the ARM64 Linux path is a dead end independent of acceleration. Plain
-  # ubuntu-latest is the standard, well-supported combination for this action — it just can't be
-  # hardware-accelerated for an arm64-v8a guest on an x86_64 host either way, so -no-accel is
-  # required regardless of which Linux runner is used. Free for this repo (public, GPLv3 — GitHub
-  # Actions minutes are unlimited for public repos). Exercises NativeLibManagerInstrumentedTest in
-  # both vox-vision and vox-commander — a real on-device dlopen of the actual essential native
-  # libs, the only thing that would have caught the 1.27.0/1.28.0 regression (both versions
-  # compiled and passed unit tests cleanly; the crash was runtime-only, on-device-only).
+  # Android emulator on macos-latest, in software (unaccelerated) mode. Four combinations have
+  # been tried on GitHub-hosted runners:
+  #   - macos-latest + HVF acceleration: emulator installs fine, but the guest never gets HVF
+  #     passthrough (HV_UNSUPPORTED, emulator never boots — confirmed live).
+  #   - ubuntu-24.04-arm + KVM: no /dev/kvm exposed to the guest at all (confirmed live).
+  #   - ubuntu-24.04-arm, no acceleration needed: Google doesn't publish an `emulator` host-tool
+  #     package for linux-aarch64 at all ("Failed to find package 'emulator'" — confirmed live) —
+  #     a dead end independent of acceleration.
+  #   - ubuntu-latest (x86_64) + cross-architecture TCG for an arm64-v8a guest: the emulator
+  #     genuinely can install and attempt to boot, but cross-arch instruction translation didn't
+  #     finish within a 1200s timeout (confirmed live) — too slow to be practical.
+  # This is the last untested combination: macOS's emulator binary DOES install correctly (unlike
+  # ARM64 Linux), and same-architecture software emulation (arm64-v8a guest on an Apple Silicon
+  # arm64 host) should be far less painful than the cross-architecture case that already timed
+  # out. Free for this repo (public, GPLv3 — GitHub Actions minutes are unlimited for public
+  # repos, including macOS runners). Exercises NativeLibManagerInstrumentedTest in both vox-vision
+  # and vox-commander — a real on-device dlopen of the actual essential native libs, the only
+  # thing that would have caught the 1.27.0/1.28.0 regression (both versions compiled and passed
+  # unit tests cleanly; the crash was runtime-only, on-device-only).
   native-lib-verify:
     needs: detect
     if: needs.detect.outputs.needs_native_verify == 'true'
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - name: Checkout PR branch (with submodules)
@@ -144,13 +149,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # packages defaults to "tools platform-tools" -- the legacy "tools" meta-package
-      # declares a dependency on "emulator" that Google's SDK repository manifest doesn't
-      # resolve for linux-aarch64 hosts under that old bundling scheme, failing the whole
-      # step (confirmed via a live run: "Warning: Dependant package with key emulator not
-      # found!"). We don't need the deprecated "tools" package at all --
-      # reactivecircus/android-emulator-runner installs the actual emulator binary + system
-      # image itself.
+      # packages defaults to "tools platform-tools" -- the legacy "tools" meta-package's
+      # dependency resolution is unreliable across hosts (confirmed broken outright on
+      # linux-aarch64); we don't need it anyway -- reactivecircus/android-emulator-runner
+      # installs the actual emulator binary + system image itself.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -162,24 +164,8 @@ jobs:
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
 
-      - name: Symlink SDK for whisper build script
-        run: |
-          mkdir -p ~/Library/Android/sdk
-          ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
-
-      - name: Install SPIRV-Headers and Shaderc for whisper Vulkan build
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq glslc libshaderc-dev
-          git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git /tmp/spirv-headers
-          cd /tmp/spirv-headers
-          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local
-          sudo cmake --install build
-          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vulkan-headers
-          cd /tmp/vulkan-headers
-          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local
-          sudo cmake --install build
-          sudo ln -sf /usr/bin/glslc /usr/local/bin/glslc 2>/dev/null || true
+      - name: Install Vulkan-Headers/SPIRV-Headers/Shaderc for whisper build (Homebrew, native on macOS)
+        run: brew install vulkan-headers spirv-headers shaderc
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -194,12 +180,10 @@ jobs:
           # Default boot timeout (600s) is tuned for hardware-accelerated boots — software (TCG)
           # emulation needs more headroom.
           emulator-boot-timeout: 1200
-          # -no-accel: neither GitHub's macOS runners (no HVF passthrough) nor its ARM64 Linux
-          # runners (no /dev/kvm at all) expose hardware virtualization to the guest — confirmed
-          # via two separate live-run failures (HV_UNSUPPORTED on macOS, missing /dev/kvm here).
-          # Software (TCG) emulation is slow but works; same-architecture (arm64-v8a guest on an
-          # arm64 host) TCG is far less painful than the cross-architecture translation an x86
-          # host would need for this ABI.
+          # -no-accel: HVF passthrough isn't available to the guest on GitHub's macOS runners
+          # (HV_UNSUPPORTED, confirmed live) — same-architecture (arm64-v8a guest on an Apple
+          # Silicon arm64 host) software emulation should still be far more tolerable than the
+          # cross-architecture case (arm64-v8a on an x86_64 host) that already timed out.
           emulator-options: -no-window -no-accel -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: ./gradlew :vox-vision:connectedDebugAndroidTest :vox-commander:connectedDebugAndroidTest --no-daemon
 
