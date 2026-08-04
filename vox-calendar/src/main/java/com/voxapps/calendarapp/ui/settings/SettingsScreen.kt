@@ -8,7 +8,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,10 +23,14 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -31,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -39,9 +47,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepository
+import com.voxapps.calendarapp.domain.localization.LanguageManager
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.ui.LocalLanguageManager
 import com.voxapps.design.VoxDarkMode
+import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.notifications.NotificationSoundPlayer
@@ -208,7 +218,8 @@ fun SettingsScreen(
                         showInWidgetLabel = languageManager.getString("today_effect_show_in_widget")
                     )
                 ),
-                modifier = Modifier.fillMaxSize().padding(padding)
+                modifier = Modifier.fillMaxSize().padding(padding),
+                extraContent = { CalendarThemeExtras(settings = settings, stateManager = stateManager, languageManager = languageManager) }
             )
             SettingsPage.NOTIFICATIONS -> Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
                 NotificationSettingsCard(
@@ -261,4 +272,77 @@ fun SettingsScreen(
             )
         }
     }
+}
+
+/** Appearance-adjacent settings that live on the Theme page via [ThemeSettingsScreen]'s
+ *  `extraContent` slot rather than General — decorative transition animations and the home-screen
+ *  widget's day-card border (on/off, thickness, color). */
+@Composable
+private fun ColumnScope.CalendarThemeExtras(
+    settings: CalendarSettings,
+    stateManager: CalendarStateManager,
+    languageManager: LanguageManager
+) {
+    HorizontalDivider()
+
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(languageManager.getString("animations_enabled"), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                languageManager.getString("animations_enabled_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(
+            checked = settings.animationsEnabled,
+            onCheckedChange = { stateManager.setAnimationsEnabled(it) }
+        )
+    }
+
+    HorizontalDivider()
+
+    Text(languageManager.getString("widget_border_section"), style = MaterialTheme.typography.labelLarge)
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(languageManager.getString("widget_border_enabled"), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                languageManager.getString("widget_border_enabled_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(
+            checked = settings.widgetBorderEnabled,
+            onCheckedChange = { stateManager.setWidgetBorderEnabled(it) }
+        )
+    }
+    Text(languageManager.getString("widget_border_thickness"), style = MaterialTheme.typography.bodyMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        val thicknessOptions = listOf(
+            CalendarSettings.THICKNESS_THIN to "widget_border_thickness_thin",
+            CalendarSettings.THICKNESS_MEDIUM to "widget_border_thickness_medium",
+            CalendarSettings.THICKNESS_THICK to "widget_border_thickness_thick"
+        )
+        thicknessOptions.forEach { (thicknessDp, labelKey) ->
+            FilterChip(
+                enabled = settings.widgetBorderEnabled,
+                selected = settings.widgetBorderThicknessDp == thicknessDp,
+                onClick = { stateManager.setWidgetBorderThicknessDp(thicknessDp) },
+                label = { Text(languageManager.getString(labelKey)) }
+            )
+        }
+    }
+    Text(languageManager.getString("widget_border_color"), style = MaterialTheme.typography.bodyMedium)
+    VoxColorSwatchPicker(
+        selectedColor = settings.widgetBorderColorArgb,
+        onColorSelected = { stateManager.setWidgetBorderColorArgb(it) },
+        modifier = Modifier.padding(top = 4.dp),
+        customColorDialogTitle = languageManager.getString("custom_color_title"),
+        customColorUseLabel = languageManager.getString("use_color_button"),
+        customColorCancelLabel = languageManager.getString("cancel"),
+        customColorHueLabel = languageManager.getString("hue_label"),
+        customColorSaturationLabel = languageManager.getString("saturation_label"),
+        customColorBrightnessLabel = languageManager.getString("brightness_label")
+    )
 }

@@ -31,6 +31,7 @@ data class ParsedIcsEntry(
     val allDay: Boolean,
     val completed: Boolean,
     val recurrenceFrequency: RecurrenceFrequency,
+    val recurrenceInterval: Int,
     val recurrenceUntilMillis: Long?,
     val layerName: String?,
     val tags: List<String>
@@ -50,11 +51,17 @@ data class ParsedIcsEntry(
  */
 object IcsExportImportUtil {
 
+    /** [entries] is expected to already exclude to-do-flavored rows ([CalendarEntry.listId] != null —
+     *  see [com.voxapps.calendarapp.receiver.CalendarExportImportHandler], which filters those out
+     *  before calling this) — a to-do checklist item isn't a calendar-standard ICS concept, and may
+     *  have no date at all, so every entry reaching here is guaranteed a plain Event/Task with a
+     *  non-null [CalendarEntry.startMillis]. */
     fun write(entries: List<CalendarEntryWithTags>, layers: List<CalendarLayer>, output: OutputStream) {
         val layerById = layers.associateBy { it.id }
         val ical = ICalendar()
         entries.forEach { ewt ->
             val entry = ewt.entry
+            val startMillis = entry.startMillis!!
             val layerName = layerById[entry.layerId]?.name
             val categories = (listOfNotNull(layerName) + ewt.tagNames)
             if (entry.type == CalendarEntryType.TASK) {
@@ -63,7 +70,7 @@ object IcsExportImportUtil {
                 todo.setSummary(entry.title)
                 entry.description?.let { todo.setDescription(it) }
                 entry.location?.let { todo.setLocation(it) }
-                todo.setDateDue(toIcalDate(entry.startMillis, entry.allDay))
+                todo.setDateDue(toIcalDate(startMillis, entry.allDay))
                 if (entry.completed) todo.setStatus(Status.completed())
                 if (categories.isNotEmpty()) todo.addCategories(*categories.toTypedArray())
                 applyRecurrence(entry)?.let { todo.setRecurrenceRule(it) }
@@ -74,7 +81,7 @@ object IcsExportImportUtil {
                 event.setSummary(entry.title)
                 entry.description?.let { event.setDescription(it) }
                 entry.location?.let { event.setLocation(it) }
-                event.setDateStart(toIcalDate(entry.startMillis, entry.allDay))
+                event.setDateStart(toIcalDate(startMillis, entry.allDay))
                 entry.endMillis?.let { event.setDateEnd(toIcalDate(it, entry.allDay)) }
                 if (categories.isNotEmpty()) event.addCategories(*categories.toTypedArray())
                 applyRecurrence(entry)?.let { event.setRecurrenceRule(it) }
@@ -104,6 +111,7 @@ object IcsExportImportUtil {
                         allDay = !start.hasTime(),
                         completed = false,
                         recurrenceFrequency = frequencyOf(event.recurrenceRule?.value),
+                        recurrenceInterval = event.recurrenceRule?.value?.interval ?: 1,
                         recurrenceUntilMillis = event.recurrenceRule?.value?.until?.time,
                         layerName = categories.firstOrNull(),
                         tags = categories.drop(1)
@@ -126,6 +134,7 @@ object IcsExportImportUtil {
                         allDay = !due.hasTime(),
                         completed = todo.status?.isCompleted == true,
                         recurrenceFrequency = frequencyOf(todo.recurrenceRule?.value),
+                        recurrenceInterval = todo.recurrenceRule?.value?.interval ?: 1,
                         recurrenceUntilMillis = todo.recurrenceRule?.value?.until?.time,
                         layerName = categories.firstOrNull(),
                         tags = categories.drop(1)
@@ -174,6 +183,7 @@ object IcsExportImportUtil {
                 allDay = entry.allDay,
                 completed = entry.completed,
                 recurrenceFrequency = entry.recurrenceFrequency,
+                recurrenceInterval = entry.recurrenceInterval,
                 recurrenceUntilMillis = entry.recurrenceUntilMillis,
                 layerId = layerId,
                 tags = entry.tags
@@ -183,7 +193,7 @@ object IcsExportImportUtil {
 
     private fun toIcalDate(millis: Long, allDay: Boolean): ICalDate = ICalDate(Date(millis), !allDay)
 
-    /** Only FREQ and UNTIL are round-tripped — anything else (BYDAY, INTERVAL, COUNT, ...) is dropped
+    /** Only FREQ, INTERVAL and UNTIL are round-tripped — anything else (BYDAY, COUNT, ...) is dropped
      *  rather than attempting a full RRULE engine, per the deliberately-minimal recurrence model. */
     private fun applyRecurrence(entry: CalendarEntry): Recurrence? {
         val frequency = when (entry.recurrenceFrequency) {
@@ -194,6 +204,7 @@ object IcsExportImportUtil {
             RecurrenceFrequency.YEARLY -> Frequency.YEARLY
         }
         val builder = Recurrence.Builder(frequency)
+        if (entry.recurrenceInterval > 1) builder.interval(entry.recurrenceInterval)
         entry.recurrenceUntilMillis?.let { builder.until(Date(it)) }
         return builder.build()
     }

@@ -8,9 +8,13 @@ import org.junit.Test
 class EntryEditScreenTest {
 
     @Test
-    fun `event with end at or before start is invalid`() {
-        assertTrue(isTimeRangeInvalid(CalendarEntryType.EVENT, startMillis = 1000L, endMillis = 1000L))
+    fun `event with end strictly before start is invalid`() {
         assertTrue(isTimeRangeInvalid(CalendarEntryType.EVENT, startMillis = 1000L, endMillis = 500L))
+    }
+
+    @Test
+    fun `event with end equal to start is valid, a zero-duration event`() {
+        assertFalse(isTimeRangeInvalid(CalendarEntryType.EVENT, startMillis = 1000L, endMillis = 1000L))
     }
 
     @Test

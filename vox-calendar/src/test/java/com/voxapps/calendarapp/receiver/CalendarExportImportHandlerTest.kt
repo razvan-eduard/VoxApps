@@ -92,7 +92,7 @@ class CalendarExportImportHandlerTest {
         coEvery { calendarRepo.entriesSnapshot() } returns listOf(entry(100))
         coEvery {
             calendarRepo.addEntry(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
             )
         } returns 1L
 
@@ -109,7 +109,7 @@ class CalendarExportImportHandlerTest {
         )
         coEvery {
             calendarRepo.addEntry(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
             )
         } returns 42L
 
@@ -131,7 +131,7 @@ class CalendarExportImportHandlerTest {
         )
         coEvery {
             calendarRepo.addEntry(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
             )
         } returns 3L
 

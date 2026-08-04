@@ -58,7 +58,9 @@ class CalendarExportImportHandler(
         }
         if (scope != VoxIpc.EXPORT_SCOPE_SETTINGS) {
             val layers = calendarRepo.layersSnapshot()
-            val entries = calendarRepo.entriesSnapshot()
+            // Excludes to-do-flavored entries (CalendarEntry.listId != null) — a to-do checklist item
+            // isn't a Hub-backup concept and is never round-tripped through this JSON export/import.
+            val entries = calendarRepo.entriesSnapshot().filter { it.entry.listId == null }
             json.put("layers", JSONArray(layers.map { it.toJson() }))
             val allFileNames = mutableListOf<String>()
             json.put(
@@ -189,7 +191,9 @@ class CalendarExportImportHandler(
         // pre-existing entries, insert every imported one, then delete exactly what existed before.
         var entriesCreated = 0
         if (root.has("events")) {
-            val preExistingIds = calendarRepo.entriesSnapshot().map { it.entry.id }
+            // Same to-do exclusion as export — a to-do-flavored entry was never part of this backup,
+            // so it must never be wiped by this import's snapshot-then-replace pass either.
+            val preExistingIds = calendarRepo.entriesSnapshot().filter { it.entry.listId == null }.map { it.entry.id }
 
             val importedEntries = root.optJSONArray("events") ?: JSONArray()
             for (i in 0 until importedEntries.length()) {
@@ -213,6 +217,7 @@ class CalendarExportImportHandler(
                     recurrenceFrequency = e.optStringOrNull("recurrenceFrequency")
                         ?.let { runCatching { RecurrenceFrequency.valueOf(it) }.getOrNull() }
                         ?: RecurrenceFrequency.NONE,
+                    recurrenceInterval = if (e.has("recurrenceInterval")) e.optInt("recurrenceInterval", 1) else 1,
                     recurrenceUntilMillis = if (e.has("recurrenceUntilMillis") && !e.isNull("recurrenceUntilMillis")) {
                         e.optLong("recurrenceUntilMillis")
                     } else {
@@ -299,6 +304,7 @@ private fun CalendarEntryWithTags.toJson(attachments: List<AttachmentEntity> = e
     put("allDay", e.allDay)
     put("completed", e.completed)
     put("recurrenceFrequency", e.recurrenceFrequency.name)
+    put("recurrenceInterval", e.recurrenceInterval)
     put("recurrenceUntilMillis", e.recurrenceUntilMillis)
     put("layerId", e.layerId)
     put("tags", JSONArray(tagNames))

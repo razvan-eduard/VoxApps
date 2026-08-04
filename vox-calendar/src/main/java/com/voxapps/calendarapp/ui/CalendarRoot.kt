@@ -1,5 +1,9 @@
 package com.voxapps.calendarapp.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -7,13 +11,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
+import com.voxapps.calendarapp.data.toToDoItem
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.ui.onboarding.CalendarOnboardingFlow
 import com.voxapps.calendarapp.ui.settings.SettingsScreen
+import com.voxapps.calendarapp.ui.todo.TaskEditDialog
+import com.voxapps.calendarapp.ui.todo.ToDoListsScreen
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.Color
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
@@ -25,6 +36,9 @@ import kotlinx.coroutines.flow.first
 private sealed interface EditTarget {
     data object New : EditTarget
     data class Existing(val entry: CalendarEntryWithTags) : EditTarget
+    /** A tapped grid entry that's to-do-flavored ([com.voxapps.calendarapp.data.CalendarEntry.listId]
+     *  != null) — opens [TaskEditDialog] instead of [com.voxapps.calendarapp.ui.EntryEditScreen]. */
+    data class ExistingTodo(val entry: CalendarEntryWithTags) : EditTarget
 }
 
 /**
@@ -67,6 +81,7 @@ fun CalendarRoot(
             } else {
                 val ui by container.calendarStateManager.uiState.collectAsStateWithLifecycle()
                 var showSettings by remember { mutableStateOf(false) }
+                var showToDoLists by remember { mutableStateOf(false) }
                 var editTarget by remember { mutableStateOf<EditTarget?>(null) }
 
                 // Widget "Add" tap — set even while locked; once CalendarUiState transitions to
@@ -84,10 +99,16 @@ fun CalendarRoot(
                             .filterIsInstance<CalendarUiState.Unlocked>()
                             .first()
                         unlocked.entries.firstOrNull { it.entry.id == editEntryId }?.let {
-                            editTarget = EditTarget.Existing(it)
+                            editTarget = if (it.entry.listId != null) EditTarget.ExistingTodo(it) else EditTarget.Existing(it)
                         }
                     }
                 }
+
+                // Owning ToDoList lookup for a to-do-flavored grid tap (see EditTarget.ExistingTodo) —
+                // observed here (not fetched suspend-style) since it's already a cheap, already-loaded
+                // Flow the to-do lists screen itself observes.
+                val toDoLists by container.toDoRepository.lists.collectAsStateWithLifecycle(initialValue = emptyList())
+                val todoEditScope = rememberCoroutineScope()
 
                 when (val state = ui) {
                     is CalendarUiState.Loading -> Unit
@@ -96,6 +117,22 @@ fun CalendarRoot(
                         val target = editTarget
                         val defaultLayer = state.layers.firstOrNull { it.isDefault } ?: state.layers.firstOrNull()
                         when {
+                            target is EditTarget.ExistingTodo -> {
+                                val list = toDoLists.firstOrNull { it.id == target.entry.entry.listId }
+                                if (list != null) {
+                                    TaskEditDialog(
+                                        item = target.entry.entry.toToDoItem(),
+                                        list = list,
+                                        toDoRepository = container.toDoRepository,
+                                        scope = todoEditScope,
+                                        onDismiss = { editTarget = null }
+                                    )
+                                } else {
+                                    // List not loaded yet, or deleted concurrently — nothing sane to
+                                    // show without list context, so just close rather than crash.
+                                    LaunchedEffect(target) { editTarget = null }
+                                }
+                            }
                             target != null && defaultLayer != null -> EntryEditScreen(
                                 existing = (target as? EditTarget.Existing)?.entry,
                                 defaultLayer = defaultLayer,
@@ -109,19 +146,56 @@ fun CalendarRoot(
                                 calendarRepository = container.calendarRepository,
                                 onBack = { showSettings = false }
                             )
-                            else -> CalendarScreen(
-                                state = state,
-                                settings = settings,
-                                stateManager = container.calendarStateManager,
-                                onAddEntry = { editTarget = EditTarget.New },
-                                onEditEntry = { item -> editTarget = EditTarget.Existing(item.entryWithTags) },
-                                onOpenSettings = { showSettings = true },
-                                todayEffect = runCatching { TodayEffect.valueOf(settings.todayEffect) }.getOrDefault(TodayEffect.NONE),
-                                todayEffectStyle = runCatching { TodayEffectStyle.valueOf(settings.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
-                                todayEffectPrimaryColor = Color(settings.todayEffectColor.toInt()),
-                                todayEffectSecondaryColor = settings.todayEffectColor2?.let { Color(it.toInt()) },
-                                todayEffectSpeed = settings.todayEffectSpeed
-                            )
+                            else -> {
+                                // Same horizontal 3D flip ToDoListCard uses for its own view/edit
+                                // faces, applied to the Calendar<->To-do-lists screen switch — gated
+                                // behind animationsEnabled (tween(0) snaps instantly when off).
+                                val effectiveShowToDo = showToDoLists && defaultLayer != null
+                                val rotationTarget = if (effectiveShowToDo) 180f else 0f
+                                val rotation by animateFloatAsState(
+                                    targetValue = rotationTarget,
+                                    animationSpec = if (settings.animationsEnabled) tween(450) else tween(0),
+                                    label = "calendarToDoFlip"
+                                )
+                                val density = LocalDensity.current
+                                Box(
+                                    modifier = Modifier.fillMaxSize().graphicsLayer {
+                                        rotationY = rotation
+                                        cameraDistance = 12f * density.density
+                                    }
+                                ) {
+                                    if (rotation <= 90f) {
+                                        CalendarScreen(
+                                            state = state,
+                                            settings = settings,
+                                            stateManager = container.calendarStateManager,
+                                            onAddEntry = { editTarget = EditTarget.New },
+                                            onEditEntry = { item ->
+                                                editTarget = if (item.entryWithTags.entry.listId != null) {
+                                                    EditTarget.ExistingTodo(item.entryWithTags)
+                                                } else {
+                                                    EditTarget.Existing(item.entryWithTags)
+                                                }
+                                            },
+                                            onOpenSettings = { showSettings = true },
+                                            onOpenToDoLists = { showToDoLists = true },
+                                            todayEffect = runCatching { TodayEffect.valueOf(settings.todayEffect) }.getOrDefault(TodayEffect.NONE),
+                                            todayEffectStyle = runCatching { TodayEffectStyle.valueOf(settings.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
+                                            todayEffectPrimaryColor = Color(settings.todayEffectColor.toInt()),
+                                            todayEffectSecondaryColor = settings.todayEffectColor2?.let { Color(it.toInt()) },
+                                            todayEffectSpeed = settings.todayEffectSpeed
+                                        )
+                                    } else if (defaultLayer != null) {
+                                        Box(Modifier.graphicsLayer { rotationY = 180f }) {
+                                            ToDoListsScreen(
+                                                toDoRepository = container.toDoRepository,
+                                                defaultLayer = defaultLayer,
+                                                onBack = { showToDoLists = false }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

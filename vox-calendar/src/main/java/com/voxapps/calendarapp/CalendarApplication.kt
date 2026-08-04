@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -52,9 +53,10 @@ class CalendarApplication : Application() {
             .distinctUntilChanged()
             .onEach { layerNames ->
                 val settings = container.settingsRepository.getSnapshot()
+                val todoListNames = container.toDoRepository.lists.first().map { it.title }
                 val schema = VoxSatelliteSchema(
                     needsExtractionPass = true,
-                    promptTemplate = CalendarEventParsePromptBuilder.buildTemplate(layerNames, settings.language),
+                    promptTemplate = CalendarEventParsePromptBuilder.buildTemplate(layerNames, todoListNames, settings.language),
                     fieldSchemaVersion = GeneratedParsedSchema.VERSION,
                     taskId = LlmTasks.CALENDAR_EVENT_PARSE
                 )

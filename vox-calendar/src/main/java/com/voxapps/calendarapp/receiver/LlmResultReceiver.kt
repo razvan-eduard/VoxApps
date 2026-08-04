@@ -8,6 +8,7 @@ import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarEventParseResultParser
 import com.voxapps.calendarapp.domain.llm.LlmTasks
+import com.voxapps.calendarapp.domain.llm.ParsedKind
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequestQueue
@@ -15,6 +16,7 @@ import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -38,12 +40,44 @@ class LlmResultReceiver : BroadcastReceiver() {
         // matching against the plain LlmTasks constants below.
         val (task, requestId) = VoxLlmRequestQueue.splitRequestId(result.task)
 
-        when (task) {
-            LlmTasks.CALENDAR_EVENT_PARSE -> {
+        when {
+            task.startsWith("${LlmTasks.TODO_SCAN_CLEANUP}:") -> {
+                // The target list is already known (baked into the task string by the scan button in
+                // ToDoListCard.kt), so this bypasses CalendarEventParseResultParser.Parsed.listName
+                // fuzzy-matching entirely and calls ToDoRepository's primitives directly — same
+                // precedent LlmTasks.CALENDAR_ATTACHMENT_CAPTURE already sets for direct-primitive
+                // handling in this receiver rather than always going through a "parsed" wrapper.
+                val listId = task.substringAfter(":").toLongOrNull()
+                val rawJson = result.rawJson
+                val parsed = if (listId != null && result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
+                    CalendarEventParseResultParser.parse(rawJson)
+                } else null
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        if (listId != null && parsed != null) {
+                            val itemId = container.toDoRepository.addItem(listId, parsed.title)
+                            val dueMillis = parsed.startMillis
+                            if (dueMillis != null) {
+                                val list = container.toDoRepository.lists.first().firstOrNull { it.id == listId }
+                                val item = container.toDoRepository.itemsForList(listId).first().firstOrNull { it.id == itemId }
+                                if (list != null && item != null) container.toDoRepository.setItemDueDate(item, dueMillis, list)
+                            }
+                        } else {
+                            Logger.w(TAG, "Todo scan cleanup: could not parse LLM result. rawJson=$rawJson")
+                        }
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            task == LlmTasks.CALENDAR_EVENT_PARSE -> {
                 val rawJson = result.rawJson
                 val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
                     CalendarEventParseResultParser.parse(rawJson) ?: run {
-                        Logger.w(TAG, "Calendar event parse: could not parse LLM result (no title/date?). rawJson=$rawJson")
+                        Logger.w(TAG, "Calendar event parse: could not parse LLM result (missing title, or a date was required but missing). rawJson=$rawJson")
                         null
                     }
                 } else {
@@ -55,8 +89,8 @@ class LlmResultReceiver : BroadcastReceiver() {
                     try {
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
                         if (parsed != null) {
-                            Logger.d(TAG, "Calendar event parse: creating ${parsed.type} '${parsed.title}' layer=${parsed.layer}")
-                            createEntryFromParsed(container, parsed)
+                            Logger.d(TAG, "Calendar event parse: creating ${parsed.kind} '${parsed.title}' layer=${parsed.layer} list=${parsed.listName}")
+                            routeParsed(container, parsed)
                         }
                     } finally {
                         pending.finish()
@@ -64,14 +98,14 @@ class LlmResultReceiver : BroadcastReceiver() {
                 }
             }
 
-            LlmTasks.CALENDAR_SCAN_CLEANUP -> {
+            task == LlmTasks.CALENDAR_SCAN_CLEANUP -> {
                 val rawJson = result.rawJson
                 val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
                     CalendarEventParseResultParser.parse(rawJson) ?: run {
-                        // No title/date (i.e. no date reference, direct or indirect) is the same
-                        // mandatory-field rule voice-created entries already enforce — a scanned
-                        // document with no date reference simply can't become a calendar entry.
-                        Logger.w(TAG, "Calendar scan cleanup: could not parse LLM result (no title/date?). rawJson=$rawJson")
+                        // Missing title, or a date required for a non-TODO kind but not found — same
+                        // mandatory-field rule voice-created records already enforce (a TODO-kind
+                        // result never fails on a missing date).
+                        Logger.w(TAG, "Calendar scan cleanup: could not parse LLM result (missing title, or a date was required but missing). rawJson=$rawJson")
                         null
                     }
                 } else {
@@ -84,14 +118,14 @@ class LlmResultReceiver : BroadcastReceiver() {
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
                         if (parsed == null) {
                             // Unconditional — the only signal the user has that the scan didn't
-                            // produce an entry, mirrors vox-notes'/vox-expenses' OCR-failure toast.
+                            // produce a record, mirrors vox-notes'/vox-expenses' OCR-failure toast.
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
                             }
                             return@launch
                         }
-                        Logger.d(TAG, "Calendar scan cleanup: creating ${parsed.type} '${parsed.title}' layer=${parsed.layer}")
-                        createEntryFromParsed(container, parsed)
+                        Logger.d(TAG, "Calendar scan cleanup: creating ${parsed.kind} '${parsed.title}' layer=${parsed.layer} list=${parsed.listName}")
+                        routeParsed(container, parsed)
                     } finally {
                         pending.finish()
                     }
@@ -116,6 +150,16 @@ class LlmResultReceiver : BroadcastReceiver() {
         }
     }
 
+    /** Dispatches on [CalendarEventParseResultParser.Parsed.kind]: EVENT/TASK go to the plain
+     *  calendar-entry path (unchanged); TODO goes to the to-do item path instead — see
+     *  [ParsedKind]'s doc comment for why this is a routing decision, not a stored field value. */
+    private suspend fun routeParsed(container: CalendarContainer, parsed: CalendarEventParseResultParser.Parsed) {
+        when (parsed.kind) {
+            ParsedKind.TODO -> createTodoItemFromParsed(container, parsed)
+            ParsedKind.EVENT, ParsedKind.TASK -> createEntryFromParsed(container, parsed)
+        }
+    }
+
     private suspend fun createEntryFromParsed(
         container: CalendarContainer,
         parsed: CalendarEventParseResultParser.Parsed
@@ -123,17 +167,31 @@ class LlmResultReceiver : BroadcastReceiver() {
         val settings = container.settingsRepository.getSnapshot()
         // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard.
         container.calendarRepository.addParsedEntry(
-            type = parsed.type,
+            type = parsed.calendarType,
             title = FieldCleaner.cleanRequired(parsed.title, parsed.title, "title", "CalendarEntry"),
             description = null,
             location = null,
-            startMillis = parsed.startMillis,
+            // Non-null enforced by CalendarEventParseResultParser.parse() for EVENT/TASK kinds.
+            startMillis = parsed.startMillis!!,
             endMillis = parsed.endMillis,
             allDay = parsed.allDay,
             tags = parsed.tags,
             spokenLayer = parsed.layer,
             defaultLayerId = settings.defaultLayerId,
             autoCreateLayer = settings.autoCreateLayer
+        )
+    }
+
+    private suspend fun createTodoItemFromParsed(
+        container: CalendarContainer,
+        parsed: CalendarEventParseResultParser.Parsed
+    ) {
+        val settings = container.settingsRepository.getSnapshot()
+        container.toDoRepository.addParsedItem(
+            spokenListName = parsed.listName,
+            text = FieldCleaner.cleanRequired(parsed.title, parsed.title, "text", "ToDoItem"),
+            dueMillis = parsed.startMillis,
+            defaultLayerId = settings.defaultLayerId
         )
     }
 }

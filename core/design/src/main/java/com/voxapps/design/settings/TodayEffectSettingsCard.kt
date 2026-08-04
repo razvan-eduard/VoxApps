@@ -165,6 +165,7 @@ fun TodayEffectSettingsCard(settings: TodayEffectSettings, modifier: Modifier = 
                 VoxColorSwatchPicker(
                     selectedColor = settings.primaryColor,
                     onColorSelected = settings.onPrimaryColorChange,
+                    collapsible = false,
                     customColorDialogTitle = strings.customColorDialogTitle,
                     customColorUseLabel = strings.customColorUseLabel,
                     customColorCancelLabel = strings.customColorCancelLabel,
@@ -196,6 +197,7 @@ fun TodayEffectSettingsCard(settings: TodayEffectSettings, modifier: Modifier = 
                         VoxColorSwatchPicker(
                             selectedColor = settings.secondaryColor,
                             onColorSelected = settings.onSecondaryColorChange,
+                            collapsible = false,
                             customColorDialogTitle = strings.customColorDialogTitle,
                             customColorUseLabel = strings.customColorUseLabel,
                             customColorCancelLabel = strings.customColorCancelLabel,

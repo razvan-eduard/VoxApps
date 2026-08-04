@@ -19,6 +19,7 @@ import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarScanCleanupPromptBuilder
 import com.voxapps.calendarapp.domain.llm.LlmTasks
+import com.voxapps.calendarapp.domain.llm.TodoScanCleanupPromptBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -60,6 +61,35 @@ class OcrResultReceiver : BroadcastReceiver() {
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     handleAttachmentCapture(context, container, taskParts, result.imageUris)
+                } finally {
+                    pending.finish()
+                }
+            }
+            return
+        }
+
+        if (baseTask == LlmTasks.TODO_SCAN_CLEANUP) {
+            val listId = taskParts.getOrNull(1)?.toLongOrNull()
+            if (listId == null) {
+                Logger.w(TAG, "Todo scan cleanup missing listId: ${result.task}")
+                return
+            }
+            val container = (context.applicationContext as CalendarApplication).container
+            if (!VoxAppsDiscovery.isCommanderInstalled(context)) {
+                Toast.makeText(context, container.languageManager.getString("commander_required_message"), Toast.LENGTH_SHORT).show()
+                return
+            }
+            val singleText = result.rawText
+            val texts: List<String> = if (singleText != null) listOf(singleText) else result.rawTexts
+            if (result.status != VoxOcrResult.STATUS_SUCCESS || texts.none { it.isNotBlank() }) {
+                Logger.w(TAG, "Todo scan failed or empty: ${result.error}")
+                Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
+                return
+            }
+            val pending = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    texts.forEach { text -> if (text.isNotBlank()) forwardTodoScanToCommander(context, container, listId, text) }
                 } finally {
                     pending.finish()
                 }
@@ -140,6 +170,7 @@ class OcrResultReceiver : BroadcastReceiver() {
         aiImageUri: String? = null
     ) {
         val existingLayers = container.calendarRepository.layers.first().map { it.name }
+        val existingTodoLists = container.toDoRepository.lists.first().map { it.title }
         val settings = container.settingsRepository.getSnapshot()
         val language = settings.language
 
@@ -159,10 +190,27 @@ class OcrResultReceiver : BroadcastReceiver() {
             context = context,
             sourcePackage = context.packageName,
             task = LlmTasks.CALENDAR_SCAN_CLEANUP,
-            promptText = CalendarScanCleanupPromptBuilder.build(rawText, existingLayers, language),
+            promptText = CalendarScanCleanupPromptBuilder.build(rawText, existingLayers, existingTodoLists, language),
             targetPackage = COMMANDER_PACKAGE,
             data = listOf(rawText),
             attachmentUri = attachmentUri
+        )
+    }
+
+    /** One scanned photo's text -> one new to-do item in the already-known [listId] (baked into the
+     *  task string by the scan button in `ToDoListCard.kt`), forwarded to Commander's generic LLM hook
+     *  for cleanup — the item itself gets created once that cleanup reply lands in
+     *  [LlmResultReceiver]. No fuzzy list-matching needed here, unlike [forwardScanToCommander],
+     *  since the target list is already certain. */
+    private suspend fun forwardTodoScanToCommander(context: Context, container: CalendarContainer, listId: Long, rawText: String) {
+        val settings = container.settingsRepository.getSnapshot()
+        container.pendingLlmRequestQueue.enqueueAndSend(
+            context = context,
+            sourcePackage = context.packageName,
+            task = "${LlmTasks.TODO_SCAN_CLEANUP}:$listId",
+            promptText = TodoScanCleanupPromptBuilder.build(rawText, settings.language),
+            targetPackage = COMMANDER_PACKAGE,
+            data = listOf(rawText)
         )
     }
 

@@ -42,7 +42,9 @@ fun IcsSettingsTab(
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             withContext(Dispatchers.IO) {
-                val entries = calendarRepository.entriesSnapshot()
+                // Excludes to-do-flavored entries (CalendarEntry.listId != null) — a to-do checklist
+                // item isn't a calendar-standard ICS concept and is never round-tripped through here.
+                val entries = calendarRepository.entriesSnapshot().filter { it.entry.listId == null }
                 val layers = calendarRepository.layersSnapshot()
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     IcsExportImportUtil.write(entries, layers, out)

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BurstMode
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Layers
@@ -48,9 +49,12 @@ import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.calendar.CalendarView
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
+import com.voxapps.calendarapp.data.toToDoItem
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.state.CalendarViewMode
+import com.voxapps.calendarapp.ui.todo.TaskChip
+import com.voxapps.calendarapp.ui.todo.TimelineNode
 import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.design.SpeedDialAction
 import com.voxapps.design.SpeedDialFab
@@ -80,6 +84,7 @@ fun CalendarScreen(
     onAddEntry: () -> Unit,
     onEditEntry: (EntryCalendarItem) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenToDoLists: () -> Unit,
     todayEffect: TodayEffect = TodayEffect.NONE,
     todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
     todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
@@ -138,6 +143,9 @@ fun CalendarScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenToDoLists) {
+                        Icon(Icons.Filled.Checklist, contentDescription = languageManager.getString("todo_lists_title"))
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
                     }
@@ -284,27 +292,49 @@ fun CalendarScreen(
 @Composable
 private fun EntryRow(item: EntryCalendarItem, layer: CalendarLayer?, onClick: () -> Unit) {
     val entry = item.entryWithTags.entry
+    // A to-do-flavored entry (bleeding into the grid via the todoBleedToCalendar setting) reuses the
+    // to-do list's own bullet (TimelineNode, incl. the star shape for isImportant) and pill (TaskChip)
+    // exactly — same color/size/shape as its own row in the to-do list, so it reads unmistakably as a
+    // task here too, not an ordinary calendar entry.
+    val isTodoFlavored = entry.listId != null
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .background(
-                        color = layer?.let { Color(it.colorArgb.toInt()) } ?: MaterialTheme.colorScheme.primary,
-                        shape = CircleShape
-                    )
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = entry.title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
+            if (isTodoFlavored) {
+                TimelineNode(
+                    colorArgb = entry.colorArgb ?: 0xFF9E9E9EL,
+                    done = entry.completed,
+                    onClick = onClick,
+                    isImportant = entry.isImportant
+                )
+                Spacer(Modifier.width(10.dp))
+                TaskChip(
+                    item = entry.toToDoItem(),
+                    clickable = false,
+                    onClick = {},
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(
+                            color = layer?.let { Color(it.colorArgb.toInt()) } ?: MaterialTheme.colorScheme.primary,
+                            shape = CircleShape
+                        )
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = entry.title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
             if (!entry.allDay) {
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(item.occurrenceStartMillis)),
                     style = MaterialTheme.typography.labelSmall,

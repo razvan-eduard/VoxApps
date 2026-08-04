@@ -54,6 +54,8 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val NOTIFICATIONS_VOLUME = intPreferencesKey("notifications_volume")
         val NOTIFICATIONS_LENGTH = stringPreferencesKey("notifications_length")
         val NOTIFICATIONS_CHANNEL_VERSION = intPreferencesKey("notifications_channel_version")
+        val TODO_BLEED_TO_CALENDAR = booleanPreferencesKey("todo_bleed_to_calendar")
+        val ANIMATIONS_ENABLED = booleanPreferencesKey("animations_enabled")
     }
 
     override val settingsFlow: Flow<CalendarSettings> = dataStore.data.map { prefs ->
@@ -85,7 +87,9 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             notificationsSoundUri = prefs[Keys.NOTIFICATIONS_SOUND_URI],
             notificationsVolume = prefs[Keys.NOTIFICATIONS_VOLUME] ?: 100,
             notificationsLength = prefs[Keys.NOTIFICATIONS_LENGTH] ?: CalendarSettings.LENGTH_SHORT,
-            notificationsChannelVersion = prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] ?: 1
+            notificationsChannelVersion = prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] ?: 1,
+            todoBleedToCalendar = prefs[Keys.TODO_BLEED_TO_CALENDAR] ?: true,
+            animationsEnabled = prefs[Keys.ANIMATIONS_ENABLED] ?: true
         )
     }
 
@@ -218,6 +222,14 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         dataStore.edit { it[Keys.NOTIFICATIONS_CHANNEL_VERSION] = version }
     }
 
+    override suspend fun setTodoBleedToCalendar(enabled: Boolean) {
+        dataStore.edit { it[Keys.TODO_BLEED_TO_CALENDAR] = enabled }
+    }
+
+    override suspend fun setAnimationsEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.ANIMATIONS_ENABLED] = enabled }
+    }
+
     override suspend fun restoreSettings(settings: CalendarSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -259,6 +271,8 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             prefs[Keys.NOTIFICATIONS_VOLUME] = settings.notificationsVolume
             prefs[Keys.NOTIFICATIONS_LENGTH] = settings.notificationsLength
             prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] = settings.notificationsChannelVersion
+            prefs[Keys.TODO_BLEED_TO_CALENDAR] = settings.todoBleedToCalendar
+            prefs[Keys.ANIMATIONS_ENABLED] = settings.animationsEnabled
         }
     }
 

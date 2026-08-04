@@ -45,7 +45,8 @@ object ReminderNotifier {
         val text = if (entry.allDay) {
             entry.location ?: languageManager.getString("today")
         } else {
-            DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(entry.startMillis))
+            // Non-null: a reminder is only ever scheduled against a dated entry.
+            DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(entry.startMillis!!))
         }
 
         val notification = NotificationCompat.Builder(context, channelId)

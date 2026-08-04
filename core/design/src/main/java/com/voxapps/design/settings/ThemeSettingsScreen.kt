@@ -2,6 +2,7 @@ package com.voxapps.design.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,7 +35,10 @@ data class ThemeSettingsStrings(
  * shared-tab convention: pure values-in/callbacks-out, no direct DataStore access, this module has
  * no `LanguageManager` so every label is caller-supplied). [todayEffect], when non-null, adds the
  * "highlight today" section below the divider — only Calendar/Expenses/Notes pass one; the other
- * apps have no "today" card to configure this for.
+ * apps have no "today" card to configure this for. [extraContent], if given, renders below that in
+ * the same scrollable column — lets a caller fold app-specific appearance-adjacent settings (e.g.
+ * vox-calendar's widget border / animations toggles) into this page instead of duplicating the
+ * scroll-column scaffolding to append them elsewhere.
  */
 @Composable
 fun ThemeSettingsScreen(
@@ -44,7 +48,8 @@ fun ThemeSettingsScreen(
     onColoredChange: (Boolean) -> Unit,
     strings: ThemeSettingsStrings,
     todayEffect: TodayEffectSettings? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    extraContent: (@Composable ColumnScope.() -> Unit)? = null
 ) {
     Column(
         modifier = modifier
@@ -83,6 +88,11 @@ fun ThemeSettingsScreen(
         if (todayEffect != null) {
             HorizontalDivider()
             TodayEffectSettingsCard(todayEffect)
+        }
+
+        if (extraContent != null) {
+            HorizontalDivider()
+            extraContent()
         }
     }
 }

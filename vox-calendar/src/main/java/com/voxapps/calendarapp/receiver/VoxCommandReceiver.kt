@@ -52,6 +52,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val layerNames = container.calendarRepository.layers.first().map { it.name }
+                        val todoListNames = container.toDoRepository.lists.first().map { it.title }
                         CalendarEventParseRequestSender.send(
                             context = context.applicationContext,
                             queue = container.pendingLlmRequestQueue,
@@ -63,6 +64,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                                 ?.let { "$text (calendar: $it)" }
                                 ?: text,
                             existingLayers = layerNames,
+                            existingTodoLists = todoListNames,
                             languageCode = settings.language
                         )
                     } finally {
@@ -79,10 +81,11 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     try {
                         val settings = container.settingsRepository.getSnapshot()
                         val layerNames = container.calendarRepository.layers.first().map { it.name }
+                        val todoListNames = container.toDoRepository.lists.first().map { it.title }
                         val schema = VoxSatelliteSchema(
                             needsExtractionPass = true,
                             promptTemplate = CalendarEventParsePromptBuilder.buildTemplate(
-                                layerNames, settings.language
+                                layerNames, todoListNames, settings.language
                             ),
                             fieldSchemaVersion = GeneratedParsedSchema.VERSION,
                             taskId = LlmTasks.CALENDAR_EVENT_PARSE

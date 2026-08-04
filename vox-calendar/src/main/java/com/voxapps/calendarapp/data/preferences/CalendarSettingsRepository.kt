@@ -40,6 +40,8 @@ interface CalendarSettingsRepository {
     suspend fun setNotificationsVolume(volume: Int)
     suspend fun setNotificationsLength(length: String)
     suspend fun setNotificationsChannelVersion(version: Int)
+    suspend fun setTodoBleedToCalendar(enabled: Boolean)
+    suspend fun setAnimationsEnabled(enabled: Boolean)
 
     /** Bulk overwrite, e.g. from a Vox Hub import — writes every portable field in one DataStore edit. */
     suspend fun restoreSettings(settings: CalendarSettings)

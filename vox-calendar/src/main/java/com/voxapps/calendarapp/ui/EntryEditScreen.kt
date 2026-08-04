@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -31,11 +33,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -76,6 +83,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -117,6 +125,18 @@ import java.util.Date
 import java.util.UUID
 
 private val OffenseRed = Color(0xFFD32F2F)
+
+/** Colors for the tappable "important" toggle star — same bright-red-on/darker-red-off convention as
+ *  the to-do item's own toggle in `ToDoListCard.kt`'s `TaskEditDialog`, since [CalendarEntry
+ *  .isImportant] is now a general field, not to-do-exclusive. */
+private val IMPORTANT_TOGGLE_ON_COLOR = Color(0xFFE53935)
+private val IMPORTANT_TOGGLE_OFF_COLOR = Color(0xFF8B1A1A)
+
+/** Same fixed green as `ToDoNodeTimeline`'s/`ToDoListCard`'s `DONE_CHECK_COLOR` — [completed] is the
+ *  exact same underlying field as a to-do item's `done` now (unification — see [CalendarEntry]'s doc
+ *  comment), so its toggle here matches that one's icon/color/row style exactly instead of the old
+ *  plain Material Checkbox. */
+private val DONE_CHECK_COLOR = Color(0xFF2E7D32)
 
 /** offsetMinutesBefore -> translation key. v1 preset set only (see plan) — no custom-minutes input. */
 private val REMINDER_PRESETS = listOf(
@@ -170,20 +190,22 @@ fun EntryEditScreen(
     var description by remember { mutableStateOf(existing?.entry?.description ?: "") }
     var location by remember { mutableStateOf(existing?.entry?.location ?: "") }
     
+    // Non-nullable in this screen's own local state: CalendarEntry.startMillis is nullable only to
+    // represent a dateless to-do checklist item, and this screen is never reached for those (see
+    // CalendarRoot's EditTarget.ExistingTodo routing) — an existing plain Event/Task always has one,
+    // so the fallback below is purely defensive, never expected to actually trigger.
     val initialStartMillis = remember {
-        if (existing == null) {
-            val now = java.time.ZonedDateTime.now(zoneId)
-            val nextHour = now.truncatedTo(java.time.temporal.ChronoUnit.HOURS).plusHours(1)
-            nextHour.toInstant().toEpochMilli()
-        } else {
-            existing.entry.startMillis
-        }
+        val now = java.time.ZonedDateTime.now(zoneId)
+        val nextHour = now.truncatedTo(java.time.temporal.ChronoUnit.HOURS).plusHours(1).toInstant().toEpochMilli()
+        existing?.entry?.startMillis ?: nextHour
     }
     var startMillis by remember { mutableStateOf(initialStartMillis) }
     var endMillis by remember { mutableStateOf(existing?.entry?.endMillis) }
     var allDay by remember { mutableStateOf(existing?.entry?.allDay ?: false) }
     var completed by remember { mutableStateOf(existing?.entry?.completed ?: false) }
+    var important by remember { mutableStateOf(existing?.entry?.isImportant ?: false) }
     var recurrence by remember { mutableStateOf(existing?.entry?.recurrenceFrequency ?: RecurrenceFrequency.NONE) }
+    var recurrenceInterval by remember { mutableStateOf(existing?.entry?.recurrenceInterval ?: 1) }
     var recurrenceUntilMillis by remember { mutableStateOf(existing?.entry?.recurrenceUntilMillis) }
     val tags = remember { mutableStateListOf<String>().apply { addAll(existing?.tagNames ?: emptyList()) } }
     var tagInput by remember { mutableStateOf("") }
@@ -233,10 +255,7 @@ fun EntryEditScreen(
     }
 
     fun saveEntry(entry: CalendarEntry, entryTags: List<String>) {
-        // Reminders are v1-scoped to non-recurring entries only — a recurring entry's selection is
-        // never shown/editable (see the Reminders SectionCard below), so always pass an empty list
-        // for one rather than persisting a stale selection from before recurrence was turned on.
-        val effectiveReminderOffsets = if (entry.recurrenceFrequency == RecurrenceFrequency.NONE) reminderOffsets.toList() else emptyList()
+        val effectiveReminderOffsets = reminderOffsets.toList()
         if (existing != null) {
             stateManager.updateEntry(entry, entryTags, effectiveReminderOffsets)
         } else {
@@ -245,11 +264,15 @@ fun EntryEditScreen(
                 title = entry.title,
                 description = entry.description,
                 location = entry.location,
-                startMillis = entry.startMillis,
+                // Non-null: this screen only ever builds an entry with a real date (see
+                // initialStartMillis' doc comment) — the entity field is nullable only for to-do items.
+                startMillis = entry.startMillis!!,
                 endMillis = entry.endMillis,
                 allDay = entry.allDay,
                 completed = entry.completed,
+                isImportant = entry.isImportant,
                 recurrenceFrequency = entry.recurrenceFrequency,
+                recurrenceInterval = entry.recurrenceInterval,
                 recurrenceUntilMillis = entry.recurrenceUntilMillis,
                 layerId = entry.layerId,
                 tags = entryTags,
@@ -294,7 +317,9 @@ fun EntryEditScreen(
             endMillis = effectiveEnd,
             allDay = allDay,
             completed = completed,
+            isImportant = important,
             recurrenceFrequency = recurrence,
+            recurrenceInterval = recurrenceInterval,
             recurrenceUntilMillis = recurrenceUntilMillis
         )
         when (val decision = CalendarEntrySanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
@@ -485,7 +510,7 @@ fun EntryEditScreen(
                         }
 
                         val currentEndMillis = endMillis
-                        if (currentEndMillis != null && startMillis >= currentEndMillis) {
+                        if (currentEndMillis != null && isTimeRangeInvalid(type, startMillis, currentEndMillis)) {
                             Text(
                                 text = languageManager.getString("entry_time_error"),
                                 style = MaterialTheme.typography.labelSmall,
@@ -494,10 +519,29 @@ fun EntryEditScreen(
                             )
                         }
                     } else {
-                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = completed, onCheckedChange = { completed = it })
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable { completed = !completed }
+                        ) {
+                            Icon(
+                                if (completed) Icons.Filled.CheckCircle else Icons.Filled.CheckCircleOutline,
+                                contentDescription = null,
+                                tint = DONE_CHECK_COLOR
+                            )
+                            Spacer(Modifier.width(8.dp))
                             Text(languageManager.getString("entry_completed"))
                         }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Icon(
+                            if (important) Icons.Filled.Star else Icons.Filled.StarBorder,
+                            contentDescription = null,
+                            tint = if (important) IMPORTANT_TOGGLE_ON_COLOR else IMPORTANT_TOGGLE_OFF_COLOR,
+                            modifier = Modifier.clickable { important = !important }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(languageManager.getString("todo_important_event"), modifier = Modifier.weight(1f))
                     }
 
                     Box {
@@ -523,6 +567,27 @@ fun EntryEditScreen(
                         }
                     }
                     if (recurrence != RecurrenceFrequency.NONE) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                languageManager.getString("entry_recurrence_every"),
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { recurrenceInterval = (recurrenceInterval - 1).coerceAtLeast(1) },
+                                enabled = recurrenceInterval > 1
+                            ) { Icon(Icons.Filled.Remove, contentDescription = null) }
+                            Text(
+                                recurrenceInterval.toString(),
+                                modifier = Modifier.widthIn(min = 24.dp),
+                                textAlign = TextAlign.Center
+                            )
+                            IconButton(onClick = { recurrenceInterval = (recurrenceInterval + 1).coerceAtMost(365) }) {
+                                Icon(Icons.Filled.Add, contentDescription = null)
+                            }
+                            Text(languageManager.getString(recurrenceIntervalUnitKey(recurrence)))
+                        }
+                    }
+                    if (recurrence != RecurrenceFrequency.NONE) {
                         PaperTapField(
                             label = languageManager.getString("entry_recurrence_until"),
                             value = recurrenceUntilMillis?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
@@ -538,41 +603,40 @@ fun EntryEditScreen(
                     SectionTitle(languageManager.getString("entry_reminders"))
                     if (recurrence != RecurrenceFrequency.NONE) {
                         Text(
-                            languageManager.getString("reminder_recurring_unsupported"),
+                            languageManager.getString("reminder_recurring_next_occurrence_note"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    } else {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            REMINDER_PRESETS.forEach { (offset, labelKey) ->
-                                FilterChip(
-                                    selected = offset in reminderOffsets,
-                                    onClick = {
-                                        if (offset in reminderOffsets) reminderOffsets.remove(offset) else reminderOffsets.add(offset)
-                                    },
-                                    label = { Text(languageManager.getString(labelKey)) }
-                                )
-                            }
+                    }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        REMINDER_PRESETS.forEach { (offset, labelKey) ->
+                            FilterChip(
+                                selected = offset in reminderOffsets,
+                                onClick = {
+                                    if (offset in reminderOffsets) reminderOffsets.remove(offset) else reminderOffsets.add(offset)
+                                },
+                                label = { Text(languageManager.getString(labelKey)) }
+                            )
                         }
-                        if (!canScheduleExactAlarms) {
-                            Column {
-                                Text(
-                                    languageManager.getString("reminder_exact_alarm_permission_needed"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                TextButton(
-                                    onClick = {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                                                .setData(Uri.fromParts("package", context.packageName, null))
-                                        )
-                                    }
-                                ) { Text(languageManager.getString("reminder_grant_permission")) }
-                            }
+                    }
+                    if (!canScheduleExactAlarms) {
+                        Column {
+                            Text(
+                                languageManager.getString("reminder_exact_alarm_permission_needed"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TextButton(
+                                onClick = {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                                            .setData(Uri.fromParts("package", context.packageName, null))
+                                    )
+                                }
+                            ) { Text(languageManager.getString("reminder_grant_permission")) }
                         }
                     }
                 }
@@ -776,10 +840,21 @@ private fun recurrenceLabelKey(freq: RecurrenceFrequency): String = when (freq) 
     RecurrenceFrequency.YEARLY -> "recurrence_yearly"
 }
 
-/** An Event's end time can't be at-or-before its start time — Tasks have no end time to
- *  validate. Pulled out as a pure function so it's unit-testable without a Composable. */
+/** Unit noun for the "every [N] ___" interval stepper, distinct from [recurrenceLabelKey]'s adjective
+ *  forms ("Daily") since this needs a plural noun regardless of N ("days", not "daily"). */
+private fun recurrenceIntervalUnitKey(freq: RecurrenceFrequency): String = when (freq) {
+    RecurrenceFrequency.NONE -> "recurrence_none"
+    RecurrenceFrequency.DAILY -> "recurrence_unit_days"
+    RecurrenceFrequency.WEEKLY -> "recurrence_unit_weeks"
+    RecurrenceFrequency.MONTHLY -> "recurrence_unit_months"
+    RecurrenceFrequency.YEARLY -> "recurrence_unit_years"
+}
+
+/** An Event's end time can't be before its start time — equal is fine (a zero-duration event), only
+ *  strictly earlier is invalid. Tasks have no end time to validate. Pulled out as a pure function so
+ *  it's unit-testable without a Composable. */
 internal fun isTimeRangeInvalid(type: CalendarEntryType, startMillis: Long, endMillis: Long?): Boolean =
-    type == CalendarEntryType.EVENT && endMillis?.let { startMillis >= it } == true
+    type == CalendarEntryType.EVENT && endMillis?.let { startMillis > it } == true
 
 private fun startOfDay(millis: Long, zoneId: ZoneId): Long =
     Instant.ofEpochMilli(millis).atZone(zoneId).toLocalDate().atStartOfDay(zoneId).toInstant().toEpochMilli()

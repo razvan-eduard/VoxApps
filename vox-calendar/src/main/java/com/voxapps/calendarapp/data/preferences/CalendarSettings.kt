@@ -34,6 +34,11 @@ import com.voxapps.design.effects.TodayEffectStyle
  *   user turns on the gradient option, `null` otherwise. The effect itself is not yet implemented
  *   (see `com.voxapps.design.effects.ApplyTodayEffect`); these fields exist so the settings UI and
  *   call-site wiring are ready ahead of it.
+ * - [todoBleedToCalendar]: whether a to-do item's due date/time makes it show up on the standard
+ *   Month/Week/Day/Year grid. The underlying `CalendarEntry` row is always created/kept (so its
+ *   reminder keeps firing regardless) — this setting only filters it out of grid rendering when off.
+ * - [animationsEnabled]: gates decorative transition animations (e.g. the Calendar-to-To-do-lists
+ *   screen flip) — off disables them for users who find them distracting or slow.
  */
 @Immutable
 data class CalendarSettings(
@@ -64,7 +69,9 @@ data class CalendarSettings(
     val notificationsSoundUri: String? = null,
     val notificationsVolume: Int = 100,
     val notificationsLength: String = LENGTH_SHORT,
-    val notificationsChannelVersion: Int = 1
+    val notificationsChannelVersion: Int = 1,
+    val todoBleedToCalendar: Boolean = true,
+    val animationsEnabled: Boolean = true
 ) {
     companion object {
         const val TIMEOUT_30M = 30

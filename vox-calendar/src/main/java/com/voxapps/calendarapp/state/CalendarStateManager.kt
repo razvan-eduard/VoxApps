@@ -57,12 +57,24 @@ class CalendarStateManager internal constructor(
     private val _uiState = MutableStateFlow<CalendarUiState>(CalendarUiState.Loading)
     val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
 
+    // When todoBleedToCalendar is off, strips out exactly the to-do-flavored rows (CalendarEntry.listId
+    // != null) from the grid, leaving the row itself — and its reminder — untouched in the database
+    // either way. Unification (see CalendarEntry's doc comment) means this is a plain field check now,
+    // no separate linked-entry-id join needed.
+    private val entriesRespectingBleed = combine(
+        calendarRepo.entriesWithTags,
+        settingsRepo.settingsFlow
+    ) { entries, settings ->
+        if (settings.todoBleedToCalendar) entries
+        else entries.filter { it.entry.listId == null }
+    }
+
     init {
         scope.launch { seedDefaultLayerIfNeeded() }
 
         combine(
             settingsRepo.settingsFlow,
-            calendarRepo.entriesWithTags,
+            entriesRespectingBleed,
             calendarRepo.layers,
             calendarRepo.distinctTagNames,
             _runtime
@@ -137,6 +149,8 @@ class CalendarStateManager internal constructor(
     fun setTodayEffectSpeed(speed: Float) { scope.launch { settingsRepo.setTodayEffectSpeed(speed) } }
     fun setTodayEffectShowInWidget(enabled: Boolean) { scope.launch { settingsRepo.setTodayEffectShowInWidget(enabled) } }
     fun setIsGridView(enabled: Boolean) { scope.launch { settingsRepo.setIsGridView(enabled) } }
+    fun setTodoBleedToCalendar(enabled: Boolean) { scope.launch { settingsRepo.setTodoBleedToCalendar(enabled) } }
+    fun setAnimationsEnabled(enabled: Boolean) { scope.launch { settingsRepo.setAnimationsEnabled(enabled) } }
 
     fun setNotificationsSystemDefault(enabled: Boolean) {
         scope.launch {
@@ -206,7 +220,9 @@ class CalendarStateManager internal constructor(
         endMillis: Long?,
         allDay: Boolean,
         completed: Boolean,
+        isImportant: Boolean = false,
         recurrenceFrequency: RecurrenceFrequency,
+        recurrenceInterval: Int = 1,
         recurrenceUntilMillis: Long?,
         layerId: Long,
         tags: List<String>,
@@ -224,7 +240,9 @@ class CalendarStateManager internal constructor(
                     endMillis = endMillis,
                     allDay = allDay,
                     completed = completed,
+                    isImportant = isImportant,
                     recurrenceFrequency = recurrenceFrequency,
+                    recurrenceInterval = recurrenceInterval,
                     recurrenceUntilMillis = recurrenceUntilMillis,
                     layerId = layerId,
                     tags = tags,

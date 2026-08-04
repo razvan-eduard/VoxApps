@@ -12,16 +12,27 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface CalendarEntryDao {
     /**
-     * All entries joined with their tags, earliest start first. Layer/tag/visibility filtering and
+     * All date-bearing entries joined with their tags, earliest start first — `startMillis IS NOT
+     * NULL` excludes dateless to-do checklist items (see [CalendarEntry.listId]'s doc comment), which
+     * have nothing to sort/bucket into a grid position by. Layer/tag/visibility filtering and
      * recurrence expansion happen in the state/UI layer (mirrors vox-expenses' ExpenseDao), so this
-     * query stays simple.
+     * query stays simple. This also backs the headless read/export/sync paths (`entriesSnapshot`),
+     * which excludes dateless to-do items the same way for the same reason.
      */
     @Transaction
-    @Query("SELECT * FROM calendar_entries ORDER BY startMillis ASC")
+    @Query("SELECT * FROM calendar_entries WHERE startMillis IS NOT NULL ORDER BY startMillis ASC")
     fun observeEntriesWithTags(): Flow<List<CalendarEntryWithTags>>
 
     @Query("SELECT * FROM calendar_entries ORDER BY startMillis ASC")
     fun observeAll(): Flow<List<CalendarEntry>>
+
+    /** A to-do list's items, in their user-arranged order — includes dateless items (unlike
+     *  [observeEntriesWithTags], which is grid-oriented and excludes them). */
+    @Query("SELECT * FROM calendar_entries WHERE listId = :listId ORDER BY position ASC")
+    fun observeForList(listId: Long): Flow<List<CalendarEntry>>
+
+    @Query("SELECT * FROM calendar_entries WHERE listId = :listId ORDER BY position ASC")
+    suspend fun getForList(listId: Long): List<CalendarEntry>
 
     @Insert
     suspend fun insert(entry: CalendarEntry): Long

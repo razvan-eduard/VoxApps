@@ -3,6 +3,7 @@ package com.voxapps.calendarapp.di
 import android.content.Context
 import com.voxapps.calendarapp.data.CalendarDatabase
 import com.voxapps.calendarapp.data.CalendarRepository
+import com.voxapps.calendarapp.data.ToDoRepository
 import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepository
 import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepositoryImpl
 import com.voxapps.calendarapp.domain.localization.LanguageManager
@@ -11,6 +12,7 @@ import com.voxapps.calendarapp.state.SessionManager
 import androidx.glance.appwidget.updateAll
 import com.voxapps.calendarapp.ui.widget.CalendarWidget
 import com.voxapps.ipc.VoxLlmRequestQueue
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,6 +38,7 @@ class CalendarContainer(context: Context) {
         database.calendarReminderDao(),
         appContext
     )
+    val toDoRepository = ToDoRepository(database.toDoListDao(), database.calendarEntryDao(), calendarRepository)
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 
@@ -66,7 +69,10 @@ class CalendarContainer(context: Context) {
                 calendarStateManager.uiState,
                 calendarRepository.entriesWithTags,
                 settingsRepository.settingsFlow
-            ) { _, _, _ -> }.collect { CalendarWidget().updateAll(appContext) }
+            ) { _, entries, _ -> entries.size }.collect { entryCount ->
+                Logger.d("CalendarContainer", "Widget refresh triggered (entriesWithTags size=$entryCount)")
+                CalendarWidget().updateAll(appContext)
+            }
         }
     }
 }

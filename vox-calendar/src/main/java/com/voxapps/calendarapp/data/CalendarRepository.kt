@@ -42,7 +42,9 @@ class CalendarRepository(
         endMillis: Long?,
         allDay: Boolean,
         completed: Boolean = false,
+        isImportant: Boolean = false,
         recurrenceFrequency: RecurrenceFrequency = RecurrenceFrequency.NONE,
+        recurrenceInterval: Int = 1,
         recurrenceUntilMillis: Long? = null,
         layerId: Long,
         tags: List<String> = emptyList(),
@@ -60,7 +62,9 @@ class CalendarRepository(
                 endMillis = endMillis,
                 allDay = allDay,
                 completed = completed,
+                isImportant = isImportant,
                 recurrenceFrequency = recurrenceFrequency,
+                recurrenceInterval = recurrenceInterval,
                 recurrenceUntilMillis = recurrenceUntilMillis,
                 layerId = layerId,
                 createdAt = now,
@@ -101,6 +105,8 @@ class CalendarRepository(
     suspend fun getEntryById(id: Long): CalendarEntry? = entryDao.getById(id)
 
     suspend fun getRemindersForEntry(entryId: Long): List<CalendarReminder> = reminderDao.getForEntry(entryId)
+
+    suspend fun getReminderById(id: Long): CalendarReminder? = reminderDao.getById(id)
 
     suspend fun getAllReminders(): List<CalendarReminder> = reminderDao.getAll()
 

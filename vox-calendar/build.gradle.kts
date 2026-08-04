@@ -15,8 +15,8 @@ android {
         applicationId = "com.voxapps.calendar"
         minSdk = 29
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.13"
+        versionCode = 14
+        versionName = "0.14"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -84,6 +84,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // Drag-to-reorder for the to-do list node timeline — same library/pattern as vox-commander's
+    // FastMap Rules Manager (RulesManagerScreen.kt).
+    implementation(libs.reorderable)
 
     // Home-screen widget (Jetpack Glance — current best practice over raw RemoteViews/AppWidgetProvider).
     // GlanceTheme itself lives in the base :glance artifact (a transitive dep of glance-appwidget),
@@ -124,4 +127,7 @@ dependencies {
     testImplementation("app.cash.turbine:turbine:1.2.1")
     testImplementation("androidx.test:core:1.7.0")
     testImplementation("org.json:json:20260719")
+    // Pure-JVM SQLite (no Android/Robolectric) — lets the 9->10 migration test replay its real SQL
+    // against a genuine SQLite engine, same "avoid Android-framework test doubles" spirit as org.json above.
+    testImplementation("org.xerial:sqlite-jdbc:3.47.1.0")
 }
