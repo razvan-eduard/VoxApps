@@ -46,25 +46,42 @@ for entry in "${APPS[@]}"; do
         if [ -z "$VERSION_CODE" ]; then
             echo "  Warning: Could not find versionCode for $DIR, skipping changelog."
         else
-            # Generate changelog using git log, scoped to this app's own directory plus any
-            # shared core/* module (every app depends on those, so a core change genuinely
-            # ships in each app's next release) — otherwise, in a monorepo, every app's
-            # changelog ends up listing every other app's commits too. Also keep only
-            # user-facing commit types (feat/fix/perf); docs/chore/ci/deps/test/refactor/style
-            # commits are noise nobody released an app for.
+            # Generate changelog using git log, scoped to this app's own directory only —
+            # a shared core/* touch still shows up here whenever it happens to land in the
+            # same commit as a change to this app's own files (build.gradle.kts, manifest,
+            # source), but a pure core-only commit no longer leaks into every app's changelog
+            # just because every app depends on that module. Also keep only user-facing commit
+            # types (feat/fix/perf); docs/chore/ci/deps/test/refactor/style commits are noise
+            # nobody released an app for.
             if [ -n "$PREV_TAG" ]; then
                 echo "  Generating changelog from $PREV_TAG to $LATEST_TAG..."
-                CHANGELOG=$(git log "$PREV_TAG..$LATEST_TAG" --pretty=format:"- %s" --no-merges -- "$DIR" core \
+                CHANGELOG=$(git log "$PREV_TAG..$LATEST_TAG" --pretty=format:"- %s" --no-merges -- "$DIR" \
                     | grep -iE '^- (feat|fix|perf)(\(|!?:)' || true)
             else
                 echo "  No previous tag found. Using last 1 commit for $LATEST_TAG..."
-                CHANGELOG=$(git log "$LATEST_TAG" -1 --pretty=format:"- %s" --no-merges -- "$DIR" core \
+                CHANGELOG=$(git log "$LATEST_TAG" -1 --pretty=format:"- %s" --no-merges -- "$DIR" \
                     | grep -iE '^- (feat|fix|perf)(\(|!?:)' || true)
             fi
 
             if [ -z "$CHANGELOG" ]; then
                 echo "  Empty git log, falling back to generic message."
                 CHANGELOG="Maintenance update and performance improvements."
+            fi
+
+            # F-Droid's whatsNew field has a hard 500-character limit; fdroid update silently
+            # truncates anything longer mid-character, which can cut a bullet off mid-word.
+            # Trim to whole bullet lines that fit instead, so a long changelog degrades to
+            # "here are the first few things" rather than a garbled half-word fragment.
+            if [ ${#CHANGELOG} -gt 500 ]; then
+                TRIMMED=""
+                while IFS= read -r line; do
+                    CANDIDATE="${TRIMMED:+$TRIMMED$'\n'}$line"
+                    if [ ${#CANDIDATE} -gt 500 ]; then
+                        break
+                    fi
+                    TRIMMED="$CANDIDATE"
+                done <<< "$CHANGELOG"
+                CHANGELOG="$TRIMMED"
             fi
 
             # Create directory structure for changelogs
