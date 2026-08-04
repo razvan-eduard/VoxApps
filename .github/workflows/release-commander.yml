@@ -165,7 +165,11 @@ jobs:
             echo ""
             echo "## Changes"
             echo ""
-            git log ${RANGE} --pretty=format:"- %s (%h)" --no-merges
+            # Scoped to this app's own directory plus shared core/* modules, and
+            # restricted to user-facing commit types (feat/fix/perf) — otherwise every
+            # app's changelog lists every other app's (and docs/chore/ci) commits too.
+            git log ${RANGE} --pretty=format:"- %s (%h)" --no-merges -- vox-commander/ core/ \
+              | grep -iE '^- (feat|fix|perf)(\(|!?:)' || echo "- Maintenance update"
             echo ""
             echo ""
             echo "## Full Changelog"

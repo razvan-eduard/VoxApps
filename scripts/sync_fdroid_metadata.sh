@@ -46,13 +46,20 @@ for entry in "${APPS[@]}"; do
         if [ -z "$VERSION_CODE" ]; then
             echo "  Warning: Could not find versionCode for $DIR, skipping changelog."
         else
-            # Generate changelog using git log
+            # Generate changelog using git log, scoped to this app's own directory plus any
+            # shared core/* module (every app depends on those, so a core change genuinely
+            # ships in each app's next release) — otherwise, in a monorepo, every app's
+            # changelog ends up listing every other app's commits too. Also keep only
+            # user-facing commit types (feat/fix/perf); docs/chore/ci/deps/test/refactor/style
+            # commits are noise nobody released an app for.
             if [ -n "$PREV_TAG" ]; then
                 echo "  Generating changelog from $PREV_TAG to $LATEST_TAG..."
-                CHANGELOG=$(git log "$PREV_TAG..$LATEST_TAG" --pretty=format:"- %s" --no-merges)
+                CHANGELOG=$(git log "$PREV_TAG..$LATEST_TAG" --pretty=format:"- %s" --no-merges -- "$DIR" core \
+                    | grep -iE '^- (feat|fix|perf)(\(|!?:)' || true)
             else
                 echo "  No previous tag found. Using last 1 commit for $LATEST_TAG..."
-                CHANGELOG=$(git log "$LATEST_TAG" -1 --pretty=format:"- %s" --no-merges)
+                CHANGELOG=$(git log "$LATEST_TAG" -1 --pretty=format:"- %s" --no-merges -- "$DIR" core \
+                    | grep -iE '^- (feat|fix|perf)(\(|!?:)' || true)
             fi
 
             if [ -z "$CHANGELOG" ]; then
