@@ -1,5 +1,6 @@
 package com.voxapps.calendarapp.ui
 
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,10 +17,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.CalendarLayer
@@ -28,6 +31,7 @@ import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -103,20 +107,38 @@ fun DayView(
         HorizontalDivider()
 
         // 3. Scrollable Timed Grid
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 24.dp)
-        ) {
-            HourAxisLabels(modifier = Modifier.width(HOUR_LABEL_WIDTH))
-            DayColumn(
-                date = date,
-                items = timedEvents, // Grid only shows timed events
-                layerById = layerById,
-                onItemClick = onItemClick,
-                modifier = Modifier.weight(1f)
-            )
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val scrollState = rememberScrollState()
+            val density = LocalDensity.current
+            val viewportHeightPx = with(density) { maxHeight.toPx() }
+            // On first showing today's column, land with "now" about a third of the way down the
+            // viewport (not pinned to the very top, and not dead-centered either) so the current
+            // time is immediately visible along with a little of what's already past — rather than
+            // opening on 00:00, which for most of the day is a long scroll away from "now".
+            LaunchedEffect(date) {
+                if (date == LocalDate.now()) {
+                    val now = LocalTime.now()
+                    val nowFraction = now.hour + now.minute / 60f
+                    val hourHeightPx = with(density) { HOUR_HEIGHT.toPx() }
+                    val targetPx = (hourHeightPx * nowFraction) - (viewportHeightPx * 0.35f)
+                    scrollState.scrollTo(targetPx.toInt().coerceAtLeast(0))
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(bottom = 24.dp)
+            ) {
+                HourAxisLabels(modifier = Modifier.width(HOUR_LABEL_WIDTH))
+                DayColumn(
+                    date = date,
+                    items = timedEvents, // Grid only shows timed events
+                    layerById = layerById,
+                    onItemClick = onItemClick,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }

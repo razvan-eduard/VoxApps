@@ -22,15 +22,18 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.CalendarLayer
 import kotlinx.coroutines.delay
+import java.text.DateFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.util.Date
 import java.util.Locale
 
 /** Shared hour-of-day grid mechanics used by both [WeekView] and [DayView] — one column per day, a
@@ -118,18 +121,28 @@ internal fun DayColumn(
         if (date == LocalDate.now()) {
             val currentTimeFraction by rememberCurrentTimeFraction()
             val dotSize = 8.dp
+            val nowColor = MaterialTheme.colorScheme.error
             Row(
                 modifier = Modifier
                     .padding(top = (HOUR_HEIGHT * currentTimeFraction) - dotSize / 2)
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(modifier = Modifier.size(dotSize).background(MaterialTheme.colorScheme.error, CircleShape))
+                Box(modifier = Modifier.size(dotSize).background(nowColor, CircleShape))
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .height(2.dp)
-                        .background(MaterialTheme.colorScheme.error)
+                        .background(nowColor)
+                )
+                // Matches the "now" time label already shown in the to-do timeline (NowSplitter)
+                // and the home-screen widget's Today section (NowSplitterRow), so the current-time
+                // marker reads the same way across the app.
+                Text(
+                    text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date()),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = nowColor,
+                    modifier = Modifier.padding(start = 6.dp, end = 4.dp)
                 )
             }
         }
