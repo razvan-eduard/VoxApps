@@ -81,7 +81,9 @@ class ModelManagementViewModelTest {
 
         mockkObject(RemoteModelRegistry)
         every { RemoteModelRegistry.getEngineKeysByType("voice") } returns listOf("stt_whisper")
-        every { RemoteModelRegistry.getEngineKeysByType("llm") } returns listOf("nlu_llm")
+        every { RemoteModelRegistry.getLlmEngineKeys() } returns listOf("nlu_llm")
+        every { RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { RemoteModelRegistry.isLlmEngine("stt_whisper") } returns false
         every { RemoteModelRegistry.isZipEngine("stt_whisper") } returns false
         every { RemoteModelRegistry.isZipEngine("nlu_llm") } returns false
         every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"

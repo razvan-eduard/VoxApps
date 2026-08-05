@@ -128,17 +128,20 @@ class RemoteModelRegistryTest {
     }
 
     @Test
-    fun `isLlmEngine returns true when llm is in engine types`() {
+    fun `isLlmEngine returns true when engine declares the local_llm capability`() {
+        // isLlmEngine is capability-driven (hasCapability(engineKey, "local_llm")), not type-driven —
+        // there can be more than one local LLM engine (one per model format), each independently
+        // selectable, so this no longer keys off getEngineTypes()/a single "llm" type string.
         mockkObject(RemoteModelRegistry)
-        every { RemoteModelRegistry.getEngineTypes("nlu_llm") } returns listOf("llm")
+        every { RemoteModelRegistry.hasCapability("nlu_llm", "local_llm") } returns true
 
         assertTrue(RemoteModelRegistry.isLlmEngine("nlu_llm"))
     }
 
     @Test
-    fun `isLlmEngine returns false when llm is not in engine types`() {
+    fun `isLlmEngine returns false when engine does not declare the local_llm capability`() {
         mockkObject(RemoteModelRegistry)
-        every { RemoteModelRegistry.getEngineTypes("stt_whisper") } returns listOf("voice")
+        every { RemoteModelRegistry.hasCapability("stt_whisper", "local_llm") } returns false
 
         assertFalse(RemoteModelRegistry.isLlmEngine("stt_whisper"))
     }
