@@ -20,7 +20,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # Shallow on purpose — see release-commander.yml for why depth 2 (not 0 or 1).
+          fetch-depth: 2
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -80,6 +81,10 @@ jobs:
              VoxCalendar-${{ steps.version.outputs.tag }}.apk
           cp vox-calendar/build/outputs/bundle/release/vox-calendar-release.aab \
              VoxCalendar-${{ steps.version.outputs.tag }}.aab
+
+      - name: Deepen checkout for changelog
+        if: steps.check_bump.outputs.changed != 'false'
+        run: git fetch --prune --unshallow --tags origin
 
       - name: Generate CHANGELOG.md
         if: steps.check_bump.outputs.changed != 'false'

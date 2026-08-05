@@ -21,7 +21,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
+          # Shallow on purpose — see release-commander.yml for why depth 2 (not 0 or 1).
+          # actions/checkout forwards fetch-depth to submodule clones too, so this also
+          # shrinks the opencv/paddleocr/makeacopy submodule downloads, not just the main repo.
+          fetch-depth: 2
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -81,6 +84,10 @@ jobs:
              VoxVision-${{ steps.version.outputs.tag }}.apk
           cp vox-vision/build/outputs/bundle/release/vox-vision-release.aab \
              VoxVision-${{ steps.version.outputs.tag }}.aab
+
+      - name: Deepen checkout for changelog
+        if: steps.check_bump.outputs.changed != 'false'
+        run: git fetch --prune --unshallow --tags origin
 
       - name: Generate CHANGELOG.md
         if: steps.check_bump.outputs.changed != 'false'

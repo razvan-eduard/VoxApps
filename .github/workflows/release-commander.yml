@@ -17,11 +17,31 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout (with submodules)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
-          fetch-depth: 0
+          # No submodules here — Commander only needs whisper.cpp + openwakeword-android-kt
+          # (checked out explicitly below), not the opencv/paddleocr/makeacopy submodules
+          # vox-vision uses. `submodules:` on this action can't select a subset (only
+          # true/false/recursive), so those 3 unrelated submodules — 565MB+ of OpenCV
+          # upstream's own multi-year history alone — were being cloned on every Commander
+          # release for zero benefit. Verified via an isolated worktree with those 3 left
+          # uninitialized: full Gradle project configuration succeeds, and Commander's
+          # release runtime classpath has no dependency edge into :vendor:ppocr-sdk or
+          # :vendor:docquad-sdk (the modules that touch them).
+          submodules: false
+          # Shallow on purpose: full history (fetch-depth: 0) was pulling ~1.6GB of main-repo
+          # history per run that the build never needs. Depth 2 (not 1) keeps HEAD~1 available
+          # for the "Detect versionCode bump" diff below; the changelog step further down
+          # deepens on demand only when a release is actually being cut (see "Deepen checkout
+          # for changelog").
+          fetch-depth: 2
+
+      - name: Checkout whisper.cpp and openwakeword submodules
+        run: |
+          git submodule update --init --depth 1 \
+            vox-commander/src/main/cpp/whisper.cpp \
+            vendor/openwakeword-android-kt
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -146,6 +166,10 @@ jobs:
           cp vox-commander/build/outputs/bundle/release/vox-commander-release.aab \
              VoxCommander-${{ steps.version.outputs.tag }}.aab
           echo "aab_path=VoxCommander-${{ steps.version.outputs.tag }}.aab" >> $GITHUB_OUTPUT
+
+      - name: Deepen checkout for changelog
+        if: steps.check_bump.outputs.changed != 'false'
+        run: git fetch --prune --unshallow --tags origin
 
       - name: Generate CHANGELOG.md
         if: steps.check_bump.outputs.changed != 'false'
