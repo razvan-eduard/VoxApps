@@ -333,7 +333,16 @@ object RemoteModelRegistry {
 
     fun isZipEngine(engineKey: String): Boolean = getExtension(engineKey).equals(".zip", ignoreCase = true)
 
-    fun isLlmEngine(engineKey: String): Boolean = "llm" in getEngineTypes(engineKey)
+    /** True for any on-device local LLM engine (declared via the "local_llm" capability in
+     *  models.json, not the "llm" type) — there can be more than one (e.g. one per model file
+     *  format: .task vs .litertlm), each independently selectable as the user's AI processor. */
+    fun isLlmEngine(engineKey: String): Boolean = hasCapability(engineKey, "local_llm")
+
+    /** Every engine key declaring the "local_llm" capability — the dynamic equivalent of the old
+     *  getEngineKeysByType("llm") lookup, but driven by capability rather than type so a new local
+     *  LLM engine (a different model format, a different runtime) needs zero code changes here. */
+    fun getLlmEngineKeys(): List<String> =
+        cachedSchema?.engines?.filter { hasCapability(it.key, "local_llm") }?.keys?.toList() ?: emptyList()
 
     fun isWakeWordEngine(engineKey: String): Boolean = "wake_word" in getEngineTypes(engineKey)
 
@@ -349,7 +358,7 @@ object RemoteModelRegistry {
     }
 
     fun getDefaultLlmEngineKey(): String? {
-        return getEngineKeysByType("llm").firstOrNull()
+        return getLlmEngineKeys().firstOrNull()
     }
 
     fun isMultilingual(engineKey: String): Boolean = cachedSchema?.engines?.get(engineKey)?.is_multilingual ?: false

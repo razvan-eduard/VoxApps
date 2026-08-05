@@ -136,15 +136,15 @@ fun BenchmarkSettingsTab(
         }
         
         item {
-            val whisperLibs = nativeLibsStatus.filter { it.name.contains("whisper") || it.name.contains("ggml") }
-            val voskLibs = nativeLibsStatus.filter { it.name.contains("vosk") }
-            val nluLibs = nativeLibsStatus.filter { it.name.contains("mediapipe") || it.name.contains("genai") }
+            val whisperLibs = nativeLibsStatus.filter { it.category == "whisper" }
+            val voskLibs = nativeLibsStatus.filter { it.category == "vosk" }
+            val nluLibs = nativeLibsStatus.filter { it.category == "llm" }
             val otherLibs = nativeLibsStatus.filter { !whisperLibs.contains(it) && !voskLibs.contains(it) && !nluLibs.contains(it) }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (whisperLibs.isNotEmpty()) EngineLibGroupCard("Voice: Whisper & GGML", whisperLibs)
                 if (voskLibs.isNotEmpty()) EngineLibGroupCard("Voice: Vosk Engine", voskLibs)
-                if (nluLibs.isNotEmpty()) EngineLibGroupCard("Intent: NLU (MediaPipe)", nluLibs)
+                if (nluLibs.isNotEmpty()) EngineLibGroupCard("Intent: NLU (LiteRT-LM)", nluLibs)
                 if (otherLibs.isNotEmpty()) EngineLibGroupCard("System & Runtime", otherLibs)
             }
         }

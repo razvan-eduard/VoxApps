@@ -106,6 +106,28 @@ class VoxApplication : Application() {
             reconcileDownloadedModels()
         }
 
+        // Warm the local on-device LLM in the background (model load + XNNPACK weight-cache
+        // compile), so the first spoken/typed command doesn't pay a 15-25s cold-start cost. Never
+        // triggers a download — only fires if a local LLM engine is selected AND its model file
+        // is already on disk; otherwise setupLlm() would just no-op anyway on first real use.
+        // Fire-and-forget like every other startup task here: the splash screen isn't gated on
+        // anything in this file (no setKeepOnScreenCondition), so this never delays first paint.
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            // fetchJson(force = false) only reads assets/filesDir, no network call — guarantees
+            // RemoteModelRegistry's schema is populated before isLlmEngine()/resolveLocalFile()
+            // are asked about it (its schema load is otherwise lazy/async elsewhere in onCreate,
+            // so without this the capability check below can race and silently see an empty registry).
+            RemoteModelRegistry.fetchJson(container.settingsRepository, force = false)
+            val s = container.settingsRepository.getSettingsSnapshot()
+            val modelId = s.activeIntentModelId
+            if (modelId != null && RemoteModelRegistry.isLlmEngine(s.aiProcessor) &&
+                container.modelDownloader.resolveLocalFile(modelId, s.aiProcessor)?.exists() == true
+            ) {
+                Logger.log("Preloading local LLM engine ($modelId / ${s.aiProcessor})", "VoxApplication")
+                container.localLlmInterpreter.preload(s.modelFilterLang.ifEmpty { null })
+            }
+        }
+
         // Initial fetch of the remote model registry - Force update on start to bypass CDN caching
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             val success = RemoteModelRegistry.fetchJson(container.settingsRepository, force = true)

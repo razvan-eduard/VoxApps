@@ -131,11 +131,11 @@ artifact could cover well.
   after the PR is merged, because CI can only verify "it compiles," never "it still transcribes
   correctly" — that needs an actual on-device sanity check.
 
-### Stripping onnxruntime/Vosk/mediapipe-genai/sherpa-onnx (post-build strip, not AGP excludes)
+### Stripping onnxruntime/Vosk/litertlm-android/sherpa-onnx (post-build strip, not AGP excludes)
 
 A local `./gradlew :vox-commander:assembleRelease` alone produces a ~40MB APK — only Whisper is
 excluded via AGP. The actual CI-published release gets to ~16MB, because
-`libonnxruntime.so`/`libllm_inference_engine_jni.so`/`libvosk.so`/`libsherpa-onnx-jni.so` are also
+`libonnxruntime.so`/`liblitertlm_jni.so`/`libvosk.so`/`libsherpa-onnx-jni.so` are also
 stripped, just via a different mechanism than Whisper. Deliberately **not** called "DLC" here —
 unlike Whisper's model download (a genuine user choice: pick tiny/base/small in Settings), these are
 mandatory libraries the app can't function without; they're stripped from the APK and silently

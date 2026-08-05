@@ -211,7 +211,7 @@ owning the source.
 - **Release builds**: Whisper native libs excluded from APK via AGP's
   `packaging.jniLibs.excludes` (reliable for this lib), downloaded as real, user-facing DLC — the
   model download above is the user-visible part of the same mechanism. onnxruntime, Vosk,
-  mediapipe-genai, and sherpa-onnx-jni are stripped from the APK the same way but aren't DLC in that
+  litertlm-android, and sherpa-onnx-jni are stripped from the APK the same way but aren't DLC in that
   sense: there's no user choice involved, they're mandatory libraries the app needs to function at
   all, silently fetched once on first launch — stripped via a post-build script instead of AGP's
   exclude mechanism, which is confirmed-unreliable on arm64-v8a for those specific libs (see
@@ -275,7 +275,7 @@ The first AI attempt. User selects via `aiProcessor` setting:
 | `openai` | `OpenAiInterpreter` | OpenAI Chat Completions API (Cloud) |
 | `gemini_native` | `GeminiNanoInterpreter` | Gemini Nano on-device (AICore) |
 | `gemini_cloud` | `GeminiCloudInterpreter` | Gemini Pro API (Cloud) |
-| Custom LLM | `LocalLlmInterpreter` | On-device LLM (MediaPipe GenAI) |
+| Custom LLM | `LocalLlmInterpreter` | On-device LLM (LiteRT-LM) |
 
 All interpreters implement `AssistantEngine`:
 
@@ -1161,7 +1161,7 @@ tasks.named("preBuild") {
 | Vosk Android | (via libs.versions) | Wake word + STT |
 | Whisper.cpp | (submodule, CMake) | On-device STT |
 | sherpa-onnx | v1.13.4 (JitPack) | Piper TTS |
-| MediaPipe GenAI | (via libs.versions) | On-device LLM inference |
+| LiteRT-LM | (via libs.versions) | On-device LLM inference |
 | Google Generative AI | 0.9.0 | Gemini Nano |
 | Picovoice Porcupine | 4.0.2 | Wake word engine |
 | OpenWakeWord | v0.1.5 (rementia, vendored fork — `:core:wakeword`) | Wake word engine, RMS silence-gate patched |
@@ -1193,7 +1193,7 @@ All six tasks are dependencies of `preBuild`.
 
 ### Repositories
 
-- **Google Maven** — AndroidX, Compose, MediaPipe
+- **Google Maven** — AndroidX, Compose, LiteRT-LM
 - **Maven Central** — OkHttp, Retrofit, Gson, Apache Commons, ONNX Runtime
 - **JitPack** — Vosk, sherpa-onnx, NewPipe Extractor
 - **Picovoice Maven** — Porcupine
@@ -1353,9 +1353,11 @@ command bus but carrying opaque prompt/result payloads instead of structured not
   a generous 90s timeout. It's a process-wide singleton with a check-then-act `setupLlm()` and no
   synchronization of its own; a burst of concurrent callers (confirmed on-device: Expenses' "Force-check
   notifications now" forwarding several matched notifications at once) each saw the model unloaded and
-  each triggered a concurrent, memory-heavy `LlmInference.createFromOptions(...)` — N full copies of the
-  model loading into RAM at once, crashing the process and silently dropping every one of those
-  requests (nothing ever reached `LlmHookWorker`'s `catch` to send a reply).
+  each triggered a concurrent, memory-heavy model-load call (originally `LlmInference
+  .createFromOptions(...)` under MediaPipe GenAI, now `Engine(...).initialize()` under LiteRT-LM — the
+  engine was migrated in Aug 2026, but this hazard and the `Mutex` fix are engine-agnostic) — N full
+  copies of the model loading into RAM at once, crashing the process and silently dropping every one of
+  those requests (nothing ever reached `LlmHookWorker`'s `catch` to send a reply).
 - **Reply** — `LlmHookWorker` applies only generic cleanup (`NluIntentParser.cleanGenericOutput`,
   stripping markdown/prose fences) to the LLM's raw text, wraps it in a `VoxLlmResult{task, status,
   rawJson}`, and delivers it as an **explicit-intent** broadcast (`ACTION_LLM_RESULT`, targeted at

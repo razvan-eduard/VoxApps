@@ -8,10 +8,9 @@
 -dontwarn com.spotify.**
 -dontwarn com.fasterxml.jackson.databind.**
 
-# MediaPipe / Google GenAI
--keep class com.google.mediapipe.** { *; }
--dontwarn com.google.mediapipe.**
--dontwarn com.google.auto.value.**
+# LiteRT-LM (on-device LLM)
+-keep class com.google.ai.edge.litertlm.** { *; }
+-dontwarn com.google.ai.edge.litertlm.**
 
 # Rhino / Mozilla (Scripting)
 -dontwarn java.beans.**

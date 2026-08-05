@@ -240,7 +240,7 @@ involved.
 | UI | Jetpack Compose, Material 3 |
 | STT | Whisper.cpp (GGML, on-device) |
 | Wake Word | Vosk, Picovoice Porcupine, OpenWakeWord |
-| NLU | OpenAI API, Gemini Nano (on-device), On-device LLM (MediaPipe GenAI) |
+| NLU | OpenAI API, Gemini Nano (on-device), On-device LLM (LiteRT-LM) |
 | TTS | Android TextToSpeech, Piper TTS |
 | Storage | DataStore, EncryptedSharedPreferences, Room (+ SQLCipher on the satellite apps) |
 | Media | Spotify, YouTube (NewPipe Extractor / Piped), MediaSession API |

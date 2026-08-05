@@ -44,6 +44,35 @@ object RegexGenerator {
         }
 
     /**
+     * Order-insensitive counterpart to [fromWords]: matches when all words appear anywhere in the
+     * text, regardless of order. Built from zero-width lookaheads, so — unlike [fromWords]'s
+     * pattern — it cannot be used to strip the matched words out of the text via `.replace()`
+     * (nothing is consumed); callers needing that must use the ordered variant instead.
+     *
+     * Input: ["turn", "on"]
+     * Output: "(?=.*\\bturn\\b)(?=.*\\bon\\b)"
+     */
+    fun fromWordsAnyOrder(selectedWords: List<String>): String {
+        if (selectedWords.isEmpty()) return ""
+        return buildUnorderedPattern(selectedWords)
+    }
+
+    /** Order-insensitive counterpart to [fromWordGroups] — same OR-of-groups shape, each group
+     *  matched via [buildUnorderedPattern] instead of [buildSequencePattern]. */
+    fun fromWordGroupsAnyOrder(groups: List<List<String>>): String {
+        val validGroups = groups.filter { it.isNotEmpty() }
+        if (validGroups.isEmpty()) return ""
+        return validGroups.joinToString("|") { buildUnorderedPattern(it) }
+    }
+
+    /** Builds a "(?=.*\b word \b)(?=.*\b word \b)..." lookahead chain — every word must appear
+     *  somewhere in the text, in any order relative to each other. */
+    private fun buildUnorderedPattern(words: List<String>): String =
+        words.joinToString("") { word ->
+            "(?=.*\\b" + makeDiacriticInsensitive(word.lowercase()) + "\\b)"
+        }
+
+    /**
      * Splits a raw sentence into individual words/tokens for UI selection.
      */
     fun splitIntoTokens(sentence: String): List<String> {

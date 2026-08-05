@@ -69,4 +69,45 @@ class RegexGeneratorTest {
         assertEquals(listOf("Hello", "world", "foo"), RegexGenerator.splitIntoTokens("Hello, world!  foo"))
         assertEquals(emptyList<String>(), RegexGenerator.splitIntoTokens("   "))
     }
+
+    @Test
+    fun `fromWordsAnyOrder matches both word orders`() {
+        val p = Regex(RegexGenerator.fromWordsAnyOrder(listOf("flashlight", "on")), RegexOption.IGNORE_CASE)
+        assertTrue(p.containsMatchIn("turn flashlight on"))
+        assertTrue(p.containsMatchIn("turn on flashlight"))
+        assertFalse(p.containsMatchIn("turn off flashlight"))
+    }
+
+    @Test
+    fun `fromWordsAnyOrder is diacritic-insensitive`() {
+        val p = Regex(RegexGenerator.fromWordsAnyOrder(listOf("maine", "vedem")), RegexOption.IGNORE_CASE)
+        assertTrue(p.containsMatchIn("vedem maine"))
+        assertTrue(p.containsMatchIn("mâine ne vedem"))
+    }
+
+    @Test
+    fun `fromWordsAnyOrder escapes regex metacharacters and avoids Unicode flag`() {
+        val p = Regex(RegexGenerator.fromWordsAnyOrder(listOf("a.b")))
+        assertTrue(p.containsMatchIn("value a.b here"))
+        assertFalse(p.containsMatchIn("value axb here"))
+        assertFalse(RegexGenerator.fromWordsAnyOrder(listOf("play", "music")).contains("(?U"))
+    }
+
+    @Test
+    fun `fromWordsAnyOrder empty list yields empty string`() {
+        assertEquals("", RegexGenerator.fromWordsAnyOrder(emptyList()))
+    }
+
+    @Test
+    fun `fromWordGroupsAnyOrder matches any group (OR), each order-insensitive`() {
+        val p = Regex(RegexGenerator.fromWordGroupsAnyOrder(listOf(listOf("flashlight", "on"), listOf("torch", "on"))), RegexOption.IGNORE_CASE)
+        assertTrue(p.containsMatchIn("turn on flashlight"))
+        assertTrue(p.containsMatchIn("turn torch on"))
+        assertFalse(p.containsMatchIn("turn off flashlight"))
+    }
+
+    @Test
+    fun `fromWordGroupsAnyOrder ignores empty groups`() {
+        assertEquals("", RegexGenerator.fromWordGroupsAnyOrder(listOf(emptyList())))
+    }
 }

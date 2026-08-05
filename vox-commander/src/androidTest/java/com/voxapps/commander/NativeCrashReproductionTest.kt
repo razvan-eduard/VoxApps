@@ -34,11 +34,17 @@ import java.io.File
  *
  * Tombstone patterns reproduced:
  *
- * 1. **MediaPipe LLM SIGSEGV** (tombstone_08-11, 16-21):
+ * 1. **On-device LLM SIGSEGV** (tombstone_08-11, 16-21):
  *    - Signal 11 (SIGSEGV), null pointer dereference at 0x0
- *    - In libllm_inference_engine_jni.so → LlmTaskRunner.nativePredictSync
+ *    - Originally reproduced against MediaPipe GenAI's libllm_inference_engine_jni.so →
+ *      LlmTaskRunner.nativePredictSync; the engine has since been migrated to LiteRT-LM
+ *      (liblitertlm_jni.so, Engine/Conversation API). Whether LiteRT-LM's Conversation has the
+ *      same concurrent-access hazard as MediaPipe's LlmInferenceSession is unconfirmed — this
+ *      test still exists to prove the Mutex in LocalLlmInterpreter is load-bearing regardless of
+ *      which engine backs it.
  *    - Thread: DefaultDispatch (Dispatchers.IO coroutine)
- *    - Root cause: concurrent access to LlmInferenceSession from multiple coroutines
+ *    - Root cause (as originally diagnosed): concurrent access to a shared session/conversation
+ *      object from multiple coroutines
  *
  * 2. **Whisper.cpp SIGILL** (tombstone_12-15):
  *    - Signal 4 (SIGILL), illegal instruction
@@ -62,18 +68,22 @@ class NativeCrashReproductionTest {
     }
 
     // ================================================================
-    // Pattern 1: MediaPipe LLM SIGSEGV — concurrent access
+    // Pattern 1: On-device LLM SIGSEGV — concurrent access
     // ================================================================
 
     /**
-     * Reproduces tombstone pattern #3: SIGSEGV in LlmTaskRunner.nativePredictSync.
+     * Reproduces tombstone pattern #3: SIGSEGV originally found in MediaPipe's
+     * LlmTaskRunner.nativePredictSync, now re-run against LiteRT-LM's Engine/Conversation.
      *
-     * Multiple concurrent coroutines calling processCommand() on Dispatchers.IO
-     * race on the shared LlmInferenceSession. MediaPipe's native predictSync()
-     * is NOT thread-safe and crashes with null pointer dereference.
+     * Multiple concurrent coroutines calling processCommand() on Dispatchers.IO race on the
+     * shared engine/conversation fields inside LocalLlmInterpreter. Whether LiteRT-LM's
+     * Conversation is thread-safe under concurrent sendMessage() calls is unconfirmed — this test
+     * exists specifically to catch a regression either way, since the Mutex in
+     * LocalLlmInterpreter is the only thing standing between this and a crash.
      *
      * **Expected result:** Process crash (SIGSEGV) — test will fail with process death.
-     * If the test PASSES without crash, the concurrency issue has been fixed.
+     * If the test PASSES without crash, the concurrency issue has been fixed (or the Mutex is
+     * doing its job).
      *
      * Prerequisites: A downloaded LLM model (e.g., qwen2.5-0.5b-q8) must exist.
      */
@@ -97,49 +107,16 @@ class NativeCrashReproductionTest {
             return@runBlocking
         }
 
-        android.util.Log.i("NativeCrashTest", "Starting concurrent LLM predictSync with model: $modelId")
+        android.util.Log.i("NativeCrashTest", "Starting concurrent LLM calls with model: $modelId")
 
-        // Launch 3 concurrent processCommand calls — this races on llmInference/baseSession
-        // On device with real native libs, this triggers SIGSEGV in predictSync
+        // Launch 3 concurrent processCommand calls — this races on engine/baseConversation
+        // On device with real native libs, this would trigger a crash if the Mutex weren't there
         val results = (1..3).map { i ->
             async { interpreter.processCommand("play song number $i") }
         }.awaitAll()
 
         // If we reach here without crash, the concurrency issue is fixed
         android.util.Log.i("NativeCrashTest", "Concurrent LLM calls completed without crash: $results")
-    }
-
-    /**
-     * Reproduces: XNNPACK cache corruption causing crash loop.
-     *
-     * After a native crash, XNNPACK cache files become corrupted.
-     * Subsequent model loads re-use the corrupted cache and crash again.
-     * This test verifies that setupLlm() clears the cache before loading.
-     */
-    @Test
-    fun `llm_xnnpackCacheCorruption_recoveryTest`() = runBlocking {
-        val settingsRepo = getSettingsRepo()
-        val modelDownloader = getModelDownloader()
-        val interpreter = LocalLlmInterpreter(context, settingsRepo, modelDownloader)
-
-        // Create fake corrupted XNNPACK cache files
-        val cacheDir = context.cacheDir
-        val fakeCache1 = File(cacheDir, "qwen2.5-0.5b-q8-tn.task.xnnpack_cache_12345_67890")
-        val fakeCache2 = File(cacheDir, "gemma3-1b-q8-tn.task.xnnpack_cache_99999_88888")
-        fakeCache1.writeText("corrupted_xnnpack_cache_data_1")
-        fakeCache2.writeText("corrupted_xnnpack_cache_data_2")
-
-        assertTrue("XNNPACK cache file should exist before test", fakeCache1.exists())
-        assertTrue("XNNPACK cache file should exist before test", fakeCache2.exists())
-
-        // Trigger setupLlm via processCommand
-        interpreter.processCommand("test")
-
-        // Verify cache files were cleared by setupLlm
-        assertFalse("XNNPACK cache should be cleared: ${fakeCache1.name}", fakeCache1.exists())
-        assertFalse("XNNPACK cache should be cleared: ${fakeCache2.name}", fakeCache2.exists())
-
-        android.util.Log.i("NativeCrashTest", "XNNPACK cache corruption recovery: PASS")
     }
 
     // ================================================================

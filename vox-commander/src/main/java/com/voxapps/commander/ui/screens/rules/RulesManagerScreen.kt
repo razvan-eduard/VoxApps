@@ -50,6 +50,26 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlinx.coroutines.launch
 import java.io.File
 
+/** Captures exactly the form fields the user directly edits via the trigger/query token
+ *  selectors and the mode chips, for dirty-checking against a baseline (see [RulesManagerContent]'s
+ *  hasUnsavedRuleChanges). Deliberately excludes the app/intent-picker fields (targetPackage,
+ *  selectedIntentIndex) — those are driven partly by an async probe (LaunchedEffect keyed on
+ *  selectedTargetPackage) that can race with the synchronous state set when loading an existing
+ *  rule for edit, which would make a naive comparison spuriously report "changed" before the
+ *  probe even settles. System-command rules (the ones this was reported against) never touch
+ *  those fields at all, so excluding them costs nothing for that case. */
+private data class RuleFormSnapshot(
+    val triggerWords: List<String>,
+    val triggerGroups: List<List<String>>,
+    val queryWords: List<String>,
+    val lazyQuery: Boolean,
+    val anyOrder: Boolean,
+    val isSystemCommand: Boolean,
+    val selectedDomain: String,
+    val selectedAction: String,
+    val mediaControlType: String
+)
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun RulesManagerContent(
@@ -57,8 +77,9 @@ fun RulesManagerContent(
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     fastMapDao: FastMapDao,
-    onSaveAndClose: () -> Unit,
-    onChangesDetected: (Boolean) -> Unit = {}
+    onChangesDetected: (Boolean) -> Unit = {},
+    onSaveAvailabilityChanged: (Boolean) -> Unit = {},
+    onSaveRequested: (suspend () -> Unit) -> Unit = {}
 ) {
         val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
@@ -101,6 +122,7 @@ fun RulesManagerContent(
     var selectedIntentIndex by remember { mutableStateOf(-1) }
     var availableIntents by remember { mutableStateOf<List<AppRegistry.KnownIntents.IntentOption>>(emptyList()) }
     var lazyQuery by remember { mutableStateOf(false) }
+    var anyOrder by remember { mutableStateOf(false) }
 
     // Edit state
     var editingRuleId by remember { mutableStateOf<Long?>(null) }
@@ -115,6 +137,41 @@ fun RulesManagerContent(
 
     // Form collapse state — collapsed by default
     var isFormExpanded by remember { mutableStateOf(false) }
+
+    fun currentFormSnapshot() = RuleFormSnapshot(
+        triggerWords = triggerSelectedIndices.sorted().map { allTokens[it] },
+        triggerGroups = triggerGroupIndicesList.map { group -> group.sorted().map { allTokens[it] } }.filter { it.isNotEmpty() },
+        queryWords = querySelectedIndices.sorted().map { allTokens[it] },
+        lazyQuery = lazyQuery,
+        anyOrder = anyOrder,
+        isSystemCommand = isSystemCommand,
+        selectedDomain = selectedDomain,
+        selectedAction = selectedAction,
+        mediaControlType = mediaControlType
+    )
+
+    // The snapshot the form started from — either a fresh/empty rule, or (when editing) the
+    // rule as it was loaded — updated in resetForm() and in the "load rule for edit" handler
+    // below. Comparing against this, rather than just checking "is anything selected," is what
+    // avoids reporting unsaved changes for a rule you merely opened without touching.
+    var baselineSnapshot by remember { mutableStateOf(currentFormSnapshot()) }
+
+    // Reports whether there's an in-progress rule draft worth warning about before the host
+    // dismisses this screen (e.g. on swipe-to-dismiss) — gated on isFormExpanded since a
+    // collapsed form has nothing visible/in-progress for the user to lose.
+    val hasUnsavedRuleChanges = isFormExpanded && currentFormSnapshot() != baselineSnapshot
+    LaunchedEffect(hasUnsavedRuleChanges) {
+        onChangesDetected(hasUnsavedRuleChanges)
+    }
+
+    // Same validity gate as the in-form Save button below — reported up so the host's discard
+    // dialog can offer (and correctly enable/disable) a "Save & Close" option instead of forcing
+    // a choice between losing the draft and manually finding this screen's own save button.
+    val canSaveRule = (triggerSelectedIndices.isNotEmpty() || triggerGroupIndicesList.any { it.isNotEmpty() } || querySelectedIndices.isNotEmpty() || lazyQuery) &&
+        (isSystemCommand || selectedTargetPackage != null)
+    LaunchedEffect(canSaveRule) {
+        onSaveAvailabilityChanged(canSaveRule)
+    }
 
     // Confirmation dialog state
     var ruleToDelete by remember { mutableStateOf<FastMapRule?>(null) }
@@ -186,12 +243,52 @@ fun RulesManagerContent(
         selectedIntentIndex = -1
         availableIntents = emptyList()
         lazyQuery = false
+        anyOrder = false
         editingRuleId = null
         isSystemCommand = false
         selectedDomain = IntentTaxonomy.Domains.SETTINGS
         selectedAction = IntentTaxonomy.Actions.VOLUME_UP
         mediaControlType = "active_session"
         isFormExpanded = false
+        baselineSnapshot = currentFormSnapshot()
+    }
+
+    // Extracted so the host (TopHeaderContainer's discard-confirmation dialog) can also trigger
+    // a save via onSaveRequested, instead of only being able to offer "discard" or "keep editing"
+    // for an in-progress rule the user forgot to explicitly save before dismissing.
+    suspend fun saveCurrentRule() {
+        if (!canSaveRule) return
+        val triggerWords = triggerSelectedIndices.sorted().map { allTokens[it] }
+        val triggerGroups = triggerGroupIndicesList.map { group ->
+            group.sorted().map { idx -> allTokens[idx] }
+        }.filter { it.isNotEmpty() }
+        val queryWords = querySelectedIndices.sorted().map { allTokens[it] }
+        val selectedOption = availableIntents.getOrNull(selectedIntentIndex)
+        val existingRule = rules.find { it.id == editingRuleId }
+        val existingSortOrder = existingRule?.sortOrder
+        val rule = FastMapRule(
+            id = editingRuleId ?: 0,
+            allWords = allTokens,
+            triggerWords = triggerWords,
+            triggerGroups = triggerGroups,
+            queryWords = queryWords,
+            targetPackage = if (isSystemCommand) "" else (selectedTargetPackage ?: ""),
+            intentAction = if (isSystemCommand) "" else (selectedOption?.action ?: ""),
+            uriTemplate = if (isSystemCommand) null else selectedOption?.variant?.uriTemplate,
+            lazyQuery = lazyQuery,
+            anyOrder = anyOrder,
+            sortOrder = existingSortOrder ?: rules.size,
+            isActive = existingRule?.isActive ?: true,
+            domain = if (isSystemCommand) selectedDomain else "custom",
+            action = if (isSystemCommand) selectedAction else "launch",
+            mediaControlType = mediaControlType
+        )
+        fastMapDao.insertRule(rule)
+        resetForm()
+    }
+
+    LaunchedEffect(Unit) {
+        onSaveRequested { saveCurrentRule() }
     }
 
     Column(
@@ -423,30 +520,61 @@ fun RulesManagerContent(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Lazy query toggle
+                            // Rule mode selector — manual query / auto-extracted query / any-order
+                            // trigger matching are mutually exclusive (a rule can only be one of these
+                            // three at a time), so this is a 3-way segmented choice rather than two
+                            // independent checkboxes — the invalid "auto-extract + any-order" combination
+                            // simply isn't representable. See FastMapRule.anyOrder's doc comment for why:
+                            // an any-order trigger pattern is built from zero-width lookaheads, and
+                            // lazyQuery relies on `.replace()`-ing the matched trigger text out of the
+                            // spoken sentence, which only works for a consuming (ordered) pattern.
+                            Text(
+                                text = languageManager.getString("rule_mode_section_title"),
+                                style = MaterialTheme.typography.labelMedium
+                            )
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        lazyQuery = !lazyQuery
-                                        if (!lazyQuery) querySelectedIndices.clear()
-                                    },
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Checkbox(
-                                    checked = lazyQuery,
-                                    onCheckedChange = {
-                                        lazyQuery = it
-                                        if (it) querySelectedIndices.clear()
-                                    }
+                                FilterChip(
+                                    selected = !lazyQuery && !anyOrder,
+                                    onClick = {
+                                        lazyQuery = false
+                                        anyOrder = false
+                                    },
+                                    label = { Text(languageManager.getString("rule_mode_manual"), style = MaterialTheme.typography.labelSmall) }
                                 )
-                                Text(
-                                    text = languageManager.getString("lazy_processing_label"),
-                                    style = MaterialTheme.typography.bodySmall
+                                FilterChip(
+                                    selected = lazyQuery,
+                                    onClick = {
+                                        lazyQuery = true
+                                        anyOrder = false
+                                        querySelectedIndices.clear()
+                                    },
+                                    label = { Text(languageManager.getString("rule_mode_lazy"), style = MaterialTheme.typography.labelSmall) }
+                                )
+                                FilterChip(
+                                    selected = anyOrder,
+                                    onClick = {
+                                        anyOrder = true
+                                        lazyQuery = false
+                                    },
+                                    label = { Text(languageManager.getString("rule_mode_any_order"), style = MaterialTheme.typography.labelSmall) }
                                 )
                             }
+                            Text(
+                                text = when {
+                                    anyOrder -> languageManager.getString("rule_mode_any_order_hint")
+                                    lazyQuery -> languageManager.getString("rule_mode_lazy_hint")
+                                    else -> languageManager.getString("rule_mode_manual_hint")
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
 
-                            // Query tokens (disabled when lazy)
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Query tokens (disabled when auto-extracting)
                             TokenSelectorSection(
                                 title = if (lazyQuery) languageManager.getString("query_auto_title") else languageManager.getString("query_manual_title"),
                                 tokens = allTokens,
@@ -625,42 +753,10 @@ fun RulesManagerContent(
                         }
 
                         // --- SAVE BUTTON ---
-                        val canSave = (triggerSelectedIndices.isNotEmpty() || triggerGroupIndicesList.any { it.isNotEmpty() } || querySelectedIndices.isNotEmpty() || lazyQuery) &&
-                                      (isSystemCommand || selectedTargetPackage != null)
-
                         Button(
-                            onClick = {
-                                scope.launch {
-                                    val triggerWords = triggerSelectedIndices.sorted().map { allTokens[it] }
-                                    val triggerGroups = triggerGroupIndicesList.map { group ->
-                                        group.sorted().map { idx -> allTokens[idx] }
-                                    }.filter { it.isNotEmpty() }
-                                    val queryWords = querySelectedIndices.sorted().map { allTokens[it] }
-                                    val selectedOption = availableIntents.getOrNull(selectedIntentIndex)
-                                    val existingRule = rules.find { it.id == editingRuleId }
-                                    val existingSortOrder = existingRule?.sortOrder
-                                    val rule = FastMapRule(
-                                        id = editingRuleId ?: 0,
-                                        allWords = allTokens,
-                                        triggerWords = triggerWords,
-                                        triggerGroups = triggerGroups,
-                                        queryWords = queryWords,
-                                        targetPackage = if (isSystemCommand) "" else (selectedTargetPackage ?: ""),
-                                        intentAction = if (isSystemCommand) "" else (selectedOption?.action ?: ""),
-                                        uriTemplate = if (isSystemCommand) null else selectedOption?.variant?.uriTemplate,
-                                        lazyQuery = lazyQuery,
-                                        sortOrder = existingSortOrder ?: rules.size,
-                                        isActive = existingRule?.isActive ?: true,
-                                        domain = if (isSystemCommand) selectedDomain else "custom",
-                                        action = if (isSystemCommand) selectedAction else "launch",
-                                        mediaControlType = mediaControlType
-                                    )
-                                    fastMapDao.insertRule(rule)
-                                    resetForm()
-                                }
-                            },
+                            onClick = { scope.launch { saveCurrentRule() } },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = canSave
+                            enabled = canSaveRule
                         ) {
                             Text(if (editingRuleId == null) languageManager.getString("add_rule_button") else languageManager.getString("update_rule"))
                         }
@@ -866,6 +962,7 @@ fun RulesManagerContent(
                             mediaControlType = rule.mediaControlType.ifBlank { "active_session" }
                             isFormExpanded = true
                             lazyQuery = rule.lazyQuery
+                            anyOrder = rule.anyOrder
                             // Re-probe to get available intents, then find matching index
                             if (!isSystemCommand && !rule.targetPackage.isNullOrBlank()) {
                                 availableIntents = AppRegistry.KnownIntents.probeSupported(context, rule.targetPackage)
@@ -877,6 +974,7 @@ fun RulesManagerContent(
                                 selectedIntentIndex = -1
                             }
                             voiceInputText = rule.allWords.joinToString(" ")
+                            baselineSnapshot = currentFormSnapshot()
                         },
                         onDelete = {
                             ruleToDelete = rule
@@ -913,13 +1011,6 @@ fun RulesManagerContent(
             }
         }
 
-        // CLOSE BUTTON
-        TextButton(
-            onClick = onSaveAndClose,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            Text(languageManager.getString("ok_button"))
-        }
     }
 
     // --- CONFIRMATION DIALOGS ---

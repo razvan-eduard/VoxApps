@@ -28,11 +28,12 @@ object NativeLibManager {
     // (see build.gradle.kts's release packaging comment / docs/BUILD_TIME_DEPENDENCIES.md for the
     // investigation) — plain zip removal sidesteps that bug entirely. Order matters:
     // libsherpa-onnx-jni.so's only external NEEDED entry is libonnxruntime.so (confirmed via
-    // readelf), so onnxruntime must load first; libllm_inference_engine_jni.so and libvosk.so are
-    // self-contained (only system libs), so their position relative to each other doesn't matter.
+    // readelf), so onnxruntime must load first; liblitertlm_jni.so and libvosk.so are
+    // self-contained (only system libs — confirmed via readelf on the real AAR artifact), so their
+    // position relative to each other doesn't matter.
     val ESSENTIAL_LIBS = listOf(
         "libonnxruntime.so",
-        "libllm_inference_engine_jni.so",
+        "liblitertlm_jni.so",
         "libvosk.so",
         "libsherpa-onnx-jni.so"
     )

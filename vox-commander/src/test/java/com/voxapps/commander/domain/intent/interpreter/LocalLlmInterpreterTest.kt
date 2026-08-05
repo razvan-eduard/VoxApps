@@ -1,8 +1,8 @@
 package com.voxapps.commander.domain.intent.interpreter
 
 import android.content.Context
-import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.Conversation
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.ModelDownloader
@@ -31,19 +31,23 @@ import java.io.File
  *
  * 1. **Concurrent access race condition** (tombstone pattern #3):
  *    Multiple coroutines calling processCommand() simultaneously on Dispatchers.IO
- *    can race on llmInference / baseSession fields. MediaPipe LlmInferenceSession
- *    is NOT documented as thread-safe — concurrent predictSync() calls cause
- *    SIGSEGV (null pointer dereference at 0x0) in libllm_inference_engine_jni.so.
+ *    can race on engine / baseConversation fields. LiteRT-LM's [Conversation] concurrency
+ *    contract hasn't been separately re-verified here — treat it as unsafe under concurrent
+ *    access until proven otherwise on-device (this test's whole point is proving the Mutex
+ *    around it is load-bearing regardless of which engine backs it).
  *
- * 2. **XNNPACK cache corruption recovery** (tombstone pattern #3):
- *    After a native crash, XNNPACK cache files become corrupted and cause
- *    crash loops on every subsequent model load. setupLlm() should clear them.
+ * 2. **Stale engine-cache corruption recovery**:
+ *    MediaPipe's implementation left behind XNNPACK cache files that could corrupt after a
+ *    native crash, requiring an explicit cleanup pass in setupLlm() before every load. LiteRT-LM
+ *    is instead given a dedicated per-app cache directory via EngineConfig.cacheDir; whether it
+ *    has an analogous stale-cache failure mode of its own is unconfirmed and needs verification
+ *    on a real device — see setupLlm()'s cacheDir wiring in LocalLlmInterpreter.kt.
  *
- * 3. **Session invalidation after failure** (tombstone pattern #3):
- *    If generateResponse() throws, the base session should be invalidated
- *    to prevent using a corrupted session object.
+ * 3. **Conversation invalidation after failure** (tombstone pattern #3):
+ *    If sendMessage() throws, the base conversation should be invalidated
+ *    to prevent using a corrupted conversation object.
  */
-@Ignore("Requires MediaPipe GenAI native libs — run as instrumented test on device")
+@Ignore("Requires LiteRT-LM native libs — run as instrumented test on device")
 class LocalLlmInterpreterTest {
 
     private lateinit var context: Context
@@ -86,50 +90,24 @@ class LocalLlmInterpreterTest {
         tempDir.deleteRecursively()
     }
 
-    // === XNNPACK CACHE CORRUPTION RECOVERY ===
+    // === ENGINE CACHE DIRECTORY ===
 
     @Test
-    fun `setupLlm clears stale XNNPACK cache files before loading model`() {
-        // Simulate corrupted XNNPACK cache from a previous native crash
-        val xnnpackCache = File(cacheDir, "qwen2.5-0.5b-q8-tn.task.xnnpack_cache_12345_67890")
-        xnnpackCache.writeText("corrupted cache data")
-        assertTrue(xnnpackCache.exists())
-
+    fun `setupLlm creates a dedicated cache directory before loading model`() {
         every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
             activeIntentModelId = "qwen2.5-0.5b-q8",
             downloadedModelIds = setOf("qwen2.5-0.5b-q8")
         )
 
         // setupLlm is private, but processCommand calls it first
-        // Since LlmInference.createFromOptions will fail (no real native lib in JVM test),
-        // setupLlm will return early after clearing cache
+        // Since Engine.initialize() will fail (no real native lib in JVM test),
+        // setupLlm will return early after the cache dir is created
         runTest {
             val result = interpreter.processCommand("play music")
-            assertNull(result) // Returns null because LlmInference can't be created in JVM
+            assertNull(result) // Returns null because Engine can't be initialized in JVM
         }
 
-        // Verify XNNPACK cache was deleted
-        assertFalse(xnnpackCache.exists())
-    }
-
-    @Test
-    fun `setupLlm clears multiple XNNPACK cache files`() {
-        File(cacheDir, "model1.xnnpack_cache_111_222").writeText("corrupt1")
-        File(cacheDir, "model2.xnnpack_cache_333_444").writeText("corrupt2")
-        File(cacheDir, "not_a_cache.txt").writeText("keep me")
-
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = "qwen2.5-0.5b-q8",
-            downloadedModelIds = setOf("qwen2.5-0.5b-q8")
-        )
-
-        runTest {
-            interpreter.processCommand("test")
-        }
-
-        assertFalse(File(cacheDir, "model1.xnnpack_cache_111_222").exists())
-        assertFalse(File(cacheDir, "model2.xnnpack_cache_333_444").exists())
-        assertTrue(File(cacheDir, "not_a_cache.txt").exists())
+        assertTrue(File(cacheDir, "litertlm_cache").exists())
     }
 
     // === MODEL NOT FOUND ===
@@ -169,12 +147,12 @@ class LocalLlmInterpreterTest {
     // === CONCURRENT ACCESS (RACE CONDITION EXPOSURE) ===
 
     @Test
-    fun `concurrent processCommand calls share same llmInference instance without synchronization`() = runTest {
+    fun `concurrent processCommand calls share same engine instance without synchronization`() = runTest {
         // This test exposes the race condition: multiple coroutines on Dispatchers.IO
-        // can call setupLlm() simultaneously. The field `llmInference` is read/written
+        // can call setupLlm() simultaneously. The field `engine` is read/written
         // without any mutex or synchronization, leading to:
         // - Double model loading (wasteful)
-        // - Concurrent access to LlmInferenceSession (SIGSEGV in native code)
+        // - Concurrent access to Conversation (potential native crash, unverified for LiteRT-LM)
         //
         // In JVM tests this doesn't crash, but on device it causes the tombstone pattern.
 
@@ -183,28 +161,28 @@ class LocalLlmInterpreterTest {
             downloadedModelIds = setOf("qwen2.5-0.5b-q8")
         )
 
-        // Launch 5 concurrent calls — in JVM they'll all fail at createFromOptions (null)
-        // but on device with real native libs, this would race on llmInference field
+        // Launch 5 concurrent calls — in JVM they'll all fail at Engine.initialize() (throws)
+        // but on device with real native libs, this would race on the engine field
         val results = (1..5).map {
             async { interpreter.processCommand("command $it") }
         }.awaitAll()
 
-        // All return null because LlmInference.createFromOptions returns null in JVM
+        // All return null because Engine.initialize() fails in JVM
         results.forEach { assertNull(it) }
     }
 
-    // === SESSION INVALIDATION AFTER FAILURE ===
+    // === CONVERSATION INVALIDATION AFTER FAILURE ===
 
     @Test
-    fun `processCommand falls back to direct generateResponse when session creation fails`() = runTest {
-        // When baseSession creation fails, processCommand should try direct generateResponse
-        // This tests the fallback path that exists in the code
+    fun `processCommand falls back to one-shot conversation when base conversation creation fails`() = runTest {
+        // When baseConversation creation fails, processCommand should try a fresh one-shot
+        // conversation. This tests the fallback path that exists in the code.
         every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
             activeIntentModelId = "qwen2.5-0.5b-q8",
             downloadedModelIds = setOf("qwen2.5-0.5b-q8")
         )
 
-        // In JVM, createFromOptions returns null, so we never reach session creation
+        // In JVM, Engine.initialize() fails, so we never reach conversation creation
         // This test just verifies the null path doesn't throw
         val result = interpreter.processCommand("play music")
         assertNull(result)

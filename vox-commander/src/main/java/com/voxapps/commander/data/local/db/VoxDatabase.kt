@@ -9,7 +9,7 @@ import com.google.gson.reflect.TypeToken
 import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.domain.intent.model.FastMapRule
 
-@Database(entities = [FastMapRule::class], version = 12)
+@Database(entities = [FastMapRule::class], version = 13)
 @TypeConverters(StringListConverter::class, StringListListConverter::class)
 abstract class VoxDatabase : RoomDatabase() {
     abstract fun fastMapDao(): FastMapDao

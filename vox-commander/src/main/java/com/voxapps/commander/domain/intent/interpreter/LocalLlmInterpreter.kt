@@ -2,8 +2,13 @@ package com.voxapps.commander.domain.intent.interpreter
 
 import android.content.Context
 import com.voxapps.logging.Logger
-import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
+import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Conversation
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.SamplerConfig
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.ModelDownloader
@@ -23,7 +28,7 @@ import java.security.MessageDigest
 private const val LOCAL_LLM_TIMEOUT_MS = 90_000L
 
 /**
- * L2/L3 Engine: Local LLM interpretation using MediaPipe GenAI.
+ * L2/L3 Engine: Local LLM interpretation using LiteRT-LM.
  * Model path resolved dynamically from models.json via ModelDownloader.
  */
 class LocalLlmInterpreter(
@@ -33,21 +38,21 @@ class LocalLlmInterpreter(
 ) : AssistantEngine {
 
     private val TAG = Strings.Tags.LOCAL_LLM_INTERPRETER
-    private var llmInference: LlmInference? = null
-    private var baseSession: LlmInferenceSession? = null
+    private var engine: Engine? = null
+    private var baseConversation: Conversation? = null
     private var cachedSystemPromptHash: String? = null
     private var loadedModelId: String? = null
     private var loadedEngineKey: String? = null
     @Volatile private var isProcessing = false
 
-    /** Serializes every call that touches [llmInference]/[baseSession] — this class is a single
-     *  process-wide singleton (see AppContainer), and [setupLlm]'s `if (llmInference != null) return`
+    /** Serializes every call that touches [engine]/[baseConversation] — this class is a single
+     *  process-wide singleton (see AppContainer), and [setupLlm]'s `if (engine != null) return`
      *  is a check-then-act with no synchronization of its own. Without this, a burst of concurrent
      *  callers (confirmed on-device: Expenses' "Force-check notifications now" forwarding several
-     *  matched notifications at once) each see `llmInference == null` and each call the native,
-     *  memory-heavy `LlmInference.createFromOptions(...)` concurrently — N full copies of the model
+     *  matched notifications at once) each see `engine == null` and each call the native,
+     *  memory-heavy `Engine(...).initialize()` concurrently — N full copies of the model
      *  loading into RAM at once, which crashed the process outright in the observed repro (visible as
-     *  a silent PID change plus the pre-existing "stale XNNPACK cache" cleanup path firing, evidence
+     *  a silent PID change plus the pre-existing "stale model cache" cleanup path firing, evidence
      *  of a prior native crash) and meant every one of those N requests vanished with zero reply, since
      *  nothing ever reached `LlmHookWorker`'s `catch` block to send one. */
     private val mutex = Mutex()
@@ -58,18 +63,18 @@ class LocalLlmInterpreter(
         val engineKey = snapshot.aiProcessor
 
         // If model or engine changed, tear down everything and reload
-        if (llmInference != null && (loadedModelId != modelId || loadedEngineKey != engineKey)) {
+        if (engine != null && (loadedModelId != modelId || loadedEngineKey != engineKey)) {
             Logger.log("LLM model changed ($loadedModelId -> $modelId), reloading", TAG)
-            try { baseSession?.close() } catch (_: Exception) {}
-            try { llmInference?.close() } catch (_: Exception) {}
-            llmInference = null
-            baseSession = null
+            try { baseConversation?.close() } catch (_: Exception) {}
+            try { engine?.close() } catch (_: Exception) {}
+            engine = null
+            baseConversation = null
             cachedSystemPromptHash = null
             loadedModelId = null
             loadedEngineKey = null
         }
 
-        if (llmInference != null) return
+        if (engine != null) return
 
         val modelFile = modelDownloader.resolveLocalFile(modelId, engineKey)
         if (modelFile == null || !modelFile.exists()) {
@@ -77,33 +82,92 @@ class LocalLlmInterpreter(
             return
         }
 
-        // Clear potentially corrupted XNNPACK cache files from previous native crashes
-        val cacheDir = context.cacheDir
-        cacheDir.listFiles { f -> f.name.contains("xnnpack_cache") }?.forEach { f ->
-            Logger.log("Removing stale XNNPACK cache: ${f.name}", TAG)
-            f.delete()
-        }
-
         val modelPath = modelFile.absolutePath
         Logger.log("Loading LLM model: $modelPath", TAG)
 
-        val options = LlmInference.LlmInferenceOptions.builder()
-            .setModelPath(modelPath)
+        val engineConfig = EngineConfig(
+            modelPath = modelPath,
+            backend = Backend.CPU(),
             // Total context budget (input + output). Must exceed the NLU system prompt
             // (~1100+ tokens) plus user input and the generated response. 1024 was too
             // small — the prompt alone overflowed it, so every generation failed with
             // OUT_OF_RANGE ("Input is too long ... was not less than maxTokens(1024)").
-            .setMaxTokens(2048)
-            .build()
+            maxNumTokens = 2048,
+            // Writable per-model cache dir (mirrors the old XNNPACK-cache-cleanup workaround's
+            // intent: keep engine-internal cache files out of the way of stale-state issues by
+            // giving each model its own directory instead of relying on modelPath's directory).
+            cacheDir = File(context.cacheDir, "litertlm_cache").apply { mkdirs() }.absolutePath
+        )
 
-        val instance = LlmInference.createFromOptions(context, options)
-        if (instance == null) {
-            Logger.log("LlmInference.createFromOptions returned null — model failed to load", TAG)
-            return
+        val instance = try {
+            Engine(engineConfig).apply { initialize() }
+        } catch (e: Exception) {
+            Logger.log("Engine.initialize() failed — model failed to load: ${e.message}", TAG)
+            null
         }
-        llmInference = instance
+        if (instance == null) return
+        engine = instance
         loadedModelId = modelId
         loadedEngineKey = engineKey
+    }
+
+    /**
+     * Warms the engine up front — model load, native `Engine.initialize()`, and the base
+     * `Conversation` (system prompt prefill + one-time XNNPACK weight-cache compile) — so the
+     * user's first real command doesn't pay that cost. Mirrors [com.voxapps.commander.domain.engine
+     * .whisper.WhisperCppSttEngine.initialize]'s shape: a public suspend fun, safe to call
+     * speculatively at app startup, returning whether the engine ended up ready.
+     *
+     * Cold-load cost on-device (confirmed): a first-ever load of a given model builds its XNNPACK
+     * weight cache from scratch (one compile pass per prefill signature the model ships, e.g.
+     * prefill_1280/prefill_512/…), which can take 15-25s; a subsequent load of the SAME model
+     * reuses the cache and is fast. Preloading at startup pays that cost once, in the background,
+     * instead of on the user's first spoken/typed command.
+     */
+    suspend fun preload(modelFilterLang: String? = null): Boolean =
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) {
+                    setupLlm()
+                    val currentEngine = engine ?: return@withTimeoutOrNull false
+                    ensureBaseConversation(currentEngine, modelFilterLang) != null
+                }
+            } ?: false
+        }
+
+    /** Builds (or rebuilds, if the system prompt changed) [baseConversation] against [engine] —
+     *  shared by [doProcessCommand] and [preload] so both pay/skip the exact same warm-up cost. */
+    private fun ensureBaseConversation(currentEngine: Engine, modelFilterLang: String?): Conversation? {
+        val settings = settingsRepo.getSettingsSnapshot()
+        val systemPrompt = PromptProvider.getNluSystemPrompt(settings, modelFilterLang, settingsRepo)
+        val promptHash = sha256(systemPrompt)
+
+        // Invalidate cached conversation if system prompt changed (apps, language, defaults, etc.)
+        if (cachedSystemPromptHash != promptHash) {
+            if (baseConversation != null) {
+                Logger.log("System prompt changed — rebuilding cached conversation", TAG)
+                try { baseConversation?.close() } catch (_: Exception) {}
+                baseConversation = null
+            }
+            cachedSystemPromptHash = promptHash
+        }
+
+        // Create base conversation with system prompt pre-loaded (cached across calls) — a
+        // Conversation retains its own KV-cache across sendMessage() calls, replacing the old
+        // MediaPipe "clone base session per query" pattern entirely.
+        if (baseConversation == null) {
+            try {
+                val conversationConfig = ConversationConfig(
+                    systemInstruction = Contents.of(systemPrompt),
+                    samplerConfig = SamplerConfig(topK = 40, topP = 1.0, temperature = 0.1)
+                )
+                baseConversation = currentEngine.createConversation(conversationConfig)
+                Logger.log("Base conversation created with cached system prompt (${systemPrompt.length} chars)", TAG)
+            } catch (e: Exception) {
+                Logger.log("Failed to create base conversation: ${e.message}", TAG)
+            }
+        }
+        return baseConversation
     }
 
     override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? =
@@ -117,69 +181,46 @@ class LocalLlmInterpreter(
         isProcessing = true
         try {
             setupLlm()
-            val engine = llmInference ?: return null
+            val currentEngine = engine ?: return null
 
-            val settings = settingsRepo.getSettingsSnapshot()
-            val systemPrompt = PromptProvider.getNluSystemPrompt(settings, modelFilterLang, settingsRepo)
             val userInput = PromptProvider.formatUserInput(spokenText)
-            val promptHash = sha256(systemPrompt)
-
-            // Invalidate cached session if system prompt changed (apps, language, defaults, etc.)
-            if (cachedSystemPromptHash != promptHash) {
-                if (baseSession != null) {
-                    Logger.log("System prompt changed — rebuilding cached session", TAG)
-                    try { baseSession?.close() } catch (_: Exception) {}
-                    baseSession = null
-                }
-                cachedSystemPromptHash = promptHash
-            }
-
-            // Create base session with system prompt pre-loaded (cached across calls)
-            if (baseSession == null) {
-                try {
-                    val sessionOptions = LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                        .setTopK(40)
-                        .setTemperature(0.1f)
-                        .build()
-                    val session = LlmInferenceSession.createFromOptions(engine, sessionOptions)
-                    session.addQueryChunk(systemPrompt)
-                    baseSession = session
-                    Logger.log("Base session created with cached system prompt (${systemPrompt.length} chars)", TAG)
-                } catch (e: Exception) {
-                    Logger.log("Failed to create base session: ${e.message}", TAG)
-                }
-            }
-
-            val session = baseSession
-            if (session == null) {
-                // Fallback: no session, use direct generateResponse
+            val conversation = ensureBaseConversation(currentEngine, modelFilterLang)
+            if (conversation == null) {
+                // Fallback: no cached conversation, use a one-shot conversation with the system
+                // prompt inlined into the same message instead of as a persisted systemInstruction.
                 return try {
+                    val settings = settingsRepo.getSettingsSnapshot()
+                    val systemPrompt = PromptProvider.getNluSystemPrompt(settings, modelFilterLang, settingsRepo)
                     val fullPrompt = "$systemPrompt\n$userInput"
-                    val response = engine.generateResponse(fullPrompt)
-                    NluIntentParser.parse(response)
+                    val response = currentEngine.createConversation().use { it.sendMessage(fullPrompt) }
+                    NluIntentParser.parse(response.toString())
                 } catch (e: Exception) {
                     Logger.log("LLM generation failed (fallback): ${e.message}", TAG)
                     null
                 }
             }
 
-            // Clone the base session (reuses KV cache for system prompt), add user input, generate
-            var querySession: LlmInferenceSession? = null
             return try {
-                querySession = session.cloneSession()
-                querySession.addQueryChunk(userInput)
-                val response = querySession.generateResponse()
+                val response = conversation.sendMessage(userInput)
                 Logger.log("LLM response: $response", TAG)
-                NluIntentParser.parse(response)
+                NluIntentParser.parse(response.toString())
             } catch (e: Exception) {
                 Logger.log("LLM generation failed: ${e.message}", TAG)
-                // If clone failed, the base session might be corrupted — invalidate it
-                try { baseSession?.close() } catch (_: Exception) {}
-                baseSession = null
-                cachedSystemPromptHash = null
                 null
             } finally {
-                try { querySession?.close() } catch (_: Exception) {}
+                // Each processCommand() call is an independent, stateless intent-parse, not a
+                // multi-turn chat — but Conversation's KV-cache only ever grows (LiteRT-LM 0.15.0
+                // exposes no reset/clone/checkpoint API, unlike MediaPipe's old cheap
+                // cloneSession()). Confirmed on-device: reusing one Conversation across unrelated
+                // commands silently degrades — 1st call parses fine, 2nd returns truncated JSON,
+                // 3rd returns nothing — because the ~2000-token system prompt plus just 1-2 turns
+                // already approaches the model's context cap. So every call rebuilds fresh from the
+                // cached systemInstruction rather than reuse across calls; this repays the system
+                // prompt's prefill cost each time, but that's unavoidable without a rewind API, and
+                // is far cheaper than the one-time XNNPACK weight-cache compile it does NOT repeat.
+                try { baseConversation?.close() } catch (_: Exception) {}
+                baseConversation = null
+                cachedSystemPromptHash = null
             }
         } finally {
             isProcessing = false
@@ -194,20 +235,20 @@ class LocalLlmInterpreter(
         }
 
     private fun doRawPrompt(promptText: String): String? {
-        // MediaPipe GenAI on-device models aren't multimodal-capable today — imageUri is always null
+        // LiteRT-LM on-device models aren't multimodal-capable here today — imageUri is always null
         // here (RemoteModelRegistry.isMultimodal never reports true for a local engine unless it
         // declares "multimodal" in models.json, which none currently do), silently ignored otherwise.
         isProcessing = true
         try {
             setupLlm()
-            val engine = llmInference ?: return null
-            // Deliberately does NOT touch baseSession/cachedSystemPromptHash — those are primed with
-            // the NLU system prompt for processCommand()'s per-utterance path. A raw-prompt call has
-            // a different "system" framing per task and is infrequent (manual button / scheduled
-            // job), so it uses the same no-session fallback path processCommand() already has for
-            // when no session is available, rather than corrupting or reusing the NLU session cache.
+            val currentEngine = engine ?: return null
+            // Deliberately does NOT touch baseConversation/cachedSystemPromptHash — those are primed
+            // with the NLU system prompt for processCommand()'s per-utterance path. A raw-prompt call
+            // has a different "system" framing per task and is infrequent (manual button / scheduled
+            // job), so it uses a fresh, one-shot conversation with no system instruction rather than
+            // corrupting or reusing the NLU conversation cache.
             return try {
-                engine.generateResponse(promptText)
+                currentEngine.createConversation().use { it.sendMessage(promptText).toString() }
             } catch (e: Exception) {
                 Logger.log("LLM rawPrompt generation failed: ${e.message}", TAG)
                 null
@@ -227,12 +268,12 @@ class LocalLlmInterpreter(
             Logger.log("Skipping LLM release — actively processing", TAG)
             return
         }
-        if (llmInference == null) return
+        if (engine == null) return
         Logger.log("Releasing LLM engine for memory pressure", TAG)
-        try { baseSession?.close() } catch (_: Exception) {}
-        try { llmInference?.close() } catch (_: Exception) {}
-        baseSession = null
-        llmInference = null
+        try { baseConversation?.close() } catch (_: Exception) {}
+        try { engine?.close() } catch (_: Exception) {}
+        baseConversation = null
+        engine = null
         cachedSystemPromptHash = null
         loadedModelId = null
         loadedEngineKey = null

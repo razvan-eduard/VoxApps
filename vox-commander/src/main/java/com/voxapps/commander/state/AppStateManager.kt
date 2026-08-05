@@ -42,7 +42,10 @@ data class NativeLibStatus(
     val exists: Boolean,
     val isActive: Boolean,
     val description: String,
-    val isIncompatible: Boolean = false
+    val isIncompatible: Boolean = false,
+    // "whisper" | "vosk" | "llm" | "gemini" — matches refreshNativeLibsStatus()'s soFiles category,
+    // so UI grouping (see BenchmarkSettingsTab) can filter by engine instead of guessing from name.
+    val category: String = ""
 )
 
 enum class VulkanTestState {
@@ -456,7 +459,7 @@ class AppStateManager private constructor(
             Triple("libggml-vulkan.so", "Vulkan GPU Acceleration", "whisper"),
             Triple("libomp.so", "OpenMP Multi-threading", "whisper"),
             Triple("libvosk.so", "Vosk Voice Engine", "vosk"),
-            Triple("libllm_inference_engine_jni.so", "MediaPipe Llama Engine", "llm"),
+            Triple("liblitertlm_jni.so", "LiteRT-LM Engine", "llm"),
             Triple("Google AICore", "Gemini Nano System Service", "gemini")
         )
 
@@ -493,7 +496,7 @@ class AppStateManager private constructor(
                 isActive = active
                 adjustedDesc = desc
             }
-            NativeLibStatus(name, exists, isActive, adjustedDesc, isIncompatible)
+            NativeLibStatus(name, exists, isActive, adjustedDesc, isIncompatible, category)
         }
         _nativeLibsStatus.value = statusList
     }

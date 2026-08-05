@@ -22,7 +22,7 @@ newpipeExtractor = "v0.26.4"
 jna = "5.19.1"
 jsoup = "1.22.2"
 whisperCpp = "0.2.1"
-mediapipeGenai = "0.10.35"
+litertLm = "0.15.0"
 androidxMedia = "1.8.0"
 datastorePreferences = "1.2.1"
 reorderable = "3.1.0"
@@ -81,7 +81,7 @@ newpipe-extractor = { group = "com.github.teamnewpipe", name = "NewPipeExtractor
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 whisper-android = { group = "com.github.PavelDoichev", name = "whisper-android", version = "v1.1.0" }
-mediapipe-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeGenai" }
+litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertLm" }
 androidx-media = { group = "androidx.media", name = "media", version.ref = "androidxMedia" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }

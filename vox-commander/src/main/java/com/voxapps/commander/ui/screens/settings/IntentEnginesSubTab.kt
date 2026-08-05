@@ -91,7 +91,7 @@ fun IntentEnginesSubTab(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     val aiOptions = remember(uiState.availableModels) {
-                        val list = RemoteModelRegistry.getEngineKeysByType("llm").toMutableList()
+                        val list = RemoteModelRegistry.getLlmEngineKeys().toMutableList()
                         
                         // Inject Virtual Services
                         if (!list.contains(Strings.AiProcessors.OPENAI)) list.add(Strings.AiProcessors.OPENAI)

@@ -150,7 +150,7 @@ class ModelManagementViewModel(
     private fun rebuildUiLists() {
         // Dynamically resolve all engine keys from models.json
         val voiceKeys = RemoteModelRegistry.getEngineKeysByType("voice")
-        val llmKeys = RemoteModelRegistry.getEngineKeysByType("llm")
+        val llmKeys = RemoteModelRegistry.getLlmEngineKeys()
 
         // Whisper models = voice engines with .bin extension
         val whisperKey = voiceKeys.firstOrNull { !RemoteModelRegistry.isZipEngine(it) }
@@ -160,9 +160,9 @@ class ModelManagementViewModel(
         val voskKey = voiceKeys.firstOrNull { RemoteModelRegistry.isZipEngine(it) }
         _voskModels.value = voskKey?.let { RemoteModelRegistry.getModels(it) } ?: emptyList()
 
-        // NLU models = LLM engines
-        val nluKey = llmKeys.firstOrNull()
-        _nluModels.value = nluKey?.let { RemoteModelRegistry.getModels(it) } ?: emptyList()
+        // NLU models = every local-LLM-capable engine's models pooled together (there can be more
+        // than one — e.g. nlu_llm for .task models, nlu_llm_litertlm for .litertlm models).
+        _nluModels.value = llmKeys.flatMap { RemoteModelRegistry.getModels(it) }
 
         _isVoskOffline.value = _voskModels.value.isEmpty()
 
@@ -197,15 +197,17 @@ class ModelManagementViewModel(
         if (localFile?.exists() == true) {
             Logger.log("Model already exists, marking as downloaded: $modelId", TAG)
             viewModelScope.launch { settingsRepo.setModelDownloaded(modelId, true) }
-            when (engineType) {
-                RemoteModelRegistry.getEngineKeysByType("llm").firstOrNull() -> {
-                    appStateManager.setActiveIntentModelId(modelId)
-                    appStateManager.saveIntentModelSelection(engineType, modelId)
-                }
-                else -> {
-                    appStateManager.setActiveVoiceModelId(modelId)
-                    appStateManager.saveVoiceModelSelection(engineType, modelId)
-                }
+            // Any engine declaring the "local_llm" capability (there can be more than one — e.g.
+            // nlu_llm for .task models, nlu_llm_litertlm for .litertlm models) routes through the
+            // intent-model path; anything else is a voice engine. Was previously comparing against
+            // only the FIRST llm-typed engine key, silently misrouting every other one into the
+            // voice-model branch.
+            if (RemoteModelRegistry.isLlmEngine(engineType)) {
+                appStateManager.setActiveIntentModelId(modelId)
+                appStateManager.saveIntentModelSelection(engineType, modelId)
+            } else {
+                appStateManager.setActiveVoiceModelId(modelId)
+                appStateManager.saveVoiceModelSelection(engineType, modelId)
             }
             appStateManager.refreshAll()
             _downloadingItem.value = null

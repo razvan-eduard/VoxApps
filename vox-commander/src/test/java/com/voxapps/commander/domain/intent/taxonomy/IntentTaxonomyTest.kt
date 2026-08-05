@@ -24,7 +24,7 @@ class IntentTaxonomyTest {
 
     @Test
     fun `Actions ALL contains all known actions`() {
-        assertEquals(14, IntentTaxonomy.Actions.ALL.size)
+        assertEquals(28, IntentTaxonomy.Actions.ALL.size)
         assertTrue(IntentTaxonomy.Actions.ALL.contains("launch"))
     }
 
@@ -42,12 +42,26 @@ class IntentTaxonomyTest {
     @Test
     fun `getActionsForDomain returns correct actions for settings`() {
         val actions = IntentTaxonomy.getActionsForDomain(IntentTaxonomy.Domains.SETTINGS)
-        assertEquals(5, actions.size)
+        assertEquals(19, actions.size)
         assertTrue(actions.contains(IntentTaxonomy.Actions.VOLUME_UP))
         assertTrue(actions.contains(IntentTaxonomy.Actions.VOLUME_DOWN))
         assertTrue(actions.contains(IntentTaxonomy.Actions.WIFI_TOGGLE))
         assertTrue(actions.contains(IntentTaxonomy.Actions.BLUETOOTH_TOGGLE))
         assertTrue(actions.contains(IntentTaxonomy.Actions.GPS_TOGGLE))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.FLASHLIGHT_ON))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.FLASHLIGHT_OFF))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.FLASHLIGHT_TOGGLE))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.AIRPLANE_MODE_TOGGLE))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.DND_ON))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.DND_OFF))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.DND_TOGGLE))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.NFC_TOGGLE))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.AUTO_ROTATE_ON))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.AUTO_ROTATE_OFF))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.AUTO_ROTATE_TOGGLE))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.SILENT_MODE_ON))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.SILENT_MODE_OFF))
+        assertTrue(actions.contains(IntentTaxonomy.Actions.SILENT_MODE_TOGGLE))
     }
 
     @Test

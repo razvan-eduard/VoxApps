@@ -134,7 +134,7 @@ jobs:
             vox-apps \
             dlc-libs \
             "$MERGED_LIBS_DIR" \
-            libonnxruntime.so libllm_inference_engine_jni.so libvosk.so libsherpa-onnx-jni.so
+            libonnxruntime.so liblitertlm_jni.so libvosk.so libsherpa-onnx-jni.so
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
 

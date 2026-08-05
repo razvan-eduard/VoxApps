@@ -16,8 +16,8 @@ android {
         applicationId = "com.voxapps.commander"
         minSdk = 29
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.10-beta"
+        versionCode = 12
+        versionName = "0.11-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -77,7 +77,7 @@ android {
             // Exclude Whisper native libs from release APK — they're downloaded on demand as DLC.
             // This reduces the APK from ~166MB to ~40MB. Debug builds keep them for normal dev workflow.
             //
-            // Other large DLC'd libs (onnxruntime, Vosk, mediapipe-genai, sherpa-onnx) are
+            // Other large DLC'd libs (onnxruntime, Vosk, litertlm-android, sherpa-onnx) are
             // deliberately NOT excluded here via packaging.jniLibs.excludes, even though they're
             // real and sizable: AGP 9.0.0–9.2.1 (every currently published 9.x release) has
             // confirmed-unreliable arm64-v8a native-lib packaging behavior for this project's
@@ -164,7 +164,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.vosk.android)
     implementation(libs.jsoup)
-    implementation(libs.mediapipe.genai)
+    implementation(libs.litertlm.android)
     implementation(libs.androidx.media)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.reorderable)

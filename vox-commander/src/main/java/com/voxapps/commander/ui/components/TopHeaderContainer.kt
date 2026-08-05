@@ -14,6 +14,7 @@ import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.screens.rules.RulesManagerContent
 import com.voxapps.commander.ui.screens.settings.SettingsContent
+import kotlinx.coroutines.launch
 
 enum class TopHeaderMode {
     NONE, SETTINGS, RULES
@@ -52,9 +53,64 @@ fun TopHeaderContainer(
     if (mode == TopHeaderMode.NONE) return
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
+    // Set by RulesManagerContent's onChangesDetected while an in-progress (not-yet-saved) rule
+    // draft exists — gates the discard-confirmation prompt below so swipe-to-dismiss/tap-outside
+    // doesn't silently throw away several taps' worth of trigger/query word selection.
+    var hasUnsavedRuleChanges by remember { mutableStateOf(false) }
+    var canSaveRuleChanges by remember { mutableStateOf(false) }
+    var saveRuleAction by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
+    var showDiscardConfirmation by remember { mutableStateOf(false) }
+
+    val requestDismiss: () -> Unit = {
+        if (mode == TopHeaderMode.RULES && hasUnsavedRuleChanges) {
+            // The sheet has already animated to Hidden by the time onDismissRequest fires (Material3
+            // ModalBottomSheet has no way to veto an in-progress swipe), so re-show it while asking
+            // for confirmation rather than trying to cancel a gesture that already completed.
+            scope.launch { sheetState.show() }
+            showDiscardConfirmation = true
+        } else {
+            onDismissRequest()
+        }
+    }
+
+    if (showDiscardConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirmation = false },
+            title = { Text(languageManager.getString("discard_rule_title")) },
+            text = { Text(languageManager.getString("discard_rule_message")) },
+            confirmButton = {
+                TextButton(
+                    enabled = canSaveRuleChanges,
+                    onClick = {
+                        showDiscardConfirmation = false
+                        hasUnsavedRuleChanges = false
+                        scope.launch {
+                            saveRuleAction?.invoke()
+                            sheetState.hide()
+                            onDismissRequest()
+                        }
+                    }
+                ) { Text(languageManager.getString("save_and_close_button")) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { showDiscardConfirmation = false }) {
+                        Text(languageManager.getString("cancel_button"))
+                    }
+                    TextButton(onClick = {
+                        showDiscardConfirmation = false
+                        hasUnsavedRuleChanges = false
+                        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismissRequest() }
+                    }) { Text(languageManager.getString("discard_button")) }
+                }
+            }
+        )
+    }
 
     ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
+        onDismissRequest = requestDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
         scrimColor = Color.Black.copy(alpha = 0.32f),
@@ -87,11 +143,12 @@ fun TopHeaderContainer(
                 }
                 TopHeaderMode.RULES -> {
                     RulesManagerContent(
-
                         settingsRepo = settingsRepo,
                         appStateManager = appStateManager,
                         fastMapDao = fastMapDao,
-                        onSaveAndClose = onDismissRequest
+                        onChangesDetected = { hasUnsavedRuleChanges = it },
+                        onSaveAvailabilityChanged = { canSaveRuleChanges = it },
+                        onSaveRequested = { saveRuleAction = it }
                     )
                 }
                 else -> {}

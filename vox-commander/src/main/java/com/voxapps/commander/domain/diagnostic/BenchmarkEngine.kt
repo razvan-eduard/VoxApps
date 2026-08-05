@@ -140,15 +140,22 @@ class BenchmarkEngine(
         // --- 6. GOOGLE STT (Initialization-only — intent-based, no direct API) ---
         runGoogleBenchmark()
 
-        // --- 7. LOCAL LLM INTENT BENCHMARK (MediaPipe GenAI) ---
-        // Reuse the shared LocalLlmInterpreter from AppContainer to avoid native crash
-        // (two LlmInference instances loading the same model causes SIGSEGV in MediaPipe)
+        // --- 7. LOCAL LLM INTENT BENCHMARK (LiteRT-LM) ---
+        // Reuse the shared LocalLlmInterpreter from AppContainer to avoid a native crash — two
+        // separate Engine instances loading the same model concurrently is the exact hazard
+        // LocalLlmInterpreter's Mutex exists to prevent (see its own doc comment).
         diagInfo.append("--- LOCAL LLM DIAGNOSTICS ---\n")
         if (localLlmInterpreter != null) {
             val activeModelId = snapshot.activeIntentModelId
             if (activeModelId != null) {
-                val nluKey = RemoteModelRegistry.getEngineKeysByType("llm").firstOrNull()
-                val activeModel = nluKey?.let { RemoteModelRegistry.getModels(it) }?.find { it.id == activeModelId }
+                // activeModelId alone doesn't say which local-LLM-capable engine it belongs to
+                // (there are two now: nlu_llm for .task models, nlu_llm_litertlm for .litertlm
+                // models) — search every local-LLM engine's model list rather than assuming the
+                // first one.
+                val activeModel = RemoteModelRegistry.getLlmEngineKeys()
+                    .asSequence()
+                    .flatMap { RemoteModelRegistry.getModels(it).asSequence() }
+                    .find { it.id == activeModelId }
                 val modelLabel = activeModel?.label ?: activeModelId
                 diagInfo.append("Model: $activeModelId | Label: $modelLabel (active)\n")
                 runLocalLlmBenchmark(modelLabel, localLlmInterpreter)

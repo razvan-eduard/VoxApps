@@ -16,7 +16,9 @@ import androidx.compose.runtime.Immutable
  *
  * @param domain          Broad category: "audio", "settings", "maps", "messaging", "system", "home", "search"
  * @param action          Specific action: "play", "pause", "next", "prev", "volume_up", "volume_down",
- *                        "wifi_toggle", "bluetooth_toggle", "navigate", "send", "query"
+ *                        "wifi_toggle", "bluetooth_toggle", "gps_toggle", "flashlight_toggle",
+ *                        "airplane_mode_toggle", "dnd_toggle", "nfc_toggle", "auto_rotate_toggle",
+ *                        "silent_mode_toggle", "navigate", "send", "query"
  * @param targetApp       Explicitly requested app (e.g. "spotify", "youtube", "waze"). null = use default.
  * @param category        Search category: "general", "news", "knowledge", "weather". null for non-search.
  * @param confidence      LLM confidence 0.0–1.0. FastMap rules always 1.0.
