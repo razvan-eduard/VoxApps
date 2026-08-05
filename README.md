@@ -53,6 +53,15 @@ needing a version bump — see
 > see [📦 App Overview](#app-overview) below for what each one does, or
 > [`docs/APPS_OVERVIEW.md`](docs/APPS_OVERVIEW.md) for the full feature list per app.
 
+| App | What it does |
+|-----|--------------|
+| 🎙️ [**Vox Commander**](#-vox-commander) | On-device voice assistant — wake word, Whisper STT, a 3-layer AI pipeline, and instant FastMap voice-shortcut rules you define yourself. |
+| 📝 [**Vox Notes**](#-vox-notes) | Encrypted on-device notes, created by voice or by hand, with AI-assisted category/duplicate cleanup. |
+| 📷 [**Vox Vision**](#-vox-vision) | Privacy-first document scanner — on-device OCR, no cloud round-trip, forwards clean text to Notes/Expenses. |
+| 💸 [**Vox Expenses**](#-vox-expenses) | Encrypted on-device expense tracker — voice, receipt scan, or automatic bank-notification capture. |
+| 📅 [**Vox Calendar**](#-vox-calendar) | Encrypted on-device calendar with natural-language scheduling and a built-in ToDo Lists system. |
+| 🗂️ [**Vox Hub**](#-vox-hub) | Backup, restore, and cloud-free peer-to-peer sync across the whole family of apps. |
+
 ## 📖 Table of Contents
 
 - [🚦 Build Status](#build-status)
@@ -63,6 +72,7 @@ needing a version bump — see
 - [⬇️ Download APK](#download-apk)
   - [First Run Setup](#first-run-setup)
 - [📦 App Overview](#app-overview)
+  - [Vox Commander](#-vox-commander)
   - [Vox Notes](#-vox-notes)
   - [Vox Vision](#-vox-vision)
   - [Vox Expenses](#-vox-expenses)
@@ -89,12 +99,12 @@ needing a version bump — see
 - **Search** — Web search via DuckDuckGo, Wikipedia, Google News, GNews, Currents API, NewsAPI, WeatherAPI, Open-Meteo
 - **Navigation** — Waze, Google Maps deep linking
 - **Messaging** — WhatsApp, Telegram, SMS
-- **System Controls** — Volume, WiFi, Bluetooth, GPS toggles
+- **System Controls** — Volume, WiFi, Bluetooth, GPS, Flashlight, Airplane Mode, Do Not Disturb, NFC, Auto-Rotate, Silent Mode
 - **Multi-language** — English, Romanian, German, French
 - **Overlay UI** — Floating voice overlay with transcription and status
 - **Home-screen widget** — Tap-to-speak widget, jumps straight into voice capture
 - **Model Downloads** — On-demand downloads for Whisper models, Piper voices, wake word models
-- **Settings** — 7 organized tabs (General, App Manager, Services, Integrations, Models, Advanced, Permissions)
+- **Settings** — 8 organized tabs (General, AI & Models, Service, App Manager, Integrations, Permissions, Advanced, Theme)
 
 [↖ Back to top](#readme-top)
 
@@ -173,6 +183,17 @@ https://github.com/user-attachments/assets/ff61a5de-d59c-4bdf-aacc-55bb1034cc07
 
 
 
+### 🎙️ Vox Commander
+
+On-device voice assistant. Wake word (Vosk/Porcupine/OpenWakeWord) and on-device Whisper STT feed a
+3-layer AI pipeline — instant FastMap voice-shortcut rules you define yourself, a primary AI (cloud or
+on-device LLM), then an automatic offline fallback; app control, media/search/navigation/messaging, and
+system toggles (volume, WiFi, flashlight, DND, and more) all route through the same pipeline.
+
+<img width="388" height="850" alt="Vox Commander home screen" src="vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/20_commander_home.png" />
+
+→ [Full feature list](docs/APPS_OVERVIEW.md#vox-commander)
+
 ### 📝 Vox Notes
 
 Encrypted on-device notes app. Create notes by voice through Commander or by hand; AI-assisted category
@@ -191,6 +212,8 @@ with another phone via Vox Hub.
 Document scanner. Camera capture with auto-detected document bounds and auto-capture, on-device OCR (no
 network round-trip), edge-cropping, then forwards the cleaned text to Vox Notes or Vox Expenses as a new
 record.
+
+<img width="388" height="850" alt="Vox Vision camera capture" src="vox-vision/fastlane/metadata/android/en-US/images/phoneScreenshots/1_vision_camera.png" />
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-vision)
 
