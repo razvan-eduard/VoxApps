@@ -3,6 +3,7 @@ package com.voxapps.commander.domain.intent.interpreter
 import android.content.Context
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
+import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.logging.Logger
@@ -17,7 +18,8 @@ import kotlinx.coroutines.withContext
  */
 class GeminiCloudInterpreter(
     private val appContext: Context,
-    private val settingsRepo: SettingsRepository
+    private val settingsRepo: SettingsRepository,
+    private val fastMapDao: FastMapDao
 ) : AssistantEngine {
 
     private val TAG = Strings.Tags.GEMINI_NANO_INTERPRETER
@@ -34,7 +36,8 @@ class GeminiCloudInterpreter(
             apiKey = apiKey
         )
 
-        val systemPrompt = PromptProvider.getNluSystemPrompt(snapshot, modelFilterLang, settingsRepo)
+        val activeRules = fastMapDao.getAllRulesOnce().filter { it.isActive }
+        val systemPrompt = PromptProvider.getNluSystemPrompt(spokenText, snapshot, modelFilterLang, settingsRepo, activeRules)
 
         try {
             val response = model.generateContent(

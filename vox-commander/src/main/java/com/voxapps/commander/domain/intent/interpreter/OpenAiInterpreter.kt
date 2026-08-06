@@ -1,6 +1,7 @@
 package com.voxapps.commander.domain.intent.interpreter
 
 import android.content.Context
+import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.logging.Logger
@@ -20,7 +21,8 @@ import org.json.JSONObject
  */
 class OpenAiInterpreter(
     private val appContext: Context,
-    private val settingsRepo: SettingsRepository
+    private val settingsRepo: SettingsRepository,
+    private val fastMapDao: FastMapDao
 ) : AssistantEngine {
 
     private val TAG = Strings.Tags.OPENAI_INTERPRETER
@@ -48,7 +50,8 @@ class OpenAiInterpreter(
         }
 
         val snapshot = settingsRepo.getSettingsSnapshot()
-        val systemPrompt = PromptProvider.getNluSystemPrompt(snapshot, modelFilterLang, settingsRepo)
+        val activeRules = fastMapDao.getAllRulesOnce().filter { it.isActive }
+        val systemPrompt = PromptProvider.getNluSystemPrompt(spokenText, snapshot, modelFilterLang, settingsRepo, activeRules)
         val userPrompt = PromptProvider.formatUserInput(spokenText)
 
         val content = sendChatCompletion(apiKey, systemPrompt, userPrompt, forceJson = true) ?: return@withContext null

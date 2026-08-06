@@ -57,6 +57,7 @@ fun BenchmarkSettingsTab(
             appContainer.settingsRepository,
             appStateManager,
             appContainer.modelDownloader,
+            appContainer.fastMapDao,
             appContainer.localLlmInterpreter,
             appContainer.geminiNanoInterpreter,
             appContainer.geminiCloudInterpreter

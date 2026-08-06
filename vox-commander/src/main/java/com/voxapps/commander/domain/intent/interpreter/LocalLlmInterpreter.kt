@@ -8,17 +8,23 @@ import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ResponseFormat
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.voxapps.commander.data.local.dao.FastMapDao
+import com.voxapps.commander.domain.intent.model.FastMapRule
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
 
@@ -28,13 +34,57 @@ import java.security.MessageDigest
 private const val LOCAL_LLM_TIMEOUT_MS = 90_000L
 
 /**
+ * Constrains generation to exactly this shape via LiteRT-LM's LLGuidance-backed constrained
+ * decoding ([ResponseFormat.json]) — confirmed on-device: without this, the model (a) truncated
+ * mid-object once the token budget ran out before a closing brace, and separately (b), once that
+ * was fixed, kept generating past the first complete object into a hallucinated second, malformed
+ * "DEFAULT" wrapper. Constrained decoding fixes both at the root instead of patching around them:
+ * the grammar can't emit tokens outside this shape, and `additionalProperties: false` means it
+ * can't wander into extra keys once the declared ones are satisfied. Only `domain`/`action` are
+ * `required` — everything else stays defensively optional to match [NluIntentParser]'s existing
+ * `getSafeString`/`getSafeStringList` fallbacks.
+ *
+ * [domains]/[actions] enum-constrain those two fields to the taxonomy's actual valid values —
+ * confirmed on-device this matters, not just in theory: an unconstrained model emitted
+ * `domain="weather"` for a weather query, which isn't a real domain at all (`search` is; `weather`
+ * is only a *category* within it — see `SearchProviderRegistry`), so `SearchIntentHandler.canHandle`
+ * (which only matches `domain == "search"`) never even saw it. Deliberately the *full* taxonomy
+ * list here, not the per-utterance token-scoped subset [PromptProvider.relevantDomains] computes
+ * for the apps section — narrowing the legal domain *values* to whatever happened to fit this
+ * utterance's app-list budget would risk the opposite failure (forcing a wrong domain when the
+ * right one was merely scoped out of the apps text, not actually irrelevant).
+ */
+private fun buildNluResponseSchema(domains: List<String>, actions: List<String>): String =
+    JSONObject().apply {
+        put(
+            "properties",
+            JSONObject().apply {
+                put("action_verb", JSONObject().put("type", "string"))
+                put("logical_subject", JSONObject().put("type", JSONArray(listOf("string", "null"))))
+                put("modifiers", JSONObject().put("type", "array").put("items", JSONObject().put("type", "string")))
+                put("context_words", JSONObject().put("type", "array").put("items", JSONObject().put("type", "string")))
+                put("domain", JSONObject().put("type", "string").put("enum", JSONArray(domains)))
+                put("action", JSONObject().put("type", "string").put("enum", JSONArray(actions)))
+                put("targetApp", JSONObject().put("type", JSONArray(listOf("string", "null"))))
+                put("category", JSONObject().put("type", JSONArray(listOf("string", "null"))))
+                put("media_type", JSONObject().put("type", JSONArray(listOf("string", "null"))))
+                put("confidence", JSONObject().put("type", "number"))
+            }
+        )
+        put("type", "object")
+        put("required", JSONArray(listOf("domain", "action")))
+        put("additionalProperties", false)
+    }.toString()
+
+/**
  * L2/L3 Engine: Local LLM interpretation using LiteRT-LM.
  * Model path resolved dynamically from models.json via ModelDownloader.
  */
 class LocalLlmInterpreter(
     private val context: Context,
     private val settingsRepo: SettingsRepository,
-    private val modelDownloader: ModelDownloader
+    private val modelDownloader: ModelDownloader,
+    private val fastMapDao: FastMapDao
 ) : AssistantEngine {
 
     private val TAG = Strings.Tags.LOCAL_LLM_INTERPRETER
@@ -89,10 +139,17 @@ class LocalLlmInterpreter(
             modelPath = modelPath,
             backend = Backend.CPU(),
             // Total context budget (input + output). Must exceed the NLU system prompt
-            // (~1100+ tokens) plus user input and the generated response. 1024 was too
-            // small — the prompt alone overflowed it, so every generation failed with
-            // OUT_OF_RANGE ("Input is too long ... was not less than maxTokens(1024)").
-            maxNumTokens = 2048,
+            // (which alone has grown past 1900 tokens — confirmed on-device: a 7685-char prompt)
+            // plus user input and the generated response. 1024 was too small (the prompt alone
+            // overflowed it — OUT_OF_RANGE "was not less than maxTokens(1024)"); 2048 was *also*
+            // too small — it left so little headroom for output that generation silently ran out
+            // of budget mid-JSON, truncating the response right after a field value with no
+            // closing brace (confirmed on-device: NluIntentParser's EOFException on a response
+            // ending "confidence": 1.0 with no trailing `}`), which read as "no intent detected"
+            // even though the model had already decided the right domain/action. Both bundled
+            // models are exported with a 4096-token context (models.json's "ekv4096"/"4096 ctx"
+            // labels), so this can safely go all the way to what they actually support.
+            maxNumTokens = 4096,
             // Writable per-model cache dir (mirrors the old XNNPACK-cache-cleanup workaround's
             // intent: keep engine-internal cache files out of the way of stale-state issues by
             // giving each model its own directory instead of relying on modelPath's directory).
@@ -130,6 +187,9 @@ class LocalLlmInterpreter(
                 withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) {
                     setupLlm()
                     val currentEngine = engine ?: return@withTimeoutOrNull false
+                    // No spokenText yet (this runs before any command exists) — PromptProvider
+                    // falls back to every domain in that case, so there's no FastMap rules to
+                    // fetch for keyword-matching purposes; skip that DB read entirely.
                     ensureBaseConversation(currentEngine, modelFilterLang) != null
                 }
             } ?: false
@@ -137,9 +197,14 @@ class LocalLlmInterpreter(
 
     /** Builds (or rebuilds, if the system prompt changed) [baseConversation] against [engine] —
      *  shared by [doProcessCommand] and [preload] so both pay/skip the exact same warm-up cost. */
-    private fun ensureBaseConversation(currentEngine: Engine, modelFilterLang: String?): Conversation? {
+    private fun ensureBaseConversation(
+        currentEngine: Engine,
+        modelFilterLang: String?,
+        spokenText: String = "",
+        fastMapRules: List<FastMapRule> = emptyList()
+    ): Conversation? {
         val settings = settingsRepo.getSettingsSnapshot()
-        val systemPrompt = PromptProvider.getNluSystemPrompt(settings, modelFilterLang, settingsRepo)
+        val systemPrompt = PromptProvider.getNluSystemPrompt(spokenText, settings, modelFilterLang, settingsRepo, fastMapRules)
         val promptHash = sha256(systemPrompt)
 
         // Invalidate cached conversation if system prompt changed (apps, language, defaults, etc.)
@@ -159,7 +224,12 @@ class LocalLlmInterpreter(
             try {
                 val conversationConfig = ConversationConfig(
                     systemInstruction = Contents.of(systemPrompt),
-                    samplerConfig = SamplerConfig(topK = 40, topP = 1.0, temperature = 0.1)
+                    samplerConfig = SamplerConfig(topK = 40, topP = 1.0, temperature = 0.1),
+                    // Required for the responseFormat passed to sendMessage() below to take
+                    // effect at all — confirmed on-device: omitting this throws "response_format
+                    // cannot be used unless enableResponseFormat=True was passed to
+                    // ConversationConfig" on every call, silently falling through to "no intent".
+                    enableResponseFormat = true
                 )
                 baseConversation = currentEngine.createConversation(conversationConfig)
                 Logger.log("Base conversation created with cached system prompt (${systemPrompt.length} chars)", TAG)
@@ -173,26 +243,33 @@ class LocalLlmInterpreter(
     override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? =
         withContext(Dispatchers.IO) {
             mutex.withLock {
-                withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) { doProcessCommand(spokenText, modelFilterLang) }
+                withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) {
+                    val activeRules = fastMapDao.getAllRulesOnce().filter { it.isActive }
+                    doProcessCommand(spokenText, modelFilterLang, activeRules)
+                }
             }
         }
 
-    private fun doProcessCommand(spokenText: String, modelFilterLang: String?): NluIntent? {
+    private fun doProcessCommand(spokenText: String, modelFilterLang: String?, fastMapRules: List<FastMapRule>): NluIntent? {
         isProcessing = true
         try {
             setupLlm()
             val currentEngine = engine ?: return null
 
             val userInput = PromptProvider.formatUserInput(spokenText)
-            val conversation = ensureBaseConversation(currentEngine, modelFilterLang)
+            val conversation = ensureBaseConversation(currentEngine, modelFilterLang, spokenText, fastMapRules)
             if (conversation == null) {
                 // Fallback: no cached conversation, use a one-shot conversation with the system
                 // prompt inlined into the same message instead of as a persisted systemInstruction.
                 return try {
                     val settings = settingsRepo.getSettingsSnapshot()
-                    val systemPrompt = PromptProvider.getNluSystemPrompt(settings, modelFilterLang, settingsRepo)
+                    val systemPrompt = PromptProvider.getNluSystemPrompt(spokenText, settings, modelFilterLang, settingsRepo, fastMapRules)
                     val fullPrompt = "$systemPrompt\n$userInput"
-                    val response = currentEngine.createConversation().use { it.sendMessage(fullPrompt) }
+                    val domains = (IntentTaxonomy.Domains.ALL + settings.customDomains).distinct()
+                    val schema = buildNluResponseSchema(domains, IntentTaxonomy.Actions.ALL)
+                    val response = currentEngine.createConversation(ConversationConfig(enableResponseFormat = true)).use {
+                        it.sendMessage(fullPrompt, responseFormat = ResponseFormat.json(schema))
+                    }
                     NluIntentParser.parse(response.toString())
                 } catch (e: Exception) {
                     Logger.log("LLM generation failed (fallback): ${e.message}", TAG)
@@ -201,7 +278,10 @@ class LocalLlmInterpreter(
             }
 
             return try {
-                val response = conversation.sendMessage(userInput)
+                val settings = settingsRepo.getSettingsSnapshot()
+                val domains = (IntentTaxonomy.Domains.ALL + settings.customDomains).distinct()
+                val schema = buildNluResponseSchema(domains, IntentTaxonomy.Actions.ALL)
+                val response = conversation.sendMessage(userInput, responseFormat = ResponseFormat.json(schema))
                 Logger.log("LLM response: $response", TAG)
                 NluIntentParser.parse(response.toString())
             } catch (e: Exception) {

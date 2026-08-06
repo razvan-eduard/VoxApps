@@ -3,6 +3,7 @@ package com.voxapps.commander.domain.intent.interpreter
 import android.content.Context
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.Conversation
+import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.ModelDownloader
@@ -53,6 +54,7 @@ class LocalLlmInterpreterTest {
     private lateinit var context: Context
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var modelDownloader: ModelDownloader
+    private lateinit var fastMapDao: FastMapDao
     private lateinit var interpreter: LocalLlmInterpreter
     private lateinit var tempDir: File
     private lateinit var cacheDir: File
@@ -78,10 +80,12 @@ class LocalLlmInterpreterTest {
 
         settingsRepo = mockk(relaxed = true)
         modelDownloader = mockk(relaxed = true)
+        fastMapDao = mockk(relaxed = true)
 
         every { modelDownloader.resolveLocalFile(any(), any()) } returns modelFile
+        coEvery { fastMapDao.getAllRulesOnce() } returns emptyList()
 
-        interpreter = LocalLlmInterpreter(context, settingsRepo, modelDownloader)
+        interpreter = LocalLlmInterpreter(context, settingsRepo, modelDownloader, fastMapDao)
     }
 
     @After

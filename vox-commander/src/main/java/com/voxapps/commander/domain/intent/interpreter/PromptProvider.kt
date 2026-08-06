@@ -4,6 +4,7 @@ import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.commander.domain.integration.VoxSatelliteRegistry
+import com.voxapps.commander.domain.intent.model.FastMapRule
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
 import com.voxapps.commander.domain.search.SearchProviderRegistry
@@ -29,8 +30,20 @@ object PromptProvider {
     /**
      * Returns only the system instructions (without the input line).
      * Used by all engines (OpenAI, Gemini Cloud, Local LLM) — they add user input separately.
+     *
+     * [spokenText] and [fastMapRules] exist purely to scope the apps/domains sections down to
+     *  what's actually relevant to this utterance — see [relevantDomains]'s doc comment for why
+     *  an empty/missing value here just falls back to "include everything" rather than breaking
+     *  anything. [fastMapRules] should be the caller's *active* rules (already filtered by
+     *  [FastMapRule.isActive]); this function doesn't filter them again.
      */
-    fun getNluSystemPrompt(settings: AppSettings? = null, modelFilterLang: String? = null, settingsRepo: SettingsRepository? = null): String {
+    fun getNluSystemPrompt(
+        spokenText: String = "",
+        settings: AppSettings? = null,
+        modelFilterLang: String? = null,
+        settingsRepo: SettingsRepository? = null,
+        fastMapRules: List<FastMapRule> = emptyList()
+    ): String {
         val template = RemoteModelRegistry.getPrompt(ID_STANDARD_NLU)
         if (template == null) {
             Logger.log("NLU prompt template '$ID_STANDARD_NLU' not found (models.json not loaded?) — returning empty system prompt", TAG)
@@ -39,13 +52,55 @@ object PromptProvider {
         val langHint = modelFilterLang?.let { "\nInput language: $it." } ?: ""
         val systemPart = stripToRules(template)
         val allDomains = (IntentTaxonomy.Domains.ALL + (settings?.customDomains ?: emptyList())).distinct()
+        val domainKeywords = buildDomainKeywords(allDomains, settings, fastMapRules)
+        val scopedDomainSet = relevantDomains(spokenText, domainKeywords)
+        // Preserves allDomains' original order rather than the Set's iteration order — the
+        // ${domains} placeholder is read by a human-adjacent LLM prompt, not just machine-parsed.
+        val scopedDomains = allDomains.filter { it in scopedDomainSet }
         return systemPart
-            .replace(PLACEHOLDER_DOMAINS, allDomains.joinToString(", ") { "\"$it\"" })
+            .replace(PLACEHOLDER_DOMAINS, scopedDomains.joinToString(", ") { "\"$it\"" })
             .replace(PLACEHOLDER_ACTIONS, IntentTaxonomy.Actions.ALL.joinToString(", ") { "\"$it\"" })
-            .replace(PLACEHOLDER_APPS, buildAppsSection(settings))
+            .replace(PLACEHOLDER_APPS, buildAppsSection(settings, scopedDomains))
             .replace(PLACEHOLDER_SEARCH, buildSearchSection(settingsRepo))
             .plus(buildSatelliteHints(VoxSatelliteRegistry.apps.value))
             .plus(langHint)
+    }
+
+    /** Which of [domainKeywords]' domains are relevant to [spokenText] — a token-bloat
+     *  optimization for the apps/domains prompt sections, not a routing gate: matching is a pure
+     *  case-insensitive substring test against each domain's own already-domain-tagged keywords
+     *  (selected-app names/aliases, active FastMap rule trigger words — see
+     *  [buildDomainKeywords]), and if *nothing* matches (e.g. "play some music" names no specific
+     *  app), this falls back to every domain in [domainKeywords] rather than guessing wrong —
+     *  a false negative here would silently break app-targeting for that command, which is worse
+     *  than the token bloat this exists to avoid. Pure function (no Android/DAO access) so it's
+     *  directly unit-testable. */
+    internal fun relevantDomains(spokenText: String, domainKeywords: Map<String, List<String>>): Set<String> {
+        val text = spokenText.lowercase()
+        val matched = domainKeywords.filterValues { keywords ->
+            keywords.any { it.isNotBlank() && text.contains(it.lowercase()) }
+        }.keys
+        return matched.ifEmpty { domainKeywords.keys }
+    }
+
+    /** Builds each domain's keyword set from data that's already domain-tagged elsewhere in the
+     *  app — no new classifier, per the same reasoning as [relevantDomains]: the selected apps'
+     *  display names/aliases for that domain ([AppSettings.domainAppPackages]/[AppSettings.appAliasRules]),
+     *  plus the trigger words/groups of [fastMapRules] whose own [FastMapRule.domain] matches —
+     *  e.g. an audio-domain rule's "play"/"music" trigger words are exactly the kind of
+     *  domain-associated vocabulary app names alone don't cover. */
+    private fun buildDomainKeywords(domains: List<String>, settings: AppSettings?, fastMapRules: List<FastMapRule>): Map<String, List<String>> {
+        return domains.associateWith { domain ->
+            val assignedPackages = settings?.domainAppPackages?.get(domain) ?: emptyList()
+            val appNames = assignedPackages.mapNotNull { AppRegistry.resolveByPackage(it)?.displayName }
+            val aliasNames = settings?.appAliasRules
+                ?.filter { it.enabled && it.packageName in assignedPackages }
+                ?.flatMap { it.aliases } ?: emptyList()
+            val ruleWords = fastMapRules
+                .filter { it.domain == domain }
+                .flatMap { it.triggerWords + it.triggerGroups.flatten() }
+            (appNames + aliasNames + ruleWords).filter { it.isNotBlank() }
+        }
     }
 
     /**
@@ -85,10 +140,16 @@ object PromptProvider {
     }
 
     /**
-     * Builds a section listing installed apps per domain and user default app selections.
-     * This helps the LLM generate more refined targetApp values.
+     * Lists, per domain in [domains], only the apps the user actually selected for it in App
+     * Manager ([AppSettings.domainAppPackages]) — not every OS-installed app matching that
+     * domain's intent probe. Mirrors `AppResolver`'s own runtime resolution order (explicit
+     * targetApp/alias > user default > user-selected > unfiltered-probe default), so the LLM's
+     * suggested targetApp lines up with what would actually get resolved: a domain with nothing
+     * configured yet falls back to a *single* best-guess app ([AppRegistry.getDefaultAppForDomain])
+     * rather than dumping every installed alternative, so first-run app-targeting doesn't go
+     * silent while still not bloating the prompt with apps the user never selected.
      */
-    private fun buildAppsSection(settings: AppSettings?): String {
+    private fun buildAppsSection(settings: AppSettings?, domains: List<String>): String {
         val sb = StringBuilder()
         sb.appendLine("Available installed apps (use the exact name as targetApp):")
 
@@ -98,13 +159,13 @@ object PromptProvider {
             ?.flatMap { rule -> rule.aliases.map { alias -> alias to rule.packageName } }
             ?.toMap() ?: emptyMap()
 
-        val domains = (IntentTaxonomy.Domains.ALL + (settings?.customDomains ?: emptyList())).distinct()
         for (domain in domains) {
-            // Probed apps for the domain, plus any the user manually assigned (custom categories
-            // only live in domainAppPackages — they have no probed domain).
-            val assigned = settings?.domainAppPackages?.get(domain)
-                ?.mapNotNull { AppRegistry.resolveByPackage(it) } ?: emptyList()
-            val apps = (AppRegistry.getInstalledAppsForDomain(domain) + assigned).distinctBy { it.packageName }
+            val selectedPackages = settings?.domainAppPackages?.get(domain) ?: emptyList()
+            val apps = if (selectedPackages.isNotEmpty()) {
+                selectedPackages.mapNotNull { AppRegistry.resolveByPackage(it) }
+            } else {
+                listOfNotNull(AppRegistry.getDefaultAppForDomain(domain))
+            }
             if (apps.isEmpty()) continue
 
             val defaultPkg = settings?.defaultAppPackages?.get(domain)

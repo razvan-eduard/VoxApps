@@ -1,6 +1,7 @@
 package com.voxapps.commander.domain.diagnostic
 
 import android.content.Context
+import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.engine.google.GoogleSttEngine
 import com.voxapps.commander.domain.engine.vosk.VoskSttEngine
@@ -31,6 +32,7 @@ class BenchmarkEngine(
     private val settingsRepo: SettingsRepository,
     private val appStateManager: AppStateManager,
     private val modelDownloader: ModelDownloader,
+    private val fastMapDao: FastMapDao,
     private val localLlmInterpreter: LocalLlmInterpreter? = null,
     private val geminiNanoInterpreter: GeminiNanoInterpreter? = null,
     private val geminiCloudInterpreter: GeminiCloudInterpreter? = null
@@ -287,7 +289,7 @@ class BenchmarkEngine(
 
     private suspend fun runOpenAiIntentBenchmark() {
         try {
-            val engine = OpenAiInterpreter(context, settingsRepo)
+            val engine = OpenAiInterpreter(context, settingsRepo, fastMapDao)
             val start = System.currentTimeMillis()
             val result = engine.processCommand(INTENT_TEST_COMMAND)
             val end = System.currentTimeMillis()

@@ -118,4 +118,64 @@ class PromptProviderTest {
     fun `hint without a domain is skipped`() {
         assertEquals("", PromptProvider.buildSatelliteHints(listOf(sat(null, "some hint"))))
     }
+
+    // --- Domain prefiltering (relevantDomains) ---
+
+    @Test
+    fun `an utterance naming a domain's keyword includes only that domain`() {
+        val domainKeywords = mapOf(
+            "audio" to listOf("spotify", "play", "music"),
+            "maps" to listOf("waze", "navigate"),
+            "messaging" to listOf("whatsapp")
+        )
+        val result = PromptProvider.relevantDomains("play something on spotify", domainKeywords)
+        assertEquals(setOf("audio"), result)
+    }
+
+    @Test
+    fun `an utterance matching two domains includes both`() {
+        val domainKeywords = mapOf(
+            "audio" to listOf("spotify"),
+            "maps" to listOf("waze"),
+            "messaging" to listOf("whatsapp")
+        )
+        val result = PromptProvider.relevantDomains("navigate with waze then play spotify", domainKeywords)
+        assertEquals(setOf("audio", "maps"), result)
+    }
+
+    @Test
+    fun `matching is case-insensitive`() {
+        val domainKeywords = mapOf("audio" to listOf("Spotify"))
+        assertEquals(setOf("audio"), PromptProvider.relevantDomains("SPOTIFY please", domainKeywords))
+    }
+
+    @Test
+    fun `no keyword match falls back to every domain, never an empty set`() {
+        // Safety net: a false negative here would silently break app-targeting for that command,
+        // which is worse than the token bloat this prefilter exists to avoid — e.g. "play some
+        // music" names no specific app, but audio is still clearly the right domain.
+        val domainKeywords = mapOf(
+            "audio" to listOf("spotify"),
+            "maps" to listOf("waze")
+        )
+        val result = PromptProvider.relevantDomains("what's the weather today", domainKeywords)
+        assertEquals(domainKeywords.keys, result)
+    }
+
+    @Test
+    fun `blank keywords in a domain's list are never treated as a universal match`() {
+        val domainKeywords = mapOf(
+            "audio" to listOf("", "spotify"),
+            "maps" to listOf("")
+        )
+        // "maps" only has a blank keyword — must never match arbitrary text via an empty
+        // substring check (every string "contains" "").
+        val result = PromptProvider.relevantDomains("call mom on whatsapp", domainKeywords)
+        assertEquals(domainKeywords.keys, result) // no real match anywhere -> falls back to all
+    }
+
+    @Test
+    fun `an empty domainKeywords map returns an empty set, not a crash`() {
+        assertEquals(emptySet<String>(), PromptProvider.relevantDomains("anything", emptyMap()))
+    }
 }
