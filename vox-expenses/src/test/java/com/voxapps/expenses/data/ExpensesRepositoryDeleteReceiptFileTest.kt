@@ -37,6 +37,9 @@ private class FakeAttachmentDao : AttachmentDao {
     override suspend fun countByFileName(recordType: String, fileName: String): Int =
         rows.count { it.recordType == recordType && it.fileName == fileName }
 
+    override fun observeRecordIdsWithAttachments(recordType: String): Flow<List<Long>> =
+        flowOf(rows.filter { it.recordType == recordType }.map { it.recordId }.distinct())
+
     override suspend fun reassignRecordId(recordType: String, oldRecordId: Long, newRecordId: Long, fileName: String) {
         rows.replaceAll {
             if (it.recordType == recordType && it.recordId == oldRecordId && it.fileName == fileName) {

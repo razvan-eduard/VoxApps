@@ -1,6 +1,7 @@
 package com.voxapps.calendarapp.di
 
 import android.content.Context
+import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarDatabase
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.data.ToDoRepository
@@ -69,8 +70,13 @@ class CalendarContainer(context: Context) {
             combine(
                 calendarStateManager.uiState,
                 calendarRepository.entriesWithTags,
-                settingsRepository.settingsFlow
-            ) { _, entries, _ -> entries.size }.collect { entryCount ->
+                settingsRepository.settingsFlow,
+                // Entries themselves don't change when an attachment is added/removed on one of
+                // them, so the widget's paperclip indicator would otherwise only catch up on the
+                // next unrelated refresh (a settings change, the midnight worker, or the OS's 30-min
+                // floor) instead of promptly.
+                attachmentDao.observeRecordIdsWithAttachments(CalendarAttachments.RECORD_TYPE)
+            ) { _, entries, _, _ -> entries.size }.collect { entryCount ->
                 Logger.d("CalendarContainer", "Widget refresh triggered (entriesWithTags size=$entryCount)")
                 CalendarWidget().updateAll(appContext)
             }

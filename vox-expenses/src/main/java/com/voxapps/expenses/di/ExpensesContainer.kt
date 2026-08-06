@@ -3,6 +3,7 @@ package com.voxapps.expenses.di
 import android.content.Context
 import androidx.glance.appwidget.updateAll
 import com.voxapps.expenses.data.ExchangeRateRepository
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.ExpensesDatabase
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
@@ -87,8 +88,12 @@ class ExpensesContainer(context: Context) {
             combine(
                 expensesStateManager.uiState,
                 expensesRepository.expensesWithDetails,
-                settingsRepository.settingsFlow
-            ) { _, _, _ -> }.collect { ExpensesWidget().updateAll(appContext) }
+                settingsRepository.settingsFlow,
+                // Expenses themselves don't change when an attachment is added/removed on one of
+                // them, so the widget's paperclip indicator would otherwise only catch up on the
+                // next unrelated refresh instead of promptly.
+                attachmentDao.observeRecordIdsWithAttachments(ExpensesAttachments.RECORD_TYPE)
+            ) { _, _, _, _ -> }.collect { ExpensesWidget().updateAll(appContext) }
         }
 
         // Warm the launcher-apps cache before any UI composes (mirrors vox-commander's AppContainer

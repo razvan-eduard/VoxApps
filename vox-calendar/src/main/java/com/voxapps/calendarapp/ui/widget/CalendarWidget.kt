@@ -44,6 +44,7 @@ import androidx.glance.unit.ColorProvider
 import com.voxapps.calendarapp.CalendarActivity
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.R
+import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.domain.llm.CalendarScanRequestSender
@@ -96,6 +97,8 @@ class CalendarWidget : GlanceAppWidget() {
         // refreshing" when it actually had refreshed, just filtered the entry back out. Mirrors
         // ExpensesWidget's identical fix for the same class of bug.
         val entries = container.calendarRepository.entriesWithTags.first()
+        val attachedEntryIds = container.attachmentDao
+            .observeRecordIdsWithAttachments(CalendarAttachments.RECORD_TYPE).first().toSet()
 
         val addIntent = Intent(context, CalendarActivity::class.java).apply {
             putExtra(CalendarActivity.EXTRA_QUICK_ADD, true)
@@ -118,6 +121,7 @@ class CalendarWidget : GlanceAppWidget() {
                 CalendarWidgetContent(
                     uiState = uiState,
                     entries = entries,
+                    attachedEntryIds = attachedEntryIds,
                     languageManager = container.languageManager,
                     addIntent = addIntent,
                     openAppIntent = openAppIntent,
@@ -178,6 +182,7 @@ class CalendarWidgetScanBatchAction : ActionCallback {
 private fun CalendarWidgetContent(
     uiState: CalendarUiState,
     entries: List<CalendarEntryWithTags>,
+    attachedEntryIds: Set<Long>,
     languageManager: LanguageManager,
     addIntent: Intent,
     openAppIntent: Intent,
@@ -245,7 +250,7 @@ private fun CalendarWidgetContent(
                 is CalendarUiState.Unlocked -> UpcomingEntriesList(
                     entries, uiState.layers, languageManager, locale, showEventDetails,
                     borderEnabled, borderThicknessDp, borderColor,
-                    todayEffect, todayEffectStyle, todayEffectColor
+                    todayEffect, todayEffectStyle, todayEffectColor, attachedEntryIds
                 )
                 else -> Unit
             }
@@ -300,7 +305,8 @@ private fun UpcomingEntriesList(
     borderColor: Color,
     todayEffect: TodayEffect,
     todayEffectStyle: TodayEffectStyle,
-    todayEffectColor: Color
+    todayEffectColor: Color,
+    attachedEntryIds: Set<Long>
 ) {
     val zoneId = ZoneId.systemDefault()
     val today = LocalDate.now(zoneId)
@@ -419,12 +425,23 @@ private fun UpcomingEntriesList(
                                             .padding(horizontal = 10.dp, vertical = 3.dp)
                                     )
                                 } else {
-                                    Text(
-                                        text = item.entry.title,
-                                        maxLines = 1,
-                                        style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                                        modifier = GlanceModifier.defaultWeight()
-                                    )
+                                    Row(modifier = GlanceModifier.defaultWeight(), verticalAlignment = Alignment.Vertical.CenterVertically) {
+                                        Text(
+                                            text = item.entry.title,
+                                            maxLines = 1,
+                                            style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
+                                            modifier = GlanceModifier.defaultWeight()
+                                        )
+                                        if (item.entry.id in attachedEntryIds) {
+                                            Spacer(modifier = GlanceModifier.width(4.dp))
+                                            Image(
+                                                provider = ImageProvider(R.drawable.ic_attachment),
+                                                contentDescription = null,
+                                                colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant),
+                                                modifier = GlanceModifier.size(12.dp)
+                                            )
+                                        }
+                                    }
                                 }
                                 if (!item.entry.allDay) {
                                     Spacer(modifier = GlanceModifier.width(8.dp))

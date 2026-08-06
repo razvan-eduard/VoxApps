@@ -44,6 +44,7 @@ import com.voxapps.notes.NotesActivity
 import com.voxapps.notes.NotesApplication
 import com.voxapps.notes.R
 import com.voxapps.notes.data.NoteWithCategory
+import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.design.showRequirementToast
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
@@ -84,6 +85,8 @@ class NotesWidget : GlanceAppWidget() {
         } else {
             emptyList()
         }
+        val attachedNoteIds = container.attachmentDao
+            .observeRecordIdsWithAttachments(NotesAttachments.RECORD_TYPE).first().toSet()
 
         val addIntent = Intent(context, NotesActivity::class.java).apply {
             putExtra(NotesActivity.EXTRA_QUICK_ADD, true)
@@ -102,6 +105,7 @@ class NotesWidget : GlanceAppWidget() {
                 NotesWidgetContent(
                     locked = uiState is NotesUiState.Locked,
                     notes = recentNotes,
+                    attachedNoteIds = attachedNoteIds,
                     languageManager = container.languageManager,
                     addIntent = addIntent,
                     openAppIntent = openAppIntent,
@@ -147,6 +151,7 @@ class NotesWidgetScanBatchAction : ActionCallback {
 private fun NotesWidgetContent(
     locked: Boolean,
     notes: List<NoteWithCategory>,
+    attachedNoteIds: Set<Long>,
     languageManager: LanguageManager,
     addIntent: Intent,
     openAppIntent: Intent,
@@ -205,7 +210,7 @@ private fun NotesWidgetContent(
                     style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant)
                 )
             } else {
-                RecentNotesList(notes, languageManager, locale)
+                RecentNotesList(notes, attachedNoteIds, languageManager, locale)
             }
         }
 
@@ -247,7 +252,7 @@ private fun WidgetAddButton(text: String, addIntent: Intent) {
 }
 
 @Composable
-private fun RecentNotesList(notes: List<NoteWithCategory>, languageManager: LanguageManager, locale: Locale) {
+private fun RecentNotesList(notes: List<NoteWithCategory>, attachedNoteIds: Set<Long>, languageManager: LanguageManager, locale: Locale) {
     val zoneId = ZoneId.systemDefault()
     val today = LocalDate.now(zoneId)
     val recent = notes
@@ -314,12 +319,23 @@ private fun RecentNotesList(notes: List<NoteWithCategory>, languageManager: Lang
                             verticalAlignment = Alignment.Vertical.CenterVertically
                         ) {
                             if (hasTitle) {
-                                Text(
-                                    text = item.note.title.orEmpty(),
-                                    maxLines = 1,
-                                    style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                                    modifier = GlanceModifier.defaultWeight()
-                                )
+                                Row(modifier = GlanceModifier.defaultWeight(), verticalAlignment = Alignment.Vertical.CenterVertically) {
+                                    Text(
+                                        text = item.note.title.orEmpty(),
+                                        maxLines = 1,
+                                        style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
+                                        modifier = GlanceModifier.defaultWeight()
+                                    )
+                                    if (item.note.id in attachedNoteIds) {
+                                        Spacer(modifier = GlanceModifier.width(4.dp))
+                                        Image(
+                                            provider = ImageProvider(R.drawable.ic_attachment),
+                                            contentDescription = null,
+                                            colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant),
+                                            modifier = GlanceModifier.size(12.dp)
+                                        )
+                                    }
+                                }
                                 if (item.note.text.isNotBlank()) {
                                     Spacer(modifier = GlanceModifier.width(8.dp))
                                     Text(

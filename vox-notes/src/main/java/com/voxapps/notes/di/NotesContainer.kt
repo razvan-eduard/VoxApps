@@ -2,6 +2,7 @@ package com.voxapps.notes.di
 
 import android.content.Context
 import androidx.glance.appwidget.updateAll
+import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.notes.data.NotesDatabase
 import com.voxapps.notes.data.NotesRepository
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
@@ -60,8 +61,12 @@ class NotesContainer(context: Context) {
             combine(
                 notesStateManager.uiState,
                 notesRepository.notesWithCategory,
-                settingsRepository.settingsFlow
-            ) { _, _, _ -> }.collect { NotesWidget().updateAll(appContext) }
+                settingsRepository.settingsFlow,
+                // Notes themselves don't change when an attachment is added/removed on one of them,
+                // so the widget's paperclip indicator would otherwise only catch up on the next
+                // unrelated refresh instead of promptly.
+                attachmentDao.observeRecordIdsWithAttachments(NotesAttachments.RECORD_TYPE)
+            ) { _, _, _, _ -> }.collect { NotesWidget().updateAll(appContext) }
         }
     }
 }

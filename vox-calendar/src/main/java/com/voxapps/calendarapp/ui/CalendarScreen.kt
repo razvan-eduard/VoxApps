@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
@@ -45,8 +46,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.calendar.CalendarView
+import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.data.toToDoItem
@@ -297,6 +301,11 @@ private fun EntryRow(item: EntryCalendarItem, layer: CalendarLayer?, onClick: ()
     // exactly — same color/size/shape as its own row in the to-do list, so it reads unmistakably as a
     // task here too, not an ordinary calendar entry.
     val isTodoFlavored = entry.listId != null
+    val context = LocalContext.current
+    val container = remember { (context.applicationContext as CalendarApplication).container }
+    val hasAttachments by remember(entry.id) {
+        container.attachmentDao.observeFor(CalendarAttachments.RECORD_TYPE, entry.id)
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -326,12 +335,22 @@ private fun EntryRow(item: EntryCalendarItem, layer: CalendarLayer?, onClick: ()
                         )
                 )
                 Spacer(Modifier.width(10.dp))
-                Text(
-                    text = entry.title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = entry.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (hasAttachments.isNotEmpty()) {
+                        Icon(
+                            Icons.Filled.AttachFile,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp).padding(start = 4.dp)
+                        )
+                    }
+                }
             }
             if (!entry.allDay) {
                 Spacer(Modifier.width(8.dp))

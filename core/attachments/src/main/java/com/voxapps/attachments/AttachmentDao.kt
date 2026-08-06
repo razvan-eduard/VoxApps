@@ -13,6 +13,13 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachments WHERE recordType = :recordType AND recordId = :recordId ORDER BY createdAt ASC")
     suspend fun getFor(recordType: String, recordId: Long): List<AttachmentEntity>
 
+    /** Every record id (of [recordType]) that has at least one attachment — a single indexed query
+     *  (see [AttachmentEntity]'s `(recordType, recordId)` index) instead of one [observeFor] per row,
+     *  for list/widget screens that just need a "has attachments?" badge rather than the attachments
+     *  themselves. */
+    @Query("SELECT DISTINCT recordId FROM attachments WHERE recordType = :recordType")
+    fun observeRecordIdsWithAttachments(recordType: String): Flow<List<Long>>
+
     @Query("SELECT COUNT(*) FROM attachments WHERE recordType = :recordType AND recordId = :recordId AND source = :source")
     suspend fun countFor(recordType: String, recordId: Long, source: String = AttachmentSource.MANUAL): Int
 

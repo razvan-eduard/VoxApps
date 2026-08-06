@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -77,6 +78,7 @@ import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.design.SpeedDialAction
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.ipc.VoxOcrRequest
+import com.voxapps.notes.NotesApplication
 import com.voxapps.notes.data.Category
 import com.voxapps.notes.data.CategoryPalette
 import com.voxapps.notes.data.NoteWithCategory
@@ -105,6 +107,12 @@ private fun Color.darker(factor: Float = 0.7f): Color {
 @Composable
 fun CollapsedNoteCard(item: NoteWithCategory, onClick: () -> Unit) {
     val note = item.note
+    val context = LocalContext.current
+    val attachmentDao = remember { (context.applicationContext as NotesApplication).container.attachmentDao }
+    val hasAttachments by remember(note.id) {
+        attachmentDao.observeFor(NotesAttachments.RECORD_TYPE, note.id)
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
+
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().animateContentSize(),
@@ -114,12 +122,23 @@ fun CollapsedNoteCard(item: NoteWithCategory, onClick: () -> Unit) {
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             if (!note.title.isNullOrBlank()) {
-                Text(
-                    note.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        note.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (hasAttachments.isNotEmpty()) {
+                        Icon(
+                            Icons.Filled.AttachFile,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp).padding(start = 4.dp)
+                        )
+                    }
+                }
             }
             if (note.text.isNotBlank()) {
                 Text(

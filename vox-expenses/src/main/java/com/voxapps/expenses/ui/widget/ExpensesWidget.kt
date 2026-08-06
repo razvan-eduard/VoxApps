@@ -45,6 +45,7 @@ import com.voxapps.expenses.ExpensesActivity
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.R
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.localization.LanguageManager
@@ -89,6 +90,8 @@ class ExpensesWidget : GlanceAppWidget() {
         } else {
             emptyList()
         }
+        val attachedExpenseIds = container.attachmentDao
+            .observeRecordIdsWithAttachments(ExpensesAttachments.RECORD_TYPE).first().toSet()
 
         val addIntent = Intent(context, ExpensesActivity::class.java).apply {
             putExtra(ExpensesActivity.EXTRA_QUICK_ADD, true)
@@ -112,6 +115,7 @@ class ExpensesWidget : GlanceAppWidget() {
                 ExpensesWidgetContent(
                     locked = uiState is ExpensesUiState.Locked,
                     expenses = recentExpenses,
+                    attachedExpenseIds = attachedExpenseIds,
                     languageManager = container.languageManager,
                     addIntent = addIntent,
                     openAppIntent = openAppIntent,
@@ -172,6 +176,7 @@ class ExpensesWidgetScanBatchAction : ActionCallback {
 private fun ExpensesWidgetContent(
     locked: Boolean,
     expenses: List<ExpenseWithDetails>,
+    attachedExpenseIds: Set<Long>,
     languageManager: LanguageManager,
     addIntent: Intent,
     openAppIntent: Intent,
@@ -242,7 +247,7 @@ private fun ExpensesWidgetContent(
                 )
             } else {
                 RecentExpensesList(
-                    expenses, languageManager, locale, borderEnabled, borderThicknessDp, borderColor,
+                    expenses, attachedExpenseIds, languageManager, locale, borderEnabled, borderThicknessDp, borderColor,
                     todayEffect, todayEffectStyle, todayEffectColor
                 )
             }
@@ -288,6 +293,7 @@ private fun WidgetAddButton(text: String, addIntent: Intent) {
 @Composable
 private fun RecentExpensesList(
     expenses: List<ExpenseWithDetails>,
+    attachedExpenseIds: Set<Long>,
     languageManager: LanguageManager,
     locale: Locale,
     borderEnabled: Boolean,
@@ -358,12 +364,23 @@ private fun RecentExpensesList(
                                 .clickable(actionStartActivity(editIntent)),
                             verticalAlignment = Alignment.Vertical.CenterVertically
                         ) {
-                            Text(
-                                text = item.expense.title?.takeIf { it.isNotBlank() } ?: item.expense.vendor ?: "—",
-                                maxLines = 1,
-                                style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                                modifier = GlanceModifier.defaultWeight()
-                            )
+                            Row(modifier = GlanceModifier.defaultWeight(), verticalAlignment = Alignment.Vertical.CenterVertically) {
+                                Text(
+                                    text = item.expense.title?.takeIf { it.isNotBlank() } ?: item.expense.vendor ?: "—",
+                                    maxLines = 1,
+                                    style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
+                                    modifier = GlanceModifier.defaultWeight()
+                                )
+                                if (item.expense.id in attachedExpenseIds) {
+                                    Spacer(modifier = GlanceModifier.width(4.dp))
+                                    Image(
+                                        provider = ImageProvider(R.drawable.ic_attachment),
+                                        contentDescription = null,
+                                        colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant),
+                                        modifier = GlanceModifier.size(12.dp)
+                                    )
+                                }
+                            }
                             if (!item.expense.comments.isNullOrBlank()) {
                                 Spacer(modifier = GlanceModifier.width(8.dp))
                                 Text(
