@@ -105,32 +105,30 @@ Same baseline for every app in this repo:
 
 ## Quick Start
 
+Every app is its own Gradle module — swap `<app>` below for `vox-commander`, `vox-notes`,
+`vox-vision`, `vox-expenses`, `vox-calendar`, or `vox-hub`; each has the same set of tasks.
+
 ```bash
 # Clone
 git clone https://github.com/razvan-eduard/VoxApps.git
-cd VoxCommander
+cd VoxApps
 
 # Build (debug)
-./gradlew :vox-commander:assembleDebug
+./gradlew :<app>:assembleDebug
 
 # Install on connected device
-./gradlew :vox-commander:installDebug
-
-# Launch
-adb shell am start -n com.voxapps.commander/.MainActivity
+./gradlew :<app>:installDebug
 ```
 
 ### Run Tests
 
 ```bash
 # Unit tests (JVM — no device needed)
-./gradlew :vox-commander:testDebugUnitTest
+./gradlew :<app>:testDebugUnitTest
 
 # Instrumented tests (requires connected device/emulator)
-./gradlew :vox-commander:connectedAndroidTest
+./gradlew :<app>:connectedAndroidTest
 ```
-
-> Swap `:vox-commander` for `:vox-notes`, `:vox-vision`, `:vox-expenses`, `:vox-calendar`, or `:vox-hub` in any of the commands above to build/install/test the companion apps instead — each has its own `assembleDebug`/`installDebug`/`testDebugUnitTest` tasks.
 
 [↖ Back to top](#readme-top)
 
