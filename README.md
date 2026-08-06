@@ -36,14 +36,21 @@ fully generated from this repo's actual GitHub Releases (see below the table for
 
 <!-- LATEST_RELEASES:END -->
 
-This table is **never hand-edited** — every `release-<app>.yml` workflow publishes a GitHub Release,
-which triggers [`update-readme-releases.yml`](.github/workflows/update-readme-releases.yml) to
-regenerate the block above from whatever's actually published, APK size included (fetched from the
-release asset itself, not a hand-maintained snapshot — see
-[`scripts/update_release_readme_links.sh`](scripts/update_release_readme_links.sh)). A manual
-`workflow_dispatch` re-run of any release workflow force-rebuilds under the current version without
-needing a version bump — see
-[`docs/TECHNICAL_DOCUMENTATION.md` §23](docs/TECHNICAL_DOCUMENTATION.md#23-release-process--ci-automation).
+<!-- This table is never hand-edited — every release-<app>.yml workflow publishes a GitHub Release,
+     which triggers update-readme-releases.yml to regenerate the block above from whatever's
+     actually published, APK size included (fetched from the release asset itself, not a
+     hand-maintained snapshot — see scripts/update_release_readme_links.sh). A manual
+     workflow_dispatch re-run of any release workflow force-rebuilds under the current version
+     without needing a version bump — see docs/TECHNICAL_DOCUMENTATION.md §23. -->
+
+Install via `adb install <file>.apk` or by opening the downloaded file and allowing "Install unknown
+apps."
+
+> **Note**: If you're installing more than one Vox app, stick to official releases for all of them (or
+> build all of them yourself) rather than mixing an official release of one with a self-built copy of
+> another — installing side by side otherwise can fail (all apps share one release signing
+> certificate; see [Satellite App Guide §8.1](docs/SATELLITE_APP_GUIDE.md#81-signature-level-permissions-are-the-entire-trust-mechanism)
+> for why that's load-bearing, not just a convention).
 
 ---
 
@@ -65,12 +72,11 @@ needing a version bump — see
 ## 📖 Table of Contents
 
 - [🚦 Build Status](#build-status)
-- [✨ Features](#features)
-- [📋 Requirements](#requirements)
+- [✨ Vox Commander Features](#vox-commander-features)
+- [📋 Vox Commander Requirements](#vox-commander-requirements)
 - [⚡ Quick Start](#quick-start)
   - [Run Tests](#run-tests)
-- [⬇️ Download APK](#download-apk)
-  - [First Run Setup](#first-run-setup)
+- [🏁 First Run Setup (Vox Commander)](#first-run-setup-vox-commander)
 - [📦 App Overview](#app-overview)
   - [Vox Commander](#-vox-commander)
   - [Vox Notes](#-vox-notes)
@@ -85,7 +91,7 @@ needing a version bump — see
 
 [↖ Back to top](#readme-top)
 
-## Features
+## Vox Commander Features
 
 - **Wake Word Detection** — Always-on listening via Vosk, Picovoice Porcupine, or OpenWakeWord
 - **External Trigger** — Automation apps (MacroDroid, Tasker) can trigger the voice assistant without saying the wake word
@@ -108,11 +114,12 @@ needing a version bump — see
 
 [↖ Back to top](#readme-top)
 
-## Requirements
+## Vox Commander Requirements
 
 - **Android 10+** (API 29)
 - **arm64-v8a** architecture
-- ~16MB APK download (the rest — Whisper models, and mandatory native libs like Vosk/onnxruntime — downloads on first launch)
+- See the [Build Status](#build-status) table above for the actual APK size — the rest (Whisper
+  models, and mandatory native libs like Vosk/onnxruntime) downloads on first launch
 - Optional: OpenAI API key for cloud NLU, Spotify Client ID for media control
 
 [↖ Back to top](#readme-top)
@@ -148,18 +155,7 @@ adb shell am start -n com.voxapps.commander/.MainActivity
 
 [↖ Back to top](#readme-top)
 
-## Download APK
-
-The [🚦 Build Status](#build-status) table above always has a direct APK link per app. Install
-via `adb install <file>.apk` or by opening the downloaded file and allowing "Install unknown apps."
-
-> **Note**: If you're installing more than one Vox app, stick to official releases for all of them (or
-> build all of them yourself) rather than mixing an official release of one with a self-built copy of
-> another — installing side by side otherwise can fail (all apps share one release signing
-> certificate; see [Satellite App Guide §8.1](docs/SATELLITE_APP_GUIDE.md#81-signature-level-permissions-are-the-entire-trust-mechanism)
-> for why that's load-bearing, not just a convention).
-
-### First Run Setup
+## First Run Setup (Vox Commander)
 
 1. **Grant permissions** — Microphone, notifications (foreground service), overlay display
 2. **Download a Whisper model** — Settings → Models → Download (tiny/base/small)
@@ -177,12 +173,6 @@ others by voice once they're installed (e.g. "add a note", "add an expense"). Ev
 short summary; see [`docs/APPS_OVERVIEW.md`](docs/APPS_OVERVIEW.md) for the full feature list of each
 app, with implementation-level detail.
 
-
-https://github.com/user-attachments/assets/ff61a5de-d59c-4bdf-aacc-55bb1034cc07
-
-
-
-
 ### 🎙️ Vox Commander
 
 On-device voice assistant. Wake word (Vosk/Porcupine/OpenWakeWord) and on-device Whisper STT feed a
@@ -191,6 +181,10 @@ on-device LLM), then an automatic offline fallback; app control, media/search/na
 system toggles (volume, WiFi, flashlight, DND, and more) all route through the same pipeline.
 
 <img width="388" height="850" alt="Vox Commander home screen" src="vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/20_commander_home.png" />
+
+Demo: asking for the weather, navigating with Waze, and playing music — all by voice.
+
+https://github.com/user-attachments/assets/ff61a5de-d59c-4bdf-aacc-55bb1034cc07
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-commander)
 
@@ -212,8 +206,6 @@ with another phone via Vox Hub.
 Document scanner. Camera capture with auto-detected document bounds and auto-capture, on-device OCR (no
 network round-trip), edge-cropping, then forwards the cleaned text to Vox Notes or Vox Expenses as a new
 record.
-
-<img width="388" height="850" alt="Vox Vision camera capture" src="vox-vision/fastlane/metadata/android/en-US/images/phoneScreenshots/1_vision_camera.png" />
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-vision)
 
@@ -248,9 +240,9 @@ with another phone via Vox Hub.
 ### 🗂️ Vox Hub
 
 Backup, restore, and peer-to-peer sync. Zero-config export/import (discovers every installed Vox app
-automatically), scheduled backups with retention and a failure banner, and NFC-paired,
-Bluetooth-transferred bidirectional sync between two phones for Notes/Calendar/Expenses — no cloud
-involved.
+automatically), scheduled backups with retention and a failure banner, NFC-paired,
+Bluetooth-transferred bidirectional sync between two phones for Notes/Calendar/Expenses, and
+VoxConnect — a QR-paired bridge to a PC companion app — no cloud involved.
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-hub)
 
