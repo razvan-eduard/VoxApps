@@ -16,8 +16,10 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
@@ -40,6 +42,7 @@ class NotesExportImportHandlerTest {
 
         every { settingsRepo.getSnapshot() } returns NotesSettings(isBiometricRequired = false)
         every { notesRepo.categories } returns flowOf(emptyList())
+        coEvery { notesRepo.notesSnapshot() } returns emptyList()
         coEvery { notesRepo.addNote(any(), any(), any(), any()) } returns 1L
         coEvery { notesRepo.deleteNoteById(any()) } just Runs
     }
@@ -127,5 +130,27 @@ class NotesExportImportHandlerTest {
         handler.import("""{"notes":[{"text":"hi","attachments":[{"fileName":"att_1.jpg","source":"manual","createdAt":1}]}]}""")
 
         coVerify(exactly = 0) { attachmentDao.insert(any()) }
+    }
+
+    @Test
+    fun `settings export then import round-trips fields the old hand-written allowlist used to drop`() = runTest {
+        // todayEffectColor2/notificationsVolume were both missing from the old hand-maintained
+        // toJson() — this is exactly the class of field the Gson-reflection switch fixes.
+        val original = NotesSettings(
+            isBiometricRequired = false,
+            todayEffectColor2 = 0xFF00FF00L,
+            notificationsVolume = 42,
+            onboardingCompleted = true
+        )
+        every { settingsRepo.getSnapshot() } returns original
+        val restored = slot<NotesSettings>()
+        coEvery { settingsRepo.restoreSettings(capture(restored)) } just Runs
+
+        val exportResult = handler.export(includePhotos = false)
+        handler.import(exportResult.text)
+
+        assertEquals(original.todayEffectColor2, restored.captured.todayEffectColor2)
+        assertEquals(original.notificationsVolume, restored.captured.notificationsVolume)
+        assertFalse(restored.captured.onboardingCompleted)
     }
 }

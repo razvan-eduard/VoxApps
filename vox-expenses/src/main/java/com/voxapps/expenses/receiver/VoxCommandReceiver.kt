@@ -118,7 +118,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.settingsRepository,
                     container.sessionManager,
                     container.expensesRepository,
-                    container.attachmentDao
+                    container.attachmentDao,
+                    container.duplicateRuleDao
                 )
                 val pending = goAsync()
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
@@ -137,7 +138,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.settingsRepository,
                     container.sessionManager,
                     container.expensesRepository,
-                    container.attachmentDao
+                    container.attachmentDao,
+                    container.duplicateRuleDao
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {

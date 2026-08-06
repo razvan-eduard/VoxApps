@@ -2,6 +2,8 @@ package com.voxapps.commander.ui.screens.rules
 
 import com.voxapps.commander.ui.LocalLanguageManager
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +18,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PauseCircle
@@ -37,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.domain.intent.model.FastMapRule
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.receiver.CommanderExportHandler
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.state.AppStateManager
@@ -176,6 +181,37 @@ fun RulesManagerContent(
     // Confirmation dialog state
     var ruleToDelete by remember { mutableStateOf<FastMapRule?>(null) }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
+
+    // Import/Export Rules JSON — the standalone, PC-authored-file path (separate from Hub's own
+    // whole-device backup/restore, which goes through CommanderExportHandler/VoxCommandReceiver
+    // directly and never touches this UI). Reuses the same buildFastMapRulesJson/parseFastMapRules
+    // functions so both paths share one schema.
+    var pendingImportRules by remember { mutableStateOf<List<FastMapRule>?>(null) }
+    var importErrorVisible by remember { mutableStateOf(false) }
+
+    val exportRulesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val json = CommanderExportHandler.buildFastMapRulesJson(fastMapDao.getAllRulesOnce())
+                context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+            }
+        }
+    }
+    val importRulesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            val parsed = text?.let { CommanderExportHandler.parseFastMapRules(it) }
+            if (parsed != null) {
+                pendingImportRules = parsed
+            } else {
+                importErrorVisible = true
+            }
+        }
+    }
 
     // Filter state
     var searchQuery by remember { mutableStateOf("") }
@@ -864,6 +900,20 @@ fun RulesManagerContent(
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Row {
+                                IconButton(onClick = { exportRulesLauncher.launch("fastmap_rules.json") }) {
+                                    Icon(
+                                        Icons.Filled.FileUpload,
+                                        contentDescription = "Export rules to JSON",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                IconButton(onClick = { importRulesLauncher.launch(arrayOf("application/json")) }) {
+                                    Icon(
+                                        Icons.Filled.FileDownload,
+                                        contentDescription = "Import rules from JSON",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                                 val anyActive = localRules.any { it.isActive }
                                 IconButton(onClick = {
                                     scope.launch {
@@ -1050,6 +1100,45 @@ fun RulesManagerContent(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteAllDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    pendingImportRules?.let { imported ->
+        AlertDialog(
+            onDismissRequest = { pendingImportRules = null },
+            title = { Text("Import ${imported.size} Rules") },
+            text = { Text("Add these rules to your existing ${rules.size}, or replace your entire rule set with this file?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        imported.forEach { fastMapDao.insertRule(it.copy(id = 0)) }
+                    }
+                    pendingImportRules = null
+                }) { Text("Add") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { pendingImportRules = null }) { Text("Cancel") }
+                    TextButton(onClick = {
+                        scope.launch {
+                            fastMapDao.deleteAllRules()
+                            imported.forEach { fastMapDao.insertRule(it.copy(id = 0)) }
+                        }
+                        pendingImportRules = null
+                    }) { Text("Replace All", color = Color.Red) }
+                }
+            }
+        )
+    }
+
+    if (importErrorVisible) {
+        AlertDialog(
+            onDismissRequest = { importErrorVisible = false },
+            title = { Text("Import Failed") },
+            text = { Text("That file isn't a valid FastMap rules export.") },
+            confirmButton = {
+                TextButton(onClick = { importErrorVisible = false }) { Text("OK") }
             }
         )
     }

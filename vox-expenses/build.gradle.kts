@@ -12,8 +12,8 @@ android {
         applicationId = "com.voxapps.expenses"
         minSdk = 29
         targetSdk = 36
-        versionCode = 27
-        versionName = "0.27"
+        versionCode = 28
+        versionName = "0.28"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -64,6 +64,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.gson)
     implementation(project(":core:design"))
     implementation(project(":core:calendar"))
     implementation(project(":core:apppicker"))

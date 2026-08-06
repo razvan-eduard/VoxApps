@@ -12,6 +12,8 @@ import com.voxapps.ipc.VoxResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Commander's own entry point on the Vox command bus (mirrors vox-notes'/vox-expenses'
@@ -46,7 +48,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val settings = container.settingsRepository.getSettingsSnapshot()
-                        val json = CommanderExportHandler.buildExportJson(
+                        val settingsJson = CommanderExportHandler.buildExportJson(
                             settings,
                             includeSecrets = command.includeSecrets,
                             searchProviderApiKeys = if (command.includeSecrets) {
@@ -55,6 +57,12 @@ class VoxCommandReceiver : BroadcastReceiver() {
                                 emptyMap()
                             }
                         )
+                        val rules = container.fastMapDao.getAllRulesOnce()
+                        val rulesJson = CommanderExportHandler.buildFastMapRulesJson(rules)
+                        val json = JSONObject()
+                            .put("settings", JSONObject(settingsJson))
+                            .put("fastMapRules", JSONArray(rulesJson))
+                            .toString()
                         // Must use the PendingResult's own setResultData, not the inherited
                         // BroadcastReceiver.setResult() — the latter throws "Call while result is
                         // not pending" once called from outside onReceive()'s synchronous window,
@@ -70,10 +78,38 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        val imported = CommanderExportHandler.parsePortableSettings(command.text.orEmpty())
-                        val result = if (imported != null) {
+                        val root = try {
+                            JSONObject(command.text.orEmpty())
+                        } catch (e: Exception) {
+                            null
+                        }
+                        if (root == null) {
+                            pending.setResultData(VoxResult(ok = false, text = "Invalid import payload").toJson())
+                            return@launch
+                        }
+
+                        val imported = root.optJSONObject("settings")?.toString()
+                            ?.let { CommanderExportHandler.parsePortableSettings(it) }
+                        if (imported != null) {
                             container.settingsRepository.restoreImportedSettings(imported)
-                            VoxResult(ok = true, text = "Settings imported")
+                        }
+
+                        // Full replace, not merge: a FastMapRule has no name/title field to merge
+                        // by (unlike categories/layers elsewhere), so a restore snapshots the
+                        // existing rules, inserts every imported one (id=0, fresh local ids —
+                        // cross-device ids are meaningless), then deletes the old snapshot.
+                        var rulesImported = 0
+                        root.optJSONArray("fastMapRules")?.toString()?.let { rulesJson ->
+                            CommanderExportHandler.parseFastMapRules(rulesJson)?.let { rules ->
+                                val preExisting = container.fastMapDao.getAllRulesOnce()
+                                rules.forEach { container.fastMapDao.insertRule(it.copy(id = 0)) }
+                                preExisting.forEach { container.fastMapDao.deleteRule(it) }
+                                rulesImported = rules.size
+                            }
+                        }
+
+                        val result = if (imported != null || rulesImported > 0) {
+                            VoxResult(ok = true, text = "Settings imported, $rulesImported FastMap rules imported")
                         } else {
                             VoxResult(ok = false, text = "Invalid import payload")
                         }

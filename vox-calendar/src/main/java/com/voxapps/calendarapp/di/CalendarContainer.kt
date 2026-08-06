@@ -30,6 +30,7 @@ class CalendarContainer(context: Context) {
 
     private val database = CalendarDatabase.get(appContext)
     val attachmentDao = database.attachmentDao()
+    val toDoListDao = database.toDoListDao()
     val calendarRepository = CalendarRepository(
         database.calendarEntryDao(),
         database.calendarLayerDao(),
@@ -38,7 +39,7 @@ class CalendarContainer(context: Context) {
         database.calendarReminderDao(),
         appContext
     )
-    val toDoRepository = ToDoRepository(database.toDoListDao(), database.calendarEntryDao(), calendarRepository)
+    val toDoRepository = ToDoRepository(toDoListDao, database.calendarEntryDao(), calendarRepository)
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 

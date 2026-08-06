@@ -38,7 +38,10 @@ class CalendarRepository(
         title: String,
         description: String?,
         location: String?,
-        startMillis: Long,
+        // Nullable so a restored to-do item with no due date (see CalendarEntry's doc comment) can
+        // be created through this same path — every existing plain Event/Task caller already always
+        // passes a real value here, so this widening is source-compatible for them.
+        startMillis: Long?,
         endMillis: Long?,
         allDay: Boolean,
         completed: Boolean = false,
@@ -49,7 +52,15 @@ class CalendarRepository(
         layerId: Long,
         tags: List<String> = emptyList(),
         reminderOffsetsMinutes: List<Int> = emptyList(),
-        now: Long = System.currentTimeMillis()
+        now: Long = System.currentTimeMillis(),
+        // To-do-specific fields (see CalendarEntry's doc comment) — null/default for a plain
+        // Event/Task. Exist here (rather than a separate ToDoRepository insert path) purely so the
+        // Hub export/import handler can restore a to-do item through the same single write point
+        // as everything else (tags/reminders wiring), without duplicating that logic.
+        listId: Long? = null,
+        position: Int = 0,
+        colorArgb: Long? = null,
+        comments: String? = null
     ): Long {
         val id = entryDao.insert(
             CalendarEntry(
@@ -67,6 +78,10 @@ class CalendarRepository(
                 recurrenceInterval = recurrenceInterval,
                 recurrenceUntilMillis = recurrenceUntilMillis,
                 layerId = layerId,
+                listId = listId,
+                position = position,
+                colorArgb = colorArgb,
+                comments = comments?.trim()?.takeIf { it.isNotEmpty() },
                 createdAt = now,
                 updatedAt = now
             )

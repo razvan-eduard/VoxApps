@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.google.gson.Gson
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentSource
@@ -27,6 +28,7 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 private const val TAG = "NotesExportImportHandler"
+private val gson = Gson()
 
 /**
  * Vox Hub's export/import for this app, extracted from the BroadcastReceiver so it's unit-testable
@@ -251,41 +253,19 @@ class NotesExportImportHandler(
     }
 }
 
-private fun NotesSettings.toJson(): JSONObject = JSONObject().apply {
-    put("isBiometricRequired", isBiometricRequired)
-    put("sessionTimeoutMinutes", sessionTimeoutMinutes)
-    put("defaultVoiceCategoryId", defaultVoiceCategoryId)
-    put("voiceSaveToastEnabled", voiceSaveToastEnabled)
-    put("autoCreateVoiceCategory", autoCreateVoiceCategory)
-    put("language", language)
-    put("scheduledMergeInterval", scheduledMergeInterval)
-    put("scheduledNoteDedupInterval", scheduledNoteDedupInterval)
-    put("debugLoggingEnabled", debugLoggingEnabled)
-    put("debugToastsEnabled", debugToastsEnabled)
-    put("calendarViewEnabled", calendarViewEnabled)
-    put("themeDarkMode", themeDarkMode)
-    put("themeColored", themeColored)
-    put("attachPhotoOnScan", attachPhotoOnScan)
-    put("scanImageRetention", scanImageRetention)
-}
+// Gson reflection over the whole data class, not a hand-maintained field list — a manual allowlist
+// silently falls behind every time a new setting is added (todayEffect*/notifications* were missing
+// before this fix). onboardingCompleted is the one deliberate exclusion (device-local UI state, not
+// portable user data — see its own doc comment); reset rather than omitted so import's
+// Gson.fromJson always has every field present. Mirrors vox-commander's CommanderExportHandler, the
+// only handler in this codebase that didn't suffer this drift.
+private fun NotesSettings.toJson(): JSONObject =
+    JSONObject(gson.toJson(copy(onboardingCompleted = false)))
 
-private fun JSONObject.toNotesSettings(): NotesSettings = NotesSettings(
-    isBiometricRequired = optBoolean("isBiometricRequired", false),
-    sessionTimeoutMinutes = optInt("sessionTimeoutMinutes", NotesSettings.TIMEOUT_30M),
-    defaultVoiceCategoryId = if (has("defaultVoiceCategoryId") && !isNull("defaultVoiceCategoryId")) optLong("defaultVoiceCategoryId") else null,
-    voiceSaveToastEnabled = optBoolean("voiceSaveToastEnabled", false),
-    autoCreateVoiceCategory = optBoolean("autoCreateVoiceCategory", false),
-    language = optString("language", NotesSettings.DEFAULT_LANGUAGE),
-    scheduledMergeInterval = optString("scheduledMergeInterval", NotesSettings.INTERVAL_OFF),
-    scheduledNoteDedupInterval = optString("scheduledNoteDedupInterval", NotesSettings.INTERVAL_OFF),
-    debugLoggingEnabled = optBoolean("debugLoggingEnabled", false),
-    debugToastsEnabled = optBoolean("debugToastsEnabled", false),
-    calendarViewEnabled = optBoolean("calendarViewEnabled", false),
-    themeDarkMode = optString("themeDarkMode", NotesSettings.THEME_SYSTEM),
-    themeColored = optBoolean("themeColored", true),
-    attachPhotoOnScan = optBoolean("attachPhotoOnScan", false),
-    scanImageRetention = optString("scanImageRetention", NotesSettings.RETENTION_ON_FAILURE)
-)
+/** Returns Room/DataStore defaults for [NotesSettings] if [this] isn't valid JSON for it (e.g. a
+ *  corrupt/foreign import file). */
+private fun JSONObject.toNotesSettings(): NotesSettings =
+    gson.fromJson(toString(), NotesSettings::class.java) ?: NotesSettings()
 
 private fun Category.toJson(): JSONObject = JSONObject().apply {
     put("id", id)

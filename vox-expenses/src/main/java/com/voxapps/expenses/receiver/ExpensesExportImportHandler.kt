@@ -4,10 +4,13 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.google.gson.Gson
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentSource
 import com.voxapps.expenses.data.Category
+import com.voxapps.expenses.data.DuplicateRuleDao
+import com.voxapps.expenses.data.DuplicateRuleEntity
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExchangeRateApiKeyStore
@@ -35,19 +38,27 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 private const val TAG = "ExpensesExportImportHandler"
+private val gson = Gson()
 
 /**
  * Vox Hub's export/import for this app, extracted from the BroadcastReceiver so it's unit-testable
  * without Android (mirrors [ExpensesReadResponder] / vox-notes' NotesExportImportHandler). Respects
  * the same biometric-lock gate as reads — an export/import request while the app is locked never
  * touches the DB.
+ *
+ * [duplicateRuleDao] is injected directly (same convention as [attachmentDao]) rather than routed
+ * through [ExpensesRepository] — that repository already keeps its own `duplicateRuleDao` reference
+ * private (used only internally for the auto-check pass), and `DuplicateRuleDao` is already injected
+ * directly into `ExpensesStateManager` elsewhere in this codebase for the same reason, so direct
+ * injection here isn't a new pattern.
  */
 class ExpensesExportImportHandler(
     private val context: Context,
     private val settingsRepo: ExpensesSettingsRepository,
     private val sessionManager: SessionManager,
     private val expensesRepo: ExpensesRepository,
-    private val attachmentDao: AttachmentDao
+    private val attachmentDao: AttachmentDao,
+    private val duplicateRuleDao: DuplicateRuleDao
 ) {
     suspend fun export(
         scope: String = VoxIpc.EXPORT_SCOPE_BOTH,
@@ -90,6 +101,8 @@ class ExpensesExportImportHandler(
                 )
             )
             json.put("merchantCategoryMemory", JSONArray(merchantCategoryMemory.map { it.toJson() }))
+            val duplicateRules = duplicateRuleDao.observeAll().first()
+            json.put("duplicateRules", JSONArray(duplicateRules.map { it.toJson() }))
 
             if (includePhotos) {
                 val names = expensesWithDetails.mapNotNull { it.expense.receiptImageName?.takeIf { n -> n.isNotBlank() } }
@@ -283,6 +296,48 @@ class ExpensesExportImportHandler(
             )
         }
 
+        // Merged by name (mirrors categories above), not replace-by-snapshot — the two rules
+        // seeded on every fresh install would otherwise duplicate on each restore cycle, and a
+        // rule only ever added on this specific device shouldn't be wiped by a backup taken
+        // elsewhere.
+        val existingRules = duplicateRuleDao.observeAll().first()
+        val ruleNameToRule = existingRules.associateBy { it.name.lowercase() }
+        val importedRules = root.optJSONArray("duplicateRules") ?: JSONArray()
+        var rulesCreated = 0
+        for (i in 0 until importedRules.length()) {
+            val r = importedRules.getJSONObject(i)
+            val name = r.optString("name").trim()
+            if (name.isEmpty()) continue
+            val fieldIdsArray = r.optJSONArray("fieldIds") ?: JSONArray()
+            val fieldIds = (0 until fieldIdsArray.length()).map { fieldIdsArray.optString(it) }
+            val existing = ruleNameToRule[name.lowercase()]
+            if (existing != null) {
+                duplicateRuleDao.update(
+                    existing.copy(
+                        fieldIds = fieldIds,
+                        combinator = r.optString("combinator", existing.combinator),
+                        enabled = r.optBoolean("enabled", existing.enabled),
+                        sortOrder = r.optInt("sortOrder", existing.sortOrder),
+                        appliesAutomatically = r.optBoolean("appliesAutomatically", existing.appliesAutomatically),
+                        fuzzyMatchEnabled = r.optBoolean("fuzzyMatchEnabled", existing.fuzzyMatchEnabled)
+                    )
+                )
+            } else {
+                duplicateRuleDao.upsert(
+                    DuplicateRuleEntity(
+                        name = name,
+                        fieldIds = fieldIds,
+                        combinator = r.optString("combinator", "AND"),
+                        enabled = r.optBoolean("enabled", true),
+                        sortOrder = r.optInt("sortOrder", 0),
+                        appliesAutomatically = r.optBoolean("appliesAutomatically", true),
+                        fuzzyMatchEnabled = r.optBoolean("fuzzyMatchEnabled", true)
+                    )
+                )
+                rulesCreated++
+            }
+        }
+
         // Replace, not merge (mirrors vox-notes' NotesExportImportHandler): importing a data
         // payload restores that snapshot rather than merging with what's already on this device.
         // Snapshot pre-existing spending limits/expenses, insert every imported one, then delete
@@ -385,7 +440,8 @@ class ExpensesExportImportHandler(
         return VoxResult(
             ok = true,
             text = "$expensesCreated expenses imported, $categoriesCreated new categories " +
-                "(${importedCategories.length() - categoriesCreated} matched existing)"
+                "(${importedCategories.length() - categoriesCreated} matched existing), " +
+                "$rulesCreated new duplicate rules (${importedRules.length() - rulesCreated} matched existing)"
         )
     }
 
@@ -412,64 +468,27 @@ class ExpensesExportImportHandler(
     }
 }
 
-private fun ExpensesSettings.toJson(): JSONObject = JSONObject().apply {
-    put("isBiometricRequired", isBiometricRequired)
-    put("sessionTimeoutMinutes", sessionTimeoutMinutes)
-    put("language", language)
-    put("defaultCurrency", defaultCurrency)
-    put("defaultVoiceCategoryId", defaultVoiceCategoryId)
-    put("voiceSaveToastEnabled", voiceSaveToastEnabled)
-    put("autoCreateVoiceCategory", autoCreateVoiceCategory)
-    put("scheduledMergeInterval", scheduledMergeInterval)
-    put("scheduledExpenseDedupInterval", scheduledExpenseDedupInterval)
-    put("homeCurrency", homeCurrency)
-    put("paymentSourcePackages", JSONArray(paymentSourcePackages.toList()))
-    put("bankingSourcePackages", JSONArray(bankingSourcePackages.toList()))
-    put("debugLoggingEnabled", debugLoggingEnabled)
-    put("vatDisplayEnabled", vatDisplayEnabled)
-    put("decimalSeparator", decimalSeparator)
-    put("calendarViewEnabled", calendarViewEnabled)
-    put("themeDarkMode", themeDarkMode)
-    put("themeColored", themeColored)
-    put("merchantCategoryMemoryEnabled", merchantCategoryMemoryEnabled)
-    put("merchantCategoryMemoryThreshold", merchantCategoryMemoryThreshold)
-    // appCacheJson intentionally excluded — internal cache, not user data.
-}
+// Gson reflection over the whole data class, not a hand-maintained field list — a manual allowlist
+// silently falls behind every time a new setting is added (this one was 20 of ~50 fields before this
+// fix, including the very duplicateCheckMode*/duplicateRuleSetGlobalCombinator settings that govern
+// [DuplicateRuleEntity] above). appCacheJson/onboardingCompleted are the two deliberate exclusions
+// (device-local cache/UI state, not portable user data — see their own doc comments); reset rather
+// than omitted so import's Gson.fromJson always has every field present. Mirrors vox-commander's
+// CommanderExportHandler, the only handler in this codebase that didn't suffer this drift.
+private fun ExpensesSettings.toJson(): JSONObject =
+    JSONObject(gson.toJson(copy(appCacheJson = null, onboardingCompleted = false)))
 
+/** Returns Room/DataStore defaults for [ExpensesSettings] if [this] isn't valid JSON for it (e.g. a
+ *  corrupt/foreign import file). [paymentSourcePackages]/[bankingSourcePackages] get an extra
+ *  null-coalesce afterward — Gson leaves a `Set` genuinely null (not the data class's `emptySet()`
+ *  default) when an old/foreign payload is missing that key entirely, the same failure mode
+ *  [com.voxapps.commander.receiver.CommanderExportHandler.parsePortableSettings] already guards
+ *  against for its own collection fields. */
 private fun JSONObject.toExpensesSettings(): ExpensesSettings {
-    val packagesArray = optJSONArray("paymentSourcePackages")
-    val packages = if (packagesArray != null) {
-        (0 until packagesArray.length()).map { packagesArray.optString(it) }.toSet()
-    } else {
-        emptySet()
-    }
-    val bankingArray = optJSONArray("bankingSourcePackages")
-    val bankingPackages = if (bankingArray != null) {
-        (0 until bankingArray.length()).map { bankingArray.optString(it) }.toSet()
-    } else {
-        emptySet()
-    }
-    return ExpensesSettings(
-        isBiometricRequired = optBoolean("isBiometricRequired", false),
-        sessionTimeoutMinutes = optInt("sessionTimeoutMinutes", ExpensesSettings.TIMEOUT_30M),
-        language = optString("language", ExpensesSettings.DEFAULT_LANGUAGE),
-        defaultCurrency = optString("defaultCurrency", ExpensesSettings.DEFAULT_CURRENCY),
-        defaultVoiceCategoryId = if (has("defaultVoiceCategoryId") && !isNull("defaultVoiceCategoryId")) optLong("defaultVoiceCategoryId") else null,
-        voiceSaveToastEnabled = optBoolean("voiceSaveToastEnabled", false),
-        autoCreateVoiceCategory = optBoolean("autoCreateVoiceCategory", false),
-        scheduledMergeInterval = optString("scheduledMergeInterval", ExpensesSettings.INTERVAL_OFF),
-        scheduledExpenseDedupInterval = optString("scheduledExpenseDedupInterval", ExpensesSettings.INTERVAL_OFF),
-        homeCurrency = optString("homeCurrency", ExpensesSettings.DEFAULT_CURRENCY),
-        paymentSourcePackages = packages,
-        bankingSourcePackages = bankingPackages,
-        debugLoggingEnabled = optBoolean("debugLoggingEnabled", false),
-        vatDisplayEnabled = optBoolean("vatDisplayEnabled", false),
-        decimalSeparator = optString("decimalSeparator", ExpensesSettings.DECIMAL_PERIOD),
-        calendarViewEnabled = optBoolean("calendarViewEnabled", false),
-        themeDarkMode = optString("themeDarkMode", ExpensesSettings.THEME_SYSTEM),
-        themeColored = optBoolean("themeColored", true),
-        merchantCategoryMemoryEnabled = optBoolean("merchantCategoryMemoryEnabled", false),
-        merchantCategoryMemoryThreshold = optInt("merchantCategoryMemoryThreshold", ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD)
+    val parsed = gson.fromJson(toString(), ExpensesSettings::class.java) ?: ExpensesSettings()
+    return parsed.copy(
+        paymentSourcePackages = parsed.paymentSourcePackages ?: emptySet(),
+        bankingSourcePackages = parsed.bankingSourcePackages ?: emptySet()
     )
 }
 
@@ -486,6 +505,16 @@ private fun SpendingLimit.toJson(): JSONObject = JSONObject().apply {
     put("amountHomeCurrency", amountHomeCurrency)
     put("period", period)
     put("createdAt", createdAt)
+}
+
+private fun DuplicateRuleEntity.toJson(): JSONObject = JSONObject().apply {
+    put("name", name)
+    put("fieldIds", JSONArray(fieldIds))
+    put("combinator", combinator)
+    put("enabled", enabled)
+    put("sortOrder", sortOrder)
+    put("appliesAutomatically", appliesAutomatically)
+    put("fuzzyMatchEnabled", fuzzyMatchEnabled)
 }
 
 private fun MerchantCategoryMemory.toJson(): JSONObject = JSONObject().apply {

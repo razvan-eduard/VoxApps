@@ -3,19 +3,26 @@ package com.voxapps.commander.receiver
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.voxapps.commander.data.preferences.AppSettings
+import com.voxapps.commander.domain.intent.model.FastMapRule
 
 /**
- * Vox Hub's export/import for Commander's own settings, extracted from the BroadcastReceiver so
- * it's unit-testable without Android. Commander has no notes/expenses-style records of its own —
- * this is settings-only, and (unlike vox-notes/vox-expenses, which keep secrets in a completely
- * separate store) [AppSettings] mixes real secrets in with ordinary preferences, so they're
- * explicitly stripped in [buildExportJson] rather than relied on to already be absent.
- * [parsePortableSettings] is the import-side mirror: parses an exported blob back into an
- * [AppSettings] (never containing secrets/paths/caches to begin with, since export never wrote
- * them), which the caller then merges into the current on-device settings via
+ * Vox Hub's export/import for Commander's own settings and FastMap rules, extracted from the
+ * BroadcastReceiver so it's unit-testable without Android. (Unlike vox-notes/vox-expenses, which
+ * keep secrets in a completely separate store) [AppSettings] mixes real secrets in with ordinary
+ * preferences, so they're explicitly stripped in [buildExportJson] rather than relied on to
+ * already be absent. [parsePortableSettings] is the import-side mirror: parses an exported blob
+ * back into an [AppSettings] (never containing secrets/paths/caches to begin with, since export
+ * never wrote them), which the caller then merges into the current on-device settings via
  * [com.voxapps.commander.data.preferences.SettingsRepository.restoreImportedSettings] — that merge,
  * not this parse, is what guarantees the excluded fields are preserved rather than reset to
  * [AppSettings]'s bare defaults.
+ *
+ * [buildFastMapRulesJson]/[parseFastMapRules] are the FastMap Rules Manager's own round-trip —
+ * [FastMapRule] is a flat data class with no secrets/paths, so it serializes via plain Gson
+ * reflection (no hand-maintained field list to drift out of sync, same reasoning as
+ * [buildExportJson] itself). Shared verbatim by both Hub's whole-device backup (via
+ * [com.voxapps.commander.receiver.VoxCommandReceiver]) and the standalone "Import/Export Rules
+ * JSON" file picker in the Rules Manager screen — one schema serves both call sites.
  */
 object CommanderExportHandler {
 
@@ -89,6 +96,17 @@ object CommanderExportHandler {
                 appAliasRules = parsed.appAliasRules ?: emptyList()
             )
         }
+    } catch (e: JsonSyntaxException) {
+        null
+    }
+
+    fun buildFastMapRulesJson(rules: List<FastMapRule>): String = gson.toJson(rules)
+
+    /** Returns `null` if [json] isn't a valid FastMapRule array (e.g. a corrupt/foreign import file) —
+     *  same fail-safe contract as [parsePortableSettings], so callers never have to distinguish
+     *  "empty file" from "unparseable file". */
+    fun parseFastMapRules(json: String): List<FastMapRule>? = try {
+        gson.fromJson(json, Array<FastMapRule>::class.java)?.toList()
     } catch (e: JsonSyntaxException) {
         null
     }

@@ -3,6 +3,8 @@ package com.voxapps.expenses.receiver
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.expenses.data.DuplicateRuleDao
+import com.voxapps.expenses.data.DuplicateRuleEntity
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.ExpenseWithDetails
@@ -17,6 +19,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
@@ -34,6 +37,7 @@ class ExpensesExportImportHandlerTest {
     private lateinit var sessionManager: SessionManager
     private lateinit var expensesRepo: ExpensesRepository
     private lateinit var attachmentDao: AttachmentDao
+    private lateinit var duplicateRuleDao: DuplicateRuleDao
     private lateinit var handler: ExpensesExportImportHandler
 
     @Before
@@ -43,7 +47,8 @@ class ExpensesExportImportHandlerTest {
         sessionManager = mockk()
         expensesRepo = mockk()
         attachmentDao = mockk(relaxed = true)
-        handler = ExpensesExportImportHandler(context, settingsRepo, sessionManager, expensesRepo, attachmentDao)
+        duplicateRuleDao = mockk(relaxed = true)
+        handler = ExpensesExportImportHandler(context, settingsRepo, sessionManager, expensesRepo, attachmentDao, duplicateRuleDao)
 
         every { settingsRepo.getSnapshot() } returns ExpensesSettings(isBiometricRequired = false)
         every { expensesRepo.categories } returns flowOf(emptyList())
@@ -53,6 +58,7 @@ class ExpensesExportImportHandlerTest {
         coEvery { expensesRepo.deleteExpenseById(any()) } just Runs
         coEvery { expensesRepo.deleteSpendingLimit(any()) } just Runs
         coEvery { expensesRepo.merchantCategoryMemorySnapshot() } returns emptyList()
+        every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
     }
 
     private fun expense(id: Long, totalAmount: Double = 10.0, createdAt: Long, receiptImageName: String? = null) = Expense(
@@ -217,5 +223,55 @@ class ExpensesExportImportHandlerTest {
         handler.import("""{"expenses":[{"totalAmount":1.0,"currencyCode":"RON","attachments":[{"fileName":"","source":"manual","createdAt":1}]}]}""")
 
         coVerify(exactly = 0) { attachmentDao.insert(any()) }
+    }
+
+    @Test
+    fun `settings export then import round-trips fields the old hand-written allowlist used to drop`() = runTest {
+        // duplicateCheckModeAutomatic/todayEffectColor2 were both missing from the old
+        // hand-maintained toJson() (only 20 of ~50 fields were exported) — this is exactly the
+        // class of field the Gson-reflection switch fixes.
+        val original = ExpensesSettings(
+            isBiometricRequired = false,
+            duplicateCheckModeAutomatic = ExpensesSettings.MODE_LOCAL_AND_AI,
+            todayEffectColor2 = 0xFF00FF00L,
+            appCacheJson = "{\"stale\":true}",
+            onboardingCompleted = true
+        )
+        every { settingsRepo.getSnapshot() } returns original
+        val restored = slot<ExpensesSettings>()
+        coEvery { settingsRepo.restoreSettings(capture(restored)) } just Runs
+
+        val exportResult = handler.export(includePhotos = false)
+        handler.import(exportResult.text)
+
+        assertEquals(original.duplicateCheckModeAutomatic, restored.captured.duplicateCheckModeAutomatic)
+        assertEquals(original.todayEffectColor2, restored.captured.todayEffectColor2)
+        // appCacheJson/onboardingCompleted are the two deliberate exclusions — neither should
+        // survive the round-trip.
+        assertNull(restored.captured.appCacheJson)
+        assertFalse(restored.captured.onboardingCompleted)
+    }
+
+    @Test
+    fun `duplicateRules merge by name instead of duplicating on repeat restores`() = runTest {
+        every { duplicateRuleDao.observeAll() } returns flowOf(
+            listOf(DuplicateRuleEntity(id = 1, name = "Same amount+title", fieldIds = listOf("amount"), combinator = "AND"))
+        )
+
+        val payload = """{"duplicateRules":[{"name":"Same amount+title","fieldIds":["amount","title"],"combinator":"OR"}]}"""
+        handler.import(payload)
+
+        coVerify(exactly = 0) { duplicateRuleDao.upsert(any()) }
+        coVerify(exactly = 1) { duplicateRuleDao.update(match { it.fieldIds == listOf("amount", "title") && it.combinator == "OR" }) }
+    }
+
+    @Test
+    fun `duplicateRules creates a new rule when no name matches`() = runTest {
+        every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
+
+        val payload = """{"duplicateRules":[{"name":"New Rule","fieldIds":["vendor"],"combinator":"AND"}]}"""
+        handler.import(payload)
+
+        coVerify(exactly = 1) { duplicateRuleDao.upsert(match { it.name == "New Rule" }) }
     }
 }
