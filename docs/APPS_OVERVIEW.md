@@ -199,9 +199,6 @@ commands in, only OCR text out.
   long document as you go), or **Batch** (keep shooting pages, OCR runs on all of them only once the
   session ends).
 
-  <img width="388" height="850" alt="Camera capture with document-bounds overlay" src="../vox-vision/fastlane/metadata/android/en-US/images/phoneScreenshots/1_vision_camera.png" />
-  <img width="388" height="850" alt="Single/Stitch/Batch capture SpeedDial" src="../vox-vision/fastlane/metadata/android/en-US/images/phoneScreenshots/2_speed_dial.png" />
-
 - Recognized text is cleaned up and titled via Commander's generic LLM hook, then forwarded to Vox
   Notes as a new note (see [Vox Vision's scan-to-note flow](TECHNICAL_DOCUMENTATION.md#vox-vision-ocr-satellite))
 - Works fully standalone (its own launcher icon) or as a **pending-request target** launched directly
