@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MergeType
@@ -135,7 +137,9 @@ fun SettingsScreen(
     ) { pad ->
         val mod = Modifier.fillMaxSize().padding(pad)
         when (page) {
-            SettingsPage.MENU -> Column(mod) {
+            // 11 rows across 6 sections genuinely don't fit every screen height — scrolls instead of
+            // clipping the last item (Logs) off the bottom, same as every other settings sub-page.
+            SettingsPage.MENU -> Column(mod.verticalScroll(rememberScrollState())) {
                 SettingsSectionHeader(languageManager.getString("settings_section_general"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("general")) },
