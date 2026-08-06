@@ -122,9 +122,10 @@ internal fun DayColumn(
             val currentTimeFraction by rememberCurrentTimeFraction()
             val dotSize = 8.dp
             val nowColor = MaterialTheme.colorScheme.error
+            val nowTop = (HOUR_HEIGHT * currentTimeFraction) - dotSize / 2
             Row(
                 modifier = Modifier
-                    .padding(top = (HOUR_HEIGHT * currentTimeFraction) - dotSize / 2)
+                    .padding(top = nowTop)
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -143,6 +144,21 @@ internal fun DayColumn(
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = nowColor,
                     modifier = Modifier.padding(start = 6.dp, end = 4.dp)
+                )
+            }
+            val now = System.currentTimeMillis()
+            val hasMoreToday = timedItems.any {
+                it.occurrenceStartMillis > now &&
+                    Instant.ofEpochMilli(it.occurrenceStartMillis).atZone(zoneId).toLocalDate() == date
+            }
+            if (!hasMoreToday) {
+                val languageManager = LocalLanguageManager.current
+                val (leading, trailing) = nothingElseTodayEmojis(LocalTime.now().hour)
+                Text(
+                    text = "$leading ${languageManager.getString("nothing_else_today")} $trailing",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = nowTop + dotSize + 4.dp, start = 6.dp)
                 )
             }
         }

@@ -5,6 +5,7 @@
   "widget_add_button": "+ Event",
   "widget_up_next": "Up Next",
   "widget_nothing_today": "Nothing for today",
+  "nothing_else_today": "Nothing else today",
   "onboarding_welcome_tagline": "Private, encrypted calendar with colored layers, ICS import/export, and voice-created events.",
   "onboarding_bullet1_title": "Voice-created via Vox Commander",
   "onboarding_bullet1_desc": "Say \"dentist in a week\" and Vox Commander creates the event, picking the right calendar layer for you.",

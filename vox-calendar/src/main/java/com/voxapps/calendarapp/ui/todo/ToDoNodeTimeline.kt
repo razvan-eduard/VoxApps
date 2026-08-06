@@ -63,12 +63,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.ToDoItem
 import com.voxapps.calendarapp.ui.LocalLanguageManager
+import com.voxapps.calendarapp.ui.nothingElseTodayEmojis
 import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.text.DateFormat
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Date
@@ -155,6 +157,17 @@ private fun computeNowSplitterIndex(items: List<ToDoItem>, now: Long = System.cu
     return if (lastPastTimedIndex != null) lastPastTimedIndex + 1 else timedIndices.first()
 }
 
+/** Whether any item from [fromIndex] onward (in display order) is still due today — used right
+ *  after the "now" splitter to decide whether to show a "Nothing else today" line. Undated items
+ *  are skipped (they never anchor a day either way); a dated item on a future day doesn't count. */
+private fun hasMoreDueToday(items: List<ToDoItem>, fromIndex: Int, today: LocalDate, zoneId: ZoneId): Boolean {
+    for (i in fromIndex until items.size) {
+        val due = items[i].dueMillis ?: continue
+        if (Instant.ofEpochMilli(due).atZone(zoneId).toLocalDate() == today) return true
+    }
+    return false
+}
+
 /** View-mode-only "ghosting" check: an item reads as behind-us — done, or dated and already overdue —
  *  and should fade back so the "next up" item stays the visual anchor. The "next" item itself is never
  *  ghosted even if it happens to be an overdue-but-undone fallback pick. */
@@ -220,6 +233,7 @@ fun ToDoNodeTimeline(
     val displayItems = if (isEditing) items else remember(items) { sortedByDateKeepingUndatedInPlace(items) }
     // View-mode only — see computeNowSplitterIndex's doc comment for the exact placement rule.
     val nowSplitterIndex = if (isEditing) null else remember(displayItems) { computeNowSplitterIndex(displayItems) }
+    val noMoreToday = nowSplitterIndex != null && !hasMoreDueToday(displayItems, nowSplitterIndex, today, zoneId)
     Column(modifier = modifier.fillMaxWidth()) {
         if (isEditing) {
             GhostAddRow(onClick = onAddAtStart, leadingOffset = UP_NEXT_LABEL_COLUMN_WIDTH)
@@ -227,7 +241,10 @@ fun ToDoNodeTimeline(
         }
         var groupDate: LocalDate? = null
         displayItems.forEachIndexed { index, item ->
-            if (nowSplitterIndex == index) NowSplitter()
+            if (nowSplitterIndex == index) {
+                NowSplitter()
+                if (noMoreToday) NothingElseTodayLabel()
+            }
             val itemDate = item.dueMillis?.let { Instant.ofEpochMilli(it).atZone(zoneId).toLocalDate() }
             val startsNewGroup = !isEditing && itemDate != null && itemDate != groupDate
             if (startsNewGroup) {
@@ -252,7 +269,10 @@ fun ToDoNodeTimeline(
                 )
             }
         }
-        if (nowSplitterIndex == displayItems.size) NowSplitter()
+        if (nowSplitterIndex == displayItems.size) {
+            NowSplitter()
+            if (noMoreToday) NothingElseTodayLabel()
+        }
         if (isEditing) {
             DottedConnector(leadingOffset = UP_NEXT_LABEL_COLUMN_WIDTH)
             GhostAddRow(onClick = onAddAtEnd, leadingOffset = UP_NEXT_LABEL_COLUMN_WIDTH)
@@ -278,6 +298,21 @@ private fun NowSplitter() {
             color = color
         )
     }
+}
+
+/** Shown right under [NowSplitter] when nothing else is due today — same indentation as a regular
+ *  timeline row (aligned past the node-slot column) so it reads as part of the timeline rather than
+ *  a stray line of text. */
+@Composable
+private fun NothingElseTodayLabel() {
+    val languageManager = LocalLanguageManager.current
+    val (leading, trailing) = remember { nothingElseTodayEmojis(LocalTime.now().hour) }
+    Text(
+        text = "$leading ${languageManager.getString("nothing_else_today")} $trailing",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = UP_NEXT_LABEL_COLUMN_WIDTH + NODE_SLOT_SIZE, top = 2.dp, bottom = 4.dp)
+    )
 }
 
 /** Reorders [items] so that every dated slot (an index whose original item has a non-null

@@ -5,6 +5,7 @@
   "widget_add_button": "+ Événement",
   "widget_up_next": "À venir",
   "widget_nothing_today": "Rien pour aujourd'hui",
+  "nothing_else_today": "Plus rien aujourd'hui",
   "onboarding_welcome_tagline": "Calendrier privé et chiffré avec des calques colorés, import/export ICS, et événements créés à la voix.",
   "onboarding_bullet1_title": "Créé à la voix via Vox Commander",
   "onboarding_bullet1_desc": "Dites « dentiste dans une semaine » et Vox Commander crée l'événement, en choisissant le bon calque de calendrier pour vous.",

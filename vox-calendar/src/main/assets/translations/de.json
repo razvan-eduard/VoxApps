@@ -5,6 +5,7 @@
   "widget_add_button": "+ Termin",
   "widget_up_next": "Demnächst",
   "widget_nothing_today": "Nichts für heute",
+  "nothing_else_today": "Nichts weiter für heute",
   "onboarding_welcome_tagline": "Privater, verschlüsselter Kalender mit farbigen Ebenen, ICS-Import/-Export und per Sprache erstellten Terminen.",
   "onboarding_bullet1_title": "Per Sprache erstellt über Vox Commander",
   "onboarding_bullet1_desc": "Sag „Zahnarzt in einer Woche“ und Vox Commander erstellt den Termin und wählt die passende Kalenderebene für dich aus.",

@@ -57,11 +57,13 @@ import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.calendarapp.domain.localization.LanguageManager
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.ui.LayerColors
+import com.voxapps.calendarapp.ui.nothingElseTodayEmojis
 import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.flow.first
 import java.text.DateFormat
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Date
@@ -464,7 +466,19 @@ private fun UpcomingEntriesList(
                         }
                         Spacer(modifier = GlanceModifier.height(2.dp))
                     }
-                    if (nowSplitIndex == items.size) NowSplitterRow()
+                    if (nowSplitIndex == items.size) {
+                        NowSplitterRow()
+                        val (leading, trailing) = nothingElseTodayEmojis(LocalTime.now().hour)
+                        Text(
+                            text = "$leading ${languageManager.getString("nothing_else_today")} $trailing",
+                            style = TextStyle(
+                                fontSize = 12.sp,
+                                color = GlanceTheme.colors.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            ),
+                            modifier = GlanceModifier.fillMaxWidth().padding(vertical = 4.dp)
+                        )
+                    }
                 }
             }
 
