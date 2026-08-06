@@ -97,6 +97,20 @@ class ExpensesRepositoryDeleteReceiptFileTest {
     }
 
     @Test
+    fun `deleteExpenseById keeps the receipt file when another row still references it`() = runTest {
+        // Reproduces an import's insert-then-delete-old-rows reconciliation: a freshly-inserted
+        // replacement row reuses the same receiptImageName as the old row about to be deleted here.
+        val kept = stageReceipt("rec_shared.jpg")
+        val expense = Expense(id = 7, totalAmount = 10.0, currencyCode = "RON", dateTime = 0, receiptImageName = "rec_shared.jpg")
+        coEvery { expenseDao.getWithDetailsById(7) } returns ExpenseWithDetails(expense = expense)
+        coEvery { expenseDao.countByReceiptImageName("rec_shared.jpg") } returns 1
+
+        repository.deleteExpenseById(7)
+
+        assertTrue(kept.exists())
+    }
+
+    @Test
     fun `applyExpenseDeduplication removes receipts for deleted duplicates only`() = runTest {
         val kept = stageReceipt("rec_keep.jpg")
         stageReceipt("rec_dup.jpg")

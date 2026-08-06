@@ -324,12 +324,16 @@ class ExpensesRepository(
 
     /** Best-effort cleanup: a file-delete failure never blocks/rolls back the DB delete — an orphan
      *  file is a far cheaper failure mode than a stuck delete. Also removes the sibling raw-OCR-text
-     *  file staged for stub-expense retry, if any. */
-    private fun deleteReceiptFiles(names: List<String>) {
+     *  file staged for stub-expense retry, if any. Checks [ExpenseDao.countByReceiptImageName] first
+     *  — mirrors [deleteAttachmentsFor]'s identical guard — since an import's insert-then-delete-old
+     *  reconciliation can re-insert a row under a new id while reusing an old row's receiptImageName;
+     *  without this check, deleting that old row here would destroy the file the new row still needs. */
+    private suspend fun deleteReceiptFiles(names: List<String>) {
         if (names.isEmpty()) return
         val receiptsDir = File(appContext.filesDir, "receipts")
         for (name in names) {
             try {
+                if (expenseDao.countByReceiptImageName(name) > 0) continue
                 File(receiptsDir, name).delete()
                 File(receiptsDir, name.substringBeforeLast('.') + ".txt").delete()
             } catch (e: Exception) {

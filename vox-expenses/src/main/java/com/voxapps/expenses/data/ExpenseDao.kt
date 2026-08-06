@@ -77,6 +77,15 @@ interface ExpenseDao {
     @Query("SELECT receiptImageName FROM expenses WHERE receiptImageName IS NOT NULL")
     suspend fun getAllReceiptImageNames(): List<String>
 
+    /** Guards [com.voxapps.expenses.data.ExpensesRepository]'s receipt-file cleanup against deleting
+     *  a file another row still needs — e.g. an import's insert-then-delete-old-rows reconciliation
+     *  re-inserting a row under a new id while reusing the original receiptImageName, ahead of the
+     *  "replace snapshot" delete of the row it was originally attached to. Mirrors
+     *  [com.voxapps.attachments.AttachmentDao.countByFileName]'s identical guard for manually-added
+     *  attachments. */
+    @Query("SELECT COUNT(*) FROM expenses WHERE receiptImageName = :fileName")
+    suspend fun countByReceiptImageName(fileName: String): Int
+
     /** Read tombstone-worthy uids before a delete-by-ids, since the rows won't exist to query afterwards. */
     @Query("SELECT uid FROM expenses WHERE id IN (:ids)")
     suspend fun getUidsByIds(ids: List<Long>): List<String>
