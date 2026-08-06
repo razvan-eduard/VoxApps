@@ -1,5 +1,6 @@
 package com.voxapps.expenses.data
 
+import com.voxapps.attachments.AttachmentDao
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -14,6 +15,7 @@ class ExpensesRepositoryApplyDeduplicationTest {
     private lateinit var categoryDao: CategoryDao
     private lateinit var lineItemDao: ExpenseLineItemDao
     private lateinit var spendingLimitDao: SpendingLimitDao
+    private lateinit var attachmentDao: AttachmentDao
     private lateinit var repository: ExpensesRepository
 
     @Before
@@ -22,9 +24,9 @@ class ExpensesRepositoryApplyDeduplicationTest {
         categoryDao = mockk(relaxed = true)
         lineItemDao = mockk(relaxed = true)
         spendingLimitDao = mockk(relaxed = true)
-        coEvery { expenseDao.getReceiptImageNames(any()) } returns emptyList()
+        attachmentDao = mockk(relaxed = true)
         repository = ExpensesRepository(
-            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true), attachmentDao, mockk(relaxed = true),
             mockk(relaxed = true)
         )
     }
@@ -33,7 +35,6 @@ class ExpensesRepositoryApplyDeduplicationTest {
     fun `deletes every duplicate id except keepId in one bulk call`() = runTest {
         repository.applyExpenseDeduplication(listOf(DuplicateGroup(keepId = 12, duplicateIds = listOf(7, 9))))
 
-        coVerify(exactly = 1) { expenseDao.getReceiptImageNames(listOf(7, 9)) }
         coVerify(exactly = 1) { expenseDao.deleteByIds(listOf(7, 9)) }
     }
 
@@ -61,7 +62,6 @@ class ExpensesRepositoryApplyDeduplicationTest {
         repository.applyExpenseDeduplication(emptyList())
 
         coVerify(exactly = 0) { expenseDao.deleteByIds(any()) }
-        coVerify(exactly = 0) { expenseDao.getReceiptImageNames(any()) }
     }
 
     @Test
@@ -101,15 +101,18 @@ class ExpensesRepositoryApplyDeduplicationTest {
     }
 
     @Test
-    fun `a receipt image adopted into the kept row is not deleted with its donor`() = runTest {
+    fun `a receipt image adopted into the kept row has its attachment record reassigned`() = runTest {
         val keeper = Expense(id = 12, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", dateTime = 1000L, receiptImageName = null)
         val duplicate = Expense(id = 7, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", dateTime = 1000L, receiptImageName = "rec_1.jpg")
         coEvery { expenseDao.getWithDetailsById(12) } returns ExpenseWithDetails(keeper)
         coEvery { expenseDao.getWithDetailsById(7) } returns ExpenseWithDetails(duplicate)
-        coEvery { expenseDao.getReceiptImageNames(listOf(7)) } returns listOf("rec_1.jpg")
 
         repository.applyExpenseDeduplication(listOf(DuplicateGroup(keepId = 12, duplicateIds = listOf(7))))
 
         coVerify(exactly = 1) { expenseDao.update(match { it.id == 12L && it.receiptImageName == "rec_1.jpg" }) }
+        // The donor row's attachment record (still owned by loser id 7 at this point) moves onto the
+        // keeper (id 12) before the loser gets deleted below — otherwise deleteAttachmentsFor(7) would
+        // delete the file the keeper's row now depends on.
+        coVerify(exactly = 1) { attachmentDao.reassignRecordId(ExpensesAttachments.RECORD_TYPE, 7, 12, "rec_1.jpg") }
     }
 }

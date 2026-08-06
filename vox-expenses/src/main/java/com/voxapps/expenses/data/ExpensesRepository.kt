@@ -2,7 +2,9 @@ package com.voxapps.expenses.data
 
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.datahygiene.DuplicateChecker
 import com.voxapps.datahygiene.RuleBasedDuplicateChecker
 import com.voxapps.datahygiene.RuleCombinator
@@ -13,7 +15,6 @@ import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 /** [ExpensesRepository.addExpense]'s return value when the insert was skipped because
@@ -230,10 +231,23 @@ class ExpensesRepository(
                 if (match != null) {
                     val enriched = enrichWithNearDuplicate(match, candidate)
                     if (enriched !== match) expenseDao.update(enriched)
-                    // The candidate's own receipt photo (if any) is now orphaned unless it got
-                    // adopted into the enriched record.
-                    if (imageName != null && enriched.receiptImageName != imageName) {
-                        deleteReceiptFiles(listOf(imageName))
+                    // The candidate itself is never persisted as its own row here — its receipt photo
+                    // (if any) either got adopted onto the existing match (track it there) or is now
+                    // orphaned with nothing else able to reference it (safe to delete outright).
+                    if (imageName != null) {
+                        if (enriched.receiptImageName == imageName) {
+                            attachmentDao.insert(
+                                AttachmentEntity(
+                                    recordType = ExpensesAttachments.RECORD_TYPE,
+                                    recordId = match.id,
+                                    fileName = imageName,
+                                    source = AttachmentSource.SCANNED,
+                                    createdAt = System.currentTimeMillis()
+                                )
+                            )
+                        } else {
+                            deleteReceiptFileRaw(imageName)
+                        }
                     }
                     return if (enriched === match) {
                         Logger.w("ExpensesRepository", "Duplicate entry — skipping insert (matches existing id=${match.id})")
@@ -250,6 +264,17 @@ class ExpensesRepository(
                 Logger.d("ExpensesRepository", "DB Insert SUCCESS - ID: $id")
                 if (items.isNotEmpty()) {
                     lineItemDao.insertAll(items.mapIndexed { index, item -> item.copy(id = 0, expenseId = id, position = index) })
+                }
+                if (imageName != null) {
+                    attachmentDao.insert(
+                        AttachmentEntity(
+                            recordType = ExpensesAttachments.RECORD_TYPE,
+                            recordId = id,
+                            fileName = imageName,
+                            source = AttachmentSource.SCANNED,
+                            createdAt = createdAt
+                        )
+                    )
                 }
             } else {
                 Logger.e("ExpensesRepository", "DB Insert returned invalid ID: $id")
@@ -282,7 +307,6 @@ class ExpensesRepository(
     suspend fun deleteExpense(expense: Expense) {
         expenseDao.delete(expense)
         expenseDao.insertTombstone(ExpenseTombstone(expense.uid, System.currentTimeMillis()))
-        deleteReceiptFiles(listOfNotNull(expense.receiptImageName))
         deleteAttachmentsFor(expense.id)
     }
 
@@ -292,7 +316,6 @@ class ExpensesRepository(
         if (expense != null) {
             expenseDao.insertTombstone(ExpenseTombstone(expense.uid, System.currentTimeMillis()))
         }
-        deleteReceiptFiles(listOfNotNull(expense?.receiptImageName))
         deleteAttachmentsFor(id)
     }
 
@@ -301,20 +324,24 @@ class ExpensesRepository(
         expenseDao.deleteAll()
         val now = System.currentTimeMillis()
         expenseDao.insertTombstones(all.map { ExpenseTombstone(it.uid, now) })
-        deleteReceiptFiles(all.mapNotNull { it.receiptImageName })
         all.forEach { deleteAttachmentsFor(it.id) }
     }
 
-    /** Best-effort cleanup of manually-added attachments (see :core:attachments) — mirrors
-     *  [deleteReceiptFiles]'s "never block/roll back the DB delete on a file-delete failure"
-     *  posture. Distinct from [deleteReceiptFiles]: the original receipt scan lives in
-     *  filesDir/receipts/ via Expense.receiptImageName, unrelated to this table/dir. */
+    /** Best-effort cleanup of every attachment on a deleted expense — both manually-added ones
+     *  (filesDir/attachments/) and the original receipt scan (filesDir/receipts/, distinguished by
+     *  [AttachmentSource.SCANNED]), now that both are rows in the same table. Checks
+     *  [AttachmentDao.countByFileName] before touching a file — an import's insert-then-delete-old
+     *  reconciliation can re-insert a row under a new id while reusing an old row's fileName, and
+     *  [applyExpenseDeduplication] reassigns a merge-adopted receipt's row onto the keeper — so this
+     *  never deletes a file another row still needs. A file-delete failure never blocks/rolls back
+     *  the DB delete — an orphan file is a far cheaper failure mode than a stuck delete. */
     private suspend fun deleteAttachmentsFor(expenseId: Long) {
         val rows = attachmentDao.deleteAllFor(ExpensesAttachments.RECORD_TYPE, expenseId)
         for (row in rows) {
             try {
                 if (attachmentDao.countByFileName(ExpensesAttachments.RECORD_TYPE, row.fileName) == 0) {
-                    AttachmentFileStore.delete(appContext, ExpensesAttachments.DIR, row.fileName)
+                    val dir = if (row.source == AttachmentSource.SCANNED) "receipts" else ExpensesAttachments.DIR
+                    AttachmentFileStore.delete(appContext, dir, row.fileName)
                 }
             } catch (e: Exception) {
                 Logger.w("ExpensesRepository", "Failed to delete attachment file for expense $expenseId", e)
@@ -322,23 +349,16 @@ class ExpensesRepository(
         }
     }
 
-    /** Best-effort cleanup: a file-delete failure never blocks/rolls back the DB delete — an orphan
-     *  file is a far cheaper failure mode than a stuck delete. Also removes the sibling raw-OCR-text
-     *  file staged for stub-expense retry, if any. Checks [ExpenseDao.countByReceiptImageName] first
-     *  — mirrors [deleteAttachmentsFor]'s identical guard — since an import's insert-then-delete-old
-     *  reconciliation can re-insert a row under a new id while reusing an old row's receiptImageName;
-     *  without this check, deleting that old row here would destroy the file the new row still needs. */
-    private suspend fun deleteReceiptFiles(names: List<String>) {
-        if (names.isEmpty()) return
-        val receiptsDir = File(appContext.filesDir, "receipts")
-        for (name in names) {
-            try {
-                if (expenseDao.countByReceiptImageName(name) > 0) continue
-                File(receiptsDir, name).delete()
-                File(receiptsDir, name.substringBeforeLast('.') + ".txt").delete()
-            } catch (e: Exception) {
-                Logger.w("ExpensesRepository", "Failed to delete receipt file(s) for $name", e)
-            }
+    /** Deletes a scanned receipt's file(s) with no reference-count guard — safe only for a
+     *  near-duplicate candidate merged away in [addExpense] without ever becoming its own persisted
+     *  row (see that branch's own comment): nothing else can reference a filename that was never
+     *  attached to any row in the first place. Every other deletion path goes through
+     *  [deleteAttachmentsFor]'s guarded, table-backed cleanup instead. */
+    private fun deleteReceiptFileRaw(name: String) {
+        try {
+            AttachmentFileStore.delete(appContext, "receipts", name)
+        } catch (e: Exception) {
+            Logger.w("ExpensesRepository", "Failed to delete receipt file(s) for $name", e)
         }
     }
 
@@ -446,26 +466,34 @@ class ExpensesRepository(
      *  [Expense.dataScore] rather than always keeping the kept row's own values untouched — approving
      *  a review group used to just discard every field the discarded rows had. */
     suspend fun applyExpenseDeduplication(groups: List<DuplicateGroup>) {
-        val adoptedImageNames = mutableSetOf<String>()
         for (g in groups) {
             val keeper = expenseDao.getWithDetailsById(g.keepId)?.expense ?: continue
             val others = g.duplicateIds.filter { it != g.keepId }.mapNotNull { expenseDao.getWithDetailsById(it)?.expense }
             val merged = others.fold(keeper) { acc, other -> enrichWithNearDuplicate(acc, other) }
             if (merged != keeper) {
                 expenseDao.update(merged)
-                merged.receiptImageName?.let { adoptedImageNames += it }
+                // A blank receiptImageName can only ever be filled in by enrichWithNearDuplicate,
+                // never overwritten (see its own doc comment) — so if it changed at all, exactly one
+                // losing row donated it. Move that row's attachment record onto the keeper too,
+                // otherwise the cleanup below (deleteAttachmentsFor per loser) would delete the file
+                // this row now solely depends on.
+                if (merged.receiptImageName != null && merged.receiptImageName != keeper.receiptImageName) {
+                    val donorId = others.firstOrNull { it.receiptImageName == merged.receiptImageName }?.id
+                    if (donorId != null) {
+                        attachmentDao.reassignRecordId(ExpensesAttachments.RECORD_TYPE, donorId, g.keepId, merged.receiptImageName!!)
+                    }
+                }
             }
         }
         val idsToDelete = groups.flatMap { g -> g.duplicateIds.filter { it != g.keepId } }.distinct()
         if (idsToDelete.isEmpty()) return
-        // Excludes any receipt image a merge above just adopted into a surviving row — otherwise this
-        // would delete the file out from under the row that now references it.
-        val imageNames = expenseDao.getReceiptImageNames(idsToDelete).filterNot { it in adoptedImageNames }
         val uids = expenseDao.getUidsByIds(idsToDelete)
         expenseDao.deleteByIds(idsToDelete)
         val now = System.currentTimeMillis()
         expenseDao.insertTombstones(uids.map { ExpenseTombstone(it, now) })
-        deleteReceiptFiles(imageNames)
+        // Cleans up every remaining attachment (receipt + manual) on each deleted loser — the
+        // reassignment above already moved anything still needed onto the keeper first.
+        idsToDelete.forEach { deleteAttachmentsFor(it) }
     }
 
     /** Retroactive scan for [ExpensesSettings.MODE_LOCAL]'s manual "Check for duplicates

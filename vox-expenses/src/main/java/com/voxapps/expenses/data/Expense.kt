@@ -13,7 +13,14 @@ enum class TransactionDirection { OUTGOING, INCOMING }
 
 /**
  * A single expense. [totalAmount] is the only mandatory field.
- * [receiptImageName] stores the filename of the receipt photo in internal storage.
+ * [receiptImageName] stores the filename of the receipt photo in internal storage (filesDir/
+ * receipts/) — kept here as a denormalized pointer for cheap reads (thumbnails, edit screen,
+ * export/import, P2P sync), but the file's actual lifetime is owned by a corresponding
+ * [com.voxapps.attachments.AttachmentEntity] row (recordType = [ExpensesAttachments.RECORD_TYPE],
+ * source = [com.voxapps.attachments.AttachmentSource.SCANNED]) inserted alongside this field
+ * everywhere it's set — deletion goes through that row's reference-counted cleanup
+ * ([ExpensesRepository.deleteAttachmentsFor]), the same guarded path every other attachment uses,
+ * rather than a bespoke column-based check.
  * [isStub] marks a record created because the LLM failed to parse a scanned receipt — the photo
  * (and its sibling raw-OCR-text file) were kept so the user can retry or edit manually, rather than
  * losing the scan. Not detected via [title]/[totalAmount] matching, since [title] is a localized

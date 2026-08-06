@@ -23,6 +23,14 @@ interface AttachmentDao {
     @Query("SELECT COUNT(*) FROM attachments WHERE recordType = :recordType AND fileName = :fileName")
     suspend fun countByFileName(recordType: String, fileName: String): Int
 
+    /** Moves one attachment to a different owning record — the other half of the scenario
+     *  [countByFileName]'s doc comment anticipates: a duplicate-merge adopting a losing record's
+     *  file onto the surviving one, so the row (and therefore [countByFileName]'s guard) follows
+     *  the record that now actually owns the file, instead of being deleted out from under it when
+     *  the losing record's own attachments are cleaned up. */
+    @Query("UPDATE attachments SET recordId = :newRecordId WHERE recordType = :recordType AND recordId = :oldRecordId AND fileName = :fileName")
+    suspend fun reassignRecordId(recordType: String, oldRecordId: Long, newRecordId: Long, fileName: String)
+
     @Insert
     suspend fun insert(entity: AttachmentEntity): Long
 
