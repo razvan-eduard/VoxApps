@@ -31,11 +31,11 @@ jobs:
           # :vendor:docquad-sdk (the modules that touch them).
           submodules: false
           # Shallow on purpose: full history (fetch-depth: 0) was pulling ~1.6GB of main-repo
-          # history per run that the build never needs. Depth 2 (not 1) keeps HEAD~1 available
-          # for the "Detect versionCode bump" diff below; the changelog step further down
-          # deepens on demand only when a release is actually being cut (see "Deepen checkout
-          # for changelog").
-          fetch-depth: 2
+          # history per run that the build never needs. The version-bump check below no longer
+          # needs any git history either (it checks GitHub Releases directly, not HEAD~1), so
+          # this can be the true minimum (1) — the changelog step further down deepens on demand
+          # only when a release is actually being cut (see "Deepen checkout for changelog").
+          fetch-depth: 1
 
       - name: Checkout whisper.cpp and openwakeword submodules
         run: |
@@ -88,22 +88,35 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Detect versionCode bump (skip build if unchanged)
+      - name: Determine version tag
+        id: version
+        uses: ./.github/actions/compute-release-tag
+        with:
+          app-prefix: commander
+
+      - name: Detect versionCode bump (skip build if this version was already released)
         id: check_bump
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PREV_CODE=$(git show HEAD~1:vox-commander/build.gradle.kts 2>/dev/null | grep 'versionCode' | grep -oE '[0-9]+' || echo "0")
-          CURR_CODE=$(grep 'versionCode' vox-commander/build.gradle.kts | grep -oE '[0-9]+')
-          echo "prev=$PREV_CODE curr=$CURR_CODE"
-          if [ "$PREV_CODE" = "$CURR_CODE" ]; then
-            echo "changed=false" >> $GITHUB_OUTPUT
+          # Checks whether a GitHub Release already exists for this exact version, instead of
+          # diffing versionCode against git's HEAD~1 — the old approach silently broke whenever
+          # a push landed more than one commit at once (HEAD~1 then lands *inside* the same
+          # push, already showing the bumped value, so prev==curr and the build gets skipped
+          # even though this version has never been released).
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "$TAG already released — skipping build"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "$TAG not yet released — building"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Skip build (versionCode not bumped)
+      - name: Skip build (version already released)
         if: steps.check_bump.outputs.changed == 'false'
-        run: echo "versionCode unchanged — skipping build"
+        run: echo "${{ steps.version.outputs.tag }} already released — skipping build"
 
       - name: Run unit tests
         if: steps.check_bump.outputs.changed != 'false'
@@ -120,13 +133,6 @@ jobs:
           ./gradlew :vox-commander:bundleRelease --no-daemon
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Determine version tag
-        if: steps.check_bump.outputs.changed != 'false'
-        id: version
-        uses: ./.github/actions/compute-release-tag
-        with:
-          app-prefix: commander
 
       - name: Strip DLC libs and sign APK
         if: steps.check_bump.outputs.changed != 'false'
