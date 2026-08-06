@@ -119,7 +119,11 @@ class ExpensesExportImportHandler(
 
     /** Zips manually-added attachment files (see :core:attachments) into a fresh file under
      *  cacheDir and grants Hub read access — same shape as [buildReceiptsZip], kept separate since
-     *  it covers a different directory (filesDir/attachments/, not filesDir/receipts/). */
+     *  it covers a different directory (filesDir/attachments/, not filesDir/receipts/). Also bundles
+     *  each attachment's sibling raw-OCR-text file, if present (see
+     *  [OcrResultReceiver.writeOcrTextSibling]) — those exist for the same
+     *  retry-without-rescanning reason [buildReceiptsZip] already bundles its own, and were
+     *  previously dropped silently here, unlike there. */
     private fun buildAttachmentsZip(fileNames: List<String>): Uri? {
         if (fileNames.isEmpty()) return null
         val attachmentsDir = File(context.filesDir, ExpensesAttachments.DIR)
@@ -135,6 +139,12 @@ class ExpensesExportImportHandler(
                         file.inputStream().use { it.copyTo(zos) }
                         zos.closeEntry()
                         wroteAny = true
+                    }
+                    val txt = File(attachmentsDir, name.substringBeforeLast('.') + ".txt")
+                    if (txt.exists()) {
+                        zos.putNextEntry(ZipEntry(txt.name))
+                        txt.inputStream().use { it.copyTo(zos) }
+                        zos.closeEntry()
                     }
                 }
             }
