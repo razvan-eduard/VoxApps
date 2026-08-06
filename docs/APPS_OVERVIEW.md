@@ -26,8 +26,10 @@ ecosystem plugs into, though it works completely on its own with no companion ap
      yourself. If one fires, nothing else runs.
   2. **L2 — Primary AI**, in-app labeled "AI Intent Translator (L2 Fallback)... Translates complex
      phrases into commands when Local Rules (L1) fail" (Settings → AI & Models → Intent Engines) — your
-     choice of a cloud LLM (OpenAI), Gemini Nano running natively on-device, Gemini Cloud, or any
-     downloaded on-device LLM engine.
+     choice of a cloud LLM (OpenAI), Gemini Nano running natively on-device, Gemini Cloud, or an
+     on-device LLM running via **LiteRT-LM** (migrated from MediaPipe GenAI for broader model
+     compatibility and better performance), with expanded system toggles and smarter FastMap rule
+     matching alongside it.
   3. **L3 — Offline Fallback**, a *separately*-configured backup engine+model used only if L2 fails or
      is unreachable (skipped automatically if it'd be identical to L2).
 
@@ -100,6 +102,18 @@ ecosystem plugs into, though it works completely on its own with no companion ap
 - **Vox Apps ecosystem** — companion apps (Notes, Vision, Expenses, Calendar, Hub) are discovered
   automatically once installed and controllable by voice with no extra setup; Settings → Integrations has
   a live panel listing discovered apps with a per-app contract-verification test.
+- **Location** (Settings → Integrations, shared `:core:location` module also used by Vox Expenses) — a
+  cached last-known location with a configurable expiry (None/1 day/1 week/1 month/Forever), a **Home
+  town** fallback used whenever GPS is unavailable and nothing's cached, and an **"Always use this
+  location"** toggle that skips GPS entirely and clears any cache, for a fixed search/weather location
+  regardless of where the device actually is.
+
+  <img width="388" height="850" alt="Location settings — Home town, cache duration, Always use this location" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/26_location_hometown_cache.png" />
+
+- **Backup & Restore** (Settings → Backup tab) — back up FastMap rules and portable settings to a
+  file you pick, or restore from one, using the same zip format Vox Hub's own export/import produces;
+  restoring offers a choice of **Full override**, **Merge**, or **Additive** reconciliation (see
+  [Vox Hub](#vox-hub) below for the full explanation, shared by every app in the family).
 - Multi-language UI (English, Romanian, German, French).
 
 ## Vox Notes
@@ -140,7 +154,13 @@ through Commander (`create`/`read`) or used entirely on its own.
   unusable "Unclear Document" scan becomes a raw note holding just the photo instead of being lost),
   or always. Adding an attachment now offers **"Choose from gallery"** alongside the camera, plus the
   same **Single / Stitch / Batch** capture-mode chooser Vox Vision uses (see
-  [Vox Vision](#vox-vision) below).
+  [Vox Vision](#vox-vision) below). A note with at least one attachment shows a small paperclip icon
+  right after its title, in both the in-app list and the home-screen widget (shared across Notes,
+  Expenses, and Calendar — see [Vox Expenses](#vox-expenses)'s screenshot below).
+- **Backup & Restore** (Settings → Data → Backup & Restore) — back up notes/categories/settings to a
+  file you pick, or restore from one, using the same zip format Vox Hub's own export/import produces;
+  restoring offers **Full override**, **Merge**, or **Additive** reconciliation (see
+  [Vox Hub](#vox-hub) below).
 - **"Today" particle-effect theming** and **custom notification controls** (Settings, shared
   `:core:design` components also used by Vox Expenses/Vox Calendar) — see
   [Vox Calendar](#vox-calendar) below for what each does and a screenshot.
@@ -209,6 +229,14 @@ bank/payment notifications, or entered by hand.
   currency/vendor/category plus an `isPayment` triage flag, since notification text isn't guaranteed to
   even be a transaction) — all three route through Commander's generic LLM hook, just with different
   `task` IDs and prompts suited to how much structure each source actually has
+- **Rescan suggestions** — re-running OCR/AI cleanup on an already-saved expense (e.g. after attaching
+  a clearer photo) no longer overwrites fields silently: each field the rescan corrected shows up as its
+  own dismissible suggestion chip next to the current value, so you approve or reject them individually
+  instead of trusting the whole rewrite at once. An **auto-rescan on first attachment** setting
+  (Settings, off by default) triggers this automatically the moment a stub expense gets its first photo.
+
+  <img width="388" height="850" alt="Rescan suggestions, applied field by field" src="../vox-expenses/fastlane/metadata/android/en-US/images/phoneScreenshots/22_rescan_field_suggestions.png" />
+
 - **Notification capture** — an opt-in `NotificationListenerService` inspects notifications only from
   apps the user explicitly allowlists (Settings → Notification capture); a matched notification is a
   **pending suggestion** the user must approve or dismiss unless "Auto-accept" is enabled, in which case
@@ -314,7 +342,23 @@ bank/payment notifications, or entered by hand.
   original receipt scan (e.g. a warranty card, a second page); tap a thumbnail for a full-screen
   zoomable view, with an inline add/remove — same shared component as Vox Notes/Vox Calendar. Adding one
   now offers **"Choose from gallery"** alongside the camera, plus the same **Single / Stitch / Batch**
-  capture-mode chooser Vox Vision uses (see [Vox Vision](#vox-vision) above).
+  capture-mode chooser Vox Vision uses (see [Vox Vision](#vox-vision) above); removing one now asks for
+  confirmation first instead of deleting on the first tap. An expense with at least one attachment (the
+  original scan or a manually-added one) shows a small paperclip icon right after its title, in both the
+  in-app list and the home-screen widget.
+
+  <img width="388" height="850" alt="Paperclip indicator in the expense list" src="../vox-expenses/fastlane/metadata/android/en-US/images/phoneScreenshots/21_attachment_paperclip.png" />
+
+- **Location** (Settings → General, shared `:core:location` module also used by Vox Commander) — the
+  same cached-location/Home-town/"Always use this location" system described under
+  [Vox Commander](#vox-commander) above, used here to prefill an expense's location field.
+- **Backup & Restore** (Settings → Data → Backup & Restore) — back up expenses/categories/duplicate
+  rules/settings to a file you pick, or restore from one, using the same zip format Vox Hub's own
+  export/import produces; restoring offers **Full override**, **Merge**, or **Additive** reconciliation
+  (see [Vox Hub](#vox-hub) below).
+
+  <img width="388" height="850" alt="Backup & Restore, with the three restore modes" src="../vox-expenses/fastlane/metadata/android/en-US/images/phoneScreenshots/20_backup_restore.png" />
+
 - **Home-screen widget** (Jetpack Glance) — recent expenses grouped by day, category-colored rows,
   tap an expense to edit it in place, plus Add/Scan actions
 - **Battery-optimization exemption prompt** — Settings → Notification Capture and first-launch
@@ -343,8 +387,12 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
   `:core:calendar` engine, Week/Day are a new local hour-of-day grid, Year is 12 compact mini-months. Day
   view draws a red **"now" line** at the current time-of-day position and auto-scrolls to land near it
   on first open — the same "now" concept the ToDo timeline and home-screen widget also show (see below).
+  Once nothing's left for today, a **"Nothing else today"** label shows up right after the now-line (Day
+  view, the ToDo timeline, and the home-screen widget alike), bracketed by a time-of-day emoji pair
+  (☕/☀️ morning-day, 🍵/🌅 golden hour, 🌙/✨ night) that stays in sync across all three.
 
   <img width="388" height="850" alt="Day view with the now-line" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/14_day_view_now_line.png" />
+  <img width="388" height="850" alt="Nothing else today, after the now-line" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/19_nothing_else_today.png" />
 
 - **Colored, named layers** (e.g. Personal / Work / Moon Calendar) instead of a hierarchical
   category tree — flat layers plus optional flat tags, each layer independently toggleable and
@@ -401,9 +449,16 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
   Batch** capture-mode chooser Vox Vision uses (Stitch live-joins several overlapping shots of one
   document, Batch defers OCR on a batch of photos until the session ends) — the "add" tile opens a
   chooser dialog rather than jumping straight to the camera. Shared component, same on Vox Notes/Vox
-  Expenses.
+  Expenses. An entry with at least one attachment shows a small paperclip icon right after its title, in
+  the calendar grid, the ToDo list, and the home-screen widget alike (see
+  [Vox Expenses](#vox-expenses)'s screenshot for what this looks like).
 
   <img width="388" height="850" alt="Attachments: gallery pick and capture-mode chooser" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/18_attachments_camera_gallery.png" />
+
+- **Backup & Restore** (Settings → Data → Backup & Restore) — back up events/layers/ToDo
+  lists/settings to a file you pick, or restore from one, using the same zip format Vox Hub's own
+  export/import produces; restoring offers **Full override**, **Merge**, or **Additive** reconciliation
+  (see [Vox Hub](#vox-hub) below).
 
 - **"Today" particle-effect theming** (Settings → Theme, `:core:design`'s `TodayEffects`, shared with
   Vox Notes/Vox Expenses) — an animated Canvas particle highlight on the current day, with five presets
@@ -447,14 +502,29 @@ other satellite implements as a server.
   into one dated zip via `ActivityResultContracts.CreateDocument`. This exact configuration is also
   what **scheduled backups** use (see below) — there's no separate data-selection step for those
 - **Import** — reads a previously exported file, previews a per-app record-count summary before
-  anything is written, and lets the user deselect individual apps; each target app applies its own
-  snapshot-then-replace semantics (existing records for that domain are fully replaced by the import,
-  not merged) and re-attaches any bundled photos to the newly-restored records
+  anything is written, and lets the user deselect individual apps; each target app reconciles its own
+  records against the import per one global **Import mode** (see below) and re-attaches any bundled
+  photos to the newly-restored records
+- **Import mode** (Settings → Backup schedule) — one global choice of how every app reconciles an
+  imported file against what's already on it: **Full override** (delete everything that app already had,
+  then insert the import), **Merge** (only delete pre-existing rows older than the backup, so anything
+  created since is kept), or **Additive** (never delete, only insert — the import just adds to what's
+  already there). Still respects each app's own Data toggle above — an app with Data off is skipped for
+  import entirely, regardless of this setting. Every satellite app's own local Backup & Restore screen
+  (see e.g. [Vox Expenses](#vox-expenses) above) has this exact same 3-way choice for its own restore
+  button, independent of Hub's global setting.
+
+  <img width="388" height="850" alt="Hub's backup schedule with the global Import mode control" src="../vox-hub/fastlane/metadata/android/en-US/images/phoneScreenshots/7_backup_schedule_import_mode.png" />
+
 - **Scheduled backups** — off/daily/weekly/monthly interval (`WorkManager`), configurable retention
   (none/2/5/10/unlimited, with a storage-growth warning at unlimited), a dismissible failure banner
   when a scheduled run doesn't complete, and a past-backups list (capped to 5 visible rows, scrollable)
   with per-backup **Share** and **Restore** actions. Frequency/retention controls are disabled until at
   least one app has something selected in the Export card above — there's nothing to schedule otherwise
+- **Backup & Restore, everywhere** — Notes, Expenses, Calendar, and Commander each have their own local
+  Backup & Restore screen too (see each app's own section above) — save to or restore from a file you
+  pick directly in that app, using the exact same zip format Hub's export/import produces, so a file
+  saved from one path is importable via the other. Hub itself also has one, for its own settings.
 - **Peer-to-peer device sync** — a second, genuinely *bidirectional* path alongside export/import's
   one-directional restore: pair two phones over NFC (tap to exchange identity + a session key — no
   Bluetooth PIN dialog), then sync Notes/Calendar/Expenses over Bluetooth Classic, both phones ending up
@@ -463,11 +533,14 @@ other satellite implements as a server.
   minutes (configurable). Per-peer category/layer checklist controls what's included. See
   [`TECHNICAL_DOCUMENTATION.md`'s Peer-to-peer device sync section](TECHNICAL_DOCUMENTATION.md#peer-to-peer-device-sync-op_sync_export--op_sync_merge)
   for the full architecture.
-- **VoxConnect** — a QR-paired bridge to a PC companion (`core/voxconnect`): scan a QR code the desktop
-  app shows to exchange identity, then a foreground bridge service keeps the phone reachable for the PC
-  side; schema-driven field discovery lets the PC app introspect what a paired phone can do without a
+- **VoxConnect** — a QR-paired bridge to a PC companion (`core/voxconnect`): the *phone's* camera scans
+  a QR code the desktop app displays (not the other way around, since most desktops have no camera) to
+  exchange identity, then a foreground bridge service keeps the phone reachable for the PC side;
+  schema-driven field discovery lets the PC app introspect what a paired phone can do without a
   hardcoded contract per feature, and a paired device can be renamed for easy identification when
   managing more than one.
+
+  <img width="388" height="850" alt="Phone scanning the desktop app's pairing QR code" src="../vox-hub/fastlane/metadata/android/en-US/images/phoneScreenshots/6_voxconnect_qr_pairing.png" />
 - Settings is grouped into labeled section banners (General/Appearance/Integrations/Advanced), same
   shared pattern as every app in the family.
 

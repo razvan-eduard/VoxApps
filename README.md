@@ -142,9 +142,11 @@ app, with implementation-level detail.
 ### 🎙️ Vox Commander
 
 On-device voice assistant. Wake word (Vosk/Porcupine/OpenWakeWord) and on-device Whisper STT feed a
-3-layer AI pipeline — instant FastMap voice-shortcut rules you define yourself, a primary AI (cloud or
-on-device LLM), then an automatic offline fallback; app control, media/search/navigation/messaging, and
-system toggles (volume, WiFi, flashlight, DND, and more) all route through the same pipeline.
+3-layer AI pipeline — instant FastMap voice-shortcut rules you define yourself, a primary AI (cloud,
+Gemini Nano, or an on-device LiteRT-LM model), then an automatic offline fallback; app control,
+media/search/navigation/messaging, and system toggles (volume, WiFi, flashlight, DND, and more) all
+route through the same pipeline. A shared location system (cached last-known location, a Home Town
+fallback, "always use this location") and its own Backup & Restore screen round it out.
 
 <img width="388" height="850" alt="Vox Commander home screen" src="vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/20_commander_home.png" />
 
@@ -159,8 +161,9 @@ https://github.com/user-attachments/assets/ff61a5de-d59c-4bdf-aacc-55bb1034cc07
 Encrypted on-device notes app. Create notes by voice through Commander or by hand; AI-assisted category
 cleanup and duplicate-note review (nothing auto-deleted without confirmation); a shared category color
 picker (scrollable presets + a full custom-color screen) with inline "+ New category…" creation right
-from the note editor; an optional calendar view instead of the plain list; a home-screen widget; syncs
-with another phone via Vox Hub.
+from the note editor; an optional split grid-and-list calendar view instead of the plain list; photo
+attachments via camera or gallery with a paperclip indicator; a home-screen widget; syncs with another
+phone via Vox Hub, plus its own Backup & Restore screen.
 
 <img width="388" height="850" alt="voice-to-note" src="https://github.com/user-attachments/assets/9435dfd2-a394-41ea-9539-acc83353a47d" />
 
@@ -179,11 +182,13 @@ record.
 
 Encrypted on-device expense tracker. Three ways in — voice, receipt-scan OCR, or automatic capture from
 bank/payment notifications (now durably queued and retried, not fire-and-forget) — plus manual entry;
-transaction direction (Total vs. Received in Reports), a user-configurable duplicate-rule engine
-(email-filter-style: any field, AND/OR, multiple rules, Off/Local/Local+AI/AI protection modes), merchant
-category memory (auto-applies a category after you correct the same vendor a few times), per-category
-spending limits with alerts, multi-currency reports, an optional calendar view, a home-screen widget,
-and sync with another phone via Vox Hub.
+rescanning a receipt shows each corrected field as its own suggestion instead of silently overwriting
+anything; transaction direction (Total vs. Received in Reports), a user-configurable duplicate-rule
+engine (email-filter-style: any field, AND/OR, multiple rules, Off/Local/Local+AI/AI protection modes),
+merchant category memory (auto-applies a category after you correct the same vendor a few times), a
+shared location system with Commander, per-category spending limits with alerts, multi-currency reports,
+photo attachments via camera or gallery with a paperclip indicator, an optional calendar view, a
+home-screen widget, sync with another phone via Vox Hub, and its own Backup & Restore screen.
 
 <img width="388" height="850" alt="invoice-to-expense" src="https://github.com/user-attachments/assets/244ed0fd-f71c-48cf-8f03-82d3726bf4df" />
 <img width="388" height="850" alt="voice-lidl-to-expense" src="https://github.com/user-attachments/assets/752bd7c7-79e3-4390-b1ef-d5c25daa2ca4" />
@@ -194,9 +199,11 @@ and sync with another phone via Vox Hub.
 ### 📅 Vox Calendar
 
 Encrypted on-device calendar. Colored, named layers instead of a rigid category tree; natural-language
-event/task creation through Commander ("dentist in a week"); ICS import/export for interop with Google
-Calendar/Thunderbird/Apple Calendar; a day view that also shows that day's Notes and Expenses; syncs
-with another phone via Vox Hub.
+event/task creation through Commander ("dentist in a week"); a reworked to-do list with due-date bleed
+onto the calendar/widget, star markers, and a "now"/"Up next" timeline; ICS import/export for interop
+with Google Calendar/Thunderbird/Apple Calendar; a day view that opens at the current time, also shows
+that day's Notes and Expenses, and tells you when there's "Nothing else today"; photo attachments with
+a paperclip indicator; syncs with another phone via Vox Hub, plus its own Backup & Restore screen.
 
 <img width="388" height="850" alt="dentist-to-calendar" src="https://github.com/user-attachments/assets/d911d7cc-c46e-4de6-a78f-96c7bcdccad2" />
 
@@ -206,9 +213,11 @@ with another phone via Vox Hub.
 ### 🗂️ Vox Hub
 
 Backup, restore, and peer-to-peer sync. Zero-config export/import (discovers every installed Vox app
-automatically), scheduled backups with retention and a failure banner, NFC-paired,
-Bluetooth-transferred bidirectional sync between two phones for Notes/Calendar/Expenses, and
-VoxConnect — a QR-paired bridge to a PC companion app — no cloud involved.
+automatically), scheduled backups with retention and a failure banner, a global Import mode (Full
+override / Merge / Additive) applied across every app, NFC-paired, Bluetooth-transferred bidirectional
+sync between two phones for Notes/Calendar/Expenses, and VoxConnect — your phone scans a QR code shown
+on the desktop companion app to pair, since most desktops have no camera — no cloud involved. Every
+companion app now also has its own local Backup & Restore screen, interchangeable with Hub's own files.
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-hub)
 

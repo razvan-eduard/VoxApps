@@ -4,7 +4,8 @@ Key Features:
 - SQLCipher Encryption: Your notes are encrypted at rest using industry-standard SQLCipher and protected by biometric authentication.
 - Smart Organization: Categories with a coverflow-style picker. The built-in AI cleanup hook helps you merge similar categories (e.g., "Shopping" and "Groceries") and find duplicate notes.
 - Scan-to-Note: Seamless integration with VoxVision allows you to scan physical documents, which are then titled and categorized by AI.
-- Calendar View: An optional month-paged agenda view provides a chronological perspective of your thoughts and records.
-- Rich Attachments: Support for multi-photo attachments with a zoomable thumbnail strip.
+- Calendar View: An optional split grid-and-list calendar view provides a chronological perspective of your thoughts and records.
+- Rich Attachments: Support for multi-photo attachments with a zoomable thumbnail strip, added via camera or gallery, with a paperclip indicator on any note that has one.
 - Cloud-Free Sync: Genuinely bidirectional peer-to-peer sync with another phone over NFC and Bluetooth. No cloud, no tracking, just your data on your devices.
+- Backup & Restore: Save and restore your notes and settings to a file you choose, with Full override, Merge, or Additive restore modes.
 - Multi-language UI: Available in English, Romanian, German, and French.
