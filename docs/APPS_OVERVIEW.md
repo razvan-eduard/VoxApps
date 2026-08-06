@@ -20,20 +20,18 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   (on-device neural voices) alongside standard Android TextToSpeech — both configurable in Settings →
   Service, which also has speech rate/pitch sliders and an audio-focus choice for what happens to other
   media while Commander talks (ignore it, lower its volume, or pause it).
-- **The "Triple AI Brain"** — every spoken command cascades through three independently-configured
-  layers, in this order:
-  1. **L1 — FastMap rules** (see below): instant, free, entirely offline pattern matches you define
-     yourself. If one fires, nothing else runs.
-  2. **L2 — Primary AI**, in-app labeled "AI Intent Translator (L2 Fallback)... Translates complex
-     phrases into commands when Local Rules (L1) fail" (Settings → AI & Models → Intent Engines) — your
-     choice of a cloud LLM (OpenAI), Gemini Nano running natively on-device, Gemini Cloud, or an
-     on-device LLM running via **LiteRT-LM** (migrated from MediaPipe GenAI for broader model
-     compatibility and better performance), with expanded system toggles and smarter FastMap rule
-     matching alongside it.
-  3. **L3 — Offline Fallback**, a *separately*-configured backup engine+model used only if L2 fails or
-     is unreachable (skipped automatically if it'd be identical to L2).
+- **Command pipeline** — every spoken command is processed in this order:
+  1. **FastMap rules** (see below) — instant, free, entirely offline pattern matches you define
+     yourself. Plain keyword/regex matching, not AI. If one fires, nothing else runs.
+  2. **AI Intent Translator** (Settings → AI & Models → Intent Engines) — the actual AI step, reached
+     only when no FastMap rule fires: your choice of a cloud LLM (OpenAI), Gemini Nano running
+     natively on-device, Gemini Cloud, or an on-device LLM running via **LiteRT-LM** (migrated from
+     MediaPipe GenAI for broader model compatibility and better performance).
+  3. **Offline fallback** — a *separately*-configured backup engine+model used only if the AI step
+     above fails or is unreachable (skipped automatically if it'd be identical to it).
 
-  <img width="388" height="850" alt="Vox Commander home screen" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/20_commander_home.png" />
+  <img width="388" height="850" alt="Asking Vox Commander for the weather and getting a spoken answer back" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/27_commander_query_response.png" />
+  <img width="388" height="850" alt="Vox Commander reading the weather answer back out loud" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/28_commander_voice_playback.png" />
 
 - **FastMap Rules Manager** (Rules Manager screen) — build instant, deterministic voice shortcuts that
   skip the AI entirely. Speak or type a sample phrase, then tap individual words to mark them as

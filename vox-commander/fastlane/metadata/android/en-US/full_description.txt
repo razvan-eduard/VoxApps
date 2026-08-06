@@ -3,7 +3,7 @@ VoxCommander is a privacy-first, on-device voice assistant for Android. It serve
 Key Features:
 - Wake Word Detection: Always-on listening using Vosk, Picovoice Porcupine, or the fully open-source OpenWakeWord (ONNX-based).
 - On-Device Whisper STT: High-accuracy speech-to-text powered by Whisper.cpp, running locally with multilingual support.
-- Triple AI Brain: A sophisticated NLU pipeline that uses L1 FastMap (regex rules), L2 Primary AI (Gemini Nano, a local LiteRT-LM model, or a Local LLM), and L3 Offline fallback for zero-latency command processing.
+- Smart Command Pipeline: Instant, offline FastMap rule matching (plain pattern matching, not AI) handles common phrases with zero latency; anything more complex goes to your choice of AI engine (Gemini Nano, a local LiteRT-LM model, or a cloud LLM), with a separate offline fallback model if that's ever unavailable.
 - Intelligent Intent Routing: Automatically maps spoken commands to system controls, media playback (Spotify/YouTube), navigation (Waze/Google Maps), or companion Vox apps.
 - Satellite App Hub: Discovers and controls independent "satellite" apps like VoxNotes or VoxExpenses via a secure IPC contract.
 - Smarter Location: A shared location system with a configurable last-known-location cache, a Home Town fallback, and an "always use this location" toggle for skipping GPS entirely.
