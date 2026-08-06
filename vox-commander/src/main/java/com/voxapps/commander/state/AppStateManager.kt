@@ -95,7 +95,7 @@ class AppStateManager private constructor(
         canDrawOverlays = com.voxapps.commander.utils.PermissionUtils.canDrawOverlays(context),
         hasMicrophonePermission = com.voxapps.commander.utils.PermissionUtils.hasMicrophonePermission(context),
         hasNotificationPermission = com.voxapps.commander.utils.PermissionUtils.hasNotificationPermission(context),
-        hasLocationPermission = com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(context),
+        hasLocationPermission = com.voxapps.commander.utils.PermissionUtils.hasLocationPermission(context),
         isIgnoringBatteryOptimizations = com.voxapps.commander.utils.PermissionUtils.isIgnoringBatteryOptimizations(context)
     ))
 
@@ -178,7 +178,7 @@ class AppStateManager private constructor(
                 canDrawOverlays = com.voxapps.commander.utils.PermissionUtils.canDrawOverlays(context),
                 hasMicrophonePermission = com.voxapps.commander.utils.PermissionUtils.hasMicrophonePermission(context),
                 hasNotificationPermission = com.voxapps.commander.utils.PermissionUtils.hasNotificationPermission(context),
-                hasLocationPermission = com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(context),
+                hasLocationPermission = com.voxapps.commander.utils.PermissionUtils.hasLocationPermission(context),
                 isIgnoringBatteryOptimizations = com.voxapps.commander.utils.PermissionUtils.isIgnoringBatteryOptimizations(context)
             )
         }

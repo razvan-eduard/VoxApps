@@ -130,6 +130,7 @@ android {
 dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:apppicker"))
+    implementation(project(":core:location"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
     implementation(platform(libs.androidx.compose.bom))

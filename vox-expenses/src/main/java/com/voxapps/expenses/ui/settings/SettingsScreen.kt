@@ -191,7 +191,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
                 )
             }
-            SettingsPage.GENERAL -> GeneralSettingsTab(settings = settings, stateManager = stateManager, modifier = mod)
+            SettingsPage.GENERAL -> GeneralSettingsTab(settings = settings, stateManager = stateManager, settingsRepo = settingsRepo, modifier = mod)
             SettingsPage.THEME -> ThemeSettingsScreen(
                 darkMode = runCatching { VoxDarkMode.valueOf(settings.themeDarkMode) }.getOrDefault(VoxDarkMode.SYSTEM),
                 colored = settings.themeColored,

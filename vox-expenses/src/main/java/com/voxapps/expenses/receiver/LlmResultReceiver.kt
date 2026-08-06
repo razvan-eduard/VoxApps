@@ -25,7 +25,7 @@ import com.voxapps.expenses.domain.llm.ExpenseDeduplicationRequestSender
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationResultParser
 import com.voxapps.expenses.domain.llm.ExpenseSummary
 import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
-import com.voxapps.expenses.domain.location.ExpensesLocationHelper
+import com.voxapps.expenses.domain.location.resolveCurrentCityName
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
@@ -446,7 +446,7 @@ class LlmResultReceiver : BroadcastReceiver() {
             null
         } else {
             parsed.location?.let { FieldCleaner.clean(it, "location", "Expense") }
-                ?: ExpensesLocationHelper.resolveCurrentCity(appContext)
+                ?: resolveCurrentCityName(appContext, container.settingsRepository)
         }
         // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard — this is the
         // only guard for fields not sourced from raw JSON.
@@ -548,7 +548,7 @@ class LlmResultReceiver : BroadcastReceiver() {
             location = if (!settings.locationPrefillEnabled) {
                 existing.expense.location
             } else {
-                parsed.location ?: ExpensesLocationHelper.resolveCurrentCity(appContext)
+                parsed.location ?: resolveCurrentCityName(appContext, container.settingsRepository)
             },
             dateTime = mergeDateTime(parsed.date, parsed.time),
             comments = null,

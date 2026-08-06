@@ -152,9 +152,12 @@ class SettingsRepositoryImpl(
         // App Aliases
         val APP_ALIAS_RULES_JSON = stringPreferencesKey("app_alias_rules_json")
 
-        // Manual location fallback (stored as strings since DataStore has no doublePreferencesKey)
-        val MANUAL_LOCATION_LAT = stringPreferencesKey("manual_location_lat")
-        val MANUAL_LOCATION_LON = stringPreferencesKey("manual_location_lon")
+        // Location: Home Town fallback (stored as strings since DataStore has no doublePreferencesKey),
+        // cache TTL, and "always use this location" (shared :core:location module).
+        val LOCATION_HOME_TOWN_LAT = stringPreferencesKey("location_home_town_lat")
+        val LOCATION_HOME_TOWN_LON = stringPreferencesKey("location_home_town_lon")
+        val LOCATION_CACHE_TTL = stringPreferencesKey("location_cache_ttl")
+        val LOCATION_ALWAYS_USE_HOME_TOWN = booleanPreferencesKey("location_always_use_home_town")
 
         // First launch / tutorial
         val FIRST_LAUNCH_COMPLETED = booleanPreferencesKey("first_launch_completed")
@@ -368,8 +371,10 @@ class SettingsRepositoryImpl(
             overlayTextSize = prefs[Keys.OVERLAY_TEXT_SIZE] ?: 1.0f,
             piperVoiceModelId = prefs[Keys.PIPER_VOICE_MODEL_ID],
             appAliasRules = parseAppAliasRules(prefs[Keys.APP_ALIAS_RULES_JSON]),
-            manualLocationLat = prefs[Keys.MANUAL_LOCATION_LAT]?.toDoubleOrNull(),
-            manualLocationLon = prefs[Keys.MANUAL_LOCATION_LON]?.toDoubleOrNull(),
+            locationHomeTownLat = prefs[Keys.LOCATION_HOME_TOWN_LAT]?.toDoubleOrNull(),
+            locationHomeTownLon = prefs[Keys.LOCATION_HOME_TOWN_LON]?.toDoubleOrNull(),
+            locationCacheTtl = prefs[Keys.LOCATION_CACHE_TTL] ?: "ONE_DAY",
+            locationAlwaysUseHomeTown = prefs[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] ?: false,
             firstLaunchCompleted = prefs[Keys.FIRST_LAUNCH_COMPLETED] ?: false,
             tutorialCompleted = prefs[Keys.TUTORIAL_COMPLETED] ?: false
         )
@@ -471,10 +476,12 @@ class SettingsRepositoryImpl(
 
             prefs[Keys.APP_ALIAS_RULES_JSON] = gson.toJson(imported.appAliasRules)
 
-            imported.manualLocationLat?.let { prefs[Keys.MANUAL_LOCATION_LAT] = it.toString() }
-                ?: prefs.remove(Keys.MANUAL_LOCATION_LAT)
-            imported.manualLocationLon?.let { prefs[Keys.MANUAL_LOCATION_LON] = it.toString() }
-                ?: prefs.remove(Keys.MANUAL_LOCATION_LON)
+            imported.locationHomeTownLat?.let { prefs[Keys.LOCATION_HOME_TOWN_LAT] = it.toString() }
+                ?: prefs.remove(Keys.LOCATION_HOME_TOWN_LAT)
+            imported.locationHomeTownLon?.let { prefs[Keys.LOCATION_HOME_TOWN_LON] = it.toString() }
+                ?: prefs.remove(Keys.LOCATION_HOME_TOWN_LON)
+            prefs[Keys.LOCATION_CACHE_TTL] = imported.locationCacheTtl
+            prefs[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] = imported.locationAlwaysUseHomeTown
 
             prefs[Keys.FIRST_LAUNCH_COMPLETED] = imported.firstLaunchCompleted
             prefs[Keys.TUTORIAL_COMPLETED] = imported.tutorialCompleted
@@ -1025,17 +1032,27 @@ class SettingsRepositoryImpl(
         }
     }
 
-    // --- MANUAL LOCATION ---
-    override fun getManualLocationLatSync(): Double? = runBlocking { dataStore.data.first()[Keys.MANUAL_LOCATION_LAT]?.toDoubleOrNull() }
-    override fun getManualLocationLonSync(): Double? = runBlocking { dataStore.data.first()[Keys.MANUAL_LOCATION_LON]?.toDoubleOrNull() }
+    // --- LOCATION (Home Town / cache TTL / always-use) ---
+    override fun getLocationHomeTownLatSync(): Double? = runBlocking { dataStore.data.first()[Keys.LOCATION_HOME_TOWN_LAT]?.toDoubleOrNull() }
+    override fun getLocationHomeTownLonSync(): Double? = runBlocking { dataStore.data.first()[Keys.LOCATION_HOME_TOWN_LON]?.toDoubleOrNull() }
 
-    override suspend fun setManualLocation(lat: Double?, lon: Double?) {
+    override suspend fun setLocationHomeTown(lat: Double?, lon: Double?) {
         dataStore.edit { prefs ->
-            if (lat != null) prefs[Keys.MANUAL_LOCATION_LAT] = lat.toString()
-            else prefs.remove(Keys.MANUAL_LOCATION_LAT)
-            if (lon != null) prefs[Keys.MANUAL_LOCATION_LON] = lon.toString()
-            else prefs.remove(Keys.MANUAL_LOCATION_LON)
+            if (lat != null) prefs[Keys.LOCATION_HOME_TOWN_LAT] = lat.toString()
+            else prefs.remove(Keys.LOCATION_HOME_TOWN_LAT)
+            if (lon != null) prefs[Keys.LOCATION_HOME_TOWN_LON] = lon.toString()
+            else prefs.remove(Keys.LOCATION_HOME_TOWN_LON)
         }
+    }
+
+    override fun getLocationCacheTtlSync(): String = runBlocking { dataStore.data.first()[Keys.LOCATION_CACHE_TTL] ?: "ONE_DAY" }
+    override suspend fun setLocationCacheTtl(ttl: String) {
+        dataStore.edit { it[Keys.LOCATION_CACHE_TTL] = ttl }
+    }
+
+    override fun getLocationAlwaysUseHomeTownSync(): Boolean = runBlocking { dataStore.data.first()[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] ?: false }
+    override suspend fun setLocationAlwaysUseHomeTown(enabled: Boolean) {
+        dataStore.edit { it[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] = enabled }
     }
 
     // --- FIRST LAUNCH / TUTORIAL ---

@@ -168,10 +168,14 @@ interface SettingsRepository {
     // --- APP ALIASES ---
     suspend fun setAppAliasRules(rules: List<AppAliasRule>)
 
-    // --- MANUAL LOCATION ---
-    fun getManualLocationLatSync(): Double?
-    fun getManualLocationLonSync(): Double?
-    suspend fun setManualLocation(lat: Double?, lon: Double?)
+    // --- LOCATION (Home Town / cache TTL / always-use, shared :core:location module) ---
+    fun getLocationHomeTownLatSync(): Double?
+    fun getLocationHomeTownLonSync(): Double?
+    suspend fun setLocationHomeTown(lat: Double?, lon: Double?)
+    fun getLocationCacheTtlSync(): String
+    suspend fun setLocationCacheTtl(ttl: String)
+    fun getLocationAlwaysUseHomeTownSync(): Boolean
+    suspend fun setLocationAlwaysUseHomeTown(enabled: Boolean)
 
     // --- FIRST LAUNCH / TUTORIAL ---
     fun getFirstLaunchCompletedSync(): Boolean

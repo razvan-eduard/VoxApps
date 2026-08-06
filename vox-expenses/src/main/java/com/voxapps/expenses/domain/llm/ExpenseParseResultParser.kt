@@ -33,7 +33,7 @@ object ExpenseParseResultParser {
         val bank: String?,
         // Only ever populated by the OCR scan-cleanup task (a receipt's printed store address, city
         // only) — the voice-parse prompt never asks the LLM for this, so it's always null there;
-        // LlmResultReceiver falls back to ExpensesLocationHelper's GPS-derived city in that case.
+        // LlmResultReceiver falls back to resolveCurrentCityName's GPS-derived city in that case.
         val location: String?,
         val category: String?,
         val date: String?, // YYYY-MM-DD format

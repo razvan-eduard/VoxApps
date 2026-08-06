@@ -131,9 +131,13 @@ data class AppSettings(
     // --- APP ALIASES ---
     val appAliasRules: List<AppAliasRule> = emptyList(),
 
-    // --- MANUAL LOCATION (fallback when GPS/network unavailable) ---
-    val manualLocationLat: Double? = null,
-    val manualLocationLon: Double? = null,
+    // --- LOCATION (shared :core:location module) ---
+    /** "Home town" fallback, used when GPS/cache are unavailable or [locationAlwaysUseHomeTown] is on. */
+    val locationHomeTownLat: Double? = null,
+    val locationHomeTownLon: Double? = null,
+    /** [com.voxapps.location.LocationCacheTtl] enum name, e.g. "ONE_DAY". */
+    val locationCacheTtl: String = "ONE_DAY",
+    val locationAlwaysUseHomeTown: Boolean = false,
 
     // --- FIRST LAUNCH / TUTORIAL ---
     val firstLaunchCompleted: Boolean = false,

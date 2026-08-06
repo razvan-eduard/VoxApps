@@ -113,6 +113,7 @@ fun ExpensesRoot(
                                 vatDisplayEnabled = container.settingsRepository.getSnapshot().vatDisplayEnabled,
                                 decimalSeparator = container.settingsRepository.getSnapshot().decimalSeparator,
                                 locationPrefillEnabled = container.settingsRepository.getSnapshot().locationPrefillEnabled,
+                                settingsRepository = container.settingsRepository,
                                 mostRecentCategoryColor = mostRecentCategoryColor,
                                 stateManager = container.expensesStateManager,
                                 onDone = { editTarget = null }

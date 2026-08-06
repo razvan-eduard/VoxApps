@@ -22,9 +22,15 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.domain.localization.LanguageManager
+import com.voxapps.commander.domain.location.CommanderLocationStore
 import com.voxapps.commander.domain.search.SearchProviderRegistry
 import com.voxapps.commander.domain.search.SearchProviderRouter
 import com.voxapps.commander.ui.components.ConnectionTestAuto
+import com.voxapps.location.LocationSource
+import com.voxapps.location.ResolvedLocation
+import com.voxapps.location.VoxLocationResolver
+import com.voxapps.location.ui.VoxLocationSettingsCard
+import com.voxapps.location.ui.VoxLocationUiState
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,10 +48,10 @@ fun SearchSettingsSection(
     Text(text = languageManager.getString("search_section"), style = MaterialTheme.typography.titleMedium)
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Manual location fallback
-        ManualLocationSetting(
+        CommanderLocationSettingsSection(
             settingsRepo = settingsRepo,
-            scope = scope
+            scope = scope,
+            context = context
         )
 
         categories.forEach { category ->
@@ -61,84 +67,54 @@ fun SearchSettingsSection(
 }
 
 @Composable
-private fun ManualLocationSetting(
+private fun CommanderLocationSettingsSection(
     settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository,
-    scope: kotlinx.coroutines.CoroutineScope
+    scope: kotlinx.coroutines.CoroutineScope,
+    context: android.content.Context
 ) {
-    var latText by remember {
-        mutableStateOf(settingsRepo.getManualLocationLatSync()?.toString() ?: "")
-    }
-    var lonText by remember {
-        mutableStateOf(settingsRepo.getManualLocationLonSync()?.toString() ?: "")
-    }
+    val store = remember(settingsRepo) { CommanderLocationStore(context, settingsRepo) }
+    // needsReverseGeocode = true: Commander gains Nominatim place names for the "last known
+    // location" display, matching what vox-expenses already resolves for its city field.
+    val resolver = remember(store) { VoxLocationResolver.create(context, store, needsReverseGeocode = true) }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    var homeTown by remember { mutableStateOf(store.getHomeTownSync()) }
+    var cacheTtl by remember { mutableStateOf(store.getCacheTtlSync()) }
+    var alwaysUse by remember { mutableStateOf(store.getAlwaysUseHomeTownSync()) }
+    var lastLocation by remember {
+        mutableStateOf(
+            store.getCachedLocationSync()?.let { ResolvedLocation(it.lat, it.lon, LocationSource.CACHE, it.resolvedName) }
         )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "Manual Location (Fallback)",
-                style = MaterialTheme.typography.titleSmall
-            )
-            Text(
-                text = "Used when GPS is unavailable and no cached location exists. Useful for weather search.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = latText,
-                    onValueChange = { latText = it },
-                    label = { Text("Latitude") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = lonText,
-                    onValueChange = { lonText = it },
-                    label = { Text("Longitude") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        val lat = latText.toDoubleOrNull()
-                        val lon = lonText.toDoubleOrNull()
-                        scope.launch { settingsRepo.setManualLocation(lat, lon) }
-                    },
-                    enabled = latText.isNotBlank() && lonText.isNotBlank()
-                ) {
-                    Text("Save")
-                }
-                if (settingsRepo.getManualLocationLatSync() != null) {
-                    TextButton(
-                        onClick = {
-                            latText = ""
-                            lonText = ""
-                            scope.launch { settingsRepo.setManualLocation(null, null) }
-                        }
-                    ) {
-                        Text("Clear")
-                    }
-                }
+    }
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    VoxLocationSettingsCard(
+        state = VoxLocationUiState(
+            lastKnownLocation = lastLocation,
+            homeTown = homeTown,
+            cacheTtl = cacheTtl,
+            alwaysUseHomeTown = alwaysUse,
+            isRefreshing = isRefreshing
+        ),
+        onHomeTownChange = { newHomeTown ->
+            homeTown = newHomeTown
+            scope.launch { store.setHomeTown(newHomeTown) }
+        },
+        onCacheTtlChange = { ttl ->
+            cacheTtl = ttl
+            scope.launch { store.setCacheTtl(ttl) }
+        },
+        onAlwaysUseHomeTownChange = { enabled ->
+            alwaysUse = enabled
+            scope.launch { VoxLocationResolver.setAlwaysUseHomeTown(store, enabled) }
+        },
+        onRefreshClick = {
+            isRefreshing = true
+            scope.launch {
+                lastLocation = resolver.resolveLocation()
+                isRefreshing = false
             }
         }
-    }
+    )
 }
 
 @Composable
@@ -288,7 +264,7 @@ private fun CategoryNode(
                     ManualQueryTest(
                         categoryName = categoryName,
                         providerName = selectedProvider,
-
+                        settingsRepo = settingsRepo,
                         scope = scope,
                         context = context
                     )
@@ -395,7 +371,7 @@ private fun ProviderRow(
 private fun ManualQueryTest(
     categoryName: String,
     providerName: String,
-
+    settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context
 ) {
@@ -436,10 +412,10 @@ private fun ManualQueryTest(
                     else SearchProviderRegistry.getProvider(categoryName)
 
                     if (activeProvider?.requiresLocation == true) {
-                        val loc = com.voxapps.commander.domain.search.LocationHelper.getLocation(context)
+                        val loc = VoxLocationResolver.create(context, CommanderLocationStore(context, settingsRepo)).resolveLocation()
                         if (loc != null) {
-                            lat = loc.latitude
-                            lon = loc.longitude
+                            lat = loc.lat
+                            lon = loc.lon
                         } else {
                             testResults = "Location unavailable. Grant location permission."
                             isSearching = false

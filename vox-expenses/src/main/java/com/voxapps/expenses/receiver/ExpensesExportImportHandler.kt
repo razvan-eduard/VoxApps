@@ -488,7 +488,8 @@ private fun JSONObject.toExpensesSettings(): ExpensesSettings {
     val parsed = gson.fromJson(toString(), ExpensesSettings::class.java) ?: ExpensesSettings()
     return parsed.copy(
         paymentSourcePackages = parsed.paymentSourcePackages ?: emptySet(),
-        bankingSourcePackages = parsed.bankingSourcePackages ?: emptySet()
+        bankingSourcePackages = parsed.bankingSourcePackages ?: emptySet(),
+        locationCacheTtl = parsed.locationCacheTtl ?: "ONE_DAY"
     )
 }
 

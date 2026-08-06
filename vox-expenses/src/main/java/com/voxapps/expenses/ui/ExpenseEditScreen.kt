@@ -117,7 +117,8 @@ import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
 import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.MultimodalAttachmentResolver
-import com.voxapps.expenses.domain.location.ExpensesLocationHelper
+import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
+import com.voxapps.expenses.domain.location.resolveCurrentCityName
 import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.datahygiene.DirtyField
@@ -198,6 +199,7 @@ fun ExpenseEditScreen(
     vatDisplayEnabled: Boolean,
     decimalSeparator: String,
     locationPrefillEnabled: Boolean,
+    settingsRepository: ExpensesSettingsRepository,
     mostRecentCategoryColor: Long? = null,
     stateManager: ExpensesStateManager,
     onDone: () -> Unit
@@ -219,7 +221,7 @@ fun ExpenseEditScreen(
     // this runs immediately on open) never gets overwritten.
     if (existing == null && locationPrefillEnabled) {
         LaunchedEffect(Unit) {
-            val city = ExpensesLocationHelper.resolveCurrentCity(context)
+            val city = resolveCurrentCityName(context, settingsRepository)
             if (city != null && location.isBlank()) location = city
         }
     }

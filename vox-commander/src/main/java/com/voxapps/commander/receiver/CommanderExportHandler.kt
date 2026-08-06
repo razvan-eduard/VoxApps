@@ -93,7 +93,8 @@ object CommanderExportHandler {
                 domainAppFilters = parsed.domainAppFilters ?: emptyMap(),
                 searchProviderApiKeys = parsed.searchProviderApiKeys ?: emptyMap(),
                 returnAfterActionApps = parsed.returnAfterActionApps ?: emptyList(),
-                appAliasRules = parsed.appAliasRules ?: emptyList()
+                appAliasRules = parsed.appAliasRules ?: emptyList(),
+                locationCacheTtl = parsed.locationCacheTtl ?: "ONE_DAY"
             )
         }
     } catch (e: JsonSyntaxException) {

@@ -47,9 +47,7 @@ class AppStateManagerTest {
         every { PermissionUtils.canDrawOverlays(any()) } returns false
         every { PermissionUtils.hasMicrophonePermission(any()) } returns true
         every { PermissionUtils.hasNotificationPermission(any()) } returns true
-
-        mockkObject(com.voxapps.commander.domain.search.LocationHelper)
-        every { com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(any()) } returns false
+        every { PermissionUtils.hasLocationPermission(any()) } returns false
 
         mockkObject(RemoteModelRegistry)
         every { RemoteModelRegistry.getEngineKeyByExtension(".bin") } returns "stt_whisper"

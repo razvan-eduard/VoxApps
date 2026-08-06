@@ -21,14 +21,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
+import com.voxapps.expenses.domain.location.ExpensesLocationStore
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
+import com.voxapps.location.LocationSource
+import com.voxapps.location.ResolvedLocation
+import com.voxapps.location.VoxLocationResolver
+import com.voxapps.location.ui.VoxLocationSettingsCard
+import com.voxapps.location.ui.VoxLocationUiState
+import kotlinx.coroutines.launch
 
 /** Fixed, common-currency list for the "Default currency" picker — not the full ISO 4217 set. */
 private val COMMON_CURRENCIES = listOf(
@@ -41,6 +51,7 @@ private val COMMON_CURRENCIES = listOf(
 fun GeneralSettingsTab(
     settings: ExpensesSettings,
     stateManager: ExpensesStateManager,
+    settingsRepo: ExpensesSettingsRepository,
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
@@ -301,6 +312,10 @@ fun GeneralSettingsTab(
             )
         }
 
+        if (settings.locationPrefillEnabled) {
+            ExpensesLocationSettingsSection(settingsRepo = settingsRepo)
+        }
+
         HorizontalDivider()
 
         // --- Danger Zone: Delete All ---
@@ -356,4 +371,54 @@ fun GeneralSettingsTab(
             }
         }
     }
+}
+
+@Composable
+private fun ExpensesLocationSettingsSection(settingsRepo: ExpensesSettingsRepository) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val store = remember(settingsRepo) { ExpensesLocationStore(context, settingsRepo) }
+    // needsReverseGeocode = true: matches resolveCurrentCityName's existing behavior for the
+    // location prefill feature — the same Nominatim resolution is now also shown here.
+    val resolver = remember(store) { VoxLocationResolver.create(context, store, needsReverseGeocode = true) }
+
+    var homeTown by remember { mutableStateOf(store.getHomeTownSync()) }
+    var cacheTtl by remember { mutableStateOf(store.getCacheTtlSync()) }
+    var alwaysUse by remember { mutableStateOf(store.getAlwaysUseHomeTownSync()) }
+    var lastLocation by remember {
+        mutableStateOf(
+            store.getCachedLocationSync()?.let { ResolvedLocation(it.lat, it.lon, LocationSource.CACHE, it.resolvedName) }
+        )
+    }
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    VoxLocationSettingsCard(
+        state = VoxLocationUiState(
+            lastKnownLocation = lastLocation,
+            homeTown = homeTown,
+            cacheTtl = cacheTtl,
+            alwaysUseHomeTown = alwaysUse,
+            isRefreshing = isRefreshing
+        ),
+        onHomeTownChange = { newHomeTown ->
+            homeTown = newHomeTown
+            scope.launch { store.setHomeTown(newHomeTown) }
+        },
+        onCacheTtlChange = { ttl ->
+            cacheTtl = ttl
+            scope.launch { store.setCacheTtl(ttl) }
+        },
+        onAlwaysUseHomeTownChange = { enabled ->
+            alwaysUse = enabled
+            scope.launch { VoxLocationResolver.setAlwaysUseHomeTown(store, enabled) }
+        },
+        onRefreshClick = {
+            isRefreshing = true
+            scope.launch {
+                lastLocation = resolver.resolveLocation()
+                isRefreshing = false
+            }
+        }
+    )
 }

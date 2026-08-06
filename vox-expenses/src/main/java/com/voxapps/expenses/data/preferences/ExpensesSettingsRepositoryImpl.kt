@@ -55,6 +55,11 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val AUTO_RESCAN_ON_FIRST_ATTACHMENT = booleanPreferencesKey("auto_rescan_on_first_attachment")
         val AUTO_OPEN_SCANNED_EXPENSE = booleanPreferencesKey("auto_open_scanned_expense")
         val LOCATION_PREFILL_ENABLED = booleanPreferencesKey("location_prefill_enabled")
+        // Home Town / cache TTL / always-use (stored as strings since DataStore has no doublePreferencesKey)
+        val LOCATION_HOME_TOWN_LAT = stringPreferencesKey("location_home_town_lat")
+        val LOCATION_HOME_TOWN_LON = stringPreferencesKey("location_home_town_lon")
+        val LOCATION_CACHE_TTL = stringPreferencesKey("location_cache_ttl")
+        val LOCATION_ALWAYS_USE_HOME_TOWN = booleanPreferencesKey("location_always_use_home_town")
         val DUPLICATE_CHECK_MODE_MANUAL = stringPreferencesKey("duplicate_check_mode_manual")
         val DUPLICATE_CHECK_MODE_AUTOMATIC = stringPreferencesKey("duplicate_check_mode_automatic")
         val AUTO_ACCEPT_DUPLICATE_MERGES = booleanPreferencesKey("auto_accept_duplicate_merges")
@@ -111,6 +116,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             autoRescanOnFirstAttachment = prefs[Keys.AUTO_RESCAN_ON_FIRST_ATTACHMENT] ?: false,
             autoOpenScannedExpense = prefs[Keys.AUTO_OPEN_SCANNED_EXPENSE] ?: false,
             locationPrefillEnabled = prefs[Keys.LOCATION_PREFILL_ENABLED] ?: true,
+            locationHomeTownLat = prefs[Keys.LOCATION_HOME_TOWN_LAT]?.toDoubleOrNull(),
+            locationHomeTownLon = prefs[Keys.LOCATION_HOME_TOWN_LON]?.toDoubleOrNull(),
+            locationCacheTtl = prefs[Keys.LOCATION_CACHE_TTL] ?: "ONE_DAY",
+            locationAlwaysUseHomeTown = prefs[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] ?: false,
             duplicateCheckModeManual = prefs[Keys.DUPLICATE_CHECK_MODE_MANUAL] ?: ExpensesSettings.MODE_LOCAL,
             duplicateCheckModeAutomatic = prefs[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] ?: ExpensesSettings.MODE_LOCAL,
             autoAcceptDuplicateMerges = prefs[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] ?: false,
@@ -275,6 +284,23 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.LOCATION_PREFILL_ENABLED] = enabled }
     }
 
+    override suspend fun setLocationHomeTown(lat: Double?, lon: Double?) {
+        dataStore.edit { prefs ->
+            if (lat != null) prefs[Keys.LOCATION_HOME_TOWN_LAT] = lat.toString()
+            else prefs.remove(Keys.LOCATION_HOME_TOWN_LAT)
+            if (lon != null) prefs[Keys.LOCATION_HOME_TOWN_LON] = lon.toString()
+            else prefs.remove(Keys.LOCATION_HOME_TOWN_LON)
+        }
+    }
+
+    override suspend fun setLocationCacheTtl(ttl: String) {
+        dataStore.edit { it[Keys.LOCATION_CACHE_TTL] = ttl }
+    }
+
+    override suspend fun setLocationAlwaysUseHomeTown(enabled: Boolean) {
+        dataStore.edit { it[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] = enabled }
+    }
+
     override suspend fun setDuplicateCheckModeManual(mode: String) {
         dataStore.edit { it[Keys.DUPLICATE_CHECK_MODE_MANUAL] = mode }
     }
@@ -407,6 +433,12 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.AUTO_RESCAN_ON_FIRST_ATTACHMENT] = settings.autoRescanOnFirstAttachment
             prefs[Keys.AUTO_OPEN_SCANNED_EXPENSE] = settings.autoOpenScannedExpense
             prefs[Keys.LOCATION_PREFILL_ENABLED] = settings.locationPrefillEnabled
+            settings.locationHomeTownLat?.let { prefs[Keys.LOCATION_HOME_TOWN_LAT] = it.toString() }
+                ?: prefs.remove(Keys.LOCATION_HOME_TOWN_LAT)
+            settings.locationHomeTownLon?.let { prefs[Keys.LOCATION_HOME_TOWN_LON] = it.toString() }
+                ?: prefs.remove(Keys.LOCATION_HOME_TOWN_LON)
+            prefs[Keys.LOCATION_CACHE_TTL] = settings.locationCacheTtl
+            prefs[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] = settings.locationAlwaysUseHomeTown
             prefs[Keys.DUPLICATE_CHECK_MODE_MANUAL] = settings.duplicateCheckModeManual
             prefs[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] = settings.duplicateCheckModeAutomatic
             prefs[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] = settings.autoAcceptDuplicateMerges

@@ -95,7 +95,6 @@ class AppContainer(context: Context) {
             if (snapshot.youtubeUrlEngine == "newpipe") {
                 com.voxapps.commander.domain.intent.handler.NewPipeExtractorHelper.warmUp()
             }
-            com.voxapps.commander.domain.search.LocationHelper.settingsRepo = settingsRepository
         }
         Logger.log("AppContainer init - starting compatibility checks", "AppContainer")
         checkVulkanCrashCookie()

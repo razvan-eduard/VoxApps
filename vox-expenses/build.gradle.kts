@@ -68,6 +68,7 @@ dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:calendar"))
     implementation(project(":core:apppicker"))
+    implementation(project(":core:location"))
     implementation(project(":core:ipc"))
     implementation(project(":core:attachments"))
     implementation(project(":core:logging"))

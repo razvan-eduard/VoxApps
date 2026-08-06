@@ -39,9 +39,7 @@ class AppStateTest {
         every { PermissionUtils.canDrawOverlays(any()) } returns false
         every { PermissionUtils.hasMicrophonePermission(any()) } returns false
         every { PermissionUtils.hasNotificationPermission(any()) } returns false
-
-        mockkObject(com.voxapps.commander.domain.search.LocationHelper)
-        every { com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(any()) } returns false
+        every { PermissionUtils.hasLocationPermission(any()) } returns false
 
         context = mockk(relaxed = true)
     }

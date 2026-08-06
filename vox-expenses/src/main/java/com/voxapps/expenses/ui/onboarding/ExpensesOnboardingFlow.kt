@@ -41,7 +41,7 @@ fun ExpensesOnboardingFlow(languageManager: LanguageManager, stateManager: Expen
     ) { granted -> notifGranted = granted }
 
     // Coarse is sufficient (and what's actually requested) for a city-level location prefill —
-    // see ExpensesLocationHelper. Either counts as granted, matching how the app itself checks.
+    // see com.voxapps.location.AndroidLiveLocationProvider. Either counts as granted, matching how the app itself checks.
     var locationGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==

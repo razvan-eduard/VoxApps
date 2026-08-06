@@ -107,10 +107,17 @@ data class ExpensesSettings(
     val autoOpenScannedExpense: Boolean = false,
     /** On by default (matches the behavior before this toggle existed) — one switch governing every
      *  place an expense's location field can get auto-filled from GPS (scan, voice, and manual
-     *  entry — see [com.voxapps.expenses.domain.location.ExpensesLocationHelper]'s callers).
+     *  entry — see [com.voxapps.expenses.domain.location.resolveCurrentCityName]'s callers).
      *  Independent of the OS location permission itself: granting that in onboarding only makes
      *  the feature *possible*, this is the separate "and do I actually want it" control. */
     val locationPrefillEnabled: Boolean = true,
+    /** "Home town" fallback, cache TTL, and "always use this location" — shared :core:location
+     *  module, same fields as vox-commander's AppSettings equivalents. */
+    val locationHomeTownLat: Double? = null,
+    val locationHomeTownLon: Double? = null,
+    /** [com.voxapps.location.LocationCacheTtl] enum name, e.g. "ONE_DAY". */
+    val locationCacheTtl: String = "ONE_DAY",
+    val locationAlwaysUseHomeTown: Boolean = false,
     /** Which engine(s) [com.voxapps.expenses.state.ExpensesStateManager.requestDuplicateCheck] (the
      *  manual "Check for duplicates now" button and its schedule) use: [MODE_LOCAL] (deterministic,
      *  instant, no Commander dependency), [MODE_LOCAL_AND_AI] (local pre-filters same-amount
