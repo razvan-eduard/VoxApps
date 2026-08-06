@@ -53,6 +53,12 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val NOTIFICATIONS_VOLUME = intPreferencesKey("notifications_volume")
         val NOTIFICATIONS_LENGTH = stringPreferencesKey("notifications_length")
         val NOTIFICATIONS_CHANNEL_VERSION = intPreferencesKey("notifications_channel_version")
+
+        // Backup & Restore (local)
+        val BACKUP_INCLUDE_SETTINGS = booleanPreferencesKey("backup_include_settings")
+        val BACKUP_INCLUDE_DATA = booleanPreferencesKey("backup_include_data")
+        val BACKUP_INCLUDE_ATTACHMENTS = booleanPreferencesKey("backup_include_attachments")
+        val BACKUP_IMPORT_MODE = stringPreferencesKey("backup_import_mode")
     }
 
     override val settingsFlow: Flow<NotesSettings> = dataStore.data.map { prefs ->
@@ -84,7 +90,11 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             notificationsSoundUri = prefs[Keys.NOTIFICATIONS_SOUND_URI],
             notificationsVolume = prefs[Keys.NOTIFICATIONS_VOLUME] ?: 100,
             notificationsLength = prefs[Keys.NOTIFICATIONS_LENGTH] ?: NotesSettings.LENGTH_SHORT,
-            notificationsChannelVersion = prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] ?: 1
+            notificationsChannelVersion = prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] ?: 1,
+            backupIncludeSettings = prefs[Keys.BACKUP_INCLUDE_SETTINGS] ?: true,
+            backupIncludeData = prefs[Keys.BACKUP_INCLUDE_DATA] ?: true,
+            backupIncludeAttachments = prefs[Keys.BACKUP_INCLUDE_ATTACHMENTS] ?: false,
+            backupImportMode = prefs[Keys.BACKUP_IMPORT_MODE] ?: "merge"
         )
     }
 
@@ -258,7 +268,27 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             prefs[Keys.NOTIFICATIONS_VOLUME] = settings.notificationsVolume
             prefs[Keys.NOTIFICATIONS_LENGTH] = settings.notificationsLength
             prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] = settings.notificationsChannelVersion
+            prefs[Keys.BACKUP_INCLUDE_SETTINGS] = settings.backupIncludeSettings
+            prefs[Keys.BACKUP_INCLUDE_DATA] = settings.backupIncludeData
+            prefs[Keys.BACKUP_INCLUDE_ATTACHMENTS] = settings.backupIncludeAttachments
+            prefs[Keys.BACKUP_IMPORT_MODE] = settings.backupImportMode
         }
+    }
+
+    override suspend fun setBackupIncludeSettings(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_SETTINGS] = enabled }
+    }
+
+    override suspend fun setBackupIncludeData(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_DATA] = enabled }
+    }
+
+    override suspend fun setBackupIncludeAttachments(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_ATTACHMENTS] = enabled }
+    }
+
+    override suspend fun setBackupImportMode(mode: String) {
+        dataStore.edit { it[Keys.BACKUP_IMPORT_MODE] = mode }
     }
 
     private fun defaultDeviceLanguage(): String =

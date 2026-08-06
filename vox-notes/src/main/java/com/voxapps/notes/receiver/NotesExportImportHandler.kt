@@ -1,13 +1,15 @@
 package com.voxapps.notes.receiver
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
-import androidx.core.content.FileProvider
-import com.google.gson.Gson
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentSource
+import com.voxapps.backup.VoxAttachmentZipUtil
+import com.voxapps.backup.VoxBiometricGate
+import com.voxapps.backup.VoxImportMode
+import com.voxapps.backup.VoxSettingsRoundTrip
+import com.voxapps.backup.VoxSnapshotReplaceImporter
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
 import com.voxapps.logging.Logger
@@ -20,15 +22,8 @@ import com.voxapps.notes.state.SessionManager
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
-import java.util.UUID
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 private const val TAG = "NotesExportImportHandler"
-private val gson = Gson()
 
 /**
  * Vox Hub's export/import for this app, extracted from the BroadcastReceiver so it's unit-testable
@@ -44,8 +39,7 @@ class NotesExportImportHandler(
 ) {
     suspend fun export(scope: String = VoxIpc.EXPORT_SCOPE_BOTH, includePhotos: Boolean = false): VoxResult {
         val settings = settingsRepo.getSnapshot()
-        val locked = settings.isBiometricRequired &&
-            !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
+        val locked = VoxBiometricGate.isLocked(settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid)
         if (locked) return VoxResult(ok = false, text = NotesReadResponder.LOCKED_MESSAGE)
 
         val json = JSONObject()
@@ -83,63 +77,17 @@ class NotesExportImportHandler(
     }
 
     /** Zips this export's attachment files (see :core:attachments) into a fresh file under cacheDir
-     *  and grants Hub read access — mirrors vox-expenses' buildReceiptsZip. Best-effort: returns null
-     *  (no attachment) on any failure or if there's nothing to bundle, never blocks the JSON export. */
-    private fun buildAttachmentsZip(fileNames: List<String>): Uri? {
-        if (fileNames.isEmpty()) return null
-        val attachmentsDir = File(context.filesDir, NotesAttachments.DIR)
-        return try {
-            val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val zipFile = File(exportsDir, "export_attachments_${UUID.randomUUID()}.zip")
-            var wroteAny = false
-            ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-                for (name in fileNames) {
-                    val file = File(attachmentsDir, name)
-                    if (file.exists()) {
-                        zos.putNextEntry(ZipEntry(name))
-                        file.inputStream().use { it.copyTo(zos) }
-                        zos.closeEntry()
-                        wroteAny = true
-                    }
-                }
-            }
-            if (!wroteAny) {
-                zipFile.delete()
-                return null
-            }
-            val uri = FileProvider.getUriForFile(context, NotesAttachments.FILE_PROVIDER_AUTHORITY, zipFile)
-            context.grantUriPermission(VoxIpc.HUB_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            uri
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to build attachments export zip", e)
-            null
-        }
-    }
+     *  and grants Hub read access. Best-effort: returns null (no attachment) on any failure or if
+     *  there's nothing to bundle, never blocks the JSON export. */
+    private fun buildAttachmentsZip(fileNames: List<String>): Uri? =
+        VoxAttachmentZipUtil.build(context, NotesAttachments.DIR, fileNames, NotesAttachments.FILE_PROVIDER_AUTHORITY)
 
-    /** Same shape as vox-expenses' extractReceiptsZip — every entry name flattened to its bare
-     *  filename (zip-slip defense). */
-    private fun extractAttachmentsZip(uri: Uri) {
-        val attachmentsDir = File(context.filesDir, NotesAttachments.DIR).apply { mkdirs() }
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            ZipInputStream(input).use { zis ->
-                var entry = zis.nextEntry
-                while (entry != null) {
-                    if (!entry.isDirectory) {
-                        val safeName = File(entry.name).name
-                        if (safeName.isNotBlank()) {
-                            FileOutputStream(File(attachmentsDir, safeName)).use { fos -> zis.copyTo(fos) }
-                        }
-                    }
-                    entry = zis.nextEntry
-                }
-            }
-        }
-    }
+    private fun extractAttachmentsZip(uri: Uri) =
+        VoxAttachmentZipUtil.extract(context, NotesAttachments.DIR, uri)
 
-    suspend fun import(payloadJson: String): VoxResult {
+    suspend fun import(payloadJson: String, importMode: VoxImportMode = VoxImportMode.MERGE): VoxResult {
         val settings = settingsRepo.getSnapshot()
-        val locked = settings.isBiometricRequired &&
-            !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
+        val locked = VoxBiometricGate.isLocked(settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid)
         if (locked) return VoxResult(ok = false, text = NotesReadResponder.LOCKED_MESSAGE)
 
         val root = try {
@@ -203,46 +151,50 @@ class NotesExportImportHandler(
             // before this import ran, is presumed unrelated to the restore and must survive.
             // Categories are untouched here (they already merge safely by name above).
             val preExistingNotes = notesRepo.notesSnapshot()
-
             val importedNotes = root.optJSONArray("notes") ?: JSONArray()
-            for (i in 0 until importedNotes.length()) {
-                val n = importedNotes.getJSONObject(i)
-                val text = n.optString("text")
-                val title = n.optStringOrNull("title")
-                if (text.isBlank() && title.isNullOrBlank()) continue
-                val importedCategoryId = if (n.has("categoryId") && !n.isNull("categoryId")) n.optLong("categoryId") else null
-                val categoryId = importedCategoryId?.let { importedIdToLocalId[it] }
-                val newNoteId = notesRepo.addNote(
-                    title = title,
-                    text = text,
-                    categoryId = categoryId,
-                    // Preserved from the source device, never re-stamped to "now" — see the
-                    // exportedAt comment above for why that would silently undo this fix.
-                    createdAt = n.optLong("createdAt", System.currentTimeMillis())
-                )
-                notesCreated++
 
-                if (newNoteId > 0) {
-                    val importedAttachments = n.optJSONArray("attachments") ?: JSONArray()
-                    for (j in 0 until importedAttachments.length()) {
-                        val a = importedAttachments.getJSONObject(j)
-                        val fileName = a.optString("fileName").takeIf { it.isNotBlank() } ?: continue
-                        attachmentDao.insert(
-                            AttachmentEntity(
-                                recordType = NotesAttachments.RECORD_TYPE,
-                                recordId = newNoteId,
-                                fileName = fileName,
-                                source = a.optString("source", AttachmentSource.MANUAL),
-                                createdAt = a.optLong("createdAt", System.currentTimeMillis()),
-                                groupId = a.optStringOrNull("groupId"),
-                                groupOrder = a.optInt("groupOrder", 0)
+            notesCreated = VoxSnapshotReplaceImporter.restore(
+                mode = importMode,
+                imported = (0 until importedNotes.length()).map { importedNotes.getJSONObject(it) },
+                preExisting = preExistingNotes,
+                exportedAt = exportedAt,
+                createdAtOf = { it.createdAt },
+                insert = insert@{ n ->
+                    val text = n.optString("text")
+                    val title = n.optStringOrNull("title")
+                    if (text.isBlank() && title.isNullOrBlank()) return@insert 0L
+                    val importedCategoryId = if (n.has("categoryId") && !n.isNull("categoryId")) n.optLong("categoryId") else null
+                    val categoryId = importedCategoryId?.let { importedIdToLocalId[it] }
+                    val newNoteId = notesRepo.addNote(
+                        title = title,
+                        text = text,
+                        categoryId = categoryId,
+                        // Preserved from the source device, never re-stamped to "now" — see the
+                        // exportedAt comment above for why that would silently undo this fix.
+                        createdAt = n.optLong("createdAt", System.currentTimeMillis())
+                    )
+                    if (newNoteId > 0) {
+                        val importedAttachments = n.optJSONArray("attachments") ?: JSONArray()
+                        for (j in 0 until importedAttachments.length()) {
+                            val a = importedAttachments.getJSONObject(j)
+                            val fileName = a.optString("fileName").takeIf { it.isNotBlank() } ?: continue
+                            attachmentDao.insert(
+                                AttachmentEntity(
+                                    recordType = NotesAttachments.RECORD_TYPE,
+                                    recordId = newNoteId,
+                                    fileName = fileName,
+                                    source = a.optString("source", AttachmentSource.MANUAL),
+                                    createdAt = a.optLong("createdAt", System.currentTimeMillis()),
+                                    groupId = a.optStringOrNull("groupId"),
+                                    groupOrder = a.optInt("groupOrder", 0)
+                                )
                             )
-                        )
+                        }
                     }
-                }
-            }
-
-            preExistingNotes.filter { it.createdAt <= exportedAt }.forEach { notesRepo.deleteNoteById(it.id) }
+                    newNoteId
+                },
+                delete = { notesRepo.deleteNoteById(it.id) }
+            )
         }
 
         return VoxResult(
@@ -260,12 +212,12 @@ class NotesExportImportHandler(
 // Gson.fromJson always has every field present. Mirrors vox-commander's CommanderExportHandler, the
 // only handler in this codebase that didn't suffer this drift.
 private fun NotesSettings.toJson(): JSONObject =
-    JSONObject(gson.toJson(copy(onboardingCompleted = false)))
+    JSONObject(VoxSettingsRoundTrip.toJson(copy(onboardingCompleted = false)))
 
 /** Returns Room/DataStore defaults for [NotesSettings] if [this] isn't valid JSON for it (e.g. a
  *  corrupt/foreign import file). */
 private fun JSONObject.toNotesSettings(): NotesSettings =
-    gson.fromJson(toString(), NotesSettings::class.java) ?: NotesSettings()
+    VoxSettingsRoundTrip.parseOrDefault(toString(), NotesSettings::class.java, NotesSettings())
 
 private fun Category.toJson(): JSONObject = JSONObject().apply {
     put("id", id)

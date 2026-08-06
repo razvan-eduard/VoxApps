@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.voxapps.backup.VoxBackupDispatch
+import com.voxapps.backup.VoxImportMode
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.domain.llm.CalendarEventParsePromptBuilder
 import com.voxapps.calendarapp.domain.llm.CalendarEventParseRequestSender
@@ -126,14 +128,9 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.attachmentDao,
                     container.toDoListDao
                 )
-                val pending = goAsync()
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        pending.setResultData(handler.export(scope, includePhotos = command.includePhotos).toJson())
-                    } finally {
-                        pending.finish()
-                    }
+                VoxBackupDispatch.dispatch(this) {
+                    handler.export(scope, includePhotos = command.includePhotos)
                 }
             }
 
@@ -146,13 +143,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.attachmentDao,
                     container.toDoListDao
                 )
-                val pending = goAsync()
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        pending.setResultData(handler.import(command.text.orEmpty()).toJson())
-                    } finally {
-                        pending.finish()
-                    }
+                VoxBackupDispatch.dispatch(this) {
+                    handler.import(command.text.orEmpty(), VoxImportMode.fromWireValue(command.importMode))
                 }
             }
 

@@ -150,6 +150,39 @@ class CalendarExportImportHandlerTest {
     }
 
     @Test
+    fun `import preserves a pre-existing entry created after the backup's exported_at`() = runTest {
+        // Regression test for a real bug: events/todoItems never serialized/read back createdAt and
+        // never read exported_at, so every import unconditionally wiped every pre-existing row
+        // regardless of when it was created — unlike Notes/Expenses' identical import shape, which
+        // always respected this. entry(100) with createdAt=0L is "old" (existed before the backup);
+        // entry(200) with a createdAt after exportedAt was created on-device since the backup and
+        // must survive.
+        coEvery { calendarRepo.layersSnapshot() } returns listOf(
+            CalendarLayer(id = 1, name = "Personal", colorArgb = 0, isDefault = true, position = 0, createdAt = 0L)
+        )
+        val survivor = CalendarEntryWithTags(
+            entry = CalendarEntry(
+                id = 200, uid = "uid-200", type = CalendarEntryType.EVENT, title = "Created after backup",
+                startMillis = 0L, layerId = 1L, createdAt = 5_000L, updatedAt = 5_000L
+            )
+        )
+        coEvery { calendarRepo.entriesSnapshot() } returns listOf(entry(100), survivor)
+        coEvery {
+            calendarRepo.addEntry(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+            )
+        } returns 1L
+
+        val payload = """{"layers":[{"id":1,"name":"Personal"}],
+            "events":[{"title":"restored","layerId":1,"startMillis":0,"createdAt":0}],
+            "exported_at":1000}"""
+        handler.import(payload)
+
+        coVerify(exactly = 1) { calendarRepo.deleteEntryById(100) }
+        coVerify(exactly = 0) { calendarRepo.deleteEntryById(200) }
+    }
+
+    @Test
     fun `malformed payload returns a failure result without touching the repository`() = runTest {
         val result = handler.import("{ not json")
 

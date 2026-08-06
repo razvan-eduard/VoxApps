@@ -114,6 +114,7 @@
   "app_alias_delete_msg": "Alias-Regel für \"${displayName}\" löschen? Aliase: ${aliases}",
   "save_button": "Speichern",
   "tab_advanced": "Erweitert",
+  "tab_backup": "Sicherung",
   "tab_theme": "Design",
   "tab_benchmark": "Diagnose",
   "tab_verbose_logging": "Detaillierte Logs",

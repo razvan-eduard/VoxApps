@@ -40,7 +40,12 @@ data class VoxCommand(
      *  category/layer is in scope. */
     val scopeNames: List<String>? = null,
     /** [VoxIpc.OP_MEDIA_CONTROL]: one of "status"/"play"/"pause"/"next"/"prev". */
-    val mediaAction: String? = null
+    val mediaAction: String? = null,
+    /** [VoxIpc.OP_IMPORT]: one of [VoxIpc.IMPORT_MODE_FULL_OVERRIDE]/[VoxIpc.IMPORT_MODE_MERGE]/
+     *  [VoxIpc.IMPORT_MODE_ADDITIVE]. Null defaults to "merge" on the receiving end — the
+     *  long-standing behavior before this field existed, so an older Hub build omitting it changes
+     *  nothing for a satellite that already understands the field. */
+    val importMode: String? = null
 ) {
     fun toJson(): String {
         val o = JSONObject()
@@ -58,6 +63,7 @@ data class VoxCommand(
         since?.let { o.put("since", it) }
         scopeNames?.let { o.put("scopeNames", JSONArray(it)) }
         mediaAction?.let { o.put("mediaAction", it) }
+        importMode?.let { o.put("importMode", it) }
         return o.toString()
     }
 
@@ -84,7 +90,8 @@ data class VoxCommand(
                     scopeNames = o.optJSONArray("scopeNames")?.let { arr ->
                         (0 until arr.length()).map { arr.optString(it) }
                     },
-                    mediaAction = o.optStringOrNull("mediaAction")
+                    mediaAction = o.optStringOrNull("mediaAction"),
+                    importMode = o.optStringOrNull("importMode")
                 )
             } catch (e: Exception) {
                 null

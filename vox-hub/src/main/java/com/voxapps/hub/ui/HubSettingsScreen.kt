@@ -73,7 +73,7 @@ import java.util.Locale
  *  5 visible rows regardless of how many backups exist. */
 private const val BACKUP_ROW_HEIGHT = 64
 
-private enum class SettingsPage { MENU, GENERAL, THEME, LOGS, VOXCONNECT }
+private enum class SettingsPage { MENU, GENERAL, THEME, LOGS, VOXCONNECT, BACKUP }
 
 /** Hub's settings screen: a menu/subpage split (mirrors the satellites' SettingsScreen shape) with
  *  scheduled-backup configuration + past-backups list under General, theme controls under Theme via
@@ -124,6 +124,7 @@ fun HubSettingsScreen(
         SettingsPage.THEME -> languageManager.getString("theme_section")
         SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
         SettingsPage.VOXCONNECT -> languageManager.getString("voxconnect_section")
+        SettingsPage.BACKUP -> languageManager.getString("backup_restore_title")
     }
 
     Scaffold(
@@ -157,6 +158,12 @@ fun HubSettingsScreen(
                     headlineContent = { Text(languageManager.getString("voxconnect_section")) },
                     leadingContent = { Icon(Icons.Filled.Wifi, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.VOXCONNECT }
+                )
+                SettingsSectionHeader(languageManager.getString("settings_section_data"))
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("backup_restore_title")) },
+                    leadingContent = { Icon(Icons.Filled.Restore, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
                 ListItem(
@@ -231,6 +238,27 @@ fun HubSettingsScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+
+                Text(languageManager.getString("import_mode_label"), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    languageManager.getString("import_mode_desc"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val importModes = listOf(
+                        HubSettings.IMPORT_MODE_FULL_OVERRIDE to "import_mode_full_override",
+                        HubSettings.IMPORT_MODE_MERGE to "import_mode_merge",
+                        HubSettings.IMPORT_MODE_ADDITIVE to "import_mode_additive"
+                    )
+                    importModes.forEach { (mode, labelKey) ->
+                        FilterChip(
+                            selected = settings.importMode == mode,
+                            onClick = { scope.launch { settingsRepo.setImportMode(mode) } },
+                            label = { Text(languageManager.getString(labelKey)) }
+                        )
+                    }
                 }
 
                 if (backupFiles.isNotEmpty()) {
@@ -356,6 +384,16 @@ fun HubSettingsScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             )
+
+            SettingsPage.BACKUP -> Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
+                HubBackupSettingsSection(settingsRepo = settingsRepo, settings = settings)
+            }
         }
     }
 }

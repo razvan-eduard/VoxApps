@@ -37,6 +37,12 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+
+        // Backup & Restore (local)
+        val BACKUP_INCLUDE_SETTINGS = booleanPreferencesKey("backup_include_settings")
+        val BACKUP_INCLUDE_DATA = booleanPreferencesKey("backup_include_data")
+        val BACKUP_INCLUDE_ATTACHMENTS = booleanPreferencesKey("backup_include_attachments")
+        val BACKUP_IMPORT_MODE = stringPreferencesKey("backup_import_mode")
         val IS_GRID_VIEW = booleanPreferencesKey("is_grid_view")
         val SHOW_EVENT_DETAILS_IN_WIDGET = booleanPreferencesKey("show_event_details_in_widget")
         val WIDGET_BORDER_ENABLED = booleanPreferencesKey("widget_border_enabled")
@@ -71,6 +77,10 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: CalendarSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+            backupIncludeSettings = prefs[Keys.BACKUP_INCLUDE_SETTINGS] ?: true,
+            backupIncludeData = prefs[Keys.BACKUP_INCLUDE_DATA] ?: true,
+            backupIncludeAttachments = prefs[Keys.BACKUP_INCLUDE_ATTACHMENTS] ?: false,
+            backupImportMode = prefs[Keys.BACKUP_IMPORT_MODE] ?: "merge",
             isGridView = prefs[Keys.IS_GRID_VIEW] ?: false,
             showEventDetailsInWidget = prefs[Keys.SHOW_EVENT_DETAILS_IN_WIDGET] ?: true,
             widgetBorderEnabled = prefs[Keys.WIDGET_BORDER_ENABLED] ?: true,
@@ -273,7 +283,27 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] = settings.notificationsChannelVersion
             prefs[Keys.TODO_BLEED_TO_CALENDAR] = settings.todoBleedToCalendar
             prefs[Keys.ANIMATIONS_ENABLED] = settings.animationsEnabled
+            prefs[Keys.BACKUP_INCLUDE_SETTINGS] = settings.backupIncludeSettings
+            prefs[Keys.BACKUP_INCLUDE_DATA] = settings.backupIncludeData
+            prefs[Keys.BACKUP_INCLUDE_ATTACHMENTS] = settings.backupIncludeAttachments
+            prefs[Keys.BACKUP_IMPORT_MODE] = settings.backupImportMode
         }
+    }
+
+    override suspend fun setBackupIncludeSettings(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_SETTINGS] = enabled }
+    }
+
+    override suspend fun setBackupIncludeData(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_DATA] = enabled }
+    }
+
+    override suspend fun setBackupIncludeAttachments(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_ATTACHMENTS] = enabled }
+    }
+
+    override suspend fun setBackupImportMode(mode: String) {
+        dataStore.edit { it[Keys.BACKUP_IMPORT_MODE] = mode }
     }
 
     private fun defaultDeviceLanguage(): String =

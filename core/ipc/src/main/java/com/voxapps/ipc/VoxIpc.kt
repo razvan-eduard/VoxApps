@@ -161,6 +161,14 @@ object VoxIpc {
     const val EXPORT_SCOPE_DATA = "data"
     const val EXPORT_SCOPE_BOTH = "both"
 
+    /** [VoxCommand.importMode] values — see [com.voxapps.backup.VoxImportMode] (in `:core:backup`)
+     *  for the exact reconciliation semantics of each. Kept as plain strings here (not the enum
+     *  itself) since `:core:ipc` has no dependency on `:core:backup` and shouldn't gain one just for
+     *  this — every satellite already depends on both modules and maps between them at the edge. */
+    const val IMPORT_MODE_FULL_OVERRIDE = "full_override"
+    const val IMPORT_MODE_MERGE = "merge"
+    const val IMPORT_MODE_ADDITIVE = "additive"
+
     // --- Domains ---
     const val DOMAIN_NOTES = "notes"
     const val DOMAIN_VISION = "vision"

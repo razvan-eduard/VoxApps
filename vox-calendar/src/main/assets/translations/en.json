@@ -153,6 +153,7 @@
   "debug_logging": "Debug logging",
   "debug_logging_desc": "Verbose logs for troubleshooting — off by default",
   "logs_settings_title": "Logs",
+  "backup_restore_title": "Backup & Restore",
   "debug_toasts_label": "Show log toasts",
   "verbose_logging_section": "Verbose Logging",
   "clear_logs": "Clear Logs",

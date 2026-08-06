@@ -145,6 +145,18 @@ fun HubScreen(
         }
     }
 
+    // Any app that got flashed to clear its "stopped" flag (see retryUnreachableThenFinalize/
+    // retryImportUnreachableThenFinalize below) leaves its own activity briefly in front of Hub's.
+    // Those functions already try to return to Hub mid-flow, but that call can get BAL-blocked (see
+    // their own comment) — this is the final, always-runs safety net so the user actually lands
+    // back on Hub once the whole backup/restore is done, not on whichever app was flashed last.
+    fun bringHubToForeground() {
+        context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        }
+    }
+
     fun finalizeExport(uri: Uri, perDomainJson: Map<String, String>, attachmentZipEntries: Map<String, String>) {
         if (perDomainJson.isNotEmpty()) {
             context.contentResolver.openOutputStream(uri)?.use { out ->
@@ -153,6 +165,7 @@ fun HubScreen(
             Toast.makeText(context, languageManager.getString("hub_export_saved_toast"), Toast.LENGTH_SHORT).show()
         }
         isExporting = false
+        bringHubToForeground()
     }
 
     /**
@@ -220,6 +233,7 @@ fun HubScreen(
     fun finalizeImport(results: Map<String, String>) {
         importStatus = results
         isImporting = false
+        bringHubToForeground()
     }
 
     /**
@@ -252,7 +266,7 @@ fun HubScreen(
             for ((domain, data) in targets) {
                 val app = apps.firstOrNull { it.domain == domain } ?: continue
                 if (app.packageName !in targetPackages) continue
-                val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString())
+                val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString(), importMode = settings.importMode)
                 results[domain] = if (result != null && result.ok) {
                     result.text
                 } else {
@@ -691,7 +705,7 @@ fun HubScreen(
                                     results[domain] = languageManager.getString("hub_status_timeout")
                                     unreachable += app.packageName
                                 } else {
-                                    val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString())
+                                    val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString(), importMode = settings.importMode)
                                     results[domain] = if (result != null && result.ok) {
                                         result.text
                                     } else {

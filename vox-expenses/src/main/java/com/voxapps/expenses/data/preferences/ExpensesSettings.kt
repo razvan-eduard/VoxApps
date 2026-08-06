@@ -118,6 +118,16 @@ data class ExpensesSettings(
     /** [com.voxapps.location.LocationCacheTtl] enum name, e.g. "ONE_DAY". */
     val locationCacheTtl: String = "ONE_DAY",
     val locationAlwaysUseHomeTown: Boolean = false,
+    // --- BACKUP & RESTORE (local, shared :core:backup module's VoxBackupSettingsCard) — mirrors
+    // vox-hub's AppBackupConfig shape/names, persisted here for this app's own local backup button,
+    // independent of any Hub-triggered IPC export. ---
+    val backupIncludeSettings: Boolean = true,
+    val backupIncludeData: Boolean = true,
+    val backupIncludeApiKeys: Boolean = false,
+    val backupIncludeAttachments: Boolean = false,
+    /** Wire-format string per [com.voxapps.ipc.VoxIpc.IMPORT_MODE_MERGE] etc., parsed via
+     *  [com.voxapps.backup.VoxImportMode.fromWireValue]. */
+    val backupImportMode: String = "merge",
     /** Which engine(s) [com.voxapps.expenses.state.ExpensesStateManager.requestDuplicateCheck] (the
      *  manual "Check for duplicates now" button and its schedule) use: [MODE_LOCAL] (deterministic,
      *  instant, no Commander dependency), [MODE_LOCAL_AND_AI] (local pre-filters same-amount

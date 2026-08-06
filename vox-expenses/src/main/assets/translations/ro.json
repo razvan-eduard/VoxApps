@@ -121,6 +121,7 @@
   "debug_toasts": "Notificări depanare",
   "debug_toasts_desc": "Afișează ferestre pop-up pe ecran pentru evenimente de sistem și sarcini de fundal",
   "logs_settings_title": "Jurnale",
+  "backup_restore_title": "Backup și restaurare",
   "verbose_logging_section": "Logare Detaliată",
   "clear_logs": "Șterge Loguri",
   "no_logs": "Niciun log disponibil",

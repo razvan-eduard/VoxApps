@@ -1,7 +1,6 @@
 package com.voxapps.commander.receiver
 
-import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
+import com.voxapps.backup.VoxSettingsRoundTrip
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.domain.intent.model.FastMapRule
 
@@ -25,8 +24,6 @@ import com.voxapps.commander.domain.intent.model.FastMapRule
  * JSON" file picker in the Rules Manager screen — one schema serves both call sites.
  */
 object CommanderExportHandler {
-
-    private val gson = Gson()
 
     /**
      * Fields deliberately excluded from [buildExportJson] unless [includeSecrets] is set:
@@ -68,7 +65,7 @@ object CommanderExportHandler {
             geminiIncompatible = false,
             wakeWordProfileJson = null
         )
-        return gson.toJson(portable)
+        return VoxSettingsRoundTrip.toJson(portable)
     }
 
     /**
@@ -81,8 +78,8 @@ object CommanderExportHandler {
      * with a NullPointerException iterating a "non-null" map). Every collection-typed field is
      * coalesced back to its safe empty default here, once, so no caller has to re-derive this.
      */
-    fun parsePortableSettings(json: String): AppSettings? = try {
-        gson.fromJson(json, AppSettings::class.java)?.let { parsed ->
+    fun parsePortableSettings(json: String): AppSettings? =
+        VoxSettingsRoundTrip.parseOrNull(json, AppSettings::class.java) { parsed ->
             parsed.copy(
                 engineModelSelections = parsed.engineModelSelections ?: emptyMap(),
                 downloadedModelIds = parsed.downloadedModelIds ?: emptySet(),
@@ -97,18 +94,12 @@ object CommanderExportHandler {
                 locationCacheTtl = parsed.locationCacheTtl ?: "ONE_DAY"
             )
         }
-    } catch (e: JsonSyntaxException) {
-        null
-    }
 
-    fun buildFastMapRulesJson(rules: List<FastMapRule>): String = gson.toJson(rules)
+    fun buildFastMapRulesJson(rules: List<FastMapRule>): String = VoxSettingsRoundTrip.toJson(rules)
 
     /** Returns `null` if [json] isn't a valid FastMapRule array (e.g. a corrupt/foreign import file) —
      *  same fail-safe contract as [parsePortableSettings], so callers never have to distinguish
      *  "empty file" from "unparseable file". */
-    fun parseFastMapRules(json: String): List<FastMapRule>? = try {
-        gson.fromJson(json, Array<FastMapRule>::class.java)?.toList()
-    } catch (e: JsonSyntaxException) {
-        null
-    }
+    fun parseFastMapRules(json: String): List<FastMapRule>? =
+        VoxSettingsRoundTrip.parseOrNull(json, Array<FastMapRule>::class.java)?.toList()
 }

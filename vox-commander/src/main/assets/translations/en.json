@@ -135,6 +135,7 @@
   "app_alias_delete_msg": "Delete alias rule for \"${displayName}\"? Aliases: ${aliases}",
   "save_button": "Save",
   "tab_advanced": "Advanced",
+  "tab_backup": "Backup",
   "tab_theme": "Theme",
   "tab_benchmark": "Benchmark",
   "tab_verbose_logging": "Verbose Logging",

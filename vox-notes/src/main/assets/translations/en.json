@@ -143,6 +143,7 @@
   "debug_logging": "Debug logging",
   "debug_logging_desc": "Write debug info to logcat — leave off unless you're troubleshooting an issue",
   "logs_settings_title": "Logs",
+  "backup_restore_title": "Backup & Restore",
   "debug_toasts_label": "Show log toasts",
   "verbose_logging_section": "Verbose Logging",
   "clear_logs": "Clear Logs",

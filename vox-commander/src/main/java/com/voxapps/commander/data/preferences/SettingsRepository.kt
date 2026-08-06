@@ -177,6 +177,16 @@ interface SettingsRepository {
     fun getLocationAlwaysUseHomeTownSync(): Boolean
     suspend fun setLocationAlwaysUseHomeTown(enabled: Boolean)
 
+    // --- BACKUP & RESTORE (local) ---
+    fun getBackupIncludeSettingsSync(): Boolean
+    suspend fun setBackupIncludeSettings(enabled: Boolean)
+    fun getBackupIncludeDataSync(): Boolean
+    suspend fun setBackupIncludeData(enabled: Boolean)
+    fun getBackupIncludeApiKeysSync(): Boolean
+    suspend fun setBackupIncludeApiKeys(enabled: Boolean)
+    fun getBackupImportModeSync(): String
+    suspend fun setBackupImportMode(mode: String)
+
     // --- FIRST LAUNCH / TUTORIAL ---
     fun getFirstLaunchCompletedSync(): Boolean
     suspend fun setFirstLaunchCompleted(completed: Boolean)

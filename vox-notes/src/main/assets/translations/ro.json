@@ -143,6 +143,7 @@
   "debug_logging": "Jurnalizare depanare",
   "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme",
   "logs_settings_title": "Jurnale",
+  "backup_restore_title": "Backup și restaurare",
   "debug_toasts_label": "Afișează notificări pentru jurnale",
   "verbose_logging_section": "Logare Detaliată",
   "clear_logs": "Șterge Loguri",

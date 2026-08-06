@@ -16,8 +16,8 @@ android {
         applicationId = "com.voxapps.commander"
         minSdk = 29
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.13-beta"
+        versionCode = 15
+        versionName = "0.14-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -131,6 +131,7 @@ dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:apppicker"))
     implementation(project(":core:location"))
+    implementation(project(":core:backup"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
     implementation(platform(libs.androidx.compose.bom))

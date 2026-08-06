@@ -35,8 +35,13 @@ object VoxDataTransferClient {
         context: Context,
         packageName: String,
         payloadJson: String,
+        importMode: String = VoxIpc.IMPORT_MODE_MERGE,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
-    ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_IMPORT, text = payloadJson), timeoutMs)
+    ): VoxResult? = send(
+        context, packageName,
+        VoxCommand(op = VoxIpc.OP_IMPORT, text = payloadJson, importMode = importMode),
+        timeoutMs
+    )
 
     /**
      * Peer-to-peer sync, export side: asks a satellite for everything that's changed since [since]

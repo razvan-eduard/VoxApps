@@ -21,6 +21,10 @@ interface HubSettingsRepository {
     suspend fun setBackupInterval(interval: String)
     suspend fun setBackupRetentionCount(count: Int)
 
+    /** One of [HubSettings.IMPORT_MODE_FULL_OVERRIDE]/[HubSettings.IMPORT_MODE_MERGE]/
+     *  [HubSettings.IMPORT_MODE_ADDITIVE] — see [HubSettings.importMode]'s doc comment. */
+    suspend fun setImportMode(mode: String)
+
     /** Updates one app's backup config, leaving every other app's entry untouched — read-modify-write
      *  within a single DataStore edit so concurrent toggles from different app sections don't race. */
     suspend fun setAppBackupConfig(packageName: String, config: AppBackupConfig)
@@ -43,4 +47,11 @@ interface HubSettingsRepository {
     /** Updates one domain's monitored flag, leaving every other domain's entry untouched — same
      *  read-modify-write shape as [setAppBackupConfig]. */
     suspend fun setVoxConnectMonitoredApp(domain: String, monitored: Boolean)
+
+    /** Bulk overwrite from Hub's own local Backup & Restore card — writes every portable field in
+     *  one DataStore edit (mirrors every satellite app's identical `restoreSettings`). Device-local
+     *  runtime state ([HubSettings.lastBackupSuccess] and friends, [HubSettings.voxConnectEnabled]/
+     *  [HubSettings.voxConnectPort]) is deliberately never part of [settings] here — see
+     *  `HubBackupSettingsSection`'s export-side exclusion of the same fields. */
+    suspend fun restoreSettings(settings: HubSettings)
 }

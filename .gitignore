@@ -49,6 +49,12 @@ backup
 # ...except actual source code that happens to live in a directory named "backup"
 # (the pattern above is for native-build artifacts, e.g. whisper.cpp's .so safety backup).
 !vox-hub/src/main/java/com/voxapps/hub/domain/backup/
+!vox-hub/src/test/java/com/voxapps/hub/domain/backup/
+!core/backup/
+!core/backup/**
+# Re-exclude build output within the un-ignored module above — a later "!" pattern otherwise wins
+# over the earlier */build/ **/build/ rules for anything nested under core/backup/.
+core/backup/build/
 build-android-hybrid/
 
 # =========================

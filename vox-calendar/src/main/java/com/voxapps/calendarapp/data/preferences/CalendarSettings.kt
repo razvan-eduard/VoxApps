@@ -53,6 +53,15 @@ data class CalendarSettings(
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,
     val onboardingCompleted: Boolean = false,
+    // --- BACKUP & RESTORE (local, shared :core:backup module's VoxBackupSettingsCard) — mirrors
+    // vox-hub's AppBackupConfig shape/names, persisted here for this app's own local backup button,
+    // independent of any Hub-triggered IPC export. ---
+    val backupIncludeSettings: Boolean = true,
+    val backupIncludeData: Boolean = true,
+    val backupIncludeAttachments: Boolean = false,
+    /** Wire-format string per [com.voxapps.ipc.VoxIpc.IMPORT_MODE_MERGE] etc., parsed via
+     *  [com.voxapps.backup.VoxImportMode.fromWireValue]. */
+    val backupImportMode: String = "merge",
     val isGridView: Boolean = false,
     val showEventDetailsInWidget: Boolean = true,
     val widgetBorderEnabled: Boolean = true,

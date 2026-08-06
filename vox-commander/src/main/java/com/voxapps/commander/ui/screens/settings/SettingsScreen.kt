@@ -66,7 +66,7 @@ fun SettingsContent(
     // REALTIME STATE - observe AppStateManager uiState for reactive updates
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     
-    val pagerState = rememberPagerState(pageCount = { 8 })
+    val pagerState = rememberPagerState(pageCount = { 9 })
 
     val isVoskLoading by modelManagementViewModel.isVoskLoading.collectAsStateWithLifecycle()
     val isVoskOffline by modelManagementViewModel.isVoskOffline.collectAsStateWithLifecycle()
@@ -117,7 +117,7 @@ fun SettingsContent(
                             },
                             modifier = Modifier.padding(bottom = 12.dp)
                         ) {
-                            val tabs = listOf("tab_general", "tab_ai_models", "tab_service", "tab_app_manager", "tab_integrations", "tab_permissions", "tab_advanced", "tab_theme")
+                            val tabs = listOf("tab_general", "tab_ai_models", "tab_service", "tab_app_manager", "tab_integrations", "tab_permissions", "tab_advanced", "tab_backup", "tab_theme")
                             
                             tabs.forEachIndexed { index, tabKey ->
                                 val selected = pagerState.currentPage == index
@@ -150,7 +150,14 @@ fun SettingsContent(
                             },
                             refreshTrigger = uiState.refreshTrigger
                         )
-                    } else if (page == 7) { // Theme (ThemeSettingsScreen already scrolls itself, no outer scroll wrapper)
+                    } else if (page == 7) { // Backup & Restore (card only, own scroll wrapper)
+                        val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(top = 16.dp).verticalScroll(rememberScrollState())
+                        ) {
+                            BackupSettingsSection(settingsRepo = settingsRepo, settings = settings)
+                        }
+                    } else if (page == 8) { // Theme (ThemeSettingsScreen already scrolls itself, no outer scroll wrapper)
                         ThemeSettingsScreen(
                             darkMode = runCatching { VoxDarkMode.valueOf(uiState.themeDarkMode) }.getOrDefault(VoxDarkMode.SYSTEM),
                             colored = uiState.themeColored,

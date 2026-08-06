@@ -159,6 +159,12 @@ class SettingsRepositoryImpl(
         val LOCATION_CACHE_TTL = stringPreferencesKey("location_cache_ttl")
         val LOCATION_ALWAYS_USE_HOME_TOWN = booleanPreferencesKey("location_always_use_home_town")
 
+        // Backup & Restore (local)
+        val BACKUP_INCLUDE_SETTINGS = booleanPreferencesKey("backup_include_settings")
+        val BACKUP_INCLUDE_DATA = booleanPreferencesKey("backup_include_data")
+        val BACKUP_INCLUDE_API_KEYS = booleanPreferencesKey("backup_include_api_keys")
+        val BACKUP_IMPORT_MODE = stringPreferencesKey("backup_import_mode")
+
         // First launch / tutorial
         val FIRST_LAUNCH_COMPLETED = booleanPreferencesKey("first_launch_completed")
         val TUTORIAL_COMPLETED = booleanPreferencesKey("tutorial_completed")
@@ -375,6 +381,10 @@ class SettingsRepositoryImpl(
             locationHomeTownLon = prefs[Keys.LOCATION_HOME_TOWN_LON]?.toDoubleOrNull(),
             locationCacheTtl = prefs[Keys.LOCATION_CACHE_TTL] ?: "ONE_DAY",
             locationAlwaysUseHomeTown = prefs[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] ?: false,
+            backupIncludeSettings = prefs[Keys.BACKUP_INCLUDE_SETTINGS] ?: true,
+            backupIncludeData = prefs[Keys.BACKUP_INCLUDE_DATA] ?: true,
+            backupIncludeApiKeys = prefs[Keys.BACKUP_INCLUDE_API_KEYS] ?: false,
+            backupImportMode = prefs[Keys.BACKUP_IMPORT_MODE] ?: "merge",
             firstLaunchCompleted = prefs[Keys.FIRST_LAUNCH_COMPLETED] ?: false,
             tutorialCompleted = prefs[Keys.TUTORIAL_COMPLETED] ?: false
         )
@@ -482,6 +492,10 @@ class SettingsRepositoryImpl(
                 ?: prefs.remove(Keys.LOCATION_HOME_TOWN_LON)
             prefs[Keys.LOCATION_CACHE_TTL] = imported.locationCacheTtl
             prefs[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] = imported.locationAlwaysUseHomeTown
+            prefs[Keys.BACKUP_INCLUDE_SETTINGS] = imported.backupIncludeSettings
+            prefs[Keys.BACKUP_INCLUDE_DATA] = imported.backupIncludeData
+            prefs[Keys.BACKUP_INCLUDE_API_KEYS] = imported.backupIncludeApiKeys
+            prefs[Keys.BACKUP_IMPORT_MODE] = imported.backupImportMode
 
             prefs[Keys.FIRST_LAUNCH_COMPLETED] = imported.firstLaunchCompleted
             prefs[Keys.TUTORIAL_COMPLETED] = imported.tutorialCompleted
@@ -1053,6 +1067,27 @@ class SettingsRepositoryImpl(
     override fun getLocationAlwaysUseHomeTownSync(): Boolean = runBlocking { dataStore.data.first()[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] ?: false }
     override suspend fun setLocationAlwaysUseHomeTown(enabled: Boolean) {
         dataStore.edit { it[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] = enabled }
+    }
+
+    // --- BACKUP & RESTORE (local) ---
+    override fun getBackupIncludeSettingsSync(): Boolean = runBlocking { dataStore.data.first()[Keys.BACKUP_INCLUDE_SETTINGS] ?: true }
+    override suspend fun setBackupIncludeSettings(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_SETTINGS] = enabled }
+    }
+
+    override fun getBackupIncludeDataSync(): Boolean = runBlocking { dataStore.data.first()[Keys.BACKUP_INCLUDE_DATA] ?: true }
+    override suspend fun setBackupIncludeData(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_DATA] = enabled }
+    }
+
+    override fun getBackupIncludeApiKeysSync(): Boolean = runBlocking { dataStore.data.first()[Keys.BACKUP_INCLUDE_API_KEYS] ?: false }
+    override suspend fun setBackupIncludeApiKeys(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_API_KEYS] = enabled }
+    }
+
+    override fun getBackupImportModeSync(): String = runBlocking { dataStore.data.first()[Keys.BACKUP_IMPORT_MODE] ?: "merge" }
+    override suspend fun setBackupImportMode(mode: String) {
+        dataStore.edit { it[Keys.BACKUP_IMPORT_MODE] = mode }
     }
 
     // --- FIRST LAUNCH / TUTORIAL ---

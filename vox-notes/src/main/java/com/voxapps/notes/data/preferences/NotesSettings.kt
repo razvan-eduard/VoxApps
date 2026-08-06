@@ -56,6 +56,15 @@ data class NotesSettings(
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,
     val onboardingCompleted: Boolean = false,
+    // --- BACKUP & RESTORE (local, shared :core:backup module's VoxBackupSettingsCard) — mirrors
+    // vox-hub's AppBackupConfig shape/names, persisted here for this app's own local backup button,
+    // independent of any Hub-triggered IPC export. ---
+    val backupIncludeSettings: Boolean = true,
+    val backupIncludeData: Boolean = true,
+    val backupIncludeAttachments: Boolean = false,
+    /** Wire-format string per [com.voxapps.ipc.VoxIpc.IMPORT_MODE_MERGE] etc., parsed via
+     *  [com.voxapps.backup.VoxImportMode.fromWireValue]. */
+    val backupImportMode: String = "merge",
     /** Off by default — attaching a photo costs real LLM tokens on top of the free OCR text a scan
      *  already provides. Only takes effect when Vision's own "send photo to AI" setting also
      *  provided a downscaled copy — this is the per-satellite half of that decision, not a

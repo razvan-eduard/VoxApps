@@ -311,6 +311,7 @@
   "debug_toasts": "Notifications de débogage",
   "debug_toasts_desc": "Affiche des pop-ups à l'écran pour les événements système et les tâches en arrière-plan",
   "logs_settings_title": "Journaux",
+  "backup_restore_title": "Sauvegarde et restauration",
   "verbose_logging_section": "Journalisation détaillée",
   "clear_logs": "Effacer les logs",
   "no_logs": "Aucun log disponible",

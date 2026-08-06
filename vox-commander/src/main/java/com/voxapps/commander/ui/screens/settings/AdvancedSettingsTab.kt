@@ -374,6 +374,7 @@ fun AdvancedSettingsTab(
                 }
             }
         }
+
     }
 
     // --- RESTART DIALOG ---

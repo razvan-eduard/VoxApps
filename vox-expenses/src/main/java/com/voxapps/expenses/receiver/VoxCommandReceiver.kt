@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.voxapps.backup.VoxBackupDispatch
+import com.voxapps.backup.VoxImportMode
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.llm.ExpenseParsePromptBuilder
 import com.voxapps.expenses.domain.llm.ExpenseParseRequestSender
@@ -121,14 +123,9 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.attachmentDao,
                     container.duplicateRuleDao
                 )
-                val pending = goAsync()
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        pending.setResultData(handler.export(scope, command.includeSecrets, command.includePhotos).toJson())
-                    } finally {
-                        pending.finish()
-                    }
+                VoxBackupDispatch.dispatch(this) {
+                    handler.export(scope, command.includeSecrets, command.includePhotos)
                 }
             }
 
@@ -141,13 +138,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.attachmentDao,
                     container.duplicateRuleDao
                 )
-                val pending = goAsync()
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        pending.setResultData(handler.import(command.text.orEmpty()).toJson())
-                    } finally {
-                        pending.finish()
-                    }
+                VoxBackupDispatch.dispatch(this) {
+                    handler.import(command.text.orEmpty(), VoxImportMode.fromWireValue(command.importMode))
                 }
             }
 

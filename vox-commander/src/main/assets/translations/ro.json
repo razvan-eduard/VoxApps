@@ -133,6 +133,7 @@
   "app_alias_delete_msg": "Ștergi regula de alias pentru \"${displayName}\"? Alias-uri: ${aliases}",
   "save_button": "Salvează",
   "tab_advanced": "Avansat",
+  "tab_backup": "Backup",
   "tab_theme": "Temă",
   "tab_benchmark": "Diagnostic",
   "tab_verbose_logging": "Log detaliat",

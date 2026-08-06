@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MergeType
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Notifications
@@ -56,7 +57,7 @@ import com.voxapps.notes.state.NotesStateManager
 import com.voxapps.notes.state.NotesUiState
 import com.voxapps.notes.ui.LocalLanguageManager
 
-private enum class SettingsPage { MENU, GENERAL, THEME, NOTIFICATIONS, CATEGORIES, NOTE_CLEANUP, LOGS }
+private enum class SettingsPage { MENU, GENERAL, THEME, NOTIFICATIONS, CATEGORIES, NOTE_CLEANUP, BACKUP, LOGS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,6 +106,7 @@ fun SettingsScreen(
         SettingsPage.NOTIFICATIONS -> languageManager.getString("notifications_settings_title")
         SettingsPage.CATEGORIES -> languageManager.getString("categories_settings_title")
         SettingsPage.NOTE_CLEANUP -> languageManager.getString("note_cleanup_settings_title")
+        SettingsPage.BACKUP -> languageManager.getString("backup_restore_title")
         SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
     }
 
@@ -151,6 +153,11 @@ fun SettingsScreen(
                     headlineContent = { Text(languageManager.getString("note_cleanup_settings_title")) },
                     leadingContent = { Icon(Icons.Filled.CleaningServices, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTE_CLEANUP }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("backup_restore_title")) },
+                    leadingContent = { Icon(Icons.Filled.Backup, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
                 ListItem(
@@ -250,6 +257,9 @@ fun SettingsScreen(
                 stateManager = stateManager,
                 modifier = mod
             )
+            SettingsPage.BACKUP -> Column(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
+                BackupSettingsSection(settingsRepo = settingsRepo, settings = settings)
+            }
             SettingsPage.LOGS -> LogsSettingsTab(
                 enabled = settings.debugLoggingEnabled,
                 onEnabledChange = { stateManager.setDebugLoggingEnabled(it) },

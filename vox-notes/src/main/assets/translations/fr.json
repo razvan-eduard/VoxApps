@@ -102,6 +102,7 @@
   "debug_logging": "Journalisation de débogage",
   "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage",
   "logs_settings_title": "Journaux",
+  "backup_restore_title": "Sauvegarde et restauration",
   "debug_toasts_label": "Afficher les toasts de journal",
   "verbose_logging_section": "Journalisation détaillée",
   "clear_logs": "Effacer les logs",

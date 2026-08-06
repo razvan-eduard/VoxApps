@@ -121,6 +121,7 @@
   "debug_toasts": "Debug toasts",
   "debug_toasts_desc": "Show on-screen popups for system events and background tasks",
   "logs_settings_title": "Logs",
+  "backup_restore_title": "Backup & Restore",
   "verbose_logging_section": "Verbose Logging",
   "clear_logs": "Clear Logs",
   "no_logs": "No logs available",

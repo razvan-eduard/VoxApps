@@ -153,6 +153,7 @@
   "debug_logging": "Journalisation de débogage",
   "debug_logging_desc": "Journaux détaillés pour le dépannage — désactivé par défaut",
   "logs_settings_title": "Journaux",
+  "backup_restore_title": "Sauvegarde et restauration",
   "debug_toasts_label": "Afficher les toasts de journal",
   "verbose_logging_section": "Journalisation détaillée",
   "clear_logs": "Effacer les logs",

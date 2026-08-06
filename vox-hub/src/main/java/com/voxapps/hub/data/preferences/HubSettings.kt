@@ -40,6 +40,12 @@ import com.voxapps.hub.domain.backup.AppBackupConfig
  * - [voxConnectMonitoredApps]: per-domain opt-in for what a paired VoxConnect device may read/command
  *   via `GET /apps`/`POST /command` — mirrors [appBackupConfigs]' shape (a flattened JSON map), just
  *   a single boolean per domain since this slice doesn't need Backup's finer Settings/Data granularity.
+ * - [importMode]: one global choice ([IMPORT_MODE_FULL_OVERRIDE]/[IMPORT_MODE_MERGE]/
+ *   [IMPORT_MODE_ADDITIVE]) for how every satellite reconciles imported data against what's already
+ *   on that device — not per-app, since it's a single question ("how aggressively should this
+ *   restore behave") rather than a per-domain concern. Still respects each app's own
+ *   [AppBackupConfig.includeData] toggle in [appBackupConfigs]: an app with Data off is skipped for
+ *   import entirely, same as today, regardless of this setting.
  */
 @Immutable
 data class HubSettings(
@@ -57,7 +63,8 @@ data class HubSettings(
     val voxConnectEnabled: Boolean = false,
     val voxConnectPort: Int = VOXCONNECT_DEFAULT_PORT,
     val voxConnectMediaControlEnabled: Boolean = false,
-    val voxConnectMonitoredApps: Map<String, Boolean> = emptyMap()
+    val voxConnectMonitoredApps: Map<String, Boolean> = emptyMap(),
+    val importMode: String = IMPORT_MODE_MERGE
 ) {
     companion object {
         const val THEME_SYSTEM = "SYSTEM"
@@ -76,5 +83,12 @@ data class HubSettings(
         const val RETENTION_UNLIMITED = -1
 
         const val VOXCONNECT_DEFAULT_PORT = 8787
+
+        // Mirror com.voxapps.ipc.VoxIpc.IMPORT_MODE_* — kept as plain strings here rather than a
+        // dependency on :core:ipc from this settings snapshot class, same reasoning as VoxIpc's own
+        // doc comment for that constant.
+        const val IMPORT_MODE_FULL_OVERRIDE = "full_override"
+        const val IMPORT_MODE_MERGE = "merge"
+        const val IMPORT_MODE_ADDITIVE = "additive"
     }
 }

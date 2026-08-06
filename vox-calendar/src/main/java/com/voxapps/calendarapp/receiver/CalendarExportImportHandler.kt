@@ -1,13 +1,15 @@
 package com.voxapps.calendarapp.receiver
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
-import androidx.core.content.FileProvider
-import com.google.gson.Gson
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentSource
+import com.voxapps.backup.VoxAttachmentZipUtil
+import com.voxapps.backup.VoxBiometricGate
+import com.voxapps.backup.VoxImportMode
+import com.voxapps.backup.VoxSettingsRoundTrip
+import com.voxapps.backup.VoxSnapshotReplaceImporter
 import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntryType
@@ -26,15 +28,9 @@ import com.voxapps.logging.Logger
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
 import java.util.UUID
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 private const val TAG = "CalendarExportImportHandler"
-private val gson = Gson()
 
 /**
  * Vox Hub's export/import for this app, extracted from the BroadcastReceiver so it's unit-testable
@@ -58,8 +54,7 @@ class CalendarExportImportHandler(
 ) {
     suspend fun export(scope: String = VoxIpc.EXPORT_SCOPE_BOTH, includePhotos: Boolean = false): VoxResult {
         val settings = settingsRepo.getSnapshot()
-        val locked = settings.isBiometricRequired &&
-            !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
+        val locked = VoxBiometricGate.isLocked(settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid)
         if (locked) return VoxResult(ok = false, text = CalendarReadResponder.LOCKED_MESSAGE)
 
         val json = JSONObject()
@@ -98,63 +93,17 @@ class CalendarExportImportHandler(
     }
 
     /** Zips this export's attachment files (see :core:attachments) into a fresh file under cacheDir
-     *  and grants Hub read access — mirrors vox-expenses' buildReceiptsZip/vox-notes'
-     *  buildAttachmentsZip. Best-effort: returns null on any failure or if there's nothing to bundle. */
-    private fun buildAttachmentsZip(fileNames: List<String>): Uri? {
-        if (fileNames.isEmpty()) return null
-        val attachmentsDir = File(context.filesDir, CalendarAttachments.DIR)
-        return try {
-            val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val zipFile = File(exportsDir, "export_attachments_${UUID.randomUUID()}.zip")
-            var wroteAny = false
-            ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-                for (name in fileNames) {
-                    val file = File(attachmentsDir, name)
-                    if (file.exists()) {
-                        zos.putNextEntry(ZipEntry(name))
-                        file.inputStream().use { it.copyTo(zos) }
-                        zos.closeEntry()
-                        wroteAny = true
-                    }
-                }
-            }
-            if (!wroteAny) {
-                zipFile.delete()
-                return null
-            }
-            val uri = FileProvider.getUriForFile(context, CalendarAttachments.FILE_PROVIDER_AUTHORITY, zipFile)
-            context.grantUriPermission(VoxIpc.HUB_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            uri
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to build attachments export zip", e)
-            null
-        }
-    }
+     *  and grants Hub read access. Best-effort: returns null on any failure or if there's nothing to
+     *  bundle. */
+    private fun buildAttachmentsZip(fileNames: List<String>): Uri? =
+        VoxAttachmentZipUtil.build(context, CalendarAttachments.DIR, fileNames, CalendarAttachments.FILE_PROVIDER_AUTHORITY)
 
-    /** Same shape as vox-expenses' extractReceiptsZip — every entry name flattened to its bare
-     *  filename (zip-slip defense). */
-    private fun extractAttachmentsZip(uri: Uri) {
-        val attachmentsDir = File(context.filesDir, CalendarAttachments.DIR).apply { mkdirs() }
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            ZipInputStream(input).use { zis ->
-                var entry = zis.nextEntry
-                while (entry != null) {
-                    if (!entry.isDirectory) {
-                        val safeName = File(entry.name).name
-                        if (safeName.isNotBlank()) {
-                            FileOutputStream(File(attachmentsDir, safeName)).use { fos -> zis.copyTo(fos) }
-                        }
-                    }
-                    entry = zis.nextEntry
-                }
-            }
-        }
-    }
+    private fun extractAttachmentsZip(uri: Uri) =
+        VoxAttachmentZipUtil.extract(context, CalendarAttachments.DIR, uri)
 
-    suspend fun import(payloadJson: String): VoxResult {
+    suspend fun import(payloadJson: String, importMode: VoxImportMode = VoxImportMode.MERGE): VoxResult {
         val settings = settingsRepo.getSnapshot()
-        val locked = settings.isBiometricRequired &&
-            !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
+        val locked = VoxBiometricGate.isLocked(settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid)
         if (locked) return VoxResult(ok = false, text = CalendarReadResponder.LOCKED_MESSAGE)
 
         val root = try {
@@ -164,6 +113,12 @@ class CalendarExportImportHandler(
         }
 
         root.optJSONObject("settings")?.let { settingsRepo.restoreSettings(it.toCalendarSettings()) }
+
+        // Injected by Hub's ExportImportUtil.parseImportDocument() from the outer export document's
+        // timestamp — mirrors vox-notes'/vox-expenses' identical field. Previously missing entirely
+        // here, which meant every import unconditionally wiped every pre-existing event/to-do item
+        // regardless of when it was created; now gated exactly like the other apps.
+        val exportedAt = root.optLong("exported_at", 0L)
 
         // Stage any bundled attachment photos before the entry-insert loop below references them by
         // filename, so thumbnails resolve immediately once the import completes. Best-effort: a
@@ -261,6 +216,10 @@ class CalendarExportImportHandler(
                 recurrenceFrequency = e.optStringOrNull("recurrenceFrequency")
                     ?.let { runCatching { RecurrenceFrequency.valueOf(it) }.getOrNull() }
                     ?: RecurrenceFrequency.NONE,
+                // Preserved from the source device, never re-stamped to "now" — same reasoning as
+                // vox-expenses' addExpense createdAt param: re-stamping would make this row
+                // permanently immune to the exportedAt-gated delete pass below on a later re-import.
+                now = e.optLong("createdAt", System.currentTimeMillis()),
                 recurrenceInterval = if (e.has("recurrenceInterval")) e.optInt("recurrenceInterval", 1) else 1,
                 recurrenceUntilMillis = if (e.has("recurrenceUntilMillis") && !e.isNull("recurrenceUntilMillis")) {
                     e.optLong("recurrenceUntilMillis")
@@ -296,47 +255,55 @@ class CalendarExportImportHandler(
             }
         }
 
-        // Entries use snapshot-then-replace semantics (mirrors vox-expenses' expenses): snapshot
-        // pre-existing entries, insert every imported one, then delete exactly what existed before.
+        // Entries reconcile per the user's chosen import mode (see VoxSnapshotReplaceImporter):
+        // snapshot pre-existing entries, insert every imported one, then reconcile pre-existing rows.
         var entriesCreated = 0
         if (root.has("events")) {
             // Same to-do exclusion as export — a to-do-flavored entry was never part of this backup,
-            // so it must never be wiped by this import's snapshot-then-replace pass either.
-            val preExistingIds = calendarRepo.entriesSnapshot().filter { it.entry.listId == null }.map { it.entry.id }
-
+            // so it must never be wiped by this import's reconciliation pass either.
+            val preExistingEvents = calendarRepo.entriesSnapshot().filter { it.entry.listId == null }
             val importedEntries = root.optJSONArray("events") ?: JSONArray()
-            for (i in 0 until importedEntries.length()) {
-                val e = importedEntries.getJSONObject(i)
-                val importedLayerId = e.optLong("layerId")
-                val layerId = importedIdToLocalId[importedLayerId] ?: defaultLocalLayerId ?: continue
 
-                val newEntryId = restoreEntry(e, layerId, listId = null)
-                entriesCreated++
-                if (newEntryId > 0) restoreAttachments(newEntryId, e)
-            }
-
-            preExistingIds.forEach { calendarRepo.deleteEntryById(it) }
+            entriesCreated = VoxSnapshotReplaceImporter.restore(
+                mode = importMode,
+                imported = (0 until importedEntries.length()).map { importedEntries.getJSONObject(it) },
+                preExisting = preExistingEvents,
+                exportedAt = exportedAt,
+                createdAtOf = { it.entry.createdAt },
+                insert = insert@{ e ->
+                    val importedLayerId = e.optLong("layerId")
+                    val layerId = importedIdToLocalId[importedLayerId] ?: defaultLocalLayerId ?: return@insert 0L
+                    val newEntryId = restoreEntry(e, layerId, listId = null)
+                    if (newEntryId > 0) restoreAttachments(newEntryId, e)
+                    newEntryId
+                },
+                delete = { calendarRepo.deleteEntryById(it.entry.id) }
+            )
         }
 
-        // Same snapshot-then-replace shape as "events" just above, filtered to to-do-flavored rows
-        // instead (listId != null) — the two never touch each other's snapshot.
+        // Same reconciliation shape as "events" just above, filtered to to-do-flavored rows instead
+        // (listId != null) — the two never touch each other's snapshot.
         var itemsCreated = 0
         if (root.has("todoItems")) {
-            val preExistingItemIds = calendarRepo.entriesSnapshot().filter { it.entry.listId != null }.map { it.entry.id }
-
+            val preExistingItems = calendarRepo.entriesSnapshot().filter { it.entry.listId != null }
             val importedItems = root.optJSONArray("todoItems") ?: JSONArray()
-            for (i in 0 until importedItems.length()) {
-                val e = importedItems.getJSONObject(i)
-                val importedLayerId = e.optLong("layerId")
-                val layerId = importedIdToLocalId[importedLayerId] ?: defaultLocalLayerId ?: continue
-                val listId = importedListIdToLocalId[e.optLong("listId")] ?: continue
 
-                val newEntryId = restoreEntry(e, layerId, listId)
-                itemsCreated++
-                if (newEntryId > 0) restoreAttachments(newEntryId, e)
-            }
-
-            preExistingItemIds.forEach { calendarRepo.deleteEntryById(it) }
+            itemsCreated = VoxSnapshotReplaceImporter.restore(
+                mode = importMode,
+                imported = (0 until importedItems.length()).map { importedItems.getJSONObject(it) },
+                preExisting = preExistingItems,
+                exportedAt = exportedAt,
+                createdAtOf = { it.entry.createdAt },
+                insert = insert@{ e ->
+                    val importedLayerId = e.optLong("layerId")
+                    val layerId = importedIdToLocalId[importedLayerId] ?: defaultLocalLayerId ?: return@insert 0L
+                    val listId = importedListIdToLocalId[e.optLong("listId")] ?: return@insert 0L
+                    val newEntryId = restoreEntry(e, layerId, listId)
+                    if (newEntryId > 0) restoreAttachments(newEntryId, e)
+                    newEntryId
+                },
+                delete = { calendarRepo.deleteEntryById(it.entry.id) }
+            )
         }
 
         return VoxResult(
@@ -355,14 +322,14 @@ class CalendarExportImportHandler(
 // so import's Gson.fromJson always has every field present. Mirrors vox-commander's
 // CommanderExportHandler, the only handler in this codebase that didn't suffer this drift.
 private fun CalendarSettings.toJson(): JSONObject =
-    JSONObject(gson.toJson(copy(onboardingCompleted = false)))
+    JSONObject(VoxSettingsRoundTrip.toJson(copy(onboardingCompleted = false)))
 
 /** Returns Room/DataStore defaults for [CalendarSettings] if [this] isn't valid JSON for it (e.g. a
  *  corrupt/foreign import file) — Gson's reflection deserializer can't throw its way past a
  *  structurally-valid-but-wrong-shape JSON object, so this fails safe to the all-defaults instance
  *  rather than a partially-null one. */
 private fun JSONObject.toCalendarSettings(): CalendarSettings =
-    gson.fromJson(toString(), CalendarSettings::class.java) ?: CalendarSettings()
+    VoxSettingsRoundTrip.parseOrDefault(toString(), CalendarSettings::class.java, CalendarSettings())
 
 private fun CalendarLayer.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
@@ -408,6 +375,7 @@ private fun CalendarEntryWithTags.toJson(
     put("listId", e.listId)
     put("position", e.position)
     put("colorArgb", e.colorArgb)
+    put("createdAt", e.createdAt)
     put("tags", JSONArray(tagNames))
     put("attachments", JSONArray(attachments.map { it.toJson() }))
     put("reminders", JSONArray(reminderOffsetsMinutes))

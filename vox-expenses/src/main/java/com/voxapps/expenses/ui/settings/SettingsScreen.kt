@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MergeType
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Mic
@@ -61,7 +62,7 @@ import com.voxapps.logging.ui.LogsSettingsTab
 import com.voxapps.logging.ui.LogsTabStrings
 
 private enum class SettingsPage {
-    MENU, GENERAL, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP, CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, LOGS
+    MENU, GENERAL, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP, CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, BACKUP, LOGS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,6 +117,7 @@ fun SettingsScreen(
         SettingsPage.CURRENCY -> languageManager.getString("currency_settings_title")
         SettingsPage.NOTIFICATION_CAPTURE -> languageManager.getString("notification_capture_title")
         SettingsPage.SPENDING_LIMITS -> languageManager.getString("spending_limits_title")
+        SettingsPage.BACKUP -> languageManager.getString("backup_restore_title")
         SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
     }
 
@@ -183,6 +185,11 @@ fun SettingsScreen(
                     headlineContent = { Text(languageManager.getString("spending_limits_title")) },
                     leadingContent = { Icon(Icons.Filled.Shield, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SPENDING_LIMITS }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("backup_restore_title")) },
+                    leadingContent = { Icon(Icons.Filled.Backup, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
                 ListItem(
@@ -313,6 +320,9 @@ fun SettingsScreen(
                 stateManager = stateManager,
                 modifier = mod
             )
+            SettingsPage.BACKUP -> Column(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
+                BackupSettingsSection(settingsRepo = settingsRepo, settings = settings)
+            }
             SettingsPage.LOGS -> LogsSettingsTab(
                 enabled = settings.debugLoggingEnabled,
                 onEnabledChange = { stateManager.setDebugLoggingEnabled(it) },

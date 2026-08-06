@@ -139,6 +139,19 @@ data class AppSettings(
     val locationCacheTtl: String = "ONE_DAY",
     val locationAlwaysUseHomeTown: Boolean = false,
 
+    // --- BACKUP & RESTORE (local, shared :core:backup module's VoxBackupSettingsCard) ---
+    // Mirrors vox-hub's AppBackupConfig shape/names — this is the same concept, just persisted
+    // locally for this app's own "back up to a file I pick right now" button, independent of any
+    // Hub-triggered IPC export (which always carries its own explicit scope/secrets parameters).
+    val backupIncludeSettings: Boolean = true,
+    val backupIncludeData: Boolean = true,
+    val backupIncludeApiKeys: Boolean = false,
+    /** Wire-format string per [com.voxapps.ipc.VoxIpc.IMPORT_MODE_MERGE] etc. (same lowercase
+     *  convention as vox-hub's `HubSettings.importMode`, parsed via
+     *  [com.voxapps.backup.VoxImportMode.fromWireValue]) — governs only this app's own local
+     *  restore-from-file button. */
+    val backupImportMode: String = "merge",
+
     // --- FIRST LAUNCH / TUTORIAL ---
     val firstLaunchCompleted: Boolean = false,
     val tutorialCompleted: Boolean = false,

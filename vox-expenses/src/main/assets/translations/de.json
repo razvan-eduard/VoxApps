@@ -311,6 +311,7 @@
   "debug_toasts": "Debug-Popups",
   "debug_toasts_desc": "Zeigt Bildschirm-Popups für Systemereignisse und Hintergrundaufgaben",
   "logs_settings_title": "Protokolle",
+  "backup_restore_title": "Sicherung & Wiederherstellung",
   "verbose_logging_section": "Detailliertes Logging",
   "clear_logs": "Logs löschen",
   "no_logs": "Keine Logs verfügbar",

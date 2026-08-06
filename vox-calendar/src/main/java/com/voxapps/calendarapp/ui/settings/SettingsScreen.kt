@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Notifications
@@ -65,7 +66,7 @@ import com.voxapps.logging.ui.LogViewerStrings
 import com.voxapps.logging.ui.LogsSettingsTab
 import com.voxapps.logging.ui.LogsTabStrings
 
-private enum class SettingsPage { MENU, GENERAL, THEME, NOTIFICATIONS, ICS, LOGS }
+private enum class SettingsPage { MENU, GENERAL, THEME, NOTIFICATIONS, ICS, BACKUP, LOGS }
 
 /** Settings shell (mirrors vox-expenses' SettingsScreen menu/subpage shape). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -109,6 +110,7 @@ fun SettingsScreen(
         SettingsPage.THEME -> languageManager.getString("theme_section")
         SettingsPage.NOTIFICATIONS -> languageManager.getString("notifications_settings_title")
         SettingsPage.ICS -> languageManager.getString("ics_settings_title")
+        SettingsPage.BACKUP -> languageManager.getString("backup_restore_title")
         SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
     }
 
@@ -150,6 +152,11 @@ fun SettingsScreen(
                         headlineContent = { Text(languageManager.getString("ics_settings_title")) },
                         leadingContent = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
                         modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.ICS }
+                    )
+                    ListItem(
+                        headlineContent = { Text(languageManager.getString("backup_restore_title")) },
+                        leadingContent = { Icon(Icons.Filled.Backup, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
                     )
                     SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
                     ListItem(
@@ -250,6 +257,9 @@ fun SettingsScreen(
                 calendarRepository = calendarRepository,
                 modifier = Modifier.fillMaxSize().padding(padding)
             )
+            SettingsPage.BACKUP -> Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+                BackupSettingsSection(settingsRepo = settingsRepo, settings = settings)
+            }
             SettingsPage.LOGS -> LogsSettingsTab(
                 enabled = settings.debugLoggingEnabled,
                 onEnabledChange = { stateManager.setDebugLoggingEnabled(it) },

@@ -40,6 +40,7 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
         val VOXCONNECT_PORT = intPreferencesKey("voxconnect_port")
         val VOXCONNECT_MEDIA_CONTROL_ENABLED = booleanPreferencesKey("voxconnect_media_control_enabled")
         val VOXCONNECT_MONITORED_APPS_JSON = stringPreferencesKey("voxconnect_monitored_apps_json")
+        val IMPORT_MODE = stringPreferencesKey("import_mode")
     }
 
     override val settingsFlow: Flow<HubSettings> = dataStore.data.map { prefs ->
@@ -58,7 +59,8 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
             voxConnectEnabled = prefs[Keys.VOXCONNECT_ENABLED] ?: false,
             voxConnectPort = prefs[Keys.VOXCONNECT_PORT] ?: HubSettings.VOXCONNECT_DEFAULT_PORT,
             voxConnectMediaControlEnabled = prefs[Keys.VOXCONNECT_MEDIA_CONTROL_ENABLED] ?: false,
-            voxConnectMonitoredApps = decodeMonitoredApps(prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] ?: "{}")
+            voxConnectMonitoredApps = decodeMonitoredApps(prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] ?: "{}"),
+            importMode = prefs[Keys.IMPORT_MODE] ?: HubSettings.IMPORT_MODE_MERGE
         )
     }
 
@@ -95,6 +97,10 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
 
     override suspend fun setBackupRetentionCount(count: Int) {
         dataStore.edit { it[Keys.BACKUP_RETENTION_COUNT] = count }
+    }
+
+    override suspend fun setImportMode(mode: String) {
+        dataStore.edit { it[Keys.IMPORT_MODE] = mode }
     }
 
     override suspend fun setAppBackupConfig(packageName: String, config: AppBackupConfig) {
@@ -138,6 +144,21 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
         dataStore.edit { prefs ->
             val current = decodeMonitoredApps(prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] ?: "{}")
             prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] = encodeMonitoredApps(current + (domain to monitored))
+        }
+    }
+
+    override suspend fun restoreSettings(settings: HubSettings) {
+        dataStore.edit { prefs ->
+            prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
+            prefs[Keys.THEME_COLORED] = settings.themeColored
+            prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
+            prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
+            prefs[Keys.BACKUP_INTERVAL] = settings.backupInterval
+            prefs[Keys.BACKUP_RETENTION_COUNT] = settings.backupRetentionCount
+            prefs[Keys.APP_BACKUP_CONFIG_JSON] = AppBackupConfig.encodeMap(settings.appBackupConfigs)
+            prefs[Keys.VOXCONNECT_MEDIA_CONTROL_ENABLED] = settings.voxConnectMediaControlEnabled
+            prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] = encodeMonitoredApps(settings.voxConnectMonitoredApps)
+            prefs[Keys.IMPORT_MODE] = settings.importMode
         }
     }
 

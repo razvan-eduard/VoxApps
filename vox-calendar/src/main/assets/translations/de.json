@@ -153,6 +153,7 @@
   "debug_logging": "Debug-Protokollierung",
   "debug_logging_desc": "Ausführliche Protokolle zur Fehlersuche — standardmäßig deaktiviert",
   "logs_settings_title": "Protokolle",
+  "backup_restore_title": "Sicherung & Wiederherstellung",
   "debug_toasts_label": "Protokoll-Toasts anzeigen",
   "verbose_logging_section": "Detailliertes Logging",
   "clear_logs": "Logs löschen",
