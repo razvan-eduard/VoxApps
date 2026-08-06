@@ -72,11 +72,9 @@ apps."
 ## 📖 Table of Contents
 
 - [🚦 Build Status](#build-status)
-- [✨ Vox Commander Features](#vox-commander-features)
-- [📋 Vox Commander Requirements](#vox-commander-requirements)
+- [📋 Requirements](#requirements)
 - [⚡ Quick Start](#quick-start)
   - [Run Tests](#run-tests)
-- [🏁 First Run Setup (Vox Commander)](#first-run-setup-vox-commander)
 - [📦 App Overview](#app-overview)
   - [Vox Commander](#-vox-commander)
   - [Vox Notes](#-vox-notes)
@@ -91,36 +89,17 @@ apps."
 
 [↖ Back to top](#readme-top)
 
-## Vox Commander Features
+## Requirements
 
-- **Wake Word Detection** — Always-on listening via Vosk, Picovoice Porcupine, or OpenWakeWord
-- **External Trigger** — Automation apps (MacroDroid, Tasker) can trigger the voice assistant without saying the wake word
-- **Speech-to-Text** — Whisper, running entirely on-device, with multilingual support
-- **Natural Language Understanding** — Redundant pipeline (L1-L2-L3) with instant regex matching for common commands, backed by a user-selected Primary AI and an automated Offline Fallback mechanism.
-- **App Management** — Default apps per category, app aliases, custom categories, return-to-previous-app
-- **Vox Apps ecosystem** — Companion apps (e.g. Vox Notes) plug in automatically once installed, so you can control them by voice too
-- **Media Control** — Search/play/pause/next/prev for Spotify, YouTube, and any app selected as your audio default
-- **Text-to-Speech** — Android TTS or Piper TTS (on-device neural voices)
-- **Barge-in** — Saying the wake word again while Commander is speaking interrupts it instead of waiting it out
-- **Search** — Web search via DuckDuckGo, Wikipedia, Google News, GNews, Currents API, NewsAPI, WeatherAPI, Open-Meteo
-- **Navigation** — Waze, Google Maps deep linking
-- **Messaging** — WhatsApp, Telegram, SMS
-- **System Controls** — Volume, WiFi, Bluetooth, GPS, Flashlight, Airplane Mode, Do Not Disturb, NFC, Auto-Rotate, Silent Mode
-- **Multi-language** — English, Romanian, German, French
-- **Overlay UI** — Floating voice overlay with transcription and status
-- **Home-screen widget** — Tap-to-speak widget, jumps straight into voice capture
-- **Model Downloads** — On-demand downloads for Whisper models, Piper voices, wake word models
-- **Settings** — 8 organized tabs (General, AI & Models, Service, App Manager, Integrations, Permissions, Advanced, Theme)
-
-[↖ Back to top](#readme-top)
-
-## Vox Commander Requirements
+Same baseline for every app in this repo:
 
 - **Android 10+** (API 29)
 - **arm64-v8a** architecture
-- See the [Build Status](#build-status) table above for the actual APK size — the rest (Whisper
-  models, and mandatory native libs like Vosk/onnxruntime) downloads on first launch
-- Optional: OpenAI API key for cloud NLU, Spotify Client ID for media control
+- See the [Build Status](#build-status) table above for each app's actual APK size — anything
+  beyond the base install (e.g. Commander's Whisper models, Vosk/onnxruntime) downloads on first
+  launch
+- Optional, app-specific extras (e.g. Commander's OpenAI API key for cloud NLU, Spotify Client ID
+  for media control) are called out in that app's own [App Overview](#app-overview) entry
 
 [↖ Back to top](#readme-top)
 
@@ -152,17 +131,6 @@ adb shell am start -n com.voxapps.commander/.MainActivity
 ```
 
 > Swap `:vox-commander` for `:vox-notes`, `:vox-vision`, `:vox-expenses`, `:vox-calendar`, or `:vox-hub` in any of the commands above to build/install/test the companion apps instead — each has its own `assembleDebug`/`installDebug`/`testDebugUnitTest` tasks.
-
-[↖ Back to top](#readme-top)
-
-## First Run Setup (Vox Commander)
-
-1. **Grant permissions** — Microphone, notifications (foreground service), overlay display
-2. **Download a Whisper model** — Settings → Models → Download (tiny/base/small)
-3. **Select wake word engine** — Settings → Voice Engines → Vosk / Porcupine / OpenWakeWord
-4. **Configure NLU engine** — Settings → Intent Engines → OpenAI / Gemini Nano / Local LLM
-5. **Set default apps** — Settings → App Manager → Select apps per domain (audio, maps, messaging)
-6. **Enable wake word** — Settings → General → Toggle wake word detection
 
 [↖ Back to top](#readme-top)
 
