@@ -148,7 +148,8 @@ media/search/navigation/messaging, and system toggles (volume, WiFi, flashlight,
 route through the same pipeline. A shared location system (cached last-known location, a Home Town
 fallback, "always use this location") and its own Backup & Restore screen round it out.
 
-<img width="388" height="850" alt="Vox Commander home screen" src="vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/20_commander_home.png" />
+<img width="388" height="850" alt="Asking Vox Commander for the weather and getting a spoken answer back" src="vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/27_commander_query_response.png" />
+<img width="388" height="850" alt="Vox Commander reading the weather answer back out loud" src="vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/28_commander_voice_playback.png" />
 
 Demo: asking for the weather, navigating with Waze, and playing music — all by voice.
 
