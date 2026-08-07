@@ -1,5 +1,6 @@
 package com.voxapps.commander.data.remote
 
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Immutable
 
 import com.google.gson.Gson
@@ -79,6 +80,11 @@ data class VirtualModelItem(
 object RemoteModelRegistry {
     private const val TAG = Strings.Tags.REMOTE_MODEL_REGISTRY
     private val gson = Gson()
+
+    /** Artefact extensions that arrive compressed. See [isArchiveEngine]. Exposed so a test can
+     *  check the real models.json against the production list rather than restating it. */
+    @VisibleForTesting
+    internal val ARCHIVE_EXTENSIONS = listOf(".zip", ".tar.bz2")
     
     // The Wrapper Object (The SSOT in memory)
     /** Written only on Dispatchers.IO (fetchJson's withContext), read pervasively from Compose on
@@ -336,6 +342,22 @@ object RemoteModelRegistry {
     fun getEngineType(engineKey: String): String? = getEngineTypes(engineKey).firstOrNull()
 
     fun isZipEngine(engineKey: String): Boolean = getExtension(engineKey).equals(".zip", ignoreCase = true)
+
+    /**
+     * True when the engine's artefact is a compressed archive that must be extracted before the
+     * model is usable — as opposed to a single file that is ready the moment the download lands.
+     *
+     * Every caller that acts on that distinction must ask *this*, not [isZipEngine]: the download
+     * layer routes archives to a temporary directory, resolves them to an extracted directory
+     * rather than a file, and has to unpack them before signalling success. Asking `.zip` alone
+     * sends an archive down the ready-as-is path, where it is never extracted and then fails
+     * verification because no directory exists at the resolved location.
+     *
+     * [ARCHIVE_EXTENSIONS] is a list because each entry needs its own decoder in ModelDownloader,
+     * so a format cannot be added by data alone — but it is the single place the set is stated.
+     */
+    fun isArchiveEngine(engineKey: String): Boolean =
+        ARCHIVE_EXTENSIONS.any { getExtension(engineKey).equals(it, ignoreCase = true) }
 
     /** True for any on-device local LLM engine (declared via the "local_llm" capability in
      *  models.json, not the "llm" type) — there can be more than one (e.g. one per model file

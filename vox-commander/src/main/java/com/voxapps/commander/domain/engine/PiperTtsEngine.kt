@@ -32,6 +32,22 @@ class PiperTtsEngine : ITtsEngine {
 
     companion object {
         private const val TAG = "PiperTtsEngine"
+
+        /**
+         * Locates the ONNX weights inside an extracted Piper voice directory.
+         *
+         * The published voice archives name the weights after the voice itself
+         * ("en_US-lessac-medium.onnx"), not "model.onnx" — so a fixed filename finds nothing in a
+         * correctly extracted voice. Matching by extension covers both spellings, since a voice
+         * directory carries exactly one set of weights alongside tokens.txt and espeak-ng-data.
+         *
+         * Shared with the download validator on purpose: the validator *deletes* a directory it
+         * judges incomplete, so if the two disagreed about which file to look for, one of them
+         * would erase what the other needs.
+         */
+        fun findVoiceModelFile(voiceDir: File): File? =
+            voiceDir.listFiles { f: File -> f.isFile && f.name.endsWith(".onnx", ignoreCase = true) }
+                ?.minByOrNull { it.name }
     }
 
     private var tts: OfflineTts? = null
@@ -84,13 +100,13 @@ class PiperTtsEngine : ITtsEngine {
 
         modelDir = voiceDir.absolutePath
 
-        val modelFile = File(modelDir, "model.onnx")
+        val modelFile = findVoiceModelFile(voiceDir)
         val tokensFile = File(modelDir, "tokens.txt")
         val espeakDir = File(modelDir, "espeak-ng-data")
         val lexiconFile = File(modelDir, "lexicon.txt")
 
-        if (!modelFile.exists() || !tokensFile.exists()) {
-            Logger.log("Missing model.onnx or tokens.txt in $modelDir", TAG)
+        if (modelFile == null || !tokensFile.exists()) {
+            Logger.log("Missing .onnx weights or tokens.txt in $modelDir", TAG)
             return false
         }
 

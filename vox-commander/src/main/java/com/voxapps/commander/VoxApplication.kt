@@ -169,19 +169,9 @@ class VoxApplication : Application() {
 
             var changed = false
             for (engineKey in RemoteModelRegistry.getEngineTypes()) {
-                val isArchive = RemoteModelRegistry.isZipEngine(engineKey) ||
-                    RemoteModelRegistry.getExtension(engineKey).equals(".tar.bz2", ignoreCase = true)
                 for (model in RemoteModelRegistry.getModels(engineKey)) {
                     if (model.id !in downloaded) continue
-                    // Archive (dir-based) models use the per-engine validator (which also purges a
-                    // corrupt dir); file-based models (Whisper/NLU) just need the file to exist —
-                    // validateModel requires a directory and would wrongly reject them.
-                    val ok = if (isArchive) {
-                        downloader.validateModel(model.id, engineKey)
-                    } else {
-                        downloader.resolveLocalFile(model.id, engineKey)?.exists() == true
-                    }
-                    if (!ok) {
+                    if (!downloader.isModelUsable(model.id, engineKey)) {
                         Logger.log("Reconcile: ${model.id} ($engineKey) not valid on disk — clearing downloaded flag", "VoxApplication")
                         container.settingsRepository.setModelDownloaded(model.id, false)
                         changed = true

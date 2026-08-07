@@ -128,6 +128,64 @@ class RemoteModelRegistryTest {
     }
 
     @Test
+    fun `isArchiveEngine covers every compressed artefact format, not just zip`() {
+        mockkObject(RemoteModelRegistry)
+        every { RemoteModelRegistry.getExtension("wake_vosk") } returns ".zip"
+        every { RemoteModelRegistry.getExtension("piper_tts") } returns ".tar.bz2"
+        every { RemoteModelRegistry.getExtension("upper") } returns ".TAR.BZ2"
+
+        assertTrue(RemoteModelRegistry.isArchiveEngine("wake_vosk"))
+        assertTrue(RemoteModelRegistry.isArchiveEngine("piper_tts"))
+        assertTrue(RemoteModelRegistry.isArchiveEngine("upper"))
+    }
+
+    @Test
+    fun `isArchiveEngine is false for single-file and virtual engines`() {
+        mockkObject(RemoteModelRegistry)
+        every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
+        every { RemoteModelRegistry.getExtension("nlu_llm") } returns ".task"
+        every { RemoteModelRegistry.getExtension("OPENAI") } returns ""
+
+        assertFalse(RemoteModelRegistry.isArchiveEngine("stt_whisper"))
+        assertFalse(RemoteModelRegistry.isArchiveEngine("nlu_llm"))
+        assertFalse(RemoteModelRegistry.isArchiveEngine("OPENAI"))
+    }
+
+    /**
+     * The download pipeline has exactly two paths — extract-then-signal and ready-as-is — chosen by
+     * extension. An engine whose extension is compressed but absent from [RemoteModelRegistry
+     * .ARCHIVE_EXTENSIONS] silently takes the second path, never gets unpacked, and then fails
+     * verification because nothing exists where the extracted directory should be. This asserts
+     * against the real assets so shipping such an engine fails here rather than on a device.
+     */
+    @Test
+    fun `every compressed extension in the shipped models_json is a known archive format`() {
+        val json = listOf(
+            java.io.File("src/main/assets/models.json"),
+            java.io.File("vox-commander/src/main/assets/models.json"),
+            java.io.File("../models.json")
+        ).firstOrNull { it.exists() }
+        assertTrue("models.json not found from ${java.io.File(".").absolutePath}", json != null)
+
+        val schema = com.google.gson.Gson()
+            .fromJson(json!!.readText(), RemoteModelSchema::class.java)
+
+        // Anything that looks compressed by name must be declared as an archive format.
+        val compressedMarkers = listOf("zip", "tar", "gz", "bz2", "xz", "7z", "rar")
+        schema.engines.forEach { (key, config) ->
+            val ext = config.extension
+            val looksCompressed = compressedMarkers.any { ext.contains(it, ignoreCase = true) }
+            if (looksCompressed) {
+                assertTrue(
+                    "Engine '$key' ships extension '$ext', which no extraction path handles — " +
+                        "add it to ARCHIVE_EXTENSIONS together with a decoder in ModelDownloader",
+                    RemoteModelRegistry.ARCHIVE_EXTENSIONS.any { it.equals(ext, ignoreCase = true) }
+                )
+            }
+        }
+    }
+
+    @Test
     fun `isLlmEngine returns true when engine declares the local_llm capability`() {
         // isLlmEngine is capability-driven (hasCapability(engineKey, "local_llm")), not type-driven —
         // there can be more than one local LLM engine (one per model format), each independently

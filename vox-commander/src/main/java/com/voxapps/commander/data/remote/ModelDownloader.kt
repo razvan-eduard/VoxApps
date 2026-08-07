@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.domain.engine.PiperTtsEngine
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
@@ -65,8 +66,8 @@ class ModelDownloader(private val context: Context) {
         val rootDir = context.getExternalFilesDir(null) ?: return null
         val extension = RemoteModelRegistry.getExtension(engineKey)
 
-        return if (RemoteModelRegistry.isZipEngine(engineKey) || extension.equals(".tar.bz2", ignoreCase = true)) {
-            // Archive engines: downloaded as .zip/.tar.bz2, extracted to a directory named just modelId (no extension)
+        return if (RemoteModelRegistry.isArchiveEngine(engineKey)) {
+            // Archive engines: downloaded compressed, extracted to a directory named just modelId (no extension)
             File(rootDir, modelId)
         } else {
             // File-based engines: model stored as modelId + extension
@@ -89,8 +90,7 @@ class ModelDownloader(private val context: Context) {
         }
 
         // Clean up leftover download files to prevent DownloadManager adding -N suffix
-        val isArchiveEngine = RemoteModelRegistry.isZipEngine(engineKey) ||
-            RemoteModelRegistry.getExtension(engineKey).equals(".tar.bz2", ignoreCase = true)
+        val isArchiveEngine = RemoteModelRegistry.isArchiveEngine(engineKey)
         val downloadDir = if (isArchiveEngine) {
             context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
         } else {
@@ -133,6 +133,52 @@ class ModelDownloader(private val context: Context) {
         } else {
             Logger.log("Model file not found for deletion: $modelId ($engineKey)", TAG)
         }
+    }
+
+    /**
+     * Whether a model previously recorded as downloaded is actually usable on disk.
+     *
+     * Archives get the per-engine structural check in [validateModel], which also purges a directory
+     * left corrupt by an interrupted extraction; a single file only has to exist, and would be
+     * wrongly rejected by a validator that expects a directory. Callers ask this instead of
+     * branching on packaging themselves — the branch is what has to stay consistent with the rest of
+     * this class, and a caller that gets it wrong deletes a perfectly good model.
+     */
+    fun isModelUsable(modelId: String, engineKey: String): Boolean =
+        if (RemoteModelRegistry.isArchiveEngine(engineKey)) {
+            validateModel(modelId, engineKey)
+        } else {
+            resolveLocalFile(modelId, engineKey)?.exists() == true
+        }
+
+    /**
+     * Makes a freshly downloaded artefact usable, whatever its packaging: archives are extracted,
+     * single files are already in place. [onReady] runs once the model can be resolved on disk,
+     * carrying the directory name for archives and null for single files.
+     *
+     * Callers must go through this rather than testing the extension themselves. The layout rules
+     * live in [resolveLocalFile] and [downloadModel] in this class; a caller that re-derives them
+     * can disagree with them, and the failure is silent — the download reports success while the
+     * model is missing from where everything else looks for it.
+     *
+     * Extraction runs on a daemon thread because a broadcast receiver has ~10s before an ANR and
+     * multi-GB models need far longer.
+     */
+    fun installDownloadedModel(modelId: String, engineKey: String, onReady: (dirName: String?) -> Unit) {
+        if (!RemoteModelRegistry.isArchiveEngine(engineKey)) {
+            onReady(null)
+            return
+        }
+        Thread {
+            try {
+                unzipModel(modelId, engineKey) { success ->
+                    Logger.log("Extraction ${if (success) "success" else "failed"} for $modelId", TAG)
+                    onReady(modelId)
+                }
+            } catch (e: Exception) {
+                Logger.log("Extraction thread error: ${e.message}", TAG)
+            }
+        }.apply { isDaemon = true; start() }
     }
 
     /**
@@ -240,11 +286,12 @@ class ModelDownloader(private val context: Context) {
 
         val extension = RemoteModelRegistry.getExtension(engineKey)
 
-        // Piper TTS models: check for model.onnx
+        // Piper TTS models: the weights are named after the voice, so resolve them the same way the
+        // engine does rather than by a fixed filename — this branch deletes what it rejects.
         if (extension.equals(".tar.bz2", ignoreCase = true)) {
-            val hasModel = File(targetDir, "model.onnx").exists()
+            val hasModel = PiperTtsEngine.findVoiceModelFile(targetDir) != null
             if (!hasModel) {
-                Logger.log("Piper model $modelId missing 'model.onnx' — deleting incomplete model", TAG)
+                Logger.log("Piper model $modelId has no .onnx weights — deleting incomplete model", TAG)
                 targetDir.deleteRecursively()
                 return false
             }

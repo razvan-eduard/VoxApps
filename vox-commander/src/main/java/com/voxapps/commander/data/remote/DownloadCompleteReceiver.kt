@@ -64,36 +64,17 @@ class DownloadCompleteReceiver : BroadcastReceiver() {
         val modelId = fileName.removeSuffix(ext)
         Logger.log("Matched engine: $matchedEngineKey, modelId: $modelId", TAG)
 
-        if (ext.equals(".zip", ignoreCase = true)) {
-            // ZIP-based engines need unzip before signaling — run on daemon thread
-            // to avoid blocking onReceive(). No goAsync() since it has a ~10s ANR timeout
-            // which is too short for large models (2GB+).
-            Thread {
-                try {
-                    val downloader = ModelDownloader(context)
-                    downloader.unzipModel(modelId, matchedEngineKey) { success ->
-                        Logger.log("Unzip ${if (success) "success" else "failed"} for $modelId", TAG)
-                        val localIntent = Intent(ACTION_DOWNLOAD_COMPLETE_LOCAL).apply {
-                            putExtra(EXTRA_DOWNLOAD_ID, id)
-                            putExtra(EXTRA_FILE_PATH, filePath)
-                            putExtra("directory_name", modelId)
-                            putExtra("model_type", matchedEngineKey)
-                        }
-                        Logger.log("Sending local broadcast for $matchedEngineKey: action=$ACTION_DOWNLOAD_COMPLETE_LOCAL, id=$id, dir=$modelId", TAG)
-                        context.sendBroadcast(localIntent)
-                    }
-                } catch (e: Exception) {
-                    Logger.log("Unzip thread error: ${e.message}", TAG)
-                }
-            }.apply { isDaemon = true; start() }
-        } else {
-            // File-based engines (e.g. stt_whisper, nlu_llm) are ready as-is
+        // Whether this artefact needs unpacking is ModelDownloader's call, not the receiver's — it
+        // owns where a model lands and what shape it takes on disk. The receiver only announces
+        // the result once the model is actually usable.
+        ModelDownloader(context).installDownloadedModel(modelId, matchedEngineKey) { dirName ->
             val localIntent = Intent(ACTION_DOWNLOAD_COMPLETE_LOCAL).apply {
                 putExtra(EXTRA_DOWNLOAD_ID, id)
                 putExtra(EXTRA_FILE_PATH, filePath)
                 putExtra("model_type", matchedEngineKey)
+                dirName?.let { putExtra("directory_name", it) }
             }
-            Logger.log("Sending local broadcast for $matchedEngineKey: action=$ACTION_DOWNLOAD_COMPLETE_LOCAL, id=$id", TAG)
+            Logger.log("Sending local broadcast for $matchedEngineKey: action=$ACTION_DOWNLOAD_COMPLETE_LOCAL, id=$id, dir=$dirName", TAG)
             context.sendBroadcast(localIntent)
         }
     }
