@@ -71,6 +71,7 @@ dependencies {
     implementation(project(":core:backup"))
     implementation(project(":core:attachments"))
     implementation(project(":core:logging"))
+    implementation(project(":core:preferences"))
     implementation(project(":core:datahygiene"))
     implementation(project(":core:textmatch"))
     implementation(project(":core:schema-annotations"))

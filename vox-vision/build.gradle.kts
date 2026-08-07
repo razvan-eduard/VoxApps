@@ -103,6 +103,7 @@ dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
+    implementation(project(":core:preferences"))
     implementation(project(":vendor:ppocr-sdk"))
     // ML-based document corner detector (see vendor/docquad-sdk/NOTICE) — brings in
     // ai.onnxruntime.* transitively; libonnxruntime.so itself is already excluded from packaging

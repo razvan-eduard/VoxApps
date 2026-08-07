@@ -63,7 +63,11 @@ dependencies {
     implementation(project(":core:backup"))
     implementation(project(":core:design"))
     implementation(project(":core:ipc"))
+    // For SyncDeltaKeys only: the Hub builds sync deltas itself, so it's a participant in the same
+    // wire contract as the satellites' *SyncHandlers and must share their key definitions.
+    implementation(project(":core:datahygiene"))
     implementation(project(":core:logging"))
+    implementation(project(":core:preferences"))
     implementation(project(":core:voxconnect"))
     // PreviewView for the pairing QR scanner's camera preview (VoxConnectSettingsCard.kt) — the
     // rest of CameraX comes from :core:voxconnect's own (implementation-scoped) dependency.
