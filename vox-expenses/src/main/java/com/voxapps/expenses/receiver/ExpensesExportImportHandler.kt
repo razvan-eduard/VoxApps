@@ -3,13 +3,17 @@ package com.voxapps.expenses.receiver
 import android.content.Context
 import android.net.Uri
 import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.restoreFromBackup
+import com.voxapps.attachments.toBackupJson
 import com.voxapps.attachments.AttachmentEntity
-import com.voxapps.attachments.AttachmentSource
 import com.voxapps.backup.VoxAttachmentZipUtil
 import com.voxapps.backup.VoxBiometricGate
+import com.voxapps.backup.mergeByName
+import com.voxapps.backup.optStringOrNull
 import com.voxapps.backup.VoxImportMode
 import com.voxapps.backup.VoxSettingsRoundTrip
 import com.voxapps.backup.VoxSnapshotReplaceImporter
+import com.voxapps.design.toEnumOrNull
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.DuplicateRuleDao
 import com.voxapps.expenses.data.DuplicateRuleEntity
@@ -95,7 +99,7 @@ class ExpensesExportImportHandler(
                 )
             )
             json.put("merchantCategoryMemory", JSONArray(merchantCategoryMemory.map { it.toJson() }))
-            val duplicateRules = duplicateRuleDao.observeAll().first()
+            val duplicateRules = duplicateRuleDao.getAll()
             json.put("duplicateRules", JSONArray(duplicateRules.map { it.toJson() }))
 
             if (includePhotos) {
@@ -184,31 +188,24 @@ class ExpensesExportImportHandler(
             }
         }
 
-        val existingCategories = expensesRepo.categories.first()
-        val nameToId = existingCategories.associate { it.name.lowercase() to it.id }.toMutableMap()
-        val importedIdToLocalId = mutableMapOf<Long, Long?>()
         val importedCategories = root.optJSONArray("categories") ?: JSONArray()
-        var categoriesCreated = 0
-        for (i in 0 until importedCategories.length()) {
-            val c = importedCategories.getJSONObject(i)
-            val name = c.optString("name").trim()
-            if (name.isEmpty()) continue
-            val importedId = c.optLong("id")
-            val localId = nameToId[name.lowercase()] ?: run {
-                val newId = expensesRepo.addCategory(
+        val categoryMerge = mergeByName(
+            imported = importedCategories,
+            existing = expensesRepo.categories.first(),
+            nameOf = { it.name },
+            idOf = { it.id },
+            importedNameOf = { it.optString("name") },
+            create = { c, name ->
+                expensesRepo.addCategory(
                     name,
                     c.optLong("colorArgb"),
                     c.optInt("position"),
                     c.optLong("createdAt", System.currentTimeMillis())
                 )
-                if (newId > 0) {
-                    categoriesCreated++
-                    nameToId[name.lowercase()] = newId
-                }
-                newId.takeIf { it > 0 }
             }
-            importedIdToLocalId[importedId] = localId
-        }
+        )
+        val importedIdToLocalId = categoryMerge.idMap
+        val categoriesCreated = categoryMerge.created
 
         // Upserted by vendorKey, not replace-by-snapshot like spendingLimits/expenses below — wiping
         // locally learned mappings on every restore would un-learn correction streaks built up on
@@ -227,7 +224,7 @@ class ExpensesExportImportHandler(
         // seeded on every fresh install would otherwise duplicate on each restore cycle, and a
         // rule only ever added on this specific device shouldn't be wiped by a backup taken
         // elsewhere.
-        val existingRules = duplicateRuleDao.observeAll().first()
+        val existingRules = duplicateRuleDao.getAll()
         val ruleNameToRule = existingRules.associateBy { it.name.lowercase() }
         val importedRules = root.optJSONArray("duplicateRules") ?: JSONArray()
         var rulesCreated = 0
@@ -346,22 +343,9 @@ class ExpensesExportImportHandler(
                         manuallyEdited = e.optBoolean("manuallyEdited", false)
                     )
                     if (newExpenseId > 0) {
-                        val importedAttachments = e.optJSONArray("attachments") ?: JSONArray()
-                        for (j in 0 until importedAttachments.length()) {
-                            val a = importedAttachments.getJSONObject(j)
-                            val fileName = a.optString("fileName").takeIf { it.isNotBlank() } ?: continue
-                            attachmentDao.insert(
-                                AttachmentEntity(
-                                    recordType = ExpensesAttachments.RECORD_TYPE,
-                                    recordId = newExpenseId,
-                                    fileName = fileName,
-                                    source = a.optString("source", AttachmentSource.MANUAL),
-                                    createdAt = a.optLong("createdAt", System.currentTimeMillis()),
-                                    groupId = a.optStringOrNull("groupId"),
-                                    groupOrder = a.optInt("groupOrder", 0)
-                                )
-                            )
-                        }
+                        attachmentDao.restoreFromBackup(
+                            ExpensesAttachments.RECORD_TYPE, newExpenseId, e.optJSONArray("attachments") ?: JSONArray()
+                        )
                     }
                     newExpenseId
                 },
@@ -453,15 +437,7 @@ private fun Expense.toJson(items: List<ExpenseLineItem>, attachments: List<Attac
     put("source", source.name)
     put("manuallyEdited", manuallyEdited)
     put("items", JSONArray(items.map { it.toJson() }))
-    put("attachments", JSONArray(attachments.map { it.toJson() }))
-}
-
-private fun AttachmentEntity.toJson(): JSONObject = JSONObject().apply {
-    put("fileName", fileName)
-    put("source", source)
-    put("createdAt", createdAt)
-    put("groupId", groupId)
-    put("groupOrder", groupOrder)
+    put("attachments", JSONArray(attachments.map { it.toBackupJson() }))
 }
 
 private fun ExpenseLineItem.toJson(): JSONObject = JSONObject().apply {
@@ -474,13 +450,11 @@ private fun ExpenseLineItem.toJson(): JSONObject = JSONObject().apply {
     put("grossAmount", grossAmount)
 }
 
-private fun JSONObject.optStringOrNull(key: String): String? =
-    if (has(key) && !isNull(key)) optString(key) else null
 
 /** Lenient parse for a field that didn't exist before this export/import round-trip supported it —
  *  older backups (and any unrecognized/corrupt value) fall back to [ExpenseSource.MANUAL]. */
 private fun JSONObject.optExpenseSource(key: String = "source"): ExpenseSource =
-    optStringOrNull(key)?.let { runCatching { ExpenseSource.valueOf(it) }.getOrNull() } ?: ExpenseSource.MANUAL
+    optStringOrNull(key).toEnumOrNull<ExpenseSource>() ?: ExpenseSource.MANUAL
 
 private fun JSONObject.optDoubleOrNull(key: String): Double? =
     if (has(key) && !isNull(key)) optDouble(key) else null

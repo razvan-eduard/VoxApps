@@ -32,29 +32,47 @@ object TtsManager {
 
     private const val TAG = Strings.Tags.TTS_MANAGER
 
-    private var engine: ITtsEngine? = null
+    /** Swapped on Main (init/settings observation), but read from Dispatchers.IO in speak() and
+     *  from the TTS binder thread in the onDone callback's resetRuntimeSpeechRate(). */
+    @Volatile private var engine: ITtsEngine? = null
     private var context: Context? = null
-    private var settingsRepo: SettingsRepository? = null
     private var appStateManager: AppStateManager? = null
     private var initialized = false
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var settingsObservationJob: kotlinx.coroutines.Job? = null
 
-    private var ttsEnabled = true
+    /** Written on Main by the settings observation, read on Dispatchers.IO at the top of speak(). */
+    @Volatile private var ttsEnabled = true
     private var ttsEngineType: String = "android"
-    private var speechRate: Float = 1.0f
+    /** Written on Main, read from the TTS binder thread via resetRuntimeSpeechRate() in onDone. */
+    @Volatile private var speechRate: Float = 1.0f
     private var pitch: Float = 1.0f
-    private var currentTtsLanguage: String = ""
-    private var audioFocusMode: String = "duck"
+    /** Written on Main by ensureEngine, read on Dispatchers.IO in speak()'s text normalization. */
+    @Volatile private var currentTtsLanguage: String = ""
+    /** Written on Main, read on Dispatchers.IO (requestAudioFocus) and on the binder thread
+     *  (abandonAudioFocus). */
+    @Volatile private var audioFocusMode: String = "duck"
     private var piperVoiceModelId: String? = null
     /** The Piper voice id the *currently live* engine instance was actually built with — distinct
      *  from [piperVoiceModelId] (the latest desired setting) so [ensureEngine] can tell a pure
      *  voice-only change apart from "nothing relevant changed" and rebuild only when needed. */
     private var currentPiperVoiceModelId: String? = null
 
-    private var audioManager: AudioManager? = null
+    /** Assigned once on Main in init(), read from Dispatchers.IO and the TTS binder thread. */
+    @Volatile private var audioManager: AudioManager? = null
+    /**
+     * Unlike its neighbours this can't be fixed with @Volatile: [abandonAudioFocus] reads it, hands
+     * it to AudioFocusHelper, then nulls it — a read-modify-write — and the three writers really do
+     * run on three different threads (requestAudioFocus from speak() on Dispatchers.IO,
+     * abandonAudioFocus from the engine's onDone on a TTS binder thread or Piper's IO job, and both
+     * again from stop()/release() on Main). @Volatile would publish the value without making the
+     * pair atomic, so two overlapping utterances could abandon the same request twice or drop one.
+     * Guarded by [audioFocusLock] instead; the critical sections are two AudioManager calls.
+     */
     private var audioFocusRequest: AudioFocusRequest? = null
+
+    private val audioFocusLock = Any()
 
     // --- REACTIVE SPEAKING STATE (for overlay UI) ---
     private val _isSpeakingFlow = MutableStateFlow(false)
@@ -80,7 +98,6 @@ object TtsManager {
         }
 
         this.context = context.applicationContext
-        this.settingsRepo = settingsRepo
         this.appStateManager = appStateManager
         this.initialized = true
 
@@ -290,7 +307,7 @@ object TtsManager {
 
     // --- AUDIO FOCUS ---
 
-    private fun requestAudioFocus() {
+    private fun requestAudioFocus() = synchronized(audioFocusLock) {
         val am = audioManager ?: return
         if (audioFocusMode == "none") return
 
@@ -308,7 +325,7 @@ object TtsManager {
         Logger.log("Audio focus requested (mode=$audioFocusMode)", TAG)
     }
 
-    private fun abandonAudioFocus() {
+    private fun abandonAudioFocus() = synchronized(audioFocusLock) {
         val am = audioManager ?: return
         if (audioFocusMode == "none") return
 

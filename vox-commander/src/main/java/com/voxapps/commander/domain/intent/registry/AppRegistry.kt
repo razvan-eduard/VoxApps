@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.voxapps.commander.utils.fromJsonOrNull
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,8 +46,12 @@ object AppRegistry {
         val isSystemApp: Boolean = false
     )
 
-    private var installedPackages: Set<String> = emptySet()
-    private var scannedApps: List<AppEntry> = emptyList()
+    /** Written on Main (initFromCache at startup, init from the splash) and on Dispatchers.IO
+     *  (rescanAndCache); read on Main from Compose and on IO from AppResolver. */
+    @Volatile private var installedPackages: Set<String> = emptySet()
+    /** Same write/read threads as installedPackages — both are single-assignment swaps of an
+     *  immutable collection, so visibility is the only thing at stake. */
+    @Volatile private var scannedApps: List<AppEntry> = emptyList()
     private val gson = Gson()
 
     fun init(context: Context, onProgress: ((current: Int, total: Int, appName: String) -> Unit)? = null) {
@@ -78,8 +82,9 @@ object AppRegistry {
     fun initFromCache(json: String?): Boolean {
         if (json.isNullOrBlank()) return false
         return try {
-            val type = TypeToken.getParameterized(List::class.java, AppEntry::class.java).type
-            val rawCached: List<AppEntry>? = gson.fromJson(json, type)
+            val rawCached = gson.fromJsonOrNull<List<AppEntry>>(json) {
+                Logger.log("AppRegistry cache parse failed: ${it.message}", TAG)
+            }
             // Gson deserializes via reflection, not Kotlin's constructor — a cache entry from a
             // different/older schema (missing a field Gson can't fill in) leaves that "non-null"
             // AppEntry field genuinely null at runtime despite the Kotlin type, which doesn't fail

@@ -1,12 +1,14 @@
 package com.voxapps.calendarapp.receiver
 
 import android.content.Context
-import android.net.Uri
 import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.restoreFromBackup
+import com.voxapps.attachments.toBackupJson
 import com.voxapps.attachments.AttachmentEntity
-import com.voxapps.attachments.AttachmentSource
-import com.voxapps.backup.VoxAttachmentZipUtil
 import com.voxapps.backup.VoxBiometricGate
+import com.voxapps.backup.VoxExportImportHandler
+import com.voxapps.backup.mergeByName
+import com.voxapps.backup.optStringOrNull
 import com.voxapps.backup.VoxImportMode
 import com.voxapps.backup.VoxSettingsRoundTrip
 import com.voxapps.backup.VoxSnapshotReplaceImporter
@@ -24,15 +26,10 @@ import com.voxapps.calendarapp.data.ToDoListDao
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepository
 import com.voxapps.calendarapp.state.SessionManager
-import com.voxapps.ipc.VoxIpc
-import com.voxapps.ipc.VoxResult
-import com.voxapps.logging.Logger
-import kotlinx.coroutines.flow.first
+import com.voxapps.design.toEnumOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
-
-private const val TAG = "CalendarExportImportHandler"
 
 /**
  * Vox Hub's export/import for this app, extracted from the BroadcastReceiver so it's unit-testable
@@ -47,26 +44,31 @@ private const val TAG = "CalendarExportImportHandler"
  * plain event, just with its to-do fields populated.
  */
 class CalendarExportImportHandler(
-    private val context: Context,
+    context: Context,
     private val settingsRepo: CalendarSettingsRepository,
     private val sessionManager: SessionManager,
     private val calendarRepo: CalendarRepository,
     private val attachmentDao: AttachmentDao,
     private val toDoListDao: ToDoListDao
-) {
-    suspend fun export(scope: String = VoxIpc.EXPORT_SCOPE_BOTH, includePhotos: Boolean = false): VoxResult {
-        val settings = settingsRepo.getSnapshot()
-        val locked = VoxBiometricGate.isLocked(settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid)
-        if (locked) return VoxResult(ok = false, text = CalendarReadResponder.LOCKED_MESSAGE)
+) : VoxExportImportHandler(context, CalendarAttachments.DIR, CalendarAttachments.FILE_PROVIDER_AUTHORITY) {
 
-        val json = JSONObject()
-        var attachmentUri: String? = null
-        if (scope != VoxIpc.EXPORT_SCOPE_DATA) {
-            json.put("settings", settings.toJson())
-        }
-        if (scope != VoxIpc.EXPORT_SCOPE_SETTINGS) {
+    override val lockedMessage: String get() = CalendarReadResponder.LOCKED_MESSAGE
+
+    override suspend fun isLocked(): Boolean {
+        val settings = settingsRepo.getSnapshot()
+        return VoxBiometricGate.isLocked(
+            settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid
+        )
+    }
+
+    override suspend fun exportSettings(): JSONObject = settingsRepo.getSnapshot().toJson()
+
+    override suspend fun restoreSettings(settings: JSONObject) =
+        settingsRepo.restoreSettings(settings.toCalendarSettings())
+
+    override suspend fun exportData(json: JSONObject): List<String> {
             val layers = calendarRepo.layersSnapshot()
-            val toDoLists = toDoListDao.observeAll().first()
+            val toDoLists = toDoListDao.getAll()
             val allEntries = calendarRepo.entriesSnapshot()
             // A to-do checklist item (CalendarEntry.listId != null) is exported separately as
             // "todoItems" rather than folded into "events" — its listId needs its own id-remapping
@@ -91,102 +93,48 @@ class CalendarExportImportHandler(
             )
             json.put("events", entriesToJson(events))
             json.put("todoItems", entriesToJson(todoItems))
-            if (includePhotos) {
-                attachmentUri = buildAttachmentsZip(allFileNames)?.toString()
-            }
-        }
-        return VoxResult(ok = true, text = json.toString(), attachmentUri = attachmentUri)
+        return allFileNames
     }
 
-    /** Zips this export's attachment files (see :core:attachments) into a fresh file under cacheDir
-     *  and grants Hub read access. Best-effort: returns null on any failure or if there's nothing to
-     *  bundle. */
-    private fun buildAttachmentsZip(fileNames: List<String>): Uri? =
-        VoxAttachmentZipUtil.build(context, CalendarAttachments.DIR, fileNames, CalendarAttachments.FILE_PROVIDER_AUTHORITY)
-
-    private fun extractAttachmentsZip(uri: Uri) =
-        VoxAttachmentZipUtil.extract(context, CalendarAttachments.DIR, uri)
-
-    suspend fun import(payloadJson: String, importMode: VoxImportMode = VoxImportMode.MERGE): VoxResult {
-        val settings = settingsRepo.getSnapshot()
-        val locked = VoxBiometricGate.isLocked(settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid)
-        if (locked) return VoxResult(ok = false, text = CalendarReadResponder.LOCKED_MESSAGE)
-
-        val root = try {
-            JSONObject(payloadJson)
-        } catch (e: Exception) {
-            return VoxResult(ok = false, text = "Invalid import payload")
-        }
-
-        root.optJSONObject("settings")?.let { settingsRepo.restoreSettings(it.toCalendarSettings()) }
-
-        // Injected by Hub's ExportImportUtil.parseImportDocument() from the outer export document's
-        // timestamp — mirrors vox-notes'/vox-expenses' identical field. Previously missing entirely
-        // here, which meant every import unconditionally wiped every pre-existing event/to-do item
-        // regardless of when it was created; now gated exactly like the other apps.
-        val exportedAt = root.optLong("exported_at", 0L)
-
-        // Stage any bundled attachment photos before the entry-insert loop below references them by
-        // filename, so thumbnails resolve immediately once the import completes. Best-effort: a
-        // failure here never fails the rest of the import, it just means photos are missing.
-        root.optStringOrNull("attachmentsZipUri")?.let { uriString ->
-            try {
-                extractAttachmentsZip(Uri.parse(uriString))
-            } catch (e: Exception) {
-                Logger.w(TAG, "Failed to import attachment photos from $uriString — continuing without them", e)
-            }
-        }
-
-        // Layers merge by name (mirrors categories in vox-expenses) — entries reference layers by id,
-        // so wholesale-replacing layers would orphan any untouched records pointing at old layer ids.
+    override suspend fun importData(root: JSONObject, exportedAt: Long, mode: VoxImportMode): String {
         val existingLayers = calendarRepo.layersSnapshot()
-        val nameToId = existingLayers.associate { it.name.lowercase() to it.id }.toMutableMap()
-        val importedIdToLocalId = mutableMapOf<Long, Long?>()
         val defaultLocalLayerId = existingLayers.firstOrNull { it.isDefault }?.id ?: existingLayers.firstOrNull()?.id
+
         val importedLayers = root.optJSONArray("layers") ?: JSONArray()
-        var layersCreated = 0
-        for (i in 0 until importedLayers.length()) {
-            val l = importedLayers.getJSONObject(i)
-            val name = l.optString("name").trim()
-            if (name.isEmpty()) continue
-            val importedId = l.optLong("id")
-            val localId = nameToId[name.lowercase()] ?: run {
-                val kind = l.optStringOrNull("kind")?.let { runCatching { CalendarLayerKind.valueOf(it) }.getOrNull() }
-                    ?: CalendarLayerKind.LOCAL
-                val newId = calendarRepo.addLayerFromBackup(
+        val layerMerge = mergeByName(
+            imported = importedLayers,
+            existing = existingLayers,
+            nameOf = { it.name },
+            idOf = { it.id },
+            importedNameOf = { it.optString("name") },
+            create = { l, name ->
+                calendarRepo.addLayerFromBackup(
                     name = name,
                     colorArgb = l.optLong("colorArgb"),
                     position = l.optInt("position"),
-                    kind = kind,
+                    kind = l.optStringOrNull("kind").toEnumOrNull<CalendarLayerKind>() ?: CalendarLayerKind.LOCAL,
                     subscriptionUrl = l.optStringOrNull("subscriptionUrl"),
                     lastSyncedAt = if (l.has("lastSyncedAt") && !l.isNull("lastSyncedAt")) l.optLong("lastSyncedAt") else null,
                     lastSyncError = l.optStringOrNull("lastSyncError"),
                     reminderOffsetsMinutes = l.optString("reminderOffsetsMinutes", "")
                 )
-                if (newId > 0) {
-                    layersCreated++
-                    nameToId[name.lowercase()] = newId
-                }
-                newId.takeIf { it > 0 }
             }
-            importedIdToLocalId[importedId] = localId
-        }
+        )
+        val importedIdToLocalId = layerMerge.idMap
+        val layersCreated = layerMerge.created
 
-        // ToDoLists merge by title (mirrors layers merging by name above) — todoItems reference a
-        // list by id, so wholesale-replacing lists would orphan any untouched item's listId.
-        val existingLists = toDoListDao.observeAll().first()
-        val listNameToId = existingLists.associate { it.title.lowercase() to it.id }.toMutableMap()
-        val importedListIdToLocalId = mutableMapOf<Long, Long?>()
+        // Merged after layers, not with them: a list's layerId is remapped through the layer merge
+        // that just completed, so the two passes are ordered, not interchangeable.
         val importedLists = root.optJSONArray("todoLists") ?: JSONArray()
-        var listsCreated = 0
-        for (i in 0 until importedLists.length()) {
-            val l = importedLists.getJSONObject(i)
-            val title = l.optString("title").trim()
-            if (title.isEmpty()) continue
-            val importedId = l.optLong("id")
-            val now = System.currentTimeMillis()
-            val localId = listNameToId[title.lowercase()] ?: run {
-                val newId = toDoListDao.insert(
+        val listMerge = mergeByName(
+            imported = importedLists,
+            existing = toDoListDao.getAll(),
+            nameOf = { it.title },
+            idOf = { it.id },
+            importedNameOf = { it.optString("title") },
+            create = { l, title ->
+                val now = System.currentTimeMillis()
+                toDoListDao.insert(
                     ToDoList(
                         uid = l.optStringOrNull("uid") ?: UUID.randomUUID().toString(),
                         title = title,
@@ -196,14 +144,10 @@ class CalendarExportImportHandler(
                         updatedAt = l.optLong("updatedAt", now)
                     )
                 )
-                if (newId > 0) {
-                    listsCreated++
-                    listNameToId[title.lowercase()] = newId
-                }
-                newId.takeIf { it > 0 }
             }
-            importedListIdToLocalId[importedId] = localId
-        }
+        )
+        val importedListIdToLocalId = listMerge.idMap
+        val listsCreated = listMerge.created
 
         // Shared by both "events" and "todoItems" below — the only difference between the two is
         // which pre-existing snapshot they're replacing and whether listId resolves against
@@ -216,7 +160,7 @@ class CalendarExportImportHandler(
 
             return calendarRepo.addEntry(
                 uid = e.optStringOrNull("uid") ?: UUID.randomUUID().toString(),
-                type = e.optStringOrNull("type")?.let { runCatching { CalendarEntryType.valueOf(it) }.getOrNull() }
+                type = e.optStringOrNull("type").toEnumOrNull<CalendarEntryType>()
                     ?: CalendarEntryType.EVENT,
                 title = e.optString("title"),
                 description = e.optStringOrNull("description"),
@@ -227,7 +171,7 @@ class CalendarExportImportHandler(
                 completed = e.optBoolean("completed", false),
                 isImportant = e.optBoolean("isImportant", false),
                 recurrenceFrequency = e.optStringOrNull("recurrenceFrequency")
-                    ?.let { runCatching { RecurrenceFrequency.valueOf(it) }.getOrNull() }
+                    .toEnumOrNull<RecurrenceFrequency>()
                     ?: RecurrenceFrequency.NONE,
                 // Preserved from the source device, never re-stamped to "now" — same reasoning as
                 // vox-expenses' addExpense createdAt param: re-stamping would make this row
@@ -250,22 +194,9 @@ class CalendarExportImportHandler(
         }
 
         suspend fun restoreAttachments(newEntryId: Long, e: JSONObject) {
-            val importedAttachments = e.optJSONArray("attachments") ?: JSONArray()
-            for (j in 0 until importedAttachments.length()) {
-                val a = importedAttachments.getJSONObject(j)
-                val fileName = a.optString("fileName").takeIf { it.isNotBlank() } ?: continue
-                attachmentDao.insert(
-                    AttachmentEntity(
-                        recordType = CalendarAttachments.RECORD_TYPE,
-                        recordId = newEntryId,
-                        fileName = fileName,
-                        source = a.optString("source", AttachmentSource.MANUAL),
-                        createdAt = a.optLong("createdAt", System.currentTimeMillis()),
-                        groupId = a.optStringOrNull("groupId"),
-                        groupOrder = a.optInt("groupOrder", 0)
-                    )
-                )
-            }
+            attachmentDao.restoreFromBackup(
+                CalendarAttachments.RECORD_TYPE, newEntryId, e.optJSONArray("attachments") ?: JSONArray()
+            )
         }
 
         // Entries reconcile per the user's chosen import mode (see VoxSnapshotReplaceImporter):
@@ -278,7 +209,7 @@ class CalendarExportImportHandler(
             val importedEntries = root.optJSONArray("events") ?: JSONArray()
 
             entriesCreated = VoxSnapshotReplaceImporter.restore(
-                mode = importMode,
+                mode = mode,
                 imported = (0 until importedEntries.length()).map { importedEntries.getJSONObject(it) },
                 preExisting = preExistingEvents,
                 exportedAt = exportedAt,
@@ -302,7 +233,7 @@ class CalendarExportImportHandler(
             val importedItems = root.optJSONArray("todoItems") ?: JSONArray()
 
             itemsCreated = VoxSnapshotReplaceImporter.restore(
-                mode = importMode,
+                mode = mode,
                 imported = (0 until importedItems.length()).map { importedItems.getJSONObject(it) },
                 preExisting = preExistingItems,
                 exportedAt = exportedAt,
@@ -319,12 +250,9 @@ class CalendarExportImportHandler(
             )
         }
 
-        return VoxResult(
-            ok = true,
-            text = "$entriesCreated entries and $itemsCreated to-do items imported, " +
-                "$layersCreated new calendars (${importedLayers.length() - layersCreated} matched existing), " +
-                "$listsCreated new to-do lists (${importedLists.length() - listsCreated} matched existing)"
-        )
+        return "$entriesCreated entries and $itemsCreated to-do items imported, " +
+            "$layersCreated new calendars (${importedLayers.length() - layersCreated} matched existing), " +
+            "$listsCreated new to-do lists (${importedLists.length() - listsCreated} matched existing)"
     }
 }
 
@@ -395,17 +323,7 @@ private fun CalendarEntryWithTags.toJson(
     put("colorArgb", e.colorArgb)
     put("createdAt", e.createdAt)
     put("tags", JSONArray(tagNames))
-    put("attachments", JSONArray(attachments.map { it.toJson() }))
+    put("attachments", JSONArray(attachments.map { it.toBackupJson() }))
     put("reminders", JSONArray(reminderOffsetsMinutes))
 }
 
-private fun AttachmentEntity.toJson(): JSONObject = JSONObject().apply {
-    put("fileName", fileName)
-    put("source", source)
-    put("createdAt", createdAt)
-    put("groupId", groupId)
-    put("groupOrder", groupOrder)
-}
-
-private fun JSONObject.optStringOrNull(key: String): String? =
-    if (has(key) && !isNull(key)) optString(key) else null

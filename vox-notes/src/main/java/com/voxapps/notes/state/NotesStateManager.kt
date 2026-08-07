@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
  * either [NotesUiState.Locked] or [NotesUiState.Unlocked]. Persistence is delegated to
  * [NotesRepository]; the biometric session lives in [SessionManager].
  */
-class NotesStateManager internal constructor(
+class NotesStateManager(
     private val settingsRepo: NotesSettingsRepository,
     private val notesRepo: NotesRepository,
     private val sessionManager: SessionManager,
@@ -86,7 +86,21 @@ class NotesStateManager internal constructor(
                     dateTo = rt.dateTo
                 )
             }
-        }.onEach { _uiState.value = it }.launchIn(scope)
+        }
+        // Deliberately NOT flowOn(Default) and NOT stateIn/WhileSubscribed, though the combine
+        // above is real CPU work on the scope's Main dispatcher:
+        //
+        //  - flowOn moves the transform off this thread, which makes _uiState update
+        //    asynchronously. Today a change published into _runtime settles into _uiState within
+        //    the same call, and the synchronous accessors below rely on that; adding flowOn broke
+        //    exactly those expectations in NotesStateManagerTest.
+        //  - WhileSubscribed would leave uiState.value at its initial Loading value whenever no UI
+        //    is attached, and it is read synchronously, with no subscription, by headless callers
+        //    (IPC read/export responders and the widget refresh).
+        //
+        // Both are worth revisiting only behind a measurement showing this combine actually costs
+        // frames, together with a plan for those synchronous readers.
+            .onEach { _uiState.value = it }.launchIn(scope)
     }
 
     // --- FILTERS ---
@@ -300,21 +314,5 @@ class NotesStateManager internal constructor(
     /** User dismissed the suggestion without applying anything. */
     fun dismissNoteDeduplication() {
         scope.launch { noteDeduplicationRepo.clearPendingGroups() }
-    }
-
-    companion object {
-        @Volatile private var instance: NotesStateManager? = null
-
-        fun getInstance(
-            settingsRepo: NotesSettingsRepository,
-            notesRepo: NotesRepository,
-            sessionManager: SessionManager,
-            noteDeduplicationRepo: NoteDeduplicationRepository,
-            pendingLlmRequestQueue: VoxLlmRequestQueue,
-            attachmentDao: AttachmentDao
-        ): NotesStateManager = instance ?: synchronized(this) {
-            instance ?: NotesStateManager(settingsRepo, notesRepo, sessionManager, noteDeduplicationRepo, pendingLlmRequestQueue, attachmentDao)
-                .also { instance = it }
-        }
     }
 }

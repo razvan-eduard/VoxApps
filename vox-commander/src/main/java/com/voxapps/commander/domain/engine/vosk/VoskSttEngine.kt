@@ -64,9 +64,24 @@ class VoskSttEngine(
         }
     }
 
-    private fun findModelDir(dir: File): File? {
+    /**
+     * Walks down the first subdirectory at each level looking for the one holding the model files.
+     *
+     * Bounded on two axes, because the input is an archive the user downloaded and this unpacks
+     * wherever its own directory layout leads. `tailrec` compiles the descent to a loop, so a deeply
+     * nested archive can't overflow the stack; [MAX_MODEL_DIR_DEPTH] then stops a directory symlink
+     * that points back at an ancestor, which the loop alone would follow forever. The previous form
+     * had neither — and its recursive call sat inside a `let`, so it wasn't in tail position and
+     * couldn't be marked `tailrec` without this restructuring.
+     */
+    private tailrec fun findModelDir(dir: File, depth: Int = 0): File? {
         if (File(dir, AM_FILE).exists() || File(dir, CONF_FILE).exists()) return dir
-        return dir.listFiles()?.firstOrNull { it.isDirectory }?.let { findModelDir(it) }
+        if (depth >= MAX_MODEL_DIR_DEPTH) {
+            Logger.log("Vosk model search gave up below $dir after $MAX_MODEL_DIR_DEPTH levels", TAG)
+            return null
+        }
+        val next = dir.listFiles()?.firstOrNull { it.isDirectory } ?: return null
+        return findModelDir(next, depth + 1)
     }
 
     override suspend fun processChunk(audio: ByteArray): String? = withContext(Dispatchers.IO) {
@@ -155,6 +170,10 @@ class VoskSttEngine(
         private const val TAG = "VoskSttEngine"
         private const val DEFAULT_LANG = Strings.Vosk.DEFAULT_LANG
         private const val MODEL_DIR_PREFIX = "vosk-model-"
+
+        /** Depth cap for [findModelDir]. A real unpacked Vosk model nests two or three levels at
+         *  most; this only has to be past that and short of looping on a symlink cycle. */
+        private const val MAX_MODEL_DIR_DEPTH = 10
         private const val AM_FILE = Strings.Vosk.AM_FILE
         private const val CONF_FILE = Strings.Vosk.CONF_FILE
         private const val JSON_KEY_TEXT = Strings.Vosk.JSON_KEY_TEXT

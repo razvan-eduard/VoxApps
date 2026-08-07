@@ -86,7 +86,7 @@ class NotesWidget : GlanceAppWidget() {
             emptyList()
         }
         val attachedNoteIds = container.attachmentDao
-            .observeRecordIdsWithAttachments(NotesAttachments.RECORD_TYPE).first().toSet()
+            .getRecordIdsWithAttachments(NotesAttachments.RECORD_TYPE).toSet()
 
         val addIntent = Intent(context, NotesActivity::class.java).apply {
             putExtra(NotesActivity.EXTRA_QUICK_ADD, true)

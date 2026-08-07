@@ -38,7 +38,6 @@ fun AppScanModal(
     if (scanState is AppScanState.Idle) return
 
     val isScanning = scanState is AppScanState.Scanning
-    val isDone = scanState is AppScanState.Done
 
     Dialog(
         onDismissRequest = { if (!isScanning) onDismiss() },
@@ -67,8 +66,11 @@ fun AppScanModal(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (isScanning) {
-                        val state = scanState as AppScanState.Scanning
+                    // `is` rather than the isScanning flag: a boolean carries no type information,
+                    // so the branch had to re-assert the type with an unchecked cast. Checking the
+                    // sealed subtype directly lets the smart cast supply it.
+                    if (scanState is AppScanState.Scanning) {
+                        val state = scanState
                         val progress = if (state.total > 0) state.current.toFloat() / state.total else 0f
 
                         CircularProgressIndicator(
@@ -117,8 +119,8 @@ fun AppScanModal(
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
-                    } else if (isDone) {
-                        val state = scanState as AppScanState.Done
+                    } else if (scanState is AppScanState.Done) {
+                        val state = scanState
                         val durationSec = state.durationMs / 1000.0
 
                         Box(

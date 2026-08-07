@@ -265,10 +265,10 @@ fun ExpenseEditScreen(
     // baseline made reopening a record that already had a saved stitch group treat the whole
     // (pre-existing, legitimate) group as "added this session" — confirmed bug: Save, reopen, tap
     // back with nothing touched, and the discard-confirm dialog still offered to delete those old
-    // photos. `first()` on the same underlying Flow always returns its true current value.
+    // photos. A direct read of the same rows always returns their true current value.
     LaunchedEffect(existing?.expense?.id) {
         knownGroupIdsAtOpen.value = existing?.expense?.id?.let { id ->
-            stateManager.observeAttachments(id).first().mapNotNull { it.groupId }.toSet()
+            stateManager.getAttachments(id).mapNotNull { it.groupId }.toSet()
         } ?: emptySet()
     }
     LaunchedEffect(currentAttachments, knownGroupIdsAtOpen.value) {

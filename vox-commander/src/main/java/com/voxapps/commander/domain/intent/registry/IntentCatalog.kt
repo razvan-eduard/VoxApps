@@ -30,8 +30,11 @@ object IntentCatalog {
 
     private val gson = Gson()
 
-    private var appContext: Context? = null
-    private var cachedSchema: IntentsSchema? = null
+    /** Assigned on Main in init(), read on Dispatchers.IO throughout fetchRemote. */
+    @Volatile private var appContext: Context? = null
+    /** Written from both Main (init -> loadFromFilesDir) and Dispatchers.IO (fetchRemote), and read
+     *  from Main, IO and the NLU prompt threads. */
+    @Volatile private var cachedSchema: IntentsSchema? = null
 
     // ---- Gson models --------------------------------------------------------
 

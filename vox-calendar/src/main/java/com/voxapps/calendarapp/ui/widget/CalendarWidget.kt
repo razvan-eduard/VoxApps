@@ -51,6 +51,7 @@ import com.voxapps.calendarapp.domain.llm.CalendarScanRequestSender
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.showRequirementToast
+import com.voxapps.design.toEnumOr
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrRequest
@@ -100,7 +101,7 @@ class CalendarWidget : GlanceAppWidget() {
         // ExpensesWidget's identical fix for the same class of bug.
         val entries = container.calendarRepository.entriesWithTags.first()
         val attachedEntryIds = container.attachmentDao
-            .observeRecordIdsWithAttachments(CalendarAttachments.RECORD_TYPE).first().toSet()
+            .getRecordIdsWithAttachments(CalendarAttachments.RECORD_TYPE).toSet()
 
         val addIntent = Intent(context, CalendarActivity::class.java).apply {
             putExtra(CalendarActivity.EXTRA_QUICK_ADD, true)
@@ -138,11 +139,11 @@ class CalendarWidget : GlanceAppWidget() {
                     // through CalendarWidgetContent/UpcomingEntriesList) reuses the existing
                     // effect==NONE gate below with no signature changes.
                     todayEffect = if (settingsSnapshot.todayEffectShowInWidget) {
-                        runCatching { TodayEffect.valueOf(settingsSnapshot.todayEffect) }.getOrDefault(TodayEffect.NONE)
+                        settingsSnapshot.todayEffect.toEnumOr(TodayEffect.NONE)
                     } else {
                         TodayEffect.NONE
                     },
-                    todayEffectStyle = runCatching { TodayEffectStyle.valueOf(settingsSnapshot.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
+                    todayEffectStyle = settingsSnapshot.todayEffectStyle.toEnumOr(TodayEffectStyle.RING),
                     todayEffectColor = Color(settingsSnapshot.todayEffectColor.toInt())
                 )
             }

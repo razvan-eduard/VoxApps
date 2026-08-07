@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 
 /**
@@ -37,7 +38,7 @@ class NotesContainer(context: Context) {
 
     val sessionManager = SessionManager()
 
-    val notesStateManager = NotesStateManager.getInstance(
+    val notesStateManager = NotesStateManager(
         settingsRepository,
         notesRepository,
         sessionManager,
@@ -66,7 +67,14 @@ class NotesContainer(context: Context) {
                 // so the widget's paperclip indicator would otherwise only catch up on the next
                 // unrelated refresh instead of promptly.
                 attachmentDao.observeRecordIdsWithAttachments(NotesAttachments.RECORD_TYPE)
-            ) { _, _, _, _ -> }.collect { NotesWidget().updateAll(appContext) }
+            // conflate(): each emission drives a Glance updateAll() — an IPC round-trip to the
+            // launcher — and a bulk import or a P2P sync merge emits once per record, so the
+            // widget would be redrawn N times to show one final state. Conflating drops the
+            // intermediate values while an update is still in flight, keeping the newest, so the
+            // refresh rate is bounded by how fast updateAll() completes rather than by how fast
+            // rows are written. No debounce: nothing here is latency-sensitive enough to justify
+            // delaying the common single-change case.
+            ) { _, _, _, _ -> }.conflate().collect { NotesWidget().updateAll(appContext) }
         }
     }
 }

@@ -41,6 +41,7 @@ import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
 import com.voxapps.design.settings.ThemeSettingsStrings
+import com.voxapps.design.toEnumOr
 import com.voxapps.logging.Logger
 import com.voxapps.logging.ui.LogViewerCard
 import com.voxapps.logging.ui.LogViewerStrings
@@ -140,7 +141,7 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
 
         if (page == SettingsPage.THEME) {
             ThemeSettingsScreen(
-                darkMode = runCatching { VoxDarkMode.valueOf(themeDarkMode) }.getOrDefault(VoxDarkMode.SYSTEM),
+                darkMode = themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
                 colored = themeColored,
                 onDarkModeChange = { scope.launch { container.settingsRepository.setThemeDarkMode(it.name) } },
                 onColoredChange = { scope.launch { container.settingsRepository.setThemeColored(it) } },

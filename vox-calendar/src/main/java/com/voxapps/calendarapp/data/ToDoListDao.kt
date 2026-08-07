@@ -14,6 +14,12 @@ interface ToDoListDao {
     @Query("SELECT * FROM todo_lists ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<ToDoList>>
 
+    /** One-shot read for the write paths — `observeAll().first()` would spin up an
+     *  InvalidationTracker observer, run the query, then tear it all down again just to read
+     *  the current rows once. */
+    @Query("SELECT * FROM todo_lists ORDER BY createdAt DESC")
+    suspend fun getAll(): List<ToDoList>
+
     @Query("SELECT * FROM todo_lists WHERE id = :id")
     suspend fun getById(id: Long): ToDoList?
 

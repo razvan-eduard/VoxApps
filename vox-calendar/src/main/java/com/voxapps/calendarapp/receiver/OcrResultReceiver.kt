@@ -10,6 +10,7 @@ import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
 import com.voxapps.calendarapp.data.CalendarAttachments
+import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
 import com.voxapps.logging.Logger
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxCapabilityClient
@@ -29,7 +30,6 @@ import java.io.FileOutputStream
 import java.util.UUID
 
 private const val TAG = "OcrResultReceiver"
-private const val COMMANDER_PACKAGE = "com.voxapps.commander"
 private const val CALENDAR_FILE_PROVIDER_AUTHORITY = "com.voxapps.calendar.fileprovider"
 
 /**

@@ -6,6 +6,7 @@ import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.logging.Logger
 import com.voxapps.notes.domain.llm.DuplicateGroup
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 
 data class VoiceNoteResult(val noteId: Long, val categoryId: Long?, val categoryName: String?)
@@ -22,11 +23,12 @@ class NotesRepository(
     private val appContext: Context
 ) {
     val notes: Flow<List<Note>> = noteDao.observeAll()
-    val notesWithCategory: Flow<List<NoteWithCategory>> = noteDao.observeNotesWithCategory()
-    val categories: Flow<List<Category>> = categoryDao.observeAll()
+    val notesWithCategory: Flow<List<NoteWithCategory>> =
+        noteDao.observeNotesWithCategory().distinctUntilChanged()
+    val categories: Flow<List<Category>> = categoryDao.observeAll().distinctUntilChanged()
 
     /** One-shot snapshot for the headless read path (Commander IPC). */
-    suspend fun notesSnapshot(): List<Note> = noteDao.observeAll().first()
+    suspend fun notesSnapshot(): List<Note> = noteDao.getAll()
 
     /** One-shot day-scoped snapshot (Vox Calendar's day-tap summary via Commander IPC). */
     suspend fun notesForDateRange(from: Long, to: Long): List<Note> = noteDao.getForDateRange(from, to)
@@ -86,7 +88,7 @@ class NotesRepository(
         autoCreate: Boolean,
         createdAt: Long
     ): VoiceNoteResult {
-        val cats = categoryDao.observeAll().first()
+        val cats = categoryDao.getAll()
         var resolved = VoiceCategoryResolver.resolve(spokenCategory, cats, defaultCategoryId)
 
         // Unknown spoken category + opt-in → create it (auto-colored) rather than falling back.
@@ -183,7 +185,7 @@ class NotesRepository(
      * suggest names that no longer exist if categories changed between the request and the reply).
      */
     suspend fun mergeCategories(mapping: Map<String, String>) {
-        val cats = categoryDao.observeAll().first()
+        val cats = categoryDao.getAll()
         for ((oldName, canonicalName) in mapping) {
             if (oldName.equals(canonicalName, ignoreCase = true)) continue
             val old = cats.firstOrNull { it.name.equals(oldName, ignoreCase = true) } ?: continue

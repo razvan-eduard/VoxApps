@@ -35,6 +35,7 @@ import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.screens.main.ListeningScreen
 import com.voxapps.commander.utils.Strings
+import com.voxapps.design.toEnumOr
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -159,7 +160,7 @@ fun SettingsContent(
                         }
                     } else if (page == 8) { // Theme (ThemeSettingsScreen already scrolls itself, no outer scroll wrapper)
                         ThemeSettingsScreen(
-                            darkMode = runCatching { VoxDarkMode.valueOf(uiState.themeDarkMode) }.getOrDefault(VoxDarkMode.SYSTEM),
+                            darkMode = uiState.themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
                             colored = uiState.themeColored,
                             onDarkModeChange = { appStateManager.setThemeDarkMode(it.name) },
                             onColoredChange = { appStateManager.setThemeColored(it) },

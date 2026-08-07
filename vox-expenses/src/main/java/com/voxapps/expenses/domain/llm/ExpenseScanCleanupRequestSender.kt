@@ -2,11 +2,11 @@ package com.voxapps.expenses.domain.llm
 
 import android.content.Context
 import com.voxapps.expenses.di.ExpensesContainer
+import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.flow.first
 
 private const val TAG = "ExpenseScanCleanupRequestSender"
-private const val COMMANDER_PACKAGE = "com.voxapps.commander"
 
 /**
  * Builds and fires the generic-LLM-hook request that turns raw receipt OCR text into structured

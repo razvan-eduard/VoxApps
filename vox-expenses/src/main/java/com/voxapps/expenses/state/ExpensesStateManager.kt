@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -50,7 +51,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class ExpensesStateManager internal constructor(
+class ExpensesStateManager(
     private val settingsRepo: ExpensesSettingsRepository,
     private val expensesRepo: ExpensesRepository,
     private val sessionManager: SessionManager,
@@ -119,7 +120,21 @@ class ExpensesStateManager internal constructor(
                     nextScheduledDedupMillis = nextRunMillis
                 )
             }
-        }.onEach { _uiState.value = it }.launchIn(scope)
+        }
+        // Deliberately NOT flowOn(Default) and NOT stateIn/WhileSubscribed, though the combine
+        // above is real CPU work on the scope's Main dispatcher:
+        //
+        //  - flowOn moves the transform off this thread, which makes _uiState update
+        //    asynchronously. Today a change published into _runtime settles into _uiState within
+        //    the same call, and the synchronous accessors below rely on that; adding flowOn broke
+        //    exactly those expectations in NotesStateManagerTest.
+        //  - WhileSubscribed would leave uiState.value at its initial Loading value whenever no UI
+        //    is attached, and it is read synchronously, with no subscription, by headless callers
+        //    (IPC read/export responders and the widget refresh).
+        //
+        // Both are worth revisiting only behind a measurement showing this combine actually costs
+        // frames, together with a plan for those synchronous readers.
+            .onEach { _uiState.value = it }.launchIn(scope)
     }
 
     fun setCategoryFilter(categoryId: Long?) = _runtime.update { it.copy(selectedCategoryId = categoryId) }
@@ -171,7 +186,7 @@ class ExpensesStateManager internal constructor(
     fun setDuplicateRuleSetGlobalCombinator(combinator: String) { scope.launch { settingsRepo.setDuplicateRuleSetGlobalCombinator(combinator) } }
 
     // --- Duplicate rules (see DuplicateRuleEntity/DuplicateRuleDao) ---
-    val duplicateRules: Flow<List<DuplicateRuleEntity>> = duplicateRuleDao.observeAll()
+    val duplicateRules: Flow<List<DuplicateRuleEntity>> = duplicateRuleDao.observeAll().distinctUntilChanged()
     fun upsertDuplicateRule(rule: DuplicateRuleEntity) { scope.launch { duplicateRuleDao.upsert(rule) } }
     fun deleteDuplicateRule(rule: DuplicateRuleEntity) { scope.launch { duplicateRuleDao.delete(rule) } }
     fun setDuplicateRuleEnabled(id: Long, enabled: Boolean) { scope.launch { duplicateRuleDao.setEnabled(id, enabled) } }
@@ -509,6 +524,11 @@ class ExpensesStateManager internal constructor(
     fun observeAttachments(expenseId: Long): Flow<List<AttachmentEntity>> =
         attachmentDao.observeFor(ExpensesAttachments.RECORD_TYPE, expenseId)
 
+    /** One-shot counterpart for callers that just need the current rows once (the edit screen's
+     *  opening snapshot), rather than collecting the flow's first emission and cancelling it. */
+    suspend fun getAttachments(expenseId: Long): List<AttachmentEntity> =
+        attachmentDao.getFor(ExpensesAttachments.RECORD_TYPE, expenseId)
+
     fun addManualAttachment(expenseId: Long, fileName: String, groupId: String? = null, groupOrder: Int = 0) {
         scope.launch {
             attachmentDao.insert(
@@ -547,29 +567,5 @@ class ExpensesStateManager internal constructor(
 
     fun clearPendingFieldSuggestion(expenseId: Long) {
         scope.launch { expensesRepo.clearPendingFieldSuggestion(expenseId) }
-    }
-
-    companion object {
-        @Volatile private var instance: ExpensesStateManager? = null
-
-        fun getInstance(
-            settingsRepo: ExpensesSettingsRepository,
-            expensesRepo: ExpensesRepository,
-            sessionManager: SessionManager,
-            pendingCategoryMergeRepo: PendingCategoryMergeRepository,
-            expenseDeduplicationRepo: ExpenseDeduplicationRepository,
-            pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
-            spendingLimitAlertRepo: SpendingLimitAlertRepository,
-            pendingLlmRequestQueue: VoxLlmRequestQueue,
-            attachmentDao: AttachmentDao,
-            duplicateRuleDao: DuplicateRuleDao,
-            appContext: Context
-        ): ExpensesStateManager = instance ?: synchronized(this) {
-            instance ?: ExpensesStateManager(
-                settingsRepo, expensesRepo, sessionManager, pendingCategoryMergeRepo, expenseDeduplicationRepo,
-                pendingNotificationExpenseRepo, spendingLimitAlertRepo, pendingLlmRequestQueue, attachmentDao, duplicateRuleDao,
-                appContext
-            ).also { instance = it }
-        }
     }
 }

@@ -1,5 +1,6 @@
 package com.voxapps.notes.receiver
 
+import com.voxapps.datahygiene.SyncDeltaKeys
 import com.voxapps.datahygiene.SyncIdentity
 import com.voxapps.datahygiene.planMerge
 import com.voxapps.ipc.VoxResult
@@ -45,8 +46,8 @@ class NotesSyncHandler(
         val tombstones = notesRepo.tombstonesSince(since)
 
         val json = JSONObject()
-        json.put("entries", JSONArray(changed.map { it.toSyncJson(it.categoryId?.let { id -> categoryNameById[id] }) }))
-        json.put("tombstones", JSONArray(tombstones.map { JSONObject().put("uid", it.uid).put("deletedAt", it.deletedAt) }))
+        json.put(SyncDeltaKeys.ENTRIES, JSONArray(changed.map { it.toSyncJson(it.categoryId?.let { id -> categoryNameById[id] }) }))
+        json.put(SyncDeltaKeys.TOMBSTONES, JSONArray(tombstones.map { JSONObject().put(SyncDeltaKeys.UID, it.uid).put(SyncDeltaKeys.DELETED_AT, it.deletedAt) }))
         return VoxResult(ok = true, text = json.toString())
     }
 
@@ -65,7 +66,7 @@ class NotesSyncHandler(
         val existingCategories = notesRepo.categories.first().toMutableList()
         val nameToId = existingCategories.associate { it.name.lowercase() to it.id }.toMutableMap()
 
-        val entriesJson = root.optJSONArray("entries") ?: JSONArray()
+        val entriesJson = root.optJSONArray(SyncDeltaKeys.ENTRIES) ?: JSONArray()
         val remoteEntries = (0 until entriesJson.length()).map { i ->
             val e = entriesJson.getJSONObject(i)
             val categoryName = e.optNullableString("categoryName")
@@ -83,9 +84,9 @@ class NotesSyncHandler(
             }
             e.toNote(categoryId)
         }
-        val tombstonesJson = root.optJSONArray("tombstones") ?: JSONArray()
+        val tombstonesJson = root.optJSONArray(SyncDeltaKeys.TOMBSTONES) ?: JSONArray()
         val remoteTombstoneUids = (0 until tombstonesJson.length())
-            .map { tombstonesJson.getJSONObject(it).optString("uid") }
+            .map { tombstonesJson.getJSONObject(it).optString(SyncDeltaKeys.UID) }
             .toSet()
 
         val local = notesRepo.notesSnapshot()
@@ -111,21 +112,21 @@ private object NoteSyncIdentity : SyncIdentity<Note> {
 }
 
 private fun Note.toSyncJson(categoryName: String?): JSONObject = JSONObject().apply {
-    put("uid", uid)
+    put(SyncDeltaKeys.UID, uid)
     put("title", title)
     put("text", text)
     put("categoryName", categoryName)
     put("createdAt", createdAt)
-    put("updatedAt", updatedAt)
+    put(SyncDeltaKeys.UPDATED_AT, updatedAt)
 }
 
 private fun JSONObject.toNote(categoryId: Long?): Note = Note(
-    uid = optString("uid"),
+    uid = optString(SyncDeltaKeys.UID),
     title = optNullableString("title"),
     text = optString("text"),
     categoryId = categoryId,
     createdAt = optLong("createdAt"),
-    updatedAt = optLong("updatedAt")
+    updatedAt = optLong(SyncDeltaKeys.UPDATED_AT)
 )
 
 private fun JSONObject.optNullableString(key: String): String? =

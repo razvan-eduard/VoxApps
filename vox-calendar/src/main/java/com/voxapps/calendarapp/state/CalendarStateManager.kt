@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
  * Seeds a single default layer ("Personal") on first-ever launch (empty layer table) so entries always
  * have somewhere to land — [CalendarEntry.layerId] is non-nullable, unlike Notes'/Expenses' category ids.
  */
-class CalendarStateManager internal constructor(
+class CalendarStateManager(
     private val settingsRepo: CalendarSettingsRepository,
     private val calendarRepo: CalendarRepository,
     private val sessionManager: SessionManager,
@@ -97,7 +97,21 @@ class CalendarStateManager internal constructor(
                     selectedDateMillis = rt.selectedDateMillis
                 )
             }
-        }.onEach { _uiState.value = it }.launchIn(scope)
+        }
+        // Deliberately NOT flowOn(Default) and NOT stateIn/WhileSubscribed, though the combine
+        // above is real CPU work on the scope's Main dispatcher:
+        //
+        //  - flowOn moves the transform off this thread, which makes _uiState update
+        //    asynchronously. Today a change published into _runtime settles into _uiState within
+        //    the same call, and the synchronous accessors below rely on that; adding flowOn broke
+        //    exactly those expectations in NotesStateManagerTest.
+        //  - WhileSubscribed would leave uiState.value at its initial Loading value whenever no UI
+        //    is attached, and it is read synchronously, with no subscription, by headless callers
+        //    (IPC read/export responders and the widget refresh).
+        //
+        // Both are worth revisiting only behind a measurement showing this combine actually costs
+        // frames, together with a plan for those synchronous readers.
+            .onEach { _uiState.value = it }.launchIn(scope)
     }
 
     private suspend fun seedDefaultLayerIfNeeded() {
@@ -363,17 +377,4 @@ class CalendarStateManager internal constructor(
 
     private fun uiStateLayers(): List<CalendarLayer> =
         (_uiState.value as? CalendarUiState.Unlocked)?.layers ?: emptyList()
-
-    companion object {
-        @Volatile private var instance: CalendarStateManager? = null
-
-        fun getInstance(
-            settingsRepo: CalendarSettingsRepository,
-            calendarRepo: CalendarRepository,
-            sessionManager: SessionManager,
-            attachmentDao: AttachmentDao
-        ): CalendarStateManager = instance ?: synchronized(this) {
-            instance ?: CalendarStateManager(settingsRepo, calendarRepo, sessionManager, attachmentDao).also { instance = it }
-        }
-    }
 }

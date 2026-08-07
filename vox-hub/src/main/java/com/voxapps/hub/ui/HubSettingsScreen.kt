@@ -51,6 +51,7 @@ import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
 import com.voxapps.design.settings.ThemeSettingsStrings
+import com.voxapps.design.toEnumOr
 import com.voxapps.hub.data.preferences.HubSettings
 import com.voxapps.hub.data.preferences.HubSettingsRepository
 import com.voxapps.hub.domain.backup.BackupScheduler
@@ -306,7 +307,7 @@ fun HubSettingsScreen(
             }
 
             SettingsPage.THEME -> ThemeSettingsScreen(
-                darkMode = runCatching { VoxDarkMode.valueOf(settings.themeDarkMode) }.getOrDefault(VoxDarkMode.SYSTEM),
+                darkMode = settings.themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
                 colored = settings.themeColored,
                 onDarkModeChange = { scope.launch { settingsRepo.setThemeDarkMode(it.name) } },
                 onColoredChange = { scope.launch { settingsRepo.setThemeColored(it) } },

@@ -64,7 +64,7 @@ data class ServiceLoadingState(
 )
 
 sealed class AppScanState {
-    object Idle : AppScanState()
+    data object Idle : AppScanState()
     data class Scanning(val current: Int, val total: Int, val appName: String) : AppScanState()
     data class Done(val totalApps: Int, val durationMs: Long) : AppScanState()
 }
@@ -607,6 +607,14 @@ class AppStateManager private constructor(
         @Volatile
         private var instance: AppStateManager? = null
 
+        /**
+         * Kept, unlike the satellites' state managers, which are now plain constructor calls from
+         * their containers. This one has entry points the container can't reach: [WakeWordService]
+         * and [VoiceTriggerReceiver] are instantiated by the OS with no reference to
+         * [com.voxapps.commander.di.AppContainer], and SpeakingOverlay reaches it from a composable
+         * via [get]. Until those are given a container handle, the process-wide instance is what
+         * makes them observe the same state as the UI rather than a second, divergent copy.
+         */
         fun getInstance(repo: SettingsRepository, context: Context): AppStateManager {
             return instance ?: synchronized(this) {
                 instance ?: AppStateManager(repo, context).also { instance = it }

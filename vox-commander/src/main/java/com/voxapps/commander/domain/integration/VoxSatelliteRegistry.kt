@@ -1,23 +1,25 @@
 package com.voxapps.commander.domain.integration
 
 import android.content.Context
-import android.content.Intent
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.voxapps.logging.Logger
+import com.voxapps.preferences.VoxDataStore
+import com.voxapps.ipc.BalGraceFlash
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxSatelliteSchema
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 
-private val Context.satelliteSchemaDataStore by preferencesDataStore(name = "vox_satellite_schema_cache")
+/** The schema cache is a second store, separate from the app's settings — same machinery, so it
+ *  goes through [VoxDataStore] rather than re-declaring a delegate. */
+private const val SCHEMA_CACHE_STORE = "vox_satellite_schema_cache"
+private val Context.satelliteSchemaDataStore get() = VoxDataStore.get(this, SCHEMA_CACHE_STORE)
 
 /**
  * Runtime registry of Vox satellite apps, rebuilt by scanning the device at warmup / refresh. This
@@ -82,19 +84,7 @@ object VoxSatelliteRegistry {
         val app = context.applicationContext
         var schema = VoxDataTransferClient.requestSchema(app, packageName)
         if (schema == null) {
-            // Same BAL-grace-window-tuned flash sequence Hub's export/import already proved out:
-            // launch the satellite's own activity to clear Android's "stopped" state, return focus
-            // to Commander, then retry once.
-            app.packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                app.startActivity(intent)
-                delay(350L)
-            }
-            app.packageManager.getLaunchIntentForPackage(app.packageName)?.let { intent ->
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                app.startActivity(intent)
-            }
-            delay(300L)
+            BalGraceFlash.flashThenRefocus(app, listOf(packageName))
             schema = VoxDataTransferClient.requestSchema(app, packageName)
         }
         if (schema != null) persistSchema(app, packageName, schema)

@@ -31,6 +31,7 @@ class ExpensesRepositoryApplyCategoryMergeTest {
             mockk(relaxed = true)
         )
         coEvery { categoryDao.observeAll() } returns flowOf(listOf(food, groceries, transport))
+        coEvery { categoryDao.getAll() } returns listOf(food, groceries, transport)
     }
 
     @Test

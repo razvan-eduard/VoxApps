@@ -3,6 +3,8 @@ package com.voxapps.calendarapp.domain.daylink
 import android.content.Context
 import android.content.pm.PackageManager
 import com.voxapps.ipc.VoxDataTransferClient
+import com.voxapps.ipc.VoxIpc.EXPENSES_PACKAGE
+import com.voxapps.ipc.VoxIpc.NOTES_PACKAGE
 import org.json.JSONObject
 
 /** [id] deep-links into the source app's editor (see [DayLinkIntentSender]); [colorArgb] is that
@@ -18,8 +20,6 @@ data class DaySummary(val count: Int, val items: List<DaySummaryEntry>)
  * null the same as "nothing to show", not surface a raw error.
  */
 object DaySummaryClient {
-    private const val NOTES_PACKAGE = "com.voxapps.notes"
-    private const val EXPENSES_PACKAGE = "com.voxapps.expenses"
 
     /** Cheap local check so callers can skip the section (and the network-timeout-shaped
      *  [fetchNotes]/[fetchExpenses] wait) entirely rather than fetching just to get null back. */

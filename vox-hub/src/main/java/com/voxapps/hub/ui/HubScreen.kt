@@ -58,10 +58,10 @@ import com.voxapps.hub.domain.backup.wantsExport
 import com.voxapps.hub.domain.backup.zipEntriesFor
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.ipc.BalGraceFlash
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxIpc
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -185,26 +185,7 @@ fun HubScreen(
         isExporting = true
         scope.launch {
             // Clearing Android's "stopped" flag requires the target app's activity to genuinely
-            // reach RESUMED (visible) state, not merely be started — batching every launch into one
-            // startActivities() call avoids BAL blocking but never lets the non-final entries
-            // actually resume (confirmed via dumpsys: their stopped flag stayed true even though a
-            // process spawned). So each target needs its own startActivity() call with enough delay
-            // to really finish its transition — but a delay much past ~1s makes Hub's own next call
-            // BAL-blocked (confirmed via logcat "Background activity launch blocked!" at 700ms).
-            // 350ms threads that needle: long enough for a real activity transition, short enough to
-            // stay inside Hub's post-tap BAL grace window for every call in the chain.
-            for (pkg in targetPackages) {
-                context.packageManager.getLaunchIntentForPackage(pkg)?.let { intent ->
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                    delay(350L)
-                }
-            }
-            context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-            }
-            delay(300L)
+            BalGraceFlash.flashThenRefocus(context, targetPackages)
 
             val results = priorResults.toMutableMap()
             val okFlags = priorOkFlags.toMutableMap()
@@ -248,19 +229,7 @@ fun HubScreen(
     ) {
         isImporting = true
         scope.launch {
-            // Same BAL-grace-window-tuned flash sequence as export — see its comment above.
-            for (pkg in targetPackages) {
-                context.packageManager.getLaunchIntentForPackage(pkg)?.let { intent ->
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                    delay(350L)
-                }
-            }
-            context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-            }
-            delay(300L)
+            BalGraceFlash.flashThenRefocus(context, targetPackages)
 
             val results = priorResults.toMutableMap()
             for ((domain, data) in targets) {

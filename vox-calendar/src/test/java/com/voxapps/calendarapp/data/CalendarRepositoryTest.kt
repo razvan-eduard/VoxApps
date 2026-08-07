@@ -4,6 +4,7 @@ import android.content.Context
 import com.voxapps.attachments.AttachmentDao
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.verify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -25,6 +26,7 @@ class CalendarRepositoryTest {
     private lateinit var attachmentDao: AttachmentDao
     private lateinit var reminderDao: CalendarReminderDao
     private lateinit var toDoListDao: ToDoListDao
+    private lateinit var effects: CalendarPlatformEffects
     private lateinit var repository: CalendarRepository
 
     private val now = 1_000_000L
@@ -36,15 +38,22 @@ class CalendarRepositoryTest {
         entryDao = mockk()
         layerDao = mockk()
         tagDao = mockk()
+        effects = mockk(relaxed = true)
         attachmentDao = mockk()
         reminderDao = mockk()
         toDoListDao = mockk()
         // CalendarRepository's `entriesWithTags`/`layers` properties capture these Flows at
         // construction time (same gotcha as ToDoRepositoryTest's buildRepository doc comment).
         every { entryDao.observeEntriesWithTags() } returns flowOf(emptyList())
+        coEvery { entryDao.getEntriesWithTags() } returns emptyList()
         every { layerDao.observeAll() } returns flowOf(listOf(mainLayer, otherLayer))
+        coEvery { layerDao.getAll() } returns listOf(mainLayer, otherLayer)
+        coEvery { layerDao.getById(any()) } answers { (listOf(mainLayer, otherLayer)).firstOrNull { it.id == firstArg<Long>() } }
         every { tagDao.observeDistinctTagNames() } returns flowOf(emptyList())
-        repository = CalendarRepository(entryDao, layerDao, tagDao, attachmentDao, reminderDao, toDoListDao, mockk<Context>(relaxed = true))
+        repository = CalendarRepository(
+            entryDao, layerDao, tagDao, attachmentDao, reminderDao, toDoListDao,
+            mockk<Context>(relaxed = true), effects
+        )
 
         coEvery { attachmentDao.deleteAllFor(any(), any()) } returns emptyList()
         coEvery { reminderDao.deleteForEntry(any()) } returns emptyList()
@@ -90,9 +99,9 @@ class CalendarRepositoryTest {
         coVerify(exactly = 0) { toDoListDao.reassignLayer(any(), any()) }
     }
 
-    // A deliberately past startMillis makes ReminderScheduler.schedule's own trigger-time check
-    // return before it ever touches the real AlarmManager/Context — letting these tests exercise the
-    // real reminder-precedence write path without needing to mock Android's alarm APIs.
+    // startMillis is now just a value, not a workaround: the repository fires alarms through the
+    // injected CalendarPlatformEffects (see setup()), so nothing here reaches AlarmManager and a
+    // future entry would work equally well.
     private fun pastEntry(id: Long, layerId: Long, individualOffsets: String?) = CalendarEntry(
         id = id, uid = "uid-$id", type = CalendarEntryType.EVENT, title = "Entry $id",
         startMillis = 1000L, allDay = false, layerId = layerId, createdAt = now, updatedAt = now,
@@ -115,6 +124,10 @@ class CalendarRepositoryTest {
 
         assertEquals("30", inserted.captured.individualReminderOffsetsMinutes)
         coVerify(exactly = 1) { reminderDao.insert(match { it.entryId == 100L && it.offsetMinutesBefore == 30 }) }
+        // The alarm itself, not just its DB row — previously unassertable, because the only way to
+        // keep ReminderScheduler away from a real AlarmManager was to let it bail out before doing
+        // anything worth asserting on.
+        verify(exactly = 1) { effects.scheduleReminder(match { it.id == 500L && it.offsetMinutesBefore == 30 }, any()) }
     }
 
     @Test
@@ -123,6 +136,8 @@ class CalendarRepositoryTest {
         // A real Room DAO's observeAll() would reflect the just-applied update on the very next read;
         // this mock has to be told that explicitly since it doesn't track state between stubbed calls.
         every { layerDao.observeAll() } returns flowOf(listOf(mainLayer, otherLayer.copy(reminderOffsetsMinutes = "60,1440")))
+        coEvery { layerDao.getAll() } returns listOf(mainLayer, otherLayer.copy(reminderOffsetsMinutes = "60,1440"))
+        coEvery { layerDao.getById(any()) } answers { (listOf(mainLayer, otherLayer.copy(reminderOffsetsMinutes = "60,1440"))).firstOrNull { it.id == firstArg<Long>() } }
         coEvery { entryDao.getIdsForLayer(2L) } returns listOf(100L)
         coEvery { entryDao.getById(100L) } returns pastEntry(100L, 2L, "30")
         coEvery { reminderDao.insert(any()) } returns 500L
@@ -143,6 +158,8 @@ class CalendarRepositoryTest {
         coEvery { layerDao.update(any()) } returns Unit
         // Simulates the calendar previously having reminders ON (60,1440) and this call turning it OFF.
         every { layerDao.observeAll() } returns flowOf(listOf(mainLayer, otherLayer.copy(reminderOffsetsMinutes = "")))
+        coEvery { layerDao.getAll() } returns listOf(mainLayer, otherLayer.copy(reminderOffsetsMinutes = ""))
+        coEvery { layerDao.getById(any()) } answers { (listOf(mainLayer, otherLayer.copy(reminderOffsetsMinutes = ""))).firstOrNull { it.id == firstArg<Long>() } }
         coEvery { entryDao.getIdsForLayer(2L) } returns listOf(100L)
         coEvery { entryDao.getById(100L) } returns pastEntry(100L, 2L, "30")
         coEvery { reminderDao.insert(any()) } returns 500L
@@ -208,6 +225,8 @@ class CalendarRepositoryTest {
             kind = CalendarLayerKind.SUBSCRIBED, subscriptionUrl = "https://example.com/cal.ics"
         )
         every { layerDao.observeAll() } returns flowOf(listOf(mainLayer, otherLayer, subscribed))
+        coEvery { layerDao.getAll() } returns listOf(mainLayer, otherLayer, subscribed)
+        coEvery { layerDao.getById(any()) } answers { (listOf(mainLayer, otherLayer, subscribed)).firstOrNull { it.id == firstArg<Long>() } }
 
         repository.setMainLayer(3L)
 

@@ -35,6 +35,7 @@ class ExpensesRepositoryDuplicateCheckTest {
         spendingLimitDao = mockk(relaxed = true)
         duplicateRuleDao = mockk(relaxed = true)
         every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
+        coEvery { duplicateRuleDao.getAll() } returns emptyList()
         repository = ExpensesRepository(
             expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk<Context>(), mockk(relaxed = true), duplicateRuleDao,
             mockk(relaxed = true)
@@ -62,6 +63,7 @@ class ExpensesRepositoryDuplicateCheckTest {
         val existing = Expense(id = 1, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour", bank = "Some Bank", dateTime = 1000L)
         coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(existing)
         every { duplicateRuleDao.observeAll() } returns flowOf(listOf(rule(listOf("title", "totalAmount", "vendor", "bank"))))
+        coEvery { duplicateRuleDao.getAll() } returns listOf(rule(listOf("title", "totalAmount", "vendor", "bank")))
 
         val result = repository.addExpense(
             title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour",
@@ -83,6 +85,7 @@ class ExpensesRepositoryDuplicateCheckTest {
         coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(existing)
         coEvery { expenseDao.insert(any()) } returns 9L
         every { duplicateRuleDao.observeAll() } returns flowOf(listOf(rule(listOf("title", "totalAmount"))))
+        coEvery { duplicateRuleDao.getAll() } returns listOf(rule(listOf("title", "totalAmount")))
 
         val result = repository.addExpense(
             title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour",
@@ -119,6 +122,7 @@ class ExpensesRepositoryDuplicateCheckTest {
         coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(nearby)
         coEvery { expenseDao.update(any()) } just Runs
         every { duplicateRuleDao.observeAll() } returns flowOf(listOf(rule(listOf("totalAmount", "title"))))
+        coEvery { duplicateRuleDao.getAll() } returns listOf(rule(listOf("totalAmount", "title")))
 
         val result = repository.addExpense(
             title = "Payment to Example Store", totalAmount = 99.0, currencyCode = "RON", vendor = null,
@@ -137,6 +141,7 @@ class ExpensesRepositoryDuplicateCheckTest {
         coEvery { expenseDao.getForDateRange(any(), any()) } returns emptyList()
         coEvery { expenseDao.insert(any()) } returns 5L
         every { duplicateRuleDao.observeAll() } returns flowOf(listOf(rule(listOf("totalAmount", "title"))))
+        coEvery { duplicateRuleDao.getAll() } returns listOf(rule(listOf("totalAmount", "title")))
 
         val result = repository.addExpense(
             title = "Example Store", totalAmount = 99.0, currencyCode = "RON", vendor = null,
@@ -179,6 +184,7 @@ class ExpensesRepositoryDuplicateCheckTest {
         coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(incomingTopUp)
         coEvery { expenseDao.insert(any()) } returns 22L
         every { duplicateRuleDao.observeAll() } returns flowOf(listOf(rule(listOf("totalAmount"))))
+        coEvery { duplicateRuleDao.getAll() } returns listOf(rule(listOf("totalAmount")))
 
         val result = repository.addExpense(
             title = "Payment", totalAmount = 1000.0, currencyCode = "RON", vendor = null,

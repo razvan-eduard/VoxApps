@@ -2,12 +2,11 @@ package com.voxapps.calendarapp.data
 
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
-import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.calendarapp.domain.reminders.ReminderScheduler
 import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.util.UUID
 
 /**
@@ -21,15 +20,27 @@ class CalendarRepository(
     private val attachmentDao: AttachmentDao,
     private val reminderDao: CalendarReminderDao,
     private val toDoListDao: ToDoListDao,
-    private val appContext: Context
+    private val appContext: Context,
+    /** The non-database side effects of writing (alarms, attachment files). Defaulted so
+     *  production wiring is unchanged; tests substitute a fake instead of shaping fixtures to
+     *  dodge AlarmManager. See [CalendarPlatformEffects]. */
+    private val effects: CalendarPlatformEffects = AndroidCalendarPlatformEffects(appContext)
 ) {
-    val entriesWithTags: Flow<List<CalendarEntryWithTags>> = entryDao.observeEntriesWithTags()
-    val layers: Flow<List<CalendarLayer>> = layerDao.observeAll()
-    val distinctTagNames: Flow<List<String>> = tagDao.observeDistinctTagNames()
+    // All three are deduped structurally because Room re-runs an observed query on *any* write to
+    // the tables it touches, not only one that changes the result. Every emission here re-triggers
+    // CalendarStateManager's five-way combine, which rebuilds the whole UI state and ultimately
+    // feeds RecurrenceExpander over a multi-year window — by far the most expensive chain in the
+    // app to run for no change. distinctTagNames is the sharpest case: it is a SELECT DISTINCT, and
+    // saving any entry rewrites its tag rows (deleteAllForEntry + insertAll), so the identical name
+    // list is re-emitted on essentially every save.
+    val entriesWithTags: Flow<List<CalendarEntryWithTags>> =
+        entryDao.observeEntriesWithTags().distinctUntilChanged()
+    val layers: Flow<List<CalendarLayer>> = layerDao.observeAll().distinctUntilChanged()
+    val distinctTagNames: Flow<List<String>> = tagDao.observeDistinctTagNames().distinctUntilChanged()
 
     /** One-shot snapshot for the headless read/export path (Commander IPC). */
-    suspend fun entriesSnapshot(): List<CalendarEntryWithTags> = entryDao.observeEntriesWithTags().first()
-    suspend fun layersSnapshot(): List<CalendarLayer> = layerDao.observeAll().first()
+    suspend fun entriesSnapshot(): List<CalendarEntryWithTags> = entryDao.getEntriesWithTags()
+    suspend fun layersSnapshot(): List<CalendarLayer> = layerDao.getAll()
 
     // --- ENTRIES ---
 
@@ -161,7 +172,7 @@ class CalendarRepository(
      *  calendar, even a [CalendarLayerKind.SUBSCRIBED] one), else [individualOffsets] (the entry's own
      *  choice) unchanged. */
     private suspend fun effectiveOffsetsFor(layerId: Long, individualOffsets: List<Int>): List<Int> {
-        val layer = layerDao.observeAll().first().firstOrNull { it.id == layerId }
+        val layer = layerDao.getById(layerId)
         val calendarOffsets = layer?.reminderOffsetsMinutes?.let(ReminderOffsetsCodec::decode) ?: emptyList()
         return calendarOffsets.ifEmpty { individualOffsets }
     }
@@ -171,7 +182,7 @@ class CalendarRepository(
      *  OFF, or editing the offset list takes effect for entries that already existed before the change,
      *  not just future ones. */
     suspend fun setLayerReminderOffsets(layerId: Long, offsets: List<Int>) {
-        val layer = layerDao.observeAll().first().firstOrNull { it.id == layerId } ?: return
+        val layer = layerDao.getById(layerId) ?: return
         layerDao.update(layer.copy(reminderOffsetsMinutes = ReminderOffsetsCodec.encode(offsets)))
         for (entryId in entryDao.getIdsForLayer(layerId)) {
             val entry = entryDao.getById(entryId) ?: continue
@@ -190,14 +201,14 @@ class CalendarRepository(
         for (offset in offsetsMinutes.distinct()) {
             val reminder = CalendarReminder(entryId = entryId, offsetMinutesBefore = offset)
             val reminderId = reminderDao.insert(reminder)
-            ReminderScheduler.schedule(appContext, reminder.copy(id = reminderId), entry)
+            effects.scheduleReminder(reminder.copy(id = reminderId), entry)
         }
     }
 
     private suspend fun cancelReminders(entryId: Long) {
         val removed = reminderDao.deleteForEntry(entryId)
         for (reminder in removed) {
-            ReminderScheduler.cancel(appContext, reminder.id)
+            effects.cancelReminder(reminder.id)
         }
     }
 
@@ -208,7 +219,7 @@ class CalendarRepository(
         for (row in rows) {
             try {
                 if (attachmentDao.countByFileName(CalendarAttachments.RECORD_TYPE, row.fileName) == 0) {
-                    AttachmentFileStore.delete(appContext, CalendarAttachments.DIR, row.fileName)
+                    effects.deleteAttachmentFile(CalendarAttachments.DIR, row.fileName)
                 }
             } catch (e: Exception) {
                 Logger.w("CalendarRepository", "Failed to delete attachment file for entry $entryId", e)
@@ -275,7 +286,7 @@ class CalendarRepository(
         defaultLayerId: Long?,
         autoCreateLayer: Boolean
     ): FuzzyNameMatcher.Resolved {
-        val existingLayers = layerDao.observeAll().first()
+        val existingLayers = layerDao.getAll()
         var resolved = FuzzyNameMatcher.resolve(
             spokenName = spokenLayer,
             candidates = existingLayers.map { FuzzyNameMatcher.Candidate(it.id, it.name) },
@@ -329,7 +340,7 @@ class CalendarRepository(
      *  .SUBSCRIBED] calendar can never be Main: it's read-only, so new entries (which fall back to
      *  Main whenever no calendar is specified) would have nowhere valid to land. */
     suspend fun setMainLayer(layerId: Long) {
-        val layers = layerDao.observeAll().first()
+        val layers = layerDao.getAll()
         val target = layers.firstOrNull { it.id == layerId } ?: return
         if (target.kind == CalendarLayerKind.SUBSCRIBED || target.isDefault) return
         layers.filter { it.isDefault }.forEach { layerDao.update(it.copy(isDefault = false)) }
@@ -340,7 +351,7 @@ class CalendarRepository(
      *  each row's [CalendarLayer.position] is rewritten to its index (the field `CalendarLayerDao
      *  .observeAll` already sorts by). */
     suspend fun reorderLayers(orderedIds: List<Long>) {
-        val byId = layerDao.observeAll().first().associateBy { it.id }
+        val byId = layerDao.getAll().associateBy { it.id }
         orderedIds.forEachIndexed { index, id ->
             val layer = byId[id] ?: return@forEachIndexed
             if (layer.position != index) layerDao.update(layer.copy(position = index))
@@ -393,7 +404,7 @@ class CalendarRepository(
     suspend fun deleteLayer(layer: CalendarLayer, mode: LayerDeleteMode) {
         when (mode) {
             LayerDeleteMode.REASSIGN_TO_MAIN -> {
-                val fallback = layerDao.observeAll().first().firstOrNull { it.isDefault && it.id != layer.id }
+                val fallback = layerDao.getAll().firstOrNull { it.isDefault && it.id != layer.id }
                     ?: return
                 entryDao.reassignLayer(layer.id, fallback.id)
                 toDoListDao.reassignLayer(layer.id, fallback.id)
@@ -428,7 +439,7 @@ class CalendarRepository(
     /** [keepLastSyncedAt] = true on a failed sync so one transient failure doesn't erase an
      *  old-but-working "last synced" timestamp — only [lastSyncError] gets set in that case. */
     suspend fun setSyncStatus(layerId: Long, lastSyncedAt: Long?, lastSyncError: String?, keepLastSyncedAt: Boolean = false) {
-        val layer = layerDao.observeAll().first().firstOrNull { it.id == layerId } ?: return
+        val layer = layerDao.getById(layerId) ?: return
         layerDao.update(
             layer.copy(
                 lastSyncedAt = if (keepLastSyncedAt) layer.lastSyncedAt else lastSyncedAt,
@@ -443,11 +454,11 @@ class CalendarRepository(
      *  reminder is tied to "this device, this row" and the user can set new ones on the copy like
      *  any local entry. Returns the new calendar's id. */
     suspend fun duplicateLayerToOfflineCopy(source: CalendarLayer, newName: String): Long {
-        val existingLayers = layerDao.observeAll().first()
+        val existingLayers = layerDao.getAll()
         val newColor = CalendarLayerPalette.unusedOrRandomColor(existingLayers.map { it.colorArgb })
         val newLayerId = addLayer(newName, newColor, existingLayers.size)
         if (newLayerId <= 0) return newLayerId
-        for (ewt in entryDao.observeEntriesWithTags().first()) {
+        for (ewt in entryDao.getEntriesWithTags()) {
             if (ewt.entry.layerId != source.id) continue
             val e = ewt.entry
             addEntry(

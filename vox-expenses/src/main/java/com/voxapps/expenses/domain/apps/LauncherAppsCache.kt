@@ -25,7 +25,9 @@ object LauncherAppsCache {
     private val _scanStatus = MutableStateFlow(ScanStatus.IDLE)
     val scanStatus: StateFlow<ScanStatus> = _scanStatus
 
-    private var apps: List<AppPickerEntry> = emptyList()
+    /** Written on Main (the container's init) and on Dispatchers.IO (the settings tab's rescan);
+     *  read on IO by PaymentNotificationListenerService and on Main from Compose. */
+    @Volatile private var apps: List<AppPickerEntry> = emptyList()
 
     val cachedApps: List<AppPickerEntry> get() = apps
 

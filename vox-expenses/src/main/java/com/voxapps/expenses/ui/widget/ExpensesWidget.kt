@@ -41,6 +41,7 @@ import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.voxapps.attachments.VisionAttachmentCapture
+import com.voxapps.design.toEnumOr
 import com.voxapps.expenses.ExpensesActivity
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.R
@@ -91,7 +92,7 @@ class ExpensesWidget : GlanceAppWidget() {
             emptyList()
         }
         val attachedExpenseIds = container.attachmentDao
-            .observeRecordIdsWithAttachments(ExpensesAttachments.RECORD_TYPE).first().toSet()
+            .getRecordIdsWithAttachments(ExpensesAttachments.RECORD_TYPE).toSet()
 
         val addIntent = Intent(context, ExpensesActivity::class.java).apply {
             putExtra(ExpensesActivity.EXTRA_QUICK_ADD, true)
@@ -128,11 +129,11 @@ class ExpensesWidget : GlanceAppWidget() {
                     // effect — collapsing it to NONE here reuses the existing effect==NONE gate
                     // below with no signature changes (mirrors CalendarWidget.kt).
                     todayEffect = if (settingsSnapshot.todayEffectShowInWidget) {
-                        runCatching { TodayEffect.valueOf(settingsSnapshot.todayEffect) }.getOrDefault(TodayEffect.NONE)
+                        settingsSnapshot.todayEffect.toEnumOr(TodayEffect.NONE)
                     } else {
                         TodayEffect.NONE
                     },
-                    todayEffectStyle = runCatching { TodayEffectStyle.valueOf(settingsSnapshot.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
+                    todayEffectStyle = settingsSnapshot.todayEffectStyle.toEnumOr(TodayEffectStyle.RING),
                     todayEffectColor = Color(settingsSnapshot.todayEffectColor.toInt())
                 )
             }

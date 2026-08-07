@@ -116,10 +116,7 @@ object NluIntentParser {
         val el = get(key) ?: return emptyMap()
         if (el.isJsonNull) return emptyMap()
         return try {
-            val type = TypeToken.getParameterized(
-                Map::class.java, String::class.java, String::class.java
-            ).type
-            gson.fromJson(el, type) ?: emptyMap()
+            gson.fromJson(el, object : TypeToken<Map<String, String>>() {}.type) ?: emptyMap()
         } catch (e: Exception) {
             emptyMap()
         }

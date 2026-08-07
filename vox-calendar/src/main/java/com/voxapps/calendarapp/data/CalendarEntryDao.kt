@@ -23,6 +23,12 @@ interface CalendarEntryDao {
     @Query("SELECT * FROM calendar_entries WHERE startMillis IS NOT NULL ORDER BY startMillis ASC")
     fun observeEntriesWithTags(): Flow<List<CalendarEntryWithTags>>
 
+    /** One-shot read for the write/export paths — `observeAll().first()` would spin up an
+     *  InvalidationTracker observer, run the query, then tear it all down again. */
+    @androidx.room.Transaction
+    @Query("SELECT * FROM calendar_entries WHERE startMillis IS NOT NULL ORDER BY startMillis ASC")
+    suspend fun getEntriesWithTags(): List<CalendarEntryWithTags>
+
     @Query("SELECT * FROM calendar_entries ORDER BY startMillis ASC")
     fun observeAll(): Flow<List<CalendarEntry>>
 

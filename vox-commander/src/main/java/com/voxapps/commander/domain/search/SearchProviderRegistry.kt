@@ -15,10 +15,15 @@ object SearchProviderRegistry {
 
     private val gson = Gson()
 
-    private var appContext: Context? = null
-    private var cachedSchema: SearchDefinitionsSchema? = null
-    private var providersByCategory: Map<String, Map<String, DynamicSearchProvider>> = emptyMap()
-    private var defaultProviderNames: Map<String, String> = emptyMap()
+    /** Assigned on Main in init(), read on Dispatchers.IO throughout fetchRemote. */
+    @Volatile private var appContext: Context? = null
+    /** Written on Main (init) and on Dispatchers.IO (fetchRemote); read from Compose on Main. */
+    @Volatile private var cachedSchema: SearchDefinitionsSchema? = null
+    /** Rebuilt on whichever thread last refreshed the schema (Main via init, IO via fetchRemote);
+     *  read on Main from the search settings UI and on IO from SearchIntentHandler. */
+    @Volatile private var providersByCategory: Map<String, Map<String, DynamicSearchProvider>> = emptyMap()
+    /** Same write/read threads as providersByCategory — the two are rebuilt together. */
+    @Volatile private var defaultProviderNames: Map<String, String> = emptyMap()
 
     fun init(context: Context) {
         appContext = context.applicationContext

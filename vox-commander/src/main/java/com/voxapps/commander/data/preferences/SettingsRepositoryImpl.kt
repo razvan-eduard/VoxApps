@@ -13,6 +13,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.utils.fromJsonOrNull
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.utils.AppScope
@@ -987,58 +988,25 @@ class SettingsRepositoryImpl(
         else -> raw
     }
 
-    private fun parseStringMap(json: String?): Map<String, String> {
-        if (json.isNullOrBlank()) return emptyMap()
-        return try {
-            val type = com.google.gson.reflect.TypeToken.getParameterized(
-                Map::class.java, String::class.java, String::class.java
-            ).type
-            gson.fromJson(json, type) ?: emptyMap()
-        } catch (e: Exception) {
-            Logger.log("Failed to parse string map: ${e.message}", TAG)
-            emptyMap()
-        }
-    }
+    private fun parseStringMap(json: String?): Map<String, String> =
+        gson.fromJsonOrNull<Map<String, String>>(json) {
+            Logger.log("Failed to parse string map: ${it.message}", TAG)
+        } ?: emptyMap()
 
-    private fun parseStringListMap(json: String?): Map<String, List<String>> {
-        if (json.isNullOrBlank()) return emptyMap()
-        return try {
-            val type = com.google.gson.reflect.TypeToken.getParameterized(
-                Map::class.java, String::class.java,
-                com.google.gson.reflect.TypeToken.getParameterized(List::class.java, String::class.java).type
-            ).type
-            gson.fromJson(json, type) ?: emptyMap()
-        } catch (e: Exception) {
-            Logger.log("Failed to parse string list map: ${e.message}", TAG)
-            emptyMap()
-        }
-    }
+    private fun parseStringListMap(json: String?): Map<String, List<String>> =
+        gson.fromJsonOrNull<Map<String, List<String>>>(json) {
+            Logger.log("Failed to parse string list map: ${it.message}", TAG)
+        } ?: emptyMap()
 
-    private fun parseStringList(json: String?): List<String> {
-        if (json.isNullOrBlank()) return emptyList()
-        return try {
-            val type = com.google.gson.reflect.TypeToken.getParameterized(
-                List::class.java, String::class.java
-            ).type
-            gson.fromJson(json, type) ?: emptyList()
-        } catch (e: Exception) {
-            Logger.log("Failed to parse string list: ${e.message}", TAG)
-            emptyList()
-        }
-    }
+    private fun parseStringList(json: String?): List<String> =
+        gson.fromJsonOrNull<List<String>>(json) {
+            Logger.log("Failed to parse string list: ${it.message}", TAG)
+        } ?: emptyList()
 
-    private fun parseAppAliasRules(json: String?): List<AppAliasRule> {
-        if (json.isNullOrBlank()) return emptyList()
-        return try {
-            val type = com.google.gson.reflect.TypeToken.getParameterized(
-                List::class.java, AppAliasRule::class.java
-            ).type
-            gson.fromJson(json, type) ?: emptyList()
-        } catch (e: Exception) {
-            Logger.log("Failed to parse app alias rules: ${e.message}", TAG)
-            emptyList()
-        }
-    }
+    private fun parseAppAliasRules(json: String?): List<AppAliasRule> =
+        gson.fromJsonOrNull<List<AppAliasRule>>(json) {
+            Logger.log("Failed to parse app alias rules: ${it.message}", TAG)
+        } ?: emptyList()
 
     override suspend fun setAppAliasRules(rules: List<AppAliasRule>) {
         dataStore.edit { prefs ->

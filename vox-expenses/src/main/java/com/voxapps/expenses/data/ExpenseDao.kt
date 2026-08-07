@@ -23,6 +23,11 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses ORDER BY dateTime DESC")
     fun observeAll(): Flow<List<Expense>>
 
+    /** One-shot read for the write/export paths — `observeAll().first()` would spin up an
+     *  InvalidationTracker observer, run the query, then tear it all down again. */
+    @Query("SELECT * FROM expenses ORDER BY dateTime DESC")
+    suspend fun getAll(): List<Expense>
+
     @Transaction
     @Query("SELECT * FROM expenses WHERE id = :id")
     suspend fun getWithDetailsById(id: Long): ExpenseWithDetails?

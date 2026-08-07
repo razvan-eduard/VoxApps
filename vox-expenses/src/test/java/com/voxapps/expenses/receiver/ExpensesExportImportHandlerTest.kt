@@ -59,6 +59,7 @@ class ExpensesExportImportHandlerTest {
         coEvery { expensesRepo.deleteSpendingLimit(any()) } just Runs
         coEvery { expensesRepo.merchantCategoryMemorySnapshot() } returns emptyList()
         every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
+        coEvery { duplicateRuleDao.getAll() } returns emptyList()
     }
 
     private fun expense(id: Long, totalAmount: Double = 10.0, createdAt: Long, receiptImageName: String? = null) = Expense(
@@ -257,6 +258,7 @@ class ExpensesExportImportHandlerTest {
         every { duplicateRuleDao.observeAll() } returns flowOf(
             listOf(DuplicateRuleEntity(id = 1, name = "Same amount+title", fieldIds = listOf("amount"), combinator = "AND"))
         )
+        coEvery { duplicateRuleDao.getAll() } returns listOf(DuplicateRuleEntity(id = 1, name = "Same amount+title", fieldIds = listOf("amount"), combinator = "AND"))
 
         val payload = """{"duplicateRules":[{"name":"Same amount+title","fieldIds":["amount","title"],"combinator":"OR"}]}"""
         handler.import(payload)
@@ -268,6 +270,7 @@ class ExpensesExportImportHandlerTest {
     @Test
     fun `duplicateRules creates a new rule when no name matches`() = runTest {
         every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
+        coEvery { duplicateRuleDao.getAll() } returns emptyList()
 
         val payload = """{"duplicateRules":[{"name":"New Rule","fieldIds":["vendor"],"combinator":"AND"}]}"""
         handler.import(payload)

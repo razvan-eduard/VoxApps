@@ -13,6 +13,7 @@ import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
+import com.voxapps.design.toEnumOr
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
@@ -139,8 +140,8 @@ fun ExpensesRoot(
                                 onEditExpense = { editTarget = EditTarget.Existing(it) },
                                 onOpenSettings = { showSettings = true },
                                 onOpenReports = { showReports = true },
-                                todayEffect = runCatching { TodayEffect.valueOf(settings.todayEffect) }.getOrDefault(TodayEffect.NONE),
-                                todayEffectStyle = runCatching { TodayEffectStyle.valueOf(settings.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
+                                todayEffect = settings.todayEffect.toEnumOr(TodayEffect.NONE),
+                                todayEffectStyle = settings.todayEffectStyle.toEnumOr(TodayEffectStyle.RING),
                                 todayEffectPrimaryColor = Color(settings.todayEffectColor.toInt()),
                                 todayEffectSecondaryColor = settings.todayEffectColor2?.let { Color(it.toInt()) },
                                 todayEffectSpeed = settings.todayEffectSpeed

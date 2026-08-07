@@ -65,6 +65,7 @@ class ToDoRepositoryTest {
 
     private fun buildRepository(lists: List<ToDoList> = emptyList()): ToDoRepository {
         every { listDao.observeAll() } returns flowOf(lists)
+        coEvery { listDao.getAll() } returns lists
         return ToDoRepository(listDao, entryDao, calendarRepository)
     }
 
@@ -205,6 +206,7 @@ class ToDoRepositoryTest {
     @Test
     fun `addParsedItem bootstraps a single list when none exist yet, using the spoken name`() = runTest {
         every { listDao.observeAll() } returns flowOf(emptyList())
+        coEvery { listDao.getAll() } returns emptyList()
         coEvery { calendarRepository.layersSnapshot() } returns listOf(
             CalendarLayer(id = 1L, name = "Personal", colorArgb = 0L, isDefault = true, position = 0, createdAt = now)
         )
@@ -222,6 +224,7 @@ class ToDoRepositoryTest {
     @Test
     fun `addParsedItem bootstraps a list titled Tasks when no name was spoken either`() = runTest {
         every { listDao.observeAll() } returns flowOf(emptyList())
+        coEvery { listDao.getAll() } returns emptyList()
         coEvery { calendarRepository.layersSnapshot() } returns listOf(
             CalendarLayer(id = 2L, name = "Personal", colorArgb = 0L, isDefault = true, position = 0, createdAt = now)
         )

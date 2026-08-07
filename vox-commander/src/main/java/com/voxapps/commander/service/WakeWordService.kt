@@ -30,7 +30,6 @@ import java.io.File
 
 class WakeWordService : Service() {
 
-    private val TAG = "WakeWordService"
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private lateinit var settingsRepo: SettingsRepository
@@ -42,13 +41,6 @@ class WakeWordService : Service() {
     private var currentEngineDisplayName: String = "Vosk"
     private var currentModelDisplayName: String = ""
 
-    private val CHANNEL_ID = "wake_word_service_channel"
-    private val NOTIFICATION_ID = 101
-
-    // App-level debounce: a wake word + its command flow always takes longer than this,
-    // so no legitimate trigger is lost, but rapid re-fires (e.g. residual audio right after
-    // an engine restart, or an over-eager OpenWakeWord threshold) are suppressed.
-    private val WAKE_DEBOUNCE_MS = 2500L
     @Volatile private var lastWakeTriggerMs = 0L
 
     override fun onCreate() {
@@ -540,6 +532,15 @@ class WakeWordService : Service() {
     }
 
     companion object {
+        private const val TAG = "WakeWordService"
+        private const val CHANNEL_ID = "wake_word_service_channel"
+        private const val NOTIFICATION_ID = 101
+
+        // App-level debounce: a wake word + its command flow always takes longer than this,
+        // so no legitimate trigger is lost, but rapid re-fires (e.g. residual audio right after
+        // an engine restart, or an over-eager OpenWakeWord threshold) are suppressed.
+        private const val WAKE_DEBOUNCE_MS = 2500L
+
         const val ACTION_START = Strings.Actions.START_WAKE_WORD
         const val ACTION_STOP = Strings.Actions.STOP_WAKE_WORD
         const val ACTION_PAUSE = Strings.Actions.PAUSE_WAKE_WORD

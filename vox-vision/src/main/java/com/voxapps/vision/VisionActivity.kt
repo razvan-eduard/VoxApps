@@ -3,6 +3,7 @@ package com.voxapps.vision
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import com.voxapps.design.toEnumOr
 import com.voxapps.logging.Logger
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -52,7 +53,7 @@ class VisionActivity : ComponentActivity() {
 
             CompositionLocalProvider(LocalLanguageManager provides container.languageManager) {
                 VoxTheme(
-                    darkMode = runCatching { VoxDarkMode.valueOf(themeDarkMode) }.getOrDefault(VoxDarkMode.SYSTEM),
+                    darkMode = themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
                     colored = themeColored
                 ) {
                     VisionRoot(

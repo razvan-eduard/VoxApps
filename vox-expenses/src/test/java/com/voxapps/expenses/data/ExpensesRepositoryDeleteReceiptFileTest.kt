@@ -25,7 +25,10 @@ private class FakeAttachmentDao : AttachmentDao {
     private val rows = mutableListOf<AttachmentEntity>()
     private var nextId = 1L
 
-    override fun observeFor(recordType: String, recordId: Long): Flow<List<AttachmentEntity>> =
+    // observeForInternal is the @Query member; the plain observeFor is a concrete wrapper on the
+    // interface that adds distinctUntilChanged, so the fake supplies the raw half and inherits it.
+    // observeRecordIdsWithAttachments has no wrapper (see its doc) and is overridden directly.
+    override fun observeForInternal(recordType: String, recordId: Long): Flow<List<AttachmentEntity>> =
         flowOf(rows.filter { it.recordType == recordType && it.recordId == recordId })
 
     override suspend fun getFor(recordType: String, recordId: Long): List<AttachmentEntity> =
@@ -39,6 +42,9 @@ private class FakeAttachmentDao : AttachmentDao {
 
     override fun observeRecordIdsWithAttachments(recordType: String): Flow<List<Long>> =
         flowOf(rows.filter { it.recordType == recordType }.map { it.recordId }.distinct())
+
+    override suspend fun getRecordIdsWithAttachments(recordType: String): List<Long> =
+        rows.filter { it.recordType == recordType }.map { it.recordId }.distinct()
 
     override suspend fun reassignRecordId(recordType: String, oldRecordId: Long, newRecordId: Long, fileName: String) {
         rows.replaceAll {
@@ -164,6 +170,7 @@ class ExpensesRepositoryDeleteReceiptFileTest {
             Expense(id = 4, totalAmount = 10.0, currencyCode = "RON", dateTime = 0, receiptImageName = "rec_4.jpg")
         )
         coEvery { expenseDao.observeAll() } returns flowOf(expenses)
+        coEvery { expenseDao.getAll() } returns expenses
 
         repository.deleteAllExpenses()
 

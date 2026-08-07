@@ -12,6 +12,7 @@ import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
+import com.voxapps.design.toEnumOr
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.di.NotesContainer
 import com.voxapps.notes.state.NotesUiState
@@ -78,8 +79,8 @@ fun NotesRoot(
                                 quickAddTrigger = quickAddTrigger,
                                 editNoteId = editNoteId,
                                 editNoteTrigger = editNoteTrigger,
-                                todayEffect = runCatching { TodayEffect.valueOf(settings.todayEffect) }.getOrDefault(TodayEffect.NONE),
-                                todayEffectStyle = runCatching { TodayEffectStyle.valueOf(settings.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
+                                todayEffect = settings.todayEffect.toEnumOr(TodayEffect.NONE),
+                                todayEffectStyle = settings.todayEffectStyle.toEnumOr(TodayEffectStyle.RING),
                                 todayEffectPrimaryColor = Color(settings.todayEffectColor.toInt()),
                                 todayEffectSecondaryColor = settings.todayEffectColor2?.let { Color(it.toInt()) },
                                 todayEffectSpeed = settings.todayEffectSpeed

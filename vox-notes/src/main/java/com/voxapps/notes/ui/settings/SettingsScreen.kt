@@ -48,6 +48,7 @@ import com.voxapps.design.settings.ThemeSettingsScreen
 import com.voxapps.design.settings.ThemeSettingsStrings
 import com.voxapps.design.settings.TodayEffectSettings
 import com.voxapps.design.settings.TodayEffectStrings
+import com.voxapps.design.toEnumOr
 import com.voxapps.logging.ui.LogViewerStrings
 import com.voxapps.logging.ui.LogsSettingsTab
 import com.voxapps.logging.ui.LogsTabStrings
@@ -168,7 +169,7 @@ fun SettingsScreen(
             }
             SettingsPage.GENERAL -> GeneralSettingsTab(settings = settings, stateManager = stateManager, modifier = mod)
             SettingsPage.THEME -> ThemeSettingsScreen(
-                darkMode = runCatching { VoxDarkMode.valueOf(settings.themeDarkMode) }.getOrDefault(VoxDarkMode.SYSTEM),
+                darkMode = settings.themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
                 colored = settings.themeColored,
                 onDarkModeChange = { stateManager.setThemeDarkMode(it.name) },
                 onColoredChange = { stateManager.setThemeColored(it) },
@@ -181,8 +182,8 @@ fun SettingsScreen(
                     coloredDesc = languageManager.getString("theme_colored_desc")
                 ),
                 todayEffect = TodayEffectSettings(
-                    effect = runCatching { TodayEffect.valueOf(settings.todayEffect) }.getOrDefault(TodayEffect.NONE),
-                    style = runCatching { TodayEffectStyle.valueOf(settings.todayEffectStyle) }.getOrDefault(TodayEffectStyle.RING),
+                    effect = settings.todayEffect.toEnumOr(TodayEffect.NONE),
+                    style = settings.todayEffectStyle.toEnumOr(TodayEffectStyle.RING),
                     primaryColor = settings.todayEffectColor,
                     secondaryColor = settings.todayEffectColor2,
                     speedMultiplier = settings.todayEffectSpeed,

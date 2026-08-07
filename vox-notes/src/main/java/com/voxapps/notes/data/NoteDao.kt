@@ -23,6 +23,11 @@ interface NoteDao {
     @Query("SELECT * FROM notes ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<Note>>
 
+    /** One-shot read for the write/export paths — `observeAll().first()` would spin up an
+     *  InvalidationTracker observer, run the query, then tear it all down again. */
+    @Query("SELECT * FROM notes ORDER BY createdAt DESC")
+    suspend fun getAll(): List<Note>
+
     /** One-shot day-scoped read (e.g. Vox Calendar's day-tap summary via VoxCommand.dateFrom/dateTo) —
      *  a plain SQL range query rather than fetching everything and filtering in memory, since the
      *  caller only wants one day's worth of records. */

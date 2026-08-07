@@ -81,7 +81,9 @@ object RemoteModelRegistry {
     private val gson = Gson()
     
     // The Wrapper Object (The SSOT in memory)
-    private var cachedSchema: RemoteModelSchema? = null
+    /** Written only on Dispatchers.IO (fetchJson's withContext), read pervasively from Compose on
+     *  Main — every engine/model lookup in Settings goes through it. */
+    @Volatile private var cachedSchema: RemoteModelSchema? = null
 
     // Reactive signal that the registry has updated
     private val _registryUpdateSignal = MutableStateFlow(0L)
@@ -91,7 +93,9 @@ object RemoteModelRegistry {
     private val _modelMap = MutableStateFlow<Map<String, List<AppModel>>>(emptyMap())
     val modelMap: StateFlow<Map<String, List<AppModel>>> = _modelMap.asStateFlow()
 
-    private var appContext: Context? = null
+    /** Assigned once in init() on Main (Application.onCreate), read from Dispatchers.IO by every
+     *  fetchJson path — unsafe publication otherwise, same shape as Logger.appContext. */
+    @Volatile private var appContext: Context? = null
 
     // Reactive load status for splash screen
     enum class LoadStatus { LOADING, LOADED_FROM_REMOTE, LOADED_FROM_CACHE, NO_NETWORK }

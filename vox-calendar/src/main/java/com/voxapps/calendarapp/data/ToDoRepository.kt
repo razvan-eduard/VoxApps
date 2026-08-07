@@ -3,6 +3,7 @@ package com.voxapps.calendarapp.data
 import com.voxapps.design.color.VoxColorPalette
 import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -22,10 +23,11 @@ class ToDoRepository(
     private val entryDao: CalendarEntryDao,
     private val calendarRepository: CalendarRepository
 ) {
-    val lists: Flow<List<ToDoList>> = listDao.observeAll()
+    val lists: Flow<List<ToDoList>> = listDao.observeAll().distinctUntilChanged()
 
     fun itemsForList(listId: Long): Flow<List<ToDoItem>> =
         entryDao.observeForList(listId).map { entries -> entries.map { it.toToDoItem() } }
+            .distinctUntilChanged()
 
     suspend fun createList(title: String, layerId: Long): Long {
         val now = System.currentTimeMillis()

@@ -409,26 +409,32 @@ fun ServiceSettingsTab(
 
         // Auto-save profile on completion
         LaunchedEffect(calibrationState) {
-            if (calibrationState is WakeWordCalibrator.CalibrationState.Complete) {
-                VoiceManager.setCalibrationListening(false)
-                val profile = (calibrationState as WakeWordCalibrator.CalibrationState.Complete).profile
-                pendingProfile = profile
-                showProfileNameDialog = true
-                delay(1500)
-                showCalibrationDialog = false
-                calibrator.stop()
-            } else if (calibrationState is WakeWordCalibrator.CalibrationState.Failed) {
-                VoiceManager.setCalibrationListening(false)
-                delay(3000)
-                calibrator.stop()
-            } else if (calibrationState is WakeWordCalibrator.CalibrationState.Listening) {
-                VoiceManager.setCalibrationListening(true)
-            } else if (calibrationState is WakeWordCalibrator.CalibrationState.Analyzing) {
-                VoiceManager.setCalibrationListening(false)
-            } else if (calibrationState is WakeWordCalibrator.CalibrationState.Waiting) {
-                VoiceManager.setCalibrationListening(false)
-            } else if (calibrationState is WakeWordCalibrator.CalibrationState.MeasuringNoise) {
-                VoiceManager.setCalibrationListening(false)
+            // `when (val state = ...)` over the sealed type: calibrationState is a delegated
+            // property, which Kotlin never smart-casts (its value could differ between reads), so
+            // the Complete branch previously had to restate the type with an unchecked cast to
+            // reach .profile. Binding it to a local once makes the cast unnecessary and gives the
+            // compiler a shot at flagging an unhandled subtype.
+            when (val state = calibrationState) {
+                is WakeWordCalibrator.CalibrationState.Complete -> {
+                    VoiceManager.setCalibrationListening(false)
+                    pendingProfile = state.profile
+                    showProfileNameDialog = true
+                    delay(1500)
+                    showCalibrationDialog = false
+                    calibrator.stop()
+                }
+                is WakeWordCalibrator.CalibrationState.Failed -> {
+                    VoiceManager.setCalibrationListening(false)
+                    delay(3000)
+                    calibrator.stop()
+                }
+                is WakeWordCalibrator.CalibrationState.Listening ->
+                    VoiceManager.setCalibrationListening(true)
+                is WakeWordCalibrator.CalibrationState.Analyzing,
+                is WakeWordCalibrator.CalibrationState.Waiting,
+                is WakeWordCalibrator.CalibrationState.MeasuringNoise ->
+                    VoiceManager.setCalibrationListening(false)
+                WakeWordCalibrator.CalibrationState.Idle -> Unit
             }
         }
 

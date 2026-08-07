@@ -236,4 +236,17 @@ object VoxIpc {
      * [VISION_PACKAGE]'s role as the other hardcoded well-known-package constant in this file.
      */
     const val HUB_PACKAGE = "com.voxapps.hub"
+
+    /**
+     * The remaining well-known satellite packages, for cross-app features that address a specific
+     * satellite by name — currently Calendar's day-link/day-summary (see its `domain/daylink/`),
+     * which asks Notes and Expenses for that day's records. Declared here beside [VISION_PACKAGE]
+     * and [HUB_PACKAGE] for the same reason: a package name is part of the cross-app contract, and
+     * a copy of it living in each caller is a typo away from a silently-unreachable satellite that
+     * nothing catches at compile time. [com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE] is the
+     * fifth, kept next to the discovery helpers that use it.
+     */
+    const val NOTES_PACKAGE = "com.voxapps.notes"
+    const val EXPENSES_PACKAGE = "com.voxapps.expenses"
+    const val CALENDAR_PACKAGE = "com.voxapps.calendar"
 }

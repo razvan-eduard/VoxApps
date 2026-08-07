@@ -58,6 +58,7 @@ class CalendarExportImportHandlerTest {
         coEvery { calendarRepo.deleteEntryById(any()) } just Runs
         coEvery { calendarRepo.getRemindersForEntry(any()) } returns emptyList()
         every { toDoListDao.observeAll() } returns flowOf(emptyList())
+        coEvery { toDoListDao.getAll() } returns emptyList()
     }
 
     private fun entry(id: Long, layerId: Long = 1L, uid: String = "uid-$id") = CalendarEntryWithTags(
@@ -204,6 +205,7 @@ class CalendarExportImportHandlerTest {
         every { toDoListDao.observeAll() } returns flowOf(
             listOf(ToDoList(id = 9L, uid = "list-uid", title = "Shopping", colorArgb = 0, layerId = 1L, createdAt = 0L, updatedAt = 0L))
         )
+        coEvery { toDoListDao.getAll() } returns listOf(ToDoList(id = 9L, uid = "list-uid", title = "Shopping", colorArgb = 0, layerId = 1L, createdAt = 0L, updatedAt = 0L))
 
         val result = handler.export(includePhotos = false)
 
@@ -280,6 +282,7 @@ class CalendarExportImportHandlerTest {
         every { toDoListDao.observeAll() } returns flowOf(
             listOf(ToDoList(id = 5L, uid = "existing-uid", title = "Shopping", colorArgb = 0, layerId = 1L, createdAt = 0L, updatedAt = 0L))
         )
+        coEvery { toDoListDao.getAll() } returns listOf(ToDoList(id = 5L, uid = "existing-uid", title = "Shopping", colorArgb = 0, layerId = 1L, createdAt = 0L, updatedAt = 0L))
 
         val payload = """{"layers":[{"id":1,"name":"Personal"}],
             "todoLists":[{"id":1,"title":"Shopping","colorArgb":0,"layerId":1}]}"""
@@ -294,6 +297,7 @@ class CalendarExportImportHandlerTest {
             CalendarLayer(id = 1, name = "Personal", colorArgb = 0, isDefault = true, position = 0, createdAt = 0L)
         )
         every { toDoListDao.observeAll() } returns flowOf(emptyList())
+        coEvery { toDoListDao.getAll() } returns emptyList()
         io.mockk.coEvery { toDoListDao.insert(any()) } returns 77L
         coEvery {
             calendarRepo.addEntry(
@@ -317,6 +321,7 @@ class CalendarExportImportHandlerTest {
             CalendarLayer(id = 1, name = "Personal", colorArgb = 0, isDefault = true, position = 0, createdAt = 0L)
         )
         every { toDoListDao.observeAll() } returns flowOf(emptyList())
+        coEvery { toDoListDao.getAll() } returns emptyList()
 
         // No "todoLists" key at all — listId 1 can never resolve, so the item must be skipped
         // rather than crash or attach to some arbitrary default list.

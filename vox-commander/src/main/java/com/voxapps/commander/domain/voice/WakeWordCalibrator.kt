@@ -38,7 +38,7 @@ class WakeWordCalibrator(
     }
 
     sealed class CalibrationState {
-        object Idle : CalibrationState()
+        data object Idle : CalibrationState()
         data class MeasuringNoise(val instruction: String) : CalibrationState()
         data class Waiting(val round: Int, val total: Int, val instruction: String) : CalibrationState()
         data class Listening(val round: Int, val total: Int) : CalibrationState()

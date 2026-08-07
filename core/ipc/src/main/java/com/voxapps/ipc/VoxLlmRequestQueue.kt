@@ -68,7 +68,11 @@ class VoxLlmRequestQueue(
      *  [maxAttempts] — called from each app's periodic retry worker. Rows that exhaust [maxAttempts]
      *  are left in place rather than deleted, so they stay inspectable instead of silently vanishing
      *  a second time. */
-    suspend fun retryStale(context: Context, staleAfterMillis: Long, maxAttempts: Int) {
+    suspend fun retryStale(
+        context: Context,
+        staleAfterMillis: Long = DEFAULT_STALE_AFTER_MILLIS,
+        maxAttempts: Int = DEFAULT_MAX_ATTEMPTS
+    ) {
         val threshold = System.currentTimeMillis() - staleAfterMillis
         for (entry in dao.getStale(threshold, maxAttempts)) {
             val request = VoxLlmRequest.fromJson(entry.payloadJson) ?: continue
@@ -78,6 +82,17 @@ class VoxLlmRequestQueue(
     }
 
     companion object {
+        /** How long a row may sit unanswered before the periodic worker re-dispatches it. */
+        val DEFAULT_STALE_AFTER_MILLIS: Long = java.util.concurrent.TimeUnit.MINUTES.toMillis(5)
+
+        /** At the workers' 15-minute cadence this is roughly 12.5 hours of retrying before a row is
+         *  left dormant — not deleted, so it stays inspectable — rather than retried forever.
+         *
+         *  Defaults live here rather than in each app's worker because they are policy of *this*
+         *  queue: all three satellites had identical private copies, so a change to the retry budget
+         *  had to be made in three places or silently diverge. */
+        const val DEFAULT_MAX_ATTEMPTS = 50
+
         private fun defaultSend(context: Context, request: VoxLlmRequest, targetPackage: String) {
             context.sendBroadcast(
                 Intent(VoxIpc.ACTION_LLM_PROCESS)

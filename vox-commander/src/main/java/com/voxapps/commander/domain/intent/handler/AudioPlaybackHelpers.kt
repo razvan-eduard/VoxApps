@@ -48,7 +48,16 @@ object AudioPlaybackHelpers {
             val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
             if (launchIntent != null) {
                 launchIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                try { context.startActivity(launchIntent) } catch (_: Exception) {}
+                // Logged, not swallowed: the sleep below exists to give this activity time to
+                // come to the foreground, and the declarative API call after it assumes that
+                // happened. If the launch was blocked (background-activity-launch restrictions,
+                // the package disabled mid-flight), the request still goes out against an app that
+                // never came up — so the failure has to be visible when diagnosing why.
+                try {
+                    context.startActivity(launchIntent)
+                } catch (e: Exception) {
+                    Logger.log("${integration.id}: could not foreground $pkg before the API call: ${e.message}", TAG)
+                }
                 Thread.sleep(waitMs)
             }
         }

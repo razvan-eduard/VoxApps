@@ -1,11 +1,11 @@
 package com.voxapps.calendarapp.domain.llm
 
 import android.content.Context
+import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.logging.Logger
 
 private const val TAG = "CalendarEventParseRequestSender"
-private const val COMMANDER_PACKAGE = "com.voxapps.commander"
 
 /**
  * Fires the generic-LLM-hook request that turns a raw spoken/typed utterance into a structured

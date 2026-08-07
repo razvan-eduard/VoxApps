@@ -54,7 +54,9 @@ object VoiceManager {
     val isListeningFlow = _isListeningFlow.asStateFlow()
 
     private var settingsRepo: SettingsRepository? = null
-    private var appStateManager: AppStateManager? = null
+    /** Assigned on Main in init(); the secure-action call inside the capture coroutine reads it on
+     *  Dispatchers.IO, unlike its neighbours which hop to Main first. */
+    @Volatile private var appStateManager: AppStateManager? = null
 
     // Calibration values from WakeWordProfile for volume normalization
     private var calibratedNoiseFloor = 0f
@@ -95,7 +97,7 @@ object VoiceManager {
         }
     }
 
-    private var currentQuality: RecordingQuality = RecordingQuality.MEDIUM
+    private val currentQuality: RecordingQuality = RecordingQuality.MEDIUM
 
     private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
     private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
@@ -563,8 +565,16 @@ object VoiceManager {
                         onResult(result) 
                     }
                 } else {
-                    abandonListeningAudioFocus()
-                    withContext(Dispatchers.Main) { onResult("") }
+                    // Both on Main: abandonListeningAudioFocus() is a read-then-write of
+                    // audioFocusRequest, and every other one of its eight call sites already runs on
+                    // Main. This one sat bare in the Dispatchers.IO body — the only place the field
+                    // was mutated off-main — while the very next line hopped to Main anyway, so the
+                    // omission looks accidental. Confining the mutation is the actual fix; @Volatile
+                    // would have given visibility without making the pair atomic.
+                    withContext(Dispatchers.Main) {
+                        abandonListeningAudioFocus()
+                        onResult("")
+                    }
                 }
 
             } catch (e: Exception) {
@@ -625,6 +635,10 @@ object VoiceManager {
             cachedSttSensitivity = ui.sttSensitivity
             cachedWakeWordProfileJson = ui.wakeWordProfileJson
         }
+        // Read from the field, not from `ui` directly: when uiState is unavailable this has to fall
+        // back to the last profile seen, or the else-branch below would wipe a working calibration
+        // to zero. (An earlier pass made this a local on the grounds that it was written and read
+        // two lines apart — true within one call, but the retention across calls is the point.)
         val profileJson = cachedWakeWordProfileJson
         val profile = profileJson?.let { WakeWordProfile.fromJson(it) }
         if (profile != null && profile.noiseFloorRms > 0f) {

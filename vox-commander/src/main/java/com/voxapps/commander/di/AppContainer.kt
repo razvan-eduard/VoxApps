@@ -37,7 +37,11 @@ class AppContainer(context: Context) {
     private val appContext = context.applicationContext
 
     // --- SETTINGS REPOSITORY (DataStore-backed, singleton) ---
-    val settingsRepository: SettingsRepository = SettingsRepositoryImpl(appContext)
+    /** Held at the concrete type because the one-time SharedPreferences migration below is an
+     *  implementation detail that deliberately isn't on [SettingsRepository] — every other consumer
+     *  gets the interface via [settingsRepository], which is the same object. */
+    private val settingsRepositoryImpl = SettingsRepositoryImpl(appContext)
+    val settingsRepository: SettingsRepository = settingsRepositoryImpl
 
     // --- SINGLETON MANAGERS ---
     val appStateManager = AppStateManager.getInstance(settingsRepository, appContext)
@@ -72,6 +76,12 @@ class AppContainer(context: Context) {
     val intentRouter = IntentRouter(appContext, settingsRepository)
 
     // --- VIEW MODELS ---
+    // Named "ViewModel" but deliberately app-scoped, not Activity-scoped: neither class extends
+    // androidx.lifecycle.ViewModel, and MainViewModel is driven by WakeWordService (an OS-created
+    // Service that outlives every Activity — see its enqueueVoiceCommand/processVoiceCommand calls),
+    // so a voice command arriving with no Activity on screen still has to reach a live instance.
+    // Holding them here is what makes the service and the UI talk to the same object; scoping them
+    // to an Activity would give the service a second, dead one.
     val mainViewModel = MainViewModel(masterIntentEngine, intentRouter, appStateManager, languageManager)
     val modelManagementViewModel = ModelManagementViewModel(
         settingsRepository,
@@ -87,7 +97,7 @@ class AppContainer(context: Context) {
         // and AppRegistry's cache has to be in place before the splash screen decides whether it
         // needs to run a full app scan. Both are ordering constraints, not just slow work.
         kotlinx.coroutines.runBlocking {
-            (settingsRepository as SettingsRepositoryImpl).migrateFromSharedPreferencesIfNeeded()
+            settingsRepositoryImpl.migrateFromSharedPreferencesIfNeeded()
             // Try loading from cache (fast path). If cache empty, splash screen will scan.
             // One read, reused below — this used to call getSettingsSnapshot() twice in a row, and
             // on a cold start (empty cache) each call is its own blocking DataStore round-trip.

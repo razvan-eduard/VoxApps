@@ -1,11 +1,11 @@
 package com.voxapps.expenses.domain.llm
 
 import android.content.Context
+import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.logging.Logger
 
 private const val TAG = "ExpenseParseRequestSender"
-private const val COMMANDER_PACKAGE = "com.voxapps.commander"
 
 /**
  * Fires the generic-LLM-hook request that turns a raw spoken utterance into structured expense

@@ -1,5 +1,6 @@
 package com.voxapps.expenses.receiver
 
+import com.voxapps.datahygiene.SyncDeltaKeys
 import com.voxapps.datahygiene.SyncIdentity
 import com.voxapps.datahygiene.planMerge
 import com.voxapps.expenses.data.CategoryPalette
@@ -57,8 +58,8 @@ class ExpensesSyncHandler(
         val tombstones = expensesRepo.tombstonesSince(since)
 
         val json = JSONObject()
-        json.put("entries", JSONArray(changed.map { it.expense.toSyncJson(it.category?.name, it.items) }))
-        json.put("tombstones", JSONArray(tombstones.map { JSONObject().put("uid", it.uid).put("deletedAt", it.deletedAt) }))
+        json.put(SyncDeltaKeys.ENTRIES, JSONArray(changed.map { it.expense.toSyncJson(it.category?.name, it.items) }))
+        json.put(SyncDeltaKeys.TOMBSTONES, JSONArray(tombstones.map { JSONObject().put(SyncDeltaKeys.UID, it.uid).put(SyncDeltaKeys.DELETED_AT, it.deletedAt) }))
         return VoxResult(ok = true, text = json.toString())
     }
 
@@ -81,7 +82,7 @@ class ExpensesSyncHandler(
         // precedingColor param.
         val precedingColor = expensesRepo.mostRecentCategoryColor()
 
-        val entriesJson = root.optJSONArray("entries") ?: JSONArray()
+        val entriesJson = root.optJSONArray(SyncDeltaKeys.ENTRIES) ?: JSONArray()
         val remoteEntries = (0 until entriesJson.length()).map { i ->
             val e = entriesJson.getJSONObject(i)
             val categoryName = e.optNullableString("categoryName")
@@ -99,9 +100,9 @@ class ExpensesSyncHandler(
             }
             e.toExpense(categoryId) to e.toLineItems()
         }
-        val tombstonesJson = root.optJSONArray("tombstones") ?: JSONArray()
+        val tombstonesJson = root.optJSONArray(SyncDeltaKeys.TOMBSTONES) ?: JSONArray()
         val remoteTombstoneUids = (0 until tombstonesJson.length())
-            .map { tombstonesJson.getJSONObject(it).optString("uid") }
+            .map { tombstonesJson.getJSONObject(it).optString(SyncDeltaKeys.UID) }
             .toSet()
 
         val local = expensesRepo.expensesSnapshot()
@@ -128,7 +129,7 @@ private object ExpenseSyncIdentity : SyncIdentity<Expense> {
 }
 
 private fun Expense.toSyncJson(categoryName: String?, items: List<ExpenseLineItem>): JSONObject = JSONObject().apply {
-    put("uid", uid)
+    put(SyncDeltaKeys.UID, uid)
     put("title", title)
     put("totalAmount", totalAmount)
     put("currencyCode", currencyCode)
@@ -142,7 +143,7 @@ private fun Expense.toSyncJson(categoryName: String?, items: List<ExpenseLineIte
     put("receiptImageName", receiptImageName)
     put("isStub", isStub)
     put("createdAt", createdAt)
-    put("updatedAt", updatedAt)
+    put(SyncDeltaKeys.UPDATED_AT, updatedAt)
     put("lineItems", JSONArray(items.sortedBy { it.position }.map { it.toSyncJson() }))
 }
 
@@ -179,7 +180,7 @@ private fun JSONObject.toLineItems(): List<ExpenseLineItem> {
 }
 
 private fun JSONObject.toExpense(categoryId: Long?): Expense = Expense(
-    uid = optString("uid"),
+    uid = optString(SyncDeltaKeys.UID),
     title = optNullableString("title"),
     totalAmount = optDouble("totalAmount"),
     currencyCode = optString("currencyCode"),
@@ -193,7 +194,7 @@ private fun JSONObject.toExpense(categoryId: Long?): Expense = Expense(
     receiptImageName = optNullableString("receiptImageName"),
     isStub = optBoolean("isStub", false),
     createdAt = optLong("createdAt"),
-    updatedAt = optLong("updatedAt")
+    updatedAt = optLong(SyncDeltaKeys.UPDATED_AT)
 )
 
 private fun JSONObject.optNullableString(key: String): String? =

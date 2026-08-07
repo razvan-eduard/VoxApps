@@ -15,6 +15,7 @@ import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -46,9 +47,10 @@ class ExpensesRepository(
     private val pendingFieldSuggestionDao: PendingFieldSuggestionDao
 ) {
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
-    val expensesWithDetails: Flow<List<ExpenseWithDetails>> = expenseDao.observeExpensesWithDetails()
-    val categories: Flow<List<Category>> = categoryDao.observeAll()
-    val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll()
+    val expensesWithDetails: Flow<List<ExpenseWithDetails>> =
+        expenseDao.observeExpensesWithDetails().distinctUntilChanged()
+    val categories: Flow<List<Category>> = categoryDao.observeAll().distinctUntilChanged()
+    val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll().distinctUntilChanged()
 
     /** See [PendingFieldSuggestion]'s doc comment — the source for ExpenseEditScreen's tappable
      *  field-suggestion chips after a line-items rescan. */
@@ -72,7 +74,7 @@ class ExpensesRepository(
      *  fuzzy setting, then combined via [NearDuplicateConfig.globalCombinator], rather than the single
      *  shared field list [com.voxapps.datahygiene.RuleBasedDuplicateChecker] alone would allow. */
     private suspend fun buildDuplicateChecker(config: NearDuplicateConfig, automaticOnly: Boolean = false): DuplicateChecker<Expense> {
-        val rules = duplicateRuleDao.observeAll().first().filter { it.enabled && (!automaticOnly || it.appliesAutomatically) }
+        val rules = duplicateRuleDao.getAll().filter { it.enabled && (!automaticOnly || it.appliesAutomatically) }
         val exactFields = ExpenseRuleFields(fuzzyMatchEnabled = false, timeWindowMillis = config.timeWindowMillis).all
         val fuzzyFields = ExpenseRuleFields(fuzzyMatchEnabled = true, timeWindowMillis = config.timeWindowMillis).all
         // Hoisted out of the lambda below: it runs once per expense *pair* in the O(n²) scans, so
@@ -97,7 +99,7 @@ class ExpensesRepository(
         }
     }
 
-    suspend fun expensesSnapshot(): List<Expense> = expenseDao.observeAll().first()
+    suspend fun expensesSnapshot(): List<Expense> = expenseDao.getAll()
 
     suspend fun getExpenseById(id: Long): ExpenseWithDetails? = expenseDao.getWithDetailsById(id)
 
@@ -391,7 +393,7 @@ class ExpensesRepository(
         merchantMemoryThreshold: Int = ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD,
         source: ExpenseSource = ExpenseSource.VOICE
     ): Long {
-        val cats = categoryDao.observeAll().first()
+        val cats = categoryDao.getAll()
 
         // A learned merchant mapping is a total short-circuit — it overrides whatever the LLM/spoken
         // category or configured default would otherwise suggest, checked BEFORE resolution runs at
@@ -457,7 +459,7 @@ class ExpensesRepository(
     suspend fun deleteSpendingLimit(limit: SpendingLimit) = spendingLimitDao.delete(limit)
 
     suspend fun applyCategoryMerge(mapping: Map<String, String>) {
-        val cats = categoryDao.observeAll().first()
+        val cats = categoryDao.getAll()
         for ((oldName, canonicalName) in mapping) {
             if (oldName.equals(canonicalName, ignoreCase = true)) continue
             val old = cats.firstOrNull { it.name.equals(oldName, ignoreCase = true) } ?: continue

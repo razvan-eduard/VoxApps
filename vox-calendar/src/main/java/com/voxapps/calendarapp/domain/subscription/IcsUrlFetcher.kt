@@ -32,18 +32,17 @@ object IcsUrlFetcher {
         val httpUrl = rawUrl.trim().replaceFirst(Regex("^webcals?://", RegexOption.IGNORE_CASE), "https://")
         require(httpUrl.startsWith("https://")) { "Only https:// (or webcal(s)://) URLs are supported" }
         val request = Request.Builder().url(httpUrl).get().build()
-        val response = client.newCall(request).execute()
-        if (!response.isSuccessful) {
-            response.close()
-            error("HTTP ${response.code}")
+        // `use` rather than a close() per exit path: the previous form closed the response on the
+        // two error branches and after a successful read, but not when readBytes() itself threw
+        // (a stall or a reset partway through the body), which leaked the connection back into the
+        // pool unreleased. Closing the response also closes its body, so one call covers both.
+        val bytes = client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("HTTP ${response.code}")
+            val body = response.body ?: error("Empty response body")
+            // Buffered fully into memory before returning — an .ics feed is at most a few MB, and
+            // the caller's Biweekly.parse needs the stream to outlive this response's own scope.
+            body.byteStream().readBytes()
         }
-        // Buffered fully into memory before returning — an .ics feed is at most a few MB, and the
-        // caller's Biweekly.parse needs the stream to outlive this response's own scope.
-        val bytes = response.body?.byteStream()?.use { it.readBytes() } ?: run {
-            response.close()
-            error("Empty response body")
-        }
-        response.close()
         bytes.inputStream()
     }
 }
