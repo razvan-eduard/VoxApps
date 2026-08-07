@@ -43,7 +43,11 @@ fully generated from this repo's actual GitHub Releases (see below the table for
      workflow_dispatch re-run of any release workflow force-rebuilds under the current version
      without needing a version bump — see docs/TECHNICAL_DOCUMENTATION.md §23. -->
 
-Install via `adb install <file>.apk` or by opening the downloaded file and allowing "Install unknown
+
+Official F-DROID Repo : https://razvan-eduard.github.io/vox-fdroid-repo/repo/
+
+
+Alternaitve Install via `adb install <file>.apk` or by opening the downloaded file and allowing "Install unknown
 apps."
 
 > **Note**: If you're installing more than one Vox app, stick to official releases for all of them (or
