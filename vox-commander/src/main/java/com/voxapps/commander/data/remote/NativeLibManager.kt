@@ -4,6 +4,7 @@ import android.content.Context
 import com.voxapps.commander.BuildConfig
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +20,22 @@ import java.io.File
 object NativeLibManager {
     private const val TAG = "NativeLibManager"
     private const val LIB_DIR_NAME = "native_libs"
+
+    private const val MAX_ATTEMPTS = 3
+    private const val RETRY_DELAY_MS = 1500L
+
+    /** Explicit timeouts — OkHttp's defaults are 10s, which these multi-MB libs routinely exceed on
+     *  a slow connection (a GitHub release download also redirects to a CDN first). callTimeout is
+     *  left unset so a slow but progressing transfer isn't killed mid-file. Lazy so the client isn't
+     *  built unless a download actually happens — the common case is libs already present. Mirrors
+     *  vox-expenses' ExchangeRateRepository, this repo's existing bare-OkHttp precedent. */
+    private val httpClient by lazy {
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
 
     // Base URL for the native libraries. Pointing to the main repo releases.
     private const val RELEASE_BASE = "https://github.com/razvan-eduard/VoxApps/releases/download/"
@@ -109,43 +126,69 @@ object NativeLibManager {
         val libDir = getLibDir(context)
         if (!libDir.exists()) libDir.mkdirs()
 
-        val client = okhttp3.OkHttpClient()
         var downloaded = 0
         val total = ESSENTIAL_LIBS.size
 
         for (libName in ESSENTIAL_LIBS) {
             val targetFile = File(libDir, libName)
-            if (targetFile.exists()) {
+            // Length check as well as existence: downloads land in a .tmp and are renamed into place
+            // only once complete (see downloadOne), but an install predating that change can still
+            // have left a truncated file here, which exists() alone would happily accept forever.
+            if (targetFile.exists() && targetFile.length() > 0) {
                 downloaded++
                 _downloadProgress.value = downloaded.toFloat() / total
                 continue
             }
 
-            val url = getDownloadUrl(libName)
-            Logger.log("Downloading essential lib: $libName from $url", TAG)
-
-            try {
-                val request = okhttp3.Request.Builder().url(url).build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Logger.log("Failed to download $libName: HTTP ${response.code}", TAG)
-                        return@withContext false
-                    }
-                    response.body?.byteStream()?.use { input ->
-                        targetFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                }
-                downloaded++
-                _downloadProgress.value = downloaded.toFloat() / total
-            } catch (e: Exception) {
-                Logger.log("Error downloading $libName: ${e.message}", TAG)
-                targetFile.delete()
+            if (!downloadOne(getDownloadUrl(libName), libDir, libName)) {
                 return@withContext false
             }
+            downloaded++
+            _downloadProgress.value = downloaded.toFloat() / total
         }
         true
+    }
+
+    /**
+     * One lib, retried up to [MAX_ATTEMPTS] times, written to a temp file and renamed into place
+     * only once fully received.
+     *
+     * Previously a single failure aborted the whole multi-file download and left [Status.ERROR], so
+     * one transient stall meant the user had to notice and relaunch to make further progress. The
+     * old code also streamed straight into the destination file, so an interrupted transfer left a
+     * truncated .so that the next run treated as already downloaded — and `System.load()` on a
+     * truncated library fails in a much more confusing way than a failed download does.
+     */
+    private suspend fun downloadOne(url: String, libDir: File, libName: String): Boolean {
+        val targetFile = File(libDir, libName)
+        val tempFile = File(libDir, "$libName.tmp")
+        repeat(MAX_ATTEMPTS) { attempt ->
+            try {
+                Logger.log("Downloading essential lib: $libName from $url (attempt ${attempt + 1}/$MAX_ATTEMPTS)", TAG)
+                httpClient.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { response ->
+                    // A 404 means this release has no such asset — retrying can't help, unlike a
+                    // timeout or 5xx, so fail fast instead of burning the whole attempt budget.
+                    if (response.code == 404) {
+                        Logger.log("$libName not found at $url — not retrying", TAG)
+                        return false
+                    }
+                    if (!response.isSuccessful) error("HTTP ${response.code}")
+                    response.body?.byteStream()?.use { input ->
+                        tempFile.outputStream().use { output -> input.copyTo(output) }
+                    } ?: error("empty response body")
+                }
+                if (tempFile.exists() && tempFile.length() > 0) {
+                    tempFile.renameTo(targetFile)
+                    return true
+                }
+                error("downloaded file was empty")
+            } catch (e: Exception) {
+                Logger.log("Error downloading $libName (attempt ${attempt + 1}): ${e.message}", TAG)
+                tempFile.delete()
+                if (attempt < MAX_ATTEMPTS - 1) delay(RETRY_DELAY_MS * (attempt + 1))
+            }
+        }
+        return false
     }
 
     /**
