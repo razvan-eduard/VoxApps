@@ -47,12 +47,22 @@ interface ITtsEngine : MemoryManagedComponent {
 
 /**
  * Supported TTS engine types.
+ *
+ * [key] is the value actually persisted in `ttsEngineType`, and for Piper that is the models.json
+ * engine key — the TTS picker stores whatever `getEngineKeysByType("tts")` returned. Piper's key was
+ * previously `"piper"`, which nothing ever wrote: [fromKey] therefore returned null for the stored
+ * `"piper_tts"` and TtsManager silently fell back to Android, so selecting Piper never took effect.
+ *
+ * [aliases] holds spellings that may exist in persisted settings or in a restored backup. Matching
+ * them on read is deliberate — rewriting DataStore to normalise would run before the registry loads
+ * and has no rollback, whereas an alias costs nothing and keeps old backups importable.
  */
-enum class TtsEngineType(val key: String) {
+enum class TtsEngineType(val key: String, val aliases: Set<String> = emptySet()) {
     ANDROID("android"),
-    PIPER("piper");
+    PIPER("piper_tts", aliases = setOf("piper"));
 
     companion object {
-        fun fromKey(key: String?): TtsEngineType? = entries.find { it.key == key }
+        fun fromKey(key: String?): TtsEngineType? =
+            entries.find { it.key == key || key in it.aliases }
     }
 }

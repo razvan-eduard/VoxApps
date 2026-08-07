@@ -25,6 +25,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.engine.TtsEngineType
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.domain.voice.VoiceManager
@@ -851,9 +852,12 @@ fun ServiceSettingsTab(
             }
 
             // --- PIPER VOICE MODELS (only relevant once Piper is selected) ---
-            if (currentTtsEngineKey == "piper_tts") {
+            // Keyed off the stored value rather than a literal, so this section follows
+            // TtsEngineType (which now carries the registry key, plus the legacy "piper" alias)
+            // instead of duplicating the spelling a third time.
+            if (TtsEngineType.fromKey(currentTtsEngineKey) == TtsEngineType.PIPER) {
                 val piperModels = remember(refreshTrigger) {
-                    RemoteModelRegistry.getModels("piper_tts")
+                    RemoteModelRegistry.getModels(TtsEngineType.PIPER.key)
                 }
                 if (piperModels.isNotEmpty()) {
                     EngineModelSection(
@@ -874,7 +878,7 @@ fun ServiceSettingsTab(
                         onCancelDownload = onCancelDownload,
                         downloadProgress = downloadProgress,
                         downloadingItem = downloadingItem,
-                        currentProcessor = "piper_tts",
+                        currentProcessor = TtsEngineType.PIPER.key,
                         // TTS isn't part of the STT/NLU fallback cascade (Strings.FallbackCategories
                         // only has "voice"/"intent") — no fallback concept applies here.
                         showFallback = false,
