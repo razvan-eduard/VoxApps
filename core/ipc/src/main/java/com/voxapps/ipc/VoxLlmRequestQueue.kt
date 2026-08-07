@@ -6,9 +6,14 @@ import java.util.UUID
 
 /**
  * Wraps a raw `ACTION_LLM_PROCESS` broadcast with durable, retryable delivery: [enqueueAndSend]
- * persists the request before attempting to send it, so a broadcast Android silently drops (target
- * app stopped/killed, briefly uninstalled — `FLAG_INCLUDE_STOPPED_PACKAGES` mitigates but doesn't
- * eliminate this) is recovered by a later [retryStale] pass instead of vanishing outright. A fresh
+ * persists the request before attempting to send it, so a broadcast Android silently drops is
+ * recovered by a later [retryStale] pass instead of vanishing outright.
+ *
+ * `FLAG_INCLUDE_STOPPED_PACKAGES` (set below, and on [VoxAppsDiscovery.ping]) does handle the
+ * stopped-app case — measured, see that function. What it cannot cover is the rest of why a
+ * fire-and-forget broadcast goes unanswered: there is no delivery confirmation at all, the target
+ * may be mid-reinstall, or its process may die after receiving the request but before replying.
+ * Those are what the queue exists for; the flag narrows the window rather than closing it. A fresh
  * request id rides along as a new trailing segment of [VoxLlmRequest.task] — [VoxLlmResult.task]
  * already round-trips its input verbatim (Commander never interprets it), so this needs no changes
  * on Commander's side. Callers extract that trailing segment from a reply via [splitRequestId] before

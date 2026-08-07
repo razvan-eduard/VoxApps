@@ -106,6 +106,21 @@ object VoxAppsDiscovery {
         val intent = Intent(VoxIpc.ACTION_COMMAND).apply {
             setPackage(packageName)
             putExtra(VoxIpc.EXTRA_PAYLOAD, VoxCommand(op = VoxIpc.OP_PING).toJson())
+            // Without this flag a force-stopped or never-since-installed app is dropped before its
+            // receiver runs, no matter that setPackage() targets it — so it looks identical to an
+            // app that is simply slow, and the only recovery was to launch its activity (see
+            // BalGraceFlash) and ask again.
+            //
+            // Measured on a DNP-NX9 / Android 16 with Calendar and Notes force-stopped: with the
+            // flag, both answered this ping directly, started, and completed a full export — no
+            // flash sequence, no "open apps first" prompt. That matters most to
+            // com.voxapps.hub.domain.backup.BackupWorker, which cannot launch anything at all and
+            // was therefore skipping a force-stopped app from every scheduled run indefinitely.
+            //
+            // The flash fallback stays: this is one device, OEMs layer their own app-freeze
+            // behaviour on top, and a stopped app is only one of the ways a broadcast goes
+            // unanswered. It is now the exception rather than the normal path.
+            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
         }
         return withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine { cont ->
