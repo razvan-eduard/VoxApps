@@ -90,9 +90,22 @@ class IntentDecisionMap(
         val fallback = snapshot.defaultIntentFallbackProcessor
 
         val stages = mutableListOf(Stage("L1 (trigger map)", l1Engine))
-        resolver.engineFor(primary, cloudOk)?.let { stages += Stage("L2 ($primary)", it) }
+        val primaryEngine = resolver.engineFor(primary, cloudOk)
+        primaryEngine?.let { stages += Stage("L2 ($primary)", it) }
+
         if (fallback != null && fallback != primary && snapshot.defaultIntentFallbackModel != null) {
-            resolver.engineFor(fallback, cloudOk)?.let { stages += Stage("L3 fallback ($fallback)", it) }
+            val fallbackEngine = resolver.engineFor(fallback, cloudOk)
+            // Compared by identity, not by processor key. Every on-device LLM key resolves to the
+            // same LocalLlmInterpreter, and that instance loads whichever model `activeIntentModelId`
+            // names — so when the primary is already on-device, a second on-device key as fallback
+            // would re-run the exact inference that just failed, on the same loaded model, for the
+            // cost of another full timeout. There is no fallback to make in that case: the selected
+            // model is the one in memory. Distinct keys alone don't catch this (nlu_llm vs
+            // nlu_llm_litertlm are different keys, one instance), and the settings can arrive that
+            // way from an imported backup regardless of what the picker allows.
+            if (fallbackEngine != null && fallbackEngine !== primaryEngine) {
+                stages += Stage("L3 fallback ($fallback)", fallbackEngine)
+            }
         }
         return stages
     }

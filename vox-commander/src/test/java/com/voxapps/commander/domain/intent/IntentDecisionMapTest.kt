@@ -357,4 +357,35 @@ class IntentDecisionMapTest {
         assertEquals(expectedIntent.domain, result?.domain)
         coVerify { l3LocalEngine.processCommand(command, any()) }
     }
+
+    /**
+     * Two different on-device processor keys both resolve to the same LocalLlmInterpreter, and that
+     * instance runs whichever model `activeIntentModelId` names. So an on-device fallback behind an
+     * on-device primary would re-run the inference that just failed, on the same loaded model, for
+     * the price of a second full timeout. The distinct-keys guard doesn't catch it.
+     */
+    @Test
+    fun `an on-device fallback behind an on-device primary is not run twice`() = runTest {
+        val command = "play music"
+
+        coEvery { l1Engine.processCommand(command, any()) } returns null
+        coEvery { l3LocalEngine.processCommand(command, any()) } returns null
+
+        mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm_litertlm") } returns true
+
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            cloudIntelligenceEnabled = true,
+            aiProcessor = "nlu_llm",
+            defaultIntentFallbackProcessor = "nlu_llm_litertlm",
+            defaultIntentFallbackModel = "qwen2.5-1.5b-q8"
+        )
+
+        val result = decisionMap.processCommand(command, null)
+
+        assertNull(result)
+        // Once as L2. Before the identity check it also ran as L3 — same engine, same loaded model.
+        coVerify(exactly = 1) { l3LocalEngine.processCommand(command, any()) }
+    }
 }
