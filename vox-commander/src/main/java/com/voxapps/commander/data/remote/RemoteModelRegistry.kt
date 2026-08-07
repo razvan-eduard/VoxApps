@@ -34,8 +34,69 @@ data class RemoteEngineConfig(
     val extension: String = "",
     val is_default_wake_word: Boolean = false,
     val capabilities: List<String> = emptyList(),
+    /** See [EngineRuntime]. Nullable because Gson writes `null` straight through a non-null Kotlin
+     *  type: an engine missing the field would then throw at an unrelated call site instead of
+     *  being reported by validateSchema() at load. */
+    val runtime: String? = null,
+    /** See [EntryPoint]. Nullable for the same reason, and because virtual engines have no file. */
+    val entry: EntryPoint? = null,
     val models: List<RemoteModelItem>
 )
+
+/**
+ * Where an engine's loadable artefact ends up once the download has been unpacked.
+ *
+ * This exists because "the model" is a different shape per engine: whisper hands its library the
+ * downloaded file itself, Piper hands sherpa-onnx a file *inside* the extracted directory, and Vosk
+ * hands `Model(path)` the *directory* — the file it contains is only proof that the directory is the
+ * right one. A single `File` path cannot describe all three without saying which of them it is.
+ *
+ * Declared as a marker to search for rather than a fixed relative path on purpose. Upstream archives
+ * sometimes carry a wrapper directory and sometimes do not — that is the packaging choice of
+ * whoever published the model, and it can change between releases of the same engine. Searching
+ * absorbs that; a fixed path encodes someone else's tarball layout into our schema.
+ *
+ * @param self the downloaded file *is* the artefact — nothing was extracted (`.bin`, `.task`).
+ * @param match glob matched against names inside the extracted directory, e.g. `*.onnx` or `am`.
+ * @param target `"file"` to hand over the match itself, `"dir"` for the directory containing it.
+ */
+data class EntryPoint(
+    val self: Boolean = false,
+    val match: String? = null,
+    val target: String? = null
+)
+
+/**
+ * What an engine actually is, declared rather than inferred.
+ *
+ * Replaces classification by elimination — `isLocalEngine(p) = p !in CLOUD_PROCESSORS` against a
+ * hardcoded list, which is how adding a second on-device LLM key silently broke the fallback guard:
+ * the code assumed one such key and nothing flagged that the assumption had expired.
+ *
+ * Deliberately a dedicated field and not a capability. Capabilities are additive, so absence means
+ * "no" and a missing one is indistinguishable from a deliberate one — which is the defect being
+ * removed here. Exactly one runtime per engine, validated on load, makes a missing or misspelled
+ * value *detectable*.
+ */
+enum class EngineRuntime(val key: String) {
+    /** Downloadable artefact on disk; the engine loads it through [EntryPoint]. */
+    LOCAL_FILE("local_file"),
+
+    /** Answered over the network. No file, no download, needs a credential. */
+    CLOUD("cloud"),
+
+    /** On-device but supplied by an OS service, so it can be *absent* on a given device
+     *  (Google STT, the platform TTS) — which is what the availability probes check today. */
+    ANDROID_LOCAL("android_local"),
+
+    /** On-device and built into the engine itself; nothing to download and nothing to resolve
+     *  (Porcupine's builtin keywords). */
+    DEVICE_BUILTIN("device_builtin");
+
+    companion object {
+        fun fromKey(key: String?): EngineRuntime? = entries.find { it.key == key }
+    }
+}
 
 /**
  * The Unified Model Item. Implements AppModel directly.
@@ -152,8 +213,11 @@ object RemoteModelRegistry {
             Logger.log("Network fetch success. Size: ${jsonText.length} chars", TAG)
             val schema = gson.fromJson(jsonText, RemoteModelSchema::class.java)
             if (schema != null) {
-                // Don't downgrade — compare remote with assets (bundled in APK, always newest)
+                // Don't downgrade — compare remote with assets (bundled in APK, always newest).
+                // Logged either way: this one comparison decides which schema the whole app runs on,
+                // and when it silently picks the remote there is otherwise no trace of why.
                 val assetVersion = getAssetSchemaVersion()
+                Logger.log("Schema versions — remote v${schema.schema_version}, asset v$assetVersion", TAG)
                 if (assetVersion > schema.schema_version) {
                     Logger.log("Remote schema v${schema.schema_version} < assets v$assetVersion, using assets (no downgrade)", TAG)
                     ensureLocalFile()
@@ -184,14 +248,27 @@ object RemoteModelRegistry {
         }
     }
 
+    /**
+     * The schema version bundled in the APK — the left operand of the no-downgrade comparison.
+     *
+     * Failures are logged rather than swallowed, because returning 0 does not merely lose
+     * information here: 0 loses every comparison, so any failure to read the asset silently turns
+     * "never accept an older remote schema" into "always accept the remote one".
+     */
     private fun getAssetSchemaVersion(): Int {
-        val ctx = appContext ?: return 0
+        val ctx = appContext ?: run {
+            Logger.log("Cannot read the bundled schema version: registry has no context yet", TAG)
+            return 0
+        }
         return try {
             ctx.assets.open(LOCAL_FILE_NAME).use { input ->
                 val text = input.readBytes().decodeToString()
                 gson.fromJson(text, RemoteModelSchema::class.java)?.schema_version ?: 0
             }
-        } catch (e: Exception) { 0 }
+        } catch (e: Exception) {
+            Logger.log("Cannot read the bundled schema version: ${e.javaClass.simpleName}: ${e.message}", TAG)
+            0
+        }
     }
 
     /**
@@ -296,6 +373,52 @@ object RemoteModelRegistry {
 
         Logger.log("Final modelMap keys: ${newMap.keys}", TAG)
         _modelMap.value = newMap
+        validateSchema()
+    }
+
+    /**
+     * Reports engines whose declaration the code cannot act on, at load time rather than at the
+     * moment something needs them.
+     *
+     * Logs only — a schema this cannot parse is still better than no schema, and the remote copy is
+     * user-configurable, so refusing to load would let a bad file brick the picker. The value is
+     * that a missing or misspelled field becomes visible in one line at startup instead of
+     * surfacing later as "my engine vanished from settings".
+     */
+    private fun validateSchema() {
+        val schema = cachedSchema ?: return
+        schema.engines.forEach { (key, config) ->
+            if (EngineRuntime.fromKey(config.runtime) == null) {
+                Logger.log(
+                    "Engine '$key' has ${if (config.runtime == null) "no" else "unrecognised"} " +
+                        "runtime${config.runtime?.let { " '$it'" } ?: ""} — falling back to inference",
+                    TAG
+                )
+            }
+            if (runtimeOf(key) == EngineRuntime.LOCAL_FILE && config.entry == null) {
+                Logger.log("Engine '$key' is local_file but declares no entry point", TAG)
+            }
+        }
+    }
+
+    /**
+     * The declared [EngineRuntime] for an engine, with an inference fallback for schemas written
+     * before the field existed.
+     *
+     * The fallback is kept because the remote copy can legitimately be older than the app — a user
+     * pointing [SettingsRepository]'s `modelRepoBaseUrl` at their own repo controls when it updates,
+     * and a v11 schema must not classify every engine as unknown.
+     */
+    fun runtimeOf(engineKey: String): EngineRuntime? {
+        val config = cachedSchema?.engines?.get(engineKey)
+        EngineRuntime.fromKey(config?.runtime)?.let { return it }
+
+        // Legacy inference: an engine that downloads something is a local file; a known cloud
+        // processor key is cloud. Anything else stays null rather than guessing, so callers can
+        // tell "old schema, inferred" from "genuinely unknown".
+        if (config != null && config.extension.isNotBlank()) return EngineRuntime.LOCAL_FILE
+        if (engineKey in Strings.AiProcessors.CLOUD_PROCESSORS) return EngineRuntime.CLOUD
+        return null
     }
 
     fun getEngineTypes(): List<String> = cachedSchema?.engines?.keys?.toList() ?: emptyList()
@@ -379,9 +502,21 @@ object RemoteModelRegistry {
             ?.firstOrNull { it.value.extension.equals(ext, ignoreCase = true) }?.key
     }
 
-    fun getDefaultVoiceEngineKey(): String? {
-        return getEngineKeysByType("voice").firstOrNull()
-    }
+    /**
+     * The engine a fresh install starts on (`SettingsRepositoryImpl` falls back to this when no
+     * `voiceProcessor` is stored).
+     *
+     * Constrained to [EngineRuntime.LOCAL_FILE]: "first voice engine in the map" is map order, and
+     * once cloud and OS-supplied engines join the registry the first one could be a cloud engine —
+     * which would silently hand a brand-new install a processor that needs an API key it does not
+     * have. A no-op against today's schema, where every voice engine is local.
+     *
+     * Falls back to any voice engine when none is local: that is a registry deliberately serving
+     * only cloud engines, where a cloud default is the honest answer and an empty picker is not.
+     */
+    fun getDefaultVoiceEngineKey(): String? =
+        getEngineKeysByType("voice").firstOrNull { runtimeOf(it) == EngineRuntime.LOCAL_FILE }
+            ?: getEngineKeysByType("voice").firstOrNull()
 
     fun getDefaultLlmEngineKey(): String? {
         return getLlmEngineKeys().firstOrNull()
@@ -403,12 +538,29 @@ object RemoteModelRegistry {
         processor in Strings.AiProcessors.MULTIMODAL_CAPABLE || hasCapability(processor, "multimodal")
 
     /**
-     * Whether [processor] runs on-device rather than calling out to a cloud API — mirrors
-     * [isMultimodal]'s hardcoded-cloud-first check, just inverted: only the fixed
-     * [Strings.AiProcessors.CLOUD_PROCESSORS] set leaves the device, so anything not in it (Gemini
-     * Nano, or any `models.json`-defined downloaded engine key) is local by elimination.
+     * Whether [processor] runs on-device rather than calling out to a cloud API.
+     *
+     * Now answered from the engine's declared [EngineRuntime] rather than by elimination against a
+     * hardcoded cloud list. The old form said "anything not known to be cloud is local", which made
+     * every unrecognised key local — including a typo, and including an engine the schema simply had
+     * not been updated for.
+     *
+     * **An unknown key now reports false.** The one caller is `CapabilityQueryReceiver`, whose reply
+     * tells a satellite app whether it may hand Commander an image; "I don't know what this engine
+     * is" must not read to that caller as "safe, it stays on the device".
      */
-    fun isLocalEngine(processor: String): Boolean = processor !in Strings.AiProcessors.CLOUD_PROCESSORS
+    fun isLocalEngine(processor: String): Boolean =
+        when (runtimeOf(processor)) {
+            EngineRuntime.LOCAL_FILE, EngineRuntime.ANDROID_LOCAL, EngineRuntime.DEVICE_BUILTIN -> true
+            EngineRuntime.CLOUD -> false
+            null -> false
+        }
+
+    /**
+     * The declared [EntryPoint] for an engine, or null when it declares none — a virtual engine, or
+     * a schema predating the field.
+     */
+    fun getEntryPoint(engineKey: String): EntryPoint? = cachedSchema?.engines?.get(engineKey)?.entry
 
     fun getDefaultWakeWordEngineKey(): String {
         return cachedSchema?.engines?.entries

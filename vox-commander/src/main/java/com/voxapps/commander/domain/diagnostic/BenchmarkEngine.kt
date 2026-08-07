@@ -149,7 +149,12 @@ class BenchmarkEngine(
         diagInfo.append("--- LOCAL LLM DIAGNOSTICS ---\n")
         if (localLlmInterpreter != null) {
             val activeModelId = snapshot.activeIntentModelId
-            if (activeModelId != null) {
+            // The interpreter resolves its model file with the *active processor's* key, so this
+            // only measures anything when that processor is actually a local LLM. With a cloud
+            // processor selected the path is built from an engine that has no extension, the load
+            // fails, and the timing reported would be of nothing at all.
+            val processorIsLocalLlm = RemoteModelRegistry.isLlmEngine(snapshot.aiProcessor)
+            if (activeModelId != null && processorIsLocalLlm) {
                 // activeModelId alone doesn't say which local-LLM-capable engine it belongs to
                 // (there are two now: nlu_llm for .task models, nlu_llm_litertlm for .litertlm
                 // models) — search every local-LLM engine's model list rather than assuming the
@@ -161,6 +166,8 @@ class BenchmarkEngine(
                 val modelLabel = activeModel?.label ?: activeModelId
                 diagInfo.append("Model: $activeModelId | Label: $modelLabel (active)\n")
                 runLocalLlmBenchmark(modelLabel, localLlmInterpreter)
+            } else if (!processorIsLocalLlm) {
+                diagInfo.append("NLU Model: skipped — active processor '${snapshot.aiProcessor}' is not a local LLM\n")
             } else {
                 diagInfo.append("NLU Model: No active model selected\n")
             }

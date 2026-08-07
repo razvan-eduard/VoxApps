@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.intent.interpreter.LlmModelInfo
 import com.voxapps.commander.domain.localization.LanguageManager
@@ -159,6 +160,10 @@ fun IntentEnginesSubTab(
 
             EngineModelSection(
                 title = languageManager.getString("nlu_model_selection_title"),
+                // Only a downloadable engine can be an offline fallback. Left at its default, the
+                // checkbox would also appear for a cloud engine — whose models report isBuiltIn,
+                // which this section reads as "already downloaded" and therefore selectable.
+                showFallback = RemoteModelRegistry.runtimeOf(engineKey) == EngineRuntime.LOCAL_FILE,
 
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,

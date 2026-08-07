@@ -101,11 +101,19 @@
 # Plus explicit keeps for every class actually passed to gson.fromJson(...)/gson.toJson(...) in this
 # app — @SerializedName-only protection isn't enough, these need to survive intact (fields AND a
 # usable constructor), not just have their field names preserved.
+#
+# This list must grow with every new schema type, INCLUDING types only reached as a nested field of
+# one already listed here: R8 judges each class on its own, and a class Gson alone instantiates has
+# no visible constructor call, so it gets abstracted away. Adding EntryPoint to models.json without
+# this line made the bundled schema unparseable in release builds only — which then read as
+# "asset version 0", losing the no-downgrade comparison and silently handing the app an older remote
+# schema. Debug builds and unit tests cannot see any of it; only a release install can.
 -keep class com.voxapps.commander.data.preferences.AppSettings { *; }
 -keep class com.voxapps.commander.data.preferences.AppAliasRule { *; }
 -keep class com.voxapps.commander.data.remote.RemoteModelSchema { *; }
 -keep class com.voxapps.commander.data.remote.RemoteEngineConfig { *; }
 -keep class com.voxapps.commander.data.remote.RemoteModelItem { *; }
+-keep class com.voxapps.commander.data.remote.EntryPoint { *; }
 -keep class com.voxapps.commander.data.remote.VirtualModelItem { *; }
 -keep class com.voxapps.commander.domain.intent.model.NluIntent { *; }
 -keep class com.voxapps.commander.domain.intent.registry.IntentCatalog$IntentsSchema { *; }

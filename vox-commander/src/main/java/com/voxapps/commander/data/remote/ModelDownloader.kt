@@ -5,7 +5,6 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.domain.engine.PiperTtsEngine
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
@@ -56,6 +55,86 @@ class ModelDownloader(private val context: Context) {
                 nested.deleteRecursively()
             }
         }
+
+        /** Depth cap for [resolveEntry]'s search. A real unpacked model nests two or three levels at
+         *  most; this only has to be past that and short of following a directory symlink cycle. */
+        private const val MAX_ENTRY_SEARCH_DEPTH = 10
+
+        /**
+         * Resolves what an engine's library actually needs to be handed, from the engine's own
+         * [EntryPoint] declaration.
+         *
+         * This is the single answer to "where is the loadable artefact", used by both the validator
+         * and the engine. They used to answer it separately and disagree: the validator looked for a
+         * fixed `model.onnx` while Piper archives ship `<voice>.onnx`, so a correctly extracted voice
+         * was judged incomplete and deleted on the next launch.
+         *
+         * Searching for the marker rather than trusting a fixed relative path also subsumes
+         * [flattenNestedDir]: an archive that wraps its contents in one extra directory resolves to
+         * that directory instead of needing the files moved on disk first.
+         *
+         * Pure File logic (no Context) so it is unit-testable.
+         */
+        internal fun resolveEntry(root: File, entry: EntryPoint): File? {
+            if (!root.exists()) return null
+            if (entry.self) return root.takeIf { it.isFile }
+
+            val pattern = entry.match?.takeIf { it.isNotBlank() } ?: return null
+            val matched = findMatch(root, globToRegex(pattern)) ?: return null
+
+            val resolved = when (entry.target) {
+                TARGET_DIR -> matched.parentFile
+                else -> matched
+            } ?: return null
+
+            // `match` can arrive from a models.json served by a user-configured modelRepoBaseUrl, so
+            // it is untrusted input describing a path. Confine the result to the model's own
+            // directory — the same concern as zip-slip, one step later in the pipeline.
+            val rootPath = root.canonicalPath
+            val resolvedPath = resolved.canonicalPath
+            if (resolvedPath != rootPath && !resolvedPath.startsWith(rootPath + File.separator)) {
+                Logger.log("Entry point '$pattern' resolved outside $rootPath — refusing", TAG)
+                return null
+            }
+            return resolved
+        }
+
+        /**
+         * Breadth-first so a match directly under [root] wins over a deeper one — an archive that
+         * happens to carry a stray copy in a subdirectory still resolves to the real layout.
+         * Children are visited in name order so the result does not depend on filesystem ordering.
+         */
+        private fun findMatch(root: File, regex: Regex): File? {
+            var frontier = listOf(root)
+            var depth = 0
+            while (frontier.isNotEmpty() && depth <= MAX_ENTRY_SEARCH_DEPTH) {
+                val next = mutableListOf<File>()
+                for (dir in frontier) {
+                    val children = dir.listFiles()?.sortedBy { it.name } ?: continue
+                    children.firstOrNull { regex.matches(it.name) }?.let { return it }
+                    next += children.filter { it.isDirectory }
+                }
+                frontier = next
+                depth++
+            }
+            return null
+        }
+
+        /** Supports `*` and `?`; everything else is matched literally. */
+        private fun globToRegex(glob: String): Regex {
+            val pattern = buildString {
+                glob.forEach { c ->
+                    when (c) {
+                        '*' -> append(".*")
+                        '?' -> append('.')
+                        else -> append(Regex.escape(c.toString()))
+                    }
+                }
+            }
+            return Regex(pattern, RegexOption.IGNORE_CASE)
+        }
+
+        private const val TARGET_DIR = "dir"
     }
 
     /**
@@ -136,6 +215,22 @@ class ModelDownloader(private val context: Context) {
     }
 
     /**
+     * The file or directory this model's engine library must be handed, or null if the model is not
+     * usable. See [resolveEntry] for why this is the only place that answers the question.
+     *
+     * An engine that declares no [EntryPoint] — a schema older than the field — falls back to plain
+     * existence rather than guessing at a layout. That is deliberately weaker than a structural
+     * check and never destructive: not knowing what to look for must not become grounds for
+     * deleting the user's download.
+     */
+    fun resolveEntryPoint(modelId: String, engineKey: String): File? {
+        val root = resolveLocalFile(modelId, engineKey) ?: return null
+        val entry = RemoteModelRegistry.getEntryPoint(engineKey)
+            ?: return root.takeIf { it.exists() }
+        return resolveEntry(root, entry)
+    }
+
+    /**
      * Whether a model previously recorded as downloaded is actually usable on disk.
      *
      * Archives get the per-engine structural check in [validateModel], which also purges a directory
@@ -148,7 +243,7 @@ class ModelDownloader(private val context: Context) {
         if (RemoteModelRegistry.isArchiveEngine(engineKey)) {
             validateModel(modelId, engineKey)
         } else {
-            resolveLocalFile(modelId, engineKey)?.exists() == true
+            resolveEntryPoint(modelId, engineKey) != null
         }
 
     /**
@@ -284,39 +379,17 @@ class ModelDownloader(private val context: Context) {
 
         if (!targetDir.exists() || !targetDir.isDirectory) return false
 
-        val extension = RemoteModelRegistry.getExtension(engineKey)
+        // Same resolution the engine will use, so the two cannot disagree about a directory this
+        // branch is willing to delete. An engine that declares no entry point resolves on existence
+        // alone and therefore passes: not knowing what to look for must not become grounds for
+        // deleting the user's download.
+        if (resolveEntryPoint(modelId, engineKey) != null) return true
 
-        // Piper TTS models: the weights are named after the voice, so resolve them the same way the
-        // engine does rather than by a fixed filename — this branch deletes what it rejects.
-        if (extension.equals(".tar.bz2", ignoreCase = true)) {
-            val hasModel = PiperTtsEngine.findVoiceModelFile(targetDir) != null
-            if (!hasModel) {
-                Logger.log("Piper model $modelId has no .onnx weights — deleting incomplete model", TAG)
-                targetDir.deleteRecursively()
-                return false
-            }
-            return true
-        }
-
-        // Vosk/ZIP models must have a NON-EMPTY 'am' directory DIRECTLY under the model dir —
-        // Vosk's Model(path) cannot load a nested layout, and an empty 'am' means a broken
-        // extraction (e.g. the old non-recursive flatten left subdirs hollow).
-        fun amPopulated(dir: File): Boolean {
-            val am = File(dir, "am")
-            return am.isDirectory && (am.listFiles()?.isNotEmpty() == true)
-        }
-        // Self-heal a legacy/interrupted extraction that left the archive's wrapper dir in place
-        // (e.g. model/model/am/...): flatten it so 'am' sits directly under the model dir.
-        if (!amPopulated(targetDir)) {
-            flattenNestedDir(targetDir)
-        }
-        if (!amPopulated(targetDir)) {
-            Logger.log("Model $modelId missing/empty 'am' directory — deleting incomplete model", TAG)
-            targetDir.deleteRecursively()
-            return false
-        }
-
-        return true
+        // Declared layout, extraction finished (no marker), and the artefact is still not there —
+        // the directory is genuinely incomplete. Removing it is what lets a re-download fix it.
+        Logger.log("Model $modelId does not satisfy its entry point — deleting incomplete model", TAG)
+        targetDir.deleteRecursively()
+        return false
     }
 
     /**

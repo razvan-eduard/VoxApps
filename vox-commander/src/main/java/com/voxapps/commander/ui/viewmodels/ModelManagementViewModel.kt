@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.DownloadCompleteReceiver
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.localization.LanguageManager
@@ -152,12 +153,18 @@ class ModelManagementViewModel(
         val voiceKeys = RemoteModelRegistry.getEngineKeysByType("voice")
         val llmKeys = RemoteModelRegistry.getLlmEngineKeys()
 
-        // Whisper models = voice engines with .bin extension
-        val whisperKey = voiceKeys.firstOrNull { !RemoteModelRegistry.isZipEngine(it) }
+        // These two lists drive different import flows — a single-file picker versus a directory
+        // picker — so the split is by packaging, not by engine name. Both are restricted to
+        // downloadable engines: a cloud voice engine has no packaging at all and would otherwise win
+        // the "not an archive" test purely on map order once virtual engines join the registry.
+        val downloadableVoiceKeys = voiceKeys.filter {
+            RemoteModelRegistry.runtimeOf(it) == EngineRuntime.LOCAL_FILE
+        }
+
+        val whisperKey = downloadableVoiceKeys.firstOrNull { !RemoteModelRegistry.isArchiveEngine(it) }
         _whisperModels.value = whisperKey?.let { RemoteModelRegistry.getModels(it) } ?: emptyList()
 
-        // Vosk models = voice engines with .zip extension
-        val voskKey = voiceKeys.firstOrNull { RemoteModelRegistry.isZipEngine(it) }
+        val voskKey = downloadableVoiceKeys.firstOrNull { RemoteModelRegistry.isArchiveEngine(it) }
         _voskModels.value = voskKey?.let { RemoteModelRegistry.getModels(it) } ?: emptyList()
 
         // NLU models = every local-LLM-capable engine's models pooled together (there can be more

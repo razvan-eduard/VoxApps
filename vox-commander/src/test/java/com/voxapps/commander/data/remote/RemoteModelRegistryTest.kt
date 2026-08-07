@@ -185,6 +185,79 @@ class RemoteModelRegistryTest {
         }
     }
 
+    /**
+     * The shipped schema is the contract between the JSON and the code that acts on it. These
+     * assertions are cheap and catch, at build time, the class of mistake that has cost the most:
+     * an engine whose declaration the download pipeline cannot act on.
+     */
+    @Test
+    fun `every engine in the shipped models_json declares a runtime the code understands`() {
+        val schema = shippedSchema()
+
+        schema.engines.forEach { (key, config) ->
+            assertTrue(
+                "Engine '$key' has runtime '${config.runtime}', which EngineRuntime cannot parse",
+                EngineRuntime.fromKey(config.runtime) != null
+            )
+        }
+    }
+
+    @Test
+    fun `every local_file engine declares an entry point and a non-empty extension`() {
+        val schema = shippedSchema()
+
+        schema.engines
+            .filter { EngineRuntime.fromKey(it.value.runtime) == EngineRuntime.LOCAL_FILE }
+            .forEach { (key, config) ->
+                assertTrue("Engine '$key' is local_file but declares no entry point", config.entry != null)
+                assertTrue("Engine '$key' is local_file but has no extension to download", config.extension.isNotBlank())
+                val entry = config.entry!!
+                assertTrue(
+                    "Engine '$key' declares an entry that is neither self nor a match",
+                    entry.self || !entry.match.isNullOrBlank()
+                )
+            }
+    }
+
+    @Test
+    fun `a non-local_file engine downloads nothing`() {
+        val schema = shippedSchema()
+
+        schema.engines
+            .filter { EngineRuntime.fromKey(it.value.runtime) != EngineRuntime.LOCAL_FILE }
+            .forEach { (key, config) ->
+                assertEquals("Engine '$key' is not local_file but declares a download extension", "", config.extension)
+            }
+    }
+
+    /**
+     * The asset copy and the repo-root copy are served to different consumers — the app reads the
+     * asset, a device with a configured modelRepoBaseUrl reads the remote one — and `fetchJson`
+     * permanently rejects a remote copy whose schema_version is lower than the asset's. Letting them
+     * drift silently strands every install that already fetched the newer number.
+     */
+    @Test
+    fun `both models_json copies carry the same schema_version`() {
+        val asset = locate("src/main/assets/models.json", "vox-commander/src/main/assets/models.json")
+        val cdn = locate("../models.json", "models.json")
+        assertTrue("could not locate both models.json copies", asset != null && cdn != null)
+
+        val gson = com.google.gson.Gson()
+        assertEquals(
+            gson.fromJson(asset!!.readText(), RemoteModelSchema::class.java).schema_version,
+            gson.fromJson(cdn!!.readText(), RemoteModelSchema::class.java).schema_version
+        )
+    }
+
+    private fun shippedSchema(): RemoteModelSchema {
+        val file = locate("src/main/assets/models.json", "vox-commander/src/main/assets/models.json")
+        assertTrue("models.json not found from ${java.io.File(".").absolutePath}", file != null)
+        return com.google.gson.Gson().fromJson(file!!.readText(), RemoteModelSchema::class.java)
+    }
+
+    private fun locate(vararg candidates: String): java.io.File? =
+        candidates.map { java.io.File(it) }.firstOrNull { it.exists() }
+
     @Test
     fun `isLlmEngine returns true when engine declares the local_llm capability`() {
         // isLlmEngine is capability-driven (hasCapability(engineKey, "local_llm")), not type-driven —
