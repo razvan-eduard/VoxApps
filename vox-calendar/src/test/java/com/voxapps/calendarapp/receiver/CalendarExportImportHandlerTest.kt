@@ -21,6 +21,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
@@ -216,10 +217,11 @@ class CalendarExportImportHandlerTest {
 
     @Test
     fun `export includes each entry's reminders`() = runTest {
-        coEvery { calendarRepo.entriesSnapshot() } returns listOf(entry(1))
-        coEvery { calendarRepo.getRemindersForEntry(1L) } returns listOf(
-            com.voxapps.calendarapp.data.CalendarReminder(id = 1, entryId = 1L, offsetMinutesBefore = 30)
-        )
+        // Export reads the entry's own individual reminder preference directly (see
+        // ReminderOffsetsCodec) rather than whatever's currently effectively scheduled — the two only
+        // differ under an active calendar-level override, which this test doesn't exercise.
+        val entryWithReminder = entry(1).let { it.copy(entry = it.entry.copy(individualReminderOffsetsMinutes = "30")) }
+        coEvery { calendarRepo.entriesSnapshot() } returns listOf(entryWithReminder)
 
         val result = handler.export(includePhotos = false)
 
@@ -227,6 +229,47 @@ class CalendarExportImportHandlerTest {
         val reminders = eventJson.getJSONArray("reminders")
         assertEquals(1, reminders.length())
         assertEquals(30, reminders.getInt(0))
+    }
+
+    @Test
+    fun `export includes a subscribed calendar's kind, URL, sync status, and reminder override`() = runTest {
+        coEvery { calendarRepo.layersSnapshot() } returns listOf(
+            com.voxapps.calendarapp.data.CalendarLayer(
+                id = 1, name = "Holidays", colorArgb = 0, position = 0, createdAt = 0L,
+                kind = com.voxapps.calendarapp.data.CalendarLayerKind.SUBSCRIBED,
+                subscriptionUrl = "https://example.com/cal.ics", lastSyncedAt = 500L,
+                lastSyncError = null, reminderOffsetsMinutes = "0,1440"
+            )
+        )
+
+        val result = handler.export(includePhotos = false)
+
+        val layerJson = JSONObject(result.text).getJSONArray("layers").getJSONObject(0)
+        assertEquals("SUBSCRIBED", layerJson.getString("kind"))
+        assertEquals("https://example.com/cal.ics", layerJson.getString("subscriptionUrl"))
+        assertEquals(500L, layerJson.getLong("lastSyncedAt"))
+        assertEquals("0,1440", layerJson.getString("reminderOffsetsMinutes"))
+    }
+
+    @Test
+    fun `import creates a new subscribed calendar preserving its URL and reminder override`() = runTest {
+        // layersSnapshot() defaults to emptyList() (setup()) — no name match, so a new layer is created.
+        val newLayer = slot<com.voxapps.calendarapp.data.CalendarLayerKind>()
+        coEvery {
+            calendarRepo.addLayerFromBackup(
+                name = "Holidays", colorArgb = 0L, position = 0,
+                kind = capture(newLayer), subscriptionUrl = "https://example.com/cal.ics",
+                lastSyncedAt = 500L, lastSyncError = null, reminderOffsetsMinutes = "0,1440"
+            )
+        } returns 9L
+
+        val payload = """{"layers":[{"id":1,"name":"Holidays","colorArgb":0,"position":0,
+            "kind":"SUBSCRIBED","subscriptionUrl":"https://example.com/cal.ics",
+            "lastSyncedAt":500,"reminderOffsetsMinutes":"0,1440"}]}"""
+        val result = handler.import(payload)
+
+        assertEquals(com.voxapps.calendarapp.data.CalendarLayerKind.SUBSCRIBED, newLayer.captured)
+        assertTrue(result.text!!.contains("1 new calendars"))
     }
 
     @Test

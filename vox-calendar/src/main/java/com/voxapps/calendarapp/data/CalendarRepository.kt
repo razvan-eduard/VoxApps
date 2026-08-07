@@ -20,6 +20,7 @@ class CalendarRepository(
     private val tagDao: CalendarEntryTagDao,
     private val attachmentDao: AttachmentDao,
     private val reminderDao: CalendarReminderDao,
+    private val toDoListDao: ToDoListDao,
     private val appContext: Context
 ) {
     val entriesWithTags: Flow<List<CalendarEntryWithTags>> = entryDao.observeEntriesWithTags()
@@ -83,21 +84,29 @@ class CalendarRepository(
                 colorArgb = colorArgb,
                 comments = comments?.trim()?.takeIf { it.isNotEmpty() },
                 createdAt = now,
-                updatedAt = now
+                updatedAt = now,
+                individualReminderOffsetsMinutes = ReminderOffsetsCodec.encode(reminderOffsetsMinutes)
             )
         )
         insertTags(id, tags)
-        replaceReminders(id, reminderOffsetsMinutes)
+        replaceReminders(id, effectiveOffsetsFor(layerId, reminderOffsetsMinutes))
         return id
     }
 
     /** Replaces an entry's fields, its full tag set, and its reminders (simplest correct update
-     *  semantics — mirrors the tag replacement already done here). */
+     *  semantics — mirrors the tag replacement already done here). [reminderOffsetsMinutes] is always
+     *  stored as this entry's own individual preference, even while a calendar-level override means
+     *  it's not what's actually scheduled right now (see [effectiveOffsetsFor]). */
     suspend fun updateEntry(entry: CalendarEntry, tags: List<String>, reminderOffsetsMinutes: List<Int> = emptyList()) {
-        entryDao.update(entry.copy(updatedAt = System.currentTimeMillis()))
+        entryDao.update(
+            entry.copy(
+                updatedAt = System.currentTimeMillis(),
+                individualReminderOffsetsMinutes = ReminderOffsetsCodec.encode(reminderOffsetsMinutes)
+            )
+        )
         tagDao.deleteAllForEntry(entry.id)
         insertTags(entry.id, tags)
-        replaceReminders(entry.id, reminderOffsetsMinutes)
+        replaceReminders(entry.id, effectiveOffsetsFor(entry.layerId, reminderOffsetsMinutes))
     }
 
     suspend fun deleteEntry(entry: CalendarEntry) {
@@ -115,6 +124,28 @@ class CalendarRepository(
         cancelReminders(id)
     }
 
+    // --- Multi-select batch actions (Day/Week view) ---
+
+    /** Loops [deleteEntryById] rather than a raw bulk `DELETE` — each entry's tombstone (P2P sync) and
+     *  attachment/reminder cleanup must still happen per row, exactly as a single delete would. */
+    suspend fun bulkDeleteEntries(ids: List<Long>) {
+        for (id in ids) deleteEntryById(id)
+    }
+
+    /** Reassigns every id to [newLayerId] in one query (safe here — unlike delete, a plain layer
+     *  reassignment has no other per-row side effect to preserve), then reschedules each moved
+     *  entry's reminders against its *new* calendar — otherwise a moved entry would keep whatever
+     *  alarms its old calendar's [effectiveOffsetsFor] had set up. */
+    suspend fun bulkMoveEntries(ids: List<Long>, newLayerId: Long) {
+        if (ids.isEmpty()) return
+        entryDao.bulkReassignLayer(ids, newLayerId, System.currentTimeMillis())
+        for (id in ids) {
+            val entry = entryDao.getById(id) ?: continue
+            val individual = ReminderOffsetsCodec.decode(entry.individualReminderOffsetsMinutes)
+            replaceReminders(id, effectiveOffsetsFor(newLayerId, individual))
+        }
+    }
+
     // --- REMINDERS (see :domain/reminders/ReminderScheduler; non-recurring entries only, v1) ---
 
     suspend fun getEntryById(id: Long): CalendarEntry? = entryDao.getById(id)
@@ -124,6 +155,30 @@ class CalendarRepository(
     suspend fun getReminderById(id: Long): CalendarReminder? = reminderDao.getById(id)
 
     suspend fun getAllReminders(): List<CalendarReminder> = reminderDao.getAll()
+
+    /** The offsets that should actually be scheduled for an entry under [layerId]: its calendar's own
+     *  [CalendarLayer.reminderOffsetsMinutes] if non-empty ("ON" — overrides every entry in that
+     *  calendar, even a [CalendarLayerKind.SUBSCRIBED] one), else [individualOffsets] (the entry's own
+     *  choice) unchanged. */
+    private suspend fun effectiveOffsetsFor(layerId: Long, individualOffsets: List<Int>): List<Int> {
+        val layer = layerDao.observeAll().first().firstOrNull { it.id == layerId }
+        val calendarOffsets = layer?.reminderOffsetsMinutes?.let(ReminderOffsetsCodec::decode) ?: emptyList()
+        return calendarOffsets.ifEmpty { individualOffsets }
+    }
+
+    /** Sets a calendar's reminder-offset override and immediately reschedules every entry currently
+     *  under it to match the new effective result — the only way turning a calendar's reminders ON,
+     *  OFF, or editing the offset list takes effect for entries that already existed before the change,
+     *  not just future ones. */
+    suspend fun setLayerReminderOffsets(layerId: Long, offsets: List<Int>) {
+        val layer = layerDao.observeAll().first().firstOrNull { it.id == layerId } ?: return
+        layerDao.update(layer.copy(reminderOffsetsMinutes = ReminderOffsetsCodec.encode(offsets)))
+        for (entryId in entryDao.getIdsForLayer(layerId)) {
+            val entry = entryDao.getById(entryId) ?: continue
+            val individual = ReminderOffsetsCodec.decode(entry.individualReminderOffsetsMinutes)
+            replaceReminders(entryId, effectiveOffsetsFor(layerId, individual))
+        }
+    }
 
     /** Cancels + deletes every existing reminder for [entryId], then inserts+schedules one row per
      *  offset in [offsetsMinutes] against the entry's current (just-saved) start time. Used by both
@@ -267,16 +322,142 @@ class CalendarRepository(
 
     suspend fun updateLayer(layer: CalendarLayer) = layerDao.update(layer)
 
+    /** Promotes [layerId] to the Main calendar, demoting whichever one currently holds the flag —
+     *  [CalendarLayer.isDefault] is a "exactly one row carries this" invariant enforced here rather
+     *  than by the schema (see its doc comment), so the demote must happen in the same pass. Once
+     *  demoted, the old Main becomes deletable like any other calendar. A [CalendarLayerKind
+     *  .SUBSCRIBED] calendar can never be Main: it's read-only, so new entries (which fall back to
+     *  Main whenever no calendar is specified) would have nowhere valid to land. */
+    suspend fun setMainLayer(layerId: Long) {
+        val layers = layerDao.observeAll().first()
+        val target = layers.firstOrNull { it.id == layerId } ?: return
+        if (target.kind == CalendarLayerKind.SUBSCRIBED || target.isDefault) return
+        layers.filter { it.isDefault }.forEach { layerDao.update(it.copy(isDefault = false)) }
+        layerDao.update(target.copy(isDefault = true))
+    }
+
+    /** Persists a user-dragged calendar order — [orderedIds] is the full list in its new order, and
+     *  each row's [CalendarLayer.position] is rewritten to its index (the field `CalendarLayerDao
+     *  .observeAll` already sorts by). */
+    suspend fun reorderLayers(orderedIds: List<Long>) {
+        val byId = layerDao.observeAll().first().associateBy { it.id }
+        orderedIds.forEachIndexed { index, id ->
+            val layer = byId[id] ?: return@forEachIndexed
+            if (layer.position != index) layerDao.update(layer.copy(position = index))
+        }
+    }
+
+    /** Full-fidelity layer creation for Hub/local backup restore — unlike [addLayer] (used by
+     *  voice/LLM creation and the Sidebar's "+" flow, which only ever produce a plain LOCAL calendar),
+     *  this preserves a subscribed calendar's kind/URL/sync status and any calendar-level reminder
+     *  override across an export/import round-trip. Never triggers an immediate sync itself — a
+     *  restored SUBSCRIBED calendar picks back up on the next periodic
+     *  [com.voxapps.calendarapp.domain.subscription.CalendarSubscriptionSyncWorker] tick, or a manual
+     *  "Resync now". */
+    suspend fun addLayerFromBackup(
+        name: String,
+        colorArgb: Long,
+        position: Int,
+        kind: CalendarLayerKind,
+        subscriptionUrl: String?,
+        lastSyncedAt: Long?,
+        lastSyncError: String?,
+        reminderOffsetsMinutes: String
+    ): Long {
+        val clean = name.trim()
+        if (clean.isEmpty()) return -1
+        return layerDao.insert(
+            CalendarLayer(
+                name = clean,
+                colorArgb = colorArgb,
+                position = position,
+                kind = kind,
+                subscriptionUrl = subscriptionUrl,
+                lastSyncedAt = lastSyncedAt,
+                lastSyncError = lastSyncError,
+                reminderOffsetsMinutes = reminderOffsetsMinutes,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+    }
+
     /**
-     * Deleting a layer reassigns its entries to the (single, always-present) default layer rather than
-     * orphaning them — [CalendarEntry.layerId] is non-nullable, unlike Notes'/Expenses' category ids.
-     * The default layer itself can never be deleted (enforced by the caller not offering the option;
-     * this function trusts it wasn't called for the default layer).
+     * Deleting a non-default calendar always asks which of these two to do (see [Sidebar]'s
+     * confirmation dialog) rather than following an automatic rule — [CalendarEntry.layerId] is
+     * non-nullable, unlike Notes'/Expenses' category ids, so entries can never be silently orphaned.
+     * The Main calendar itself can never be deleted (enforced by the caller not offering the option;
+     * this function trusts it wasn't called for the default/Main layer).
      */
-    suspend fun deleteLayer(layer: CalendarLayer) {
-        val fallback = layerDao.observeAll().first().firstOrNull { it.isDefault && it.id != layer.id }
-            ?: return
-        entryDao.reassignLayer(layer.id, fallback.id)
+    enum class LayerDeleteMode { REASSIGN_TO_MAIN, DELETE_ALL_ENTRIES }
+
+    suspend fun deleteLayer(layer: CalendarLayer, mode: LayerDeleteMode) {
+        when (mode) {
+            LayerDeleteMode.REASSIGN_TO_MAIN -> {
+                val fallback = layerDao.observeAll().first().firstOrNull { it.isDefault && it.id != layer.id }
+                    ?: return
+                entryDao.reassignLayer(layer.id, fallback.id)
+                toDoListDao.reassignLayer(layer.id, fallback.id)
+            }
+            LayerDeleteMode.DELETE_ALL_ENTRIES -> {
+                for (id in entryDao.getIdsForLayer(layer.id)) deleteEntryById(id)
+                for (list in toDoListDao.getAllForLayer(layer.id)) toDoListDao.delete(list)
+            }
+        }
         layerDao.delete(layer)
+    }
+
+    // --- Online-subscribed calendars (see domain/subscription/CalendarSubscriptionSyncEngine) ---
+
+    suspend fun uidsForLayer(layerId: Long): List<String> = entryDao.getUidsForLayer(layerId)
+
+    suspend fun addSubscribedLayer(name: String, colorArgb: Long, position: Int, url: String): Long {
+        val clean = name.trim()
+        if (clean.isEmpty()) return -1
+        return layerDao.insert(
+            CalendarLayer(
+                name = clean,
+                colorArgb = colorArgb,
+                position = position,
+                kind = CalendarLayerKind.SUBSCRIBED,
+                subscriptionUrl = url.trim(),
+                createdAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    /** [keepLastSyncedAt] = true on a failed sync so one transient failure doesn't erase an
+     *  old-but-working "last synced" timestamp — only [lastSyncError] gets set in that case. */
+    suspend fun setSyncStatus(layerId: Long, lastSyncedAt: Long?, lastSyncError: String?, keepLastSyncedAt: Boolean = false) {
+        val layer = layerDao.observeAll().first().firstOrNull { it.id == layerId } ?: return
+        layerDao.update(
+            layer.copy(
+                lastSyncedAt = if (keepLastSyncedAt) layer.lastSyncedAt else lastSyncedAt,
+                lastSyncError = lastSyncError
+            )
+        )
+    }
+
+    /** Snapshots every entry under [source] into a brand-new LOCAL calendar named [newName] — fresh
+     *  uids/ids/timestamps per entry (never reuses [source]'s ICS uids, so a future resync of
+     *  [source] can never touch this copy) and copied tags; reminders are NOT copied, since a
+     *  reminder is tied to "this device, this row" and the user can set new ones on the copy like
+     *  any local entry. Returns the new calendar's id. */
+    suspend fun duplicateLayerToOfflineCopy(source: CalendarLayer, newName: String): Long {
+        val existingLayers = layerDao.observeAll().first()
+        val newColor = CalendarLayerPalette.unusedOrRandomColor(existingLayers.map { it.colorArgb })
+        val newLayerId = addLayer(newName, newColor, existingLayers.size)
+        if (newLayerId <= 0) return newLayerId
+        for (ewt in entryDao.observeEntriesWithTags().first()) {
+            if (ewt.entry.layerId != source.id) continue
+            val e = ewt.entry
+            addEntry(
+                type = e.type, title = e.title, description = e.description, location = e.location,
+                startMillis = e.startMillis, endMillis = e.endMillis, allDay = e.allDay, completed = e.completed,
+                isImportant = e.isImportant, recurrenceFrequency = e.recurrenceFrequency,
+                recurrenceInterval = e.recurrenceInterval, recurrenceUntilMillis = e.recurrenceUntilMillis,
+                layerId = newLayerId, tags = ewt.tagNames
+            )
+        }
+        return newLayerId
     }
 }

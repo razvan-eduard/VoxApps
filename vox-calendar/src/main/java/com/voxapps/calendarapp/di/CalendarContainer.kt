@@ -38,6 +38,7 @@ class CalendarContainer(context: Context) {
         database.calendarEntryTagDao(),
         attachmentDao,
         database.calendarReminderDao(),
+        toDoListDao,
         appContext
     )
     val toDoRepository = ToDoRepository(toDoListDao, database.calendarEntryDao(), calendarRepository)

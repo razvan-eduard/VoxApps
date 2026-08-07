@@ -15,8 +15,10 @@ import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
+import com.voxapps.calendarapp.data.CalendarLayerKind
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.data.RecurrenceFrequency
+import com.voxapps.calendarapp.data.ReminderOffsetsCodec
 import com.voxapps.calendarapp.data.ToDoList
 import com.voxapps.calendarapp.data.ToDoListDao
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
@@ -79,8 +81,12 @@ class CalendarExportImportHandler(
                 entries.map { entryWithTags ->
                     val attachments = attachmentDao.getFor(CalendarAttachments.RECORD_TYPE, entryWithTags.entry.id)
                     allFileNames += attachments.map { it.fileName }
-                    val reminders = calendarRepo.getRemindersForEntry(entryWithTags.entry.id)
-                    entryWithTags.toJson(attachments, reminders.map { it.offsetMinutesBefore })
+                    // The entry's own INDIVIDUAL preference, not whatever's currently effectively
+                    // scheduled — the two only differ while a calendar-level override is active (see
+                    // CalendarLayer's doc comment), and it's the individual choice that should survive
+                    // an export/import round-trip unchanged.
+                    val reminders = ReminderOffsetsCodec.decode(entryWithTags.entry.individualReminderOffsetsMinutes)
+                    entryWithTags.toJson(attachments, reminders)
                 }
             )
             json.put("events", entriesToJson(events))
@@ -145,10 +151,17 @@ class CalendarExportImportHandler(
             if (name.isEmpty()) continue
             val importedId = l.optLong("id")
             val localId = nameToId[name.lowercase()] ?: run {
-                val newId = calendarRepo.addLayer(
+                val kind = l.optStringOrNull("kind")?.let { runCatching { CalendarLayerKind.valueOf(it) }.getOrNull() }
+                    ?: CalendarLayerKind.LOCAL
+                val newId = calendarRepo.addLayerFromBackup(
                     name = name,
                     colorArgb = l.optLong("colorArgb"),
-                    position = l.optInt("position")
+                    position = l.optInt("position"),
+                    kind = kind,
+                    subscriptionUrl = l.optStringOrNull("subscriptionUrl"),
+                    lastSyncedAt = if (l.has("lastSyncedAt") && !l.isNull("lastSyncedAt")) l.optLong("lastSyncedAt") else null,
+                    lastSyncError = l.optStringOrNull("lastSyncError"),
+                    reminderOffsetsMinutes = l.optString("reminderOffsetsMinutes", "")
                 )
                 if (newId > 0) {
                     layersCreated++
@@ -339,6 +352,11 @@ private fun CalendarLayer.toJson(): JSONObject = JSONObject().apply {
     put("isDefault", isDefault)
     put("position", position)
     put("createdAt", createdAt)
+    put("kind", kind.name)
+    put("subscriptionUrl", subscriptionUrl)
+    put("lastSyncedAt", lastSyncedAt)
+    put("lastSyncError", lastSyncError)
+    put("reminderOffsetsMinutes", reminderOffsetsMinutes)
 }
 
 private fun ToDoList.toJson(): JSONObject = JSONObject().apply {

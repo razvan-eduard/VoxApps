@@ -44,6 +44,7 @@ fun YearView(
     selectedDateMillis: Long,
     locale: Locale,
     onDayClick: (Long) -> Unit,
+    onMonthClick: (Long) -> Unit,
     todayEffect: TodayEffect = TodayEffect.NONE,
     todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
     todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
@@ -71,6 +72,7 @@ fun YearView(
                 layerById = layerById,
                 locale = locale,
                 onDayClick = onDayClick,
+                onMonthClick = onMonthClick,
                 todayEffect = todayEffect,
                 todayEffectStyle = todayEffectStyle,
                 todayEffectPrimaryColor = todayEffectPrimaryColor,
@@ -88,6 +90,7 @@ private fun MiniMonth(
     layerById: Map<Long, CalendarLayer>,
     locale: Locale,
     onDayClick: (Long) -> Unit,
+    onMonthClick: (Long) -> Unit,
     todayEffect: TodayEffect,
     todayEffectStyle: TodayEffectStyle,
     todayEffectPrimaryColor: Color,
@@ -99,7 +102,10 @@ private fun MiniMonth(
     Column(Modifier.fillMaxWidth()) {
         Text(
             text = "${month.month.getDisplayName(TextStyle.FULL, locale)} ${month.year}",
-            style = MaterialTheme.typography.labelLarge
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.clickable {
+                onMonthClick(month.atDay(1).atStartOfDay(zoneId).toInstant().toEpochMilli())
+            }
         )
         val leadingBlanks = month.atDay(1).dayOfWeek.value - 1
         val cells: List<LocalDate?> = List(leadingBlanks) { null } + CalendarDateUtils.daysInMonth(month)

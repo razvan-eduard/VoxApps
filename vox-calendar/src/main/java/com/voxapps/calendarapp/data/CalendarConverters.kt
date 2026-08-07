@@ -15,4 +15,10 @@ class CalendarConverters {
 
     @TypeConverter
     fun toRecurrenceFrequency(value: String): RecurrenceFrequency = RecurrenceFrequency.valueOf(value)
+
+    @TypeConverter
+    fun fromLayerKind(kind: CalendarLayerKind): String = kind.name
+
+    @TypeConverter
+    fun toLayerKind(value: String): CalendarLayerKind = CalendarLayerKind.valueOf(value)
 }

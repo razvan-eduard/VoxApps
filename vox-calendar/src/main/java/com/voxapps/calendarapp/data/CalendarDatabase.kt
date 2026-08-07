@@ -17,7 +17,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
     entities = [CalendarLayer::class, CalendarEntry::class, CalendarEntryTag::class, CalendarEntryTombstone::class,
         PendingLlmRequestEntity::class, AttachmentEntity::class, CalendarReminder::class,
         ToDoList::class],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(CalendarConverters::class)
@@ -170,6 +170,27 @@ abstract class CalendarDatabase : RoomDatabase() {
             }
         }
 
+        // Multi-calendar support: calendar_layers gains a LOCAL/SUBSCRIBED kind plus subscription
+        // metadata (see CalendarLayerKind/CalendarSubscriptionSyncEngine), and a calendar-level
+        // reminder-offset override (empty = no override, see CalendarRepository.effectiveOffsetsFor).
+        // calendar_entries gains the matching per-entry "individual" reminder preference, backfilled
+        // from whatever's already in `reminders` so existing configured reminders aren't silently
+        // forgotten as an individual preference once a calendar-level override is later turned on.
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE calendar_layers ADD COLUMN kind TEXT NOT NULL DEFAULT 'LOCAL'")
+                db.execSQL("ALTER TABLE calendar_layers ADD COLUMN subscriptionUrl TEXT")
+                db.execSQL("ALTER TABLE calendar_layers ADD COLUMN lastSyncedAt INTEGER")
+                db.execSQL("ALTER TABLE calendar_layers ADD COLUMN lastSyncError TEXT")
+                db.execSQL("ALTER TABLE calendar_layers ADD COLUMN reminderOffsetsMinutes TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE calendar_entries ADD COLUMN individualReminderOffsetsMinutes TEXT")
+                db.execSQL(
+                    "UPDATE calendar_entries SET individualReminderOffsetsMinutes = (" +
+                        "SELECT GROUP_CONCAT(offsetMinutesBefore) FROM reminders WHERE reminders.entryId = calendar_entries.id)"
+                )
+            }
+        }
+
         /** Room backed by SQLCipher; passphrase comes from the Keystore-backed store. */
         fun get(context: Context): CalendarDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
@@ -182,7 +203,7 @@ abstract class CalendarDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, CalendarDatabase::class.java, "vox-calendar.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 .build()
         }
     }

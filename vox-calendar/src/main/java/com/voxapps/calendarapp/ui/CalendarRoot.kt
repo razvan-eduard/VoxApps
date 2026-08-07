@@ -136,6 +136,7 @@ fun CalendarRoot(
                             target != null && defaultLayer != null -> EntryEditScreen(
                                 existing = (target as? EditTarget.Existing)?.entry,
                                 defaultLayer = defaultLayer,
+                                layers = state.layers,
                                 stateManager = container.calendarStateManager,
                                 availableTags = state.availableTags,
                                 onDone = { editTarget = null }

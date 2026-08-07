@@ -1,7 +1,12 @@
 package com.voxapps.calendarapp.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,13 +23,19 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.BurstMode
+import androidx.compose.material.icons.filled.CalendarViewDay
+import androidx.compose.material.icons.filled.CalendarViewMonth
+import androidx.compose.material.icons.filled.CalendarViewWeek
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -33,8 +44,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,7 +55,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,6 +67,8 @@ import com.voxapps.calendar.CalendarView
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarLayer
+import com.voxapps.calendarapp.data.CalendarLayerKind
+import com.voxapps.calendarapp.data.CalendarLayerPalette
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.data.toToDoItem
 import com.voxapps.calendarapp.state.CalendarStateManager
@@ -79,6 +96,28 @@ private const val WINDOW_PAST_DAYS = 365L
 private const val WINDOW_FUTURE_DAYS = 730L
 private const val DAY_MILLIS = 24 * 3600_000L
 
+/** Zoom-out cycle for the top-bar mode toggle: Day -> Week -> Month -> Year -> Day. */
+private fun nextViewMode(mode: CalendarViewMode): CalendarViewMode = when (mode) {
+    CalendarViewMode.DAY -> CalendarViewMode.WEEK
+    CalendarViewMode.WEEK -> CalendarViewMode.MONTH
+    CalendarViewMode.MONTH -> CalendarViewMode.YEAR
+    CalendarViewMode.YEAR -> CalendarViewMode.DAY
+}
+
+private fun viewModeIcon(mode: CalendarViewMode): ImageVector = when (mode) {
+    CalendarViewMode.DAY -> Icons.Filled.CalendarViewDay
+    CalendarViewMode.WEEK -> Icons.Filled.CalendarViewWeek
+    CalendarViewMode.MONTH -> Icons.Filled.CalendarViewMonth
+    CalendarViewMode.YEAR -> Icons.Filled.DateRange
+}
+
+private fun viewModeLabelKey(mode: CalendarViewMode): String = when (mode) {
+    CalendarViewMode.DAY -> "view_day"
+    CalendarViewMode.WEEK -> "view_week"
+    CalendarViewMode.MONTH -> "view_month"
+    CalendarViewMode.YEAR -> "view_year"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
@@ -100,6 +139,38 @@ fun CalendarScreen(
     val locale = Locale.forLanguageTag(settings.language)
     var daySummaryFor by remember { mutableStateOf<Long?>(null) }
     var sidebarVisible by remember { mutableStateOf(false) }
+
+    // --- Day/Week multi-select (see SelectionActionBar) ---
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var showBulkDeleteConfirm by remember { mutableStateOf(false) }
+    var showMoveExistingPicker by remember { mutableStateOf(false) }
+    var showMoveNewForm by remember { mutableStateOf(false) }
+
+    fun exitSelectionMode() {
+        selectionMode = false
+        selectedIds = emptySet()
+    }
+
+    val effectiveOnItemClick: (EntryCalendarItem) -> Unit = { item ->
+        if (selectionMode) {
+            val id = item.entryWithTags.entry.id
+            selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
+            if (selectedIds.isEmpty()) selectionMode = false
+        } else {
+            onEditEntry(item)
+        }
+    }
+    // A subscribed calendar's entries are view-only end-to-end — long-pressing one never enters
+    // selection mode, since there's nothing a batch delete/move could meaningfully do to it (it would
+    // just come back, or get wiped, on the next sync anyway).
+    val effectiveOnItemLongClick: (EntryCalendarItem) -> Unit = { item ->
+        val entry = item.entryWithTags.entry
+        if (!selectionMode && layerById[entry.layerId]?.kind != CalendarLayerKind.SUBSCRIBED) {
+            selectionMode = true
+            selectedIds = setOf(entry.id)
+        }
+    }
 
     DoubleBackToExitHandler(message = languageManager.getString("press_back_again_to_exit"))
 
@@ -139,22 +210,48 @@ fun CalendarScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(languageManager.getString("calendar_title")) },
-                navigationIcon = {
-                    IconButton(onClick = { sidebarVisible = !sidebarVisible }) {
-                        Icon(Icons.Filled.Menu, contentDescription = languageManager.getString("toggle_sidebar"))
+            if (selectionMode) {
+                SelectionActionBar(
+                    selectedCount = selectedIds.size,
+                    onClose = ::exitSelectionMode,
+                    onDelete = { showBulkDeleteConfirm = true },
+                    onMoveExisting = { showMoveExistingPicker = true },
+                    onMoveNew = { showMoveNewForm = true }
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(languageManager.getString("calendar_title")) },
+                    navigationIcon = {
+                        IconButton(onClick = { sidebarVisible = !sidebarVisible }) {
+                            Icon(Icons.Filled.Menu, contentDescription = languageManager.getString("toggle_sidebar"))
+                        }
+                    },
+                    actions = {
+                        // Shows the NEXT mode's icon (a preview of what tapping does), and jumps to
+                        // "now" in that granularity — e.g. from Month, it shows Year's icon and
+                        // switches straight to the current year rather than wherever Month had scrolled.
+                        val nextViewMode = nextViewMode(state.viewMode)
+                        IconButton(onClick = {
+                            stateManager.setSelectedDate(System.currentTimeMillis())
+                            stateManager.setViewMode(nextViewMode)
+                        }) {
+                            Icon(
+                                viewModeIcon(nextViewMode),
+                                contentDescription = String.format(
+                                    languageManager.getString("switch_to_view_mode_desc"),
+                                    languageManager.getString(viewModeLabelKey(nextViewMode))
+                                )
+                            )
+                        }
+                        IconButton(onClick = onOpenToDoLists) {
+                            Icon(Icons.Filled.Checklist, contentDescription = languageManager.getString("todo_lists_title"))
+                        }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
+                        }
                     }
-                },
-                actions = {
-                    IconButton(onClick = onOpenToDoLists) {
-                        Icon(Icons.Filled.Checklist, contentDescription = languageManager.getString("todo_lists_title"))
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
-                    }
-                }
-            )
+                )
+            }
         },
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End) {
@@ -192,11 +289,33 @@ fun CalendarScreen(
                     layers = state.layers,
                     availableTags = state.availableTags,
                     selectedTags = state.selectedTags,
-                    stateManager = stateManager
+                    stateManager = stateManager,
+                    settings = settings
                 )
             }
-            Box(modifier = Modifier.fillMaxSize()) {
-                when (state.viewMode) {
+            // Book-page-flip between Year/Month/Week/Day, whichever way the mode changed (sidebar
+            // tap or the top-bar cycle button) — same rotationY idiom as CalendarRoot's Calendar<->
+            // To-do flip, generalized from a fixed 2-state toggle (which can just pin its animated
+            // value at 0 or 180 forever) to an arbitrary mode change: every transition here sweeps a
+            // fresh 0->180 and then snaps back to 0 the instant it settles (invisible — by then
+            // [previousViewMode] already matches [state.viewMode], so which branch renders is moot),
+            // rather than accumulating +180 per change, which would need the front/back branch test
+            // to somehow know which specific transition is live — not just "how far have we rotated".
+            val flipRotationAnim = remember { Animatable(0f) }
+            var previousViewMode by remember { mutableStateOf(state.viewMode) }
+            LaunchedEffect(state.viewMode) {
+                if (state.viewMode != previousViewMode) {
+                    flipRotationAnim.animateTo(180f, animationSpec = if (settings.animationsEnabled) tween(450) else tween(0))
+                    previousViewMode = state.viewMode
+                    flipRotationAnim.snapTo(0f)
+                }
+            }
+            val flipRotation = flipRotationAnim.value
+            val flipDensity = LocalDensity.current
+
+            @Composable
+            fun ViewModeContent(mode: CalendarViewMode) {
+                when (mode) {
                     CalendarViewMode.YEAR -> YearView(
                         items = items,
                         layers = state.layers,
@@ -205,6 +324,10 @@ fun CalendarScreen(
                         onDayClick = { millis ->
                             stateManager.setSelectedDate(millis)
                             stateManager.setViewMode(CalendarViewMode.DAY)
+                        },
+                        onMonthClick = { millis ->
+                            stateManager.setSelectedDate(millis)
+                            stateManager.setViewMode(CalendarViewMode.MONTH)
                         },
                         todayEffect = todayEffect,
                         todayEffectStyle = todayEffectStyle,
@@ -232,7 +355,9 @@ fun CalendarScreen(
                                 EntryRow(
                                     item = item,
                                     layer = layerById[item.entryWithTags.entry.layerId],
-                                    onClick = { onEditEntry(item) }
+                                    onClick = { effectiveOnItemClick(item) },
+                                    isSelected = item.entryWithTags.entry.id in selectedIds,
+                                    onLongClick = { effectiveOnItemLongClick(item) }
                                 )
                             }
                         )
@@ -242,7 +367,7 @@ fun CalendarScreen(
                         layers = state.layers,
                         selectedDateMillis = state.selectedDateMillis,
                         locale = locale,
-                        onItemClick = onEditEntry,
+                        onItemClick = effectiveOnItemClick,
                         onDayHeaderClick = { millis ->
                             stateManager.setSelectedDate(millis)
                             stateManager.setViewMode(CalendarViewMode.DAY)
@@ -251,21 +376,46 @@ fun CalendarScreen(
                         todayEffectStyle = todayEffectStyle,
                         todayEffectPrimaryColor = todayEffectPrimaryColor,
                         todayEffectSecondaryColor = todayEffectSecondaryColor,
-                        todayEffectSpeed = todayEffectSpeed
+                        todayEffectSpeed = todayEffectSpeed,
+                        selectedIds = selectedIds,
+                        onItemLongClick = effectiveOnItemLongClick
                     )
                     CalendarViewMode.DAY -> DayView(
                         items = items,
                         layers = state.layers,
                         selectedDateMillis = state.selectedDateMillis,
                         locale = locale,
-                        onItemClick = onEditEntry,
+                        onItemClick = effectiveOnItemClick,
                         onOpenDaySummary = { daySummaryFor = it },
                         todayEffect = todayEffect,
                         todayEffectStyle = todayEffectStyle,
                         todayEffectPrimaryColor = todayEffectPrimaryColor,
                         todayEffectSecondaryColor = todayEffectSecondaryColor,
-                        todayEffectSpeed = todayEffectSpeed
+                        todayEffectSpeed = todayEffectSpeed,
+                        selectedIds = selectedIds,
+                        onItemLongClick = effectiveOnItemLongClick,
+                        onNavigateDay = { delta ->
+                            val zoneId = java.time.ZoneId.systemDefault()
+                            val newDate = java.time.Instant.ofEpochMilli(state.selectedDateMillis)
+                                .atZone(zoneId).toLocalDate().plusDays(delta.toLong())
+                            stateManager.setSelectedDate(newDate.atStartOfDay(zoneId).toInstant().toEpochMilli())
+                        }
                     )
+                }
+            }
+
+            Box(
+                modifier = Modifier.fillMaxSize().graphicsLayer {
+                    rotationY = flipRotation
+                    cameraDistance = 12f * flipDensity.density
+                }
+            ) {
+                if (flipRotation <= 90f) {
+                    ViewModeContent(previousViewMode)
+                } else {
+                    Box(Modifier.graphicsLayer { rotationY = 180f }) {
+                        ViewModeContent(state.viewMode)
+                    }
                 }
             }
         }
@@ -291,10 +441,114 @@ fun CalendarScreen(
             }
         )
     }
+
+    if (showBulkDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showBulkDeleteConfirm = false },
+            title = { Text(String.format(languageManager.getString("selection_delete_confirm_title"), selectedIds.size)) },
+            text = { Text(languageManager.getString("selection_delete_confirm_desc")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    stateManager.bulkDeleteEntries(selectedIds.toList())
+                    showBulkDeleteConfirm = false
+                    exitSelectionMode()
+                }) { Text(languageManager.getString("selection_delete"), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkDeleteConfirm = false }) { Text(languageManager.getString("cancel")) }
+            }
+        )
+    }
+
+    if (showMoveExistingPicker) {
+        val localLayers = state.layers.filter { it.kind == CalendarLayerKind.LOCAL }
+        AlertDialog(
+            onDismissRequest = { showMoveExistingPicker = false },
+            title = { Text(languageManager.getString("selection_move_existing")) },
+            text = {
+                Column {
+                    localLayers.forEach { layer ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                stateManager.bulkMoveEntries(selectedIds.toList(), layer.id)
+                                showMoveExistingPicker = false
+                                exitSelectionMode()
+                            }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier.size(12.dp)
+                                    .background(color = Color(layer.colorArgb.toInt()), shape = CircleShape)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(layer.name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showMoveExistingPicker = false }) { Text(languageManager.getString("cancel")) }
+            }
+        )
+    }
+
+    if (showMoveNewForm) {
+        var newLayerName by remember { mutableStateOf("") }
+        var newLayerColor by remember {
+            mutableStateOf(CalendarLayerPalette.unusedOrRandomColor(state.layers.map { it.colorArgb }))
+        }
+        AlertDialog(
+            onDismissRequest = { showMoveNewForm = false },
+            title = { Text(languageManager.getString("selection_move_new")) },
+            text = {
+                Column {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = newLayerName,
+                        onValueChange = { newLayerName = it },
+                        label = { Text(languageManager.getString("layer_name")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    com.voxapps.design.color.VoxColorSwatchPicker(
+                        selectedColor = newLayerColor,
+                        onColorSelected = { newLayerColor = it },
+                        modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                        customColorDialogTitle = languageManager.getString("custom_color_title"),
+                        customColorUseLabel = languageManager.getString("use_color_button"),
+                        customColorCancelLabel = languageManager.getString("cancel"),
+                        customColorHueLabel = languageManager.getString("hue_label"),
+                        customColorSaturationLabel = languageManager.getString("saturation_label"),
+                        customColorBrightnessLabel = languageManager.getString("brightness_label")
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        stateManager.createLayerAndMoveEntries(newLayerName, newLayerColor, selectedIds.toList())
+                        showMoveNewForm = false
+                        exitSelectionMode()
+                    },
+                    enabled = newLayerName.isNotBlank()
+                ) { Text(languageManager.getString("save")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMoveNewForm = false }) { Text(languageManager.getString("cancel")) }
+            }
+        )
+    }
 }
 
 @Composable
-private fun EntryRow(item: EntryCalendarItem, layer: CalendarLayer?, onClick: () -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun EntryRow(
+    item: EntryCalendarItem,
+    layer: CalendarLayer?,
+    onClick: () -> Unit,
+    isSelected: Boolean = false,
+    onLongClick: () -> Unit = {}
+) {
     val entry = item.entryWithTags.entry
     // A to-do-flavored entry (bleeding into the grid via the todoBleedToCalendar setting) reuses the
     // to-do list's own bullet (TimelineNode, incl. the star shape for isImportant) and pill (TaskChip)
@@ -306,7 +560,14 @@ private fun EntryRow(item: EntryCalendarItem, layer: CalendarLayer?, onClick: ()
     val hasAttachments by remember(entry.id) {
         container.attachmentDao.observeFor(CalendarAttachments.RECORD_TYPE, entry.id)
     }.collectAsStateWithLifecycle(initialValue = emptyList())
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .let {
+                if (isSelected) it.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else it
+            }
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically

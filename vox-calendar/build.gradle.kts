@@ -122,6 +122,11 @@ dependencies {
     // ICS import/export (Phase 5) — pure-Java, few dependencies, Android-compatible.
     implementation("net.sf.biweekly:biweekly:0.6.8")
 
+    // Subscribed-calendar sync — fetching a user-supplied .ics URL (see domain/subscription/
+    // IcsUrlFetcher.kt). Already used elsewhere in the monorepo (e.g. vox-expenses'
+    // ExchangeRateRepository), not a new HTTP stack to the ecosystem.
+    implementation(libs.okhttp)
+
     // --- Unit tests (JVM, mirror vox-notes/vox-expenses) ---
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

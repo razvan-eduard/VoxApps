@@ -46,6 +46,21 @@ interface CalendarEntryDao {
     @Query("UPDATE calendar_entries SET layerId = :newLayerId WHERE layerId = :oldLayerId")
     suspend fun reassignLayer(oldLayerId: Long, newLayerId: Long)
 
+    /** Every uid currently under [layerId] — a subscription sync's diff base (see
+     *  CalendarSubscriptionSyncEngine) and the delete-all branch of layer deletion. */
+    @Query("SELECT uid FROM calendar_entries WHERE layerId = :layerId")
+    suspend fun getUidsForLayer(layerId: Long): List<String>
+
+    /** Ids under [layerId] — used by the hard-delete branch of layer deletion. */
+    @Query("SELECT id FROM calendar_entries WHERE layerId = :layerId")
+    suspend fun getIdsForLayer(layerId: Long): List<Long>
+
+    /** Bulk "move to calendar" for multi-select — safe as one UPDATE (unlike delete) since a layer
+     *  reassignment has no other per-row side effect (no tombstone, no attachment/reminder cleanup)
+     *  that a raw bulk query would skip. */
+    @Query("UPDATE calendar_entries SET layerId = :newLayerId, updatedAt = :now WHERE id IN (:ids)")
+    suspend fun bulkReassignLayer(ids: List<Long>, newLayerId: Long, now: Long)
+
     @Query("DELETE FROM calendar_entries WHERE id = :id")
     suspend fun deleteById(id: Long)
 

@@ -31,6 +31,11 @@ enum class RecurrenceFrequency { NONE, DAILY, WEEKLY, MONTHLY, YEARLY }
  * (independent of the layer's color, unlike a plain entry), [comments] is a free-text note. Except for
  * [colorArgb] (a to-do-only visual), these fields are exposed generally — [isImportant] in particular
  * is just as meaningful on an ordinary Event/Task as on a to-do item.
+ *
+ * [individualReminderOffsetsMinutes] (see [ReminderOffsetsCodec]) is this entry's own reminder choice,
+ * kept durably even while its calendar's [CalendarLayer.reminderOffsetsMinutes] is overriding what's
+ * actually scheduled — see [CalendarRepository.effectiveOffsetsFor]. Never read directly for
+ * scheduling; only the effective (calendar-overrides-item) result ever reaches [CalendarReminder].
  */
 @Entity(
     tableName = "calendar_entries",
@@ -57,5 +62,6 @@ data class CalendarEntry(
     val position: Int = 0,
     val colorArgb: Long? = null,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val individualReminderOffsetsMinutes: String? = null
 )

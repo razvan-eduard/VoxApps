@@ -1,7 +1,9 @@
 package com.voxapps.calendarapp.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,13 +61,20 @@ internal fun HourAxisLabels(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun DayColumn(
     date: LocalDate,
     items: List<EntryCalendarItem>,
     layerById: Map<Long, CalendarLayer>,
     onItemClick: (EntryCalendarItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedIds: Set<Long> = emptySet(),
+    onItemLongClick: (EntryCalendarItem) -> Unit = {},
+    // WeekView draws its own single now-line spanning all 7 columns instead (see WeekView.kt) —
+    // one continuous ruler reads far better across a full week than 7 copies each confined to a
+    // ~45dp-wide column. DayView keeps this per-column line (its only column, full width).
+    showNowLine: Boolean = true
 ) {
     val zoneId = ZoneId.systemDefault()
     // Separate timed events for the grid (industry standard: all-day handled in pinned header)
@@ -100,13 +109,24 @@ internal fun DayColumn(
             val top = HOUR_HEIGHT * startHour
             val entry = item.entryWithTags.entry
             val color = layerById[entry.layerId]?.let { Color(it.colorArgb.toInt()) } ?: MaterialTheme.colorScheme.primary
+            val isSelected = entry.id in selectedIds
             Box(
                 modifier = Modifier
                     .padding(top = top, start = 2.dp, end = 2.dp)
                     .height((HOUR_HEIGHT.value * durationHours).coerceAtLeast(24f).dp)
                     .fillMaxWidth()
                     .background(color.copy(alpha = 0.9f), RoundedCornerShape(4.dp))
-                    .clickable { onItemClick(item) }
+                    .let {
+                        if (isSelected) {
+                            it.border(2.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(4.dp))
+                        } else {
+                            it
+                        }
+                    }
+                    .combinedClickable(
+                        onClick = { onItemClick(item) },
+                        onLongClick = { onItemLongClick(item) }
+                    )
                     .padding(4.dp)
             ) {
                 Text(
@@ -123,28 +143,30 @@ internal fun DayColumn(
             val dotSize = 8.dp
             val nowColor = MaterialTheme.colorScheme.error
             val nowTop = (HOUR_HEIGHT * currentTimeFraction) - dotSize / 2
-            Row(
-                modifier = Modifier
-                    .padding(top = nowTop)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(modifier = Modifier.size(dotSize).background(nowColor, CircleShape))
-                Box(
+            if (showNowLine) {
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .height(2.dp)
-                        .background(nowColor)
-                )
-                // Matches the "now" time label already shown in the to-do timeline (NowSplitter)
-                // and the home-screen widget's Today section (NowSplitterRow), so the current-time
-                // marker reads the same way across the app.
-                Text(
-                    text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date()),
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = nowColor,
-                    modifier = Modifier.padding(start = 6.dp, end = 4.dp)
-                )
+                        .padding(top = nowTop)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(modifier = Modifier.size(dotSize).background(nowColor, CircleShape))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(2.dp)
+                            .background(nowColor)
+                    )
+                    // Matches the "now" time label already shown in the to-do timeline (NowSplitter)
+                    // and the home-screen widget's Today section (NowSplitterRow), so the current-time
+                    // marker reads the same way across the app.
+                    Text(
+                        text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date()),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = nowColor,
+                        modifier = Modifier.padding(start = 6.dp, end = 4.dp)
+                    )
+                }
             }
             val now = System.currentTimeMillis()
             val hasMoreToday = timedItems.any {
@@ -166,9 +188,10 @@ internal fun DayColumn(
 }
 
 /** Ticks once a minute so the current-time line drifts down the grid in real time without a full
- *  screen refresh. Only meaningful for today's column — callers gate rendering on that. */
+ *  screen refresh. Only meaningful for today's column — callers gate rendering on that. Internal
+ *  (not private) so [WeekView] can position its own single full-width now-line at the same offset. */
 @Composable
-private fun rememberCurrentTimeFraction(): State<Float> =
+internal fun rememberCurrentTimeFraction(): State<Float> =
     produceState(initialValue = currentHourFraction()) {
         while (true) {
             value = currentHourFraction()

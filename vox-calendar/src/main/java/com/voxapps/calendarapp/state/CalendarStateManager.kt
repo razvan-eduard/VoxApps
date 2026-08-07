@@ -14,6 +14,8 @@ import com.voxapps.calendarapp.data.CalendarReminder
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.data.RecurrenceFrequency
 import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepository
+import com.voxapps.calendarapp.domain.subscription.CalendarSubscriptionSyncEngine
+import com.voxapps.calendarapp.domain.subscription.IcsUrlFetcher
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -258,6 +260,20 @@ class CalendarStateManager internal constructor(
 
     fun deleteEntry(entry: CalendarEntry) { scope.launch { calendarRepo.deleteEntry(entry) } }
 
+    // --- Multi-select batch actions (Day/Week view) ---
+
+    fun bulkDeleteEntries(ids: List<Long>) { scope.launch { calendarRepo.bulkDeleteEntries(ids) } }
+
+    fun bulkMoveEntries(ids: List<Long>, newLayerId: Long) { scope.launch { calendarRepo.bulkMoveEntries(ids, newLayerId) } }
+
+    fun createLayerAndMoveEntries(name: String, colorArgb: Long, entryIds: List<Long>) {
+        val position = uiStateLayers().size
+        scope.launch {
+            val newId = calendarRepo.addLayer(name, colorArgb, position)
+            if (newId > 0) calendarRepo.bulkMoveEntries(entryIds, newId)
+        }
+    }
+
     // --- LAYER CRUD (delegated) ---
     fun addLayer(name: String, colorArgb: Long) {
         val position = uiStateLayers().size
@@ -266,9 +282,40 @@ class CalendarStateManager internal constructor(
 
     fun updateLayer(layer: CalendarLayer) { scope.launch { calendarRepo.updateLayer(layer) } }
 
-    fun removeLayer(layer: CalendarLayer) {
-        if (layer.isDefault) return // the default layer can't be deleted — nothing left to reassign to
-        scope.launch { calendarRepo.deleteLayer(layer) }
+    fun setMainLayer(layerId: Long) { scope.launch { calendarRepo.setMainLayer(layerId) } }
+
+    fun reorderLayers(orderedIds: List<Long>) { scope.launch { calendarRepo.reorderLayers(orderedIds) } }
+
+    fun removeLayer(layer: CalendarLayer, mode: CalendarRepository.LayerDeleteMode) {
+        if (layer.isDefault) return // the Main calendar can't be deleted — nothing left to reassign to
+        scope.launch { calendarRepo.deleteLayer(layer, mode) }
+    }
+
+    /** Turns a calendar's reminder override on/off (or edits its offsets) and immediately reschedules
+     *  every entry currently under it — see [CalendarRepository.setLayerReminderOffsets]. */
+    fun setLayerReminderOffsets(layerId: Long, offsets: List<Int>) {
+        scope.launch { calendarRepo.setLayerReminderOffsets(layerId, offsets) }
+    }
+
+    // --- Online-subscribed calendars ---
+
+    fun addSubscribedLayer(name: String, colorArgb: Long, url: String) {
+        val position = uiStateLayers().size
+        scope.launch {
+            val id = calendarRepo.addSubscribedLayer(name, colorArgb, position, url)
+            if (id > 0) {
+                val layer = calendarRepo.layersSnapshot().firstOrNull { it.id == id } ?: return@launch
+                CalendarSubscriptionSyncEngine.sync(calendarRepo, layer, IcsUrlFetcher::fetch)
+            }
+        }
+    }
+
+    fun resyncSubscribedLayer(layer: CalendarLayer) {
+        scope.launch { CalendarSubscriptionSyncEngine.sync(calendarRepo, layer, IcsUrlFetcher::fetch) }
+    }
+
+    fun duplicateLayerToOfflineCopy(source: CalendarLayer, newName: String) {
+        scope.launch { calendarRepo.duplicateLayerToOfflineCopy(source, newName) }
     }
 
     // --- Attachments (manually-added photos on an entry — see :core:attachments) ---

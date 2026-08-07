@@ -6,6 +6,7 @@ import com.voxapps.calendarapp.domain.llm.CalendarEventParsePromptBuilder
 import com.voxapps.calendarapp.domain.llm.GeneratedParsedSchema
 import com.voxapps.calendarapp.domain.llm.LlmTasks
 import com.voxapps.calendarapp.domain.llm.PendingLlmRequestScheduler
+import com.voxapps.calendarapp.domain.subscription.CalendarSubscriptionSyncScheduler
 import com.voxapps.calendarapp.domain.widget.WidgetMidnightRefreshScheduler
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxSatelliteSchema
@@ -29,6 +30,7 @@ class CalendarApplication : Application() {
         container = CalendarContainer(this)
         PendingLlmRequestScheduler.ensureScheduled(this)
         WidgetMidnightRefreshScheduler.ensureScheduled(this)
+        CalendarSubscriptionSyncScheduler.ensureScheduled(this)
 
         // Apply the persisted debug-logging flags immediately (no lag waiting for the first
         // settingsFlow emission), then keep them in sync with any later Settings toggle.

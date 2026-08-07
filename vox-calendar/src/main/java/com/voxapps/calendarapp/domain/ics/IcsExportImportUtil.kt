@@ -12,7 +12,6 @@ import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
-import com.voxapps.calendarapp.data.CalendarLayerPalette
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.data.RecurrenceFrequency
 import java.io.InputStream
@@ -36,6 +35,11 @@ data class ParsedIcsEntry(
     val layerName: String?,
     val tags: List<String>
 )
+
+/** [suggestedName] is the source calendar's own name, pulled from the ICS `X-WR-CALNAME` property
+ *  when present — used to pre-fill the "new calendar" name field in [IcsSettingsTab]'s import-target
+ *  dialog, falling back to the picked file's own name when absent. */
+data class ParsedIcsFile(val suggestedName: String?, val entries: List<ParsedIcsEntry>)
 
 /**
  * Vox Calendar's own ICS import/export (its Settings screen, not Hub's JSON backup — the two are
@@ -91,8 +95,17 @@ object IcsExportImportUtil {
         Biweekly.write(ical).go(output)
     }
 
-    fun read(input: InputStream): List<ParsedIcsEntry> {
+    fun read(input: InputStream): List<ParsedIcsEntry> = parseEntries(Biweekly.parse(input).all())
+
+    /** Same parse as [read], plus the source calendar's own name (see [ParsedIcsFile]) — used by the
+     *  import-target dialog to pre-fill a "new calendar" name. */
+    fun readWithSuggestedName(input: InputStream): ParsedIcsFile {
         val icals = Biweekly.parse(input).all()
+        val suggestedName = icals.firstNotNullOfOrNull { it.getExperimentalProperty("X-WR-CALNAME")?.value }
+        return ParsedIcsFile(suggestedName, parseEntries(icals))
+    }
+
+    private fun parseEntries(icals: List<ICalendar>): List<ParsedIcsEntry> {
         val result = mutableListOf<ParsedIcsEntry>()
         icals.forEach { ical ->
             ical.events.forEach { event ->
@@ -146,32 +159,16 @@ object IcsExportImportUtil {
     }
 
     /**
-     * Resolves each parsed entry's layer by name (case-insensitive, create-if-missing — mirrors
-     * `ExpensesExportImportHandler`'s exact `nameToId[name.lowercase()]` merge-by-name pattern) and
-     * inserts it, preserving the ICS `UID` so re-importing the same file after a re-export stays
-     * stable rather than duplicating.
+     * Imports every [parsed] entry into exactly [targetLayerId], preserving the ICS `UID` so
+     * re-importing the same file after a re-export stays stable rather than duplicating — ignores
+     * each entry's own [ParsedIcsEntry.layerName]/`CATEGORIES` on purpose: the user explicitly picked
+     * one target calendar for this whole file (see [IcsSettingsTab]'s import-target dialog), and an
+     * ICS file represents one source calendar in practice, so per-entry category-based layer
+     * auto-matching was only ever an accidental side effect of the old design, not a deliberately used
+     * capability.
      */
-    suspend fun importEntries(repository: CalendarRepository, parsed: List<ParsedIcsEntry>) {
-        val layers = repository.layersSnapshot().toMutableList()
-        val nameToId = layers.associate { it.name.lowercase() to it.id }.toMutableMap()
-        val defaultLayerId = layers.firstOrNull { it.isDefault }?.id ?: layers.firstOrNull()?.id
-
+    suspend fun importEntriesIntoLayer(repository: CalendarRepository, parsed: List<ParsedIcsEntry>, targetLayerId: Long) {
         parsed.forEach { entry ->
-            val layerId = if (entry.layerName == null) {
-                defaultLayerId
-            } else {
-                nameToId[entry.layerName.lowercase()] ?: run {
-                    val newId = repository.addLayer(
-                        name = entry.layerName,
-                        colorArgb = CalendarLayerPalette.unusedOrRandomColor(layers.map { it.colorArgb }),
-                        position = layers.size
-                    )
-                    nameToId[entry.layerName.lowercase()] = newId
-                    layers.add(CalendarLayer(id = newId, name = entry.layerName, colorArgb = 0L, position = layers.size, createdAt = 0L))
-                    newId
-                }
-            } ?: return@forEach
-
             repository.addEntry(
                 uid = entry.uid,
                 type = entry.type,
@@ -185,7 +182,7 @@ object IcsExportImportUtil {
                 recurrenceFrequency = entry.recurrenceFrequency,
                 recurrenceInterval = entry.recurrenceInterval,
                 recurrenceUntilMillis = entry.recurrenceUntilMillis,
-                layerId = layerId,
+                layerId = targetLayerId,
                 tags = entry.tags
             )
         }

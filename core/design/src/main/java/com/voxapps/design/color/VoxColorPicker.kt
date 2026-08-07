@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -72,6 +73,10 @@ private val SWATCH_STACK_PEEK_ALPHAS = listOf(0.75f, 0.5f, 0.3f)
  * composition churns a lot on selection (e.g. reacting to a Room `Flow` write triggered by
  * [onColorSelected] itself) can instead hoist it via [expanded]/[onExpandedChange] so the flag lives
  * somewhere more stable than this composable's own slot.
+ *
+ * [shape] outlines every swatch (see [VoxSwatchShapes]) — circles by default. A caller can pass a
+ * different shape to give the whole picker a second meaning beyond color: vox-calendar passes
+ * [VoxSwatchShapes.Star] for the Main calendar, matching the star its sidebar dot switches to.
  */
 @Composable
 fun VoxColorSwatchPicker(
@@ -83,6 +88,7 @@ fun VoxColorSwatchPicker(
     expanded: Boolean? = null,
     onExpandedChange: ((Boolean) -> Unit)? = null,
     showSelectionRing: Boolean = true,
+    shape: Shape = CircleShape,
     customColorDialogTitle: String = "Custom color",
     customColorUseLabel: String = "Use this color",
     customColorCancelLabel: String = "Cancel",
@@ -118,7 +124,8 @@ fun VoxColorSwatchPicker(
                 VoxColorSwatch(
                     color = color,
                     selected = showSelectionRing && color == selectedColor,
-                    onClick = { onColorSelected(color) }
+                    onClick = { onColorSelected(color) },
+                    shape = shape
                 )
             }
             item {
@@ -130,7 +137,8 @@ fun VoxColorSwatchPicker(
             selectedColor = selectedColor,
             peekColors = presetColors.filter { it != selectedColor }.take(SWATCH_STACK_PEEK_ALPHAS.size),
             onClick = { setExpanded(true) },
-            modifier = modifier
+            modifier = modifier,
+            shape = shape
         )
     }
 
@@ -160,7 +168,8 @@ private fun CollapsedSwatchStack(
     selectedColor: Long,
     peekColors: List<Long>,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    shape: Shape = CircleShape
 ) {
     Box(
         modifier = modifier
@@ -173,14 +182,14 @@ private fun CollapsedSwatchStack(
                 modifier = Modifier
                     .offset(x = SWATCH_STACK_PEEK_OFFSET * (index + 1))
                     .size(SWATCH_OUTER_SIZE)
-                    .clip(CircleShape)
+                    .clip(shape)
                     .background(Color(color.toInt()).copy(alpha = SWATCH_STACK_PEEK_ALPHAS[index]))
             )
         }
         Box(
             modifier = Modifier
                 .size(SWATCH_OUTER_SIZE)
-                .clip(CircleShape)
+                .clip(shape)
                 .background(Color(selectedColor.toInt()))
         )
     }
@@ -191,18 +200,23 @@ private fun CollapsedSwatchStack(
  *  the solid color inward, leaving a visible gap — a genuine outline around the color rather than
  *  a border drawn on the color itself. */
 @Composable
-internal fun VoxColorSwatch(color: Long, selected: Boolean, onClick: () -> Unit) {
+internal fun VoxColorSwatch(
+    color: Long,
+    selected: Boolean,
+    onClick: () -> Unit,
+    shape: Shape = CircleShape
+) {
     Box(
         modifier = Modifier
             .size(SWATCH_OUTER_SIZE)
-            .then(if (selected) Modifier.border(SWATCH_RING_WIDTH, MaterialTheme.colorScheme.primary, CircleShape) else Modifier)
+            .then(if (selected) Modifier.border(SWATCH_RING_WIDTH, MaterialTheme.colorScheme.primary, shape) else Modifier)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
                 .size(if (selected) SWATCH_OUTER_SIZE - (SWATCH_RING_WIDTH + SWATCH_RING_GAP) * 2 else SWATCH_OUTER_SIZE)
-                .clip(CircleShape)
+                .clip(shape)
                 .background(Color(color.toInt()))
         )
     }

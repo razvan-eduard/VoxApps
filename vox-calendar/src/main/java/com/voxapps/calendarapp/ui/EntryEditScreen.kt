@@ -107,7 +107,9 @@ import com.voxapps.calendarapp.data.CalendarEntrySanitizer
 import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
+import com.voxapps.calendarapp.data.CalendarLayerKind
 import com.voxapps.calendarapp.data.RecurrenceFrequency
+import com.voxapps.calendarapp.data.ReminderOffsetsCodec
 import com.voxapps.calendarapp.domain.localization.LanguageManager
 import com.voxapps.calendarapp.domain.reminders.ReminderScheduler
 import com.voxapps.calendarapp.state.CalendarStateManager
@@ -138,16 +140,6 @@ private val IMPORTANT_TOGGLE_OFF_COLOR = Color(0xFF8B1A1A)
  *  plain Material Checkbox. */
 private val DONE_CHECK_COLOR = Color(0xFF2E7D32)
 
-/** offsetMinutesBefore -> translation key. v1 preset set only (see plan) — no custom-minutes input. */
-private val REMINDER_PRESETS = listOf(
-    0 to "reminder_at_start",
-    5 to "reminder_5min",
-    15 to "reminder_15min",
-    30 to "reminder_30min",
-    60 to "reminder_1hour",
-    1440 to "reminder_1day"
-)
-
 private data class PendingCleanup(val entry: CalendarEntry, val tags: List<String>, val dirtyFields: List<DirtyField>)
 
 /** Deletes every staged-but-unlinked attachment file for a new entry that's discarded (screen closed
@@ -177,6 +169,7 @@ private fun entryFieldLabel(languageManager: LanguageManager, fieldKey: String):
 fun EntryEditScreen(
     existing: CalendarEntryWithTags?,
     defaultLayer: CalendarLayer,
+    layers: List<CalendarLayer>,
     stateManager: CalendarStateManager,
     availableTags: List<String>,
     onDone: () -> Unit
@@ -184,6 +177,24 @@ fun EntryEditScreen(
     val languageManager = LocalLanguageManager.current
     val zoneId = ZoneId.systemDefault()
     val context = LocalContext.current
+
+    // The entry's own calendar — starts out matching the existing entry (or defaultLayer for a
+    // brand-new one), but tracks selectedLayerId live so switching the picker below immediately
+    // reflects any calendar-level reminder override for the newly-chosen calendar too.
+    var selectedLayerId by remember { mutableStateOf(existing?.entry?.layerId ?: defaultLayer.id) }
+    var layerMenuExpanded by remember { mutableStateOf(false) }
+    val currentLayer = remember(selectedLayerId, layers) {
+        layers.firstOrNull { it.id == selectedLayerId } ?: defaultLayer
+    }
+    val calendarReminderOffsets = remember(currentLayer) {
+        ReminderOffsetsCodec.decode(currentLayer.reminderOffsetsMinutes)
+    }
+    val remindersOverriddenByCalendar = calendarReminderOffsets.isNotEmpty()
+    // A subscribed calendar's entries are view-only end-to-end (see the plan's confirmed decision) —
+    // your own edits would just be overwritten by the next sync anyway. Reminders are the one
+    // exception (gated separately above), since a reminder is device-local, not calendar content.
+    val isReadOnly = existing != null && currentLayer.kind == CalendarLayerKind.SUBSCRIBED
+    val selectableLayers = remember(layers) { layers.filter { it.kind == CalendarLayerKind.LOCAL } }
 
     var type by remember { mutableStateOf(existing?.entry?.type ?: CalendarEntryType.EVENT) }
     var title by remember { mutableStateOf(existing?.entry?.title ?: "") }
@@ -235,9 +246,13 @@ fun EntryEditScreen(
     // EntryAttachmentsSection instead).
     var pendingAttachments by remember { mutableStateOf<List<String>>(emptyList()) }
 
+    // Reads the entry's own INDIVIDUAL preference, not whatever's currently scheduled — the two only
+    // differ while a calendar-level override is active (see ReminderOffsetsCodec/CalendarLayer's doc
+    // comment), in which case the picker below is disabled and pre-checked to the calendar's own
+    // offsets instead, so reading the individual value here is still correct either way.
     LaunchedEffect(existing?.entry?.id) {
-        val entryId = existing?.entry?.id ?: return@LaunchedEffect
-        reminderOffsets.addAll(stateManager.getRemindersForEntry(entryId).map { it.offsetMinutesBefore })
+        val offsets = ReminderOffsetsCodec.decode(existing?.entry?.individualReminderOffsetsMinutes)
+        reminderOffsets.addAll(offsets)
     }
 
     // Granting the exact-alarm permission happens in system Settings, outside this screen — recheck
@@ -291,6 +306,12 @@ fun EntryEditScreen(
     // just closes without writing anything, matching the old Save button's `enabled = title.isNotBlank()`
     // guard instead of silently creating an empty-titled entry.
     fun attemptSaveAndClose() {
+        // A subscribed calendar's entry is view-only end-to-end — nothing typed/toggled here (other
+        // than the reminders section, which saves through its own separate path) is ever persisted.
+        if (isReadOnly) {
+            onDone()
+            return
+        }
         if (title.isBlank() || isTimeRangeInvalid) {
             // Nothing will ever link these now — a no-op when editing an existing entry, since
             // pendingAttachments is only ever populated for a new, not-yet-saved one.
@@ -320,7 +341,8 @@ fun EntryEditScreen(
             isImportant = important,
             recurrenceFrequency = recurrence,
             recurrenceInterval = recurrenceInterval,
-            recurrenceUntilMillis = recurrenceUntilMillis
+            recurrenceUntilMillis = recurrenceUntilMillis,
+            layerId = selectedLayerId
         )
         when (val decision = CalendarEntrySanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
             is SaveDecision.Proceed -> {
@@ -360,6 +382,7 @@ fun EntryEditScreen(
                         BasicTextField(
                             value = title,
                             onValueChange = { title = it },
+                            readOnly = isReadOnly,
                             singleLine = true,
                             textStyle = MaterialTheme.typography.titleLarge.copy(color = LocalContentColor.current),
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -373,13 +396,15 @@ fun EntryEditScreen(
                     }
                 },
                 actions = {
-                    if (existing != null) {
-                        IconButton(onClick = { showDeleteConfirm = true }) {
-                            Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
+                    if (!isReadOnly) {
+                        if (existing != null) {
+                            IconButton(onClick = { showDeleteConfirm = true }) {
+                                Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
+                            }
                         }
-                    }
-                    IconButton(onClick = ::attemptSaveAndClose, enabled = title.isNotBlank() && !isTimeRangeInvalid) {
-                        Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
+                        IconButton(onClick = ::attemptSaveAndClose, enabled = title.isNotBlank() && !isTimeRangeInvalid) {
+                            Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
+                        }
                     }
                 }
             )
@@ -389,14 +414,25 @@ fun EntryEditScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (isReadOnly) {
+                item {
+                    Text(
+                        languageManager.getString("entry_subscribed_read_only_note"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
+                        enabled = !isReadOnly,
                         selected = type == CalendarEntryType.EVENT,
                         onClick = { type = CalendarEntryType.EVENT },
                         label = { Text(languageManager.getString("entry_type_event")) }
                     )
                     FilterChip(
+                        enabled = !isReadOnly,
                         selected = type == CalendarEntryType.TASK,
                         onClick = { type = CalendarEntryType.TASK },
                         label = { Text(languageManager.getString("entry_type_task")) }
@@ -405,8 +441,14 @@ fun EntryEditScreen(
             }
 
             if (existing?.entry?.id != null) {
-                item {
-                    EntryAttachmentsSection(existing.entry.id, stateManager)
+                // A subscribed entry is view-only end-to-end — attachments write directly to the DB
+                // as soon as you add/remove one (unlike every other field here, which only takes
+                // effect through the now-hidden Save button), so this section is skipped entirely
+                // rather than merely visually disabled.
+                if (!isReadOnly) {
+                    item {
+                        EntryAttachmentsSection(existing.entry.id, stateManager)
+                    }
                 }
             } else {
                 item {
@@ -425,14 +467,44 @@ fun EntryEditScreen(
                         value = description,
                         onValueChange = { description = it },
                         singleLine = false,
-                        minLines = 2
+                        minLines = 2,
+                        enabled = !isReadOnly
                     )
-                    PaperField(label = languageManager.getString("entry_location"), value = location, onValueChange = { location = it })
-                    Text(
-                        text = "${languageManager.getString("entry_layer")}: ${defaultLayer.name}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    PaperField(
+                        label = languageManager.getString("entry_location"),
+                        value = location,
+                        onValueChange = { location = it },
+                        enabled = !isReadOnly
                     )
+                    if (isReadOnly) {
+                        Text(
+                            text = "${languageManager.getString("entry_layer")}: ${currentLayer.name}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Box {
+                            PaperTapField(
+                                label = languageManager.getString("entry_layer"),
+                                value = currentLayer.name,
+                                onClick = { layerMenuExpanded = true },
+                                trailingIcon = {
+                                    Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            )
+                            DropdownMenu(expanded = layerMenuExpanded, onDismissRequest = { layerMenuExpanded = false }) {
+                                selectableLayers.forEach { layer ->
+                                    DropdownMenuItem(
+                                        text = { Text(layer.name) },
+                                        onClick = {
+                                            selectedLayerId = layer.id
+                                            layerMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -445,6 +517,7 @@ fun EntryEditScreen(
                             label = languageManager.getString(if (type == CalendarEntryType.EVENT) "entry_start_date" else "entry_due_date"),
                             value = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(startMillis)),
                             onClick = { showStartDatePicker = true },
+                            enabled = !isReadOnly,
                             modifier = Modifier.weight(1f)
                         )
                         if (!allDay) {
@@ -452,6 +525,7 @@ fun EntryEditScreen(
                                 label = languageManager.getString("entry_start_time"),
                                 value = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(startMillis)),
                                 onClick = { showStartTimePicker = true },
+                                enabled = !isReadOnly,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -462,7 +536,7 @@ fun EntryEditScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Checkbox(checked = allDay, onCheckedChange = { checked ->
+                            Checkbox(checked = allDay, enabled = !isReadOnly, onCheckedChange = { checked ->
                                 allDay = checked
                                 if (checked) {
                                     startMillis = startOfDay(startMillis, zoneId)
@@ -482,6 +556,7 @@ fun EntryEditScreen(
                                     value = endMillis?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
                                         ?: languageManager.getString("none"),
                                     onClick = { showEndDatePicker = true },
+                                    enabled = !isReadOnly,
                                     modifier = Modifier.weight(1f)
                                 )
                                 if (!allDay) {
@@ -490,12 +565,13 @@ fun EntryEditScreen(
                                         value = endMillis?.let { DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it)) }
                                             ?: languageManager.getString("none"),
                                         onClick = { if (endMillis == null) endMillis = startMillis; showEndTimePicker = true },
+                                        enabled = !isReadOnly,
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
                             }
-                            
-                            if (endMillis != null) {
+
+                            if (endMillis != null && !isReadOnly) {
                                 IconButton(
                                     onClick = { endMillis = null },
                                     modifier = Modifier.padding(start = 8.dp)
@@ -521,7 +597,7 @@ fun EntryEditScreen(
                     } else {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().clickable { completed = !completed }
+                            modifier = Modifier.fillMaxWidth().clickable(enabled = !isReadOnly) { completed = !completed }
                         ) {
                             Icon(
                                 if (completed) Icons.Filled.CheckCircle else Icons.Filled.CheckCircleOutline,
@@ -538,7 +614,7 @@ fun EntryEditScreen(
                             if (important) Icons.Filled.Star else Icons.Filled.StarBorder,
                             contentDescription = null,
                             tint = if (important) IMPORTANT_TOGGLE_ON_COLOR else IMPORTANT_TOGGLE_OFF_COLOR,
-                            modifier = Modifier.clickable { important = !important }
+                            modifier = Modifier.clickable(enabled = !isReadOnly) { important = !important }
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(languageManager.getString("todo_important_event"), modifier = Modifier.weight(1f))
@@ -549,6 +625,7 @@ fun EntryEditScreen(
                             label = languageManager.getString("entry_recurrence"),
                             value = languageManager.getString(recurrenceLabelKey(recurrence)),
                             onClick = { recurrenceMenuExpanded = true },
+                            enabled = !isReadOnly,
                             trailingIcon = {
                                 Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             }
@@ -574,14 +651,17 @@ fun EntryEditScreen(
                             )
                             IconButton(
                                 onClick = { recurrenceInterval = (recurrenceInterval - 1).coerceAtLeast(1) },
-                                enabled = recurrenceInterval > 1
+                                enabled = !isReadOnly && recurrenceInterval > 1
                             ) { Icon(Icons.Filled.Remove, contentDescription = null) }
                             Text(
                                 recurrenceInterval.toString(),
                                 modifier = Modifier.widthIn(min = 24.dp),
                                 textAlign = TextAlign.Center
                             )
-                            IconButton(onClick = { recurrenceInterval = (recurrenceInterval + 1).coerceAtMost(365) }) {
+                            IconButton(
+                                onClick = { recurrenceInterval = (recurrenceInterval + 1).coerceAtMost(365) },
+                                enabled = !isReadOnly
+                            ) {
                                 Icon(Icons.Filled.Add, contentDescription = null)
                             }
                             Text(languageManager.getString(recurrenceIntervalUnitKey(recurrence)))
@@ -592,7 +672,8 @@ fun EntryEditScreen(
                             label = languageManager.getString("entry_recurrence_until"),
                             value = recurrenceUntilMillis?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
                                 ?: languageManager.getString("entry_recurrence_forever"),
-                            onClick = { showUntilDatePicker = true }
+                            onClick = { showUntilDatePicker = true },
+                            enabled = !isReadOnly
                         )
                     }
                 }
@@ -608,19 +689,26 @@ fun EntryEditScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        REMINDER_PRESETS.forEach { (offset, labelKey) ->
-                            FilterChip(
-                                selected = offset in reminderOffsets,
-                                onClick = {
-                                    if (offset in reminderOffsets) reminderOffsets.remove(offset) else reminderOffsets.add(offset)
-                                },
-                                label = { Text(languageManager.getString(labelKey)) }
-                            )
-                        }
+                    if (remindersOverriddenByCalendar) {
+                        Text(
+                            languageManager.getString("reminder_set_by_calendar_note"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        ReminderOffsetsPicker(
+                            selected = calendarReminderOffsets,
+                            onToggle = {},
+                            languageManager = languageManager,
+                            enabled = false
+                        )
+                    } else {
+                        ReminderOffsetsPicker(
+                            selected = reminderOffsets,
+                            onToggle = { offset ->
+                                if (offset in reminderOffsets) reminderOffsets.remove(offset) else reminderOffsets.add(offset)
+                            },
+                            languageManager = languageManager
+                        )
                     }
                     if (!canScheduleExactAlarms) {
                         Column {
@@ -1081,7 +1169,8 @@ private fun PaperField(
     singleLine: Boolean = true,
     minLines: Int = 1,
     valueColor: Color = MaterialTheme.colorScheme.primary,
-    dividerColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    dividerColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+    enabled: Boolean = true
 ) {
     Column(modifier = modifier) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1096,7 +1185,8 @@ private fun PaperField(
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = valueColor),
+                readOnly = !enabled,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = if (enabled) valueColor else valueColor.copy(alpha = 0.5f)),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 keyboardOptions = keyboardOptions,
                 singleLine = singleLine,
@@ -1115,9 +1205,10 @@ private fun PaperTapField(
     value: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     trailingIcon: @Composable () -> Unit = {}
 ) {
-    Column(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    Column(modifier = modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick)) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1126,10 +1217,10 @@ private fun PaperTapField(
             Text(
                 value,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
+                color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                 modifier = Modifier.weight(1f)
             )
-            trailingIcon()
+            if (enabled) trailingIcon()
         }
         Spacer(Modifier.height(4.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), thickness = 1.dp)
