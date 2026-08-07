@@ -1,6 +1,7 @@
 package com.voxapps.vision.data
 
 import android.content.Context
+import com.voxapps.vision.BuildConfig
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,10 +51,10 @@ object NativeLibManager {
     enum class Status { IDLE, CHECKING, DOWNLOADING, READY, ERROR }
 
     private fun getLibDir(context: Context): File =
-        File(context.filesDir, "$LIB_DIR_PREFIX${getReleaseTag(context)}")
+        File(context.filesDir, "$LIB_DIR_PREFIX${getReleaseTag()}")
 
     private fun cleanupOldVersions(context: Context) {
-        val currentDirName = "$LIB_DIR_PREFIX${getReleaseTag(context)}"
+        val currentDirName = "$LIB_DIR_PREFIX${getReleaseTag()}"
         context.filesDir.listFiles()?.forEach { file ->
             if (file.isDirectory && file.name.startsWith(LIB_DIR_PREFIX) && file.name != currentDirName) {
                 Logger.d(TAG, "Cleaning up old native libs version: ${file.name}")
@@ -66,14 +67,19 @@ object NativeLibManager {
         }
     }
 
-    private fun getReleaseTag(context: Context): String {
-        return try {
-            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            "vision-v${pInfo.versionName}"
-        } catch (e: Exception) {
-            "vision-v0.3" // Current fallback
-        }
-    }
+    /**
+     * The release these libs are published under — always this exact build's own tag, since the
+     * OpenCV set in [ESSENTIAL_LIBS] is version-specific and libs from a different release are not
+     * interchangeable.
+     *
+     * [BuildConfig.VERSION_NAME] rather than a PackageManager lookup: it's a compile-time constant
+     * baked from the same `versionName` the release tag is derived from (see
+     * `.github/actions/compute-release-tag`), so it cannot throw and cannot disagree with the running
+     * build. The old form queried PackageManager at runtime and therefore needed a catch — which
+     * hardcoded `vision-v0.3`, a release that does not exist at all, so that path could only ever
+     * have 404'd.
+     */
+    private fun getReleaseTag(): String = "vision-v${BuildConfig.VERSION_NAME}"
 
     /**
      * Verifies that all libs are present AND have non-zero size.
@@ -130,7 +136,7 @@ object NativeLibManager {
         if (!libDir.exists()) libDir.mkdirs()
 
         val client = OkHttpClient()
-        val tag = getReleaseTag(context)
+        val tag = getReleaseTag()
         var completed = 0
 
         for (libName in ESSENTIAL_LIBS) {

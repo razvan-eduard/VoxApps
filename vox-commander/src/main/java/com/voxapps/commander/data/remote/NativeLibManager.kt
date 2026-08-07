@@ -1,6 +1,7 @@
 package com.voxapps.commander.data.remote
 
 import android.content.Context
+import com.voxapps.commander.BuildConfig
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,17 +39,23 @@ object NativeLibManager {
         "libsherpa-onnx-jni.so"
     )
 
-    private fun getReleaseTag(context: Context): String {
-        return try {
-            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            "commander-v${pInfo.versionName}"
-        } catch (e: Exception) {
-            "commander-v0.5-beta" // Fallback
-        }
-    }
+    /**
+     * The release these libs are published under — always this exact build's own tag, since
+     * [ESSENTIAL_LIBS] is version-specific (this app's set changed from
+     * `libllm_inference_engine_jni.so` to `liblitertlm_jni.so` at the LiteRT-LM migration, so libs
+     * from a *different* release are not interchangeable).
+     *
+     * [BuildConfig.VERSION_NAME] rather than a PackageManager lookup: it's a compile-time constant
+     * baked from the same `versionName` the release tag is derived from (see
+     * `.github/actions/compute-release-tag`), so it cannot throw and cannot disagree with the running
+     * build. The old form queried PackageManager at runtime and therefore needed a catch — which
+     * hardcoded `commander-v0.5-beta`, a release whose lib set no longer matches [ESSENTIAL_LIBS],
+     * so that path would have 404'd had it ever run.
+     */
+    private fun getReleaseTag(): String = "commander-v${BuildConfig.VERSION_NAME}"
 
-    private fun getDownloadUrl(context: Context, libName: String): String {
-        return "$RELEASE_BASE${getReleaseTag(context)}/$libName"
+    private fun getDownloadUrl(libName: String): String {
+        return "$RELEASE_BASE${getReleaseTag()}/$libName"
     }
 
     private val _downloadProgress = MutableStateFlow(0f)
@@ -114,7 +121,7 @@ object NativeLibManager {
                 continue
             }
 
-            val url = getDownloadUrl(context, libName)
+            val url = getDownloadUrl(libName)
             Logger.log("Downloading essential lib: $libName from $url", TAG)
 
             try {

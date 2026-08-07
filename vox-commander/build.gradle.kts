@@ -111,6 +111,9 @@ android {
     }
     buildFeatures {
         compose = true
+        // NativeLibManager builds its DLC download URL from BuildConfig.VERSION_NAME — a
+        // compile-time constant that can't disagree with the running build (see its doc comment).
+        buildConfig = true
     }
     
     packaging {
