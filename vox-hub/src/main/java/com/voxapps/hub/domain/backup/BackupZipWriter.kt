@@ -27,9 +27,12 @@ object BackupZipWriter {
         outputStream: OutputStream,
         contentResolver: ContentResolver,
         perDomainJson: Map<String, String>,
-        attachmentZipEntries: Map<String, String>
+        attachmentZipEntries: Map<String, String>,
+        /** Labels of selected apps that contributed nothing — recorded inside export.json so the
+         *  archive itself says it is partial. See ExportImportUtil.buildExportDocument. */
+        missingApps: List<String> = emptyList()
     ) {
-        val document = ExportImportUtil.buildExportDocument(perDomainJson)
+        val document = ExportImportUtil.buildExportDocument(perDomainJson, missingApps)
         ZipOutputStream(outputStream).use { zos ->
             zos.putNextEntry(ZipEntry("export.json"))
             zos.write(document.toByteArray())

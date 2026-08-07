@@ -13,6 +13,7 @@
   "hub_import_section": "Import",
   "hub_import_button": "Alege fișierul de importat",
   "hub_import_confirm_title": "Imporți aceste date?",
+  "hub_import_partial_warning": "Acest backup e incomplet — a fost salvat fără: %1$s",
   "hub_import_apply_button": "Importă",
   "hub_import_no_matching_apps": "Acest fișier nu corespunde niciunei aplicații Vox instalate.",
   "hub_import_invalid_file": "Fișierul nu a putut fi citit ca export Vox.",
@@ -22,6 +23,8 @@
   "hub_prewarm_message": "%1$s nu au fost deschise încă (sau au fost oprite forțat), așa că nu au răspuns la cererea de backup. Lasă Hub să deschidă doar aceste aplicații și încearcă din nou, sau salvează backup-ul cu ce s-a reușit deja.",
   "hub_prewarm_flash_button": "Deschide aplicațiile automat",
   "hub_prewarm_skip_button": "Salvează fără a reîncerca",
+  "hub_prewarm_retry_title": "Tot nu răspund",
+  "hub_prewarm_retry_message": "%1$s tot nu au răspuns după ce au fost deschise. Mai încearcă o dată, sau salvează un backup fără ele — arhiva va consemna ce aplicații lipsesc.",
   "hub_status_timeout": "Fără răspuns",
   "cancel": "Anulează",
   "save": "Salvează",
@@ -61,7 +64,8 @@
   "theme_light": "Luminos",
   "theme_dark": "Întunecat",
   "theme_colored": "Colorat (Material You)",
-  "theme_colored_desc": "Folosește culorile dinamice ale sistemului (Android 12+)",  "backup_schedule_section": "Program de backup",
+  "theme_colored_desc": "Folosește culorile dinamice ale sistemului (Android 12+)",
+  "backup_schedule_section": "Program de backup",
   "backup_schedule_uses_main_screen_config": "Folosește selecția Setări/Date/Chei API/Atașamente configurată pentru fiecare aplicație pe ecranul principal.",
   "backup_schedule_nothing_selected": "Nimic nu e selectat pe ecranul principal — programarea e dezactivată până când cel puțin o aplicație are ceva activat.",
   "backup_frequency_off": "Oprit",
@@ -98,7 +102,6 @@
   "no_logs": "Niciun log disponibil",
   "copy_button": "Copiază",
   "share_button": "Partajează",
-
   "sync_title": "Sincronizare dispozitive",
   "sync_pair_button": "Asociază dispozitiv nou",
   "sync_waiting_for_tap": "Ține telefonul lângă celălalt dispozitiv…",
@@ -118,5 +121,4 @@
   "sync_scope_button": "Ce se sincronizează",
   "sync_scope_title": "Ce se sincronizează cu %1$s",
   "sync_scope_no_categories": "Nicio categorie găsită pentru această aplicație"
-
 }

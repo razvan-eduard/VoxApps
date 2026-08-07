@@ -13,6 +13,7 @@
   "hub_import_section": "Import",
   "hub_import_button": "Datei zum Importieren auswählen",
   "hub_import_confirm_title": "Diese Daten importieren?",
+  "hub_import_partial_warning": "Diese Sicherung ist unvollständig — sie wurde ohne %1$s gespeichert",
   "hub_import_apply_button": "Importieren",
   "hub_import_no_matching_apps": "Diese Datei passt zu keiner installierten Vox-App.",
   "hub_import_invalid_file": "Diese Datei konnte nicht als Vox-Export gelesen werden.",
@@ -22,6 +23,8 @@
   "hub_prewarm_message": "%1$s wurden noch nicht geöffnet (oder wurden beendet), daher haben sie nicht auf die Sicherungsanfrage reagiert. Lassen Sie Hub nur diese Apps öffnen und erneut versuchen, oder speichern Sie die Sicherung mit dem bereits Erfolgten.",
   "hub_prewarm_flash_button": "Apps automatisch öffnen",
   "hub_prewarm_skip_button": "Ohne erneuten Versuch speichern",
+  "hub_prewarm_retry_title": "Reagiert weiterhin nicht",
+  "hub_prewarm_retry_message": "%1$s hat auch nach dem Öffnen nicht geantwortet. Versuche es erneut oder sichere ohne diese Apps — das Archiv vermerkt, welche Apps fehlen.",
   "hub_status_timeout": "Keine Antwort",
   "cancel": "Abbrechen",
   "save": "Speichern",
@@ -61,7 +64,8 @@
   "theme_light": "Hell",
   "theme_dark": "Dunkel",
   "theme_colored": "Farbig (Material You)",
-  "theme_colored_desc": "Dynamische Systemfarben verwenden (Android 12+)",  "backup_schedule_section": "Sicherungszeitplan",
+  "theme_colored_desc": "Dynamische Systemfarben verwenden (Android 12+)",
+  "backup_schedule_section": "Sicherungszeitplan",
   "backup_schedule_uses_main_screen_config": "Verwendet die Auswahl von Einstellungen/Daten/API-Schlüsseln/Anhängen, die für jede App auf dem Hauptbildschirm konfiguriert ist.",
   "backup_schedule_nothing_selected": "Auf dem Hauptbildschirm ist nichts ausgewählt — die Planung ist deaktiviert, bis mindestens eine App etwas aktiviert hat.",
   "backup_frequency_off": "Aus",
@@ -98,7 +102,6 @@
   "no_logs": "Keine Logs verfügbar",
   "copy_button": "Kopieren",
   "share_button": "Teilen",
-
   "sync_title": "Geräte-Synchronisierung",
   "sync_pair_button": "Neues Gerät koppeln",
   "sync_waiting_for_tap": "Halte dieses Telefon an das andere Gerät…",
@@ -118,5 +121,4 @@
   "sync_scope_button": "Sync-Bereich",
   "sync_scope_title": "Was mit %1$s synchronisiert wird",
   "sync_scope_no_categories": "Keine Kategorien für diese App gefunden"
-
 }

@@ -95,7 +95,10 @@ class BackupWorker(
             val outFile = File(backupsDir, fileName)
             try {
                 FileOutputStream(outFile).use { out ->
-                    BackupZipWriter.write(out, applicationContext.contentResolver, perDomainJson, attachmentZipEntries)
+                    BackupZipWriter.write(
+                        out, applicationContext.contentResolver, perDomainJson, attachmentZipEntries,
+                        missingApps = missingLabels
+                    )
                 }
             } catch (e: IOException) {
                 outFile.delete()

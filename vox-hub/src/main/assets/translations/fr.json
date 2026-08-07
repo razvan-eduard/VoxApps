@@ -13,6 +13,7 @@
   "hub_import_section": "Import",
   "hub_import_button": "Choisir le fichier à importer",
   "hub_import_confirm_title": "Importer ces données ?",
+  "hub_import_partial_warning": "Cette sauvegarde est incomplète — elle a été enregistrée sans : %1$s",
   "hub_import_apply_button": "Importer",
   "hub_import_no_matching_apps": "Ce fichier ne correspond à aucune application Vox installée.",
   "hub_import_invalid_file": "Impossible de lire ce fichier comme un export Vox.",
@@ -22,6 +23,8 @@
   "hub_prewarm_message": "%1$s n'ont pas encore été ouvertes (ou ont été arrêtées de force), elles n'ont donc pas répondu à la demande de sauvegarde. Laissez Hub ouvrir uniquement ces applications et réessayer, ou enregistrez la sauvegarde avec ce qui a déjà réussi.",
   "hub_prewarm_flash_button": "Ouvrir les applications automatiquement",
   "hub_prewarm_skip_button": "Enregistrer sans réessayer",
+  "hub_prewarm_retry_title": "Toujours aucune réponse",
+  "hub_prewarm_retry_message": "%1$s n'a toujours pas répondu après ouverture. Réessayez, ou enregistrez une sauvegarde sans ces applications — l'archive indiquera lesquelles manquent.",
   "hub_status_timeout": "Aucune réponse",
   "cancel": "Annuler",
   "save": "Enregistrer",
@@ -61,7 +64,8 @@
   "theme_light": "Clair",
   "theme_dark": "Sombre",
   "theme_colored": "Coloré (Material You)",
-  "theme_colored_desc": "Utiliser les couleurs dynamiques du système (Android 12+)",  "backup_schedule_section": "Planification des sauvegardes",
+  "theme_colored_desc": "Utiliser les couleurs dynamiques du système (Android 12+)",
+  "backup_schedule_section": "Planification des sauvegardes",
   "backup_schedule_uses_main_screen_config": "Utilise la sélection Paramètres/Données/Clés API/Pièces jointes configurée pour chaque application sur l'écran principal.",
   "backup_schedule_nothing_selected": "Rien n'est sélectionné sur l'écran principal — la planification est désactivée tant qu'aucune application n'a d'option activée.",
   "backup_frequency_off": "Désactivé",
@@ -98,7 +102,6 @@
   "no_logs": "Aucun log disponible",
   "copy_button": "Copier",
   "share_button": "Partager",
-
   "sync_title": "Synchronisation des appareils",
   "sync_pair_button": "Associer un nouvel appareil",
   "sync_waiting_for_tap": "Approchez ce téléphone de l'autre appareil…",
@@ -118,5 +121,4 @@
   "sync_scope_button": "Portée de synchronisation",
   "sync_scope_title": "Ce qui se synchronise avec %1$s",
   "sync_scope_no_categories": "Aucune catégorie trouvée pour cette application"
-
 }

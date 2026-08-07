@@ -13,6 +13,7 @@
   "hub_import_section": "Import",
   "hub_import_button": "Choose file to import",
   "hub_import_confirm_title": "Import this data?",
+  "hub_import_partial_warning": "This backup is incomplete — it was saved without: %1$s",
   "hub_import_apply_button": "Import",
   "hub_import_no_matching_apps": "This file doesn't match any installed Vox app.",
   "hub_import_invalid_file": "Couldn't read that file as a Vox export.",
@@ -22,6 +23,8 @@
   "hub_prewarm_message": "%1$s haven't been opened yet (or were Force Stopped), so they didn't respond to the backup request. Let Hub open just those apps and retry, or save the backup with what already succeeded.",
   "hub_prewarm_flash_button": "Open apps automatically",
   "hub_prewarm_skip_button": "Save without retrying",
+  "hub_prewarm_retry_title": "Still not responding",
+  "hub_prewarm_retry_message": "%1$s still didn't respond after being opened. Try once more, or save a backup without them — the archive will record which apps are missing.",
   "hub_status_timeout": "No response",
   "cancel": "Cancel",
   "save": "Save",
@@ -61,7 +64,8 @@
   "theme_light": "Light",
   "theme_dark": "Dark",
   "theme_colored": "Colored (Material You)",
-  "theme_colored_desc": "Use system dynamic colors (Android 12+)",  "backup_schedule_section": "Backup schedule",
+  "theme_colored_desc": "Use system dynamic colors (Android 12+)",
+  "backup_schedule_section": "Backup schedule",
   "backup_schedule_uses_main_screen_config": "Uses the Settings/Data/API keys/Attachments selection configured for each app on the main screen.",
   "backup_schedule_nothing_selected": "Nothing is selected on the main screen — scheduling is disabled until at least one app has something turned on.",
   "backup_frequency_off": "Off",
@@ -98,7 +102,6 @@
   "no_logs": "No logs available",
   "copy_button": "Copy",
   "share_button": "Share",
-
   "sync_title": "Device sync",
   "sync_pair_button": "Pair new device",
   "sync_waiting_for_tap": "Hold this phone near the other device…",
@@ -118,5 +121,4 @@
   "sync_scope_button": "Sync scope",
   "sync_scope_title": "What syncs with %1$s",
   "sync_scope_no_categories": "No categories found for this app"
-
 }

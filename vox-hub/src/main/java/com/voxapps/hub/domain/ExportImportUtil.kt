@@ -1,11 +1,12 @@
 package com.voxapps.hub.domain
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
  * Pure JSON assembly/parsing for the combined export document, extracted from the UI so it's
  * unit-testable without Android. Document shape:
- * `{ "exported_at": <millis>, "schema_version": 1, "apps": { "<domain>": {...per-app payload...} } }`
+ * `{ "exported_at": <millis>, "schema_version": 1, "missing_apps": [...], "apps": { "<domain>": {...} } }`
  * — `<domain>` matches the same string each satellite advertises via `com.voxapps.vox.domain`
  * meta-data (e.g. "notes", "expenses"), so the export/import side and NLU-routing side agree on
  * naming for free.
@@ -13,11 +14,24 @@ import org.json.JSONObject
 object ExportImportUtil {
     const val SCHEMA_VERSION = 1
 
-    /** [appsData] maps domain -> that app's raw [com.voxapps.ipc.VoxResult.text] JSON from OP_EXPORT. */
-    fun buildExportDocument(appsData: Map<String, String>): String {
+    private const val KEY_MISSING_APPS = "missing_apps"
+
+    /**
+     * @param appsData domain -> that app's raw [com.voxapps.ipc.VoxResult.text] JSON from OP_EXPORT.
+     * @param missingApps labels of apps that were *selected* for this backup but produced nothing —
+     *   unreachable, or their export failed. Recorded in the document itself, not just in the UI of
+     *   the moment: a backup missing an app is otherwise indistinguishable from a complete one once
+     *   the screen is dismissed, and the file may be restored months later on another device. Read
+     *   back by [missingAppsIn] and shown before an import runs.
+     *
+     * Additive and optional — a document written before this field existed simply has no
+     * `missing_apps` key and reads back as an empty list, so [SCHEMA_VERSION] is unchanged.
+     */
+    fun buildExportDocument(appsData: Map<String, String>, missingApps: List<String> = emptyList()): String {
         val root = JSONObject()
         root.put("exported_at", System.currentTimeMillis())
         root.put("schema_version", SCHEMA_VERSION)
+        if (missingApps.isNotEmpty()) root.put(KEY_MISSING_APPS, JSONArray(missingApps))
         val appsObj = JSONObject()
         for ((domain, json) in appsData) {
             appsObj.put(domain, JSONObject(json))
@@ -39,6 +53,13 @@ object ExportImportUtil {
         return appsObj.keys().asSequence().associateWith { key ->
             appsObj.getJSONObject(key).apply { put("exported_at", exportedAt) }
         }
+    }
+
+    /** Labels recorded by [buildExportDocument] for apps that were selected but contributed nothing.
+     *  Empty for a complete backup, and for any document written before the field existed. */
+    fun missingAppsIn(text: String): List<String> {
+        val arr = JSONObject(text).optJSONArray(KEY_MISSING_APPS) ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
     }
 
     /** Per-domain record counts for the confirm-before-import summary UI (e.g. "42 notes, 3 categories"). */
