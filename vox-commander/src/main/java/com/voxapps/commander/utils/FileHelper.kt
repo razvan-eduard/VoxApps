@@ -23,12 +23,15 @@ object FileHelper {
      */
     fun copyUriToInternal(context: Context, uri: Uri, targetName: String): String? {
         return try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+            // `use` on both, not close() after copyTo — copyTo is by far the likeliest call here to
+            // throw (source unreadable mid-read, target volume full), and the old form leaked BOTH
+            // descriptors when it did, since neither close() was ever reached.
             val file = File(context.getExternalFilesDir(null), targetName)
-            val outputStream = FileOutputStream(file)
-            inputStream.copyTo(outputStream)
-            inputStream.close()
-            outputStream.close()
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(file).use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return null
             file.absolutePath
         } catch (e: Exception) {
             Logger.log("copyUriToInternal failed: ${e.message}", Strings.Tags.FILE_HELPER)

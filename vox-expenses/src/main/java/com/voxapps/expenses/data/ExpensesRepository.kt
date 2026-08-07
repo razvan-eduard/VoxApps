@@ -13,8 +13,10 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 /** [ExpensesRepository.addExpense]'s return value when the insert was skipped because
@@ -73,17 +75,21 @@ class ExpensesRepository(
         val rules = duplicateRuleDao.observeAll().first().filter { it.enabled && (!automaticOnly || it.appliesAutomatically) }
         val exactFields = ExpenseRuleFields(fuzzyMatchEnabled = false, timeWindowMillis = config.timeWindowMillis).all
         val fuzzyFields = ExpenseRuleFields(fuzzyMatchEnabled = true, timeWindowMillis = config.timeWindowMillis).all
+        // Hoisted out of the lambda below: it runs once per expense *pair* in the O(n²) scans, so
+        // building a checker per rule in there allocated O(n² · rules) of them for objects that are
+        // identical every time.
+        val ruleCheckers = rules.map { rule ->
+            val fields = if (rule.fuzzyMatchEnabled) fuzzyFields else exactFields
+            RuleBasedDuplicateChecker(fields, listOf(rule.toDuplicateRule()), RuleCombinator.OR)
+        }
         return DuplicateChecker { candidate, existing ->
             // Unconditional, not opt-in per rule: an incoming top-up/refund and an outgoing payment of
             // the same amount are two different real transactions, never a duplicate, regardless of
             // which fields a user-configured rule happens to check. Confirmed on-device: a rule that
             // didn't explicitly include "direction" let a 1000 RON top-up and a 1000 RON payment merge.
             if (candidate.direction != existing.direction) return@DuplicateChecker false
-            if (rules.isEmpty()) return@DuplicateChecker false
-            val results = rules.map { rule ->
-                val fields = if (rule.fuzzyMatchEnabled) fuzzyFields else exactFields
-                RuleBasedDuplicateChecker(fields, listOf(rule.toDuplicateRule()), RuleCombinator.OR).isDuplicateOf(candidate, existing)
-            }
+            if (ruleCheckers.isEmpty()) return@DuplicateChecker false
+            val results = ruleCheckers.map { it.isDuplicateOf(candidate, existing) }
             when (config.globalCombinator) {
                 RuleCombinator.AND -> results.all { it }
                 RuleCombinator.OR -> results.any { it }
@@ -505,18 +511,25 @@ class ExpensesRepository(
     suspend fun findLocalDuplicateGroups(nearDuplicateConfig: NearDuplicateConfig): List<DuplicateGroup> {
         val detector = buildDuplicateChecker(nearDuplicateConfig)
         val all = expensesSnapshot().sortedBy { it.createdAt }
-        val consumed = mutableSetOf<Long>()
-        val groups = mutableListOf<DuplicateGroup>()
-        for (keep in all) {
-            if (keep.id in consumed) continue
-            val dups = all.filter { it.id != keep.id && it.id !in consumed && detector.isDuplicateOf(it, keep) }
-            if (dups.isNotEmpty()) {
-                groups += DuplicateGroup(keep.id, dups.map { it.id })
-                consumed += dups.map { it.id }
-                consumed += keep.id
+        // Explicitly off the caller's dispatcher: the manual-check entry point launches on
+        // CalendarStateManager-style Main.immediate, and this is an O(n²) pass whose comparator can
+        // run a full Levenshtein matrix per pair — on the main thread that is a guaranteed ANR once
+        // the expense list gets into the low thousands. Room's suspend DAOs hop on their own; pure
+        // CPU work like this does not.
+        return withContext(Dispatchers.Default) {
+            val consumed = mutableSetOf<Long>()
+            val groups = mutableListOf<DuplicateGroup>()
+            for (keep in all) {
+                if (keep.id in consumed) continue
+                val dups = all.filter { it.id != keep.id && it.id !in consumed && detector.isDuplicateOf(it, keep) }
+                if (dups.isNotEmpty()) {
+                    groups += DuplicateGroup(keep.id, dups.map { it.id })
+                    consumed += dups.map { it.id }
+                    consumed += keep.id
+                }
             }
+            groups
         }
-        return groups
     }
 
     /** Scoped single-row counterpart to [findLocalDuplicateGroups], for automatic protection's
@@ -569,23 +582,27 @@ class ExpensesRepository(
     ): List<List<Expense>> {
         val detector = buildDuplicateChecker(nearDuplicateConfig, automaticOnly)
         val all = expensesSnapshot()
-        fun matches(a: Expense, b: Expense) = detector.isDuplicateOf(a, b) || detector.isDuplicateOf(b, a)
-        if (scopedToId != null) {
-            val target = all.find { it.id == scopedToId } ?: return emptyList()
-            val peers = all.filter { it.id != scopedToId && matches(it, target) }
-            return if (peers.isEmpty()) emptyList() else listOf(listOf(target) + peers)
-        }
-        val consumed = mutableSetOf<Long>()
-        val clusters = mutableListOf<List<Expense>>()
-        for (anchor in all.sortedBy { it.createdAt }) {
-            if (anchor.id in consumed) continue
-            val peers = all.filter { it.id != anchor.id && it.id !in consumed && matches(it, anchor) }
-            if (peers.isNotEmpty()) {
-                clusters += listOf(anchor) + peers
-                consumed += anchor.id
-                consumed += peers.map { it.id }
+        // Same reasoning as findLocalDuplicateGroups: unscoped, this is another O(n²) CPU pass
+        // reachable from a Main-dispatched launch.
+        return withContext(Dispatchers.Default) {
+            fun matches(a: Expense, b: Expense) = detector.isDuplicateOf(a, b) || detector.isDuplicateOf(b, a)
+            if (scopedToId != null) {
+                val target = all.find { it.id == scopedToId } ?: return@withContext emptyList()
+                val peers = all.filter { it.id != scopedToId && matches(it, target) }
+                return@withContext if (peers.isEmpty()) emptyList() else listOf(listOf(target) + peers)
             }
+            val consumed = mutableSetOf<Long>()
+            val clusters = mutableListOf<List<Expense>>()
+            for (anchor in all.sortedBy { it.createdAt }) {
+                if (anchor.id in consumed) continue
+                val peers = all.filter { it.id != anchor.id && it.id !in consumed && matches(it, anchor) }
+                if (peers.isNotEmpty()) {
+                    clusters += listOf(anchor) + peers
+                    consumed += anchor.id
+                    consumed += peers.map { it.id }
+                }
+            }
+            clusters
         }
-        return clusters
     }
 }

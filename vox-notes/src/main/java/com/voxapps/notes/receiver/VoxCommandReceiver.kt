@@ -46,10 +46,12 @@ class VoxCommandReceiver : BroadcastReceiver() {
 
             VoxIpc.OP_CREATE -> {
                 val text = command.text.orEmpty()
-                val settings = container.settingsRepository.getSnapshot()
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        // Read inside the coroutine — getSnapshot() blocks on DataStore until its
+                        // cache warms, and a broadcast can be what cold-starts this process.
+                        val settings = container.settingsRepository.getSnapshot()
                         val resolved = container.notesRepository.addVoiceNote(
                             title = command.title,
                             text = text,

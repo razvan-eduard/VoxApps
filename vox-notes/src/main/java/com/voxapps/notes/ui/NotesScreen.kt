@@ -296,48 +296,56 @@ fun NotesScreen(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // New-note draft editor at the top.
-                        if (editing?.id == null && editing != null) {
+                        // New-note draft editor at the top. `draft` is bound once so the reads below
+                        // are statically non-null — the old `editing!!` form re-read the nullable
+                        // state on every access, and the callbacks in particular run *after*
+                        // composition, so an intervening `editing = null` (BackHandler, onDone) made
+                        // them a live NPE. Writes deliberately go through `editing?.` rather than
+                        // `draft` so they still act on the current value, just without the bang.
+                        val draft = editing
+                        if (draft != null && draft.id == null) {
                             item(key = "new-note-editor") {
                                 NoteEditorCard(
-                                    noteId = editing!!.id,
+                                    noteId = draft.id,
                                     stateManager = stateManager,
-                                    title = editing!!.title,
-                                    text = editing!!.text,
-                                    categoryId = editing!!.categoryId,
+                                    title = draft.title,
+                                    text = draft.text,
+                                    categoryId = draft.categoryId,
                                     categories = state.categories,
-                                    pendingAttachments = editing!!.pendingAttachments,
-                                    onTitleChange = { editing = editing!!.copy(title = it) },
-                                    onTextChange = { editing = editing!!.copy(text = it) },
-                                    onCategoryChange = { editing = editing!!.copy(categoryId = it) },
+                                    pendingAttachments = draft.pendingAttachments,
+                                    onTitleChange = { editing = editing?.copy(title = it) },
+                                    onTextChange = { editing = editing?.copy(text = it) },
+                                    onCategoryChange = { editing = editing?.copy(categoryId = it) },
                                     onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
-                                    onPendingAttachmentsChange = { editing = editing!!.copy(pendingAttachments = it) },
+                                    onPendingAttachmentsChange = { editing = editing?.copy(pendingAttachments = it) },
                                     onDone = {
                                         val cleanup = commitEdit(editing, stateManager, context, confirmCleanup = true)
                                         if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
                                     },
                                     onDelete = {
-                                        discardPendingAttachments(editing!!.pendingAttachments, context)
+                                        discardPendingAttachments(editing?.pendingAttachments.orEmpty(), context)
                                         editing = null
                                     }
                                 )
                             }
                         }
                         items(state.notes, key = { it.note.id }) { nwc ->
-                            if (editing?.id == nwc.note.id) {
+                            // Same bind-once-then-null-safe-writes split as the draft editor above.
+                            val current = editing
+                            if (current != null && current.id == nwc.note.id) {
                                 NoteEditorCard(
-                                    noteId = editing!!.id,
+                                    noteId = current.id,
                                     stateManager = stateManager,
-                                    title = editing!!.title,
-                                    text = editing!!.text,
-                                    categoryId = editing!!.categoryId,
+                                    title = current.title,
+                                    text = current.text,
+                                    categoryId = current.categoryId,
                                     categories = state.categories,
-                                    pendingAttachments = editing!!.pendingAttachments,
-                                    onTitleChange = { editing = editing!!.copy(title = it) },
-                                    onTextChange = { editing = editing!!.copy(text = it) },
-                                    onCategoryChange = { editing = editing!!.copy(categoryId = it) },
+                                    pendingAttachments = current.pendingAttachments,
+                                    onTitleChange = { editing = editing?.copy(title = it) },
+                                    onTextChange = { editing = editing?.copy(text = it) },
+                                    onCategoryChange = { editing = editing?.copy(categoryId = it) },
                                     onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
-                                    onPendingAttachmentsChange = { editing = editing!!.copy(pendingAttachments = it) },
+                                    onPendingAttachmentsChange = { editing = editing?.copy(pendingAttachments = it) },
                                     onDone = {
                                         val cleanup = commitEdit(editing, stateManager, context, confirmCleanup = true)
                                         if (cleanup != null) pendingNoteCleanup = cleanup else editing = null

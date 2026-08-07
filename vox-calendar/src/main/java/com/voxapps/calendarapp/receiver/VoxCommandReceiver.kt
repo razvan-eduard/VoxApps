@@ -49,10 +49,14 @@ class VoxCommandReceiver : BroadcastReceiver() {
             VoxIpc.OP_CREATE -> {
                 val text = command.text.orEmpty()
                 if (text.isBlank()) return
-                val settings = container.settingsRepository.getSnapshot()
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        // Read inside the coroutine, not in onReceive: getSnapshot() falls back to a
+                        // blocking DataStore read until its cache warms, and a broadcast can be what
+                        // cold-starts this process — so on main it was a guaranteed disk read on the
+                        // main thread. OP_GET_SCHEMA below already had it in the right place.
+                        val settings = container.settingsRepository.getSnapshot()
                         val layerNames = container.calendarRepository.layers.first().map { it.name }
                         val todoListNames = container.toDoRepository.lists.first().map { it.title }
                         CalendarEventParseRequestSender.send(

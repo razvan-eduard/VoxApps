@@ -2,9 +2,12 @@ package com.voxapps.backup
 
 import android.content.BroadcastReceiver
 import com.voxapps.ipc.VoxResult
+import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+
+private const val TAG = "VoxBackupDispatch"
 
 /**
  * The `goAsync()` + `CoroutineScope(Dispatchers.IO).launch { try { pending.setResultData(...) }
@@ -23,6 +26,14 @@ object VoxBackupDispatch {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 pending.setResultData(block().toJson())
+            } catch (e: Exception) {
+                // [block] parses peer-supplied JSON and writes to Room, so it genuinely can throw
+                // (malformed payload, constraint violation). Without this catch the exception
+                // escapes an ad-hoc scope that has no CoroutineExceptionHandler, reaching the
+                // default uncaught handler and killing the whole app process — while the caller
+                // just sees a timeout with no idea why. Answer with a failed result instead.
+                Logger.w(TAG, "Backup IPC failed", e)
+                runCatching { pending.setResultData(VoxResult(ok = false, text = e.message ?: "Backup operation failed").toJson()) }
             } finally {
                 pending.finish()
             }

@@ -20,7 +20,9 @@ import com.voxapps.commander.domain.voice.VoiceManager
 import com.voxapps.commander.domain.voice.TtsManager
 import com.voxapps.commander.domain.conversation.ConversationHandler
 import com.voxapps.commander.state.AppStateManager
+import com.voxapps.commander.utils.AppScope
 import com.voxapps.logging.Logger
+import kotlinx.coroutines.launch
 import com.voxapps.commander.ui.viewmodels.MainViewModel
 import com.voxapps.commander.ui.viewmodels.ModelManagementViewModel
 import com.whispercpp.whisper.WhisperLib
@@ -80,13 +82,24 @@ class AppContainer(context: Context) {
     )
 
     init {
+        // Deliberately still blocking, and kept as small as possible: the migration must finish
+        // before ANY settings read (otherwise pre-migration values are read and then overwritten),
+        // and AppRegistry's cache has to be in place before the splash screen decides whether it
+        // needs to run a full app scan. Both are ordering constraints, not just slow work.
         kotlinx.coroutines.runBlocking {
             (settingsRepository as SettingsRepositoryImpl).migrateFromSharedPreferencesIfNeeded()
             // Try loading from cache (fast path). If cache empty, splash screen will scan.
-            val cache = settingsRepository.getSettingsSnapshot().appCacheJson
-            AppRegistry.initFromCache(cache)
+            // One read, reused below — this used to call getSettingsSnapshot() twice in a row, and
+            // on a cold start (empty cache) each call is its own blocking DataStore round-trip.
+            val snapshot = settingsRepository.getSettingsSnapshot()
+            AppRegistry.initFromCache(snapshot.appCacheJson)
+        }
 
-            // Load media service settings
+        // Media-service config moved off the blocking path: these are plain setters whose values
+        // aren't read until the user actually triggers playback/search, so nothing downstream needs
+        // them to be set by the time this constructor returns. (NewPipe's warmUp() already dispatches
+        // to AppScope.io internally, so it was never the expensive part here.)
+        AppScope.io.launch {
             val snapshot = settingsRepository.getSettingsSnapshot()
             com.voxapps.commander.service.SpotifyRemoteManager.setClientId(snapshot.spotifyClientId)
             com.voxapps.commander.domain.intent.handler.PipedSearchHelper.setPipedApiUrl(snapshot.pipedApiUrl)

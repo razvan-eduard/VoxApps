@@ -358,6 +358,12 @@ fun ServiceSettingsTab(
 
         val context = LocalContext.current
         val calibrator = remember { WakeWordCalibrator(context) { } }
+        // The calibrator owns its own coroutine scope and holds the mic open while running, but is
+        // remembered per-composition — without this, leaving the screen mid-calibration left the
+        // recording loop alive with the microphone still active.
+        DisposableEffect(calibrator) {
+            onDispose { calibrator.release() }
+        }
         val calibrationState by calibrator.state.collectAsStateWithLifecycle()
         var showCalibrationDialog by remember { mutableStateOf(false) }
 

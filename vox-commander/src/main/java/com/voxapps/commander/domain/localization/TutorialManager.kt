@@ -30,14 +30,19 @@ class TutorialManager(private val context: Context) {
 
     fun load(langCode: String) {
         try {
-            val inputStream = context.assets.open("tutorial_steps.json")
-            val reader = java.io.InputStreamReader(inputStream)
             val type = object : TypeToken<Map<String, JsonObject>>() {}.type
-            tutorialData = gson.fromJson(reader, type)
-            reader.close()
+            // `use`, not close() after fromJson — malformed JSON threw straight past close() and
+            // leaked the reader (see LanguageManager for the same fix).
+            tutorialData = context.assets.open("tutorial_steps.json").use { inputStream ->
+                java.io.InputStreamReader(inputStream).use { reader ->
+                    gson.fromJson(reader, type)
+                }
+            }
         } catch (e: Exception) {
             Logger.log("Tutorial load failed: ${e.message}", "TutorialManager")
-            // Fallback to English
+            // Note: unlike LanguageManager, every language lives in this one file, so retrying as
+            // "en" re-reads the exact same asset and fails identically — it only costs one extra
+            // attempt, and is kept solely so behavior doesn't change alongside the leak fix.
             if (langCode != "en") load("en")
         }
     }
