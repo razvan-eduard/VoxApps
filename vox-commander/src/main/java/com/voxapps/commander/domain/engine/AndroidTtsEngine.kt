@@ -2,6 +2,8 @@ package com.voxapps.commander.domain.engine
 
 import android.content.Context
 import android.speech.tts.TextToSpeech
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.utils.TextUtils
@@ -11,18 +13,17 @@ import java.util.Locale
  * Android TextToSpeech wrapper implementing ITtsEngine.
  * Uses the system TTS service — no extra dependencies needed.
  */
-class AndroidTtsEngine : ITtsEngine {
+class AndroidTtsEngine(private val appContext: Context) : BaseVoxEngine(), ITtsEngine {
 
     companion object {
+        const val ENGINE_KEY = "android"
         private const val TAG = "AndroidTtsEngine"
     }
 
+    override val engineKey: String = ENGINE_KEY
+
     private var tts: TextToSpeech? = null
     private var ready = false
-    private var currentLanguage: String = "en"
-    private var pendingText: String? = null
-    private var pendingUtteranceId: String? = null
-    private var pendingOnDone: (() -> Unit)? = null
     private var speechRate: Float = 1.0f
     private var pitch: Float = 1.0f
 
@@ -40,15 +41,23 @@ class AndroidTtsEngine : ITtsEngine {
     private var currentBaseId: String = ""
     private var currentOnDone: (() -> Unit)? = null
 
-    override fun initialize(context: Context, language: String): Boolean {
-        currentLanguage = language
+    /**
+     * Connects to the platform TTS service and waits for it to report ready.
+     *
+     * The old form returned `true` immediately and let the service become ready later, which forced
+     * a `pendingText` queue here for speech requested in the meantime, and meant the caller could
+     * never actually know whether TTS worked. Suspending until `onInit` fires removes both: `load()`
+     * returning true means the engine can speak now.
+     */
+    override suspend fun onLoad(spec: ModelSpec): Boolean = suspendCancellableCoroutine { cont ->
+        val language = spec.language
         ready = false
 
         tts?.stop()
         tts?.shutdown()
         tts = null
 
-        tts = TextToSpeech(context.applicationContext) { status ->
+        tts = TextToSpeech(appContext.applicationContext) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 val locale = localeForLanguage(language)
                 val setResult = tts?.setLanguage(locale)
@@ -82,28 +91,37 @@ class AndroidTtsEngine : ITtsEngine {
 
                 ready = true
                 Logger.log("Android TTS initialized for language '$language'", TAG)
-
-                // If text was queued before init completed, speak it now
-                pendingText?.let { text ->
-                    pendingText = null
-                    speak(text, pendingUtteranceId, pendingOnDone)
-                    pendingUtteranceId = null
-                    pendingOnDone = null
-                }
+                if (cont.isActive) cont.resume(true)
             } else {
                 Logger.log("Android TTS init failed with status=$status", TAG)
+                if (cont.isActive) cont.resume(false)
             }
         }
 
-        return true
+        cont.invokeOnCancellation {
+            // The caller gave up while the service was still connecting; do not leave the
+            // connection dangling.
+            tts?.shutdown()
+            tts = null
+            ready = false
+        }
+    }
+
+    override fun onUnload() {
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
+        ready = false
+        synchronized(ttsLock) { utteranceCallbacks.clear() }
+        Logger.log("Android TTS released", TAG)
     }
 
     override fun speak(text: String, utteranceId: String?, onDone: (() -> Unit)?) {
         if (!ready) {
-            Logger.log("TTS not ready yet, queuing text", TAG)
-            pendingText = text
-            pendingUtteranceId = utteranceId
-            pendingOnDone = onDone
+            // Readiness is the caller's responsibility: TtsManager loads before speaking, and
+            // load() now only returns once the service has reported ready.
+            Logger.log("Android TTS has no service connection, cannot speak", TAG)
+            onDone?.invoke()
             return
         }
 
@@ -173,8 +191,6 @@ class AndroidTtsEngine : ITtsEngine {
             currentSentenceIdx = 0
             currentOnDone = null
         }
-        pendingText = null
-        pendingOnDone = null
     }
 
     override fun isSpeaking(): Boolean {
@@ -191,16 +207,6 @@ class AndroidTtsEngine : ITtsEngine {
         if (ready) tts?.setPitch(pitch)
     }
 
-    override fun release() {
-        tts?.stop()
-        tts?.shutdown()
-        tts = null
-        ready = false
-        synchronized(ttsLock) { utteranceCallbacks.clear() }
-        pendingText = null
-        pendingOnDone = null
-        Logger.log("Android TTS released", TAG)
-    }
 
     private fun localeForLanguage(language: String): Locale {
         return when {

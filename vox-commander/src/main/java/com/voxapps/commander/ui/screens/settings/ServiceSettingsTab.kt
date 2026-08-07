@@ -25,7 +25,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteModelRegistry
-import com.voxapps.commander.domain.engine.TtsEngineType
+import com.voxapps.commander.domain.engine.AndroidTtsEngine
+import com.voxapps.commander.domain.engine.PiperTtsEngine
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.domain.voice.VoiceManager
@@ -840,7 +841,7 @@ fun ServiceSettingsTab(
                 ) {
                     DropdownMenuItem(
                         text = { Text(languageManager.getString("tts_engine_android") ?: "Android (system default)") },
-                        onClick = { appStateManager.setTtsEngineType("android"); ttsEngineExpanded = false }
+                        onClick = { appStateManager.setTtsEngineType(AndroidTtsEngine.ENGINE_KEY); ttsEngineExpanded = false }
                     )
                     ttsEngines.forEach { engKey ->
                         DropdownMenuItem(
@@ -852,12 +853,11 @@ fun ServiceSettingsTab(
             }
 
             // --- PIPER VOICE MODELS (only relevant once Piper is selected) ---
-            // Keyed off the stored value rather than a literal, so this section follows
-            // TtsEngineType (which now carries the registry key, plus the legacy "piper" alias)
-            // instead of duplicating the spelling a third time.
-            if (TtsEngineType.fromKey(currentTtsEngineKey) == TtsEngineType.PIPER) {
+            // The stored value is already normalised by SettingsRepositoryImpl, so comparing it to
+            // the engine's own key is enough — no second alias table on this side.
+            if (currentTtsEngineKey == PiperTtsEngine.ENGINE_KEY) {
                 val piperModels = remember(refreshTrigger) {
-                    RemoteModelRegistry.getModels(TtsEngineType.PIPER.key)
+                    RemoteModelRegistry.getModels(PiperTtsEngine.ENGINE_KEY)
                 }
                 if (piperModels.isNotEmpty()) {
                     EngineModelSection(
@@ -878,7 +878,7 @@ fun ServiceSettingsTab(
                         onCancelDownload = onCancelDownload,
                         downloadProgress = downloadProgress,
                         downloadingItem = downloadingItem,
-                        currentProcessor = TtsEngineType.PIPER.key,
+                        currentProcessor = PiperTtsEngine.ENGINE_KEY,
                         // TTS isn't part of the STT/NLU fallback cascade (Strings.FallbackCategories
                         // only has "voice"/"intent") — no fallback concept applies here.
                         showFallback = false,

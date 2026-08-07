@@ -120,9 +120,8 @@ data class AppSettings(
     // --- TTS ---
     val ttsEnabled: Boolean = true,
     /** The TTS picker stores whatever `getEngineKeysByType("tts")` returned, so this holds a
-     *  models.json engine key ("piper_tts"), not the short name. Read it through
-     *  [com.voxapps.commander.domain.engine.TtsEngineType.fromKey], which also accepts the
-     *  legacy "piper" spelling that may survive in an old backup. */
+     *  models.json engine key ("piper_tts"), not the short name. Legacy spellings that may survive
+     *  in an old backup are normalised on read by SettingsRepositoryImpl.normalizeEngineKey. */
     val ttsEngineType: String = "android",
     val ttsSpeechRate: Float = 1.0f,
     val ttsPitch: Float = 1.0f,

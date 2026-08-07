@@ -371,7 +371,7 @@ class SettingsRepositoryImpl(
             downloadPreference = prefs[Keys.DOWNLOAD_PREFERENCE] ?: "wifi_and_metered",
 
             ttsEnabled = prefs[Keys.TTS_ENABLED] ?: true,
-            ttsEngineType = prefs[Keys.TTS_ENGINE_TYPE] ?: "android",
+            ttsEngineType = normalizeEngineKey(prefs[Keys.TTS_ENGINE_TYPE] ?: "android"),
             ttsSpeechRate = prefs[Keys.TTS_SPEECH_RATE] ?: 1.0f,
             ttsPitch = prefs[Keys.TTS_PITCH] ?: 1.0f,
             ttsAudioFocusMode = prefs[Keys.TTS_AUDIO_FOCUS_MODE] ?: "duck",
@@ -981,10 +981,22 @@ class SettingsRepositoryImpl(
     // --- HELPERS ---
     private fun parseCustomModelPaths(json: String?): Map<String, String> = parseStringMap(json)
 
+    /**
+     * Maps legacy engine spellings onto the `models.json` keys the app uses today.
+     *
+     * One table for every domain, applied where settings are read. The TTS alias used to live in a
+     * `TtsEngineType` enum resolved at the point of use instead, which meant two mechanisms for the
+     * same problem and an unnormalised value persisting in DataStore indefinitely.
+     *
+     * Nothing is rewritten on disk: stored identifiers stay exactly as they are, because
+     * `restoreImportedSettings` writes them verbatim from backups with no version field and there is
+     * no migration mechanism. Normalising on read costs nothing and keeps old backups importable.
+     */
     private fun normalizeEngineKey(raw: String): String = when (raw) {
         "vosk" -> "wake_vosk"
         "porcupine" -> "wake_porcupine"
         "openwakeword" -> "wake_openwakeword"
+        "piper" -> "piper_tts"
         else -> raw
     }
 
