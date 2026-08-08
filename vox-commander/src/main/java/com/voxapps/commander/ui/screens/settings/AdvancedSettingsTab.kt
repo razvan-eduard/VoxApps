@@ -48,7 +48,6 @@ fun AdvancedSettingsTab(
 
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val benchmarkResults by appStateManager.benchmarkResults.collectAsStateWithLifecycle()
-    val nativeLibsStatus by appStateManager.nativeLibsStatus.collectAsStateWithLifecycle()
     val systemInfo by appStateManager.systemInfo.collectAsStateWithLifecycle()
     val logs by Logger.verboseLogs.collectAsStateWithLifecycle()
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())

@@ -116,6 +116,8 @@
   "tab_advanced": "Avancé",
   "tab_backup": "Sauvegarde",
   "tab_theme": "Thème",
+  "tab_diagnostics": "Diagnostic",
+  "engine_api_key": "Clé API",
   "tab_benchmark": "Diagnostic",
   "tab_verbose_logging": "Logs détaillés",
   "tab_default_apps": "Apps par défaut",

@@ -131,14 +131,10 @@ fun EngineApiKeyField(
         value = value,
         // Typing only updates what is on screen. See [commit] for when it is stored.
         onValueChange = { value = it },
-        label = {
-            Text(
-                languageManager.getString("api_key_for_engine")
-                    .takeIf { it.isNotBlank() && it != "api_key_for_engine" }
-                    ?.replace("{engine}", RemoteModelRegistry.getEngineLabel(engineKey, languageManager))
-                    ?: "${RemoteModelRegistry.getEngineLabel(engineKey, languageManager)} API key"
-            )
-        },
+        // Just "API key": the field sits directly under the engine it belongs to, so naming the
+        // engine again is noise — and it read badly for the engines whose own label ends in API
+        // ("OpenAI Whisper API API key").
+        label = { Text(languageManager.getString("engine_api_key")) },
         modifier = modifier
             .fillMaxWidth()
             .onFocusChanged { focus ->

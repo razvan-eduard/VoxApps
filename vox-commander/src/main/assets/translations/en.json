@@ -137,6 +137,8 @@
   "tab_advanced": "Advanced",
   "tab_backup": "Backup",
   "tab_theme": "Theme",
+  "tab_diagnostics": "Diagnostics",
+  "engine_api_key": "API key",
   "tab_benchmark": "Benchmark",
   "tab_verbose_logging": "Verbose Logging",
   "tab_default_apps": "Default Apps",

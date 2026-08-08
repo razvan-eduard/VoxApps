@@ -135,6 +135,8 @@
   "tab_advanced": "Avansat",
   "tab_backup": "Backup",
   "tab_theme": "Temă",
+  "tab_diagnostics": "Diagnosticare",
+  "engine_api_key": "Cheie API",
   "tab_benchmark": "Diagnostic",
   "tab_verbose_logging": "Log detaliat",
   "tab_default_apps": "Aplicații Implicite",

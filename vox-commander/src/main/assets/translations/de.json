@@ -116,6 +116,8 @@
   "tab_advanced": "Erweitert",
   "tab_backup": "Sicherung",
   "tab_theme": "Design",
+  "tab_diagnostics": "Diagnose",
+  "engine_api_key": "API-Schlüssel",
   "tab_benchmark": "Diagnose",
   "tab_verbose_logging": "Detaillierte Logs",
   "tab_default_apps": "Standard-Apps",

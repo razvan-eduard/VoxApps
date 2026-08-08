@@ -67,7 +67,7 @@ fun SettingsContent(
     // REALTIME STATE - observe AppStateManager uiState for reactive updates
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     
-    val pagerState = rememberPagerState(pageCount = { 9 })
+    val pagerState = rememberPagerState(pageCount = { 10 })
 
     val isVoskLoading by modelManagementViewModel.isVoskLoading.collectAsStateWithLifecycle()
     val isVoskOffline by modelManagementViewModel.isVoskOffline.collectAsStateWithLifecycle()
@@ -118,7 +118,7 @@ fun SettingsContent(
                             },
                             modifier = Modifier.padding(bottom = 12.dp)
                         ) {
-                            val tabs = listOf("tab_general", "tab_ai_models", "tab_service", "tab_app_manager", "tab_integrations", "tab_permissions", "tab_advanced", "tab_backup", "tab_theme")
+                            val tabs = listOf("tab_general", "tab_ai_models", "tab_service", "tab_app_manager", "tab_integrations", "tab_permissions", "tab_advanced", "tab_backup", "tab_theme", "tab_diagnostics")
                             
                             tabs.forEachIndexed { index, tabKey ->
                                 val selected = pagerState.currentPage == index
@@ -162,6 +162,15 @@ fun SettingsContent(
                                 credentials = uiState.credentials
                             )
                         }
+                    } else if (page == 9) { // Diagnostics (LazyColumn of its own, no scroll wrapper)
+                        // Which native libraries are present, which engine each belongs to, and
+                        // whether that engine is the one running. The screen existed and was
+                        // reachable from nowhere: nothing referenced this composable, so the status
+                        // it renders was computed, published to a flow, and displayed by no one.
+                        BenchmarkSettingsTab(
+                            appStateManager = appStateManager,
+                            refreshTrigger = uiState.refreshTrigger
+                        )
                     } else if (page == 8) { // Theme (ThemeSettingsScreen already scrolls itself, no outer scroll wrapper)
                         ThemeSettingsScreen(
                             darkMode = uiState.themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
