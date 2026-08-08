@@ -152,6 +152,37 @@ class ModelDownloaderTest {
         coVerify { settingsRepo.setModelDownloaded("tiny", false) }
     }
 
+    /**
+     * A model the user imported themselves is the one file here that cannot be fetched again — it
+     * may be their only copy. The single-file import writes it into this very directory under a
+     * name derived from the engine, and the active model id is a registry id rather than that file,
+     * so nothing the cleanup protects ever resolved to it: selecting a custom model and then running
+     * cleanup deleted it, leaving the selection pointing at nothing.
+     */
+    @Test
+    fun `deleteUnusedModels keeps a model the user imported`() = runBlocking {
+        every { RemoteModelRegistry.getExtension(Strings.Processors.WHISPER_VULKAN) } returns ".bin"
+
+        val custom = File(tempDir, "stt_whisper.bin")
+        custom.writeText("the user's own model")
+        val unused = downloader.resolveLocalFile("tiny", Strings.Processors.WHISPER_VULKAN)!!
+        unused.writeText("unused")
+
+        val settings = TestDataFactory.createAppSettings(
+            voiceProcessor = Strings.Processors.WHISPER_VULKAN,
+            activeVoiceModelId = "base",
+            downloadedModelIds = setOf("tiny"),
+            customModelPaths = mapOf("stt_whisper" to custom.absolutePath)
+        )
+        val settingsRepo = mockk<SettingsRepository>(relaxed = true)
+        every { settingsRepo.getSettingsSnapshot() } returns settings
+
+        downloader.deleteUnusedModels(settingsRepo, "base", null, null, null)
+
+        assertTrue("the imported model was deleted", custom.exists())
+        assertFalse(unused.exists())
+    }
+
     @Test
     fun `deleteUnusedModels cleans up downloads directory`() = runBlocking {
         // In unit tests, DIRECTORY_DOWNLOADS is null so downloadsDir == rootDir == tempDir

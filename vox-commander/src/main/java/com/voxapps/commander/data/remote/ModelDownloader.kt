@@ -443,6 +443,18 @@ class ModelDownloader(private val context: Context) {
             }
         }
 
+        // Protect every model the user imported themselves.
+        //
+        // These are not "downloaded" in the sense this cleanup means — nothing here can re-fetch
+        // them, and the file the user picked may be the only copy they have. The single-file import
+        // copies into this very directory under a name derived from the engine, so the sweep below
+        // reached it by name; and because the active model id is a registry id rather than that
+        // file, none of the protections above ever resolved to it. Selecting a custom model and
+        // then running cleanup deleted it, with the selection left pointing at nothing.
+        snapshot.customModelPaths.values
+            .filter { it.isNotBlank() }
+            .forEach { protectedNames.add(java.io.File(it).name) }
+
         val engineKeys = RemoteModelRegistry.getEngineTypes()
 
         Logger.log("Cleanup started. Protected items: $protectedNames", CLEANUP_TAG)
@@ -478,6 +490,12 @@ class ModelDownloader(private val context: Context) {
 
         // 3. Clean temporary Downloads
         downloadsDir?.listFiles()?.forEach { file ->
+            // Protected first, here too. This sweep matches on extension alone, and it is only the
+            // separation between `files/` and `files/Download` that keeps it away from real models
+            // — a directory layout this code does not control and does not check. Asking the same
+            // question step 2 asks costs nothing and removes the dependency on that accident.
+            if (file.name in protectedNames) return@forEach
+
             val isKnownZip = engineKeys.any { key ->
                 val ext = RemoteModelRegistry.getExtension(key)
                 ext.isNotBlank() && file.name.endsWith(ext)
