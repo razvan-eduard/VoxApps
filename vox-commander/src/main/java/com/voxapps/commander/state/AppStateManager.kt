@@ -5,6 +5,8 @@ import androidx.compose.runtime.Immutable
 import android.content.Context
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.engine.whisper.WhisperCppSttEngine
+import com.voxapps.commander.domain.engine.vosk.VoskSttEngine
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
@@ -43,8 +45,9 @@ data class NativeLibStatus(
     val isActive: Boolean,
     val description: String,
     val isIncompatible: Boolean = false,
-    // "whisper" | "vosk" | "llm" | "gemini" — matches refreshNativeLibsStatus()'s soFiles category,
-    // so UI grouping (see BenchmarkSettingsTab) can filter by engine instead of guessing from name.
+    /** The engine key this library belongs to, or blank for one that serves no single engine.
+     *  An engine key rather than a name invented here: the diagnostics screen then groups and
+     *  labels these the way every other screen names an engine. */
     val category: String = ""
 )
 
@@ -483,17 +486,21 @@ class AppStateManager private constructor(
         val geminiIncompatible = aiProcessor == Strings.AiProcessors.GEMINI_NATIVE && !currentState.intentModelReady
         val vulkanIncompatible = voiceProcessor == Strings.Processors.WHISPER_VULKAN && !currentState.voiceModelReady
         
-        // (libName, description, engineCategory) — engineCategory: "whisper", "vosk", "llm", "gemini"
+        // (libName, description, engineKey). The third column used to be a naming of its own —
+        // "whisper", "vosk", "llm", "gemini" — a fourth way to say which engine something belongs
+        // to, matching neither the schema's keys nor the stored processor values nor anything else.
+        // These are engine keys, so the screen can name each group from the registry.
+        val litertLmEngine = "nlu_llm_litertlm" // schema key; no compiled class owns it
         val soFiles = listOf(
-            Triple("libwhisper.so", "Core Whisper STT Engine", "whisper"),
-            Triple("libggml.so", "GGML Tensor Library", "whisper"),
-            Triple("libggml-cpu.so", "GGML CPU Operations", "whisper"),
-            Triple("libggml-base.so", "GGML Base Library", "whisper"),
-            Triple("libggml-vulkan.so", "Vulkan GPU Acceleration", "whisper"),
-            Triple("libomp.so", "OpenMP Multi-threading", "whisper"),
-            Triple("libvosk.so", "Vosk Voice Engine", "vosk"),
-            Triple("liblitertlm_jni.so", "LiteRT-LM Engine", "llm"),
-            Triple("Google AICore", "Gemini Nano System Service", "gemini")
+            Triple("libwhisper.so", "Core Whisper STT Engine", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libggml.so", "GGML Tensor Library", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libggml-cpu.so", "GGML CPU Operations", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libggml-base.so", "GGML Base Library", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libggml-vulkan.so", "Vulkan GPU Acceleration", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libomp.so", "OpenMP Multi-threading", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libvosk.so", "Vosk Voice Engine", VoskSttEngine.ENGINE_KEY),
+            Triple("liblitertlm_jni.so", "LiteRT-LM Engine", litertLmEngine),
+            Triple("Google AICore", "Gemini Nano System Service", Strings.AiProcessors.GEMINI_NATIVE)
         )
 
         val statusList = soFiles.map { (name, desc, category) ->
@@ -518,15 +525,19 @@ class AppStateManager private constructor(
                 isActive = false
                 adjustedDesc = "$desc (Incompatible)"
             } else {
-                val voiceExt = com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(voiceProcessor)
-                val active = when (category) {
-                    "whisper" -> voiceExt == ".bin" || voiceProcessor == Strings.Processors.WHISPER_VULKAN
-                    "vosk" -> voiceExt == ".zip"
-                    "llm" -> com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine(aiProcessor)
-                    "gemini" -> aiProcessor == Strings.AiProcessors.GEMINI_NATIVE
-                    else -> false
-                }
-                isActive = active
+                // A library is in use when its engine is the one selected — asked by comparing
+                // engine keys, in place of a `when` that restated the same four invented names and
+                // answered each with a differently-shaped question (an extension for one, a
+                // capability for another, an equality for the third).
+                //
+                // Whisper on the GPU is the same engine asked to run differently, and the only
+                // selection whose stored value is not an engine key of its own.
+                val selectedVoiceEngine =
+                    if (voiceProcessor == Strings.Processors.WHISPER_VULKAN) WhisperCppSttEngine.ENGINE_KEY
+                    else voiceProcessor
+                isActive = category == selectedVoiceEngine ||
+                    category == aiProcessor ||
+                    category == currentState.wakeWordEngineType
                 adjustedDesc = desc
             }
             NativeLibStatus(name, exists, isActive, adjustedDesc, isIncompatible, category)
