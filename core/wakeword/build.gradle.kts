@@ -40,5 +40,5 @@ dependencies {
     // to currently disagree (vox-vision is pinned to 1.21.1 because upstream's own 1.27.0/1.28.0
     // builds are broken; sherpa-onnx bundles its own separately-built 1.27.0-tagged binary that is
     // not the same artifact).
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
 }
