@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import com.voxapps.commander.data.preferences.Credentials
+import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.service.AuthDeclaration
 import com.voxapps.commander.domain.service.ProbeSpec
 import com.voxapps.logging.Logger
@@ -147,6 +148,9 @@ class DynamicSearchProvider(
         /** What the boolean spelling meant, since it named no engine. */
         private const val BORROWED_BY_DEFAULT = "OPENAI"
 
+        /** An engine worth borrowing from is one that declares it needs a credential. */
+        private const val CAPABILITY_REQUIRES_API_KEY = "requires_api_key"
+
         private const val BROWSER_UA =
             "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
 
@@ -163,9 +167,18 @@ class DynamicSearchProvider(
     val name: String get() = def.name
     val requiresLocation: Boolean get() = def.requiresLocation
     val requiresApiKey: Boolean get() = def.requiresApiKey
-    /** Which engine's credential this provider uses, or null when it owns its key. */
+    /**
+     * Which engine's credential this provider uses, or null when it owns its key.
+     *
+     * The named engine has to be one that exists and actually holds a credential. A schema can be
+     * served from a repository, so it can name an engine this build does not have — and the failure
+     * would be silent in the worst way: the screen says where the key comes from, and the field that
+     * would enter it renders nothing, because it renders nothing for an engine that declares no need
+     * for a key. The provider falls back to its own credential instead of pointing at nothing.
+     */
     val borrowsFromEngine: String?
-        get() = def.sharedKeyEngine ?: BORROWED_BY_DEFAULT.takeIf { def.usesSharedApiKey }
+        get() = (def.sharedKeyEngine ?: BORROWED_BY_DEFAULT.takeIf { def.usesSharedApiKey })
+            ?.takeIf { RemoteModelRegistry.hasCapability(it, CAPABILITY_REQUIRES_API_KEY) }
     val endpoint: String get() = def.endpoint
 
     private var currentLang: String = "en"
