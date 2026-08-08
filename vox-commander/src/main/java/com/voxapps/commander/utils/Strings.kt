@@ -18,7 +18,6 @@ object Strings {
         const val GEMINI_NANO_INTERPRETER = "GeminiNanoInterpreter"
         const val OPENAI_INTERPRETER = "OpenAiInterpreter"
         const val LOCAL_LLM_INTERPRETER = "LocalLlmInterpreter"
-        const val FILE_HELPER = "FileHelper"
         const val TTS_MANAGER = "TtsManager"
         const val ANDROID_TTS_ENGINE = "AndroidTtsEngine"
     }

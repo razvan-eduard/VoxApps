@@ -18,7 +18,6 @@ import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.utils.FileHelper
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.CoroutineDispatcher
@@ -250,30 +249,29 @@ class ModelManagementViewModel(
     /**
      * Stores a model the user picked themselves.
      *
-     * The branch asks the same question the picker did — an archive engine loads from a directory,
-     * so it was offered a directory picker and what arrives is a tree URI. Branching on "has an
-     * extension" instead put every archive engine on the file path, because an archive engine does
-     * have one, and its `uri` was then opened as a stream. Nothing was stored and nothing was
-     * reported, so picking a folder simply did nothing.
+     * One import for every engine, performed where models are kept. The two shapes differ only in
+     * what gets copied — a file, or a directory and everything in it — and ModelDownloader decides
+     * that from the engine's declared packaging, the same way it decides where a download lands.
+     *
+     * The directory case used to copy nothing at all: it stored `uri.path` of the picked *tree*,
+     * which is a document-id string rather than a filesystem path, so the import reported success
+     * and left behind a value nothing could open.
      */
     fun selectCustomModel(uri: Uri, engineKey: String, langCode: String? = null) {
-        if (!isSingleFileEngine(engineKey)) {
-            // Directory-based: the picked tree is referenced where it is, not copied.
-            val path = uri.path ?: uri.toString()
-            viewModelScope.launch { settingsRepo.setCustomModelPath(engineKey, path, langCode) }
-            showSuccessMessage(languageManager.getString("success_custom_vosk"))
-        } else {
-            val fileName = "$engineKey${RemoteModelRegistry.getExtension(engineKey)}"
-            val copied = FileHelper.copyUriToInternal(context, uri, fileName)
-            if (copied != null) {
-                viewModelScope.launch { settingsRepo.setCustomModelPath(engineKey, copied) }
-                showSuccessMessage(languageManager.getString("success_custom_whisper"))
-            } else {
-                // Previously silent: the import failed and the screen looked unchanged.
-                Logger.log("Custom model import failed for $engineKey", TAG)
-                _downloadError.value = languageManager.getString("error_download_failed")
-            }
+        val imported = modelDownloader.importCustomModel(uri, engineKey, langCode)
+        if (imported == null) {
+            Logger.log("Custom model import failed for $engineKey", TAG)
+            _downloadError.value = languageManager.getString("error_download_failed")
+            appStateManager.refreshAll()
+            return
         }
+
+        viewModelScope.launch { settingsRepo.setCustomModelPath(engineKey, imported.absolutePath, langCode) }
+        showSuccessMessage(
+            languageManager.getString(
+                if (isSingleFileEngine(engineKey)) "success_custom_whisper" else "success_custom_vosk"
+            )
+        )
         appStateManager.refreshAll()
     }
 

@@ -343,26 +343,31 @@ class ModelManagementViewModelTest {
     }
 
     @Test
-    fun `selectCustomModel with blank extension uses directory-based strategy`() = runTest {
+    /**
+     * A directory-based engine is copied, and what is stored is where the copy landed.
+     *
+     * This used to store `uri.path` of the picked tree — a document-id string, not a filesystem
+     * path — so the import reported success and left a value nothing could open.
+     */
+    fun `selectCustomModel stores the copied directory, not the picked tree`() = runTest {
         val uri = mockk<Uri>()
-        every { uri.path } returns "/sdcard/vosk-model"
-        every { uri.toString() } returns "content://uri"
         every { RemoteModelRegistry.getExtension("wake_vosk") } returns ""
+        every { modelDownloader.importCustomModel(uri, "wake_vosk", "en") } returns
+            java.io.File("/data/files/wake_vosk_custom_en")
 
         viewModel.selectCustomModel(uri, "wake_vosk", "en")
 
-        coVerify { settingsRepo.setCustomModelPath("wake_vosk", "/sdcard/vosk-model", "en") }
+        coVerify { settingsRepo.setCustomModelPath("wake_vosk", "/data/files/wake_vosk_custom_en", "en") }
         verify { appStateManager.refreshAll() }
     }
 
     @Test
-    fun `selectCustomModel with file extension uses file-based strategy`() = runTest {
+    fun `selectCustomModel stores where the import actually landed`() = runTest {
         val uri = mockk<Uri>()
         every { uri.toString() } returns "content://com.android.providers.documents/document/abc"
         every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
 
-        mockkObject(com.voxapps.commander.utils.FileHelper)
-        every { com.voxapps.commander.utils.FileHelper.copyUriToInternal(any(), any(), any()) } returns "/data/files/stt_whisper.bin"
+        every { modelDownloader.importCustomModel(any(), any(), any()) } returns java.io.File("/data/files/stt_whisper.bin")
 
         viewModel.selectCustomModel(uri, "stt_whisper")
 
@@ -371,13 +376,12 @@ class ModelManagementViewModelTest {
     }
 
     @Test
-    fun `selectCustomModel with file extension and copy failure does not set path`() = runTest {
+    fun `selectCustomModel stores nothing when the import failed`() = runTest {
         val uri = mockk<Uri>()
         every { uri.toString() } returns "content://com.android.providers.documents/document/abc"
         every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
 
-        mockkObject(com.voxapps.commander.utils.FileHelper)
-        every { com.voxapps.commander.utils.FileHelper.copyUriToInternal(any(), any(), any()) } returns null
+        every { modelDownloader.importCustomModel(any(), any(), any()) } returns null
 
         viewModel.selectCustomModel(uri, "stt_whisper")
 

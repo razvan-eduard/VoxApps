@@ -4,6 +4,7 @@ import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.provider.DocumentsContract
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.logging.Logger
@@ -151,6 +152,83 @@ class ModelDownloader(private val context: Context) {
         } else {
             // File-based engines: model stored as modelId + extension
             File(rootDir, "$modelId$extension")
+        }
+    }
+
+    /**
+     * Copies a model the user picked into the models directory, and returns where it landed.
+     *
+     * Importing lives here because this class owns where models are kept — the same directory the
+     * resolver reads and the cleanup sweeps. It used to be done in three other places instead: a
+     * copy in the settings view model, a hand-rolled one in the activity, and, for directory-based
+     * engines, no copy at all — those stored `uri.path` of a picked *tree*, which is a document-id
+     * string like `/tree/primary:Download/vosk-model` and not a filesystem path, so nothing could
+     * ever open it. The import reported success and left a value no reader could use.
+     *
+     * Directory-based engines are copied recursively: Vosk's `Model(path)` opens a real directory,
+     * and the picked one is only reachable through the provider that granted it, for as long as
+     * that grant lasts.
+     *
+     * @return the imported artefact, or null if nothing could be read — the caller reports that
+     *         rather than storing a path to something absent.
+     */
+    fun importCustomModel(uri: Uri, engineKey: String, langCode: String? = null): File? {
+        val rootDir = context.getExternalFilesDir(null) ?: return null
+
+        return try {
+            if (RemoteModelRegistry.isArchiveEngine(engineKey)) {
+                val suffix = langCode?.let { "_$it" }.orEmpty()
+                val dest = File(rootDir, "${engineKey}_custom$suffix")
+                dest.deleteRecursively()
+                val treeId = DocumentsContract.getTreeDocumentId(uri)
+                copyDocumentTree(uri, DocumentsContract.buildDocumentUriUsingTree(uri, treeId), dest)
+                if (dest.listFiles().isNullOrEmpty()) {
+                    Logger.log("Imported directory for $engineKey is empty", TAG)
+                    dest.deleteRecursively()
+                    null
+                } else {
+                    dest
+                }
+            } else {
+                val dest = File(rootDir, "$engineKey${RemoteModelRegistry.getExtension(engineKey)}")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
+                } ?: return null
+                dest
+            }
+        } catch (e: Exception) {
+            Logger.log("Custom model import failed for $engineKey: ${e.message}", TAG)
+            null
+        }
+    }
+
+    /** Walks a picked tree, mirroring its structure — a Vosk model is a directory of directories. */
+    private fun copyDocumentTree(treeUri: Uri, documentUri: Uri, dest: File) {
+        dest.mkdirs()
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(
+            treeUri,
+            DocumentsContract.getDocumentId(documentUri)
+        )
+        context.contentResolver.query(
+            children,
+            arrayOf(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE
+            ),
+            null, null, null
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, cursor.getString(0))
+                val name = cursor.getString(1)
+                if (cursor.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR) {
+                    copyDocumentTree(treeUri, childUri, File(dest, name))
+                } else {
+                    context.contentResolver.openInputStream(childUri)?.use { input ->
+                        File(dest, name).outputStream().use { output -> input.copyTo(output) }
+                    }
+                }
+            }
         }
     }
 
