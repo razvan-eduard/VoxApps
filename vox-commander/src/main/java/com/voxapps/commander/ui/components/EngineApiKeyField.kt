@@ -55,10 +55,50 @@ fun EngineApiKeyField(
     if (!RemoteModelRegistry.hasCapability(engineKey, "requires_api_key")) return
 
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
-    val stored = uiState.credentials.forEngine(engineKey) ?: ""
 
-    var value by remember(engineKey) { mutableStateOf(stored) }
-    var isFocused by remember(engineKey) { mutableStateOf(false) }
+    // Where to get the key, when the engine says. A localized sentence if it declares one (the host
+    // inside it becomes the link), otherwise just the host as a link — so an engine can be useful
+    // here with a single line of JSON and no translation work.
+    val helpKey = RemoteModelRegistry.declaredApiKeyHelpKey(engineKey)
+    val helpText = helpKey?.let { languageManager.getString(it) }?.takeIf { it.isNotBlank() && it != helpKey }
+
+    CredentialField(
+        stored = uiState.credentials.forEngine(engineKey) ?: "",
+        label = languageManager.getString("engine_api_key"),
+        onCommit = {
+            appStateManager.setEngineApiKey(engineKey, it.ifBlank { null })
+            onKeyChanged(it)
+        },
+        identity = engineKey,
+        modifier = modifier,
+        helpUrl = RemoteModelRegistry.declaredApiKeyUrl(engineKey),
+        helpText = helpText
+    )
+}
+
+/**
+ * A secret, typed and stored the way every secret in settings is.
+ *
+ * Shared because the behaviour is what matters and it is easy to get wrong: masked until focused,
+ * written when finished with rather than per keystroke, and replaced by an external change only
+ * while nobody is editing. The search providers had their own field with none of that — it wrote on
+ * every keystroke — and the two are the same field.
+ *
+ * [identity] resets the editing state when the field starts describing something else; pass whatever
+ * names the owner (an engine key, a provider name).
+ */
+@Composable
+fun CredentialField(
+    stored: String,
+    label: String,
+    onCommit: (String) -> Unit,
+    identity: Any,
+    modifier: Modifier = Modifier,
+    helpUrl: String? = null,
+    helpText: String? = null
+) {
+    var value by remember(identity) { mutableStateOf(stored) }
+    var isFocused by remember(identity) { mutableStateOf(false) }
 
     /*
      * The credential is written when the field is *finished with* — focus lost, or the screen left —
@@ -75,15 +115,11 @@ fun EngineApiKeyField(
      */
     val latestValue by rememberUpdatedState(value)
     val latestStored by rememberUpdatedState(stored)
-    val commit = {
-        if (latestValue != latestStored) {
-            appStateManager.setEngineApiKey(engineKey, latestValue.ifBlank { null })
-            onKeyChanged(latestValue)
-        }
-    }
+    val latestCommit by rememberUpdatedState(onCommit)
+    val commit = { if (latestValue != latestStored) latestCommit(latestValue) }
 
     // Leaving the screen counts as finishing: a key typed and then navigated away from is kept.
-    DisposableEffect(engineKey) { onDispose { commit() } }
+    DisposableEffect(identity) { onDispose { commit() } }
 
     // An external change (an import, a restore) replaces what is shown — but never mid-edit.
     LaunchedEffect(stored, isFocused) {
@@ -92,24 +128,17 @@ fun EngineApiKeyField(
 
     Spacer(modifier = Modifier.height(8.dp))
 
-    // Where to get the key, when the engine says. A localized sentence if it declares one (the host
-    // inside it becomes the link), otherwise just the host as a link — so an engine can be useful
-    // here with a single line of JSON and no translation work.
-    val helpKey = RemoteModelRegistry.declaredApiKeyHelpKey(engineKey)
-    val keyUrl = RemoteModelRegistry.declaredApiKeyUrl(engineKey)
-    val helpText = helpKey?.let { languageManager.getString(it) }?.takeIf { it.isNotBlank() && it != helpKey }
-    val host = keyUrl?.toUri()?.host
-
-    if (host != null && keyUrl != null) {
+    val host = helpUrl?.toUri()?.host
+    if (host != null && helpUrl != null) {
         val uriHandler = LocalUriHandler.current
-        val annotated = remember(helpText, host, keyUrl) {
+        val annotated = remember(helpText, host, helpUrl) {
             buildAnnotatedString {
                 val sentence = helpText ?: host
                 val linkStart = sentence.indexOf(host)
                 if (linkStart >= 0) {
                     append(sentence.substring(0, linkStart))
                     withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) {
-                        withAnnotation(tag = "URL", annotation = keyUrl) { append(host) }
+                        withAnnotation(tag = "URL", annotation = helpUrl) { append(host) }
                     }
                     append(sentence.substring(linkStart + host.length))
                 } else {
@@ -131,10 +160,10 @@ fun EngineApiKeyField(
         value = value,
         // Typing only updates what is on screen. See [commit] for when it is stored.
         onValueChange = { value = it },
-        // Just "API key": the field sits directly under the engine it belongs to, so naming the
-        // engine again is noise — and it read badly for the engines whose own label ends in API
-        // ("OpenAI Whisper API API key").
-        label = { Text(languageManager.getString("engine_api_key")) },
+        // Just "API key": the field sits directly under whatever it belongs to, so naming that again
+        // is noise — and it read badly for the engines whose own label ends in API ("OpenAI Whisper
+        // API API key").
+        label = { Text(label) },
         modifier = modifier
             .fillMaxWidth()
             .onFocusChanged { focus ->

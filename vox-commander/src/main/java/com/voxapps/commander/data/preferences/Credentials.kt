@@ -18,11 +18,21 @@ package com.voxapps.commander.data.preferences
  * setting: [SettingsRepository.credentialsFlow] to observe, [SettingsRepository.getCredentialsSnapshot]
  * to read, [SettingsRepository.setEngineApiKey] to write.
  */
-data class Credentials(val byEngine: Map<String, String> = emptyMap()) {
+data class Credentials(
+    val byEngine: Map<String, String> = emptyMap(),
+    /** The same store, for the search providers that own a key rather than borrowing an engine's.
+     *  They are declared in a schema of their own and addressed by provider name, so they cannot
+     *  share the engine map — but there is no reason for them to be read and written differently,
+     *  which is what a separate synchronous accessor made them. */
+    val bySearchProvider: Map<String, String> = emptyMap()
+) {
 
     /** The credential for [engineKey], or null when it has none. Blank counts as none: an emptied
      *  text field must read as "not configured" rather than as a key that happens to be empty. */
     fun forEngine(engineKey: String): String? = byEngine[engineKey]?.takeIf { it.isNotBlank() }
 
     fun has(engineKey: String): Boolean = forEngine(engineKey) != null
+
+    fun forSearchProvider(providerName: String): String? =
+        bySearchProvider[providerName]?.takeIf { it.isNotBlank() }
 }

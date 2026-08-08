@@ -93,7 +93,8 @@ fun ConnectionTestCard(
     helpText: String? = null,
     testingLabel: String = "Testing…",
     onlineLabel: String = "Reachable",
-    offlineLabel: String = "Not reachable"
+    offlineLabel: String = "Not reachable",
+    missingCredentialLabel: String = "Needs an API key"
 ) {
     if (spec == null) return
 
@@ -106,7 +107,9 @@ fun ConnectionTestCard(
         helpText = helpText,
         testingLabel = testingLabel,
         onlineLabel = onlineLabel,
-        offlineLabel = offlineLabel
+        // No request is made when the credential is missing, so "not reachable" would blame the
+        // network for something the field directly above it is asking for.
+        offlineLabel = if (spec.missingCredential) missingCredentialLabel else offlineLabel
     )
 }
 

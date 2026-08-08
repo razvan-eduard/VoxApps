@@ -135,6 +135,11 @@ data class AppSettings(
     /** Map of provider name -> API key (stored encrypted) */
     val searchProviderApiKeys: Map<String, String> = emptyMap(),
 
+    /** Category -> chosen provider name. The category's own `defaultProvider` is what applies
+     *  until someone chooses otherwise; only a deliberate choice is stored here, so a schema that
+     *  changes its default still moves users who never expressed one. */
+    val searchProviderSelections: Map<String, String> = emptyMap(),
+
     // --- TTS ---
     val ttsEnabled: Boolean = true,
     /** The TTS picker stores whatever `getEngineKeysByType("tts")` returned, so this holds a

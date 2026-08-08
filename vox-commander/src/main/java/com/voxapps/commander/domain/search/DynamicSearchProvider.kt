@@ -3,6 +3,9 @@ package com.voxapps.commander.domain.search
 import androidx.compose.runtime.Immutable
 
 import com.google.gson.JsonParser
+import com.google.gson.annotations.SerializedName
+import com.voxapps.commander.domain.service.AuthDeclaration
+import com.voxapps.commander.domain.service.ProbeSpec
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,6 +44,14 @@ data class CategoryDefinition(
 data class ProviderDefinition(
     val name: String,
     val endpoint: String,
+    /** A cheap URL that proves the service answers and accepts the credential, relative to
+     *  [endpoint] — see ProbeSpec.from. A search endpoint is usually complete already and needs
+     *  only arguments (`?q=…`), which is why most of these are queries rather than paths. */
+    @SerializedName("probe_url") val probeUrl: String? = null,
+    /** How the credential attaches, in the vocabulary every schema shares. The working call carries
+     *  its key inline in [queryTemplate]; this says the same thing in a form the prober can use
+     *  without knowing what a query template is. */
+    val auth: AuthDeclaration? = null,
     val method: String = "GET",
     val requiresLocation: Boolean = false,
     val requiresApiKey: Boolean = false,
@@ -144,56 +155,22 @@ class DynamicSearchProvider(
     fun setApiKey(key: String?) { apiKey = key }
     fun hasApiKey(): Boolean = !apiKey.isNullOrBlank()
 
-    suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {
-        if (def.providerType == "openai_chat") {
-            return@withContext testOpenAiConnection()
-        }
-        try {
-            val url = if (def.method == "GET" && def.queryTemplate != null) {
-                if (def.requiresLocation) buildUrl("test", 44.43, 26.10)
-                else buildUrl("test", null, null)
-            } else {
-                def.endpoint
-            }
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", def.userAgent ?: BROWSER_UA)
-                .get()
-                .build()
-            val response = client.newCall(request).execute()
-            val ok = response.isSuccessful
-            Logger.log("$name connection test: ${if (ok) "OK" else "HTTP ${response.code}"}", tag)
-            ok
-        } catch (e: Exception) {
-            Logger.log("$name connection test failed: ${e.message}", tag)
-            false
-        }
-    }
-
-    /** Lightweight authenticated check for an "openai_chat" provider — hits the cheap /v1/models
-     *  listing endpoint with the same key rather than a GET against the chat-completions endpoint
-     *  (which requires POST and would always fail the generic [testConnection] path). */
-    private fun testOpenAiConnection(): Boolean {
-        val key = apiKey
-        if (key.isNullOrBlank()) {
-            Logger.log("$name connection test: no API key", tag)
-            return false
-        }
-        return try {
-            val request = Request.Builder()
-                .url("https://api.openai.com/v1/models")
-                .header("Authorization", "Bearer $key")
-                .get()
-                .build()
-            val response = client.newCall(request).execute()
-            val ok = response.isSuccessful
-            Logger.log("$name connection test: ${if (ok) "OK" else "HTTP ${response.code}"}", tag)
-            ok
-        } catch (e: Exception) {
-            Logger.log("$name connection test failed: ${e.message}", tag)
-            false
-        }
-    }
+    /**
+     * What this provider's declaration says about testing it, or null when it says nothing.
+     *
+     * The test used to be a real search with a dummy term — a Bucharest latitude and the word
+     * "test" written into the code — and OpenAI needed an exception on top of it, since a GET
+     * against chat-completions can only ever fail. Both are declarations now: the arguments that
+     * make a cheap answer live beside the endpoint they belong to, and the credential attaches the
+     * way the schema says it does.
+     */
+    fun probeSpec(lang: String = currentLang): ProbeSpec? = ProbeSpec.from(
+        id = def.name,
+        endpoint = def.endpoint.replace("{lang}", formatLang(lang)),
+        probeUrl = def.probeUrl,
+        auth = def.auth?.probeStyle() ?: ProbeSpec.AuthStyle.None,
+        credential = apiKey
+    )
 
     suspend fun search(query: String, lat: Double? = null, lon: Double? = null, lang: String = "en"): List<SearchResult> =
         withContext(Dispatchers.IO) {

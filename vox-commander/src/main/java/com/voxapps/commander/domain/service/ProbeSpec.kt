@@ -52,8 +52,16 @@ data class ProbeSpec(
          * A declaration should not repeat itself. `endpoint` already says where the service lives,
          * so the probe says only what is different about it:
          *
-         *  - omitted   → probe [endpoint] itself, for a service whose own URL answers a GET;
-         *  - `/models` → a path on the same service, which is every other real case.
+         *  - omitted      → probe [endpoint] itself, for a service whose own URL answers a GET;
+         *  - `models`     → appended to the endpoint, for a service whose base URL is a base;
+         *  - `/v1/models` → from the host root, for an endpoint that is already a full path;
+         *  - `?q=London`  → the endpoint with a query, for a service that answers nothing without
+         *                   arguments — every search API, whose bare endpoint returns 400.
+         *
+         * These are ordinary relative-URL resolution, and each is needed by something: Spotify's
+         * endpoint is a base (`…/v1`) so its probe hangs off it; a search provider's endpoint is the
+         * working call itself (`…/v1/chat/completions`) and its cheap sibling is `/v1/models`; a
+         * weather endpoint is complete already and needs only arguments.
          *
          * **A probe is always a path, never a URL.** An absolute one is refused, and that is a
          * security boundary rather than a style rule: these schemas can be served from a repository
@@ -77,9 +85,22 @@ data class ProbeSpec(
             }
 
             val base = endpoint?.trimEnd('/')?.takeIf { it.isNotBlank() } ?: return null
-            val url = if (probeUrl.isNullOrBlank()) base else base + "/" + probeUrl.trimStart('/')
+            val url = when {
+                probeUrl.isNullOrBlank() -> base
+                probeUrl.startsWith("?") -> base + probeUrl
+                probeUrl.startsWith("/") -> originOf(base) + probeUrl
+                else -> "$base/$probeUrl"
+            }
 
             return ProbeSpec(id = id, url = url, auth = auth, credential = credential)
+        }
+
+        /** Scheme and host of [url], so a root-relative probe stays on the declared host. */
+        private fun originOf(url: String): String {
+            val schemeEnd = url.indexOf("://")
+            if (schemeEnd < 0) return url
+            val pathStart = url.indexOf('/', schemeEnd + 3)
+            return if (pathStart < 0) url else url.substring(0, pathStart)
         }
 
         private const val TAG = "ProbeSpec"

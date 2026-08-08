@@ -37,6 +37,9 @@ fun <T> SettingsPicklist(
     modifier: Modifier = Modifier,
     itemEnabled: (T) -> Boolean = { true },
     disabledSuffix: String = "",
+    /** A hint on a row that can still be chosen — "needs an API key" and the like. The greyed-out
+     *  reason is [disabledSuffix]; this is for what the user can act on by choosing it. */
+    itemNote: (T) -> String = { "" },
     below: @Composable () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -56,7 +59,7 @@ fun <T> SettingsPicklist(
                 DropdownMenuItem(
                     text = {
                         Text(
-                            text = itemLabel(item) + if (enabled) "" else disabledSuffix,
+                            text = itemLabel(item) + if (enabled) itemNote(item) else disabledSuffix,
                             color = if (enabled) LocalContentColor.current
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                         )

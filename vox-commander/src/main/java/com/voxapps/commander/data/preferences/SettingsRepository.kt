@@ -149,6 +149,9 @@ interface SettingsRepository {
     suspend fun setExternalTriggerEnabled(enabled: Boolean)
 
     // --- SEARCH PROVIDER API KEYS ---
+    /** Per-category provider choice — the same shape as the per-engine model selection above. */
+    suspend fun setSearchProviderSelection(category: String, providerName: String)
+
     fun getSearchProviderApiKeySync(providerName: String): String?
     suspend fun setSearchProviderApiKey(providerName: String, key: String?)
     fun getAllSearchProviderApiKeys(): Map<String, String>

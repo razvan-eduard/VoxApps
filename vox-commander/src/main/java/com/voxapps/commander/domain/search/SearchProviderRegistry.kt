@@ -17,6 +17,10 @@ object SearchProviderRegistry {
 
     /** Assigned on Main in init(), read on Dispatchers.IO throughout fetchRemote. */
     @Volatile private var appContext: Context? = null
+    /** Held so the chosen provider can be *read* where it is used rather than pushed in from
+     *  startup and from the settings screen — the API keys below are pushed, and every push site is
+     *  another place that can be forgotten when a third one appears. */
+    @Volatile private var settingsRepo: SettingsRepository? = null
     /** Written on Main (init) and on Dispatchers.IO (fetchRemote); read from Compose on Main. */
     @Volatile private var cachedSchema: SearchDefinitionsSchema? = null
     /** Rebuilt on whichever thread last refreshed the schema (Main via init, IO via fetchRemote);
@@ -25,8 +29,9 @@ object SearchProviderRegistry {
     /** Same write/read threads as providersByCategory — the two are rebuilt together. */
     @Volatile private var defaultProviderNames: Map<String, String> = emptyMap()
 
-    fun init(context: Context) {
+    fun init(context: Context, repo: SettingsRepository? = null) {
         appContext = context.applicationContext
+        settingsRepo = repo
         loadFromFilesDir()
     }
 
@@ -222,27 +227,36 @@ object SearchProviderRegistry {
         Logger.log("Applied shared OpenAI key to $count provider(s)", TAG)
     }
 
+    /**
+     * Whichever provider answers this category — the user's choice when they made one, the
+     * category's declared default when they did not.
+     *
+     * The choice used to reach no further than the settings screen's own test box: a spoken query
+     * always went to the declared default, so picking a provider changed nothing that mattered.
+     */
     fun getProvider(category: String): DynamicSearchProvider? {
-        val providers = providersByCategory[category]
-        if (providers != null) {
-            val defaultName = defaultProviderNames[category]
-            val default = defaultName?.let { providers[it] }
-            if (default != null) {
-                // If default requires API key but has none, fall back to a provider without API key requirement
-                if (default.requiresApiKey && !default.hasApiKey()) {
-                    val fallback = providers.values.firstOrNull { !it.requiresApiKey }
-                    if (fallback != null) return fallback
-                }
-                return default
-            }
-            return providers.values.firstOrNull()
+        val providers = providersByCategory[category] ?: return generalProvider()
+        val chosen = chosenName(category)?.let { providers[it] }
+            ?: defaultProviderNames[category]?.let { providers[it] }
+            ?: return providers.values.firstOrNull()
+
+        // A provider that needs a key it has not been given cannot answer, and a category with no
+        // answer at all is worse than one answered by something else.
+        if (chosen.requiresApiKey && !chosen.hasApiKey()) {
+            providers.values.firstOrNull { !it.requiresApiKey }?.let { return it }
         }
+        return chosen
+    }
+
+    /** The stored choice for [category], or null when none was ever made. */
+    private fun chosenName(category: String): String? =
+        settingsRepo?.getSettingsSnapshot()?.searchProviderSelections?.get(category)
+
+    /** What answers a category the schema does not describe. */
+    private fun generalProvider(): DynamicSearchProvider? {
         val generalProviders = providersByCategory["general"] ?: return null
-        val generalDefault = defaultProviderNames["general"]
-        if (generalDefault != null && generalProviders.containsKey(generalDefault)) {
-            return generalProviders[generalDefault]
-        }
-        return generalProviders.values.firstOrNull()
+        val name = chosenName("general") ?: defaultProviderNames["general"]
+        return name?.let { generalProviders[it] } ?: generalProviders.values.firstOrNull()
     }
 
     fun getProvider(category: String, providerName: String): DynamicSearchProvider? {
@@ -251,23 +265,6 @@ object SearchProviderRegistry {
 
     fun getProviderNames(category: String): List<String> {
         return providersByCategory[category]?.keys?.toList() ?: emptyList()
-    }
-
-    /**
-     * Returns provider names for a category, excluding API-key providers that don't have a key configured.
-     */
-    fun getAvailableProviderNames(category: String, settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository?): List<String> {
-        val allNames = getProviderNames(category)
-        return allNames.filter { name ->
-            val provider = getProvider(category, name)
-            when {
-                // A shared-key provider (e.g. OpenAI) never has its own entry in the per-provider key
-                // store — check what was actually applied via applySharedOpenAiKey instead.
-                provider?.usesSharedApiKey == true -> provider.hasApiKey()
-                provider?.requiresApiKey == true -> settingsRepo?.getSearchProviderApiKeySync(name)?.isNotBlank() == true
-                else -> true
-            }
-        }
     }
 
     val categories: List<String>

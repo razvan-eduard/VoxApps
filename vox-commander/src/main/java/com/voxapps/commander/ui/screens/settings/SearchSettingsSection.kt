@@ -22,17 +22,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.location.CommanderLocationStore
 import com.voxapps.commander.domain.search.SearchProviderRegistry
 import com.voxapps.commander.domain.search.SearchProviderRouter
-import com.voxapps.commander.ui.components.ConnectionTestAuto
+import com.voxapps.commander.ui.components.ConnectionTestCard
+import com.voxapps.commander.ui.components.CredentialField
+import com.voxapps.commander.ui.components.SettingsPicklist
 import com.voxapps.location.LocationSource
 import com.voxapps.location.ResolvedLocation
 import com.voxapps.location.VoxLocationResolver
@@ -170,18 +168,18 @@ private fun CategoryNode(
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context
 ) {
-        val languageManager = LocalLanguageManager.current
-    var apiKeyRefreshKey by remember { mutableStateOf(0) }
-    val providerNames = remember(categoryName, apiKeyRefreshKey) {
-        SearchProviderRegistry.getAvailableProviderNames(categoryName, settingsRepo)
+    val languageManager = LocalLanguageManager.current
+    val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
+
+    val providerNames = remember(categoryName) {
+        SearchProviderRegistry.getProviderNames(categoryName)
     }
-    val defaultProvider = remember(categoryName) {
-        SearchProviderRegistry.getProvider(categoryName)
+    // What answers this category: the stored choice, or the schema's default until one is made.
+    val defaultProviderName = remember(categoryName, providerNames) {
+        SearchProviderRegistry.getProvider(categoryName)?.name.orEmpty()
     }
+    val selectedProvider = uiState.searchProviderSelections[categoryName] ?: defaultProviderName
     var expanded by remember { mutableStateOf(false) }
-    var selectedProvider by remember(categoryName, apiKeyRefreshKey) {
-        mutableStateOf(defaultProvider?.name ?: providerNames.firstOrNull() ?: "")
-    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -246,61 +244,31 @@ private fun CategoryNode(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Provider selection
+                    /*
+                     * One dropdown per category, exactly like the engine screens.
+                     *
+                     * Every declared provider is listed and every one can be chosen, including those
+                     * still missing a key — the key field appears directly beneath the selection, so
+                     * choosing one is how you get to configure it. The old screen split them into a
+                     * usable list and a locked "Requires API Key" list, which put the fix for being
+                     * locked in a second place and made the two lists look like different kinds of
+                     * thing.
+                     */
                     if (providerNames.isNotEmpty()) {
-                        Text(
-                            text = "Providers",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        providerNames.forEach { providerName ->
-                            ProviderRow(
-                                providerName = providerName,
-                                isSelected = providerName == selectedProvider,
-                                categoryName = categoryName,
-                                appStateManager = appStateManager,
-                                settingsRepo = settingsRepo,
-                                scope = scope,
-                                context = context,
-                                onSelect = { selectedProvider = it },
-                                onApiKeyChanged = { apiKeyRefreshKey++ }
-                            )
-                        }
-                    }
-
-                    // Locked providers (require API key)
-                    val lockedProviders = remember(categoryName, apiKeyRefreshKey) {
-                        val all = SearchProviderRegistry.getProviderNames(categoryName)
-                        all.filter { name ->
-                            val provider = SearchProviderRegistry.getProvider(categoryName, name)
-                            when {
-                                // Shared-key providers (e.g. OpenAI) are locked based on the shared
-                                // key actually applied, not the per-provider key store.
-                                provider?.usesSharedApiKey == true -> !provider.hasApiKey()
-                                provider?.requiresApiKey == true ->
-                                    settingsRepo.getSearchProviderApiKeySync(name).isNullOrBlank()
-                                else -> false
+                        SettingsPicklist(
+                            items = providerNames,
+                            selected = selectedProvider,
+                            itemLabel = { it },
+                            onSelect = { appStateManager.setSearchProvider(categoryName, it) },
+                            itemNote = { name ->
+                                if (needsCredential(categoryName, name, uiState)) " — needs an API key" else ""
                             }
-                        }
-                    }
-                    if (lockedProviders.isNotEmpty()) {
-                        Text(
-                            text = "Requires API Key",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                        lockedProviders.forEach { providerName ->
-                            ProviderRow(
-                                providerName = providerName,
-                                isSelected = false,
+                        ) {
+                            SelectedProviderDetails(
                                 categoryName = categoryName,
+                                providerName = selectedProvider,
                                 appStateManager = appStateManager,
-                                settingsRepo = settingsRepo,
-                                scope = scope,
-                                context = context,
-                                onSelect = { selectedProvider = it },
-                                onApiKeyChanged = { apiKeyRefreshKey++ }
+                                settingsRepo = settingsRepo
                             )
                         }
                     }
@@ -321,120 +289,84 @@ private fun CategoryNode(
     }
 }
 
-@Composable
-private fun ProviderRow(
-    providerName: String,
-    isSelected: Boolean,
+/** True when a provider says it needs a key and the store has none for it. */
+private fun needsCredential(
     categoryName: String,
+    providerName: String,
+    uiState: com.voxapps.commander.state.AppState
+): Boolean {
+    val provider = SearchProviderRegistry.getProvider(categoryName, providerName) ?: return false
+    if (!provider.requiresApiKey) return false
+    return if (provider.usesSharedApiKey) !uiState.credentials.has(Strings.AiProcessors.OPENAI)
+    else uiState.credentials.forSearchProvider(providerName) == null
+}
+
+/**
+ * Whatever the chosen provider needs said about it: where it gets its key, and whether it answers.
+ *
+ * Under the collapsed dropdown rather than on the rows, so opening the menu costs no requests — a
+ * test per row would be one request per provider every time someone looked at the list.
+ */
+@Composable
+private fun SelectedProviderDetails(
+    categoryName: String,
+    providerName: String,
     appStateManager: com.voxapps.commander.state.AppStateManager,
-    settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository,
-    scope: kotlinx.coroutines.CoroutineScope,
-    context: android.content.Context,
-    onSelect: (String) -> Unit,
-    onApiKeyChanged: () -> Unit = {}
+    settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository
 ) {
-    val provider = remember(categoryName, providerName) {
-        SearchProviderRegistry.getProvider(categoryName, providerName)
-    }
-    var apiKey by remember(providerName) {
-        mutableStateOf(settingsRepo.getSearchProviderApiKeySync(providerName) ?: "")
-    }
-    var isApiKeyFocused by remember { mutableStateOf(false) }
     val languageManager = LocalLanguageManager.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
+    val provider = remember(categoryName, providerName) {
+        SearchProviderRegistry.getProvider(categoryName, providerName)
+    } ?: return
 
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Radio button for selection
-            RadioButton(
-                selected = isSelected,
-                onClick = { onSelect(providerName) }
-            )
-
-            // Provider name + info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = providerName,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                if (provider?.requiresLocation == true) {
-                    Text(
-                        text = "requires location",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                // Auto connection test — same component as Piped
-                // Re-tested when the provider changes and when its credential does — a provider
-                // that needs a key shows a failure until one is entered, and that failure has to
-                // stop being shown the moment it is. The credential is reduced to a length, which
-                // changes when the key does without the key itself becoming a composition key.
-                val credentialFingerprint = if (provider?.usesSharedApiKey == true) {
-                    uiState.credentials.forEngine(Strings.AiProcessors.OPENAI)?.length ?: 0
-                } else {
-                    settingsRepo.getSearchProviderApiKeySync(providerName)?.length ?: 0
-                }
-                ConnectionTestAuto(
-                    keys = listOf(if (isSelected) providerName else "", credentialFingerprint),
-                    testFn = { provider?.testConnection() ?: false }
-                )
-            }
-        }
-
-        // A shared-key provider does not own a key — it borrows the engine's. The field shown here
-        // is that engine's own, writing the same slot the intent engine reads, so entering it in
-        // either place is entering it once. It has to be reachable here: the engine's own screen
-        // shows the field only while that engine is *selected*, and someone running a local intent
-        // model would otherwise have no way to configure the provider that needs this key.
-        if (provider?.usesSharedApiKey == true) {
-            Text(
-                text = languageManager.getString("search_provider_uses_shared_key")
-                    ?: "Shares the engine's API key",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 48.dp)
-            )
-            EngineApiKeyField(
-                engineKey = Strings.AiProcessors.OPENAI,
-                appStateManager = appStateManager,
-                languageManager = languageManager,
-                onKeyChanged = {
-                    SearchProviderRegistry.applySharedOpenAiKey(it.ifBlank { null })
-                    onApiKeyChanged()
-                }
-            )
-        }
-
-        // API key field for providers that require their own key
-        if (provider?.requiresApiKey == true && provider?.usesSharedApiKey != true) {
-            TextField(
-                value = apiKey,
-                onValueChange = {
-                    apiKey = it
-                    scope.launch {
-                    settingsRepo.setSearchProviderApiKey(providerName, it.ifBlank { null })
-                    provider.setApiKey(it.ifBlank { null })
-                    onApiKeyChanged()
-                }
-                },
-                label = { Text("API Key") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { isApiKeyFocused = it.isFocused },
-                visualTransformation = if (isApiKeyFocused) VisualTransformation.None else PasswordVisualTransformation(),
-                singleLine = !isApiKeyFocused,
-                maxLines = if (isApiKeyFocused) 5 else 1,
-                colors = if (!isApiKeyFocused) TextFieldDefaults.colors(
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    unfocusedIndicatorColor = Color.Transparent
-                ) else TextFieldDefaults.colors()
-            )
-        }
+    val credential = if (provider.usesSharedApiKey) {
+        uiState.credentials.forEngine(Strings.AiProcessors.OPENAI)
+    } else {
+        uiState.credentials.forSearchProvider(providerName)
     }
+
+    if (provider.requiresLocation) {
+        Text(
+            text = "requires location",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    // A shared-key provider does not own a key — it borrows the engine's. The field shown here is
+    // that engine's own, writing the same slot the intent engine reads, so entering it in either
+    // place is entering it once. It has to be reachable here: the engine's own screen shows the
+    // field only while that engine is *selected*, and someone running a local intent model would
+    // otherwise have no way to configure the provider that needs this key.
+    if (provider.usesSharedApiKey) {
+        Text(
+            text = languageManager.getString("search_provider_uses_shared_key")
+                ?: "Shares the engine's API key",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        EngineApiKeyField(
+            engineKey = Strings.AiProcessors.OPENAI,
+            appStateManager = appStateManager,
+            languageManager = languageManager,
+            onKeyChanged = { SearchProviderRegistry.applySharedOpenAiKey(it.ifBlank { null }) }
+        )
+    } else if (provider.requiresApiKey) {
+        CredentialField(
+            stored = credential ?: "",
+            label = languageManager.getString("engine_api_key"),
+            identity = providerName,
+            onCommit = { appStateManager.setSearchProviderApiKey(providerName, it.ifBlank { null }) }
+        )
+    }
+
+    // The credential the screen holds is what gets tested, rather than whatever copy the registry
+    // was last pushed — the test then answers for the key that is on screen.
+    val spec = remember(providerName, credential, uiState.language) {
+        provider.probeSpec(uiState.language)?.copy(credential = credential)
+    }
+    ConnectionTestCard(spec = spec, settingsRepo = settingsRepo)
 }
 
 @Composable

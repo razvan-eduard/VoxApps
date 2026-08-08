@@ -2,6 +2,7 @@ package com.voxapps.commander.data.remote
 
 import com.google.gson.Gson
 import com.voxapps.commander.domain.engine.AndroidTtsEngine
+import com.voxapps.commander.domain.service.ProbeSpec
 import com.voxapps.commander.utils.Strings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -9,6 +10,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.net.URI
 
 /**
  * Checks the *shipped* assets against the code that reads them.
@@ -202,6 +204,54 @@ class ShippedSchemaTest {
         }
     }
 
+    private fun assetSearch(): com.voxapps.commander.domain.search.SearchDefinitionsSchema =
+        gson.fromJson(
+            repoFile("src/main/assets/search_definitions.json").readText(),
+            com.voxapps.commander.domain.search.SearchDefinitionsSchema::class.java
+        )
+
+    private fun declaredProviders() = assetSearch().categories.flatMap { it.providers }
+
+    /**
+     * Every search provider is testable, and its test reaches its own service.
+     *
+     * The probe is resolved against the endpoint precisely so a schema cannot send a credential
+     * somewhere else; asserting the resolved host still matches keeps that true for the shipped
+     * declarations rather than only for the resolver.
+     */
+    @Test
+    fun `every declared search provider resolves to a probe on its own host`() {
+        val providers = declaredProviders()
+        assertTrue("no search providers declared", providers.isNotEmpty())
+
+        providers.forEach { def ->
+            val endpoint = def.endpoint.replace("{lang}", "en")
+            val spec = ProbeSpec.from(def.name, endpoint, def.probeUrl)
+                ?: error("provider '${def.name}' declares nothing to probe")
+
+            assertEquals(
+                "provider '${def.name}' probes a different host than it calls",
+                URI(endpoint).host,
+                URI(spec.url).host
+            )
+        }
+    }
+
+    /**
+     * A provider that needs a key must say how the key attaches, or the probe sends none and the
+     * screen reports the service unreachable when it is the credential that is missing.
+     */
+    @Test
+    fun `a search provider that requires a key declares how it travels`() {
+        declaredProviders().filter { it.requiresApiKey }.forEach { def ->
+            val style = def.auth?.probeStyle()
+            assertTrue(
+                "provider '${def.name}' requires an API key but declares no auth style",
+                style is ProbeSpec.AuthStyle.Bearer || style is ProbeSpec.AuthStyle.Query
+            )
+        }
+    }
+
     /**
      * The bundled copy and the one served from the repository are compared by version to decide
      * which the app runs on, so a twin left behind is not a cosmetic difference — it decides whose
@@ -209,7 +259,12 @@ class ShippedSchemaTest {
      */
     @Test
     fun `each asset and its repo-root twin are identical`() {
-        listOf("models.json", "virtual_models.json").forEach { name ->
+        listOf(
+            "models.json",
+            "virtual_models.json",
+            "search_definitions.json",
+            "api_integrations.json"
+        ).forEach { name ->
             val asset = repoFile("src/main/assets/$name")
             val twin = listOf(File(name), File("../$name")).firstOrNull { it.exists() }
                 ?: error("repo-root $name not found")

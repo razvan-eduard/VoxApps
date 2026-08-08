@@ -310,6 +310,21 @@ class AppStateManager private constructor(
         scope.launch { repo.setEngineApiKey(engineKey, key) }
     }
 
+    /**
+     * The same, for a search provider that owns its key.
+     *
+     * The registry is told immediately afterwards because it holds a provider object per
+     * declaration with the key applied to it — a push, like the one at startup, rather than the
+     * screen doing it on the way past and the next screen forgetting to.
+     */
+    fun setSearchProviderApiKey(providerName: String, key: String?) {
+        scope.launch {
+            repo.setSearchProviderApiKey(providerName, key)
+            com.voxapps.commander.domain.search.SearchProviderRegistry
+                .applyApiKeys(repo.getAllSearchProviderApiKeys())
+        }
+    }
+
     fun setAppLanguage(lang: String) {
         scope.launch { repo.setLanguage(lang) }
     }
@@ -475,6 +490,12 @@ class AppStateManager private constructor(
 
     fun saveIntentModelSelection(engineKey: String, modelId: String) {
         scope.launch { repo.setEngineModelSelection(engineKey, modelId) }
+    }
+
+    /** Which provider answers a search in [category] — for spoken queries, not only for the
+     *  screen's own test box, which is all the choice used to affect. */
+    fun setSearchProvider(category: String, providerName: String) {
+        scope.launch { repo.setSearchProviderSelection(category, providerName) }
     }
 
     // Diagnostic Helpers

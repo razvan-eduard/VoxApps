@@ -66,6 +66,13 @@ class SettingsRepositoryImpl(
         fun engineOf(prefName: String) = prefName.removePrefix(ENGINE_PREFIX)
         fun isEngineKey(prefName: String) = prefName.startsWith(ENGINE_PREFIX)
 
+        /** The same idea for search providers, which own their keys by provider name. */
+        const val SEARCH_PREFIX = "search_apikey_"
+
+        fun forSearchProvider(providerName: String) = "$SEARCH_PREFIX$providerName"
+        fun searchProviderOf(prefName: String) = prefName.removePrefix(SEARCH_PREFIX)
+        fun isSearchKey(prefName: String) = prefName.startsWith(SEARCH_PREFIX)
+
         /** The single-key names used before credentials were per engine. Read once by
          *  [migrateLegacyCredentials] and then gone; never written again. */
         const val LEGACY_OPENAI = "api_key"
@@ -159,6 +166,9 @@ class SettingsRepositoryImpl(
 
         // Per-engine model selections (stored as JSON map)
         val ENGINE_MODEL_SELECTIONS_JSON = stringPreferencesKey("engine_model_selections_json")
+
+        // Per-category search provider selections (stored as JSON map)
+        val SEARCH_PROVIDER_SELECTIONS_JSON = stringPreferencesKey("search_provider_selections_json")
 
         // Default apps per domain (stored as JSON map: "audio" -> "com.spotify.music")
         val DEFAULT_APP_PACKAGES_JSON = stringPreferencesKey("default_app_packages_json")
@@ -359,6 +369,7 @@ class SettingsRepositoryImpl(
             cloudIntelligenceEnabled = prefs[Keys.CLOUD_INTELLIGENCE_ENABLED] ?: false,
 
             engineModelSelections = parseStringMap(prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON]),
+            searchProviderSelections = parseStringMap(prefs[Keys.SEARCH_PROVIDER_SELECTIONS_JSON]),
 
             wakeWord = prefs[Keys.WAKE_WORD] ?: "hi vosk",
             wakeWordEnabled = prefs[Keys.WAKE_WORD_ENABLED] ?: false,
@@ -501,6 +512,7 @@ class SettingsRepositoryImpl(
             prefs[Keys.CLOUD_INTELLIGENCE_ENABLED] = imported.cloudIntelligenceEnabled
 
             prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON] = gson.toJson(imported.engineModelSelections)
+            prefs[Keys.SEARCH_PROVIDER_SELECTIONS_JSON] = gson.toJson(imported.searchProviderSelections)
 
             prefs[Keys.WAKE_WORD] = imported.wakeWord
             prefs[Keys.WAKE_WORD_ENABLED] = imported.wakeWordEnabled
@@ -586,11 +598,16 @@ class SettingsRepositoryImpl(
     override fun getCredentialsSnapshot(): Credentials = readCredentials()
 
     private fun readCredentials(): Credentials {
-        val byEngine = encryptedPrefs.all
+        val all = encryptedPrefs.all
+        val byEngine = all
             .filterKeys { SecureKeys.isEngineKey(it) }
             .mapNotNull { (name, value) -> (value as? String)?.let { SecureKeys.engineOf(name) to it } }
             .toMap()
-        return Credentials(byEngine)
+        val bySearchProvider = all
+            .filterKeys { SecureKeys.isSearchKey(it) }
+            .mapNotNull { (name, value) -> (value as? String)?.let { SecureKeys.searchProviderOf(name) to it } }
+            .toMap()
+        return Credentials(byEngine, bySearchProvider)
     }
 
     /**
@@ -603,7 +620,7 @@ class SettingsRepositoryImpl(
      */
     override val credentialsFlow: Flow<Credentials> = callbackFlow {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == null || SecureKeys.isEngineKey(key)) {
+            if (key == null || SecureKeys.isEngineKey(key) || SecureKeys.isSearchKey(key)) {
                 trySend(readCredentials())
             }
         }
@@ -1020,26 +1037,27 @@ class SettingsRepositoryImpl(
         dataStore.edit { it[Keys.DOWNLOAD_PREFERENCE] = preference }
     }
 
+    override suspend fun setSearchProviderSelection(category: String, providerName: String) {
+        dataStore.edit { prefs ->
+            val currentMap = parseStringMap(prefs[Keys.SEARCH_PROVIDER_SELECTIONS_JSON]).toMutableMap()
+            currentMap[category] = providerName
+            prefs[Keys.SEARCH_PROVIDER_SELECTIONS_JSON] = gson.toJson(currentMap)
+        }
+    }
+
     // --- SEARCH PROVIDER API KEYS (stored in encrypted prefs) ---
     override fun getSearchProviderApiKeySync(providerName: String): String? =
-        encryptedPrefs.getString("search_apikey_$providerName", null)
+        encryptedPrefs.getString(SecureKeys.forSearchProvider(providerName), null)
 
     override suspend fun setSearchProviderApiKey(providerName: String, key: String?) {
+        val name = SecureKeys.forSearchProvider(providerName)
         encryptedPrefs.edit().apply {
-            if (key != null) putString("search_apikey_$providerName", key)
-            else remove("search_apikey_$providerName")
+            if (key != null) putString(name, key) else remove(name)
         }.apply()
     }
 
-    override fun getAllSearchProviderApiKeys(): Map<String, String> {
-        val result = mutableMapOf<String, String>()
-        for ((k, v) in encryptedPrefs.all) {
-            if (k.startsWith("search_apikey_") && v is String) {
-                result[k.removePrefix("search_apikey_")] = v
-            }
-        }
-        return result
-    }
+    override fun getAllSearchProviderApiKeys(): Map<String, String> =
+        readCredentials().bySearchProvider
 
     // --- DECLARATIVE API INTEGRATION OAUTH TOKENS (stored in encrypted prefs, keyed by service id).
     // Key format "${serviceId}_access_token" etc matches the pre-existing "spotify_access_token"

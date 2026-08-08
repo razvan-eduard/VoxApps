@@ -1,5 +1,5 @@
 {
-  "schema_version": 6,
+  "schema_version": 7,
   "categories": [
     {
       "category": "weather",
@@ -8,6 +8,11 @@
         {
           "name": "WeatherAPI",
           "endpoint": "https://api.weatherapi.com/v1/forecast.json",
+          "probe_url": "?q=London&days=1",
+          "auth": {
+            "style": "query",
+            "param": "key"
+          },
           "method": "GET",
           "requiresLocation": true,
           "requiresApiKey": true,
@@ -58,6 +63,7 @@
         {
           "name": "Open-Meteo",
           "endpoint": "https://api.open-meteo.com/v1/forecast",
+          "probe_url": "?latitude=0&longitude=0&current=temperature_2m",
           "method": "GET",
           "requiresLocation": true,
           "queryTemplate": "?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,apparent_temperature&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto&forecast_days=2",
@@ -157,6 +163,7 @@
         {
           "name": "DuckDuckGo",
           "endpoint": "https://api.duckduckgo.com/",
+          "probe_url": "?q=test&format=json&no_html=1",
           "method": "GET",
           "requiresLocation": false,
           "queryTemplate": "?q={query}&format=json&no_html=1&skip_disambig=1&kl={lang}",
@@ -174,6 +181,7 @@
         {
           "name": "Wikipedia",
           "endpoint": "https://{lang}.wikipedia.org/w/api.php",
+          "probe_url": "?action=query&meta=siteinfo&format=json",
           "method": "GET",
           "requiresLocation": false,
           "userAgent": "VoxCommander/1.0 (Android; contact@voxcommander.app)",
@@ -196,6 +204,10 @@
         {
           "name": "OpenAI",
           "endpoint": "https://api.openai.com/v1/chat/completions",
+          "probe_url": "/v1/models",
+          "auth": {
+            "style": "bearer"
+          },
           "method": "POST",
           "requiresLocation": false,
           "requiresApiKey": true,
@@ -212,6 +224,7 @@
         {
           "name": "Google News",
           "endpoint": "https://news.google.com/rss/search",
+          "probe_url": "?q=test&hl=en-US&gl=US&ceid=US:en",
           "method": "GET",
           "requiresLocation": false,
           "queryTemplate": "?q={query}&hl=en-US&gl=US&ceid=US:en",
@@ -226,6 +239,11 @@
         {
           "name": "GNews",
           "endpoint": "https://gnews.io/api/v4/search",
+          "probe_url": "?q=test&lang=en&max=1",
+          "auth": {
+            "style": "query",
+            "param": "apikey"
+          },
           "method": "GET",
           "requiresLocation": false,
           "requiresApiKey": true,
@@ -243,6 +261,11 @@
         {
           "name": "Currents API",
           "endpoint": "https://api.currentsapi.services/v1/search",
+          "probe_url": "?keywords=test&language=en",
+          "auth": {
+            "style": "query",
+            "param": "apiKey"
+          },
           "method": "GET",
           "requiresLocation": false,
           "requiresApiKey": true,
@@ -260,6 +283,11 @@
         {
           "name": "NewsAPI",
           "endpoint": "https://newsapi.org/v2/everything",
+          "probe_url": "?q=test&language=en&pageSize=1",
+          "auth": {
+            "style": "query",
+            "param": "apiKey"
+          },
           "method": "GET",
           "requiresLocation": false,
           "requiresApiKey": true,
@@ -283,6 +311,7 @@
         {
           "name": "Wikipedia",
           "endpoint": "https://{lang}.wikipedia.org/w/api.php",
+          "probe_url": "?action=query&meta=siteinfo&format=json",
           "method": "GET",
           "requiresLocation": false,
           "userAgent": "VoxCommander/1.0 (Android; contact@voxcommander.app)",
@@ -305,6 +334,10 @@
         {
           "name": "OpenAI",
           "endpoint": "https://api.openai.com/v1/chat/completions",
+          "probe_url": "/v1/models",
+          "auth": {
+            "style": "bearer"
+          },
           "method": "POST",
           "requiresLocation": false,
           "requiresApiKey": true,

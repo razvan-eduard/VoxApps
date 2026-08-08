@@ -55,7 +55,7 @@ class VoxApplication : Application() {
         NativeLibManager.loadAll(this)
 
         // Initialize SearchProviderRegistry with app context
-        com.voxapps.commander.domain.search.SearchProviderRegistry.init(this)
+        com.voxapps.commander.domain.search.SearchProviderRegistry.init(this, container.settingsRepository)
         com.voxapps.commander.domain.search.SearchProviderRegistry.applyApiKeys(
             container.settingsRepository.getAllSearchProviderApiKeys()
         )

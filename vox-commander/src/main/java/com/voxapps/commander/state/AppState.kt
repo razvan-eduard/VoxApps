@@ -76,6 +76,10 @@ data class AppState(
     val defaultIntentFallbackProcessor: String?,
     val defaultIntentFallbackModel: String?,
 
+    // --- SEARCH SETTINGS ---
+    /** Category -> chosen search provider, empty for a category left on its declared default. */
+    val searchProviderSelections: Map<String, String> = emptyMap(),
+
     // --- DYNAMIC MODEL REGISTRY (Reconstructed from JSON Cache) ---
     val availableModels: Map<String, List<AppModel>> = emptyMap(),
     val downloadedModelIds: Set<String> = emptySet(),
@@ -205,6 +209,7 @@ data class AppState(
                 piperVoiceModelId = settings.piperVoiceModelId,
                 appAliasRules = settings.appAliasRules,
                 credentials = credentials,
+                searchProviderSelections = settings.searchProviderSelections,
                 voiceState = voiceState,
                 defaultVoiceFallbackProcessor = settings.defaultVoiceFallbackProcessor,
                 defaultVoiceFallbackModel = settings.defaultVoiceFallbackModel,
@@ -262,6 +267,7 @@ data class AppState(
             piperVoiceModelId = null,
             appAliasRules = emptyList(),
             credentials = com.voxapps.commander.data.preferences.Credentials(),
+            searchProviderSelections = emptyMap(),
             voiceState = VoiceState.IDLE,
             defaultVoiceFallbackProcessor = null,
             defaultVoiceFallbackModel = null,
