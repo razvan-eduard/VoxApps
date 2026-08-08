@@ -95,6 +95,15 @@ data class AppSettings(
     // --- REMOTE REPOSITORY ---
     val modelRepoBaseUrl: String = Strings.Preferences.DEFAULT_MODEL_REPO_URL,
 
+    /** Whether the app asks the repository for newer schemas at startup. Off means the copies in
+     *  force stay in force until the user presses refresh — the app behaves identically every
+     *  launch, which is the point of turning it off. */
+    val schemaAutoUpdate: Boolean = true,
+
+    /** Whether the copies left by the previous schema loader have been discarded — see
+     *  SchemaCatalog.discardCopiesFromOlderScheme. Set once, never shown to the user. */
+    val schemaStoreMigrated: Boolean = false,
+
     // --- DEFAULT APPS PER DOMAIN ---
     /** Map of domain -> package name. e.g. "audio" -> "com.spotify.music" */
     val defaultAppPackages: Map<String, String> = emptyMap(),

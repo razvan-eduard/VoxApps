@@ -63,7 +63,7 @@ class TextNormalizerTest {
     /** Loads [json] as the normalization asset. */
     private fun loadFixture(json: String) {
         val assets = mockk<AssetManager>()
-        every { assets.open("normalization.json") } answers { ByteArrayInputStream(json.toByteArray()) }
+        every { assets.open("schemas/normalization.json") } answers { ByteArrayInputStream(json.toByteArray()) }
         every { context.assets } returns assets
         TextNormalizer.reload(context)
     }

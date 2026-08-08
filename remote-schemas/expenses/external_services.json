@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "services": [
+    {
+      "id": "exchangerate_api",
+      "name": "ExchangeRate-API",
+      "category": "currency_exchange",
+      "endpoint": "https://v6.exchangerate-api.com/v6",
+      "probe_url": "{key}/latest/USD",
+      "requires_api_key": true,
+      "api_key_url": "https://www.exchangerate-api.com/docs/free"
+    }
+  ]
+}

@@ -70,7 +70,7 @@ class ExchangeRateRepository(private val context: Context) {
             ?: return@withContext RatesResult.Error("external_services.json missing exchangerate_api entry")
 
         try {
-            val url = "${service.baseEndpoint}/$apiKey/latest/$homeCurrency"
+            val url = "${service.serviceUrl}/$apiKey/latest/$homeCurrency"
             val request = Request.Builder().url(url).get().build()
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {

@@ -1,4 +1,4 @@
-package com.voxapps.commander.ui.components
+package com.voxapps.design
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row

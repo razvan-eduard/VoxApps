@@ -6,6 +6,7 @@ import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.di.AppContainer
 import com.voxapps.commander.service.OAuth2Manager
 import com.voxapps.logging.Logger
+import com.voxapps.services.SchemaCatalog
 import com.voxapps.commander.utils.NetworkMonitor
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +49,10 @@ class VoxApplication : Application() {
             kotlinx.coroutines.runBlocking { container.settingsRepository.setModelFilterLang(Strings.Preferences.DEFAULT_LANGUAGE) }
         }
         
+        // Which folder in the schema repository is ours. Set before any registry loads, since a
+        // schema resolves its URL against it.
+        com.voxapps.services.SchemaRepo.appFolder = "commander"
+
         // Initialize RemoteModelRegistry with app context (for assets/filesDir access)
         RemoteModelRegistry.init(this)
 
@@ -110,11 +115,8 @@ class VoxApplication : Application() {
         // Fire-and-forget like every other startup task here: the splash screen isn't gated on
         // anything in this file (no setKeepOnScreenCondition), so this never delays first paint.
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
-            // fetchJson(force = false) only reads assets/filesDir, no network call — guarantees
-            // RemoteModelRegistry's schema is populated before isLlmEngine()/resolveLocalFile()
-            // are asked about it (its schema load is otherwise lazy/async elsewhere in onCreate,
-            // so without this the capability check below can race and silently see an empty registry).
-            RemoteModelRegistry.fetchJson(container.settingsRepository, force = false)
+            // The registry is already populated: init() above loads the copies in force, with no
+            // network and nothing async, so the capability checks below cannot race an empty one.
             val s = container.settingsRepository.getSettingsSnapshot()
             val modelId = s.activeIntentModelId
             if (modelId != null && RemoteModelRegistry.isLlmEngine(s.aiProcessor) &&
@@ -125,24 +127,32 @@ class VoxApplication : Application() {
             }
         }
 
-        // Initial fetch of the remote model registry - Force update on start to bypass CDN caching
+        // Copies written by the previous loader cannot say whether they came from the repository or
+        // from assets, so they are discarded once and the app starts from what it shipped with.
+        SchemaCatalog.discardCopiesFromOlderScheme(
+            alreadyDone = snapshot.schemaStoreMigrated,
+            markDone = {
+                CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                    container.settingsRepository.setSchemaStoreMigrated(true)
+                }
+            }
+        )
+
+        // Ask the repository for newer schemas, if the user leaves that on. Every schema the app
+        // loaded takes part — the catalog is the list, so a new one is covered by existing.
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
-            val success = RemoteModelRegistry.fetchJson(container.settingsRepository, force = true)
-            if (success) {
-                // Force AppStateManager to rebuild its UI state with the fresh models
+            if (!container.settingsRepository.getSettingsSnapshot().schemaAutoUpdate) {
+                Logger.log("Schema updates are off — staying on the copies in force", "VoxApplication")
+                return@launch
+            }
+            val results = SchemaCatalog.refreshAll(
+                container.settingsRepository.getSettingsSnapshot().modelRepoBaseUrl
+            )
+            val updated = results.filterValues { it is com.voxapps.services.RemoteSchema.Refreshed.Updated }
+            if (updated.isNotEmpty()) {
+                Logger.log("Updated schemas: ${updated.keys}", "VoxApplication")
                 container.appStateManager.refreshAll()
             }
-
-            // Also fetch search definitions from remote repo
-            com.voxapps.commander.domain.search.SearchProviderRegistry.fetchRemote(container.settingsRepository, force = true)
-            // Also fetch the intent catalog from the remote repo (hot-reload)
-            com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(container.settingsRepository, force = true)
-            // …and the media backends, whose public instances are the likeliest of all of these to
-            // have changed since the release.
-            com.voxapps.commander.domain.media.MediaServiceRegistry.fetchRemote(container.settingsRepository, force = true)
-            // …and the API integrations, whose OAuth endpoints and scopes are the service's to
-            // change, not ours.
-            com.voxapps.commander.domain.intent.registry.ApiIntegrationRegistry.fetchRemote(container.settingsRepository, force = true)
         }
     }
 
@@ -155,11 +165,7 @@ class VoxApplication : Application() {
      */
     private suspend fun reconcileDownloadedModels() {
         try {
-            // RemoteModelRegistry.init() only stores the context — the schema is loaded lazily by
-            // fetchJson(). force=false loads from filesDir/assets and returns WITHOUT any network
-            // call, so this guarantees the registry is populated before we iterate it.
-            RemoteModelRegistry.fetchJson(container.settingsRepository, force = false)
-
+            // init() has already loaded the copies in force, so the registry is populated here.
             val downloader = com.voxapps.commander.data.remote.ModelDownloader(this)
             val downloaded = container.settingsRepository.getSettingsSnapshot().downloadedModelIds
             if (downloaded.isEmpty()) return

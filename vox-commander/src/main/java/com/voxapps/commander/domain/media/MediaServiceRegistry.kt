@@ -3,8 +3,8 @@ package com.voxapps.commander.domain.media
 import android.content.Context
 import com.google.gson.annotations.SerializedName
 import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.data.remote.RemoteSchema
-import com.voxapps.commander.domain.service.ProbeSpec
+import com.voxapps.services.RemoteSchema
+import com.voxapps.services.ProbeSpec
 
 /**
  * The backends that can answer "play this video", declared rather than compiled.
@@ -48,15 +48,12 @@ object MediaServiceRegistry {
     private val schema = RemoteSchema(
         fileName = "media_services.json",
         type = MediaSchema::class.java,
-        versionOf = { it.schemaVersion },
         usable = { it.backends.isNotEmpty() },
         tag = TAG
     )
 
     fun init(context: Context) = schema.init(context)
 
-    suspend fun fetchRemote(repo: SettingsRepository, force: Boolean = false): Boolean =
-        schema.fetchRemote(repo, force)
 
     fun backends(): List<MediaBackend> = schema.value?.backends ?: FALLBACK.backends
 

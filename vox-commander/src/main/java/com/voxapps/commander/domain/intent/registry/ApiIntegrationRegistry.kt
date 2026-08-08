@@ -3,7 +3,7 @@ package com.voxapps.commander.domain.intent.registry
 import android.content.Context
 import com.google.gson.annotations.SerializedName
 import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.data.remote.RemoteSchema
+import com.voxapps.services.RemoteSchema
 
 /**
  * Declarative external-app-API integration schema. One entry replaces what used to require three
@@ -25,7 +25,7 @@ data class ApiIntegration(
     val id: String = "",
     val label: String = "",
     @SerializedName("package_name") val packageName: String = "",
-    val auth: com.voxapps.commander.domain.service.AuthDeclaration? = null,
+    val auth: com.voxapps.services.AuthDeclaration? = null,
     /** Where the service lives. `base_url` is the older spelling and is still read, since a copy of
      *  this file may predate the shared vocabulary. */
     val endpoint: String? = null,
@@ -125,15 +125,12 @@ object ApiIntegrationRegistry {
     private val schema = RemoteSchema(
         fileName = "api_integrations.json",
         type = ApiIntegrationsSchema::class.java,
-        versionOf = { it.schemaVersion },
         usable = { it.integrations.isNotEmpty() },
         tag = TAG
     )
 
     fun init(context: Context) = schema.init(context)
 
-    suspend fun fetchRemote(repo: SettingsRepository, force: Boolean = false): Boolean =
-        schema.fetchRemote(repo, force)
 
     private val cached: List<ApiIntegration> get() = schema.value?.integrations ?: emptyList()
 

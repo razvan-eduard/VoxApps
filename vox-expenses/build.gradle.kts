@@ -73,6 +73,7 @@ dependencies {
     implementation(project(":core:ipc"))
     implementation(project(":core:attachments"))
     implementation(project(":core:logging"))
+    implementation(project(":core:services"))
     implementation(project(":core:preferences"))
     implementation(project(":core:datahygiene"))
     implementation(project(":core:schema-annotations"))
@@ -129,16 +130,17 @@ dependencies {
     testImplementation("org.json:json:20260719")
 }
 
-// Copy external_services.json from repo root into assets (single source of truth in root, mirrors
-// vox-commander's models.json/search_definitions.json/intents.json convention) — Expenses reads this
-// for the exchange-rate API's endpoint shape; the API key itself is stored separately (Settings).
-val copyExternalServicesJson = tasks.register<Copy>("copyExternalServicesJson") {
+// The same folder of shipped schemas the other apps copy. Whole folder rather than the one file
+// this app reads today: which schemas an app understands is decided by the code that loads them,
+// not by a list in a build script.
+val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
     group = "build"
-    description = "Copies external_services.json from repo root into src/main/assets/"
-    from("${project.rootDir}/external_services.json")
-    into("${projectDir}/src/main/assets")
+    description = "Copies this app's schemas (and any shared ones) into src/main/assets/schemas/"
+    from("${project.rootDir}/remote-schemas/expenses") { include("*.json") }
+    from("${project.rootDir}/remote-schemas/shared") { include("*.json") }
+    into("${projectDir}/src/main/assets/schemas")
 }
 
 tasks.named("preBuild") {
-    dependsOn(copyExternalServicesJson)
+    dependsOn(copyShippedSchemas)
 }

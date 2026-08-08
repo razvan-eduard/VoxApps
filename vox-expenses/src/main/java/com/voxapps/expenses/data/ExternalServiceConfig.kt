@@ -1,53 +1,89 @@
 package com.voxapps.expenses.data
 
 import android.content.Context
-import com.voxapps.logging.Logger
-import org.json.JSONObject
+import com.google.gson.annotations.SerializedName
+import com.voxapps.services.ProbeSpec
+import com.voxapps.services.RemoteSchema
 
-private const val TAG = "ExternalServiceConfig"
-
-/** One entry from the repo-root `external_services.json` (copied to assets at build time). */
+/**
+ * One entry from `external_services.json` — a service this app talks to, described the way every
+ * other declared service in VoxApps is.
+ *
+ * Every field has a default, and that is load-bearing rather than tidy: Gson skips the Kotlin
+ * constructor entirely for a class with a required parameter, and then *every* absent field arrives
+ * null regardless of what its type says.
+ */
 data class ExternalService(
-    val id: String,
-    val name: String,
-    val docsUrl: String,
-    val baseEndpoint: String,
-    val requiresApiKey: Boolean,
-    val category: String
+    val id: String = "",
+    val name: String = "",
+    val category: String = "",
+    /** Where the service lives. `baseEndpoint` is the older spelling, still read, since this file
+     *  can be served from a repository that has not caught up. */
+    val endpoint: String = "",
+    @SerializedName("baseEndpoint") val legacyBaseEndpoint: String? = null,
+    /** A cheap URL that proves the service answers and accepts the key, relative to [endpoint].
+     *  This one carries `{key}` because the credential travels in the path. */
+    @SerializedName("probe_url") val probeUrl: String? = null,
+    @SerializedName("requires_api_key") val requiresApiKey: Boolean = false,
+    @SerializedName("requiresApiKey") val legacyRequiresApiKey: Boolean = false,
+    /** Where the user obtains a key. `docsUrl` is the older spelling. */
+    @SerializedName("api_key_url") val apiKeyUrl: String? = null,
+    @SerializedName("docsUrl") val legacyDocsUrl: String? = null
+) {
+    /** The endpoint under either spelling. */
+    val serviceUrl: String get() = endpoint.ifBlank { legacyBaseEndpoint.orEmpty() }
+
+    val needsApiKey: Boolean get() = requiresApiKey || legacyRequiresApiKey
+
+    val helpUrl: String? get() = apiKeyUrl ?: legacyDocsUrl
+
+    /** How to test this service with [apiKey], or null when it declares nothing to reach. */
+    fun probeSpec(apiKey: String?): ProbeSpec? =
+        ProbeSpec.from(id = id, endpoint = serviceUrl, probeUrl = probeUrl, credential = apiKey)
+}
+
+data class ExternalServicesSchema(
+    @SerializedName("schema_version") val schemaVersion: Int = 1,
+    val services: List<ExternalService> = emptyList()
 )
 
 /**
- * Reads `external_services.json` from assets — the same repo-root JSON, copied at build time, that
- * vox-commander's config ecosystem also lists (see `docs/TECHNICAL_DOCUMENTATION.md` §17). Expenses
- * only needs the "exchangerate_api" entry today, so this is deliberately minimal rather than a full
- * registry — a second consumer would be the point to generalize it.
+ * The services this app depends on but does not own.
+ *
+ * Loaded through the same [RemoteSchema] as Commander's catalogues, which means the entry can be
+ * corrected from the repository rather than by shipping a release — the rate provider's endpoint and
+ * the URL where a key is obtained are that provider's to change, not ours. It used to be read
+ * straight from assets on every call, so a moved endpoint meant an app update.
  */
 object ExternalServiceConfig {
-    private const val ASSET_FILE = "external_services.json"
+
+    private const val TAG = "ExternalServiceConfig"
     private const val EXCHANGE_RATE_API_ID = "exchangerate_api"
 
+    private val schema = RemoteSchema(
+        fileName = "external_services.json",
+        type = ExternalServicesSchema::class.java,
+        usable = { it.services.any { service -> service.serviceUrl.isNotBlank() } },
+        tag = TAG
+    )
+
+    fun init(context: Context) = schema.init(context)
+
+    /** Asks the repository for a newer copy. Nothing else in this app decides to. */
+    suspend fun refresh(baseUrl: String) = schema.refresh(baseUrl)
+
+    fun all(): List<ExternalService> = schema.value?.services.orEmpty()
+
+    fun byId(id: String): ExternalService? = all().firstOrNull { it.id == id }
+
+    /**
+     * The rate provider, loading the bundled copy first if the app never initialised the registry.
+     *
+     * The [context] fallback keeps every existing caller working unchanged — this used to read the
+     * asset on each call, so callers hand one over anyway.
+     */
     fun exchangeRateService(context: Context): ExternalService? {
-        return try {
-            val json = context.assets.open(ASSET_FILE).bufferedReader().use { it.readText() }
-            val root = JSONObject(json)
-            val services = root.optJSONArray("services") ?: return null
-            for (i in 0 until services.length()) {
-                val o = services.optJSONObject(i) ?: continue
-                if (o.optString("id") == EXCHANGE_RATE_API_ID) {
-                    return ExternalService(
-                        id = o.optString("id"),
-                        name = o.optString("name"),
-                        docsUrl = o.optString("docsUrl"),
-                        baseEndpoint = o.optString("baseEndpoint"),
-                        requiresApiKey = o.optBoolean("requiresApiKey", false),
-                        category = o.optString("category")
-                    )
-                }
-            }
-            null
-        } catch (e: Exception) {
-            Logger.w(TAG, "Failed to read $ASSET_FILE: ${e.message}")
-            null
-        }
+        if (!schema.isLoaded) init(context)
+        return byId(EXCHANGE_RATE_API_ID)
     }
 }

@@ -57,12 +57,14 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.utils.AppSigningIdentity
-import com.voxapps.commander.domain.service.ProbeSpec
-import com.voxapps.commander.domain.service.ServiceProbe
+import com.voxapps.services.ProbeSpec
+import com.voxapps.commander.domain.engine.CloudDeadline
+import com.voxapps.services.ServiceProbe
 import com.voxapps.commander.service.OAuth2Manager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.voxapps.commander.domain.service.toOAuthConfig
 
 /**
  * One declared API integration: what it is, whether it is connected, and whether that is still true.
@@ -281,7 +283,7 @@ private suspend fun probeWithRefresh(
     clientId: String,
     settingsRepo: SettingsRepository
 ): Boolean {
-    val first = ServiceProbe.detailed(spec, settingsRepo)
+    val first = ServiceProbe.detailed(spec, CloudDeadline.secondsFor(spec.id, settingsRepo))
     if (first.ok || !first.rejected) return first.ok
 
     val config = integration.auth?.toOAuthConfig(integration.id) ?: return false
@@ -299,7 +301,7 @@ private suspend fun probeWithRefresh(
     val token = withContext(Dispatchers.IO) { OAuth2Manager.getValidAccessToken(config, clientId) }
         ?: return false
 
-    return ServiceProbe.run(spec.copy(credential = token), settingsRepo)
+    return ServiceProbe.run(spec.copy(credential = token), CloudDeadline.secondsFor(spec.id, settingsRepo))
 }
 
 /**
@@ -332,13 +334,14 @@ private fun ClientIdDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                auth.clientIdUrl?.toUri()?.host?.let { host ->
+                val clientIdUrl = auth.clientIdUrl
+                clientIdUrl?.toUri()?.host?.let { host ->
                     Text(
                         text = host,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
                         textDecoration = TextDecoration.Underline,
-                        modifier = Modifier.clickable { uriHandler.openUri(auth.clientIdUrl) }
+                        modifier = Modifier.clickable { uriHandler.openUri(clientIdUrl) }
                     )
                 }
 

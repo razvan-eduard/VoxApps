@@ -16,7 +16,7 @@ import org.junit.Test
 class OrderIndependentLookupTest {
 
     private fun shippedSchema(): RemoteModelSchema {
-        val file = listOf("src/main/assets/models.json", "vox-commander/src/main/assets/models.json")
+        val file = listOf("src/main/assets/schemas/models.json", "vox-commander/src/main/assets/schemas/models.json")
             .map { java.io.File(it) }.firstOrNull { it.exists() }
         assertTrue("models.json not found from ${java.io.File(".").absolutePath}", file != null)
         return com.google.gson.Gson().fromJson(file!!.readText(), RemoteModelSchema::class.java)

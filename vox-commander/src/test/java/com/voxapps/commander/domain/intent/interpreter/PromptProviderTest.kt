@@ -160,7 +160,7 @@ class PromptProviderTest {
         // Reads the actual repo-root models.json (single source of truth, copied into assets at
         // build time) to make sure this specific rule never regresses back to living after
         // Examples: again.
-        val modelsJson = File("../models.json")
+        val modelsJson = File("../remote-schemas/commander/models.json")
         val schema = Gson().fromJson(modelsJson.readText(), RemoteModelSchema::class.java)
         val template = requireNotNull(schema.prompts?.get("standard_nlu")) { "standard_nlu prompt missing from models.json" }
 

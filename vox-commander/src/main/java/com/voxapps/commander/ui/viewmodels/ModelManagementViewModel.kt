@@ -15,6 +15,7 @@ import com.voxapps.commander.data.remote.DownloadCompleteReceiver
 import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.services.SchemaCatalog
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
@@ -177,7 +178,9 @@ class ModelManagementViewModel(
 
     suspend fun loadModels(force: Boolean = false) {
         _isVoskLoading.value = true
-        RemoteModelRegistry.fetchJson(settingsRepo, force)
+        // Whatever schema is in force is already loaded; asking the repository for a newer one is a
+        // deliberate act with its own button, not something a list rebuild does on the way past.
+        if (force) SchemaCatalog.refreshAll(settingsRepo.getSettingsSnapshot().modelRepoBaseUrl)
         rebuildUiLists()
         _isVoskLoading.value = false
     }

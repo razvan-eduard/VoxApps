@@ -18,7 +18,7 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.components.DropdownGroup
-import com.voxapps.commander.domain.service.ServiceProbe
+import com.voxapps.services.ServiceProbe
 import com.voxapps.commander.ui.components.ConnectionTestCard
 import com.voxapps.commander.ui.components.SettingsPicklist
 import com.voxapps.commander.ui.components.EngineApiKeyField

@@ -137,6 +137,7 @@ dependencies {
     implementation(project(":core:backup"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
+    implementation(project(":core:services"))
     implementation(project(":core:preferences"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -266,23 +267,15 @@ val autoCheckOpenWakeWord = tasks.register<Exec>("autoCheckOpenWakeWord") {
     commandLine("bash", "${project.rootDir}/scripts/check_openwakeword_version.sh")
 }
 
-// The repo root is the single source of truth for every shipped schema; assets get a copy at build
-// time. One task rather than one per file — the four this replaced differed only in a file name,
-// so adding a schema meant remembering to add a task and a preBuild dependency to match.
-val shippedSchemas = listOf(
-    "models.json",
-    "virtual_models.json",
-    "search_definitions.json",
-    "intents.json",
-    "api_integrations.json",
-    "media_services.json"
-)
-
+// Every schema the family ships lives in one folder at the repo root, and the whole folder is
+// copied into assets at build time. A list of file names used to live here, and adding a schema
+// meant remembering to add it — the folder is the list now.
 val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
     group = "build"
-    description = "Copies the shipped schema files from the repo root into src/main/assets/"
-    from("${project.rootDir}") { include(shippedSchemas) }
-    into("${projectDir}/src/main/assets")
+    description = "Copies this app's schemas (and any shared ones) into src/main/assets/schemas/"
+    from("${project.rootDir}/remote-schemas/commander") { include("*.json") }
+    from("${project.rootDir}/remote-schemas/shared") { include("*.json") }
+    into("${projectDir}/src/main/assets/schemas")
 }
 
 // Forțează procesul de build al aplicației să ruleze aceste scripturi chiar la început

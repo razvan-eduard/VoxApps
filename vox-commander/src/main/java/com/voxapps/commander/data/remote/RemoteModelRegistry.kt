@@ -8,6 +8,7 @@ import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.logging.Logger
+import com.voxapps.services.RemoteSchema
 import com.voxapps.commander.utils.NetworkMonitor
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.Dispatchers
@@ -76,8 +77,8 @@ data class RemoteEngineConfig(
      * declaration already names.
      */
     val probe_url: String? = null,
-    /** How the credential attaches — see [com.voxapps.commander.domain.service.AuthDeclaration]. */
-    val auth: com.voxapps.commander.domain.service.AuthDeclaration? = null,
+    /** How the credential attaches — see [com.voxapps.services.AuthDeclaration]. */
+    val auth: com.voxapps.services.AuthDeclaration? = null,
     /** A translations key for the sentence explaining how to get that credential. A key rather than
      *  the sentence itself, for the same reason as [label_key]. */
     val api_key_help_key: String? = null,
@@ -215,183 +216,59 @@ object RemoteModelRegistry {
     private const val LOCAL_FILE_NAME = "models.json"
     private const val VIRTUAL_FILE_NAME = "virtual_models.json"
 
+    /**
+     * The engine catalogue, and the cloud engines declared beside it.
+     *
+     * Two files rather than one because they answer to different owners: `models.json` describes
+     * what can be downloaded and run, while `virtual_models.json` describes services that need no
+     * download — and a deployment may serve an empty copy of the second to say "nothing here leaves
+     * the device", which is a legitimate answer rather than a broken file. Hence the different
+     * [usable] rules.
+     *
+     * Both rebuild the same merged registry when they load, so it does not matter which arrives
+     * first or whether only one of them changed.
+     */
+    private val virtualSchema = RemoteSchema(
+        fileName = VIRTUAL_FILE_NAME,
+        type = RemoteModelSchema::class.java,
+        usable = { true },
+        tag = TAG,
+        onLoaded = { applyMerged() }
+    )
+
+    private val modelsSchema = RemoteSchema(
+        fileName = LOCAL_FILE_NAME,
+        type = RemoteModelSchema::class.java,
+        usable = { it.engines.isNotEmpty() },
+        tag = TAG,
+        onLoaded = { applyMerged() }
+    )
+
     fun init(context: Context) {
         appContext = context.applicationContext
-    }
-
-    suspend fun fetchJson(repo: SettingsRepository, force: Boolean = false): Boolean = withContext(Dispatchers.IO) {
-        Logger.log("fetchJson called (force=$force)", TAG)
-
-        // 1. Load from filesDir if available (immediate availability, preserves hot-reloaded data)
-        if (cachedSchema == null) {
-            loadFromFilesDir()
-        }
-
-        // 1b. If still no data, copy from assets (bundled APK may be newer than CDN cache)
-        if (cachedSchema == null) {
-            ensureLocalFile()
-            loadFromFilesDir()
-        }
-
-        // 2. If not force and we have data, return early
-        if (!force && cachedSchema != null) {
-            _loadStatus.value = LoadStatus.LOADED_FROM_CACHE
-            return@withContext true
-        }
-
-        _loadStatus.value = LoadStatus.LOADING
-
-        // 3. Try remote fetch (repo → filesDir)
-        val baseUrl = repo.getSettingsSnapshot().modelRepoBaseUrl
-        val rawUrlBase = if (baseUrl.contains("github.com") && !baseUrl.contains("raw.githubusercontent.com")) {
-            baseUrl.replace("github.com", "raw.githubusercontent.com").removeSuffix("/") + "/main/models.json"
-        } else {
-            if (baseUrl.endsWith("/")) "${baseUrl}models.json" else "$baseUrl/models.json"
-        }
-
-        val rawUrl = "$rawUrlBase?t=${System.currentTimeMillis()}"
-        Logger.log("Fetching remote registry from: $rawUrl", TAG)
-
-        return@withContext try {
-            val jsonText = URL(rawUrl).readText()
-            Logger.log("Network fetch success. Size: ${jsonText.length} chars", TAG)
-            val schema = gson.fromJson(jsonText, RemoteModelSchema::class.java)
-            if (schema != null) {
-                // Don't downgrade — compare remote with assets (bundled in APK, always newest).
-                // Logged either way: this one comparison decides which schema the whole app runs on,
-                // and when it silently picks the remote there is otherwise no trace of why.
-                val assetVersion = getAssetSchemaVersion()
-                Logger.log("Schema versions — remote v${schema.schema_version}, asset v$assetVersion", TAG)
-                if (assetVersion > schema.schema_version) {
-                    Logger.log("Remote schema v${schema.schema_version} < assets v$assetVersion, using assets (no downgrade)", TAG)
-                    ensureLocalFile()
-                    loadFromFilesDir()
-                    _loadStatus.value = if (cachedSchema != null) LoadStatus.LOADED_FROM_CACHE else LoadStatus.NO_NETWORK
-                    return@withContext cachedSchema != null
-                }
-                saveLocalFile(jsonText)
-                fetchVirtualSchema(baseUrl)
-                applySchema(schema)
-                Logger.log("Remote JSON parsed and saved locally. Engines found: ${cachedSchema?.engines?.keys}", TAG)
-                _registryUpdateSignal.value++
-                _loadStatus.value = LoadStatus.LOADED_FROM_REMOTE
-                true
-            } else {
-                Logger.log("Failed to parse remote JSON (schema is null)", TAG)
-                _loadStatus.value = if (cachedSchema != null) LoadStatus.LOADED_FROM_CACHE else LoadStatus.NO_NETWORK
-                cachedSchema != null
-            }
-        } catch (e: Exception) {
-            Logger.log("Network fetch failed: ${e.message}. Falling back to assets.", TAG)
-            // 4. No net — copy from assets if newer (assets → filesDir), then reload
-            ensureLocalFile()
-            loadFromFilesDir()
-            _loadStatus.value = if (cachedSchema != null) LoadStatus.LOADED_FROM_CACHE else LoadStatus.NO_NETWORK
-            cachedSchema != null
-        }
+        // Virtual first, so the merge has both halves the moment models.json lands.
+        virtualSchema.init(context)
+        modelsSchema.init(context)
     }
 
     /**
-     * The schema version bundled in the APK — the left operand of the no-downgrade comparison.
+     * Installs whatever is loaded as the registry's contents, virtual engines merged in first.
      *
-     * Failures are logged rather than swallowed, because returning 0 does not merely lose
-     * information here: 0 loses every comparison, so any failure to read the asset silently turns
-     * "never accept an older remote schema" into "always accept the remote one".
+     * Every path that assigns the schema goes through here, because a merge only some of them
+     * perform is a registry whose contents depend on how the app happened to start. Virtual engines
+     * are merged *under* the catalogue so a schema describing an engine of its own always wins over
+     * the declaration of the same key.
      */
-    private fun getAssetSchemaVersion(): Int {
-        val ctx = appContext ?: run {
-            Logger.log("Cannot read the bundled schema version: registry has no context yet", TAG)
-            return 0
-        }
-        return try {
-            ctx.assets.open(LOCAL_FILE_NAME).use { input ->
-                val text = input.readBytes().decodeToString()
-                gson.fromJson(text, RemoteModelSchema::class.java)?.schema_version ?: 0
-            }
-        } catch (e: Exception) {
-            Logger.log("Cannot read the bundled schema version: ${e.javaClass.simpleName}: ${e.message}", TAG)
-            0
-        }
-    }
-
-    /**
-     * Copies models.json from bundled assets to filesDir if local is missing
-     * or assets has a newer schema_version. Called as fallback when repo download fails.
-     */
-    private fun ensureLocalFile() {
-        val ctx = appContext ?: return
-        val localFile = java.io.File(ctx.filesDir, LOCAL_FILE_NAME)
-
-        val assetText = try {
-            ctx.assets.open(LOCAL_FILE_NAME).use { it.readBytes().decodeToString() }
-        } catch (e: Exception) {
-            Logger.log("Failed to read models.json from assets: ${e.message}", TAG)
-            return
-        }
-
-        val assetVersion = try {
-            gson.fromJson(assetText, RemoteModelSchema::class.java)?.schema_version ?: 0
-        } catch (e: Exception) { 0 }
-
-        val localVersion = if (localFile.exists()) {
-            try {
-                gson.fromJson(localFile.readText(), RemoteModelSchema::class.java)?.schema_version ?: 0
-            } catch (e: Exception) { 0 }
-        } else 0
-
-        if (!localFile.exists() || assetVersion > localVersion) {
-            try {
-                localFile.writeText(assetText)
-                Logger.log("Copied models.json from assets to filesDir (asset v$assetVersion > local v$localVersion)", TAG)
-            } catch (e: Exception) {
-                Logger.log("Failed to copy models.json from assets: ${e.message}", TAG)
-            }
-        }
-    }
-
-    /**
-     * Best-effort refresh of the virtual declarations from the same repository as models.json.
-     *
-     * Deliberately silent on failure: a repository that does not carry the file at all is the
-     * ordinary case, and the bundled copy then stands. A repository that *does* carry it — including
-     * one carrying `{}` — replaces it, which is what lets a deployment say "nothing here leaves the
-     * device" and be believed.
-     */
-    private fun fetchVirtualSchema(baseUrl: String) {
-        val ctx = appContext ?: return
-        val rawBase = if (baseUrl.contains("github.com") && !baseUrl.contains("raw.githubusercontent.com")) {
-            baseUrl.replace("github.com", "raw.githubusercontent.com").removeSuffix("/") + "/main/$VIRTUAL_FILE_NAME"
-        } else {
-            if (baseUrl.endsWith("/")) "$baseUrl$VIRTUAL_FILE_NAME" else "$baseUrl/$VIRTUAL_FILE_NAME"
-        }
-        try {
-            val text = URL("$rawBase?t=${System.currentTimeMillis()}").readText()
-            // Parsed before it is stored: a corrupt download must not replace a copy that works.
-            gson.fromJson(text, RemoteModelSchema::class.java) ?: return
-            java.io.File(ctx.filesDir, VIRTUAL_FILE_NAME).writeText(text)
-            Logger.log("Updated $VIRTUAL_FILE_NAME from the repository", TAG)
-        } catch (e: Exception) {
-            Logger.log("No $VIRTUAL_FILE_NAME served by the repository (${e.message}) — keeping the bundled one", TAG)
-        }
-    }
-
-    /**
-     * Installs [schema] as the registry's contents, with the virtual engines merged in after it.
-     *
-     * Every path that assigns the schema goes through here — remote fetch, local copy, and the
-     * recovery reparse — because a merge that only some of them perform is a registry whose contents
-     * depend on how the app happened to start. Virtual engines are merged *after* so that a schema
-     * describing an engine of its own always wins over the compiled-in declaration of the same key.
-     */
-    private fun applySchema(schema: RemoteModelSchema?) {
-        if (schema == null) {
-            cachedSchema = null
-            return
-        }
-        val virtual = loadVirtualEngines()
-        val engines = (virtual + schema.engines).mapValues { it.value.withSafeCollections() }
-        cachedSchema = schema.copy(engines = engines)
+    private fun applyMerged() {
+        val models = modelsSchema.value ?: return
+        val virtual = virtualSchema.value?.engines.orEmpty()
+        val engines = (virtual + models.engines).mapValues { it.value.withSafeCollections() }
+        cachedSchema = models.copy(engines = engines)
         rebuildModelMap()
+        _registryUpdateSignal.value++
+        _loadStatus.value =
+            if (modelsSchema.source == RemoteSchema.Source.ACCEPTED) LoadStatus.LOADED_FROM_REMOTE
+            else LoadStatus.LOADED_FROM_CACHE
     }
 
     /**
@@ -419,79 +296,6 @@ object RemoteModelRegistry {
         capabilities = capabilities ?: emptyList(),
         models = models ?: emptyList()
     )
-
-    /**
-     * The engines that have no downloadable artefact — cloud services and OS-supplied ones.
-     *
-     * They are declared rather than injected by the screens that happen to show them, which is how
-     * the same engine came to be listed in one place, labelled in a second, and have its
-     * availability decided in a third. A repository may serve its own copy; failing that, the one
-     * bundled with the app is used. A copy that parses to zero engines is a legitimate answer —
-     * "this deployment offers nothing that leaves the device" — and not an error.
-     */
-    private fun loadVirtualEngines(): Map<String, RemoteEngineConfig> {
-        val ctx = appContext ?: return emptyMap()
-        val local = java.io.File(ctx.filesDir, VIRTUAL_FILE_NAME)
-        val json = try {
-            if (local.exists()) local.readText()
-            else ctx.assets.open(VIRTUAL_FILE_NAME).use { it.readBytes().decodeToString() }
-        } catch (e: Exception) {
-            Logger.log("No virtual engine declarations available: ${e.message}", TAG)
-            return emptyMap()
-        }
-        return try {
-            gson.fromJson(json, RemoteModelSchema::class.java)?.engines.orEmpty()
-        } catch (e: Exception) {
-            Logger.log("Failed to parse $VIRTUAL_FILE_NAME: ${e.message}", TAG)
-            emptyMap()
-        }
-    }
-
-    /**
-     * Loads and parses models.json from filesDir (the writable local copy).
-     */
-    private fun loadFromFilesDir() {
-        val ctx = appContext ?: return
-        val localFile = java.io.File(ctx.filesDir, LOCAL_FILE_NAME)
-        if (!localFile.exists()) {
-            ensureLocalFile()
-            if (!localFile.exists()) return
-        }
-        try {
-            val jsonText = localFile.readText()
-            applySchema(gson.fromJson(jsonText, RemoteModelSchema::class.java))
-            if (cachedSchema != null) {
-                Logger.log("Loaded models.json from filesDir. Engines: ${cachedSchema?.engines?.keys}", TAG)
-            }
-        } catch (e: Exception) {
-            Logger.log("Failed to parse local models.json: ${e.message}. Overwriting from assets.", TAG)
-            try {
-                ctx.assets.open(LOCAL_FILE_NAME).use { input ->
-                    localFile.outputStream().use { output -> input.copyTo(output) }
-                }
-                val freshText = localFile.readText()
-                applySchema(gson.fromJson(freshText, RemoteModelSchema::class.java))
-                if (cachedSchema != null) {
-                    Logger.log("Recovered models.json from assets. Engines: ${cachedSchema?.engines?.keys}", TAG)
-                }
-            } catch (e2: Exception) {
-                Logger.log("Failed to recover models.json from assets: ${e2.message}", TAG)
-            }
-        }
-    }
-
-    /**
-     * Saves remote JSON text to filesDir, overwriting the local copy.
-     */
-    private fun saveLocalFile(jsonText: String) {
-        val ctx = appContext ?: return
-        try {
-            java.io.File(ctx.filesDir, LOCAL_FILE_NAME).writeText(jsonText)
-            Logger.log("Saved updated models.json to filesDir", TAG)
-        } catch (e: Exception) {
-            Logger.log("Failed to save models.json to filesDir: ${e.message}", TAG)
-        }
-    }
 
     /**
      * Rebuilds the memory map from the current cached schema.
@@ -755,19 +559,19 @@ object RemoteModelRegistry {
      * The absence of a declaration is how "not testable" is expressed — an on-device engine has no
      * endpoint, and Porcupine needs a key that its SDK validates locally with no URL to call.
      */
-    fun probeSpecFor(engineKey: String, credential: String?): com.voxapps.commander.domain.service.ProbeSpec? {
+    fun probeSpecFor(engineKey: String, credential: String?): com.voxapps.services.ProbeSpec? {
         val config = cachedSchema?.engines?.get(engineKey) ?: return null
         val auth = config.auth
             ?: if (hasCapability(engineKey, "requires_api_key")) {
-                com.voxapps.commander.domain.service.AuthDeclaration(
-                    style = com.voxapps.commander.domain.service.AuthDeclaration.STYLE_BEARER
+                com.voxapps.services.AuthDeclaration(
+                    style = com.voxapps.services.AuthDeclaration.STYLE_BEARER
                 )
             } else null
-        return com.voxapps.commander.domain.service.ProbeSpec.from(
+        return com.voxapps.services.ProbeSpec.from(
             id = engineKey,
             endpoint = config.endpoint,
             probeUrl = config.probe_url,
-            auth = auth?.probeStyle() ?: com.voxapps.commander.domain.service.ProbeSpec.AuthStyle.None,
+            auth = auth?.probeStyle() ?: com.voxapps.services.ProbeSpec.AuthStyle.None,
             credential = credential
         )
     }

@@ -11,11 +11,12 @@ import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.intent.handler.NewPipeExtractorHelper
 import com.voxapps.commander.domain.intent.handler.PipedSearchHelper
 import com.voxapps.commander.domain.media.MediaServiceRegistry
-import com.voxapps.commander.domain.service.ServiceProbe
-import com.voxapps.commander.ui.components.CommittedTextField
+import com.voxapps.commander.domain.engine.CloudDeadline
+import com.voxapps.services.ServiceProbe
 import com.voxapps.commander.ui.components.ConnectionTestCard
 import com.voxapps.commander.ui.components.SettingsPicklist
 import kotlinx.coroutines.launch
+import com.voxapps.design.CommittedTextField
 
 private const val REGION_DEFAULT_KEY = "piped_region_system_default"
 
@@ -83,7 +84,7 @@ fun PipedSettingsSection(
                 // Nothing configurable to depend on, so the retry button is the only way to ask again.
                 keys = listOf(selectedBackend.id),
                 testFn = {
-                    ServiceProbe.run(selectedBackend.id, settingsRepo) {
+                    ServiceProbe.run(selectedBackend.id, CloudDeadline.secondsFor(selectedBackend.id, settingsRepo)) {
                         NewPipeExtractorHelper.testConnection()
                     }
                 },

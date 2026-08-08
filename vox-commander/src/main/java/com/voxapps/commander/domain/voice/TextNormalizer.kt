@@ -20,7 +20,7 @@ import java.util.regex.Pattern
 object TextNormalizer {
 
     private const val TAG = "TextNormalizer"
-    private const val ASSET_FILE = "normalization.json"
+    private const val ASSET_FILE = "schemas/normalization.json"
     private const val KEY_SCHEMA_VERSION = "schema_version"
 
     // @Volatile: load() runs on the init thread while normalize() reads the pattern maps

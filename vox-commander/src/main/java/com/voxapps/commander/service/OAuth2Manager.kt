@@ -16,7 +16,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 
 /**
- * Per-service OAuth2 config, parsed from an [com.voxapps.commander.domain.service.AuthDeclaration].
+ * Per-service OAuth2 config, parsed from an [com.voxapps.services.AuthDeclaration].
  * `usePkce` selects Authorization-Code-with-PKCE (no client_secret, e.g. Spotify) vs plain
  * Authorization-Code (wants a client_secret, e.g. Deezer's confidential-client flow).
  */

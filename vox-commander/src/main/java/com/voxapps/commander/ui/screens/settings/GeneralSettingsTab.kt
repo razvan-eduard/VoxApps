@@ -22,6 +22,8 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.launch
+import com.voxapps.services.SchemaCatalog
+import com.voxapps.services.RemoteSchema
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,8 +55,39 @@ fun GeneralSettingsTab(
     ) {
         Text(text = languageManager.getString("app_settings_section"), style = MaterialTheme.typography.titleMedium)
 
+        Text(
+            text = languageManager.getString("schema_updates_section"),
+            style = MaterialTheme.typography.titleSmall
+        )
+        Text(
+            text = languageManager.getString("schema_updates_desc"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        // Off means the app behaves identically every launch: whatever is in force stays in force
+        // until the button below is pressed. On means the repository is asked at startup, and only a
+        // file whose bytes actually changed is adopted.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = languageManager.getString("schema_auto_update_label"),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = uiState.schemaAutoUpdate,
+                onCheckedChange = { appStateManager.setSchemaAutoUpdate(it) }
+            )
+        }
+
         // Repository Base URL with gray-out logic
         var isRepoFocused by remember { mutableStateOf(false) }
+        var syncing by remember { mutableStateOf(false) }
+        var syncReport by remember { mutableStateOf<String?>(null) }
         TextField(
             value = modelRepoUrl,
             onValueChange = {
@@ -67,22 +100,29 @@ fun GeneralSettingsTab(
                 .fillMaxWidth()
                 .onFocusChanged { isRepoFocused = it.isFocused },
             trailingIcon = {
-                IconButton(onClick = {
-                    scope.launch {
-                        val success = RemoteModelRegistry.fetchJson(settingsRepo, force = true)
-                        if (success) {
-                            appStateManager.refreshAll()
+                IconButton(
+                    enabled = !syncing,
+                    onClick = {
+                        syncing = true
+                        syncReport = null
+                        scope.launch {
+                            // Every schema the app loaded, whatever the toggle says: the catalog is
+                            // the list, so this cannot drift out of step with what exists.
+                            val results = SchemaCatalog.refreshAll(modelRepoUrl)
+                            val updated = results.count { it.value is RemoteSchema.Refreshed.Updated }
+                            val unreachable = results.count { it.value is RemoteSchema.Refreshed.Unreachable }
+                            val rejected = results.count { it.value is RemoteSchema.Refreshed.Rejected }
+                            if (updated > 0) appStateManager.refreshAll()
+                            syncReport = String.format(
+                                languageManager.getString("schema_sync_report"),
+                                updated, results.size - updated - unreachable - rejected, unreachable + rejected
+                            )
+                            syncing = false
                         }
-                        // Rebuilding every provider from a fetched schema used to lose whatever key
-                        // had been applied to the old instances, so each caller had to re-apply them
-                        // afterwards and this one's omission left a configured provider looking
-                        // unconfigured until the next app start. A provider reads its own credential
-                        // now, so there is nothing to re-apply.
-                        com.voxapps.commander.domain.search.SearchProviderRegistry.fetchRemote(settingsRepo, force = true)
-                        com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(settingsRepo, force = true)
                     }
-                }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Sync JSON")
+                ) {
+                    if (syncing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Default.Refresh, contentDescription = languageManager.getString("schema_sync_now"))
                 }
             },
             colors = if (!isRepoFocused) TextFieldDefaults.colors(
@@ -90,6 +130,35 @@ fun GeneralSettingsTab(
                 unfocusedIndicatorColor = Color.Transparent
             ) else TextFieldDefaults.colors()
         )
+
+        syncReport?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        // The files, then where they came from — one line rather than a source repeated per name.
+        // Mixed only happens between a refresh and a reset, so it is worth saying plainly when it
+        // does rather than making the user compare six lines.
+        val provenance = SchemaCatalog.provenance()
+        if (provenance.isNotEmpty()) {
+            Text(
+                text = provenance.joinToString(" · ") { it.fileName },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val fromRepo = provenance.count { it.source == RemoteSchema.Source.ACCEPTED }
+            Text(
+                text = when (fromRepo) {
+                    0 -> languageManager.getString("schema_source_bundled")
+                    provenance.size -> languageManager.getString("schema_source_accepted")
+                    else -> String.format(
+                        languageManager.getString("schema_source_mixed"),
+                        fromRepo, provenance.size - fromRepo
+                    )
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 

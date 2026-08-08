@@ -185,9 +185,9 @@ class WakeWordService : Service() {
         startForeground(NOTIFICATION_ID, createNotification())
 
         serviceScope.launch {
-            // Ensure the model registry is loaded in this process (loads from filesDir, no network)
-            // so hasCapability()/model labels resolve in the notification even on a cold start.
-            com.voxapps.commander.data.remote.RemoteModelRegistry.fetchJson(settingsRepo, force = false)
+            // Ensure the model registry is loaded in this process — the copies in force, no network
+            // — so hasCapability()/model labels resolve in the notification even on a cold start.
+            com.voxapps.commander.data.remote.RemoteModelRegistry.init(applicationContext)
 
             val snapshot = settingsRepo.getSettingsSnapshot()
             val wakeWord = snapshot.wakeWord

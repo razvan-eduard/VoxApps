@@ -30,6 +30,9 @@ import com.voxapps.expenses.ui.LocalLanguageManager
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+import com.voxapps.services.ServiceProbe
+import com.voxapps.design.ConnectionTestAuto
+import com.voxapps.design.CommittedTextField
 
 /**
  * Home currency + exchange-rate API key (a real secret, stored separately via
@@ -78,20 +81,38 @@ fun CurrencySettingsTab(
 
         Text(languageManager.getString("exchange_rate_api_key_label"), style = MaterialTheme.typography.labelLarge)
         Text(
-            service?.let { String.format(languageManager.getString("exchange_rate_api_key_desc"), it.docsUrl) }
+            service?.let { String.format(languageManager.getString("exchange_rate_api_key_desc"), it.helpUrl.orEmpty()) }
                 ?: languageManager.getString("exchange_rate_service_missing"),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        OutlinedTextField(
-            value = apiKeyText,
-            onValueChange = {
-                apiKeyText = it
-                ExchangeRateApiKeyStore.set(context, it.takeIf { key -> key.isNotBlank() })
-            },
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth()
+        // Stored when the field is finished with, not per keystroke: a key written a character at a
+        // time is written to the secure store a dozen times half-typed, and each write is what the
+        // test below keys on.
+        CommittedTextField(
+            stored = apiKeyText,
+            label = languageManager.getString("exchange_rate_api_key_label"),
+            identity = service?.id ?: "exchangerate_api",
+            masked = true,
+            onCommit = { entered ->
+                apiKeyText = entered
+                ExchangeRateApiKeyStore.set(context, entered.takeIf { key -> key.isNotBlank() })
+            }
         )
+
+        // The same card every declared service in VoxApps gets: does it answer, and does it accept
+        // this key? Previously the only way to find out was to fetch rates and read the error.
+        service?.probeSpec(apiKeyText.takeIf { it.isNotBlank() })?.let { spec ->
+            ConnectionTestAuto(
+                keys = listOf(spec.id, spec.url, apiKeyText.length),
+                testFn = { ServiceProbe.run(spec) },
+                testingLabel = languageManager.getString("exchange_rate_testing"),
+                onlineLabel = languageManager.getString("exchange_rate_online"),
+                offlineLabel = if (spec.missingCredential)
+                    languageManager.getString("exchange_rate_needs_key")
+                else languageManager.getString("exchange_rate_offline")
+            )
+        }
 
         OutlinedButton(
             onClick = {

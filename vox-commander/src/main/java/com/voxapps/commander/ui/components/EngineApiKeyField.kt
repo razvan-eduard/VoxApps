@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.state.AppStateManager
+import com.voxapps.design.CommittedTextField
 
 /**
  * The credential field for [engineKey], shown beside the engine it belongs to.

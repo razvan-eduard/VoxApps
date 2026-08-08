@@ -1,10 +1,9 @@
-package com.voxapps.commander.domain.service
+package com.voxapps.services
 
-import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -27,15 +26,18 @@ import okhttp3.Request
 object ServiceProbe {
 
     private const val TAG = "ServiceProbe"
-    private const val KEY_PLACEHOLDER = "{key}"
 
     private val client by lazy { OkHttpClient() }
+
+    /** What a probe waits before deciding the service is not answering, when the caller says
+     *  nothing. Callers that own a configured timeout pass it instead. */
+    const val DEFAULT_TIMEOUT_SECONDS = 15
 
     /**
      * Requests [spec]'s URL and reports whether it answered.
      *
-     * [settingsRepo] is used only for the deadline, which is the same one every other outbound call
-     * obeys, so a silent endpoint reports failure instead of leaving a spinner on screen.
+     * [timeoutSeconds] is the same budget the caller's other outbound calls obey, so a silent
+     * endpoint reports failure instead of leaving a spinner on screen.
      *
      * Note what a declaration can do here: the credential is sent to whatever host the schema names,
      * and these schemas can be served from a user-configured repository. The host is logged on every
@@ -49,11 +51,11 @@ object ServiceProbe {
         val rejected: Boolean get() = code == 401 || code == 403
     }
 
-    suspend fun run(spec: ProbeSpec, settingsRepo: SettingsRepository): Boolean =
-        detailed(spec, settingsRepo).ok
+    suspend fun run(spec: ProbeSpec, timeoutSeconds: Int = DEFAULT_TIMEOUT_SECONDS): Boolean =
+        detailed(spec, timeoutSeconds).ok
 
     /** As [run], but reporting the status so a caller can tell a rejected credential from a failure. */
-    suspend fun detailed(spec: ProbeSpec, settingsRepo: SettingsRepository): Outcome {
+    suspend fun detailed(spec: ProbeSpec, timeoutSeconds: Int = DEFAULT_TIMEOUT_SECONDS): Outcome {
         if (spec.missingCredential) {
             // No point spending a request to be told what is already known.
             Logger.log("${spec.id} needs a credential and has none — not probing", TAG)
@@ -68,7 +70,7 @@ object ServiceProbe {
         Logger.log("Probing ${spec.id} at ${request.url.host}", TAG)
 
         var code: Int? = null
-        val ok = bounded(spec.id, settingsRepo) {
+        val ok = bounded(spec.id, timeoutSeconds) {
             client.newCall(request).execute().use { response ->
                 code = response.code
                 if (!response.isSuccessful) {
@@ -90,11 +92,11 @@ object ServiceProbe {
      */
     suspend fun run(
         id: String,
-        settingsRepo: SettingsRepository,
+        timeoutSeconds: Int = DEFAULT_TIMEOUT_SECONDS,
         probe: suspend () -> Boolean
     ): Boolean {
         Logger.log("Probing $id", TAG)
-        return bounded(id, settingsRepo) { probe() }
+        return bounded(id, timeoutSeconds) { probe() }
     }
 
     /**
@@ -104,11 +106,14 @@ object ServiceProbe {
      */
     private suspend fun bounded(
         id: String,
-        settingsRepo: SettingsRepository,
+        timeoutSeconds: Int,
         block: suspend () -> Boolean
     ): Boolean = try {
         withContext(Dispatchers.IO) {
-            CloudDeadline.run(id, settingsRepo) { block() } ?: false
+            withTimeoutOrNull(timeoutSeconds * 1000L) { block() } ?: run {
+                Logger.log("$id exceeded its ${timeoutSeconds}s deadline — giving up on it", TAG)
+                false
+            }
         }
     } catch (e: Exception) {
         Logger.log("Probe for $id failed: ${e.message}", TAG)
@@ -117,7 +122,7 @@ object ServiceProbe {
 
     private fun buildRequest(spec: ProbeSpec): Request? {
         val credential = spec.credential.orEmpty()
-        val withKey = spec.url.replace(KEY_PLACEHOLDER, credential)
+        val withKey = spec.url.replace(ProbeSpec.KEY_PLACEHOLDER, credential)
         val parsed = withKey.toHttpUrlOrNull() ?: return null
 
         val url = when (val auth = spec.auth) {

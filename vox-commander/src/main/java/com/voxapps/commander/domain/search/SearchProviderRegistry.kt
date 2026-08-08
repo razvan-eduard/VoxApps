@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.annotation.VisibleForTesting
 import com.voxapps.commander.data.preferences.Credentials
 import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.data.remote.RemoteSchema
+import com.voxapps.services.RemoteSchema
 import com.voxapps.logging.Logger
 
 object SearchProviderRegistry {
@@ -25,7 +25,6 @@ object SearchProviderRegistry {
     private val schema = RemoteSchema(
         fileName = "search_definitions.json",
         type = SearchDefinitionsSchema::class.java,
-        versionOf = { it.schema_version },
         usable = { it.categories.isNotEmpty() },
         tag = TAG,
         onLoaded = { rebuildProviders(it) }
@@ -36,8 +35,6 @@ object SearchProviderRegistry {
         schema.init(context)
     }
 
-    suspend fun fetchRemote(repo: SettingsRepository, force: Boolean = false): Boolean =
-        schema.fetchRemote(repo, force)
 
     /**
      * Turns a parsed schema into the providers the app uses, dropping what it cannot use.

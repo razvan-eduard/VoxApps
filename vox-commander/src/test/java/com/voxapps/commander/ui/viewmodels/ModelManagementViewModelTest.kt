@@ -96,7 +96,6 @@ class ModelManagementViewModelTest {
             TestDataFactory.createRemoteModelItem(id = "qwen", path = "models/qwen.gguf")
         )
         every { RemoteModelRegistry.resolveUrl(any(), any()) } returns "https://example.com/models/base.bin"
-        coEvery { RemoteModelRegistry.fetchJson(any(), any()) } returns true
         every { RemoteModelRegistry.registryUpdateSignal } returns kotlinx.coroutines.flow.MutableStateFlow(0L)
 
         val settings = TestDataFactory.createAppSettings()

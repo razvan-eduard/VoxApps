@@ -6,8 +6,8 @@ import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import com.voxapps.commander.data.preferences.Credentials
 import com.voxapps.commander.data.remote.RemoteModelRegistry
-import com.voxapps.commander.domain.service.AuthDeclaration
-import com.voxapps.commander.domain.service.ProbeSpec
+import com.voxapps.services.AuthDeclaration
+import com.voxapps.services.ProbeSpec
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

@@ -1,4 +1,4 @@
-package com.voxapps.commander.domain.service
+package com.voxapps.services
 
 import com.google.gson.annotations.SerializedName
 
@@ -13,7 +13,9 @@ import com.google.gson.annotations.SerializedName
  * was written three times too.
  *
  * [style] is a closed set the app implements ([ProbeSpec.AuthStyle]); a declaration selects among
- * them rather than describing a new one. Everything else here is data.
+ * them rather than describing a new one. Everything else here is data — which is why this lives
+ * beside the prober rather than beside any one app's OAuth client: the fields describe the service,
+ * and turning them into a client config is the consuming app's business.
  */
 data class AuthDeclaration(
     /** `bearer` | `query` | `oauth2` | `none`. Read from `type` as well, for copies written before
@@ -67,29 +69,6 @@ data class AuthDeclaration(
         effectiveStyle == STYLE_BEARER -> ProbeSpec.AuthStyle.Bearer
         effectiveStyle == STYLE_QUERY -> ProbeSpec.AuthStyle.Query(param ?: DEFAULT_QUERY_PARAM)
         else -> ProbeSpec.AuthStyle.None
-    }
-
-    /**
-     * The OAuth client config this declaration describes, or null when it describes something else.
-     *
-     * Built here because two callers were building it identically from the same fields — the audio
-     * playback path and the integrations screen — and a third would have copied it again.
-     */
-    fun toOAuthConfig(serviceId: String): com.voxapps.commander.service.OAuthConfig? {
-        if (!isOAuth) return null
-        val authorize = authorizeUrl ?: return null
-        val token = tokenUrl ?: return null
-        val redirect = redirectUri ?: return null
-        return com.voxapps.commander.service.OAuthConfig(
-            serviceId = serviceId,
-            authorizeUrl = authorize,
-            tokenUrl = token,
-            redirectUri = redirect,
-            scopes = scopes.orEmpty(),
-            // The flow, from whichever field carries it: `flow` today, `type` in a copy written
-            // before it existed (`oauth2_pkce` / `oauth2_authorization_code`).
-            usePkce = !(flow ?: type ?: style).orEmpty().contains(FLOW_AUTHORIZATION_CODE)
-        )
     }
 
     companion object {

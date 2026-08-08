@@ -118,6 +118,17 @@ interface SettingsRepository {
 
     // --- REMOTE REPOSITORY ---
     suspend fun setModelRepoBaseUrl(url: String)
+    suspend fun setSchemaAutoUpdate(enabled: Boolean)
+    suspend fun setSchemaStoreMigrated(done: Boolean)
+
+    /**
+     * Empties the settings store, leaving every setting at its default.
+     *
+     * Deliberately narrow: the DataStore only. Credentials live in the encrypted store and models on
+     * disk, and someone resetting *settings* is not asking to re-enter their API keys or re-download
+     * two gigabytes — a reset that takes those with it is one nobody dares press.
+     */
+    suspend fun clearAllSettings()
 
     // --- MODEL DOWNLOAD STATE ---
     suspend fun setModelDownloaded(modelId: String, isDownloaded: Boolean)

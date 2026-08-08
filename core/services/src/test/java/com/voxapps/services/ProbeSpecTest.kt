@@ -1,4 +1,4 @@
-package com.voxapps.commander.domain.service
+package com.voxapps.services
 
 import android.util.Log
 import io.mockk.every
@@ -118,5 +118,23 @@ class ProbeSpecTest {
         val spec = ProbeSpec.from("piped", "https://pipedapi.kavin.rocks", "health")
 
         assertFalse(spec!!.missingCredential)
+    }
+
+    /**
+     * A key can travel in the path, where no header or query parameter can describe it — the rate
+     * service Expenses uses spells its URL `/v6/<key>/latest/USD`. The placeholder is what says so,
+     * and it has to count as needing a credential, or the probe asks with an empty key and reports
+     * the service unreachable when it is the key that is missing.
+     */
+    @Test
+    fun `a key placeholder in the url counts as needing a credential`() {
+        val spec = ProbeSpec.from(
+            "exchangerate_api",
+            "https://v6.exchangerate-api.com/v6",
+            "{key}/latest/USD"
+        )
+
+        assertTrue(spec!!.missingCredential)
+        assertFalse(spec.copy(credential = "abc123").missingCredential)
     }
 }

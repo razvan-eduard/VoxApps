@@ -1,4 +1,4 @@
-package com.voxapps.commander.domain.service
+package com.voxapps.services
 
 import com.voxapps.logging.Logger
 
@@ -41,11 +41,21 @@ data class ProbeSpec(
         data class Query(val param: String) : AuthStyle
     }
 
-    /** True when this service needs a credential it has not been given, so probing is pointless. */
+    /**
+     * True when this service needs a credential it has not been given, so probing is pointless.
+     *
+     * Covers both ways a credential can be needed: an [auth] style that attaches one to the
+     * request, and a `{key}` placeholder written into the URL itself — the escape hatch for a
+     * service that takes its key in the path, which no header or query parameter can describe.
+     */
     val missingCredential: Boolean
-        get() = auth != AuthStyle.None && credential.isNullOrBlank()
+        get() = (auth != AuthStyle.None || url.contains(KEY_PLACEHOLDER)) && credential.isNullOrBlank()
 
     companion object {
+        /** Replaced by the credential wherever it appears in a URL. Also declares, by its presence,
+         *  that the service needs one — see [missingCredential]. */
+        const val KEY_PLACEHOLDER = "{key}"
+
         /**
          * Builds a spec from a declaration, resolving [probeUrl] against [endpoint].
          *

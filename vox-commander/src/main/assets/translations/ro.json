@@ -484,5 +484,20 @@
   "overlay_text_preview": "Așa va arăta textul suprapus în timpul vorbirii.",
   "overlay_text_size_label": "Dimensiune text suprapus",
   "ww_aec_desc": "Permite detectarea cuvântului de trezire în timpul redării TTS/muzicii",
-  "ww_aec_label": "Anulare ecou (AEC)"
+  "ww_aec_label": "Anulare ecou (AEC)",
+  "schema_updates_section": "Actualizări de scheme",
+  "schema_updates_desc": "Motoarele, furnizorii de căutare, serviciile media și integrările sunt declarate în fișiere livrate cu aplicația. Depozitul de mai jos poate oferi versiuni mai noi.",
+  "schema_auto_update_label": "Verifică actualizările la pornire",
+  "schema_sync_now": "Verifică acum",
+  "schema_sync_report": "%1$d actualizate, %2$d neschimbate, %3$d eșuate",
+  "schema_source_bundled": "livrată cu aplicația",
+  "schema_source_accepted": "din depozit",
+  "system_maintenance_section": "Întreținere sistem",
+  "reset_schemas_button": "Restabilește schemele livrate",
+  "reset_schemas_description": "Șterge copiile descărcate din depozit. Se aplică din nou cele livrate cu această versiune.",
+  "reset_schemas_confirm": "Renunți la toate schemele descărcate din depozit și revii la cele livrate cu această versiune?",
+  "reset_settings_button": "Resetează toate setările",
+  "reset_settings_description": "Readuce fiecare setare la valoarea implicită. Cheile API și modelele descărcate se păstrează.",
+  "reset_settings_confirm": "Readuci fiecare setare la valoarea implicită? Cheile API și modelele descărcate se păstrează. Aplicația va reporni.",
+  "schema_source_mixed": "%1$d din depozit, %2$d livrate cu aplicația"
 }

@@ -2,8 +2,8 @@ package com.voxapps.commander.data.remote
 
 import com.google.gson.Gson
 import com.voxapps.commander.domain.engine.AndroidTtsEngine
-import com.voxapps.commander.domain.service.AuthDeclaration
-import com.voxapps.commander.domain.service.ProbeSpec
+import com.voxapps.services.AuthDeclaration
+import com.voxapps.services.ProbeSpec
 import com.voxapps.commander.utils.Strings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -41,8 +41,8 @@ class ShippedSchemaTest {
     private fun parse(file: File): RemoteModelSchema =
         RemoteModelRegistry.normalised(gson.fromJson(file.readText(), RemoteModelSchema::class.java))
 
-    private fun assetModels() = parse(repoFile("src/main/assets/models.json"))
-    private fun assetVirtual() = parse(repoFile("src/main/assets/virtual_models.json"))
+    private fun assetModels() = parse(repoFile("src/main/assets/schemas/models.json"))
+    private fun assetVirtual() = parse(repoFile("src/main/assets/schemas/virtual_models.json"))
 
     private fun translations(): Map<*, *> =
         gson.fromJson(repoFile("src/main/assets/translations/en.json").readText(), Map::class.java)
@@ -207,7 +207,7 @@ class ShippedSchemaTest {
 
     private fun assetSearch(): com.voxapps.commander.domain.search.SearchDefinitionsSchema =
         gson.fromJson(
-            repoFile("src/main/assets/search_definitions.json").readText(),
+            repoFile("src/main/assets/schemas/search_definitions.json").readText(),
             com.voxapps.commander.domain.search.SearchDefinitionsSchema::class.java
         )
 
@@ -271,7 +271,7 @@ class ShippedSchemaTest {
 
     private fun assetIntegrations(): com.voxapps.commander.domain.intent.registry.ApiIntegrationsSchema =
         gson.fromJson(
-            repoFile("src/main/assets/api_integrations.json").readText(),
+            repoFile("src/main/assets/schemas/api_integrations.json").readText(),
             com.voxapps.commander.domain.intent.registry.ApiIntegrationsSchema::class.java
         )
 
@@ -352,7 +352,7 @@ class ShippedSchemaTest {
 
     private fun assetMedia(): com.voxapps.commander.domain.media.MediaServiceRegistry.MediaSchema =
         gson.fromJson(
-            repoFile("src/main/assets/media_services.json").readText(),
+            repoFile("src/main/assets/schemas/media_services.json").readText(),
             com.voxapps.commander.domain.media.MediaServiceRegistry.MediaSchema::class.java
         )
 
@@ -397,12 +397,12 @@ class ShippedSchemaTest {
     }
 
     /**
-     * The bundled copy and the one served from the repository are compared by version to decide
-     * which the app runs on, so a twin left behind is not a cosmetic difference — it decides whose
-     * schema wins.
+     * `remote-schemas/` is what the repository serves *and* what the build copies into assets, so a
+     * stale asset copy means the app ships one thing and the repository offers another — and since a
+     * refresh compares them by hash, the difference would show up as a permanent "update available".
      */
     @Test
-    fun `each asset and its repo-root twin are identical`() {
+    fun `each shipped asset matches the copy in remote-schemas`() {
         listOf(
             "models.json",
             "virtual_models.json",
@@ -410,10 +410,12 @@ class ShippedSchemaTest {
             "api_integrations.json",
             "media_services.json"
         ).forEach { name ->
-            val asset = repoFile("src/main/assets/$name")
-            val twin = listOf(File(name), File("../$name")).firstOrNull { it.exists() }
-                ?: error("repo-root $name not found")
-            assertEquals("$name differs from its repo-root twin", asset.readText(), twin.readText())
+            val asset = repoFile("src/main/assets/schemas/$name")
+            val source = listOf(
+                File("remote-schemas/commander/$name"),
+                File("../remote-schemas/commander/$name")
+            ).firstOrNull { it.exists() } ?: error("remote-schemas/commander/$name not found")
+            assertEquals("$name differs from the copy in remote-schemas/", asset.readText(), source.readText())
         }
     }
 }

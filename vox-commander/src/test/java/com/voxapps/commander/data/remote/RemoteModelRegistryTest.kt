@@ -161,9 +161,9 @@ class RemoteModelRegistryTest {
     @Test
     fun `every compressed extension in the shipped models_json is a known archive format`() {
         val json = listOf(
-            java.io.File("src/main/assets/models.json"),
-            java.io.File("vox-commander/src/main/assets/models.json"),
-            java.io.File("../models.json")
+            java.io.File("src/main/assets/schemas/models.json"),
+            java.io.File("vox-commander/src/main/assets/schemas/models.json"),
+            java.io.File("../remote-schemas/commander/models.json")
         ).firstOrNull { it.exists() }
         assertTrue("models.json not found from ${java.io.File(".").absolutePath}", json != null)
 
@@ -238,8 +238,8 @@ class RemoteModelRegistryTest {
      */
     @Test
     fun `both models_json copies carry the same schema_version`() {
-        val asset = locate("src/main/assets/models.json", "vox-commander/src/main/assets/models.json")
-        val cdn = locate("../models.json", "models.json")
+        val asset = locate("src/main/assets/schemas/models.json", "vox-commander/src/main/assets/schemas/models.json")
+        val cdn = locate("../remote-schemas/commander/models.json", "models.json")
         assertTrue("could not locate both models.json copies", asset != null && cdn != null)
 
         val gson = com.google.gson.Gson()
@@ -250,7 +250,7 @@ class RemoteModelRegistryTest {
     }
 
     private fun shippedSchema(): RemoteModelSchema {
-        val file = locate("src/main/assets/models.json", "vox-commander/src/main/assets/models.json")
+        val file = locate("src/main/assets/schemas/models.json", "vox-commander/src/main/assets/schemas/models.json")
         assertTrue("models.json not found from ${java.io.File(".").absolutePath}", file != null)
         return com.google.gson.Gson().fromJson(file!!.readText(), RemoteModelSchema::class.java)
     }

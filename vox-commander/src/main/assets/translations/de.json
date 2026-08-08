@@ -484,5 +484,20 @@
   "ww_aec_desc": "Ermöglicht Weckwort-Erkennung während TTS-/Musikwiedergabe",
   "ww_aec_label": "Echounterdrückung (AEC)",
   "ww_delete_profile_msg": "Dadurch wird dein Sprachkalibrierungsprofil entfernt. Die Weckwort-Erkennung fällt auf den Basismodus zurück. Bist du sicher?",
-  "ww_delete_profile_title": "Sprachprofil löschen"
+  "ww_delete_profile_title": "Sprachprofil löschen",
+  "schema_updates_section": "Schema-Updates",
+  "schema_updates_desc": "Engines, Suchanbieter, Medien-Backends und Integrationen sind in Dateien deklariert, die mit der App ausgeliefert werden. Das Repository unten kann neuere liefern.",
+  "schema_auto_update_label": "Beim Start nach Updates suchen",
+  "schema_sync_now": "Jetzt prüfen",
+  "schema_sync_report": "%1$d aktualisiert, %2$d unverändert, %3$d fehlgeschlagen",
+  "schema_source_bundled": "mit der App ausgeliefert",
+  "schema_source_accepted": "aus dem Repository",
+  "system_maintenance_section": "Systemwartung",
+  "reset_schemas_button": "Schemas auf die ausgelieferten zurücksetzen",
+  "reset_schemas_description": "Löscht die aus dem Repository geladenen Kopien. Es gelten wieder die dieses Builds.",
+  "reset_schemas_confirm": "Alle aus dem Repository geladenen Schemas verwerfen und zu denen dieses Builds zurückkehren?",
+  "reset_settings_button": "Alle Einstellungen zurücksetzen",
+  "reset_settings_description": "Setzt jede Einstellung auf den Standard zurück. API-Schlüssel und geladene Modelle bleiben erhalten.",
+  "reset_settings_confirm": "Jede Einstellung auf den Standard zurücksetzen? API-Schlüssel und geladene Modelle bleiben. Die App startet neu.",
+  "schema_source_mixed": "%1$d aus dem Repository, %2$d mit der App ausgeliefert"
 }

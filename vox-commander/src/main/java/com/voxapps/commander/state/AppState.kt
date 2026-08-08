@@ -76,6 +76,9 @@ data class AppState(
     val defaultIntentFallbackProcessor: String?,
     val defaultIntentFallbackModel: String?,
 
+    /** Whether the app asks the repository for newer schemas at startup. */
+    val schemaAutoUpdate: Boolean = true,
+
     // --- SEARCH SETTINGS ---
     /** Category -> chosen search provider, empty for a category left on its declared default. */
     val searchProviderSelections: Map<String, String> = emptyMap(),
@@ -202,6 +205,7 @@ data class AppState(
                 piperVoiceModelId = settings.piperVoiceModelId,
                 appAliasRules = settings.appAliasRules,
                 credentials = credentials,
+                schemaAutoUpdate = settings.schemaAutoUpdate,
                 searchProviderSelections = settings.searchProviderSelections,
                 voiceState = voiceState,
                 defaultVoiceFallbackProcessor = settings.defaultVoiceFallbackProcessor,
@@ -260,6 +264,7 @@ data class AppState(
             piperVoiceModelId = null,
             appAliasRules = emptyList(),
             credentials = com.voxapps.commander.data.preferences.Credentials(),
+            schemaAutoUpdate = true,
             searchProviderSelections = emptyMap(),
             voiceState = VoiceState.IDLE,
             defaultVoiceFallbackProcessor = null,

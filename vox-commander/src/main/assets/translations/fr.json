@@ -484,5 +484,20 @@
   "ww_aec_desc": "Permet la détection du mot de réveil pendant la lecture TTS/musique",
   "ww_aec_label": "Suppression d'écho (AEC)",
   "ww_delete_profile_msg": "Cela supprimera votre profil de calibration vocale. La détection du mot de réveil reviendra au mode de base. Êtes-vous sûr ?",
-  "ww_delete_profile_title": "Supprimer le profil vocal"
+  "ww_delete_profile_title": "Supprimer le profil vocal",
+  "schema_updates_section": "Mises à jour des schémas",
+  "schema_updates_desc": "Les moteurs, fournisseurs de recherche, services média et intégrations sont déclarés dans des fichiers livrés avec l'application. Le dépôt ci-dessous peut en fournir de plus récents.",
+  "schema_auto_update_label": "Vérifier au démarrage",
+  "schema_sync_now": "Vérifier maintenant",
+  "schema_sync_report": "%1$d mis à jour, %2$d inchangés, %3$d en échec",
+  "schema_source_bundled": "livré avec l'application",
+  "schema_source_accepted": "depuis le dépôt",
+  "system_maintenance_section": "Maintenance du système",
+  "reset_schemas_button": "Rétablir les schémas livrés",
+  "reset_schemas_description": "Supprime les copies téléchargées depuis le dépôt. Ceux de cette version reprennent effet.",
+  "reset_schemas_confirm": "Abandonner tous les schémas téléchargés et revenir à ceux livrés avec cette version ?",
+  "reset_settings_button": "Réinitialiser tous les réglages",
+  "reset_settings_description": "Remet chaque réglage à sa valeur par défaut. Les clés API et les modèles téléchargés sont conservés.",
+  "reset_settings_confirm": "Remettre chaque réglage à sa valeur par défaut ? Les clés API et les modèles sont conservés. L'application redémarrera.",
+  "schema_source_mixed": "%1$d depuis le dépôt, %2$d livrés avec l’application"
 }

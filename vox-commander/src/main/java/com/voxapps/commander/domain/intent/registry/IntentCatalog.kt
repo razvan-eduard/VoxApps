@@ -1,7 +1,7 @@
 package com.voxapps.commander.domain.intent.registry
 
 import android.content.Context
-import com.voxapps.commander.data.remote.RemoteSchema
+import com.voxapps.services.RemoteSchema
 import com.google.gson.annotations.SerializedName
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
@@ -54,15 +54,12 @@ object IntentCatalog {
     private val schema = RemoteSchema(
         fileName = "intents.json",
         type = IntentsSchema::class.java,
-        versionOf = { it.schemaVersion },
         usable = { it.intents.isNotEmpty() },
         tag = TAG
     )
 
     fun init(context: Context) = schema.init(context)
 
-    suspend fun fetchRemote(repo: SettingsRepository, force: Boolean = false): Boolean =
-        schema.fetchRemote(repo, force)
 
     // ---- Public API ---------------------------------------------------------
 

@@ -18,11 +18,13 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.domain.service.ProbeSpec
-import com.voxapps.commander.domain.service.ServiceProbe
+import com.voxapps.services.ProbeSpec
+import com.voxapps.commander.domain.engine.CloudDeadline
+import com.voxapps.services.ServiceProbe
 import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
+import com.voxapps.design.ConnectionTestAuto
 
 /**
  * Everything a declared service says about its own health, in one place.
@@ -100,7 +102,10 @@ fun ConnectionTestCard(
 
     ConnectionTestCard(
         keys = listOf(spec.id, spec.url, spec.credential?.length ?: 0) + extraKeys,
-        testFn = { ServiceProbe.run(spec, settingsRepo) },
+        // The deadline every other outbound call in this app obeys, including whatever the engine
+        // itself declared — the prober takes a number so it can live beside services rather than
+        // beside one app's settings.
+        testFn = { ServiceProbe.run(spec, CloudDeadline.secondsFor(spec.id, settingsRepo)) },
         modifier = modifier,
         tokenState = tokenState,
         helpUrl = helpUrl,

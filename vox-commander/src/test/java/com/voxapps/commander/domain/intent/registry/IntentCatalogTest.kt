@@ -25,10 +25,10 @@ class IntentCatalogTest {
         // Gradle runs unit tests with the module dir (app/) as CWD; the source of
         // truth lives at the repo root and is copied into assets by copyIntentsJson.
         val candidates = listOf(
-            File("../intents.json"),
-            File("intents.json"),
-            File("src/main/assets/intents.json"),
-            File("app/src/main/assets/intents.json")
+            File("../remote-schemas/commander/intents.json"),
+            File("remote-schemas/commander/intents.json"),
+            File("src/main/assets/schemas/intents.json"),
+            File("app/src/main/assets/schemas/intents.json")
         )
         val file = candidates.firstOrNull { it.exists() }
             ?: error("intents.json not found. Looked in: ${candidates.map { it.absolutePath }}")

@@ -114,7 +114,7 @@
 -keep class com.voxapps.commander.data.remote.RemoteEngineConfig { *; }
 -keep class com.voxapps.commander.data.remote.RemoteModelItem { *; }
 -keep class com.voxapps.commander.data.remote.EntryPoint { *; }
--keep class com.voxapps.commander.domain.service.AuthDeclaration { *; }
+# AuthDeclaration now ships in :core:services and is kept by that module's consumer rules.
 -keep class com.voxapps.commander.data.remote.VirtualModelItem { *; }
 -keep class com.voxapps.commander.domain.intent.model.NluIntent { *; }
 -keep class com.voxapps.commander.domain.intent.registry.IntentCatalog$IntentsSchema { *; }
