@@ -13,8 +13,12 @@ interface SttEngine : VoxEngine {
 
     /**
      * Transcribes audio data to text.
+     *
+     * [langCode] is null for auto-detection. Engines that cannot be told a language ignore it; the
+     * caller used to ask `is WhisperSttEngine || is WhisperCppSttEngine` to decide whether passing
+     * one was possible, which is a type test standing in for a capability.
      */
-    suspend fun transcribe(audio: ByteArray): String
+    suspend fun transcribe(audio: ByteArray, langCode: String? = null): String
 
     /**
      * Processes a chunk of audio and returns a partial transcription if available.

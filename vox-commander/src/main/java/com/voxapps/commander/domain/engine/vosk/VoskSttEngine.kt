@@ -69,7 +69,7 @@ class VoskSttEngine(
         }
     }
 
-    override suspend fun transcribe(audio: ByteArray): String = withContext(Dispatchers.IO) {
+    override suspend fun transcribe(audio: ByteArray, langCode: String?): String = withContext(Dispatchers.IO) {
         val currentModel = model ?: return@withContext "Error: Vosk model not loaded."
 
         withModel {

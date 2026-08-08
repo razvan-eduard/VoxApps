@@ -167,15 +167,7 @@ class AppContainer(context: Context) {
 
     // --- VOICE MANAGER INITIALIZATION ---
     fun initVoiceManager(context: Context, voiceIntentLauncher: com.voxapps.commander.utils.VoiceIntentLauncher) {
-        VoiceManager.init(
-            context,
-            null, // Engines are now managed internally by VoiceManager via observation
-            null,
-            null,
-            null,
-            settingsRepository,
-            appStateManager
-        )
+        VoiceManager.init(context, settingsRepository, appStateManager)
 
         // Set offline fallback settings in VoiceManager
         val snapshot = settingsRepository.getSettingsSnapshot()

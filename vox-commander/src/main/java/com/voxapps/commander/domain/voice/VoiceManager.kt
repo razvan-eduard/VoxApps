@@ -9,10 +9,8 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.engine.SttEngine
-import com.voxapps.commander.domain.engine.whisper.WhisperCppSttEngine
-import com.voxapps.commander.domain.engine.google.GoogleSttEngine
-import com.voxapps.commander.domain.engine.vosk.VoskSttEngine
-import com.voxapps.commander.domain.engine.whisper.WhisperSttEngine
+import com.voxapps.commander.domain.engine.SttEngines
+import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.voice.WakeWordProfile
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.state.VoiceState
@@ -39,10 +37,9 @@ object VoiceManager {
     // still-in-progress recognition attempt.
     private const val LISTENING_WATCHDOG_MS = 15_000L
 
-    private var whisperCppEngine: WhisperCppSttEngine? = null
-    private var whisperApiEngine: WhisperSttEngine? = null
-    private var googleSttEngine: GoogleSttEngine? = null
-    private var voskSttEngine: VoskSttEngine? = null
+    /** The engine for the currently selected processor — one, not one of four. Swapped on Main by
+     *  reinitializeEngines, read from Dispatchers.IO while transcribing. */
+    @Volatile private var sttEngine: com.voxapps.commander.domain.engine.SttEngine? = null
 
     @android.annotation.SuppressLint("StaticFieldLeak")
     private var context: Context? = null
@@ -171,18 +168,10 @@ object VoiceManager {
 
     fun init(
         context: Context,
-        whisperCpp: WhisperCppSttEngine?,
-        whisperApi: WhisperSttEngine?,
-        google: GoogleSttEngine?,
-        vosk: VoskSttEngine?,
         settingsRepo: SettingsRepository,
         appStateManager: AppStateManager
     ) {
         this.context = context.applicationContext
-        this.whisperCppEngine = whisperCpp
-        this.whisperApiEngine = whisperApi
-        this.googleSttEngine = google
-        this.voskSttEngine = vosk
         this.settingsRepo = settingsRepo
         this.appStateManager = appStateManager
         
@@ -231,20 +220,23 @@ object VoiceManager {
         val apiKey = snapshot.apiKey
         val voiceLang = snapshot.voiceLanguage
         
-        whisperCppEngine = WhisperCppSttEngine(
-            ctx, 
-            settings, 
-            forceGpu = (processor == Strings.Processors.WHISPER_VULKAN)
-        )
-        
-        whisperApiEngine = if (!apiKey.isNullOrBlank()) WhisperSttEngine(apiKey) else null
-        googleSttEngine = GoogleSttEngine(ctx)
-        voskSttEngine = VoskSttEngine(ctx)
+        // Build only the engine this processor actually uses. All four used to be constructed on
+        // every processor change, so three of them held native handles nothing was going to ask for.
+        var built = SttEngines.create(processor, ctx, settings)
+        var builtKey = processor
+        if (built == null) {
+            // The processor cannot be built as configured — the Whisper API with no credential, or
+            // a key this build has no implementation for. Fall back to the registry's default local
+            // engine rather than to a hardcoded one, and say so.
+            builtKey = RemoteModelRegistry.getDefaultVoiceEngineKey() ?: ""
+            Logger.log("Cannot build '$processor'; falling back to '$builtKey'", TAG)
+            built = SttEngines.create(builtKey, ctx, settings)
+        }
+        sttEngine = built
 
-        // 3b. Load the model for the engine this processor will actually use. Engines no longer
-        // load themselves on first transcribe: locating a model — including honouring a custom
-        // import — happens here, where the selection is known, instead of three times over.
-        loadSelectedEngine(ctx, settings, processor, voiceLang)
+        // Load the model for it. Engines no longer load themselves on first transcribe: locating a
+        // model — including honouring a custom import — happens here, where the selection is known.
+        loadSelectedEngine(ctx, settings, builtKey, voiceLang)
 
         // 4. Return to IDLE state
         hub.setVoiceState(VoiceState.IDLE)
@@ -391,18 +383,8 @@ object VoiceManager {
         speechRecognizer?.destroy()
         speechRecognizer = null
         
-        // Use the new common release interface for all engines
-        whisperCppEngine?.release()
-        whisperCppEngine = null
-        
-        whisperApiEngine?.release()
-        whisperApiEngine = null
-        
-        googleSttEngine?.release()
-        googleSttEngine = null
-        
-        voskSttEngine?.release()
-        voskSttEngine = null
+        sttEngine?.release()
+        sttEngine = null
     }
 
     /**
@@ -412,37 +394,19 @@ object VoiceManager {
      * releasing mid-transcription.
      */
     fun releaseForMemoryPressure() {
-        listOfNotNull(whisperCppEngine, whisperApiEngine, googleSttEngine, voskSttEngine)
+        listOfNotNull(sttEngine)
             .forEach { it.releaseForMemoryPressure() }
     }
 
-    private fun selectEngine(userPreference: String): SttEngine? {
-        Logger.log("Selecting engine for preference: $userPreference", TAG)
-        
-        val selectedEngine = when (userPreference) {
-            Strings.Processors.WHISPER_API -> {
-                whisperApiEngine ?: whisperCppEngine ?: googleSttEngine
-            }
-            Strings.Processors.GOOGLE -> {
-                googleSttEngine ?: whisperCppEngine
-            }
-            Strings.Processors.WHISPER_VULKAN -> {
-                whisperCppEngine ?: googleSttEngine
-            }
-            else -> {
-                // JSON-defined engines — route by extension
-                val ext = com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(userPreference)
-                when (ext) {
-                    ".zip" -> voskSttEngine ?: whisperCppEngine ?: googleSttEngine
-                    ".bin" -> whisperCppEngine ?: googleSttEngine
-                    else -> whisperCppEngine ?: googleSttEngine
-                }
-            }
-        }
-
-        Logger.log("VoiceManager: Selected engine: ${selectedEngine?.javaClass?.simpleName}")
-        return selectedEngine
-    }
+    /**
+     * The engine currently built for the selected processor.
+     *
+     * There is nothing left to select. This used to be a `when` over processor names falling
+     * through to a `when` over file extensions, choosing among four live instances with `?:` chains
+     * that quietly substituted a different engine when one was missing. The choice now happens once,
+     * in reinitializeEngines, where it is made explicitly and logged.
+     */
+    private fun selectEngine(userPreference: String): SttEngine? = sttEngine
 
     fun startListening(languageCode: String, processor: String, onResult: (String) -> Unit) {
         if (!isListeningFlag.compareAndSet(false, true)) {
@@ -583,13 +547,9 @@ object VoiceManager {
 
                     val result = appStateManager?.executeSecureVoiceAction {
                         // Pass language code to engine if it supports it
-                        val rawResult = if (engine is WhisperSttEngine) {
-                            engine.transcribeWithLanguage(byteArray, effectiveLangCode)
-                        } else if (engine is WhisperCppSttEngine) {
-                            engine.transcribeWithLanguage(byteArray, effectiveLangCode)
-                        } else {
-                            engine.transcribe(byteArray)
-                        }
+                        // Engines that cannot be told a language ignore it, so there is no longer
+                        // a type test here deciding whether passing one is possible.
+                        val rawResult = engine.transcribe(byteArray, effectiveLangCode)
                         
                         // Clean up transcription to remove trailing noise/formatting that kills regex matches
                         rawResult.trim().lowercase().removeSuffix(".")

@@ -99,9 +99,7 @@ class WhisperCppSttEngine(
         whisperContext = null
     }
 
-    override suspend fun transcribe(audio: ByteArray): String = transcribeWithLanguage(audio, null)
-
-    suspend fun transcribeWithLanguage(audio: ByteArray, langCode: String?): String = withContext(Dispatchers.IO) {
+    override suspend fun transcribe(audio: ByteArray, langCode: String?): String = withContext(Dispatchers.IO) {
         if (!WhisperLib.isReady()) return@withContext "Error: Native library failed to load"
 
         val currentContext = whisperContext

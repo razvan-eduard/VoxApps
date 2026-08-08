@@ -33,7 +33,7 @@ class GoogleSttEngine(private val context: Context) : BaseVoxEngine(), SttEngine
         }
     }
 
-    override suspend fun transcribe(audio: ByteArray): String {
+    override suspend fun transcribe(audio: ByteArray, langCode: String?): String {
         return ""
     }
 

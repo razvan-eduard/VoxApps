@@ -42,9 +42,7 @@ class WhisperSttEngine(
         .build()
         .create(WhisperApi::class.java)
 
-    override suspend fun transcribe(audio: ByteArray): String = transcribeWithLanguage(audio, null)
-
-    suspend fun transcribeWithLanguage(audio: ByteArray, langCode: String?): String {
+    override suspend fun transcribe(audio: ByteArray, langCode: String?): String {
         val wavAudio = WavUtils.wrapPcmToWav(audio)
         val requestBody = wavAudio.toRequestBody(MEDIA_TYPE_WAV.toMediaType())
         val filePart = MultipartBody.Part.createFormData(PART_FILE, FILENAME_WAV, requestBody)
