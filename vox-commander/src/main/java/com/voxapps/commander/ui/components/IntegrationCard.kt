@@ -168,7 +168,9 @@ fun IntegrationCard(
                 )
             }
 
-            if (auth.requiresClientId && !connected && clientId.isNotBlank()) {
+            // Also while connected: a client id can need rotating, and hiding the only way to see
+            // it behind "disconnect first" makes the user throw away a working token to reach it.
+            if (auth.requiresClientId && clientId.isNotBlank()) {
                 TextButton(onClick = { showSetup = true }) {
                     Text(
                         text = languageManager.getString("spotify_change_client_id"),
@@ -241,11 +243,23 @@ fun IntegrationCard(
             onDismiss = { showSetup = false },
             onConfirm = { entered ->
                 showSetup = false
+                val changed = entered != clientId
                 clientId = entered
                 scope.launch {
                     settingsRepo.setServiceClientId(integration.id, entered)
                     onConnected(entered)
-                    authorise(entered)
+                    /*
+                     * A token belongs to the application that issued it, so a new client id makes
+                     * the stored one worthless — it will be refused, and refreshing it asks the old
+                     * application for a token the user no longer wants. Dropping it and authorising
+                     * again is the honest response; leaving it would show "connected" for a
+                     * credential that has been replaced.
+                     */
+                    if (changed && connected) {
+                        OAuth2Manager.logout(integration.id)
+                        connected = false
+                    }
+                    if (!connected) authorise(entered)
                 }
             }
         )

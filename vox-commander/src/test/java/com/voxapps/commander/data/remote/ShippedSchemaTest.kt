@@ -239,6 +239,22 @@ class ShippedSchemaTest {
     }
 
     /**
+     * A provider that borrows a credential names the engine it borrows from, and that engine exists.
+     *
+     * The boolean this replaced could only ever mean OpenAI, because the engine it borrowed from was
+     * written in the registry rather than declared — so a second provider sharing a different
+     * engine's key had nowhere to say so.
+     */
+    @Test
+    fun `a borrowed credential names an engine that is declared`() {
+        val declared = assetVirtual().engines.keys + assetModels().engines.keys
+
+        declaredProviders().mapNotNull { it.sharedKeyEngine }.forEach { engineKey ->
+            assertTrue("provider borrows from undeclared engine '$engineKey'", engineKey in declared)
+        }
+    }
+
+    /**
      * A provider that needs a key must say how the key attaches, or the probe sends none and the
      * screen reports the service unreachable when it is the credential that is missing.
      */

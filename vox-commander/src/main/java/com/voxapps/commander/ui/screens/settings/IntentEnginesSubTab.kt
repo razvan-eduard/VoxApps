@@ -144,15 +144,7 @@ fun IntentEnginesSubTab(
                     EngineApiKeyField(
                         engineKey = uiState.aiProcessor,
                         appStateManager = appStateManager,
-                        languageManager = languageManager,
-                        onKeyChanged = {
-                            // The OpenAI credential is also what the shared-key search providers
-                            // use; they hold their own copy and are told when it changes.
-                            if (uiState.aiProcessor == Strings.AiProcessors.OPENAI) {
-                                com.voxapps.commander.domain.search.SearchProviderRegistry
-                                    .applySharedOpenAiKey(it.ifBlank { null })
-                            }
-                        }
+                        languageManager = languageManager
                     )
                 }
             }

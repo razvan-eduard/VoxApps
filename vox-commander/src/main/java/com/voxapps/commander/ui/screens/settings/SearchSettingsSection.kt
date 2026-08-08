@@ -297,8 +297,8 @@ private fun needsCredential(
 ): Boolean {
     val provider = SearchProviderRegistry.getProvider(categoryName, providerName) ?: return false
     if (!provider.requiresApiKey) return false
-    return if (provider.usesSharedApiKey) !uiState.credentials.has(Strings.AiProcessors.OPENAI)
-    else uiState.credentials.forSearchProvider(providerName) == null
+    return provider.borrowsFromEngine?.let { !uiState.credentials.has(it) }
+        ?: (uiState.credentials.forSearchProvider(providerName) == null)
 }
 
 /**
@@ -320,11 +320,9 @@ private fun SelectedProviderDetails(
         SearchProviderRegistry.getProvider(categoryName, providerName)
     } ?: return
 
-    val credential = if (provider.usesSharedApiKey) {
-        uiState.credentials.forEngine(Strings.AiProcessors.OPENAI)
-    } else {
-        uiState.credentials.forSearchProvider(providerName)
-    }
+    val borrowedEngine = provider.borrowsFromEngine
+    val credential = borrowedEngine?.let { uiState.credentials.forEngine(it) }
+        ?: uiState.credentials.forSearchProvider(providerName)
 
     if (provider.requiresLocation) {
         Text(
@@ -339,7 +337,7 @@ private fun SelectedProviderDetails(
     // place is entering it once. It has to be reachable here: the engine's own screen shows the
     // field only while that engine is *selected*, and someone running a local intent model would
     // otherwise have no way to configure the provider that needs this key.
-    if (provider.usesSharedApiKey) {
+    if (borrowedEngine != null) {
         Text(
             text = languageManager.getString("search_provider_uses_shared_key")
                 ?: "Shares the engine's API key",
@@ -347,10 +345,9 @@ private fun SelectedProviderDetails(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         EngineApiKeyField(
-            engineKey = Strings.AiProcessors.OPENAI,
+            engineKey = borrowedEngine,
             appStateManager = appStateManager,
-            languageManager = languageManager,
-            onKeyChanged = { SearchProviderRegistry.applySharedOpenAiKey(it.ifBlank { null }) }
+            languageManager = languageManager
         )
     } else if (provider.requiresApiKey) {
         CredentialField(

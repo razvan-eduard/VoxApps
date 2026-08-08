@@ -1,6 +1,7 @@
 package com.voxapps.commander.domain.search
 
 import android.content.Context
+import com.voxapps.commander.data.preferences.Credentials
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteSchema
 import com.voxapps.logging.Logger
@@ -44,7 +45,9 @@ object SearchProviderRegistry {
         for (catDef in loaded.categories) {
             val providerMap = mutableMapOf<String, DynamicSearchProvider>()
             for (provDef in catDef.providers) {
-                providerMap[provDef.name] = DynamicSearchProvider(provDef, catDef.category)
+                providerMap[provDef.name] = DynamicSearchProvider(provDef, catDef.category) {
+                    settingsRepo?.getCredentialsSnapshot() ?: Credentials()
+                }
             }
             newProviders[catDef.category] = providerMap
             newDefaults[catDef.category] = catDef.defaultProvider.ifBlank {
@@ -55,35 +58,6 @@ object SearchProviderRegistry {
         providersByCategory = newProviders
         defaultProviderNames = newDefaults
         Logger.log("Rebuilt search providers: ${newProviders.map { "${it.key}=[${it.value.keys}]" }}", TAG)
-    }
-
-    fun applyApiKeys(apiKeys: Map<String, String>) {
-        for ((_, providerMap) in providersByCategory) {
-            for ((name, provider) in providerMap) {
-                if (!provider.usesSharedApiKey) provider.setApiKey(apiKeys[name])
-            }
-        }
-        Logger.log("Applied API keys to search providers: ${apiKeys.keys}", TAG)
-    }
-
-    /**
-     * Pushes the shared Settings → Models API key into every provider that opted into reusing it
-     * (`usesSharedApiKey = true` in its JSON definition, e.g. the OpenAI general/knowledge provider)
-     * instead of asking the user to paste the same key a second time into a provider-specific field.
-     * Must be re-called after [rebuildProviders] runs (e.g. after [fetchRemote]), since that replaces
-     * every `DynamicSearchProvider` instance — same reason [applyApiKeys] gets re-called there too.
-     */
-    fun applySharedOpenAiKey(key: String?) {
-        var count = 0
-        for ((_, providerMap) in providersByCategory) {
-            for (provider in providerMap.values) {
-                if (provider.usesSharedApiKey) {
-                    provider.setApiKey(key)
-                    count++
-                }
-            }
-        }
-        Logger.log("Applied shared OpenAI key to $count provider(s)", TAG)
     }
 
     /**

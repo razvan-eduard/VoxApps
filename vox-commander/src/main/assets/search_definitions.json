@@ -1,5 +1,5 @@
 {
-  "schema_version": 7,
+  "schema_version": 8,
   "categories": [
     {
       "category": "weather",
@@ -211,7 +211,7 @@
           "method": "POST",
           "requiresLocation": false,
           "requiresApiKey": true,
-          "usesSharedApiKey": true,
+          "shared_key_engine": "OPENAI",
           "providerType": "openai_chat",
           "promptTemplate": "Answer the following question concisely and conversationally, suitable for a voice assistant to read aloud. If asked about real-time information such as current weather, sports scores, or breaking news, say you don't have live data instead of guessing: {query}"
         }
@@ -341,7 +341,7 @@
           "method": "POST",
           "requiresLocation": false,
           "requiresApiKey": true,
-          "usesSharedApiKey": true,
+          "shared_key_engine": "OPENAI",
           "providerType": "openai_chat",
           "promptTemplate": "Answer the following question concisely and conversationally, suitable for a voice assistant to read aloud. If asked about real-time information such as current weather, sports scores, or breaking news, say you don't have live data instead of guessing: {query}"
         }

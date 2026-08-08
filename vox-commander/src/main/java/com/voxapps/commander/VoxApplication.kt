@@ -56,12 +56,6 @@ class VoxApplication : Application() {
 
         // Initialize SearchProviderRegistry with app context
         com.voxapps.commander.domain.search.SearchProviderRegistry.init(this, container.settingsRepository)
-        com.voxapps.commander.domain.search.SearchProviderRegistry.applyApiKeys(
-            container.settingsRepository.getAllSearchProviderApiKeys()
-        )
-        com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
-            container.settingsRepository.getCredentialsSnapshot().forEngine(Strings.AiProcessors.OPENAI)
-        )
 
         // Initialize MediaServiceRegistry (declared video backends and their instances).
         com.voxapps.commander.domain.media.MediaServiceRegistry.init(this)
@@ -141,12 +135,6 @@ class VoxApplication : Application() {
 
             // Also fetch search definitions from remote repo
             com.voxapps.commander.domain.search.SearchProviderRegistry.fetchRemote(container.settingsRepository, force = true)
-            com.voxapps.commander.domain.search.SearchProviderRegistry.applyApiKeys(
-                container.settingsRepository.getAllSearchProviderApiKeys()
-            )
-            com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
-                container.settingsRepository.getCredentialsSnapshot().forEngine(Strings.AiProcessors.OPENAI)
-            )
             // Also fetch the intent catalog from the remote repo (hot-reload)
             com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(container.settingsRepository, force = true)
             // …and the media backends, whose public instances are the likeliest of all of these to

@@ -310,19 +310,9 @@ class AppStateManager private constructor(
         scope.launch { repo.setEngineApiKey(engineKey, key) }
     }
 
-    /**
-     * The same, for a search provider that owns its key.
-     *
-     * The registry is told immediately afterwards because it holds a provider object per
-     * declaration with the key applied to it — a push, like the one at startup, rather than the
-     * screen doing it on the way past and the next screen forgetting to.
-     */
+    /** The same, for a search provider that owns its key. */
     fun setSearchProviderApiKey(providerName: String, key: String?) {
-        scope.launch {
-            repo.setSearchProviderApiKey(providerName, key)
-            com.voxapps.commander.domain.search.SearchProviderRegistry
-                .applyApiKeys(repo.getAllSearchProviderApiKeys())
-        }
+        scope.launch { repo.setSearchProviderApiKey(providerName, key) }
     }
 
     fun setAppLanguage(lang: String) {

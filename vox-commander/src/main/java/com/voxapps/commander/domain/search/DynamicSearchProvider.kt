@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 
 import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
+import com.voxapps.commander.data.preferences.Credentials
 import com.voxapps.commander.domain.service.AuthDeclaration
 import com.voxapps.commander.domain.service.ProbeSpec
 import com.voxapps.logging.Logger
@@ -61,8 +62,13 @@ data class ProviderDefinition(
     val providerType: String = "http",
     // Instruction sent to the model for an "openai_chat" provider, with a {query} placeholder.
     val promptTemplate: String? = null,
-    // True = this provider's key comes from the shared Settings → Models API key (reused, not
-    // re-entered) rather than its own per-provider key store — see SearchProviderRegistry.applySharedOpenAiKey.
+    /** The engine whose credential this provider borrows, rather than asking for one of its own —
+     *  the OpenAI search provider calls the same service the OpenAI intent engine does, and asking
+     *  for the same key twice is asking the user to keep two copies in step. */
+    @SerializedName("shared_key_engine") val sharedKeyEngine: String? = null,
+    /** The older spelling: a boolean that could only ever mean OpenAI, since the engine it borrowed
+     *  from was written in the registry rather than declared. Still read, for a copy served from a
+     *  repository that predates the field above. */
     val usesSharedApiKey: Boolean = false,
     val queryTemplate: String? = null,
     val postBodyTemplate: String? = null,
@@ -124,12 +130,23 @@ data class FieldMapping(
 
 class DynamicSearchProvider(
     private val def: ProviderDefinition,
-    private val categoryName: String
+    private val categoryName: String,
+    /**
+     * The credential store, read when a key is needed rather than pushed in when it changes.
+     *
+     * Pushing meant every path that rebuilt these providers had to remember to re-apply the keys
+     * afterwards, and the one that forgot left a configured provider looking unconfigured until the
+     * next app start. Reading has no such ordering to get wrong.
+     */
+    private val credentials: () -> Credentials = { Credentials() }
 ) {
 
     private val tag = "SearchProvider_${def.name}"
 
     companion object {
+        /** What the boolean spelling meant, since it named no engine. */
+        private const val BORROWED_BY_DEFAULT = "OPENAI"
+
         private const val BROWSER_UA =
             "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
 
@@ -146,13 +163,18 @@ class DynamicSearchProvider(
     val name: String get() = def.name
     val requiresLocation: Boolean get() = def.requiresLocation
     val requiresApiKey: Boolean get() = def.requiresApiKey
-    val usesSharedApiKey: Boolean get() = def.usesSharedApiKey
+    /** Which engine's credential this provider uses, or null when it owns its key. */
+    val borrowsFromEngine: String?
+        get() = def.sharedKeyEngine ?: BORROWED_BY_DEFAULT.takeIf { def.usesSharedApiKey }
     val endpoint: String get() = def.endpoint
 
-    private var apiKey: String? = null
     private var currentLang: String = "en"
 
-    fun setApiKey(key: String?) { apiKey = key }
+    /** This provider's credential: the engine's when it borrows one, otherwise its own. */
+    private val apiKey: String?
+        get() = borrowsFromEngine?.let { credentials().forEngine(it) }
+            ?: credentials().forSearchProvider(def.name)
+
     fun hasApiKey(): Boolean = !apiKey.isNullOrBlank()
 
     /**

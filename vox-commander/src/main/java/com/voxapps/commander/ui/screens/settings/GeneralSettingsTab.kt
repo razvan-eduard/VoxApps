@@ -73,19 +73,12 @@ fun GeneralSettingsTab(
                         if (success) {
                             appStateManager.refreshAll()
                         }
+                        // Rebuilding every provider from a fetched schema used to lose whatever key
+                        // had been applied to the old instances, so each caller had to re-apply them
+                        // afterwards and this one's omission left a configured provider looking
+                        // unconfigured until the next app start. A provider reads its own credential
+                        // now, so there is nothing to re-apply.
                         com.voxapps.commander.domain.search.SearchProviderRegistry.fetchRemote(settingsRepo, force = true)
-                        // fetchRemote() rebuilds every DynamicSearchProvider instance from scratch,
-                        // so any previously-applied key is gone until these are called again — see
-                        // SearchProviderRegistry.applySharedOpenAiKey's own doc comment. Missing here
-                        // meant the OpenAI general/knowledge provider stayed locked (hasApiKey()
-                        // false) after a manual sync even with a real key configured, until the next
-                        // full app restart re-ran VoxApplication's own copy of this same sequence.
-                        com.voxapps.commander.domain.search.SearchProviderRegistry.applyApiKeys(
-                            settingsRepo.getAllSearchProviderApiKeys()
-                        )
-                        com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
-                            uiState.credentials.forEngine(Strings.AiProcessors.OPENAI)
-                        )
                         com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(settingsRepo, force = true)
                     }
                 }) {
