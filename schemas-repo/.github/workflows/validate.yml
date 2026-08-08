@@ -1,0 +1,20 @@
+# The check that stands between an edit and every install that follows this repository.
+#
+# The apps assert these same rules against the copies they ship with, which protects a build. It
+# cannot protect an edit made here — that reaches devices on their next check, with no compiler and
+# no test suite in between. This is that missing step.
+name: Validate schemas
+
+on:
+  push:
+    paths: ["remote-schemas/**", "scripts/validate_schemas.py"]
+  pull_request:
+    paths: ["remote-schemas/**", "scripts/validate_schemas.py"]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/validate_schemas.py remote-schemas
