@@ -39,7 +39,8 @@ jobs:
           # Sparse and shallow: this repository wants two paths, not the app's history.
           git clone --depth 1 --filter=blob:none --sparse \
             "https://github.com/${SOURCE_REPO}.git" --branch "${SOURCE_BRANCH}" .mirror
-          git -C .mirror sparse-checkout set remote-schemas scripts/validate_schemas.py
+          # Cone mode takes directories, not files — hence scripts/ rather than the one script.
+          git -C .mirror sparse-checkout set remote-schemas scripts
           rm -rf remote-schemas scripts
           mkdir -p scripts
           cp -r .mirror/remote-schemas ./remote-schemas
