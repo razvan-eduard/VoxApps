@@ -203,7 +203,6 @@ fun SettingsContent(
                                     onProcessorSelected = {
                                         appStateManager.setVoiceProcessor(it)
                                     },
-                                    hasApiKey = uiState.credentials.has(Strings.AiProcessors.OPENAI),
                                     googleSttAvailable = googleSttAvailable,
                                     onVoiceLanguageSelected = {
                                         appStateManager.setModelFilterLang(it)

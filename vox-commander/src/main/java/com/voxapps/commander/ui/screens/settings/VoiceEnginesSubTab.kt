@@ -35,7 +35,6 @@ fun VoiceEnginesSubTab(
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     onProcessorSelected: (String) -> Unit,
-    hasApiKey: Boolean,
     googleSttAvailable: Boolean,
     onVoiceLanguageSelected: (String) -> Unit,
     onModelSelected: (AppModel, Boolean, String) -> Unit,
@@ -99,17 +98,26 @@ fun VoiceEnginesSubTab(
             itemLabel = { RemoteModelRegistry.getEngineLabel(it, languageManager) },
             onSelect = { onProcessorSelected(it) },
             itemEnabled = { proc ->
-                // Asked of the declaration wherever the declaration can answer. "Needs a key" is a
-                // property of the engine and is written down as one; whether the OS actually
-                // provides a recogniser is a property of the *device*, which no schema can know, so
-                // that one stays a probe the caller performs.
+                /*
+                 * Only what this device cannot do disables a row.
+                 *
+                 * A missing key does not: the field for it appears under the selection, so an
+                 * engine greyed out for wanting a credential is an engine whose credential can
+                 * never be entered. It was worse than that here — the guard consulted the *intent*
+                 * engine's OpenAI key, a leftover from when every service shared one — so the
+                 * transcription engine unlocked when a key for something else was entered.
+                 */
                 when {
-                    RemoteModelRegistry.hasCapability(proc, "requires_api_key") -> hasApiKey
                     proc == Strings.Processors.GOOGLE -> googleSttAvailable
                     proc == Strings.Processors.WHISPER_VULKAN ->
                         uiState.isWhisperSystemEnabled && !settingsRepo.getSettingsSnapshot().vulkanIncompatible
                     else -> true
                 }
+            },
+            itemNote = { proc ->
+                if (RemoteModelRegistry.hasCapability(proc, "requires_api_key") &&
+                    !uiState.credentials.has(proc)
+                ) " — needs an API key" else ""
             }
         ) {
             // Beneath the collapsed dropdown, describing whatever is selected in it. Null when the
