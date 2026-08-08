@@ -87,6 +87,8 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Date
+import com.voxapps.design.color.VoxSwatchShapes
+import androidx.compose.foundation.gestures.Orientation
 
 /** Fixed amber tint for the "important" star — same fixed-color-regardless-of-item-hue treatment as
  *  [DONE_CHECK_COLOR] in ToDoNodeTimeline.kt. */
@@ -319,11 +321,23 @@ private fun ToDoListEditFace(
                 modifier = Modifier.weight(1f)
             )
             Box(modifier = Modifier.width(EDIT_FACE_RIGHT_COLUMN_WIDTH), contentAlignment = Alignment.Center) {
-                VerticalColorStrip(
+                // The same picker every other colour choice uses, stood on its side: this card is
+                // row-shaped, so its colours run down the trailing edge. It carried a copy of the
+                // component to get that, which then missed everything the shared one gained.
+                VoxColorSwatchPicker(
                     selectedColor = list.colorArgb,
                     onColorSelected = { color -> scope.launch { toDoRepository.updateListColor(list, color) } },
                     expanded = listColorExpanded,
-                    onExpandedChange = { listColorExpanded = it }
+                    onExpandedChange = { listColorExpanded = it },
+                    orientation = Orientation.Vertical,
+                    swatchSize = VERTICAL_SWATCH_SIZE,
+                    modifier = Modifier.heightIn(max = 360.dp),
+                    customColorDialogTitle = languageManager.getString("todo_custom_color_title"),
+                    customColorUseLabel = languageManager.getString("apply"),
+                    customColorCancelLabel = languageManager.getString("cancel"),
+                    customColorHueLabel = languageManager.getString("todo_color_hue"),
+                    customColorSaturationLabel = languageManager.getString("todo_color_saturation"),
+                    customColorBrightnessLabel = languageManager.getString("todo_color_brightness")
                 )
             }
         }
@@ -373,105 +387,6 @@ private val EDIT_FACE_RIGHT_COLUMN_WIDTH = 40.dp
 private val VERTICAL_SWATCH_SIZE = 28.dp
 private val VERTICAL_SWATCH_PEEK_OFFSET = 10.dp
 private val VERTICAL_SWATCH_PEEK_ALPHAS = listOf(0.75f, 0.5f, 0.3f)
-
-/** Vertical analog of `VoxColorSwatchPicker` (that one is a horizontal `LazyRow`) — same preset
- *  palette, same ring-inset swatch styling, and the same trailing custom-color entry, just stacked
- *  vertically on the trailing edge of the edit face (mirroring vox-notes' `CategoryCoverflow`
- *  placement for a note's own category color) instead of scrolling horizontally. Collapsible like
- *  its horizontal counterpart: starts as [selectedColor] with a few presets peeking out below it,
- *  expands into the full column on tap. [expanded] is hoisted by the caller rather than owned here —
- *  see the comment at its call site for why. */
-@Composable
-private fun VerticalColorStrip(
-    selectedColor: Long,
-    onColorSelected: (Long) -> Unit,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit
-) {
-    val languageManager = LocalLanguageManager.current
-    var showCustomDialog by remember { mutableStateOf(false) }
-
-    if (expanded) {
-        LazyColumn(
-            state = rememberLazyListState(),
-            modifier = Modifier.width(40.dp).heightIn(max = 360.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 4.dp)
-        ) {
-            items(VoxColorPalette.presets) { color ->
-                val selected = color == selectedColor
-                Box(
-                    modifier = Modifier
-                        .size(VERTICAL_SWATCH_SIZE)
-                        .then(if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier)
-                        .padding(if (selected) 3.dp else 0.dp)
-                        .clip(CircleShape)
-                        .background(Color(color.toInt()))
-                        .clickable { onColorSelected(color) }
-                )
-            }
-            item {
-                Box(
-                    modifier = Modifier
-                        .size(VERTICAL_SWATCH_SIZE)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                        .clickable { showCustomDialog = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Filled.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    } else {
-        val peekColors = VoxColorPalette.presets.filter { it != selectedColor }.take(VERTICAL_SWATCH_PEEK_ALPHAS.size)
-        Box(
-            modifier = Modifier
-                .width(VERTICAL_SWATCH_SIZE)
-                .height(VERTICAL_SWATCH_SIZE + VERTICAL_SWATCH_PEEK_OFFSET * peekColors.size)
-                .clickable { onExpandedChange(true) }
-        ) {
-            peekColors.forEachIndexed { index, color ->
-                Box(
-                    modifier = Modifier
-                        .offset(y = VERTICAL_SWATCH_PEEK_OFFSET * (index + 1))
-                        .size(VERTICAL_SWATCH_SIZE)
-                        .clip(CircleShape)
-                        .background(Color(color.toInt()).copy(alpha = VERTICAL_SWATCH_PEEK_ALPHAS[index]))
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(VERTICAL_SWATCH_SIZE)
-                    .clip(CircleShape)
-                    .background(Color(selectedColor.toInt()))
-            )
-        }
-    }
-
-    if (showCustomDialog) {
-        VoxCustomColorDialog(
-            initialColor = selectedColor,
-            title = languageManager.getString("todo_custom_color_title"),
-            useColorLabel = languageManager.getString("apply"),
-            cancelLabel = languageManager.getString("cancel"),
-            hueLabel = languageManager.getString("todo_color_hue"),
-            saturationLabel = languageManager.getString("todo_color_saturation"),
-            valueLabel = languageManager.getString("todo_color_brightness"),
-            onDismiss = { showCustomDialog = false },
-            onConfirm = { color ->
-                onColorSelected(color)
-                showCustomDialog = false
-            }
-        )
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 /** Public so [com.voxapps.calendarapp.ui.CalendarRoot] can reuse it directly when a tapped
@@ -564,6 +479,9 @@ fun TaskEditDialog(
                         selectedColor = color,
                         onColorSelected = { color = it },
                         showSelectionRing = true,
+                        // Important items are drawn as stars on the timeline; the selector says the
+                        // same thing, and follows the toggle below as it is flipped.
+                        shape = if (important) VoxSwatchShapes.Star else CircleShape,
                         expanded = colorExpanded,
                         onExpandedChange = { colorExpanded = it },
                         customColorDialogTitle = languageManager.getString("todo_custom_color_title"),

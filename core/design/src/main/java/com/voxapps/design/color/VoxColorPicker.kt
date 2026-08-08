@@ -20,6 +20,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -44,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -85,6 +89,12 @@ fun VoxColorSwatchPicker(
     modifier: Modifier = Modifier,
     presetColors: List<Long> = VoxColorPalette.presets,
     collapsible: Boolean = true,
+    /** Which way the swatches run. A column is the same picker on its side — vox-calendar's to-do
+     *  card needs one on the trailing edge of a row-shaped card, and used to carry its own copy of
+     *  this component to get it. */
+    orientation: Orientation = Orientation.Horizontal,
+    /** Swatch footprint. Smaller where the picker sits beside content rather than under it. */
+    swatchSize: Dp = SWATCH_OUTER_SIZE,
     expanded: Boolean? = null,
     onExpandedChange: ((Boolean) -> Unit)? = null,
     showSelectionRing: Boolean = true,
@@ -113,24 +123,41 @@ fun VoxColorSwatchPicker(
         if (index > 0) listState.scrollToItem(index)
     }
 
+    // The two directions share their item content exactly; only the container and which axis the
+    // spacing applies to differ, which is why one component can be both.
+    val swatches: LazyListScope.() -> Unit = {
+        items(presetColors) { color ->
+            VoxColorSwatch(
+                color = color,
+                selected = showSelectionRing && color == selectedColor,
+                onClick = { onColorSelected(color) },
+                shape = shape,
+                size = swatchSize
+            )
+        }
+        item {
+            VoxCustomColorEntry(onClick = { showCustomDialog = true }, size = swatchSize)
+        }
+    }
+
     if (expandedState) {
-        LazyRow(
-            state = listState,
-            modifier = modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(SWATCH_SPACING),
-            contentPadding = PaddingValues(vertical = 4.dp)
-        ) {
-            items(presetColors) { color ->
-                VoxColorSwatch(
-                    color = color,
-                    selected = showSelectionRing && color == selectedColor,
-                    onClick = { onColorSelected(color) },
-                    shape = shape
-                )
-            }
-            item {
-                VoxCustomColorEntry(onClick = { showCustomDialog = true })
-            }
+        if (orientation == Orientation.Vertical) {
+            LazyColumn(
+                state = listState,
+                modifier = modifier,
+                verticalArrangement = Arrangement.spacedBy(SWATCH_SPACING),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(horizontal = 4.dp),
+                content = swatches
+            )
+        } else {
+            LazyRow(
+                state = listState,
+                modifier = modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(SWATCH_SPACING),
+                contentPadding = PaddingValues(vertical = 4.dp),
+                content = swatches
+            )
         }
     } else {
         CollapsedSwatchStack(
@@ -138,7 +165,9 @@ fun VoxColorSwatchPicker(
             peekColors = presetColors.filter { it != selectedColor }.take(SWATCH_STACK_PEEK_ALPHAS.size),
             onClick = { setExpanded(true) },
             modifier = modifier,
-            shape = shape
+            shape = shape,
+            orientation = orientation,
+            size = swatchSize
         )
     }
 
@@ -169,26 +198,33 @@ private fun CollapsedSwatchStack(
     peekColors: List<Long>,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    shape: Shape = CircleShape
+    shape: Shape = CircleShape,
+    orientation: Orientation = Orientation.Horizontal,
+    size: Dp = SWATCH_OUTER_SIZE
 ) {
+    // The peeks fan out along whichever axis the expanded picker will use, so the collapsed state
+    // points at where the rest of the swatches are about to appear.
+    val vertical = orientation == Orientation.Vertical
+    val spread = SWATCH_STACK_PEEK_OFFSET * peekColors.size
     Box(
         modifier = modifier
-            .height(SWATCH_OUTER_SIZE)
-            .width(SWATCH_OUTER_SIZE + SWATCH_STACK_PEEK_OFFSET * peekColors.size)
+            .height(if (vertical) size + spread else size)
+            .width(if (vertical) size else size + spread)
             .clickable(onClick = onClick)
     ) {
         peekColors.forEachIndexed { index, color ->
+            val offset = SWATCH_STACK_PEEK_OFFSET * (index + 1)
             Box(
                 modifier = Modifier
-                    .offset(x = SWATCH_STACK_PEEK_OFFSET * (index + 1))
-                    .size(SWATCH_OUTER_SIZE)
+                    .offset(x = if (vertical) 0.dp else offset, y = if (vertical) offset else 0.dp)
+                    .size(size)
                     .clip(shape)
                     .background(Color(color.toInt()).copy(alpha = SWATCH_STACK_PEEK_ALPHAS[index]))
             )
         }
         Box(
             modifier = Modifier
-                .size(SWATCH_OUTER_SIZE)
+                .size(size)
                 .clip(shape)
                 .background(Color(selectedColor.toInt()))
         )
@@ -204,18 +240,19 @@ internal fun VoxColorSwatch(
     color: Long,
     selected: Boolean,
     onClick: () -> Unit,
-    shape: Shape = CircleShape
+    shape: Shape = CircleShape,
+    size: Dp = SWATCH_OUTER_SIZE
 ) {
     Box(
         modifier = Modifier
-            .size(SWATCH_OUTER_SIZE)
+            .size(size)
             .then(if (selected) Modifier.border(SWATCH_RING_WIDTH, MaterialTheme.colorScheme.primary, shape) else Modifier)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(if (selected) SWATCH_OUTER_SIZE - (SWATCH_RING_WIDTH + SWATCH_RING_GAP) * 2 else SWATCH_OUTER_SIZE)
+                .size(if (selected) size - (SWATCH_RING_WIDTH + SWATCH_RING_GAP) * 2 else size)
                 .clip(shape)
                 .background(Color(color.toInt()))
         )
@@ -223,10 +260,10 @@ internal fun VoxColorSwatch(
 }
 
 @Composable
-private fun VoxCustomColorEntry(onClick: () -> Unit) {
+private fun VoxCustomColorEntry(onClick: () -> Unit, size: Dp = SWATCH_OUTER_SIZE) {
     Box(
         modifier = Modifier
-            .size(SWATCH_OUTER_SIZE)
+            .size(size)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
