@@ -39,6 +39,8 @@ import java.time.format.TextStyle
 import java.time.temporal.WeekFields
 import java.util.Date
 import java.util.Locale
+import java.time.LocalTime
+import androidx.compose.ui.text.style.TextAlign
 
 @Composable
 fun WeekView(
@@ -209,6 +211,27 @@ fun WeekView(
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = nowColor,
                         modifier = Modifier.padding(start = 6.dp, end = 4.dp)
+                    )
+                }
+
+                // The remark belongs to the line, so it lives with it. DayColumn used to draw its
+                // own copy per column, which in a week meant it landed in a ~45dp-wide column and
+                // wrapped onto three lines; here it spans the same width the line does.
+                val nowMillis = System.currentTimeMillis()
+                val hasMoreToday = items.any {
+                    !it.entryWithTags.entry.allDay &&
+                        it.occurrenceStartMillis > nowMillis &&
+                        Instant.ofEpochMilli(it.occurrenceStartMillis).atZone(zoneId).toLocalDate() == today
+                }
+                if (!hasMoreToday) {
+                    val languageManager = LocalLanguageManager.current
+                    val (leading, trailing) = nothingElseTodayEmojis(LocalTime.now().hour)
+                    Text(
+                        text = "$leading ${languageManager.getString("nothing_else_today")} $trailing",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = nowTop + dotSize + 4.dp)
                     )
                 }
             }

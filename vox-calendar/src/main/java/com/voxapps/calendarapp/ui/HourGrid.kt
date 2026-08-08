@@ -37,6 +37,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.text.style.TextAlign
 
 /** Shared hour-of-day grid mechanics used by both [WeekView] and [DayView] — one column per day, a
  *  shared hour axis on the left. Kept local to `:vox-calendar`: `core:calendar` only offers a
@@ -167,37 +168,51 @@ internal fun DayColumn(
                         modifier = Modifier.padding(start = 6.dp, end = 4.dp)
                     )
                 }
-            }
-            val now = System.currentTimeMillis()
-            val hasMoreToday = timedItems.any {
-                it.occurrenceStartMillis > now &&
-                    Instant.ofEpochMilli(it.occurrenceStartMillis).atZone(zoneId).toLocalDate() == date
-            }
-            if (!hasMoreToday) {
-                val languageManager = LocalLanguageManager.current
-                val (leading, trailing) = nothingElseTodayEmojis(LocalTime.now().hour)
-                Text(
-                    text = "$leading ${languageManager.getString("nothing_else_today")} $trailing",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = nowTop + dotSize + 4.dp, start = 6.dp)
-                )
+                // Belongs to the now-line, so it is drawn with it. Outside this guard it also
+                // appeared in the week view — inside a ~45dp column, under no line at all, wrapping
+                // onto three lines. WeekView draws its own full-width line for the same reason.
+                val now = System.currentTimeMillis()
+                val hasMoreToday = timedItems.any {
+                    it.occurrenceStartMillis > now &&
+                        Instant.ofEpochMilli(it.occurrenceStartMillis).atZone(zoneId).toLocalDate() == date
+                }
+                if (!hasMoreToday) {
+                    val languageManager = LocalLanguageManager.current
+                    val (leading, trailing) = nothingElseTodayEmojis(LocalTime.now().hour)
+                    // Centred under the line, like the widget's copy and the to-do timeline's: a
+                    // remark about the day rather than an entry pinned to the grid's left gutter.
+                    Text(
+                        text = "$leading ${languageManager.getString("nothing_else_today")} $trailing",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = nowTop + dotSize + 4.dp)
+                    )
+                }
             }
         }
     }
 }
 
-/** Ticks once a minute so the current-time line drifts down the grid in real time without a full
+/** Ticks on the minute so the current-time line drifts down the grid in real time without a full
  *  screen refresh. Only meaningful for today's column — callers gate rendering on that. Internal
- *  (not private) so [WeekView] can position its own single full-width now-line at the same offset. */
+ *  (not private) so [WeekView] can position its own single full-width now-line at the same offset.
+ *
+ *  On the minute *boundary*, not every sixty seconds from whenever this started: the line and the
+ *  clock printed beside it are what the user compares against their status bar, and a fixed delay
+ *  lands wherever composition happened to begin — showing 00:36 for most of the minute the phone
+ *  already calls 00:37. */
 @Composable
 internal fun rememberCurrentTimeFraction(): State<Float> =
     produceState(initialValue = currentHourFraction()) {
         while (true) {
             value = currentHourFraction()
-            delay(60_000L)
+            val now = System.currentTimeMillis()
+            delay(MINUTE_MILLIS - (now % MINUTE_MILLIS))
         }
     }
+
+private const val MINUTE_MILLIS = 60_000L
 
 private fun currentHourFraction(): Float {
     val now = LocalTime.now()
