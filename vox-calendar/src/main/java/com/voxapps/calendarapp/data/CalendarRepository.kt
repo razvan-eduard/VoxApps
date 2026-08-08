@@ -8,6 +8,7 @@ import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.util.UUID
+import com.voxapps.design.color.VoxColorPalette
 
 /**
  * Single write point over the Room DAOs (mirrors vox-expenses' ExpensesRepository). CalendarStateManager
@@ -295,7 +296,7 @@ class CalendarRepository(
 
         val spoken = spokenLayer?.trim()?.takeIf { it.isNotEmpty() }
         if (resolved.id == null && autoCreateLayer && spoken != null) {
-            val id = addLayer(spoken, CalendarLayerPalette.unusedOrRandomColor(existingLayers.map { it.colorArgb }), existingLayers.size)
+            val id = addLayer(spoken, VoxColorPalette.unusedOrRandomColor(existingLayers.map { it.colorArgb }), existingLayers.size)
             if (id > 0) resolved = FuzzyNameMatcher.Resolved(id, spoken)
         }
 
@@ -455,7 +456,7 @@ class CalendarRepository(
      *  any local entry. Returns the new calendar's id. */
     suspend fun duplicateLayerToOfflineCopy(source: CalendarLayer, newName: String): Long {
         val existingLayers = layerDao.getAll()
-        val newColor = CalendarLayerPalette.unusedOrRandomColor(existingLayers.map { it.colorArgb })
+        val newColor = VoxColorPalette.unusedOrRandomColor(existingLayers.map { it.colorArgb })
         val newLayerId = addLayer(newName, newColor, existingLayers.size)
         if (newLayerId <= 0) return newLayerId
         for (ewt in entryDao.getEntriesWithTags()) {

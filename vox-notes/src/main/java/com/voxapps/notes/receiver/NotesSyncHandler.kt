@@ -4,7 +4,6 @@ import com.voxapps.datahygiene.SyncDeltaKeys
 import com.voxapps.datahygiene.SyncIdentity
 import com.voxapps.datahygiene.planMerge
 import com.voxapps.ipc.VoxResult
-import com.voxapps.notes.data.CategoryPalette
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NotesRepository
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
@@ -12,6 +11,7 @@ import com.voxapps.notes.state.SessionManager
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
+import com.voxapps.design.color.VoxColorPalette
 
 /**
  * Vox Hub's peer-to-peer sync for this app (see [VoxIpc.OP_SYNC_EXPORT]/[VoxIpc.OP_SYNC_MERGE]) —
@@ -74,7 +74,7 @@ class NotesSyncHandler(
                 nameToId[name.lowercase()] ?: run {
                     val newId = notesRepo.addCategory(
                         name,
-                        CategoryPalette.unusedOrRandomColor(existingCategories.map { it.colorArgb }),
+                        VoxColorPalette.unusedOrRandomColor(existingCategories.map { it.colorArgb }),
                         existingCategories.size,
                         System.currentTimeMillis()
                     )

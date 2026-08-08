@@ -101,7 +101,6 @@ import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Category
-import com.voxapps.expenses.data.CategoryPalette
 import com.voxapps.expenses.data.DUPLICATE_ENTRY_RESULT
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
@@ -141,6 +140,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.Date
 import java.util.UUID
+import com.voxapps.design.color.VoxColorPalette
 
 private val ConfirmGreen = Color(0xFF4CAF50)
 private val OffenseRed = Color(0xFFD32F2F)
@@ -941,7 +941,7 @@ private fun NewCategoryDialog(
     val languageManager = LocalLanguageManager.current
     var name by remember { mutableStateOf("") }
     var selectedColor by remember(existingColors, precedingColor) {
-        mutableStateOf(CategoryPalette.unusedOrRandomColor(existingColors, precedingColor))
+        mutableStateOf(VoxColorPalette.unusedOrRandomColor(existingColors, precedingColor))
     }
     AlertDialog(
         onDismissRequest = onDismiss,

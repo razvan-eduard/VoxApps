@@ -2,7 +2,6 @@ package com.voxapps.calendarapp.receiver
 
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntryType
-import com.voxapps.calendarapp.data.CalendarLayerPalette
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.data.RecurrenceFrequency
 import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepository
@@ -15,6 +14,7 @@ import com.voxapps.ipc.VoxResult
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
+import com.voxapps.design.color.VoxColorPalette
 
 /**
  * Vox Hub's peer-to-peer sync for this app (see [VoxIpc.OP_SYNC_EXPORT]/[VoxIpc.OP_SYNC_MERGE]) —
@@ -83,7 +83,7 @@ class CalendarSyncHandler(
                 nameToId[name.lowercase()] ?: run {
                     val newId = calendarRepo.addLayer(
                         name,
-                        CalendarLayerPalette.unusedOrRandomColor(existingLayers.map { it.colorArgb }),
+                        VoxColorPalette.unusedOrRandomColor(existingLayers.map { it.colorArgb }),
                         existingLayers.size
                     )
                     if (newId > 0) nameToId[name.lowercase()] = newId

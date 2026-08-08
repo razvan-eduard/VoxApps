@@ -8,6 +8,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
+import com.voxapps.design.color.VoxColorPalette
 
 @Dao
 interface ExpenseDao {
@@ -39,7 +40,7 @@ interface ExpenseDao {
     suspend fun getForDateRange(from: Long, to: Long): List<Expense>
 
     /** Cheap "what color is the top-of-list expense's category" lookup for
-     *  [CategoryPalette.unusedOrRandomColor]'s `precedingColor` param — a single indexed-order
+     *  [VoxColorPalette.unusedOrRandomColor]'s `precedingColor` param — a single indexed-order
      *  `LIMIT 1` row, not a full fetch+sort of the table. */
     @Query(
         """

@@ -9,7 +9,6 @@ import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarLayer
-import com.voxapps.calendarapp.data.CalendarLayerPalette
 import com.voxapps.calendarapp.data.CalendarReminder
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.data.RecurrenceFrequency
@@ -29,6 +28,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.voxapps.design.color.VoxColorPalette
 
 /**
  * Reactive state hub for Vox Calendar (mirrors vox-expenses' ExpensesStateManager). Combines persisted
@@ -118,7 +118,7 @@ class CalendarStateManager(
         if (calendarRepo.layersSnapshot().isEmpty()) {
             calendarRepo.addLayer(
                 name = "Personal",
-                colorArgb = CalendarLayerPalette.argb.first(),
+                colorArgb = VoxColorPalette.presets.first(),
                 position = 0,
                 isDefault = true
             )

@@ -3,7 +3,6 @@ package com.voxapps.expenses.receiver
 import com.voxapps.datahygiene.SyncDeltaKeys
 import com.voxapps.datahygiene.SyncIdentity
 import com.voxapps.datahygiene.planMerge
-import com.voxapps.expenses.data.CategoryPalette
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpensesRepository
@@ -15,6 +14,7 @@ import com.voxapps.ipc.VoxResult
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
+import com.voxapps.design.color.VoxColorPalette
 
 /**
  * Vox Hub's peer-to-peer sync for this app (see [VoxIpc.OP_SYNC_EXPORT]/[VoxIpc.OP_SYNC_MERGE]) —
@@ -78,7 +78,7 @@ class ExpensesSyncHandler(
         // Same auto-create-by-name convention ExpensesExportImportHandler.import() already uses.
         val existingCategories = expensesRepo.categories.first().toMutableList()
         val nameToId = existingCategories.associate { it.name.lowercase() to it.id }.toMutableMap()
-        // Fetched once per merge, not per-entry — see CategoryPalette.unusedOrRandomColor's
+        // Fetched once per merge, not per-entry — see VoxColorPalette.unusedOrRandomColor's
         // precedingColor param.
         val precedingColor = expensesRepo.mostRecentCategoryColor()
 
@@ -90,7 +90,7 @@ class ExpensesSyncHandler(
                 nameToId[name.lowercase()] ?: run {
                     val newId = expensesRepo.addCategory(
                         name,
-                        CategoryPalette.unusedOrRandomColor(existingCategories.map { it.colorArgb }, precedingColor),
+                        VoxColorPalette.unusedOrRandomColor(existingCategories.map { it.colorArgb }, precedingColor),
                         existingCategories.size,
                         System.currentTimeMillis()
                     )

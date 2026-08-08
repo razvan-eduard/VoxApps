@@ -75,7 +75,6 @@ import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.design.color.VoxSwatchShapes
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.CalendarLayerKind
-import com.voxapps.calendarapp.data.CalendarLayerPalette
 import com.voxapps.calendarapp.data.CalendarRepository.LayerDeleteMode
 import com.voxapps.calendarapp.data.ReminderOffsetsCodec
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
@@ -83,6 +82,7 @@ import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.state.CalendarViewMode
 import java.text.DateFormat
 import java.util.Date
+import com.voxapps.design.color.VoxColorPalette
 
 private val SIDEBAR_WIDTH = 200.dp
 
@@ -397,7 +397,7 @@ private fun SubscribeCalendarDialog(
 ) {
     var name by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
-    var selectedColor by remember { mutableStateOf(CalendarLayerPalette.unusedOrRandomColor(existingLayerColors)) }
+    var selectedColor by remember { mutableStateOf(VoxColorPalette.unusedOrRandomColor(existingLayerColors)) }
     val urlValid = remember(url) {
         val trimmed = url.trim()
         trimmed.startsWith("http://", ignoreCase = true) ||
@@ -480,13 +480,13 @@ private fun LayerEditDialog(
     }
     // New layers auto-suggest the first unused preset (or a random-but-distinct generated color once
     // all presets are taken) — mirrors vox-expenses' CategoriesSettingsTab, which assigns a category's
-    // color via CategoryPalette.unusedOrRandomColor rather than making the user pick one. Editing an
+    // color via VoxColorPalette.unusedOrRandomColor rather than making the user pick one. Editing an
     // existing layer still starts from its current color; the swatch grid below lets either case be
     // overridden manually, which vox-expenses doesn't offer but is worth keeping here since a layer's
     // color is far more visually persistent (shown on every event) than an expense category's.
     var selectedColor by remember {
         mutableStateOf(
-            layer?.colorArgb ?: CalendarLayerPalette.unusedOrRandomColor(existingLayerColors)
+            layer?.colorArgb ?: VoxColorPalette.unusedOrRandomColor(existingLayerColors)
         )
     }
 

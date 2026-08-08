@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import com.voxapps.design.color.VoxColorPalette
 
 /** [ExpensesRepository.addExpense]'s return value when the insert was skipped because
  *  [ExpenseDuplicateChecker] found an exact match already in the database — distinct from the
@@ -103,7 +104,7 @@ class ExpensesRepository(
 
     suspend fun getExpenseById(id: Long): ExpenseWithDetails? = expenseDao.getWithDetailsById(id)
 
-    /** The color of the most recent expense's category — see [CategoryPalette.unusedOrRandomColor]'s
+    /** The color of the most recent expense's category — see [VoxColorPalette.unusedOrRandomColor]'s
      *  `precedingColor` param. */
     suspend fun mostRecentCategoryColor(): Long? = expenseDao.getMostRecentCategoryColor()
 
@@ -416,7 +417,7 @@ class ExpensesRepository(
         val spoken = spokenCategory?.trim()?.takeIf { it.isNotEmpty() }
         if (resolved.id == null && autoCreate && spoken != null) {
             val precedingColor = expenseDao.getMostRecentCategoryColor()
-            val id = addCategory(spoken, CategoryPalette.unusedOrRandomColor(cats.map { it.colorArgb }, precedingColor), cats.size, dateTime)
+            val id = addCategory(spoken, VoxColorPalette.unusedOrRandomColor(cats.map { it.colorArgb }, precedingColor), cats.size, dateTime)
             if (id > 0) resolved = FuzzyNameMatcher.Resolved(id, spoken)
         }
 

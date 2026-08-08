@@ -33,7 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.notes.data.Category
-import com.voxapps.notes.data.CategoryPalette
+import com.voxapps.design.color.VoxColorPalette
 
 @Composable
 fun CategorySidebar(
@@ -145,7 +145,7 @@ fun CategorySidebar(
 private fun AddCategoryDialog(existingColors: List<Long>, onDismiss: () -> Unit, onConfirm: (String, Long) -> Unit) {
     val languageManager = LocalLanguageManager.current
     var name by remember { mutableStateOf("") }
-    var selectedColor by remember { mutableLongStateOf(CategoryPalette.unusedOrRandomColor(existingColors)) }
+    var selectedColor by remember { mutableLongStateOf(VoxColorPalette.unusedOrRandomColor(existingColors)) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

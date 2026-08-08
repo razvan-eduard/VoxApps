@@ -68,7 +68,6 @@ import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.CalendarLayerKind
-import com.voxapps.calendarapp.data.CalendarLayerPalette
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.data.toToDoItem
 import com.voxapps.calendarapp.state.CalendarStateManager
@@ -90,6 +89,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
+import com.voxapps.design.color.VoxColorPalette
 
 /** Pre-expansion window for recurring entries — see [toCalendarItems]'s doc comment. */
 private const val WINDOW_PAST_DAYS = 365L
@@ -496,7 +496,7 @@ fun CalendarScreen(
     if (showMoveNewForm) {
         var newLayerName by remember { mutableStateOf("") }
         var newLayerColor by remember {
-            mutableStateOf(CalendarLayerPalette.unusedOrRandomColor(state.layers.map { it.colorArgb }))
+            mutableStateOf(VoxColorPalette.unusedOrRandomColor(state.layers.map { it.colorArgb }))
         }
         AlertDialog(
             onDismissRequest = { showMoveNewForm = false },

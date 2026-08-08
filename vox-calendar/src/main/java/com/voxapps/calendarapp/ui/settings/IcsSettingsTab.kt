@@ -36,7 +36,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.CalendarLayerKind
-import com.voxapps.calendarapp.data.CalendarLayerPalette
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.domain.ics.IcsExportImportUtil
 import com.voxapps.calendarapp.domain.ics.ParsedIcsFile
@@ -44,6 +43,7 @@ import com.voxapps.calendarapp.ui.LocalLanguageManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.voxapps.design.color.VoxColorPalette
 
 /** A parsed .ics file waiting for the user to pick its target calendar (see [ImportTargetDialog]). */
 private data class PendingImport(val file: ParsedIcsFile, val fallbackName: String)
@@ -123,7 +123,7 @@ fun IcsSettingsTab(
                     val count = withContext(Dispatchers.IO) {
                         val resolvedLayerId = targetLayerId ?: calendarRepository.addLayer(
                             name = newLayerName ?: pending.fallbackName,
-                            colorArgb = newLayerColor ?: CalendarLayerPalette.unusedOrRandomColor(layers.map { it.colorArgb }),
+                            colorArgb = newLayerColor ?: VoxColorPalette.unusedOrRandomColor(layers.map { it.colorArgb }),
                             position = layers.size
                         )
                         IcsExportImportUtil.importEntriesIntoLayer(calendarRepository, pending.file.entries, resolvedLayerId)
@@ -166,7 +166,7 @@ private fun ImportTargetDialog(
 ) {
     var createNew by remember { mutableStateOf(true) }
     var newName by remember { mutableStateOf(suggestedName) }
-    var newColor by remember { mutableStateOf(CalendarLayerPalette.unusedOrRandomColor(existingLayerColors)) }
+    var newColor by remember { mutableStateOf(VoxColorPalette.unusedOrRandomColor(existingLayerColors)) }
     var selectedExisting by remember { mutableStateOf(existingLayers.firstOrNull()) }
     var dropdownExpanded by remember { mutableStateOf(false) }
 

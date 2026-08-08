@@ -86,4 +86,27 @@ class VoxColorPaletteTest {
         val (hue, _, _) = VoxColorPalette.argbToHsv(0xFF808080L)
         assertEquals(null, hue)
     }
+
+    /**
+     * Kept from vox-notes' copy of this test when the per-app palettes were removed: it guards the
+     * HSV→RGB path rather than the choosing, so a broken conversion cannot silently hand back a
+     * value that is not an opaque colour at all.
+     */
+    @Test
+    fun `every generated fallback colour is a valid opaque ARGB value`() {
+        repeat(20) {
+            val color = VoxColorPalette.unusedOrRandomColor(VoxColorPalette.presets)
+            assertTrue(color in 0xFF000000L..0xFFFFFFFFL)
+        }
+    }
+
+    /** Kept from vox-expenses' copy: with one preset left, hue bias has nothing to choose between. */
+    @Test
+    fun `preset phase ignores precedingColor when only one unused preset remains`() {
+        val used = VoxColorPalette.presets.drop(1)
+
+        val color = VoxColorPalette.unusedOrRandomColor(used, precedingColor = VoxColorPalette.presets.first())
+
+        assertEquals(VoxColorPalette.presets[0], color)
+    }
 }

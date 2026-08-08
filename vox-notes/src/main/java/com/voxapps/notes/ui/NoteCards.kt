@@ -80,13 +80,13 @@ import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.notes.NotesApplication
 import com.voxapps.notes.data.Category
-import com.voxapps.notes.data.CategoryPalette
 import com.voxapps.notes.data.NoteWithCategory
 import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.notes.domain.llm.LlmTasks
 import com.voxapps.notes.state.NotesStateManager
 import java.util.UUID
 import kotlin.math.abs
+import com.voxapps.design.color.VoxColorPalette
 
 /** Low-alpha tint applied to a note card's background from its category color. */
 private const val CARD_TINT_ALPHA = 0.18f
@@ -591,7 +591,7 @@ private fun CategoryCoverflow(
 private fun NewCategoryFromNoteDialog(existingColors: List<Long>, onDismiss: () -> Unit, onConfirm: (String, Long) -> Unit) {
     val languageManager = LocalLanguageManager.current
     var name by remember { mutableStateOf("") }
-    var selectedColor by remember(existingColors) { mutableLongStateOf(CategoryPalette.unusedOrRandomColor(existingColors)) }
+    var selectedColor by remember(existingColors) { mutableLongStateOf(VoxColorPalette.unusedOrRandomColor(existingColors)) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

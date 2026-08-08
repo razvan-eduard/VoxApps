@@ -8,6 +8,7 @@ import com.voxapps.notes.domain.llm.DuplicateGroup
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import com.voxapps.design.color.VoxColorPalette
 
 data class VoiceNoteResult(val noteId: Long, val categoryId: Long?, val categoryName: String?)
 
@@ -94,7 +95,7 @@ class NotesRepository(
         // Unknown spoken category + opt-in → create it (auto-colored) rather than falling back.
         val spoken = spokenCategory?.trim()?.takeIf { it.isNotEmpty() }
         if (resolved.categoryId == null && autoCreate && spoken != null) {
-            val id = addCategory(spoken, CategoryPalette.unusedOrRandomColor(cats.map { it.colorArgb }), cats.size, createdAt)
+            val id = addCategory(spoken, VoxColorPalette.unusedOrRandomColor(cats.map { it.colorArgb }), cats.size, createdAt)
             if (id > 0) resolved = VoiceCategoryResolver.Resolved(id, spoken)
         }
 
