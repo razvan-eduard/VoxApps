@@ -51,6 +51,7 @@ interface SettingsRepository {
     // --- VOICE ENGINE ---
     suspend fun setVoiceProcessor(processor: String)
     suspend fun setActiveVoiceModelId(modelId: String?)
+    suspend fun setActiveWakeModelId(modelId: String?)
 
     // --- INTENT ENGINE ---
     suspend fun setAiProcessor(processor: String)

@@ -651,9 +651,11 @@ fun ServiceSettingsTab(
             else engineModels
         }
 
-        val selectedModel = remember(displayModels, uiState.wakeWordModelPath) {
-            val path = uiState.wakeWordModelPath
-            if (path != null) displayModels.find { it.id == path } else null
+        // Keyed off the wake word's own model id, not the voice engine's selection. The two engines
+        // can be the same key (`wake_vosk` is both) but the choice is separate: a large model is
+        // reasonable for transcription and wasteful for something always resident.
+        val selectedModel = remember(displayModels, uiState.activeWakeModelId) {
+            uiState.activeWakeModelId?.let { id -> displayModels.find { it.id == id } }
         }
 
         if (displayModels.isNotEmpty()) {
@@ -669,6 +671,9 @@ fun ServiceSettingsTab(
                 itemLabel = { if (supportsModelDownload) "${it.label} (${it.sizeDescription})" else it.label },
                 modelIdProvider = { it.id },
                 onItemSelected = { model, _ ->
+                    appStateManager.setActiveWakeModelId(model.id)
+                    // Kept in step for now: other call sites still read the legacy key, and old
+                    // installs are migrated by reading it as a fallback rather than by a rewrite.
                     appStateManager.setWakeWordModelPath(model.id)
                     if (supportsBuiltinKeywords) {
                         appStateManager.setWakeWord(model.label)

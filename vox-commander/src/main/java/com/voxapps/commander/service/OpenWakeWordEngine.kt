@@ -26,7 +26,10 @@ class OpenWakeWordEngine(
 
     private var engine: WakeWordEngine? = null
     private var detectionJob: Job? = null
-    private var isListening = false
+    /** Read from the caller thread and written from engineScope coroutines. Its siblings in the
+     *  other two wake-word engines are volatile; this one was not, so a stop could go unseen by an
+     *  in-flight detection loop. */
+    @Volatile private var isListening = false
     private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile private var listenStartMs = 0L

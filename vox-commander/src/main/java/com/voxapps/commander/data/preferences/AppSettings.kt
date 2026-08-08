@@ -37,6 +37,15 @@ data class AppSettings(
     val wakeWord: String = "hi vosk",
     val wakeWordEnabled: Boolean = false,
     val wakeWordModelPath: String? = null,
+    /** The wake-word model the user picked, as an id like every other engine's selection.
+     *
+     *  Separate from [activeVoiceModelId] on purpose: the two engines can share a key (`wake_vosk`
+     *  is both a voice and a wake-word engine) but not a choice — someone may want a large model for
+     *  transcription and a small one always resident for the wake word.
+     *
+     *  [wakeWordModelPath] stays as the migration path: it held the same thing under a name that
+     *  implied a filesystem path, and old installs and backups still carry it. */
+    val activeWakeModelId: String? = null,
     val commandQueueEnabled: Boolean = true,
     val wakeWordProfileJson: String? = null,
     val wakeWordEngineType: String = "vosk",

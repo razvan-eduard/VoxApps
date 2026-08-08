@@ -205,11 +205,7 @@ class WakeWordService : Service() {
                     ?.let { modelId -> com.voxapps.commander.data.remote.RemoteModelRegistry.getModels(registryKey).find { it.id == modelId }?.label }
                     ?: wakeWord
 
-            val engineDisplayName = when (engineType) {
-                "wake_porcupine", "porcupine" -> "Porcupine"
-                "wake_openwakeword", "openwakeword" -> "OpenWakeWord"
-                else -> "Vosk"
-            }
+            val engineDisplayName = engineDisplayName(engineType)
             val modelDisplayName = snapshot.wakeWordModelPath ?: snapshot.modelFilterLang.uppercase()
 
             currentEngineDisplayName = engineDisplayName
@@ -260,36 +256,37 @@ class WakeWordService : Service() {
                 }
             } else {
                 Logger.log("Using Vosk wake word engine", TAG)
-                val wakeWordModelName = snapshot.wakeWordModelPath
                 val modelFilterLang = snapshot.modelFilterLang
+                val downloader = com.voxapps.commander.data.remote.ModelDownloader(this@WakeWordService)
 
-                val rootDir = getExternalFilesDir(null)
-                val modelPath = if (!wakeWordModelName.isNullOrBlank()) {
-                    val directFile = File(rootDir, wakeWordModelName)
-                    if (directFile.exists()) {
-                        directFile.absolutePath
-                    } else {
-                        rootDir?.listFiles()?.find {
-                            it.isDirectory && it.name.contains(wakeWordModelName, ignoreCase = true)
-                        }?.absolutePath
-                    }
-                } else {
-                    rootDir?.listFiles()?.find {
-                        it.isDirectory && it.name.startsWith("vosk-model-") && it.name.contains(modelFilterLang, ignoreCase = true)
-                    }?.absolutePath
-                }
+                // Ask the registry where the model is instead of scanning the files directory for a
+                // directory whose name starts with "vosk-model-" and mentions the language. That
+                // scan was a third copy of the same heuristic — the STT engine and the download
+                // validator each had their own — and it matched on substrings, so a rename upstream
+                // could pick a different model than the one selected.
+                val selected = snapshot.activeWakeModelId?.takeIf { it.isNotBlank() }
+                fun firstDownloadedForLanguage(): String? =
+                    com.voxapps.commander.data.remote.RemoteModelRegistry.getModels(engineType)
+                        .firstOrNull {
+                            it.id in snapshot.downloadedModelIds &&
+                                (it.langCode == null || it.langCode.equals(modelFilterLang, ignoreCase = true))
+                        }?.id
 
-                if (modelPath == null) {
+                // The stored selection is tried first, then any downloaded model for the language.
+                // The second branch is not only for "nothing selected yet": it also covers a stored
+                // name this build can no longer resolve, which the old substring match would have
+                // papered over.
+                val modelId = selected?.takeIf { downloader.resolveEntryPoint(it, engineType) != null }
+                    ?: firstDownloadedForLanguage()
+
+                val entryPoint = modelId?.let { downloader.resolveEntryPoint(it, engineType) }
+                if (modelId == null || entryPoint == null) {
                     Logger.log("No Vosk model available", TAG)
                     appStateManager.clearServiceLoading()
                     stopSelf()
                     return@launch
                 }
-
-                // Validate model integrity before initializing
-                val modelDir = File(modelPath)
-                val modelId = modelDir.name
-                val downloader = com.voxapps.commander.data.remote.ModelDownloader(this@WakeWordService)
+                val modelPath = entryPoint.absolutePath
                 if (!downloader.validateModel(modelId, engineType)) {
                     Logger.log("Vosk model $modelId is corrupt/incomplete — cleaning up and marking for re-download", TAG)
                     settingsRepo.setModelDownloaded(modelId, false)
@@ -317,13 +314,19 @@ class WakeWordService : Service() {
         }
     }
 
+    /**
+     * The engine's display name, from the registry rather than from a `when` over its key.
+     *
+     * The same mapping was written out three times in this file, each listing both the current key
+     * and its legacy spelling — and `models.json` already carries these exact labels. A fourth
+     * engine needed four edits to show its name; now it needs none.
+     */
+    private fun engineDisplayName(engineType: String): String =
+        com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineLabel(engineType, languageManager)
+
     private fun stopWakeWordDetection() {
         Logger.log("Stopping wake word detection and releasing", TAG)
-        val engineDisplayName = when (settingsRepo.getSettingsSnapshot().wakeWordEngineType) {
-            "wake_porcupine", "porcupine" -> "Porcupine"
-            "wake_openwakeword", "openwakeword" -> "OpenWakeWord"
-            else -> "Vosk"
-        }
+        val engineDisplayName = engineDisplayName(settingsRepo.getSettingsSnapshot().wakeWordEngineType)
         appStateManager.setServiceLoading(ServiceLoadingState(
             isActive = true,
             serviceName = "Wake Word",

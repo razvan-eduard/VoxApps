@@ -244,6 +244,10 @@ class AppStateManager private constructor(
         scope.launch { repo.setActiveVoiceModelId(modelId) }
     }
 
+    fun setActiveWakeModelId(modelId: String?) {
+        scope.launch { repo.setActiveWakeModelId(modelId) }
+    }
+
     fun saveVoiceModelSelection(engineKey: String, modelId: String) {
         scope.launch { repo.setEngineModelSelection(engineKey, modelId) }
     }

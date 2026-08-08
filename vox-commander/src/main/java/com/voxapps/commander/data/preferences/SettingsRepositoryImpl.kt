@@ -56,6 +56,7 @@ class SettingsRepositoryImpl(
         // Voice engine
         val VOICE_PROCESSOR = stringPreferencesKey("voice_processor")
         val ACTIVE_VOICE_MODEL_ID = stringPreferencesKey("active_voice_model_id")
+        val ACTIVE_WAKE_MODEL_ID = stringPreferencesKey("active_wake_model_id")
 
         // Intent engine
         val AI_PROCESSOR = stringPreferencesKey("ai_processor")
@@ -304,6 +305,8 @@ class SettingsRepositoryImpl(
 
             voiceProcessor = prefs[Keys.VOICE_PROCESSOR] ?: com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultVoiceEngineKey() ?: "",
             activeVoiceModelId = prefs[Keys.ACTIVE_VOICE_MODEL_ID],
+            // Falls back to the legacy key so an existing install keeps the model it was using.
+            activeWakeModelId = prefs[Keys.ACTIVE_WAKE_MODEL_ID] ?: prefs[Keys.WAKE_WORD_MODEL_PATH],
 
             aiProcessor = prefs[Keys.AI_PROCESSOR] ?: com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultLlmEngineKey() ?: "",
             activeIntentModelId = prefs[Keys.ACTIVE_INTENT_MODEL_ID],
@@ -424,6 +427,8 @@ class SettingsRepositoryImpl(
             prefs[Keys.VOICE_PROCESSOR] = imported.voiceProcessor
             imported.activeVoiceModelId?.let { prefs[Keys.ACTIVE_VOICE_MODEL_ID] = it }
                 ?: prefs.remove(Keys.ACTIVE_VOICE_MODEL_ID)
+            imported.activeWakeModelId?.let { prefs[Keys.ACTIVE_WAKE_MODEL_ID] = it }
+                ?: prefs.remove(Keys.ACTIVE_WAKE_MODEL_ID)
 
             prefs[Keys.AI_PROCESSOR] = imported.aiProcessor
             imported.activeIntentModelId?.let { prefs[Keys.ACTIVE_INTENT_MODEL_ID] = it }
@@ -559,6 +564,12 @@ class SettingsRepositoryImpl(
     // --- VOICE ENGINE ---
     override suspend fun setVoiceProcessor(processor: String) {
         dataStore.edit { it[Keys.VOICE_PROCESSOR] = processor }
+    }
+
+    override suspend fun setActiveWakeModelId(modelId: String?) {
+        dataStore.edit { prefs ->
+            if (modelId == null) prefs.remove(Keys.ACTIVE_WAKE_MODEL_ID) else prefs[Keys.ACTIVE_WAKE_MODEL_ID] = modelId
+        }
     }
 
     override suspend fun setActiveVoiceModelId(modelId: String?) {

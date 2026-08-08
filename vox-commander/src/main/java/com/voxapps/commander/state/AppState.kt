@@ -23,6 +23,7 @@ data class AppState(
     val voiceLanguageAutoDetect: Boolean,
     val modelFilterLang: String,
     val activeVoiceModelId: String?,
+    val activeWakeModelId: String?,
     val customWhisperModelPath: String?,
     val customVoskModelPaths: Map<String, String>,
 
@@ -172,6 +173,7 @@ data class AppState(
                 voiceLanguageAutoDetect = settings.voiceLanguageAutoDetect,
                 modelFilterLang = modelFilterLang,
                 activeVoiceModelId = activeVoiceModelId,
+                activeWakeModelId = settings.activeWakeModelId,
                 customWhisperModelPath = customWhisperModelPath,
                 customVoskModelPaths = customVoskModelPaths,
                 aiProcessor = settings.aiProcessor,
@@ -230,6 +232,7 @@ data class AppState(
             voiceLanguageAutoDetect = false,
             modelFilterLang = Strings.Preferences.DEFAULT_LANGUAGE,
             activeVoiceModelId = null,
+            activeWakeModelId = null,
             customWhisperModelPath = null,
             customVoskModelPaths = emptyMap(),
             aiProcessor = "",
