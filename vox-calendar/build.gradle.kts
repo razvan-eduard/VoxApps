@@ -137,5 +137,5 @@ dependencies {
     testImplementation("org.json:json:20260719")
     // Pure-JVM SQLite (no Android/Robolectric) — lets the 9->10 migration test replay its real SQL
     // against a genuine SQLite engine, same "avoid Android-framework test doubles" spirit as org.json above.
-    testImplementation("org.xerial:sqlite-jdbc:3.47.1.0")
+    testImplementation("org.xerial:sqlite-jdbc:3.53.2.1")
 }
