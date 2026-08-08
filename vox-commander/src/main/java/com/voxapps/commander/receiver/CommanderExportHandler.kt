@@ -104,6 +104,7 @@ object CommanderExportHandler {
                 customDomains = parsed.customDomains ?: emptyList(),
                 domainAppFilters = parsed.domainAppFilters ?: emptyMap(),
                 searchProviderApiKeys = parsed.searchProviderApiKeys ?: emptyMap(),
+                searchProviderSelections = parsed.searchProviderSelections ?: emptyMap(),
                 // Gson leaves an absent map null behind a non-null type — every collection here is
                 // coalesced once for exactly that reason, and a new one is no exception.
                 engineApiKeys = parsed.engineApiKeys ?: emptyMap(),

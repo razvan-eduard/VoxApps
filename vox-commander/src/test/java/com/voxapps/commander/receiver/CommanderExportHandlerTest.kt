@@ -1,11 +1,13 @@
 package com.voxapps.commander.receiver
 
+import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.preferences.Credentials
 import com.voxapps.commander.testutil.TestDataFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.reflect.full.memberProperties
 
 class CommanderExportHandlerTest {
 
@@ -102,5 +104,32 @@ class CommanderExportHandlerTest {
     fun `parseFastMapRules returns empty list for an empty array`() {
         val parsed = CommanderExportHandler.parseFastMapRules("[]")
         assertTrue(parsed != null && parsed.isEmpty())
+    }
+
+    /**
+     * Every collection survives an export that spells it `null`.
+     *
+     * Gson fills these by reflection, so a field written as null is genuinely null behind a non-null
+     * Kotlin type — and the first thing to iterate it throws. (An *absent* field is harmless: every
+     * parameter has a default, so Gson uses the no-arg constructor. It is the written null that
+     * bites, which is what a foreign or older exporter produces.) The parser coalesces each one
+     * back to its empty default, which works only for as long as someone remembers to add the next
+     * field to that list. This asks the class itself instead of naming them, so the field nobody
+     * remembered fails here rather than in an import of a real backup.
+     */
+    @Test
+    fun `every collection field survives an export that spells it null`() {
+        val collections = AppSettings::class.memberProperties.filter { property ->
+            val type = property.returnType.classifier
+            type == Map::class || type == List::class || type == Set::class
+        }
+        val allNull = collections.joinToString(prefix = "{", postfix = "}") { "\"${it.name}\": null" }
+
+        val parsed = CommanderExportHandler.parsePortableSettings(allNull)
+            ?: error("an export of nulls should still parse")
+
+        val stillNull = collections.filter { it.get(parsed) == null }.map { it.name }
+
+        assertEquals(emptyList<String>(), stillNull)
     }
 }
