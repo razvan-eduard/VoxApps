@@ -184,6 +184,25 @@ class ShippedSchemaTest {
     }
 
     /**
+     * Porcupine's keywords are compiled into the library, so `models.json` can only ever *name*
+     * them — and a name the SDK does not recognise is a model the user can select and never
+     * trigger. The hand-written map that used to sit between the two is gone; this is what keeps
+     * the remaining two honest.
+     */
+    @Test
+    fun `every Porcupine model names a keyword the SDK actually has`() {
+        val declared = assetModels().engines["wake_porcupine"]?.models.orEmpty()
+        assertTrue("no Porcupine models declared", declared.isNotEmpty())
+
+        declared.forEach { model ->
+            assertNotNull(
+                "models.json offers '${'$'}{model.label}', which Porcupine does not recognise",
+                com.voxapps.commander.service.PorcupineWakeWordEngine.builtInKeyword(model.label)
+            )
+        }
+    }
+
+    /**
      * The bundled copy and the one served from the repository are compared by version to decide
      * which the app runs on, so a twin left behind is not a cosmetic difference — it decides whose
      * schema wins.
