@@ -222,9 +222,10 @@ fun VoiceEnginesSubTab(
     }
 
     // --- CUSTOM MODEL IMPORT ---
-    val isZipEngine = RemoteModelRegistry.isZipEngine(engineKey)
+    val isDirectoryBased = RemoteModelRegistry.isArchiveEngine(engineKey) ||
+        RemoteModelRegistry.getExtension(engineKey).isBlank()
     val supportsCustomModel = RemoteModelRegistry.getExtension(engineKey).isNotEmpty()
-    val customModelPath = if (isZipEngine) {
+    val customModelPath = if (isDirectoryBased) {
         uiState.customVoskModelPaths[modelFilterLang]
     } else {
         uiState.customWhisperModelPath
@@ -262,7 +263,7 @@ fun VoiceEnginesSubTab(
         }
     } else {
         OutlinedButton(
-            onClick = { onImportCustomModel(if (isZipEngine) modelFilterLang else null) },
+            onClick = { onImportCustomModel(if (isDirectoryBased) modelFilterLang else null) },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(languageManager.getString("import_custom_model"))

@@ -315,10 +315,14 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             onImportCustomModel = { langCode ->
-                                val isZipEngine = com.voxapps.commander.data.remote.RemoteModelRegistry.isZipEngine(
-                                    appContainer.appStateManager.uiState.value.voiceProcessor
-                                )
-                                if (isZipEngine) {
+                                // Same question the import handler asks: anything that is not a
+                                // single file to copy is referenced as a directory, so it must be
+                                // offered a directory picker.
+                                val proc = appContainer.appStateManager.uiState.value.voiceProcessor
+                                val isDirectoryBased =
+                                    com.voxapps.commander.data.remote.RemoteModelRegistry.isArchiveEngine(proc) ||
+                                        com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(proc).isBlank()
+                                if (isDirectoryBased) {
                                     pendingModelLanguage = langCode
                                     customVoskModelLauncher.launch(null)
                                 } else {
@@ -327,8 +331,10 @@ class MainActivity : ComponentActivity() {
                             },
                             onClearCustomModel = {
                                 val engineKey = appContainer.appStateManager.uiState.value.voiceProcessor
-                                val isZipEngine = com.voxapps.commander.data.remote.RemoteModelRegistry.isZipEngine(engineKey)
-                                val lang = if (isZipEngine) appContainer.appStateManager.uiState.value.modelFilterLang else null
+                                val isDirectoryBased =
+                                    com.voxapps.commander.data.remote.RemoteModelRegistry.isArchiveEngine(engineKey) ||
+                                        com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(engineKey).isBlank()
+                                val lang = if (isDirectoryBased) appContainer.appStateManager.uiState.value.modelFilterLang else null
                                 appContainer.modelManagementViewModel.clearCustomModel(engineKey, lang)
                             },
                             onImportOpenWakeWordModel = {

@@ -247,24 +247,48 @@ class ModelManagementViewModel(
         // refreshTrigger here churned the model dropdown's `groups` (a re-fire loop).
     }
 
+    /**
+     * Stores a model the user picked themselves.
+     *
+     * The branch asks the same question the picker did — an archive engine loads from a directory,
+     * so it was offered a directory picker and what arrives is a tree URI. Branching on "has an
+     * extension" instead put every archive engine on the file path, because an archive engine does
+     * have one, and its `uri` was then opened as a stream. Nothing was stored and nothing was
+     * reported, so picking a folder simply did nothing.
+     */
     fun selectCustomModel(uri: Uri, engineKey: String, langCode: String? = null) {
-        val extension = RemoteModelRegistry.getExtension(engineKey)
-        
-        if (extension.isBlank()) {
-            // Directory-based strategy (e.g. wake_vosk)
+        if (!isSingleFileEngine(engineKey)) {
+            // Directory-based: the picked tree is referenced where it is, not copied.
             val path = uri.path ?: uri.toString()
             viewModelScope.launch { settingsRepo.setCustomModelPath(engineKey, path, langCode) }
             showSuccessMessage(languageManager.getString("success_custom_vosk"))
         } else {
-            // File-based strategy (e.g. stt_whisper, nlu_llm)
-            val fileName = "$engineKey$extension"
-            FileHelper.copyUriToInternal(context, uri, fileName)?.let { internalPath ->
-                viewModelScope.launch { settingsRepo.setCustomModelPath(engineKey, internalPath) }
+            val fileName = "$engineKey${RemoteModelRegistry.getExtension(engineKey)}"
+            val copied = FileHelper.copyUriToInternal(context, uri, fileName)
+            if (copied != null) {
+                viewModelScope.launch { settingsRepo.setCustomModelPath(engineKey, copied) }
                 showSuccessMessage(languageManager.getString("success_custom_whisper"))
+            } else {
+                // Previously silent: the import failed and the screen looked unchanged.
+                Logger.log("Custom model import failed for $engineKey", TAG)
+                _downloadError.value = languageManager.getString("error_download_failed")
             }
         }
         appStateManager.refreshAll()
     }
+
+    /**
+     * Whether a custom import for [engineKey] is one file to copy, as opposed to a directory to
+     * reference where it lies.
+     *
+     * Both halves matter. An archive engine has an extension but loads from a directory, so testing
+     * the extension alone sent it down the file path — which is why importing a custom Vosk model
+     * did nothing. An engine with no extension has no single file to copy either, so it belongs on
+     * the directory path as well.
+     */
+    private fun isSingleFileEngine(engineKey: String): Boolean =
+        !RemoteModelRegistry.isArchiveEngine(engineKey) &&
+            RemoteModelRegistry.getExtension(engineKey).isNotBlank()
 
     fun cancelDownload() {
         currentDownloadId?.let { id ->
