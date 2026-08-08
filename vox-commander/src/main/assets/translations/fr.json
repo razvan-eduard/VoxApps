@@ -282,6 +282,7 @@
   "piped_instance_custom": "URL Personnalisée",
   "piped_custom_url": "URL API Piped Personnalisée",
   "piped_region": "Région de Recherche Piped",
+  "piped_region_system_default": "Par défaut du système",
   "piped_testing": "Test de connexion...",
   "piped_online": "En ligne",
   "piped_offline": "Hors ligne - instance injoignable",

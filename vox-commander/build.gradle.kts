@@ -266,36 +266,22 @@ val autoCheckOpenWakeWord = tasks.register<Exec>("autoCheckOpenWakeWord") {
     commandLine("bash", "${project.rootDir}/scripts/check_openwakeword_version.sh")
 }
 
-// Copy models.json from repo root into assets (single source of truth in root)
-val copyModelsJson = tasks.register<Copy>("copyModelsJson") {
-    group = "build"
-    description = "Copies models.json from repo root into app/src/main/assets/"
-    from("${project.rootDir}/models.json")
-    into("${projectDir}/src/main/assets")
-}
+// The repo root is the single source of truth for every shipped schema; assets get a copy at build
+// time. One task rather than one per file — the four this replaced differed only in a file name,
+// so adding a schema meant remembering to add a task and a preBuild dependency to match.
+val shippedSchemas = listOf(
+    "models.json",
+    "virtual_models.json",
+    "search_definitions.json",
+    "intents.json",
+    "api_integrations.json",
+    "media_services.json"
+)
 
-// Copy search_definitions.json from repo root into assets (single source of truth in root)
-val copySearchDefinitions = tasks.register<Copy>("copySearchDefinitions") {
+val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
     group = "build"
-    description = "Copies search_definitions.json from repo root into app/src/main/assets/"
-    from("${project.rootDir}/search_definitions.json")
-    into("${projectDir}/src/main/assets")
-}
-
-// Copy intents.json from repo root into assets (single source of truth in root)
-val copyIntentsJson = tasks.register<Copy>("copyIntentsJson") {
-    group = "build"
-    description = "Copies intents.json from repo root into app/src/main/assets/"
-    from("${project.rootDir}/intents.json")
-    into("${projectDir}/src/main/assets")
-}
-
-// Copy api_integrations.json from repo root into assets (single source of truth in root) — the
-// declarative per-service API definitions consumed by ApiIntegrationRegistry/DeclarativeApiExecutor.
-val copyApiIntegrationsJson = tasks.register<Copy>("copyApiIntegrationsJson") {
-    group = "build"
-    description = "Copies api_integrations.json from repo root into app/src/main/assets/"
-    from("${project.rootDir}/api_integrations.json")
+    description = "Copies the shipped schema files from the repo root into src/main/assets/"
+    from("${project.rootDir}") { include(shippedSchemas) }
     into("${projectDir}/src/main/assets")
 }
 
@@ -305,10 +291,7 @@ tasks.named("preBuild") {
     dependsOn(autoCheckVosk)
     dependsOn(autoCheckNewPipeExtractor)
     dependsOn(autoCheckOpenWakeWord)
-    dependsOn(copyModelsJson)
-    dependsOn(copySearchDefinitions)
-    dependsOn(copyIntentsJson)
-    dependsOn(copyApiIntegrationsJson)
+    dependsOn(copyShippedSchemas)
 }
 
 // A handful of ViewModel tests use viewModelScope.launch{} (not tied to the test's own TestScope),

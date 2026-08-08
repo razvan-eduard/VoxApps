@@ -282,6 +282,7 @@
   "piped_instance_custom": "Benutzerdefinierte URL",
   "piped_custom_url": "Benutzerdefinierte Piped API URL",
   "piped_region": "Piped Suchregion",
+  "piped_region_system_default": "Systemstandard",
   "piped_testing": "Verbindung wird getestet...",
   "piped_online": "Online",
   "piped_offline": "Offline - Instanz nicht erreichbar",

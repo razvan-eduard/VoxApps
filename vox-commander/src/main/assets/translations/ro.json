@@ -304,6 +304,7 @@
   "piped_instance_custom": "URL Personalizat",
   "piped_custom_url": "URL API Piped Personalizat",
   "piped_region": "Regiune Căutare Piped",
+  "piped_region_system_default": "Implicit de sistem",
   "piped_testing": "Testare conexiune...",
   "piped_online": "Online",
   "piped_offline": "Offline - instanță indisponibilă",

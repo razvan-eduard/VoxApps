@@ -6,6 +6,7 @@ import android.net.Uri
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.voxapps.logging.Logger
+import com.voxapps.commander.domain.media.MediaServiceRegistry
 import com.voxapps.commander.utils.NetworkMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,112 +25,38 @@ object PipedSearchHelper {
 
     private const val TAG = "PipedSearch"
 
-    /** Hardcoded list of popular Piped API instances. */
-    val PIPED_INSTANCES = listOf(
-        "https://inv.thepixora.com",
-        "https://pipedapi.kavin.rocks",
-        "https://pipedapi.adminforge.de",
-        "https://api.piped.private.coffee"
-    )
-
-    /** Region codes for Piped search. null = system default. */
-    val PIPED_REGIONS = listOf(
-        null to "System Default",
-        "RO" to "Romania",
-        "US" to "United States",
-        "GB" to "United Kingdom",
-        "DE" to "Germany",
-        "FR" to "France",
-        "IT" to "Italy",
-        "ES" to "Spain",
-        "NL" to "Netherlands",
-        "CA" to "Canada",
-        "AU" to "Australia",
-        "JP" to "Japan",
-        "KR" to "South Korea",
-        "IN" to "India",
-        "BR" to "Brazil",
-        "MX" to "Mexico",
-        "RU" to "Russia",
-        "PL" to "Poland",
-        "SE" to "Sweden",
-        "NO" to "Norway",
-        "FI" to "Finland",
-        "DK" to "Denmark",
-        "AT" to "Austria",
-        "BE" to "Belgium",
-        "CH" to "Switzerland",
-        "CZ" to "Czech Republic",
-        "HU" to "Hungary",
-        "PT" to "Portugal",
-        "GR" to "Greece",
-        "TR" to "Turkey",
-        "UA" to "Ukraine",
-        "BG" to "Bulgaria",
-        "RS" to "Serbia",
-        "IL" to "Israel",
-        "AE" to "UAE",
-        "SA" to "Saudi Arabia",
-        "CN" to "China",
-        "HK" to "Hong Kong",
-        "TW" to "Taiwan",
-        "TH" to "Thailand",
-        "ID" to "Indonesia",
-        "MY" to "Malaysia",
-        "PH" to "Philippines",
-        "SG" to "Singapore",
-        "VN" to "Vietnam",
-        "AR" to "Argentina",
-        "CL" to "Chile",
-        "CO" to "Colombia",
-        "PE" to "Peru",
-        "ZA" to "South Africa",
-        "EG" to "Egypt",
-        "NG" to "Nigeria",
-        "KE" to "Kenya",
-        "MA" to "Morocco"
-    )
-
-    private var selectedInstance: String = PIPED_INSTANCES[0]
+    /** Blank until something is stored or declared — resolved against the schema when used, so a
+     *  fresh install picks up whatever instance list the repository is serving today. */
+    private var selectedInstance: String = ""
     private var pipedRegion: String? = null
 
     @Volatile
     var useNewPipe: Boolean = false
 
     fun setPipedApiUrl(url: String?) {
-        selectedInstance = url?.takeIf { it.isNotBlank() } ?: PIPED_INSTANCES[0]
+        selectedInstance = url?.takeIf { it.isNotBlank() }.orEmpty()
     }
 
     fun setPipedRegion(region: String?) {
         pipedRegion = region?.takeIf { it.isNotBlank() }
     }
 
+    /** The chosen instance first, then the rest as fallbacks — one service on several hosts, and
+     *  the declared order is the order they are tried in. */
     private val pipedInstances: List<String>
-        get() = listOf(selectedInstance) + PIPED_INSTANCES.filter { it != selectedInstance }
+        get() {
+            val declared = MediaServiceRegistry.endpoints(BACKEND_ID)
+            val chosen = selectedInstance.takeIf { it.isNotBlank() } ?: declared.firstOrNull()
+            return listOfNotNull(chosen) + declared.filter { it != chosen }
+        }
+
+    /** This backend's id in `media_services.json`. */
+    const val BACKEND_ID = "piped"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
-
-    /**
-     * Tests connectivity to a Piped API instance by hitting /health.
-     * Returns true if the instance responds with 200 OK.
-     */
-    suspend fun testInstance(url: String): Boolean = withContext(Dispatchers.IO) {
-        val baseUrl = url.trimEnd('/')
-        try {
-            val request = Request.Builder().url("$baseUrl/health").build()
-            client.newCall(request).execute().use { response ->
-                val ok = response.isSuccessful
-                Logger.log("Piped instance $baseUrl health check: ${response.code} ${if (ok) "OK" else "FAIL"}", TAG)
-                ok
-            }
-        } catch (e: Exception) {
-            Logger.log("Piped instance $baseUrl health check failed: ${e.message}", TAG)
-            false
-        }
-    }
 
     /**
      * Searches for a query on Piped API, gets the first video ID,

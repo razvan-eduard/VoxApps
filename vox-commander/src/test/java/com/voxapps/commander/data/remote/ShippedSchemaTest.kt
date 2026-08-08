@@ -252,6 +252,52 @@ class ShippedSchemaTest {
         }
     }
 
+    private fun assetMedia(): com.voxapps.commander.domain.media.MediaServiceRegistry.MediaSchema =
+        gson.fromJson(
+            repoFile("src/main/assets/media_services.json").readText(),
+            com.voxapps.commander.domain.media.MediaServiceRegistry.MediaSchema::class.java
+        )
+
+    /**
+     * A media backend either has instances to call or says it is compiled in — never neither, which
+     * would be a backend the settings screen offers and nothing can reach.
+     */
+    @Test
+    fun `every media backend is either reachable or built in`() {
+        val backends = assetMedia().backends
+        assertTrue("no media backends declared", backends.isNotEmpty())
+
+        backends.forEach { backend ->
+            if (backend.isBuiltIn) {
+                assertTrue(
+                    "built-in backend '${backend.id}' declares endpoints",
+                    backend.endpoints.isEmpty()
+                )
+            } else {
+                assertTrue(
+                    "backend '${backend.id}' declares no endpoint",
+                    backend.endpoints.isNotEmpty()
+                )
+                backend.endpoints.forEach { endpoint ->
+                    assertTrue(
+                        "backend '${backend.id}' declares a non-https endpoint: $endpoint",
+                        endpoint.startsWith("https://")
+                    )
+                    assertNotNull(
+                        "endpoint $endpoint yields no probe",
+                        ProbeSpec.from(backend.id, endpoint, backend.probeUrl)
+                    )
+                }
+            }
+        }
+    }
+
+    /** Exactly one default, or the screen's choice of what to select first is arbitrary. */
+    @Test
+    fun `exactly one media backend is the default`() {
+        assertEquals(1, assetMedia().backends.count { it.isDefault })
+    }
+
     /**
      * The bundled copy and the one served from the repository are compared by version to decide
      * which the app runs on, so a twin left behind is not a cosmetic difference — it decides whose
@@ -263,7 +309,8 @@ class ShippedSchemaTest {
             "models.json",
             "virtual_models.json",
             "search_definitions.json",
-            "api_integrations.json"
+            "api_integrations.json",
+            "media_services.json"
         ).forEach { name ->
             val asset = repoFile("src/main/assets/$name")
             val twin = listOf(File(name), File("../$name")).firstOrNull { it.exists() }

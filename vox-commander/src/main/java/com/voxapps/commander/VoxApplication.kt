@@ -63,6 +63,9 @@ class VoxApplication : Application() {
             container.settingsRepository.getCredentialsSnapshot().forEngine(Strings.AiProcessors.OPENAI)
         )
 
+        // Initialize MediaServiceRegistry (declared video backends and their instances).
+        com.voxapps.commander.domain.media.MediaServiceRegistry.init(this)
+
         // Initialize IntentCatalog (data-driven intent probe catalog) — must be ready
         // before the app scan in SplashLoadingScreen (AppRegistry.init probes against it).
         com.voxapps.commander.domain.intent.registry.IntentCatalog.init(this)
@@ -146,6 +149,9 @@ class VoxApplication : Application() {
             )
             // Also fetch the intent catalog from the remote repo (hot-reload)
             com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(container.settingsRepository, force = true)
+            // …and the media backends, whose public instances are the likeliest of all of these to
+            // have changed since the release.
+            com.voxapps.commander.domain.media.MediaServiceRegistry.fetchRemote(container.settingsRepository, force = true)
         }
     }
 

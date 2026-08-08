@@ -312,6 +312,7 @@
   "piped_instance_custom": "Custom URL",
   "piped_custom_url": "Custom Piped API URL",
   "piped_region": "Piped Search Region",
+  "piped_region_system_default": "System Default",
   "piped_testing": "Testing connection...",
   "piped_online": "Online",
   "piped_offline": "Offline - instance not reachable",

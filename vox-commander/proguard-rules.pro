@@ -126,6 +126,9 @@
 -keep class com.voxapps.commander.domain.search.CategoryDefinition { *; }
 -keep class com.voxapps.commander.domain.search.ProviderDefinition { *; }
 -keep class com.voxapps.commander.domain.search.FieldMapping { *; }
+-keep class com.voxapps.commander.domain.media.MediaServiceRegistry$MediaSchema { *; }
+-keep class com.voxapps.commander.domain.media.MediaServiceRegistry$MediaBackend { *; }
+-keep class com.voxapps.commander.domain.media.MediaServiceRegistry$MediaRegion { *; }
 -keep class com.voxapps.commander.domain.intent.registry.ApiIntegrationsSchema { *; }
 -keep class com.voxapps.commander.domain.intent.registry.ApiIntegration { *; }
 -keep class com.voxapps.commander.domain.intent.registry.AuthDef { *; }
