@@ -47,7 +47,16 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.intent.registry.ApiIntegration
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Mail
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.voxapps.commander.domain.localization.LanguageManager
+import com.voxapps.commander.utils.AppSigningIdentity
 import com.voxapps.commander.domain.service.ProbeSpec
 import com.voxapps.commander.domain.service.ServiceProbe
 import com.voxapps.commander.service.OAuth2Manager
@@ -115,16 +124,17 @@ fun IntegrationCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                val accent = accentColor(integration.accentColor) ?: MaterialTheme.colorScheme.primary
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape),
+                        .background(accent, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Link,
+                        imageVector = iconFor(integration.icon),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
+                        tint = contrastOn(accent),
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -297,6 +307,7 @@ private fun ClientIdDialog(
     val auth = integration.auth ?: return
     val uriHandler = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     var input by remember { mutableStateOf(initialClientId) }
 
     AlertDialog(
@@ -317,25 +328,29 @@ private fun ClientIdDialog(
                     )
                 }
 
-                auth.setupHelpKeys.forEach { key ->
-                    Text(languageManager.getString(key), style = MaterialTheme.typography.bodyMedium)
-                }
-
-                auth.redirectUri?.let { redirect ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { clipboard.setText(AnnotatedString(redirect)) }
-                    ) {
-                        SelectionContainer {
-                            Text(
-                                text = redirect,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(8.dp)
-                            )
-                        }
+                /*
+                 * The setup steps, in the order the service declared them.
+                 *
+                 * An entry is either a translation key or one of the values the user has to paste
+                 * into the console — the redirect URI the service itself declares, and the two the
+                 * running package knows about itself. Interleaved rather than appended because the
+                 * order is the instruction: "add this redirect URI" means nothing if the box to
+                 * copy it from is four steps further down.
+                 */
+                auth.setupHelpKeys.forEach { entry ->
+                    val value = when (entry) {
+                        VALUE_REDIRECT_URI -> auth.redirectUri
+                        VALUE_PACKAGE_NAME -> AppSigningIdentity.packageName(context)
+                        VALUE_SIGNING_SHA1 -> AppSigningIdentity.signingSha1(context)
+                        else -> null
+                    }
+                    when {
+                        value != null -> CopyableValue(value, clipboard)
+                        entry.startsWith("{") -> Unit // an unknown value this build cannot supply
+                        else -> Text(
+                            text = languageManager.getString(entry),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
 
@@ -358,3 +373,58 @@ private fun ClientIdDialog(
         }
     )
 }
+
+/** Values a declaration can ask for by name, resolved from the service or from this build. */
+private const val VALUE_REDIRECT_URI = "{redirect_uri}"
+private const val VALUE_PACKAGE_NAME = "{package_name}"
+private const val VALUE_SIGNING_SHA1 = "{signing_sha1}"
+
+/** A value the user has to paste elsewhere: selectable, and copied by tapping it. */
+@Composable
+private fun CopyableValue(
+    value: String,
+    clipboard: androidx.compose.ui.platform.ClipboardManager
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { clipboard.setText(AnnotatedString(value)) }
+    ) {
+        SelectionContainer {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                modifier = Modifier.padding(8.dp)
+            )
+        }
+    }
+}
+
+/**
+ * The icons a declaration may ask for, by name.
+ *
+ * Closed on purpose, like the auth styles: what a schema supplies is a choice among what the app
+ * carries, never an image fetched from wherever the schema came from.
+ */
+private fun iconFor(name: String?): ImageVector = when (name) {
+    "music" -> Icons.Default.MusicNote
+    "calendar" -> Icons.Default.CalendarMonth
+    "note" -> Icons.Default.Description
+    "weather" -> Icons.Default.WbSunny
+    "mail" -> Icons.Default.Mail
+    "home" -> Icons.Default.Home
+    else -> Icons.Default.Link
+}
+
+/** `#RRGGBB` from a declaration, or null when it names none or names it wrongly. */
+private fun accentColor(value: String?): Color? {
+    val hex = value?.trim()?.removePrefix("#")?.takeIf { it.length == 6 } ?: return null
+    return hex.toLongOrNull(16)?.let { Color(0xFF000000L or it) }
+}
+
+/** Black or white, whichever stays readable on [background] — a brand colour can be either. */
+private fun contrastOn(background: Color): Color =
+    if (background.luminance() > 0.5f) Color.Black else Color.White

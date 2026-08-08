@@ -2,6 +2,7 @@ package com.voxapps.commander.data.remote
 
 import com.google.gson.Gson
 import com.voxapps.commander.domain.engine.AndroidTtsEngine
+import com.voxapps.commander.domain.service.AuthDeclaration
 import com.voxapps.commander.domain.service.ProbeSpec
 import com.voxapps.commander.utils.Strings
 import org.junit.Assert.assertEquals
@@ -248,6 +249,87 @@ class ShippedSchemaTest {
             assertTrue(
                 "provider '${def.name}' requires an API key but declares no auth style",
                 style is ProbeSpec.AuthStyle.Bearer || style is ProbeSpec.AuthStyle.Query
+            )
+        }
+    }
+
+    private fun assetIntegrations(): com.voxapps.commander.domain.intent.registry.ApiIntegrationsSchema =
+        gson.fromJson(
+            repoFile("src/main/assets/api_integrations.json").readText(),
+            com.voxapps.commander.domain.intent.registry.ApiIntegrationsSchema::class.java
+        )
+
+    /**
+     * One vocabulary, asserted on the files rather than trusted.
+     *
+     * Each schema arrived with its own words for the same three facts — where the service lives,
+     * what proves it answers, how the credential attaches — and the code that read them was written
+     * once per vocabulary. The readers still accept the old spellings, because a copy served from a
+     * user's repository may predate the rename; what must not drift is what the app itself ships.
+     */
+    @Test
+    fun `every shipped schema uses the shared vocabulary`() {
+        val endpoints = mutableListOf<Pair<String, String>>()
+
+        assetVirtual().engines.forEach { (key, config) ->
+            config.endpoint?.let { endpoints += key to it }
+        }
+        assetIntegrations().integrations.forEach { integration ->
+            assertTrue(
+                "integration '${integration.id}' still uses base_url",
+                integration.legacyBaseUrl == null
+            )
+            endpoints += integration.id to integration.serviceUrl
+        }
+        declaredProviders().forEach { endpoints += it.name to it.endpoint }
+        assetMedia().backends.forEach { backend ->
+            backend.endpoints.forEach { endpoints += backend.id to it }
+        }
+
+        assertTrue("no endpoints declared anywhere", endpoints.isNotEmpty())
+        endpoints.forEach { (owner, endpoint) ->
+            assertTrue(
+                "'$owner' declares a non-https endpoint: $endpoint",
+                endpoint.replace("{lang}", "en").startsWith("https://")
+            )
+        }
+    }
+
+    /**
+     * An auth style is a choice among the ones the app implements, never a description of a new one
+     * — a schema supplies data, not a way of authenticating that no code exists for.
+     */
+    @Test
+    fun `every declared auth style is one the prober implements`() {
+        val declarations = assetVirtual().engines.values.mapNotNull { it.auth } +
+            assetIntegrations().integrations.mapNotNull { it.auth } +
+            declaredProviders().mapNotNull { it.auth }
+
+        assertTrue("no auth declared anywhere", declarations.isNotEmpty())
+        declarations.forEach { auth ->
+            assertTrue(
+                "unknown auth style '${auth.effectiveStyle}'",
+                auth.effectiveStyle in setOf(
+                    AuthDeclaration.STYLE_NONE,
+                    AuthDeclaration.STYLE_BEARER,
+                    AuthDeclaration.STYLE_QUERY,
+                    AuthDeclaration.STYLE_OAUTH2
+                )
+            )
+        }
+    }
+
+    /**
+     * An OAuth service says which flow it uses, because the two are not interchangeable: the app
+     * defaults to PKCE, so a service needing the authorization-code flow and not saying so fails at
+     * the token exchange rather than at load.
+     */
+    @Test
+    fun `every OAuth integration declares its flow`() {
+        assetIntegrations().integrations.mapNotNull { it.auth }.filter { it.isOAuth }.forEach { auth ->
+            assertTrue(
+                "an OAuth declaration names no flow",
+                auth.flow in setOf(AuthDeclaration.FLOW_PKCE, AuthDeclaration.FLOW_AUTHORIZATION_CODE)
             )
         }
     }

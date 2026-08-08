@@ -1,27 +1,38 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "integrations": [
     {
       "id": "spotify",
       "label": "Spotify",
       "package_name": "com.spotify.music",
       "auth": {
-        "type": "oauth2_pkce",
+        "style": "oauth2",
+        "flow": "pkce",
         "authorize_url": "https://accounts.spotify.com/authorize",
         "token_url": "https://accounts.spotify.com/api/token",
         "redirect_uri": "voxcommander://spotify/callback",
         "scopes": "user-read-playback-state user-modify-playback-state user-read-currently-playing streaming app-remote-control",
-        "style": "oauth2",
         "requires_client_id": true,
         "client_id_url": "https://developer.spotify.com/dashboard",
         "setup_help_keys": [
           "spotify_setup_step1",
           "spotify_setup_step2",
-          "spotify_setup_step3"
+          "spotify_setup_step3",
+          "{redirect_uri}",
+          "spotify_setup_step4",
+          "spotify_setup_step_apis",
+          "spotify_setup_step_user_mgmt",
+          "spotify_setup_step_fingerprint",
+          "spotify_setup_step_package_name",
+          "{package_name}",
+          "spotify_setup_step_fingerprint_sha1",
+          "{signing_sha1}"
         ]
       },
       "endpoint": "https://api.spotify.com/v1",
       "probe_url": "me",
+      "icon": "music",
+      "accent_color": "#1DB954",
       "capabilities": {
         "search_track": {
           "type": "api_call",

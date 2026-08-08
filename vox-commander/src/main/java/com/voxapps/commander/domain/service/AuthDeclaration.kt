@@ -21,6 +21,15 @@ data class AuthDeclaration(
     val style: String? = null,
     val type: String? = null,
 
+    /** Which OAuth flow, when [style] is `oauth2`: `pkce` | `authorization_code`.
+     *
+     *  Separate from [style] because they answer different questions — the family decides how the
+     *  credential attaches to a request, the flow decides how it was obtained. They used to share
+     *  the `type` field (`oauth2_pkce`), which meant the variant lived in the field documented as
+     *  the outdated spelling, and reading the vocabulary's own `style` alone put every service on
+     *  PKCE regardless of what it declared. */
+    val flow: String? = null,
+
     /** Parameter name when the credential travels in the URL: `key` for Gemini and WeatherAPI. */
     val param: String? = null,
 
@@ -77,10 +86,9 @@ data class AuthDeclaration(
             tokenUrl = token,
             redirectUri = redirect,
             scopes = scopes.orEmpty(),
-            // Which OAuth flow, from whichever field carries it. `style` says only "oauth2"; the
-            // variant lives in `type` (`oauth2_pkce` / `oauth2_authorization_code`), so reading the
-            // style alone would silently put every service on PKCE.
-            usePkce = !(type ?: style).orEmpty().contains("authorization_code")
+            // The flow, from whichever field carries it: `flow` today, `type` in a copy written
+            // before it existed (`oauth2_pkce` / `oauth2_authorization_code`).
+            usePkce = !(flow ?: type ?: style).orEmpty().contains(FLOW_AUTHORIZATION_CODE)
         )
     }
 
@@ -89,6 +97,9 @@ data class AuthDeclaration(
         const val STYLE_BEARER = "bearer"
         const val STYLE_QUERY = "query"
         const val STYLE_OAUTH2 = "oauth2"
+
+        const val FLOW_PKCE = "pkce"
+        const val FLOW_AUTHORIZATION_CODE = "authorization_code"
 
         /** What almost every key-in-URL service calls it, so a declaration need not repeat it. */
         const val DEFAULT_QUERY_PARAM = "key"

@@ -32,6 +32,14 @@ data class ApiIntegration(
     @SerializedName("base_url") val legacyBaseUrl: String? = null,
     /** Path that proves the credential still works — `/me` for Spotify. Relative to [endpoint]. */
     @SerializedName("probe_url") val probeUrl: String? = null,
+
+    /** Which of the icons the app carries represents this service, and the colour it is known by.
+     *  A closed set, chosen the same way an auth style is: a declaration selects among what the app
+     *  has compiled, it does not ship an image. Without them a card is a generic link on a themed
+     *  circle, which is what every integration looked like after the screen stopped being written
+     *  by hand for one service. */
+    val icon: String? = null,
+    @SerializedName("accent_color") val accentColor: String? = null,
     val capabilities: Map<String, CapabilitySlot> = emptyMap()
 ) {
     /** The endpoint under either spelling. */
