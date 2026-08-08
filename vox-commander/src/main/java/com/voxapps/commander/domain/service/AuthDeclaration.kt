@@ -32,7 +32,15 @@ data class AuthDeclaration(
     /** The user must supply a client id before authorising. True for Spotify; most services do not
      *  ask for one, and the field exists so the screen can omit that input rather than show an empty
      *  box nobody can fill. */
-    @SerializedName("requires_client_id") val requiresClientId: Boolean = false
+    @SerializedName("requires_client_id") val requiresClientId: Boolean = false,
+
+    /** Where the user creates the application that issues [requiresClientId] — a developer portal. */
+    @SerializedName("client_id_url") val clientIdUrl: String? = null,
+
+    /** Translation keys for the setup steps, shown in order. Keys rather than sentences, so the
+     *  instructions stay translated; the redirect URI to paste comes from [redirectUri] itself
+     *  rather than being written out again in the dialog. */
+    @SerializedName("setup_help_keys") val setupHelpKeys: List<String> = emptyList()
 ) {
     /** The declared style, falling back to the older `type` spelling, then to none. */
     val effectiveStyle: String get() = (style ?: type ?: STYLE_NONE).lowercase()
@@ -50,6 +58,30 @@ data class AuthDeclaration(
         effectiveStyle == STYLE_BEARER -> ProbeSpec.AuthStyle.Bearer
         effectiveStyle == STYLE_QUERY -> ProbeSpec.AuthStyle.Query(param ?: DEFAULT_QUERY_PARAM)
         else -> ProbeSpec.AuthStyle.None
+    }
+
+    /**
+     * The OAuth client config this declaration describes, or null when it describes something else.
+     *
+     * Built here because two callers were building it identically from the same fields — the audio
+     * playback path and the integrations screen — and a third would have copied it again.
+     */
+    fun toOAuthConfig(serviceId: String): com.voxapps.commander.service.OAuthConfig? {
+        if (!isOAuth) return null
+        val authorize = authorizeUrl ?: return null
+        val token = tokenUrl ?: return null
+        val redirect = redirectUri ?: return null
+        return com.voxapps.commander.service.OAuthConfig(
+            serviceId = serviceId,
+            authorizeUrl = authorize,
+            tokenUrl = token,
+            redirectUri = redirect,
+            scopes = scopes.orEmpty(),
+            // Which OAuth flow, from whichever field carries it. `style` says only "oauth2"; the
+            // variant lives in `type` (`oauth2_pkce` / `oauth2_authorization_code`), so reading the
+            // style alone would silently put every service on PKCE.
+            usePkce = !(type ?: style).orEmpty().contains("authorization_code")
+        )
     }
 
     companion object {

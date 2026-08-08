@@ -21,6 +21,7 @@ import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.service.ProbeSpec
 import com.voxapps.commander.domain.service.ServiceProbe
 import java.text.DateFormat
+import java.util.Calendar
 import java.util.Date
 
 /**
@@ -89,7 +90,10 @@ fun ConnectionTestCard(
     extraKeys: List<Any?> = emptyList(),
     tokenState: TokenState? = null,
     helpUrl: String? = null,
-    helpText: String? = null
+    helpText: String? = null,
+    testingLabel: String = "Testing…",
+    onlineLabel: String = "Reachable",
+    offlineLabel: String = "Not reachable"
 ) {
     if (spec == null) return
 
@@ -99,7 +103,10 @@ fun ConnectionTestCard(
         modifier = modifier,
         tokenState = tokenState,
         helpUrl = helpUrl,
-        helpText = helpText
+        helpText = helpText,
+        testingLabel = testingLabel,
+        onlineLabel = onlineLabel,
+        offlineLabel = offlineLabel
     )
 }
 
@@ -115,10 +122,27 @@ data class TokenState(val present: Boolean, val expiresAtMillis: Long = 0L) {
 
     fun describe(): String = when {
         !present -> "Not connected"
-        expired -> "Token expired ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(expiresAtMillis))}"
-        expiresAtMillis > 0L ->
-            "Token valid until ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(expiresAtMillis))}"
+        expired -> "Token expired ${moment(expiresAtMillis)}"
+        expiresAtMillis > 0L -> "Token valid until ${moment(expiresAtMillis)}"
         else -> "Token stored"
+    }
+
+    /**
+     * A time on its own is only unambiguous today.
+     *
+     * An access token lives about an hour, so "expired 14:32" usually means an hour ago — but the
+     * same string on a token that expired last week reads as if it had just lapsed, which is a
+     * different problem with a different fix. Anything outside today carries its date.
+     */
+    private fun moment(millis: Long): String {
+        val time = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(millis))
+        val today = Calendar.getInstance()
+        val then = Calendar.getInstance().apply { timeInMillis = millis }
+        val sameDay = today.get(Calendar.YEAR) == then.get(Calendar.YEAR) &&
+            today.get(Calendar.DAY_OF_YEAR) == then.get(Calendar.DAY_OF_YEAR)
+
+        return if (sameDay) time
+        else "${DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(millis))} $time"
     }
 }
 

@@ -38,7 +38,7 @@ object AudioPlaybackHelpers {
         if (!OAuth2Manager.isAuthorized(integration.id)) return false
 
         val clientId = clientIdFor(integration.id) ?: return false
-        val config = oauthConfigFor(integration, auth)
+        val config = auth.toOAuthConfig(integration.id) ?: return false
         val token = OAuth2Manager.getValidAccessToken(config, clientId) ?: run {
             Logger.log("${integration.id}: no valid access token", TAG)
             return false
@@ -79,16 +79,6 @@ object AudioPlaybackHelpers {
         else -> null
     }
 
-    private fun oauthConfigFor(integration: ApiIntegration, auth: com.voxapps.commander.domain.intent.registry.AuthDef): OAuthConfig {
-        return OAuthConfig(
-            serviceId = integration.id,
-            authorizeUrl = auth.authorizeUrl,
-            tokenUrl = auth.tokenUrl,
-            redirectUri = auth.redirectUri,
-            scopes = auth.scopes,
-            usePkce = auth.type == "oauth2_pkce"
-        )
-    }
 
     fun pipedPlayDirect(context: Context, pkg: String?, query: String): Boolean {
         return try {

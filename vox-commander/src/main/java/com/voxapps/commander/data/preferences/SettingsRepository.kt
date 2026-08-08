@@ -162,6 +162,16 @@ interface SettingsRepository {
     fun getServiceTokenExpirySync(serviceId: String): Long
     suspend fun setServiceTokens(serviceId: String, accessToken: String?, refreshToken: String?, expiry: Long)
 
+    /**
+     * The client id a service's OAuth flow needs, keyed by service id.
+     *
+     * Spotify's lived in its own DataStore key and its own getter, which is why the integrations
+     * screen could only ever configure Spotify. Declared integrations each get a slot, and Spotify's
+     * existing value is migrated into it.
+     */
+    fun getServiceClientIdSync(serviceId: String): String?
+    suspend fun setServiceClientId(serviceId: String, clientId: String?)
+
     // --- DECLARATIVE API INTEGRATION DEVICE ID (keyed by service id) ---
     fun getServiceDeviceIdSync(serviceId: String): String?
     suspend fun setServiceDeviceId(serviceId: String, deviceId: String?)

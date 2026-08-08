@@ -25,18 +25,18 @@ data class ApiIntegration(
     val id: String = "",
     val label: String = "",
     @SerializedName("package_name") val packageName: String = "",
-    val auth: AuthDef? = null,
-    @SerializedName("base_url") val baseUrl: String = "",
+    val auth: com.voxapps.commander.domain.service.AuthDeclaration? = null,
+    /** Where the service lives. `base_url` is the older spelling and is still read, since a copy of
+     *  this file may predate the shared vocabulary. */
+    val endpoint: String? = null,
+    @SerializedName("base_url") val legacyBaseUrl: String? = null,
+    /** Path that proves the credential still works — `/me` for Spotify. Relative to [endpoint]. */
+    @SerializedName("probe_url") val probeUrl: String? = null,
     val capabilities: Map<String, CapabilitySlot> = emptyMap()
-)
-
-data class AuthDef(
-    val type: String = "", // oauth2_pkce | oauth2_authorization_code
-    @SerializedName("authorize_url") val authorizeUrl: String = "",
-    @SerializedName("token_url") val tokenUrl: String = "",
-    @SerializedName("redirect_uri") val redirectUri: String = "",
-    val scopes: String = ""
-)
+) {
+    /** The endpoint under either spelling. */
+    val serviceUrl: String get() = (endpoint ?: legacyBaseUrl).orEmpty()
+}
 
 data class CapabilitySlot(
     val type: String = "", // api_call | api_sequence | deep_link
@@ -125,4 +125,15 @@ object ApiIntegrationRegistry {
     }
 
     fun forPackage(packageName: String): ApiIntegration? = cached.firstOrNull { it.packageName == packageName }
+
+    /**
+     * Every declared integration.
+     *
+     * Its absence is why the integrations screen could only ever show Spotify: the screen asked for
+     * one integration by package name and drew a card written for it by hand, so a second entry in
+     * `api_integrations.json` rendered nowhere.
+     */
+    fun all(): List<ApiIntegration> = cached
+
+    fun byId(serviceId: String): ApiIntegration? = cached.firstOrNull { it.id == serviceId }
 }

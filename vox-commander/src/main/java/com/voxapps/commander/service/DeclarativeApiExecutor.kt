@@ -197,7 +197,7 @@ object DeclarativeApiExecutor {
             if (uri == skipValue) continue
 
             val path = queuePath.replace("{item}", URLEncoder.encode(uri, "UTF-8"))
-            val url = integration.baseUrl.trimEnd('/') + path
+            val url = integration.serviceUrl.trimEnd('/') + path
             if (httpRequest(method, url, token, null) != null) queued++
         }
     }
@@ -223,7 +223,7 @@ object DeclarativeApiExecutor {
             return null
         }
         val rawPath = path ?: return null
-        val url = integration.baseUrl.trimEnd('/') + substituteForPath(rawPath, vars)
+        val url = integration.serviceUrl.trimEnd('/') + substituteForPath(rawPath, vars)
         val requestBody = body?.let { substituteForBody(it, vars) }
 
         val raw = httpRequest(method, url, token, requestBody) ?: return null

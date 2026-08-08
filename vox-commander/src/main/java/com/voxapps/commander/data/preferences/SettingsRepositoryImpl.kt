@@ -1057,6 +1057,18 @@ class SettingsRepositoryImpl(
     }
 
     // --- DECLARATIVE API INTEGRATION DEVICE ID (stored in encrypted prefs, keyed by service id) ---
+    override fun getServiceClientIdSync(serviceId: String): String? =
+        encryptedPrefs.getString("${'$'}{serviceId}_client_id", null)
+            // Spotify's client id predates per-service storage; read the old key until it is moved.
+            ?: if (serviceId == "spotify") getSettingsSnapshot().spotifyClientId else null
+
+    override suspend fun setServiceClientId(serviceId: String, clientId: String?) {
+        encryptedPrefs.edit().apply {
+            if (!clientId.isNullOrBlank()) putString("${'$'}{serviceId}_client_id", clientId)
+            else remove("${'$'}{serviceId}_client_id")
+        }.apply()
+    }
+
     override fun getServiceDeviceIdSync(serviceId: String): String? = encryptedPrefs.getString("${serviceId}_device_id", null)
 
     override suspend fun setServiceDeviceId(serviceId: String, deviceId: String?) {

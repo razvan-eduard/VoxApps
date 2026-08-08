@@ -41,28 +41,43 @@ object ServiceProbe {
      * and these schemas can be served from a user-configured repository. The host is logged on every
      * probe for exactly that reason.
      */
-    suspend fun run(spec: ProbeSpec, settingsRepo: SettingsRepository): Boolean {
+    /** What a probe found: whether it answered, and — for HTTP — with what. */
+    data class Outcome(val ok: Boolean, val code: Int? = null) {
+        /** The one status worth acting on: a credential the service will not accept. An OAuth token
+         *  that has merely expired can often be refreshed, which is a different thing from a wrong
+         *  key and needs to be told apart from "the network is down". */
+        val rejected: Boolean get() = code == 401 || code == 403
+    }
+
+    suspend fun run(spec: ProbeSpec, settingsRepo: SettingsRepository): Boolean =
+        detailed(spec, settingsRepo).ok
+
+    /** As [run], but reporting the status so a caller can tell a rejected credential from a failure. */
+    suspend fun detailed(spec: ProbeSpec, settingsRepo: SettingsRepository): Outcome {
         if (spec.missingCredential) {
             // No point spending a request to be told what is already known.
             Logger.log("${spec.id} needs a credential and has none — not probing", TAG)
-            return false
+            return Outcome(ok = false)
         }
 
         val request = buildRequest(spec) ?: run {
             Logger.log("${spec.id} declares an unusable probe URL: ${spec.url}", TAG)
-            return false
+            return Outcome(ok = false)
         }
 
         Logger.log("Probing ${spec.id} at ${request.url.host}", TAG)
 
-        return bounded(spec.id, settingsRepo) {
+        var code: Int? = null
+        val ok = bounded(spec.id, settingsRepo) {
             client.newCall(request).execute().use { response ->
+                code = response.code
                 if (!response.isSuccessful) {
                     Logger.log("${spec.id} answered HTTP ${response.code}", TAG)
                 }
                 response.isSuccessful
             }
         }
+        return Outcome(ok = ok, code = code)
     }
 
     /**

@@ -10,16 +10,27 @@
         "authorize_url": "https://accounts.spotify.com/authorize",
         "token_url": "https://accounts.spotify.com/api/token",
         "redirect_uri": "voxcommander://spotify/callback",
-        "scopes": "user-read-playback-state user-modify-playback-state user-read-currently-playing streaming app-remote-control"
+        "scopes": "user-read-playback-state user-modify-playback-state user-read-currently-playing streaming app-remote-control",
+        "style": "oauth2",
+        "requires_client_id": true,
+        "client_id_url": "https://developer.spotify.com/dashboard",
+        "setup_help_keys": [
+          "spotify_setup_step1",
+          "spotify_setup_step2",
+          "spotify_setup_step3"
+        ]
       },
-      "base_url": "https://api.spotify.com/v1",
+      "endpoint": "https://api.spotify.com/v1",
+      "probe_url": "me",
       "capabilities": {
         "search_track": {
           "type": "api_call",
           "method": "GET",
           "path": "/search?q={query}&type=track&limit=1",
           "response_path": "tracks.items[0].uri",
-          "extract": { "artist_id": "tracks.items[0].artists[0].id" }
+          "extract": {
+            "artist_id": "tracks.items[0].artists[0].id"
+          }
         },
         "search_album": {
           "type": "api_call",
@@ -36,21 +47,45 @@
         "play_track": {
           "type": "api_sequence",
           "steps": [
-            { "capability": "search_track" },
-            { "type": "api_call", "method": "GET", "path": "/me/player/devices", "response_path": "devices", "as": "devices", "optional": true },
+            {
+              "capability": "search_track"
+            },
+            {
+              "type": "api_call",
+              "method": "GET",
+              "path": "/me/player/devices",
+              "response_path": "devices",
+              "as": "devices",
+              "optional": true
+            },
             {
               "type": "device_select",
               "from": "devices",
               "prefer": [
-                { "field": "type", "equals": "Smartphone" },
-                { "field": "is_active", "equals": true },
-                { "field": "type", "equals": "Computer" }
+                {
+                  "field": "type",
+                  "equals": "Smartphone"
+                },
+                {
+                  "field": "is_active",
+                  "equals": true
+                },
+                {
+                  "field": "type",
+                  "equals": "Computer"
+                }
               ],
               "id_field": "id",
               "as": "device_id",
               "optional": true
             },
-            { "type": "api_call", "method": "PUT", "path": "/me/player", "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}", "optional": true },
+            {
+              "type": "api_call",
+              "method": "PUT",
+              "path": "/me/player",
+              "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}",
+              "optional": true
+            },
             {
               "type": "api_call",
               "group": "play",
@@ -58,9 +93,18 @@
               "path": "/me/player/play?device_id={device_id}",
               "body": "{\"uris\":[\"{search_track.result}\"]}",
               "delay_before_ms": 500,
-              "retry": { "times": 1, "delay_ms": 2000 }
+              "retry": {
+                "times": 1,
+                "delay_ms": 2000
+              }
             },
-            { "type": "api_call", "group": "play", "method": "PUT", "path": "/me/player/play", "body": "{\"uris\":[\"{search_track.result}\"]}" },
+            {
+              "type": "api_call",
+              "group": "play",
+              "method": "PUT",
+              "path": "/me/player/play",
+              "body": "{\"uris\":[\"{search_track.result}\"]}"
+            },
             {
               "type": "api_call",
               "method": "GET",
@@ -84,21 +128,45 @@
         "play_album": {
           "type": "api_sequence",
           "steps": [
-            { "capability": "search_album" },
-            { "type": "api_call", "method": "GET", "path": "/me/player/devices", "response_path": "devices", "as": "devices", "optional": true },
+            {
+              "capability": "search_album"
+            },
+            {
+              "type": "api_call",
+              "method": "GET",
+              "path": "/me/player/devices",
+              "response_path": "devices",
+              "as": "devices",
+              "optional": true
+            },
             {
               "type": "device_select",
               "from": "devices",
               "prefer": [
-                { "field": "type", "equals": "Smartphone" },
-                { "field": "is_active", "equals": true },
-                { "field": "type", "equals": "Computer" }
+                {
+                  "field": "type",
+                  "equals": "Smartphone"
+                },
+                {
+                  "field": "is_active",
+                  "equals": true
+                },
+                {
+                  "field": "type",
+                  "equals": "Computer"
+                }
               ],
               "id_field": "id",
               "as": "device_id",
               "optional": true
             },
-            { "type": "api_call", "method": "PUT", "path": "/me/player", "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}", "optional": true },
+            {
+              "type": "api_call",
+              "method": "PUT",
+              "path": "/me/player",
+              "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}",
+              "optional": true
+            },
             {
               "type": "api_call",
               "group": "play",
@@ -106,29 +174,62 @@
               "path": "/me/player/play?device_id={device_id}",
               "body": "{\"context_uri\":\"{search_album.result}\"}",
               "delay_before_ms": 500,
-              "retry": { "times": 1, "delay_ms": 2000 }
+              "retry": {
+                "times": 1,
+                "delay_ms": 2000
+              }
             },
-            { "type": "api_call", "group": "play", "method": "PUT", "path": "/me/player/play", "body": "{\"context_uri\":\"{search_album.result}\"}" }
+            {
+              "type": "api_call",
+              "group": "play",
+              "method": "PUT",
+              "path": "/me/player/play",
+              "body": "{\"context_uri\":\"{search_album.result}\"}"
+            }
           ]
         },
         "play_artist": {
           "type": "api_sequence",
           "steps": [
-            { "capability": "search_artist" },
-            { "type": "api_call", "method": "GET", "path": "/me/player/devices", "response_path": "devices", "as": "devices", "optional": true },
+            {
+              "capability": "search_artist"
+            },
+            {
+              "type": "api_call",
+              "method": "GET",
+              "path": "/me/player/devices",
+              "response_path": "devices",
+              "as": "devices",
+              "optional": true
+            },
             {
               "type": "device_select",
               "from": "devices",
               "prefer": [
-                { "field": "type", "equals": "Smartphone" },
-                { "field": "is_active", "equals": true },
-                { "field": "type", "equals": "Computer" }
+                {
+                  "field": "type",
+                  "equals": "Smartphone"
+                },
+                {
+                  "field": "is_active",
+                  "equals": true
+                },
+                {
+                  "field": "type",
+                  "equals": "Computer"
+                }
               ],
               "id_field": "id",
               "as": "device_id",
               "optional": true
             },
-            { "type": "api_call", "method": "PUT", "path": "/me/player", "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}", "optional": true },
+            {
+              "type": "api_call",
+              "method": "PUT",
+              "path": "/me/player",
+              "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}",
+              "optional": true
+            },
             {
               "type": "api_call",
               "group": "play",
@@ -136,14 +237,35 @@
               "path": "/me/player/play?device_id={device_id}",
               "body": "{\"context_uri\":\"{search_artist.result}\"}",
               "delay_before_ms": 500,
-              "retry": { "times": 1, "delay_ms": 2000 }
+              "retry": {
+                "times": 1,
+                "delay_ms": 2000
+              }
             },
-            { "type": "api_call", "group": "play", "method": "PUT", "path": "/me/player/play", "body": "{\"context_uri\":\"{search_artist.result}\"}" }
+            {
+              "type": "api_call",
+              "group": "play",
+              "method": "PUT",
+              "path": "/me/player/play",
+              "body": "{\"context_uri\":\"{search_artist.result}\"}"
+            }
           ]
         },
-        "pause": { "type": "api_call", "method": "PUT", "path": "/me/player/pause" },
-        "next": { "type": "api_call", "method": "POST", "path": "/me/player/next" },
-        "prev": { "type": "api_call", "method": "POST", "path": "/me/player/previous" }
+        "pause": {
+          "type": "api_call",
+          "method": "PUT",
+          "path": "/me/player/pause"
+        },
+        "next": {
+          "type": "api_call",
+          "method": "POST",
+          "path": "/me/player/next"
+        },
+        "prev": {
+          "type": "api_call",
+          "method": "POST",
+          "path": "/me/player/previous"
+        }
       }
     }
   ]
