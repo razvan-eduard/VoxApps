@@ -4,13 +4,13 @@ import android.content.Context
 import com.voxapps.commander.utils.AudioConvert
 import com.voxapps.logging.Logger
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.domain.engine.BaseVoxEngine
+import com.voxapps.commander.domain.engine.ModelSpec
 import com.voxapps.commander.domain.engine.SttEngine
 import com.voxapps.commander.utils.Strings
 import com.whispercpp.whisper.WhisperContext
 import com.whispercpp.whisper.WhisperLib
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -22,53 +22,45 @@ class WhisperCppSttEngine(
     private val settingsRepo: SettingsRepository,
     private val forceGpu: Boolean = false,
     private val onVulkanIncompatible: () -> Unit = {}
-) : SttEngine {
+) : BaseVoxEngine(), SttEngine {
+
+    override val engineKey: String = ENGINE_KEY
 
     private val TAG = Strings.Tags.WHISPER_CPP_STT_ENGINE
     private var whisperContext: WhisperContext? = null
     private var isUsingGpu = false
-    private val loadMutex = Mutex()
-    @Volatile private var isTranscribing = false
 
     /**
-     * Public method to trigger initialization and test compatibility.
-     * Returns true if initialized (either GPU or CPU).
+     * Builds the whisper context from an already-resolved model file.
+     *
+     * The engine no longer decides where its model is: it used to look up its own key by extension,
+     * check the custom path, then rebuild the download layout by hand. Locating the file — including
+     * honouring a custom import — happens once, in the caller that also knows which model is
+     * selected. The GPU/CPU tiering stays, because that is genuinely this engine's business.
+     *
+     * No mutex here either. Concurrent loads are serialised by [BaseVoxEngine], which is what
+     * removes the difference between this engine and Vosk, whose own check-then-act had none.
      */
-    suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
-        ensureModelLoaded()
-        return@withContext whisperContext != null
-    }
+    override suspend fun onLoad(spec: ModelSpec): Boolean = withContext(Dispatchers.IO) {
+        val local = spec as? ModelSpec.LocalModel ?: run {
+            Logger.log("Whisper needs a local model, got ${spec::class.simpleName}", TAG)
+            return@withContext false
+        }
 
-    private suspend fun ensureModelLoaded() = withContext(Dispatchers.IO) {
-        loadMutex.withLock {
-            if (whisperContext != null) return@withContext
+        // Lazy-load native .so files only when Whisper is actually used, avoiding ~60MB RSS
+        // when another STT engine is active.
+        val libDir = File(context.filesDir, "whisper_libs").absolutePath
+        WhisperLib.load(libDir)
 
-            // Lazy-load native .so files only when Whisper is actually used for
-            // transcription, avoiding unnecessary ~60MB RSS when another STT engine is active.
-            val libDir = File(context.filesDir, "whisper_libs").absolutePath
-            WhisperLib.load(libDir)
+        val modelPath = local.entryPoint.absolutePath
+        if (!local.entryPoint.exists()) {
+            Logger.log("Model file not found at: $modelPath", TAG)
+            return@withContext false
+        }
+        val snapshot = settingsRepo.getSettingsSnapshot()
 
-            // Check for custom model path first
-            val snapshot = settingsRepo.getSettingsSnapshot()
-            val whisperKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".bin")
-            val customPath = whisperKey?.let { snapshot.getCustomModelPath(it) }
-            var modelPath = if (!customPath.isNullOrBlank()) {
-                Logger.log("Using custom model path: $customPath", TAG)
-                customPath
-            } else {
-                val selectedModelId = snapshot.activeVoiceModelId
-                File(
-                    context.getExternalFilesDir(null),
-                    "$selectedModelId${whisperKey?.let { com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(it) } ?: ""}"
-                ).absolutePath
-            }
-
-            if (!File(modelPath).exists()) {
-                Logger.log("Model file not found at: $modelPath", TAG)
-                return@withContext
-            }
-
-            // TIER 1: Try Vulkan (GPU)
+        // TIER 1: Try Vulkan (GPU)
+        run {
             val attemptVulkan = forceGpu && !snapshot.vulkanIncompatible
             if (attemptVulkan) {
                 Logger.log("Attempting to initialize with VULKAN...", TAG)
@@ -77,7 +69,7 @@ class WhisperCppSttEngine(
                     if (whisperContext != null) {
                         isUsingGpu = true
                         Logger.log("SUCCESS: Whisper context initialized with VULKAN", TAG)
-                        return@withContext
+                        return@withContext true
                     }
                 } catch (e: Throwable) {
                     Logger.log("VULKAN init failed. Marking as incompatible. ${e.message}", TAG)
@@ -98,82 +90,64 @@ class WhisperCppSttEngine(
                 Logger.log("CRITICAL: NEON/CPU initialization failed: ${e.message}", TAG)
             }
         }
+        return@withContext whisperContext != null
+    }
+
+    override fun onUnload() {
+        Logger.log("Releasing native context", TAG)
+        try { whisperContext?.release() } catch (_: Exception) {}
+        whisperContext = null
     }
 
     override suspend fun transcribe(audio: ByteArray): String = transcribeWithLanguage(audio, null)
 
     suspend fun transcribeWithLanguage(audio: ByteArray, langCode: String?): String = withContext(Dispatchers.IO) {
-        ensureModelLoaded()
         if (!WhisperLib.isReady()) return@withContext "Error: Native library failed to load"
 
-        // Set the flag BEFORE reading whisperContext so releaseForMemoryPressure()
-        // (which checks isTranscribing) cannot free the context in the window
-        // between the read and the start of native work.
-        isTranscribing = true
-        val currentContext = whisperContext ?: run {
-            isTranscribing = false
-            return@withContext "Error: Whisper engine not initialized"
-        }
+        val currentContext = whisperContext
+            ?: return@withContext "Error: Whisper engine not initialized"
 
-        try {
-            val floatAudio = AudioConvert.pcm16ToFloat(audio)
+        // Pins the model for the duration, so a concurrent unload defers rather than freeing the
+        // native context underneath the inference. This replaces a hand-rolled `isTranscribing`
+        // flag whose read order had to be commented to stay correct.
+        withModel {
+            try {
+                val floatAudio = AudioConvert.pcm16ToFloat(audio)
 
-            // Use 4 threads on CPU for faster inference on modern multi-core devices
-            val threads = if (isUsingGpu) 1 else 4
+                // Use 4 threads on CPU for faster inference on modern multi-core devices
+                val threads = if (isUsingGpu) 1 else 4
 
-            Logger.log(
-                "Transcribing using ${if (isUsingGpu) "VULKAN" else "CPU"} ($threads threads), Lang: ${langCode ?: "auto"}",
-                TAG
-            )
+                Logger.log(
+                    "Transcribing using ${if (isUsingGpu) "VULKAN" else "CPU"} ($threads threads), Lang: ${langCode ?: "auto"}",
+                    TAG
+                )
             
-            // Crash-cookie: a native GPU crash during inference cannot be caught by
-            // try/catch. Commit a marker before real GPU work; if the process dies,
-            // AppContainer detects the leftover cookie next launch and disables Vulkan.
-            val snapshot = settingsRepo.getSettingsSnapshot()
-            val guardGpu = isUsingGpu && !snapshot.vulkanRuntimeVerified
-            if (guardGpu) settingsRepo.setVulkanRuntimeAttemptSync(true)
+                // Crash-cookie: a native GPU crash during inference cannot be caught by
+                // try/catch. Commit a marker before real GPU work; if the process dies,
+                // AppContainer detects the leftover cookie next launch and disables Vulkan.
+                val snapshot = settingsRepo.getSettingsSnapshot()
+                val guardGpu = isUsingGpu && !snapshot.vulkanRuntimeVerified
+                if (guardGpu) settingsRepo.setVulkanRuntimeAttemptSync(true)
 
-            // Force language if provided to prevent Cyrillic/Slavic hallucinations
-            val result = currentContext.transcribeData(floatAudio, threads, language = langCode, printTimestamp = false)
+                // Force language if provided to prevent Cyrillic/Slavic hallucinations
+                val result = currentContext.transcribeData(floatAudio, threads, language = langCode, printTimestamp = false)
 
-            if (guardGpu) {
-                // Survived a real GPU transcription -> device is genuinely compatible.
-                settingsRepo.setVulkanRuntimeAttemptSync(false)
-                kotlinx.coroutines.runBlocking { settingsRepo.setVulkanRuntimeVerified(true) }
+                if (guardGpu) {
+                    // Survived a real GPU transcription -> device is genuinely compatible.
+                    settingsRepo.setVulkanRuntimeAttemptSync(false)
+                    kotlinx.coroutines.runBlocking { settingsRepo.setVulkanRuntimeVerified(true) }
+                }
+
+                result.trim()
+            } catch (e: Exception) {
+                Logger.log("Transcription failed: ${e.message}", TAG)
+                if (isUsingGpu) settingsRepo.setVulkanRuntimeAttemptSync(false)
+                "Error: ${e.message}"
             }
-
-            return@withContext result.trim()
-        } catch (e: Exception) {
-            Logger.log("Transcription failed: ${e.message}", TAG)
-            if (isUsingGpu) settingsRepo.setVulkanRuntimeAttemptSync(false)
-            "Error: ${e.message}"
-        } finally {
-            isTranscribing = false
         }
     }
 
-    override fun releaseHardware() {
-        Logger.log("Releasing native context", TAG)
-        whisperContext?.release()
-    }
-
-    override fun releaseResources() {
-        whisperContext = null
-    }
-
-    /**
-     * Releases the Whisper context (~150MB+) on system memory pressure while keeping
-     * the engine alive. ensureModelLoaded() will transparently reload it on the next
-     * transcribe() call. Skipped if a transcription is currently in progress.
-     */
-    override fun releaseForMemoryPressure() {
-        if (isTranscribing) {
-            Logger.log("Skipping Whisper release — actively transcribing", TAG)
-            return
-        }
-        if (whisperContext == null) return
-        Logger.log("Releasing Whisper context for memory pressure", TAG)
-        try { whisperContext?.release() } catch (_: Exception) {}
-        whisperContext = null
+    companion object {
+        const val ENGINE_KEY = "stt_whisper"
     }
 }

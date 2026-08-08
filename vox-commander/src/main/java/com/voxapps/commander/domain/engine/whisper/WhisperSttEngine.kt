@@ -1,5 +1,7 @@
 package com.voxapps.commander.domain.engine.whisper
 
+import com.voxapps.commander.domain.engine.BaseVoxEngine
+import com.voxapps.commander.domain.engine.ModelSpec
 import com.voxapps.commander.domain.engine.SttEngine
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
@@ -30,8 +32,10 @@ data class WhisperResponse(val text: String)
 class WhisperSttEngine(
     private val apiKey: String,
     private val modelName: String = MODEL_NAME
-) : SttEngine {
-    
+) : BaseVoxEngine(), SttEngine {
+
+    override val engineKey: String = ENGINE_KEY
+
     private val api = Retrofit.Builder()
         .baseUrl(BASE_URL)
         .addConverterFactory(GsonConverterFactory.create())
@@ -60,15 +64,19 @@ class WhisperSttEngine(
         }
     }
 
-    override fun releaseHardware() {
-        // No hardware resources to release for API engine
-    }
+    /**
+     * Nothing is downloaded, so loading means checking the engine is configured — a credential must
+     * be present. Deliberately no round-trip: a real API call at startup costs money, can rate-limit,
+     * and tells a third party the app launched. An invalid key surfaces from an actual transcription.
+     */
+    override suspend fun onLoad(spec: ModelSpec): Boolean = apiKey.isNotBlank()
 
-    override fun releaseResources() {
-        // API is persistent but doesn't hold large memory
+    override fun onUnload() {
+        // The Retrofit client holds no model and no meaningful memory.
     }
 
     companion object {
+        const val ENGINE_KEY = "WHISPER_API"
         private const val BASE_URL = Strings.Urls.OPENAI_API
         private const val AUTH_PREFIX = "Bearer "
         private const val MEDIA_TYPE_WAV = "audio/wav"

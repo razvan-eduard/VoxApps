@@ -4,13 +4,11 @@ import android.content.Context
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import com.voxapps.commander.data.preferences.SettingsRepository
-import com.voxapps.commander.data.remote.EngineRuntime
-import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.engine.AndroidTtsEngine
+import com.voxapps.commander.domain.engine.EngineSpecs
 import com.voxapps.commander.domain.engine.EngineState
 import com.voxapps.commander.domain.engine.ITtsEngine
-import com.voxapps.commander.domain.engine.ModelSpec
 import com.voxapps.commander.domain.engine.TtsEngines
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.logging.Logger
@@ -195,34 +193,10 @@ object TtsManager {
 
     private suspend fun loadOrNull(ctx: Context, engineKey: String, language: String): Boolean {
         val eng = engine ?: return false
-        val spec = buildSpec(ctx, engineKey, language) ?: return false
+        val repo = settingsRepo ?: return false
+        val spec = EngineSpecs.build(ctx, repo, engineKey, selectedModelFor(engineKey), language) ?: return false
         return eng.load(spec)
     }
-
-    /**
-     * Describes what the selected engine needs in order to load, from its declared runtime.
-     *
-     * Nothing here knows what Piper is. A downloadable engine gets the model the user picked plus
-     * the entry point `ModelDownloader` resolved from `models.json`; anything else is supplied by
-     * the platform. Returning null means "this engine cannot run right now", which the caller turns
-     * into a fallback rather than a silent failure.
-     */
-    private fun buildSpec(ctx: Context, engineKey: String, language: String): ModelSpec? =
-        when (RemoteModelRegistry.runtimeOf(engineKey)) {
-            EngineRuntime.LOCAL_FILE -> {
-                val modelId = selectedModelFor(engineKey)
-                val entry = modelId?.let { ModelDownloader(ctx).resolveEntryPoint(it, engineKey) }
-                if (modelId == null || entry == null) {
-                    Logger.log("No usable model for '$engineKey' (selected=$modelId)", TAG)
-                    null
-                } else {
-                    ModelSpec.LocalModel(modelId, entry, language)
-                }
-            }
-            // Cloud TTS does not exist yet; treating it as a platform engine would hide that.
-            EngineRuntime.CLOUD -> null
-            else -> ModelSpec.PlatformModel(language)
-        }
 
     /**
      * The model the user picked for [engineKey], falling back to any downloaded one.
@@ -239,6 +213,16 @@ object TtsManager {
         val downloaded = settingsRepo?.getSettingsSnapshot()?.downloadedModelIds ?: return null
         return RemoteModelRegistry.getModels(engineKey).firstOrNull { it.id in downloaded }?.id
     }
+
+    /**
+     * Brings the engine in line with the current selection, whatever changed.
+     *
+     * One path, not two. This used to be an `engine == null` branch and an "did anything change"
+     * branch with the same body written twice — and the change detection compared engine *types*,
+     * which is how selecting Piper stayed a no-op: the key never matched, so the desired type came
+     * out as Android, which the engine already was. Now the engine decides: loading the same spec is
+     * a no-op inside [com.voxapps.commander.domain.engine.BaseVoxEngine], so this can always ask.
+     */
 
     /**
      * Speaks the given text. If TTS is disabled, this is a no-op.

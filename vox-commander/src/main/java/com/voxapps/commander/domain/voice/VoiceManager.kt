@@ -239,11 +239,45 @@ object VoiceManager {
         
         whisperApiEngine = if (!apiKey.isNullOrBlank()) WhisperSttEngine(apiKey) else null
         googleSttEngine = GoogleSttEngine(ctx)
-        voskSttEngine = VoskSttEngine(ctx, settings, voiceLang)
-        
+        voskSttEngine = VoskSttEngine(ctx)
+
+        // 3b. Load the model for the engine this processor will actually use. Engines no longer
+        // load themselves on first transcribe: locating a model — including honouring a custom
+        // import — happens here, where the selection is known, instead of three times over.
+        loadSelectedEngine(ctx, settings, processor, voiceLang)
+
         // 4. Return to IDLE state
         hub.setVoiceState(VoiceState.IDLE)
         Logger.log("Engines updated successfully for $processor", TAG)
+    }
+
+    /**
+     * Prepares the engine [processor] resolves to. A failure is logged rather than thrown: the
+     * cascade in startListening already copes with an engine that cannot produce a transcript, and
+     * a missing model must not stop the voice pipeline from coming back to IDLE.
+     */
+    private suspend fun loadSelectedEngine(
+        ctx: android.content.Context,
+        settings: com.voxapps.commander.data.preferences.SettingsRepository,
+        processor: String,
+        voiceLang: String
+    ) {
+        val engine = selectEngine(processor) ?: return
+        val snapshot = settings.getSettingsSnapshot()
+        val spec = com.voxapps.commander.domain.engine.EngineSpecs.build(
+            context = ctx,
+            settingsRepo = settings,
+            engineKey = engine.engineKey,
+            modelId = snapshot.activeVoiceModelId,
+            language = voiceLang,
+            langCode = snapshot.modelFilterLang
+        )
+        if (spec == null) {
+            Logger.log("No model available for ${engine.engineKey}; it will report not-ready", TAG)
+            return
+        }
+        val ok = engine.load(spec)
+        Logger.log("Engine ${engine.engineKey} load ${if (ok) "succeeded" else "failed"}", TAG)
     }
 
     fun handleIntentResult(text: String) {

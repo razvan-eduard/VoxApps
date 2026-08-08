@@ -208,6 +208,13 @@ class BenchmarkEngine(
         val label = if (forceGpu) "Whisper Vulkan" else "Whisper NEON"
         try {
             val engine = WhisperCppSttEngine(context, settingsRepo, forceGpu = forceGpu)
+            val spec = com.voxapps.commander.domain.engine.EngineSpecs.build(
+                context, settingsRepo, engine.engineKey, model.id, settingsRepo.getSettingsSnapshot().voiceLanguage
+            )
+            if (spec == null || !engine.load(spec)) {
+                appStateManager.updateBenchmarkResult(BenchmarkResult(label, model.label, 0, 0f, false, "model not loadable"))
+                return
+            }
             val start = System.currentTimeMillis()
             engine.transcribe(audioData)
             val end = System.currentTimeMillis()
@@ -220,7 +227,16 @@ class BenchmarkEngine(
 
     private suspend fun runVoskBenchmark(modelId: String, modelLabel: String, langCode: String, audioData: ByteArray) {
         try {
-            val engine = VoskSttEngine(context, settingsRepo, langCode)
+            val engine = VoskSttEngine(context)
+            // Engines no longer load themselves on first use, so the benchmark must load the model
+            // it means to measure — and it measures *this* model, not whichever one is selected.
+            val spec = com.voxapps.commander.domain.engine.EngineSpecs.build(
+                context, settingsRepo, engine.engineKey, modelId, langCode, langCode
+            )
+            if (spec == null || !engine.load(spec)) {
+                appStateManager.updateBenchmarkResult(BenchmarkResult("Vosk", "$modelLabel ($langCode)", 0, 0f, false, "model not loadable"))
+                return
+            }
             val start = System.currentTimeMillis()
             engine.transcribe(audioData)
             val end = System.currentTimeMillis()
