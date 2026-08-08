@@ -86,7 +86,19 @@ abstract class BaseVoxEngine : VoxEngine {
         onRelease()
     }
 
-    final override fun releaseForMemoryPressure() = unload()
+    final override fun releaseForMemoryPressure() {
+        if (releasesUnderMemoryPressure()) unload()
+    }
+
+    /**
+     * Whether this engine should give its model back when the system asks for memory.
+     *
+     * Default yes. An engine overrides it when it has a real reason not to — a model small enough
+     * that reloading costs more than it frees, or a flow in progress that a release would break
+     * even though no call is currently inside [withModel]. It is a reason to decline, not a place
+     * to reimplement the release: what happens when the answer is yes stays final.
+     */
+    protected open fun releasesUnderMemoryPressure(): Boolean = true
 
     private fun doUnload() {
         try {

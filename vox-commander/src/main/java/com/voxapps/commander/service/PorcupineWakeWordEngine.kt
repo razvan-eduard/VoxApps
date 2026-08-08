@@ -28,7 +28,10 @@ class PorcupineWakeWordEngine(
     private val settingsRepo: SettingsRepository,
     private val appStateManager: AppStateManager,
     private val onWakeWordDetected: () -> Unit
-) : IWakeWordEngine {
+) : com.voxapps.commander.domain.engine.BaseVoxEngine(), IWakeWordEngine {
+
+    override val engineKey: String = ENGINE_KEY
+
 
     private val TAG = "PorcupineWWEngine"
     private var porcupine: Porcupine? = null
@@ -54,6 +57,7 @@ class PorcupineWakeWordEngine(
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
 
     companion object {
+        const val ENGINE_KEY = "wake_porcupine"
         val BUILT_IN_KEYWORDS = mapOf(
             "alexa" to Porcupine.BuiltInKeyword.ALEXA,
             "americano" to Porcupine.BuiltInKeyword.AMERICANO,
@@ -71,7 +75,14 @@ class PorcupineWakeWordEngine(
         )
     }
 
-    override suspend fun initialize(modelPath: String, wakeWord: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun onLoad(spec: com.voxapps.commander.domain.engine.ModelSpec): Boolean = withContext(Dispatchers.IO) {
+        val wake = spec as? com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel ?: run {
+            Logger.log("Wake word engines need a WakeWordModel spec", TAG)
+            return@withContext false
+        }
+        val modelPath = wake.entryPoint?.absolutePath ?: wake.modelId.orEmpty()
+        val wakeWord = wake.keyword
+
         try {
             porcupine?.delete()
             porcupine = null
@@ -274,7 +285,7 @@ class PorcupineWakeWordEngine(
         appStateManager.setVoiceState(VoiceState.IDLE)
     }
 
-    override fun release() {
+    override fun onRelease() {
         stopService()
         engineJob.cancel()
         try {
@@ -285,7 +296,11 @@ class PorcupineWakeWordEngine(
         porcupine = null
     }
 
-    override fun releaseForMemoryPressure() {
-        // Porcupine model is small (~2MB), no need to release on memory pressure
+    /** ~2MB — reloading it would cost more than releasing it frees. */
+    override fun releasesUnderMemoryPressure(): Boolean = false
+
+    override fun onUnload() {
+        try { porcupine?.delete() } catch (e: Exception) { Logger.log("Porcupine delete error: ${e.message}", TAG) }
+        porcupine = null
     }
 }

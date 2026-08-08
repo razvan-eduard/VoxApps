@@ -78,6 +78,24 @@ sealed interface ModelSpec {
     data class PlatformModel(
         override val language: String
     ) : ModelSpec
+
+    /**
+     * A wake-word engine's configuration, which is a model *and* a phrase.
+     *
+     * The phrase belongs here rather than in `startListening` because all three engines need it at
+     * load time, not at listen time: Porcupine builds a keyword-specific native handle, OpenWakeWord's
+     * model *is* the keyword, and Vosk configures its matcher during init. Putting it in the spec is
+     * also what makes "the user changed the wake word" expressible as `load(newSpec)` — the base
+     * already treats a different spec as a reload and an identical one as a no-op.
+     *
+     * [entryPoint] is null for a keyword built into the engine, which has nothing on disk.
+     */
+    data class WakeWordModel(
+        val modelId: String?,
+        val entryPoint: java.io.File?,
+        val keyword: String,
+        override val language: String
+    ) : ModelSpec
 }
 
 /**

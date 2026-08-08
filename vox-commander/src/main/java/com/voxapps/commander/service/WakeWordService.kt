@@ -226,7 +226,11 @@ class WakeWordService : Service() {
                 wakeWordEngine = PorcupineWakeWordEngine(this@WakeWordService, settingsRepo, appStateManager) {
                     onWakeWordDetected()
                 }
-                val initialized = wakeWordEngine?.initialize("", engineDisplayWakeWord("wake_porcupine")) ?: false
+                // A built-in keyword: nothing on disk, so the spec carries only the phrase.
+                val initialized = wakeWordEngine?.load(
+                    com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(modelId = null, entryPoint = null,
+                        keyword = engineDisplayWakeWord("wake_porcupine"), language = snapshot.modelFilterLang)
+                ) ?: false
                 if (initialized) {
                     wakeWordEngine?.startListening()
                     delay(100)
@@ -243,7 +247,10 @@ class WakeWordService : Service() {
                 wakeWordEngine = OpenWakeWordEngine(this@WakeWordService, appStateManager) {
                     onWakeWordDetected()
                 }
-                val initialized = wakeWordEngine?.initialize(modelFileName, engineDisplayWakeWord("wake_openwakeword")) ?: false
+                val initialized = wakeWordEngine?.load(
+                    com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(modelId = modelFileName, entryPoint = null,
+                        keyword = engineDisplayWakeWord("wake_openwakeword"), language = snapshot.modelFilterLang)
+                ) ?: false
                 if (initialized) {
                     wakeWordEngine?.startListening()
                     delay(100)
@@ -299,7 +306,10 @@ class WakeWordService : Service() {
                     onWakeWordDetected()
                 }
 
-                val initialized = wakeWordEngine?.initialize(modelPath, wakeWord) ?: false
+                val initialized = wakeWordEngine?.load(
+                    com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(modelId = modelId, entryPoint = entryPoint,
+                        keyword = wakeWord, language = snapshot.modelFilterLang)
+                ) ?: false
                 if (initialized) {
                     wakeWordEngine?.startListening()
                     delay(100)

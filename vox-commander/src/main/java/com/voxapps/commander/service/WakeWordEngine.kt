@@ -34,7 +34,10 @@ class WakeWordEngine(
     private val settingsRepo: SettingsRepository,
     private val appStateManager: AppStateManager,
     private val onWakeWordDetected: () -> Unit
-) : IWakeWordEngine {
+) : com.voxapps.commander.domain.engine.BaseVoxEngine(), IWakeWordEngine {
+
+    override val engineKey: String = ENGINE_KEY
+
     private val TAG = Strings.Tags.WAKE_WORD_ENGINE
     private var model: Model? = null
     private var recognizer: Recognizer? = null
@@ -85,7 +88,14 @@ class WakeWordEngine(
     private var isCollectingVoice = false
     private val SILENCE_FRAMES_TO_END_SEGMENT = 8
 
-    override suspend fun initialize(modelPath: String, wakeWord: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun onLoad(spec: com.voxapps.commander.domain.engine.ModelSpec): Boolean = withContext(Dispatchers.IO) {
+        val wake = spec as? com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel ?: run {
+            Logger.log("Wake word engines need a WakeWordModel spec", TAG)
+            return@withContext false
+        }
+        val modelPath = wake.entryPoint?.absolutePath ?: wake.modelId.orEmpty()
+        val wakeWord = wake.keyword
+
         try {
             Logger.log("Init model: $modelPath", TAG)
 
@@ -188,7 +198,13 @@ class WakeWordEngine(
                     isReinitializing = true
                     Logger.log("Model was released (memory pressure) — reinitializing in background", TAG)
                     AppScope.io.launch {
-                        val ok = try { initialize(path, word) } finally { isReinitializing = false }
+                        val spec = com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(
+                            modelId = java.io.File(path).name,
+                            entryPoint = java.io.File(path),
+                            keyword = word,
+                            language = ""
+                        )
+                        val ok = try { load(spec) } finally { isReinitializing = false }
                         Logger.log("Background model reinit ${if (ok) "succeeded" else "failed"}", TAG)
                     }
                 }
@@ -472,7 +488,7 @@ class WakeWordEngine(
         appStateManager.setVoiceState(VoiceState.IDLE)
     }
 
-    override fun release() {
+    override fun onRelease() {
         stopService()
         engineScope.cancel()
 
@@ -487,21 +503,27 @@ class WakeWordEngine(
         }
     }
 
-    override fun releaseForMemoryPressure() {
-        // Only release when genuinely idle. `!isListening` alone is not enough: during a
-        // command flow the service calls stopListening() (isListening=false) while voiceState
-        // is PROCESSING/LISTENING_COMMAND — releasing there frees the recognizer mid-flight
-        // and the async reinit can lose the next wake trigger.
-        val voiceState = appStateManager.uiState.value.voiceState
+    /**
+     * Declines while anything is in flight. `!isListening` alone is not enough: during a command
+     * flow the service calls stopListening() (isListening=false) while voiceState is
+     * PROCESSING/LISTENING_COMMAND — releasing there frees the recognizer mid-flight and the async
+     * reinit can lose the next wake trigger.
+     */
+    override fun releasesUnderMemoryPressure(): Boolean {
         if (isListening) {
             Logger.log("Skipping memory pressure release — engine is actively listening", TAG)
-            return
+            return false
         }
+        val voiceState = appStateManager.uiState.value.voiceState
         if (voiceState != VoiceState.IDLE) {
             Logger.log("Skipping memory pressure release — command flow in progress (state=$voiceState)", TAG)
-            return
+            return false
         }
-        Logger.log("Releasing Vosk model for memory pressure (model=${storedModelPath})", TAG)
+        return true
+    }
+
+    override fun onUnload() {
+        Logger.log("Releasing Vosk model (model=${storedModelPath})", TAG)
         AppScope.io.launch {
             appStateManager.executeSecureVoiceAction {
                 try { recognizer?.close() } catch (_: Exception) {}
@@ -514,4 +536,8 @@ class WakeWordEngine(
 
     private fun calculateFilteredRms(filtered: FloatArray, length: Int): Float =
         com.voxapps.commander.utils.AudioConvert.calculateFilteredRms(filtered, length)
+
+    companion object {
+        const val ENGINE_KEY = "wake_vosk"
+    }
 }

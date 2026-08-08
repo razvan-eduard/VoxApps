@@ -22,7 +22,10 @@ class OpenWakeWordEngine(
     private val context: Context,
     private val appStateManager: AppStateManager,
     private val onWakeWordDetected: () -> Unit
-) : IWakeWordEngine {
+) : com.voxapps.commander.domain.engine.BaseVoxEngine(), IWakeWordEngine {
+
+    override val engineKey: String = ENGINE_KEY
+
 
     private var engine: WakeWordEngine? = null
     private var detectionJob: Job? = null
@@ -52,7 +55,14 @@ class OpenWakeWordEngine(
         const val ENGINE_KEY = "wake_openwakeword"
     }
 
-    override suspend fun initialize(modelPath: String, wakeWord: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun onLoad(spec: com.voxapps.commander.domain.engine.ModelSpec): Boolean = withContext(Dispatchers.IO) {
+        val wake = spec as? com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel ?: run {
+            Logger.log("Wake word engines need a WakeWordModel spec", TAG)
+            return@withContext false
+        }
+        val modelPath = wake.entryPoint?.absolutePath ?: wake.modelId.orEmpty()
+        val wakeWord = wake.keyword
+
         try {
             engine?.release()
             engine = null
@@ -198,7 +208,7 @@ class OpenWakeWordEngine(
         appStateManager.setVoiceState(VoiceState.IDLE)
     }
 
-    override fun release() {
+    override fun onRelease() {
         stopService()
         try {
             engine?.release()
@@ -208,7 +218,11 @@ class OpenWakeWordEngine(
         engine = null
     }
 
-    override fun releaseForMemoryPressure() {
-        // OpenWakeWord ONNX models are small (~10MB), no need to release on memory pressure
+    /** ~10MB of ONNX — reloading it would cost more than releasing it frees. */
+    override fun releasesUnderMemoryPressure(): Boolean = false
+
+    override fun onUnload() {
+        try { engine?.release() } catch (e: Exception) { Logger.log("OpenWakeWord release error: ${e.message}", TAG) }
+        engine = null
     }
 }
