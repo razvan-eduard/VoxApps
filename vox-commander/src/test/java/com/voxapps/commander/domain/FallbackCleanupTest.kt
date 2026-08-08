@@ -141,7 +141,7 @@ class FallbackCleanupTest {
     }
 
     @Test
-    fun `deleteModel reassigns voice fallback when deleted model was fallback`() = runTest {
+    fun `deleteModel clears the voice fallback when the deleted model was it`() = runTest {
         val modelId = "base"
         val engineKey = "stt_whisper"
         val settings = AppSettings(
@@ -155,11 +155,11 @@ class FallbackCleanupTest {
 
         viewModel.deleteModel(modelId, engineKey)
 
-        coVerify { settingsRepo.setDefaultVoiceFallback("stt_whisper", "tiny") }
+        coVerify { settingsRepo.clearDefaultVoiceFallback() }
     }
 
     @Test
-    fun `deleteModel reassigns intent fallback when deleted model was fallback`() = runTest {
+    fun `deleteModel clears the intent fallback when the deleted model was it`() = runTest {
         val modelId = "qwen2.5-1.5b-q8"
         val engineKey = "nlu_llm"
         val settings = AppSettings(
@@ -173,6 +173,6 @@ class FallbackCleanupTest {
 
         viewModel.deleteModel(modelId, engineKey)
 
-        coVerify { settingsRepo.setDefaultIntentFallback("nlu_llm", "gemma-3-1b-q8") }
+        coVerify { settingsRepo.clearDefaultIntentFallback() }
     }
 }

@@ -335,23 +335,17 @@ class ModelManagementViewModel(
         modelDownloader.deleteModelFile(modelId, engineKey)
         viewModelScope.launch { settingsRepo.setModelDownloaded(modelId, false) }
 
-        // Reassign fallback to active model if the deleted model was the fallback
+        // Deleting a model the user had chosen as a fallback used to move the checkbox onto the
+        // active model — writing the *primary's* processor as the fallback processor, a value the
+        // cascade skips (it requires fallback != primary) and the voice path never reads at all. The
+        // choice was silently replaced by an inert one. Clearing it is the honest outcome: the
+        // fallback is gone, and the settings screen shows that.
         val snapshot = settingsRepo.getSettingsSnapshot()
         if (snapshot.defaultVoiceFallbackModel == modelId) {
-            val activeVoice = snapshot.activeVoiceModelId
-            if (activeVoice != null && activeVoice != modelId && snapshot.isModelDownloaded(activeVoice)) {
-                viewModelScope.launch { settingsRepo.setDefaultVoiceFallback(snapshot.voiceProcessor, activeVoice) }
-            } else {
-                viewModelScope.launch { settingsRepo.clearDefaultVoiceFallback() }
-            }
+            viewModelScope.launch { settingsRepo.clearDefaultVoiceFallback() }
         }
         if (snapshot.defaultIntentFallbackModel == modelId) {
-            val activeIntent = snapshot.activeIntentModelId
-            if (activeIntent != null && activeIntent != modelId && snapshot.isModelDownloaded(activeIntent)) {
-                viewModelScope.launch { settingsRepo.setDefaultIntentFallback(snapshot.aiProcessor, activeIntent) }
-            } else {
-                viewModelScope.launch { settingsRepo.clearDefaultIntentFallback() }
-            }
+            viewModelScope.launch { settingsRepo.clearDefaultIntentFallback() }
         }
 
         appStateManager.refreshAll()

@@ -429,6 +429,20 @@ class ModelDownloader(private val context: Context) {
             resolveLocalFile(id, snapshot.wakeWordEngineType)?.let { protectedNames.add(it.name) }
         }
 
+        // Protect the models the user chose as fallbacks. "Unused" has to mean neither active nor
+        // fallback: a model picked precisely so it is there when the primary fails is not unused,
+        // and deleting it silently removed the safety net the user had set up.
+        snapshot.defaultVoiceFallbackProcessor?.let { proc ->
+            snapshot.defaultVoiceFallbackModel?.let { id ->
+                resolveLocalFile(id, proc)?.let { protectedNames.add(it.name) }
+            }
+        }
+        snapshot.defaultIntentFallbackProcessor?.let { proc ->
+            snapshot.defaultIntentFallbackModel?.let { id ->
+                resolveLocalFile(id, proc)?.let { protectedNames.add(it.name) }
+            }
+        }
+
         val engineKeys = RemoteModelRegistry.getEngineTypes()
 
         Logger.log("Cleanup started. Protected items: $protectedNames", CLEANUP_TAG)
@@ -455,23 +469,11 @@ class ModelDownloader(private val context: Context) {
             }
             
             settingsRepo.setModelDownloaded(modelId, false)
-            val snapshot = settingsRepo.getSettingsSnapshot()
-            if (snapshot.defaultVoiceFallbackModel == modelId) {
-                val activeVoice = snapshot.activeVoiceModelId
-                if (activeVoice != null && activeVoice != modelId && snapshot.isModelDownloaded(activeVoice)) {
-                    settingsRepo.setDefaultVoiceFallback(snapshot.voiceProcessor, activeVoice)
-                } else {
-                    settingsRepo.clearDefaultVoiceFallback()
-                }
-            }
-            if (snapshot.defaultIntentFallbackModel == modelId) {
-                val activeIntent = snapshot.activeIntentModelId
-                if (activeIntent != null && activeIntent != modelId && snapshot.isModelDownloaded(activeIntent)) {
-                    settingsRepo.setDefaultIntentFallback(snapshot.aiProcessor, activeIntent)
-                } else {
-                    settingsRepo.clearDefaultIntentFallback()
-                }
-            }
+            // No fallback reassignment here any more: a fallback model is now protected above, so
+            // nothing this loop deletes can be one. The block that used to live here moved the
+            // checkbox onto the active model by writing the *primary's* processor as the fallback
+            // processor — a value that can never be a working fallback, since the cascade skips a
+            // fallback equal to the primary and the voice path never reads it at all.
         }
 
         // 3. Clean temporary Downloads

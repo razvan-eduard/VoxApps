@@ -259,7 +259,7 @@ class ModelManagementViewModelTest {
     }
 
     @Test
-    fun `deleteModel reassigns voice fallback when deleted model was fallback`() = runTest {
+    fun `deleteModel clears the voice fallback when the deleted model was it`() = runTest {
         val settings = TestDataFactory.createAppSettings(
             voiceProcessor = Strings.Processors.WHISPER_VULKAN,
             activeVoiceModelId = "base",
@@ -271,7 +271,7 @@ class ModelManagementViewModelTest {
 
         viewModel.deleteModel("tiny", "stt_whisper")
 
-        coVerify { settingsRepo.setDefaultVoiceFallback(Strings.Processors.WHISPER_VULKAN, "base") }
+        coVerify { settingsRepo.clearDefaultVoiceFallback() }
     }
 
     @Test
@@ -291,7 +291,7 @@ class ModelManagementViewModelTest {
     }
 
     @Test
-    fun `deleteModel reassigns intent fallback when deleted model was fallback`() = runTest {
+    fun `deleteModel clears the intent fallback when the deleted model was it`() = runTest {
         val settings = TestDataFactory.createSettingsWithLlmEngine(
             activeIntentModelId = "qwen",
             downloadedModelIds = setOf("qwen"),
@@ -301,7 +301,7 @@ class ModelManagementViewModelTest {
 
         viewModel.deleteModel("tiny-llm", "nlu_llm")
 
-        coVerify { settingsRepo.setDefaultIntentFallback("nlu_llm", "qwen") }
+        coVerify { settingsRepo.clearDefaultIntentFallback() }
     }
 
     @Test
