@@ -43,6 +43,34 @@ object EngineSpecs {
         else -> ModelSpec.PlatformModel(language)
     }
 
+    /**
+     * The model the user imported for [engineKey], if they imported one and it is still there.
+     *
+     * Every domain asks this *before* asking the registry, and it has to be that way round: the
+     * registry knows nothing about an imported file, so asking it first silently loads a different
+     * model — or none — for everyone who has ever used the import button. Shared rather than
+     * written per domain, because the wake-word service is what happens otherwise: it did not ask
+     * at all, and an import there was stored, displayed as configured, and never loaded.
+     *
+     * @param langCode for engines that keep one import per language (Vosk); null for the rest.
+     */
+    fun importedModel(
+        settingsRepo: SettingsRepository,
+        engineKey: String,
+        langCode: String? = null
+    ): File? {
+        val path = settingsRepo.getSettingsSnapshot().getCustomModelPath(engineKey, langCode)
+        if (path.isNullOrBlank()) return null
+
+        val file = File(path)
+        if (file.exists()) {
+            Logger.log("Using the imported model for $engineKey: $path", TAG)
+            return file
+        }
+        Logger.log("Imported model for $engineKey no longer exists: $path", TAG)
+        return null
+    }
+
     private fun localSpec(
         context: Context,
         settingsRepo: SettingsRepository,
@@ -51,18 +79,8 @@ object EngineSpecs {
         language: String,
         langCode: String?
     ): ModelSpec? {
-        // A model the user imported themselves wins over anything the registry would resolve. It has
-        // to be checked first and not merely as a fallback: the registry knows nothing about it, so
-        // asking the registry first would silently load a different model — or none — for everyone
-        // who has ever used the import button.
-        val custom = settingsRepo.getSettingsSnapshot().getCustomModelPath(engineKey, langCode)
-        if (!custom.isNullOrBlank()) {
-            val file = File(custom)
-            if (file.exists()) {
-                Logger.log("Using custom model path for $engineKey: $custom", TAG)
-                return ModelSpec.LocalModel(modelId ?: file.name, file, language)
-            }
-            Logger.log("Custom model path for $engineKey no longer exists: $custom", TAG)
+        importedModel(settingsRepo, engineKey, langCode)?.let { file ->
+            return ModelSpec.LocalModel(modelId ?: file.name, file, language)
         }
 
         if (modelId.isNullOrBlank()) {

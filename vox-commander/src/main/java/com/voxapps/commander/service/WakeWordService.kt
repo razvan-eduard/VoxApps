@@ -283,12 +283,36 @@ class WakeWordService : Service() {
     ): com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel? {
         val language = snapshot.modelFilterLang
 
+        // Whether this engine listens for a phrase the user typed or for whatever its model was
+        // trained on — declared as `wake_word_text`, rather than decided by testing engine names.
+        val keyword = if (RemoteModelRegistry.hasCapability(engineType, "wake_word_text")) {
+            wakeWord
+        } else {
+            engineDisplayWakeWord(engineType, snapshot, wakeWord)
+        }
+
+        // The user's own import wins over anything the registry would resolve — the shared rule,
+        // asked through the same helper the speech and speech-synthesis paths use. This service was
+        // the one domain that never asked, so an import here was stored, displayed as configured,
+        // and then never loaded.
+        val customLang = if (RemoteModelRegistry.isArchiveEngine(engineType)) language else null
+        com.voxapps.commander.domain.engine.EngineSpecs
+            .importedModel(settingsRepo, engineType, customLang)
+            ?.let { file ->
+                return com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(
+                    modelId = file.name,
+                    entryPoint = file,
+                    keyword = keyword,
+                    language = language
+                )
+            }
+
         if (RemoteModelRegistry.runtimeOf(engineType) == com.voxapps.commander.data.remote.EngineRuntime.DEVICE_BUILTIN) {
             // Nothing on disk: the keyword *is* the model, and the engine holds it.
             return com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(
                 modelId = null,
                 entryPoint = null,
-                keyword = engineDisplayWakeWord(engineType, snapshot, wakeWord),
+                keyword = keyword,
                 language = language
             )
         }
@@ -301,7 +325,7 @@ class WakeWordService : Service() {
                 // only place that default should live.
                 modelId = snapshot.wakeWordModelPath,
                 entryPoint = null,
-                keyword = engineDisplayWakeWord(engineType, snapshot, wakeWord),
+                keyword = keyword,
                 language = language
             )
         }
@@ -341,7 +365,7 @@ class WakeWordService : Service() {
         return com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(
             modelId = modelId,
             entryPoint = entryPoint,
-            keyword = wakeWord,
+            keyword = keyword,
             language = language
         )
     }

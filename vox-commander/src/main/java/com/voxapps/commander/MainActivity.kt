@@ -21,6 +21,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.voxapps.commander.di.AppContainer
 import com.voxapps.commander.domain.voice.VoiceManager
+import com.voxapps.commander.service.OpenWakeWordEngine
 import com.voxapps.commander.ui.screens.main.MainScreen
 import com.voxapps.commander.ui.screens.onboarding.LanguageSelectionScreen
 import com.voxapps.commander.ui.screens.onboarding.TutorialScreen
@@ -98,22 +99,14 @@ class MainActivity : ComponentActivity() {
     private val customOpenWakeWordModelLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let {
-            val destDir = java.io.File(filesDir, "openwakeword_models")
-            if (!destDir.exists()) destDir.mkdirs()
-            val fileName = it.lastPathSegment?.substringAfterLast('/') ?: "custom_model.onnx"
-            val destFile = java.io.File(destDir, fileName)
-            try {
-                contentResolver.openInputStream(it)?.use { input ->
-                    destFile.outputStream().use { output -> input.copyTo(output) }
-                }
-                Logger.log("OpenWakeWord custom model imported: ${destFile.absolutePath}", "MainActivity")
-                com.voxapps.commander.data.remote.RemoteModelRegistry.refreshModelMap()
-                appContainer.appStateManager.refreshAll()
-            } catch (e: Exception) {
-                Logger.log("Failed to import OpenWakeWord model: ${e.message}", "MainActivity")
-            }
-        }
+        // Imported the same way every other engine's model is, rather than by hand here.
+        //
+        // This used to copy the file into a private directory of its own and then refresh the
+        // registry — which builds its list from the schema, so the file appeared in no list, could
+        // not be selected, and was never loaded by anything. Going through the view model stores it
+        // as this engine's custom model, which is what the picker reads, what the wake service now
+        // resolves, and what "delete unused models" protects.
+        uri?.let { appContainer.modelManagementViewModel.selectCustomModel(it, OpenWakeWordEngine.ENGINE_KEY) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
