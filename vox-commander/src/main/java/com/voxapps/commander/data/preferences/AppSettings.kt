@@ -94,7 +94,6 @@ data class AppSettings(
 
     // --- REMOTE REPOSITORY ---
     val modelRepoBaseUrl: String = Strings.Preferences.DEFAULT_MODEL_REPO_URL,
-    val modelsJsonCache: String? = null,
 
     // --- DEFAULT APPS PER DOMAIN ---
     /** Map of domain -> package name. e.g. "audio" -> "com.spotify.music" */

@@ -253,7 +253,6 @@ object RemoteModelRegistry {
                 fetchVirtualSchema(baseUrl)
                 applySchema(schema)
                 Logger.log("Remote JSON parsed and saved locally. Engines found: ${cachedSchema?.engines?.keys}", TAG)
-                repo.saveModelsJsonCache(jsonText)
                 _registryUpdateSignal.value++
                 _loadStatus.value = LoadStatus.LOADED_FROM_REMOTE
                 true

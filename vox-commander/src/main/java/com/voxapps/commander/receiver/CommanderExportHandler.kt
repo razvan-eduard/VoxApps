@@ -44,7 +44,7 @@ object CommanderExportHandler {
      *  - Raw local filesystem paths, meaningless on another device/after reinstall:
      *    [AppSettings.wakeWordModelPath], [AppSettings.customModelPaths].
      *  - Pure caches/device-capability probe results, all auto-regenerated at runtime:
-     *    [AppSettings.modelsJsonCache], [AppSettings.appCacheJson], [AppSettings.downloadedModelIds],
+     *    [AppSettings.appCacheJson], [AppSettings.downloadedModelIds],
      *    [AppSettings.vulkanIncompatible], [AppSettings.vulkanProbeDone],
      *    [AppSettings.vulkanRuntimeAttempt], [AppSettings.vulkanRuntimeVerified],
      *    [AppSettings.geminiIncompatible].
@@ -71,7 +71,6 @@ object CommanderExportHandler {
             searchProviderApiKeys = if (includeSecrets) searchProviderApiKeys else emptyMap(),
             wakeWordModelPath = null,
             customModelPaths = emptyMap(),
-            modelsJsonCache = null,
             appCacheJson = null,
             downloadedModelIds = emptySet(),
             vulkanIncompatible = false,

@@ -19,7 +19,7 @@ interface SettingsRepository {
 
     /**
      * Bulk-applies every field of [imported] EXCEPT raw local paths (wakeWordModelPath/
-     * customModelPaths) and pure caches/probe results (modelsJsonCache/appCacheJson/
+     * customModelPaths) and pure caches/probe results (appCacheJson/
      * downloadedModelIds/the vulkan flags/geminiIncompatible/wakeWordProfileJson) — those are always
      * left alone since they were never present in an exported snapshot to begin with. Secrets
      * (apiKey/geminiApiKey/picovoiceAccessKey/searchProviderApiKeys) are applied only where
@@ -118,12 +118,9 @@ interface SettingsRepository {
 
     // --- REMOTE REPOSITORY ---
     suspend fun setModelRepoBaseUrl(url: String)
-    suspend fun saveModelsJsonCache(json: String)
-    suspend fun clearModelsJsonCache()
 
     // --- MODEL DOWNLOAD STATE ---
     suspend fun setModelDownloaded(modelId: String, isDownloaded: Boolean)
-    suspend fun clearUnusedModelFlags(protectedIds: Set<String>)
 
     // --- CUSTOM MODEL PATHS ---
     suspend fun setCustomModelPath(engineKey: String, path: String, langCode: String? = null)

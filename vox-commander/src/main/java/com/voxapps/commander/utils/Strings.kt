@@ -28,7 +28,6 @@ object Strings {
         const val WHISPER_VULKAN = "WHISPER_VULKAN"
         const val GOOGLE = "GOOGLE"
         const val WHISPER_API = "WHISPER_API"
-        const val WHISPER_CLOUD = "WHISPER_CLOUD"
     }
 
     object AiProcessors {

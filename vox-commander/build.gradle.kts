@@ -290,16 +290,6 @@ val copyIntentsJson = tasks.register<Copy>("copyIntentsJson") {
     into("${projectDir}/src/main/assets")
 }
 
-// Copy external_services.json from repo root into assets (single source of truth in root) — listed
-// here for visibility/consistency with Commander's other JSON config files even though the actual
-// exchange-rate lookup happens in vox-expenses, which consumes its own copy of the same file.
-val copyExternalServicesJson = tasks.register<Copy>("copyExternalServicesJson") {
-    group = "build"
-    description = "Copies external_services.json from repo root into app/src/main/assets/"
-    from("${project.rootDir}/external_services.json")
-    into("${projectDir}/src/main/assets")
-}
-
 // Copy api_integrations.json from repo root into assets (single source of truth in root) — the
 // declarative per-service API definitions consumed by ApiIntegrationRegistry/DeclarativeApiExecutor.
 val copyApiIntegrationsJson = tasks.register<Copy>("copyApiIntegrationsJson") {
@@ -318,7 +308,6 @@ tasks.named("preBuild") {
     dependsOn(copyModelsJson)
     dependsOn(copySearchDefinitions)
     dependsOn(copyIntentsJson)
-    dependsOn(copyExternalServicesJson)
     dependsOn(copyApiIntegrationsJson)
 }
 

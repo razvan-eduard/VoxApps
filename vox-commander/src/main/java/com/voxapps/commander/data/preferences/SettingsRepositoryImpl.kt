@@ -150,7 +150,6 @@ class SettingsRepositoryImpl(
 
         // Remote repository
         val MODEL_REPO_BASE_URL = stringPreferencesKey("model_repo_base_url")
-        val MODELS_JSON_CACHE = stringPreferencesKey("models_json_cache")
 
         // Model download state
         val DOWNLOADED_MODEL_IDS = stringSetPreferencesKey("downloaded_model_ids")
@@ -299,7 +298,6 @@ class SettingsRepositoryImpl(
 
                 // Remote repository
                 all[Strings.Preferences.KEY_MODEL_REPO_BASE_URL]?.let { prefs[Keys.MODEL_REPO_BASE_URL] = it as String }
-                all[Strings.Preferences.KEY_MODELS_JSON_CACHE]?.let { prefs[Keys.MODELS_JSON_CACHE] = it as String }
 
                 // Model downloaded flags -> collect into set
                 val downloadedIds = all.keys
@@ -396,7 +394,6 @@ class SettingsRepositoryImpl(
             geminiIncompatible = prefs[Keys.GEMINI_INCOMPATIBLE] ?: false,
 
             modelRepoBaseUrl = prefs[Keys.MODEL_REPO_BASE_URL] ?: Strings.Preferences.DEFAULT_MODEL_REPO_URL,
-            modelsJsonCache = prefs[Keys.MODELS_JSON_CACHE],
 
             downloadedModelIds = prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet(),
             customModelPaths = parseCustomModelPaths(prefs[Keys.CUSTOM_MODEL_PATHS_JSON]),
@@ -885,27 +882,12 @@ class SettingsRepositoryImpl(
         dataStore.edit { it[Keys.MODEL_REPO_BASE_URL] = url }
     }
 
-    override suspend fun saveModelsJsonCache(json: String) {
-        dataStore.edit { it[Keys.MODELS_JSON_CACHE] = json }
-    }
-
-    override suspend fun clearModelsJsonCache() {
-        dataStore.edit { it.remove(Keys.MODELS_JSON_CACHE) }
-    }
-
     // --- MODEL DOWNLOAD STATE ---
     override suspend fun setModelDownloaded(modelId: String, isDownloaded: Boolean) {
         dataStore.edit { prefs ->
             val current = prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet()
             val updated = if (isDownloaded) current + modelId else current - modelId
             prefs[Keys.DOWNLOADED_MODEL_IDS] = updated
-        }
-    }
-
-    override suspend fun clearUnusedModelFlags(protectedIds: Set<String>) {
-        dataStore.edit { prefs ->
-            val current = prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet()
-            prefs[Keys.DOWNLOADED_MODEL_IDS] = current.intersect(protectedIds)
         }
     }
 
