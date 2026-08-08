@@ -18,6 +18,9 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.components.DropdownGroup
+import com.voxapps.commander.domain.service.ServiceProbe
+import com.voxapps.commander.ui.components.ConnectionTestCard
+import com.voxapps.commander.ui.components.SettingsPicklist
 import com.voxapps.commander.ui.components.EngineApiKeyField
 import com.voxapps.commander.ui.components.EngineModelSection
 import com.voxapps.commander.ui.components.GroupedDropdownContent
@@ -68,10 +71,7 @@ fun VoiceEnginesSubTab(
 
     // 1. Processor Selection
     Text(text = languageManager.getString("voice_processor_section"), style = MaterialTheme.typography.titleMedium)
-    Box {
-        var processorExpanded by remember { mutableStateOf(false) }
-        
-        // Build list of processors: JSON engines (type=voice) + Local/Virtual injections
+    // Build list of processors: JSON engines (type=voice) + Local/Virtual injections
         val processors = remember(uiState.availableModels, uiState.isExperimentalVulkanEnabled, uiState.isWhisperSystemEnabled) {
             val list = RemoteModelRegistry.getEngineKeysByType("voice").toMutableList()
 
@@ -93,37 +93,39 @@ fun VoiceEnginesSubTab(
             list
         }
 
-        OutlinedButton(onClick = { processorExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(RemoteModelRegistry.getEngineLabel(uiState.voiceProcessor, languageManager))
-        }
-        
-        DropdownMenu(expanded = processorExpanded, onDismissRequest = { processorExpanded = false }, modifier = Modifier.fillMaxWidth()) {
-            processors.forEach { proc ->
+        SettingsPicklist(
+            items = processors,
+            selected = uiState.voiceProcessor,
+            itemLabel = { RemoteModelRegistry.getEngineLabel(it, languageManager) },
+            onSelect = { onProcessorSelected(it) },
+            itemEnabled = { proc ->
                 // Asked of the declaration wherever the declaration can answer. "Needs a key" is a
-                // property of the engine and is now written down as one; whether the OS actually
+                // property of the engine and is written down as one; whether the OS actually
                 // provides a recogniser is a property of the *device*, which no schema can know, so
                 // that one stays a probe the caller performs.
-                val enabled = when {
+                when {
                     RemoteModelRegistry.hasCapability(proc, "requires_api_key") -> hasApiKey
                     proc == Strings.Processors.GOOGLE -> googleSttAvailable
                     proc == Strings.Processors.WHISPER_VULKAN ->
                         uiState.isWhisperSystemEnabled && !settingsRepo.getSettingsSnapshot().vulkanIncompatible
                     else -> true
                 }
-                
-                DropdownMenuItem(
-                    text = { 
-                        Text(
-                            text = RemoteModelRegistry.getEngineLabel(proc, languageManager), 
-                            color = if (enabled) LocalContentColor.current else Color.Gray
-                        ) 
-                    },
-                    onClick = { if (enabled) { onProcessorSelected(proc); processorExpanded = false } },
-                    enabled = enabled
-                )
             }
+        ) {
+            // Beneath the collapsed dropdown, describing whatever is selected in it. Null when the
+            // engine declares nothing to reach — an on-device engine has no endpoint, and
+            // Porcupine's key is validated inside its SDK with no URL to call.
+            ConnectionTestCard(
+                spec = RemoteModelRegistry.probeSpecFor(
+                    uiState.voiceProcessor,
+                    uiState.credentials.forEngine(uiState.voiceProcessor)
+                ),
+                // The "where to get a key" link belongs to the credential field, which is shown
+                // for engines that have no endpoint to probe either (Porcupine). Drawing it here
+                // too put it on screen twice.
+                settingsRepo = settingsRepo
+            )
         }
-    }
 
     // Shown only when the selected engine declares it needs a credential — the Whisper API does,
     // the on-device engines do not.

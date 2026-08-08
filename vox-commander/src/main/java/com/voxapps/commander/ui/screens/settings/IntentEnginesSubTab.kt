@@ -19,6 +19,9 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.components.DropdownGroup
+import com.voxapps.commander.domain.service.ServiceProbe
+import com.voxapps.commander.ui.components.ConnectionTestCard
+import com.voxapps.commander.ui.components.SettingsPicklist
 import com.voxapps.commander.ui.components.EngineApiKeyField
 import com.voxapps.commander.ui.components.EngineModelSection
 import com.voxapps.commander.utils.Strings
@@ -99,53 +102,39 @@ fun IntentEnginesSubTab(
                         RemoteModelRegistry.getEngineKeysByType("llm")
                     }
 
-                    var expanded by remember { mutableStateOf(false) }
-                    
-                    Box {
-                        OutlinedButton(
-                            onClick = { expanded = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(RemoteModelRegistry.getEngineLabel(uiState.aiProcessor, languageManager))
-                        }
-                        
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            aiOptions.forEach { id ->
-                                // Credentials come from uiState rather than a snapshot read: this is
-                                // composition, so a value fetched here is fixed until something else
-                                // recomposes the menu — the key would be entered and the entry would
-                                // stay greyed out. Whether this device carries Gemini Nano is a
-                                // probe result, which no declaration can supply.
-                                val isEnabled = when {
-                                    RemoteModelRegistry.hasCapability(id, "requires_api_key") ->
-                                        uiState.credentials.has(id)
-                                    id == Strings.AiProcessors.GEMINI_NATIVE ->
-                                        !settingsRepo.getSettingsSnapshot().geminiIncompatible
-                                    else -> true
-                                }
-                                
-                                DropdownMenuItem(
-                                    text = { 
-                                        Text(
-                                            text = RemoteModelRegistry.getEngineLabel(id, languageManager) + if (isEnabled) "" else " (Incompatible)",
-                                            color = if (isEnabled) LocalContentColor.current else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                        ) 
-                                    },
-                                    onClick = {
-                                        if (isEnabled) {
-                                            appStateManager.setAiProcessor(id)
-                                            expanded = false
-                                        }
-                                    },
-                                    enabled = isEnabled
-                                )
+                    SettingsPicklist(
+                        items = aiOptions,
+                        selected = uiState.aiProcessor,
+                        itemLabel = { RemoteModelRegistry.getEngineLabel(it, languageManager) },
+                        onSelect = { appStateManager.setAiProcessor(it) },
+                        disabledSuffix = " (Incompatible)",
+                        itemEnabled = { id ->
+                            // Credentials come from uiState rather than a snapshot read: this is
+                            // composition, so a value fetched here is fixed until something else
+                            // recomposes the menu — the key would be entered and the entry would
+                            // stay greyed out. Whether this device carries Gemini Nano is a probe
+                            // result, which no declaration can supply.
+                            when {
+                                RemoteModelRegistry.hasCapability(id, "requires_api_key") ->
+                                    uiState.credentials.has(id)
+                                id == Strings.AiProcessors.GEMINI_NATIVE ->
+                                    !settingsRepo.getSettingsSnapshot().geminiIncompatible
+                                else -> true
                             }
                         }
+                    ) {
+                        ConnectionTestCard(
+                            spec = RemoteModelRegistry.probeSpecFor(
+                                uiState.aiProcessor,
+                                uiState.credentials.forEngine(uiState.aiProcessor)
+                            ),
+                            // The "where to get a key" link belongs to the credential field,
+                            // which also shows for engines with no endpoint to probe. Drawing it
+                            // here too put it on screen twice.
+                            settingsRepo = settingsRepo
+                        )
                     }
+
 
                     // The credential for whichever engine is selected, and only when that engine
                     // needs one — asked where the choice is made rather than on another page.

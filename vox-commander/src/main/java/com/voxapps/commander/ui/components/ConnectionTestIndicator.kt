@@ -4,12 +4,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -81,29 +86,60 @@ fun ConnectionTestIndicator(
 }
 
 /**
- * Auto-testing variant: runs [testFn] immediately on first composition
- * and whenever [testKey] changes. Manages its own state.
+ * Tests an endpoint and shows the result, re-testing whenever anything that could change the answer
+ * changes.
  *
- * Same pattern as PipedSettingsSection's LaunchedEffect(pipedApiUrl).
+ * [keys] is everything the result depends on — the selected item, and a fingerprint of the
+ * credential it uses. A credential belongs in there because entering a key is exactly when the
+ * previous ❌ stops being true, and the row otherwise kept showing a failure from before the key
+ * existed. Pass a *fingerprint*, never the key itself: this ends up in a composition key.
+ *
+ * Composition is the fourth trigger, and it comes for free: a dropdown that builds its rows when it
+ * opens re-tests on opening. The tap-to-retry exists for what none of that covers — a network that
+ * came back, or an endpoint that was simply down a moment ago. Without it, a target whose keys never
+ * change (an extractor with no configuration) could be tested once per screen visit and never again.
+ *
+ * The first entry in [keys] doubles as the identity: blank or null means nothing is selected, and
+ * nothing is tested.
  */
 @Composable
 fun ConnectionTestAuto(
-    testKey: String,
+    keys: List<Any?>,
     testFn: suspend () -> Boolean,
     testingLabel: String = "Testing…",
     onlineLabel: String = "Online",
     offlineLabel: String = "Offline",
+    retryDescription: String = "Test connection again",
     modifier: Modifier = Modifier
 ) {
-    var state by remember(testKey) { mutableStateOf(ConnectionTestState.Testing) }
-    LaunchedEffect(testKey) {
-        if (testKey.isBlank()) {
+    var retries by remember { mutableIntStateOf(0) }
+    var state by remember { mutableStateOf(ConnectionTestState.Testing) }
+
+    val identity = keys.firstOrNull()
+    val selected = identity != null && (identity !is String || identity.isNotBlank())
+
+    LaunchedEffect(keys, retries) {
+        if (!selected) {
             state = ConnectionTestState.Idle
             return@LaunchedEffect
         }
         state = ConnectionTestState.Testing
-        val ok = testFn()
-        state = if (ok) ConnectionTestState.Online else ConnectionTestState.Offline
+        state = if (testFn()) ConnectionTestState.Online else ConnectionTestState.Offline
     }
-    ConnectionTestIndicator(state, testingLabel, onlineLabel, offlineLabel, modifier)
+
+    if (!selected) return
+
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        ConnectionTestIndicator(state, testingLabel, onlineLabel, offlineLabel)
+        if (state != ConnectionTestState.Testing) {
+            IconButton(onClick = { retries++ }, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = retryDescription,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
 }

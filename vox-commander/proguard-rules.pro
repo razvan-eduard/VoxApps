@@ -114,6 +114,7 @@
 -keep class com.voxapps.commander.data.remote.RemoteEngineConfig { *; }
 -keep class com.voxapps.commander.data.remote.RemoteModelItem { *; }
 -keep class com.voxapps.commander.data.remote.EntryPoint { *; }
+-keep class com.voxapps.commander.domain.service.AuthDeclaration { *; }
 -keep class com.voxapps.commander.data.remote.VirtualModelItem { *; }
 -keep class com.voxapps.commander.domain.intent.model.NluIntent { *; }
 -keep class com.voxapps.commander.domain.intent.registry.IntentCatalog$IntentsSchema { *; }

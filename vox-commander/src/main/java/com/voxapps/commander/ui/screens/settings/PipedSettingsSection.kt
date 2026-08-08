@@ -78,7 +78,8 @@ fun PipedSettingsSection(
             modifier = Modifier.padding(vertical = 4.dp)
         )
         ConnectionTestAuto(
-            testKey = "newpipe",
+            // Nothing configurable to depend on, so the retry button is the only way to ask again.
+            keys = listOf("newpipe"),
             testFn = { NewPipeExtractorHelper.testConnection() },
             testingLabel = "Testing YouTube search…",
             onlineLabel = "Connection OK",
@@ -156,7 +157,7 @@ fun PipedSettingsSection(
     }
 
     ConnectionTestAuto(
-        testKey = pipedApiUrl,
+        keys = listOf(pipedApiUrl),
         testFn = { PipedSearchHelper.testInstance(pipedApiUrl) },
         testingLabel = languageManager.getString("piped_testing"),
         onlineLabel = languageManager.getString("piped_online"),

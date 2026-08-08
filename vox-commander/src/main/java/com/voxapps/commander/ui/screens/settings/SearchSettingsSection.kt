@@ -4,6 +4,7 @@ import com.voxapps.location.VoxNominatimGeocoder
 import com.voxapps.location.CachedCoordinate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.commander.ui.LocalLanguageManager
 import com.voxapps.commander.ui.components.EngineApiKeyField
 import com.voxapps.commander.utils.Strings
@@ -340,6 +341,7 @@ private fun ProviderRow(
     }
     var isApiKeyFocused by remember { mutableStateOf(false) }
     val languageManager = LocalLanguageManager.current
+    val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
@@ -367,8 +369,17 @@ private fun ProviderRow(
                     )
                 }
                 // Auto connection test — same component as Piped
+                // Re-tested when the provider changes and when its credential does — a provider
+                // that needs a key shows a failure until one is entered, and that failure has to
+                // stop being shown the moment it is. The credential is reduced to a length, which
+                // changes when the key does without the key itself becoming a composition key.
+                val credentialFingerprint = if (provider?.usesSharedApiKey == true) {
+                    uiState.credentials.forEngine(Strings.AiProcessors.OPENAI)?.length ?: 0
+                } else {
+                    settingsRepo.getSearchProviderApiKeySync(providerName)?.length ?: 0
+                }
                 ConnectionTestAuto(
-                    testKey = if (isSelected) providerName else "",
+                    keys = listOf(if (isSelected) providerName else "", credentialFingerprint),
                     testFn = { provider?.testConnection() ?: false }
                 )
             }

@@ -16,6 +16,11 @@
       "engine_label": "OpenAI Whisper API",
       "label_key": "engine_label_whisper_api",
       "api_key_url": "https://platform.openai.com/api-keys",
+      "endpoint": "https://api.openai.com/v1",
+      "probe_url": "models",
+      "auth": {
+        "style": "bearer"
+      },
       "is_multilingual": true,
       "extension": "",
       "runtime": "cloud",
@@ -32,6 +37,11 @@
       "engine_label": "OpenAI GPT (Cloud)",
       "label_key": "engine_label_openai_gpt",
       "api_key_url": "https://platform.openai.com/api-keys",
+      "endpoint": "https://api.openai.com/v1",
+      "probe_url": "models",
+      "auth": {
+        "style": "bearer"
+      },
       "is_multilingual": true,
       "extension": "",
       "runtime": "cloud",
@@ -48,6 +58,12 @@
       "engine_label": "Gemini Cloud (API)",
       "label_key": "engine_label_gemini_cloud",
       "api_key_url": "https://aistudio.google.com/apikey",
+      "endpoint": "https://generativelanguage.googleapis.com/v1beta",
+      "probe_url": "models",
+      "auth": {
+        "style": "query",
+        "param": "key"
+      },
       "is_multilingual": true,
       "extension": "",
       "runtime": "cloud",

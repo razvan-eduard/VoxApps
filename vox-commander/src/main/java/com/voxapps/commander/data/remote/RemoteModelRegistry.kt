@@ -58,6 +58,21 @@ data class RemoteEngineConfig(
     /** Where the user obtains a credential for this engine — shown as a link beside the key field.
      *  An engine that needs a key but says nothing about where to get one simply shows no link. */
     val api_key_url: String? = null,
+    /** Where this engine's service lives. The probe below is resolved against it, and it is the
+     *  only host a probe can reach. */
+    val endpoint: String? = null,
+    /**
+     * A path that answers cheaply if this engine is reachable and its credential is accepted — a
+     * models listing, not an inference. Declaring it is what gives an engine a connection test,
+     * including one added to this schema by hand.
+     *
+     * Relative to [endpoint] (`/models`), or omitted to probe the endpoint itself. Absolute URLs are
+     * refused: the credential travels with this request, and a path can only reach the host the
+     * declaration already names.
+     */
+    val probe_url: String? = null,
+    /** How the credential attaches — see [com.voxapps.commander.domain.service.AuthDeclaration]. */
+    val auth: com.voxapps.commander.domain.service.AuthDeclaration? = null,
     /** A translations key for the sentence explaining how to get that credential. A key rather than
      *  the sentence itself, for the same reason as [label_key]. */
     val api_key_help_key: String? = null,
@@ -728,6 +743,29 @@ object RemoteModelRegistry {
     /** Where to obtain this engine's credential, if it says. */
     fun declaredApiKeyUrl(engineKey: String): String? =
         cachedSchema?.engines?.get(engineKey)?.api_key_url?.takeIf { it.isNotBlank() }
+
+    /**
+     * What it takes to test this engine, or null when it declares nothing to reach.
+     *
+     * The absence of a declaration is how "not testable" is expressed — an on-device engine has no
+     * endpoint, and Porcupine needs a key that its SDK validates locally with no URL to call.
+     */
+    fun probeSpecFor(engineKey: String, credential: String?): com.voxapps.commander.domain.service.ProbeSpec? {
+        val config = cachedSchema?.engines?.get(engineKey) ?: return null
+        val auth = config.auth
+            ?: if (hasCapability(engineKey, "requires_api_key")) {
+                com.voxapps.commander.domain.service.AuthDeclaration(
+                    style = com.voxapps.commander.domain.service.AuthDeclaration.STYLE_BEARER
+                )
+            } else null
+        return com.voxapps.commander.domain.service.ProbeSpec.from(
+            id = engineKey,
+            endpoint = config.endpoint,
+            probeUrl = config.probe_url,
+            auth = auth?.probeStyle() ?: com.voxapps.commander.domain.service.ProbeSpec.AuthStyle.None,
+            credential = credential
+        )
+    }
 
     /** The translations key for this engine's "how to get a key" sentence, if it declares one. */
     fun declaredApiKeyHelpKey(engineKey: String): String? =
