@@ -61,6 +61,12 @@ import com.voxapps.design.effects.TodayEffectStyle
  */
 @Immutable
 data class ExpensesSettings(
+    /** Which repository serves this app's schemas. Its own setting rather than Commander's: an
+     *  install may follow a fork for one app and not the other. */
+    val schemaRepoBaseUrl: String = com.voxapps.services.SchemaRepo.DEFAULT_BASE_URL,
+    /** Whether that repository is asked at startup, or only when the user presses check. */
+    val schemaAutoUpdate: Boolean = true,
+
     val isBiometricRequired: Boolean = false,
     val sessionTimeoutMinutes: Int = TIMEOUT_30M,
     val language: String = DEFAULT_LANGUAGE,

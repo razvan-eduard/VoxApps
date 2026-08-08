@@ -24,6 +24,8 @@ import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.launch
 import com.voxapps.services.SchemaCatalog
 import com.voxapps.services.RemoteSchema
+import com.voxapps.design.settings.SchemaUpdatesSection
+import com.voxapps.design.settings.SchemaUpdatesStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,110 +57,29 @@ fun GeneralSettingsTab(
     ) {
         Text(text = languageManager.getString("app_settings_section"), style = MaterialTheme.typography.titleMedium)
 
-        Text(
-            text = languageManager.getString("schema_updates_section"),
-            style = MaterialTheme.typography.titleSmall
-        )
-        Text(
-            text = languageManager.getString("schema_updates_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        // Off means the app behaves identically every launch: whatever is in force stays in force
-        // until the button below is pressed. On means the repository is asked at startup, and only a
-        // file whose bytes actually changed is adopted.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = languageManager.getString("schema_auto_update_label"),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f)
-            )
-            Switch(
-                checked = uiState.schemaAutoUpdate,
-                onCheckedChange = { appStateManager.setSchemaAutoUpdate(it) }
-            )
-        }
-
-        // Repository Base URL with gray-out logic
-        var isRepoFocused by remember { mutableStateOf(false) }
-        var syncing by remember { mutableStateOf(false) }
-        var syncReport by remember { mutableStateOf<String?>(null) }
-        TextField(
-            value = modelRepoUrl,
-            onValueChange = {
+        // The same section every app that reads schemas shows. What differs between them is only
+        // where the two values are stored, which is why it takes them rather than reading anything.
+        SchemaUpdatesSection(
+            strings = SchemaUpdatesStrings(
+                sectionLabel = languageManager.getString("schema_updates_section"),
+                description = languageManager.getString("schema_updates_desc"),
+                autoUpdateLabel = languageManager.getString("schema_auto_update_label"),
+                repositoryUrlLabel = languageManager.getString("model_repository_url"),
+                checkNow = languageManager.getString("schema_sync_now"),
+                reportFormat = languageManager.getString("schema_sync_report"),
+                sourceBundled = languageManager.getString("schema_source_bundled"),
+                sourceAccepted = languageManager.getString("schema_source_accepted"),
+                sourceMixedFormat = languageManager.getString("schema_source_mixed")
+            ),
+            repositoryUrl = modelRepoUrl,
+            autoUpdate = uiState.schemaAutoUpdate,
+            onRepositoryUrlChange = {
                 modelRepoUrl = it
                 scope.launch { settingsRepo.setModelRepoBaseUrl(it) }
             },
-            label = { Text(languageManager.getString("model_repository_url")) },
-            placeholder = { Text(languageManager.getString("repository_url_placeholder")) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { isRepoFocused = it.isFocused },
-            trailingIcon = {
-                IconButton(
-                    enabled = !syncing,
-                    onClick = {
-                        syncing = true
-                        syncReport = null
-                        scope.launch {
-                            // Every schema the app loaded, whatever the toggle says: the catalog is
-                            // the list, so this cannot drift out of step with what exists.
-                            val results = SchemaCatalog.refreshAll(modelRepoUrl)
-                            val updated = results.count { it.value is RemoteSchema.Refreshed.Updated }
-                            val unreachable = results.count { it.value is RemoteSchema.Refreshed.Unreachable }
-                            val rejected = results.count { it.value is RemoteSchema.Refreshed.Rejected }
-                            if (updated > 0) appStateManager.refreshAll()
-                            syncReport = String.format(
-                                languageManager.getString("schema_sync_report"),
-                                updated, results.size - updated - unreachable - rejected, unreachable + rejected
-                            )
-                            syncing = false
-                        }
-                    }
-                ) {
-                    if (syncing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.Refresh, contentDescription = languageManager.getString("schema_sync_now"))
-                }
-            },
-            colors = if (!isRepoFocused) TextFieldDefaults.colors(
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                unfocusedIndicatorColor = Color.Transparent
-            ) else TextFieldDefaults.colors()
+            onAutoUpdateChange = { appStateManager.setSchemaAutoUpdate(it) },
+            onSchemasChanged = { appStateManager.refreshAll() }
         )
-
-        syncReport?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-
-        // The files, then where they came from — one line rather than a source repeated per name.
-        // Mixed only happens between a refresh and a reset, so it is worth saying plainly when it
-        // does rather than making the user compare six lines.
-        val provenance = SchemaCatalog.provenance()
-        if (provenance.isNotEmpty()) {
-            Text(
-                text = provenance.joinToString(" · ") { it.fileName },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            val fromRepo = provenance.count { it.source == RemoteSchema.Source.ACCEPTED }
-            Text(
-                text = when (fromRepo) {
-                    0 -> languageManager.getString("schema_source_bundled")
-                    provenance.size -> languageManager.getString("schema_source_accepted")
-                    else -> String.format(
-                        languageManager.getString("schema_source_mixed"),
-                        fromRepo, provenance.size - fromRepo
-                    )
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 

@@ -400,5 +400,14 @@
   "notifications_length_long": "Lung",
   "capture_mode_single": "O singură poză",
   "capture_mode_stitch": "Îmbinare",
-  "capture_mode_batch": "Lot"
+  "capture_mode_batch": "Lot",
+  "schema_updates_section": "Actualizări de scheme",
+  "schema_updates_desc": "Serviciile cu care vorbește aplicația sunt declarate în fișiere livrate cu ea. Depozitul de mai jos poate oferi altele.",
+  "schema_auto_update_label": "Verifică actualizările la pornire",
+  "schema_repository_url": "URL depozit scheme",
+  "schema_sync_now": "Verifică acum",
+  "schema_sync_report": "%1$d actualizate, %2$d neschimbate, %3$d eșuate",
+  "schema_source_bundled": "livrate cu aplicația",
+  "schema_source_accepted": "din depozit",
+  "schema_source_mixed": "%1$d din depozit, %2$d livrate cu aplicația"
 }

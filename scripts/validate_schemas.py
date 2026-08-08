@@ -44,7 +44,7 @@ def load(path: Path):
         return None
 
 
-def probe_url(endpoint: str, probe: str | None, where: str) -> str | None:
+def probe_url(endpoint: str, probe: str | None, where: str, field: str = "probe_url") -> str | None:
     """Resolve a probe the way ProbeSpec.from does, or report why it cannot be resolved.
 
     A probe is always a path, never a URL: it can only ever reach the host the endpoint already
@@ -53,7 +53,7 @@ def probe_url(endpoint: str, probe: str | None, where: str) -> str | None:
     if probe is None or probe == "":
         return endpoint
     if probe.startswith("http://") or probe.startswith("https://"):
-        fail(where, f"probe_url must be a path, not an absolute URL: {probe}")
+        fail(where, f"{field} must be a path, not an absolute URL: {probe}")
         return None
     base = endpoint.rstrip("/")
     if probe.startswith("?"):
@@ -70,12 +70,12 @@ def check_endpoint(url: str, where: str, field: str = "endpoint") -> None:
         fail(where, f"{field} is not https: {url}")
 
 
-def check_probe(endpoint: str, probe: str | None, where: str) -> None:
-    resolved = probe_url(endpoint.replace("{lang}", "en"), probe, where)
+def check_probe(endpoint: str, probe: str | None, where: str, field: str = "probe_url") -> None:
+    resolved = probe_url(endpoint.replace("{lang}", "en"), probe, where, field)
     if resolved is None:
         return
     if urlsplit(resolved).netloc != urlsplit(endpoint.replace("{lang}", "en")).netloc:
-        fail(where, f"probe_url leaves the service's own host: {resolved}")
+        fail(where, f"{field} leaves the service's own host: {resolved}")
 
 
 def auth_style(auth: dict | None) -> str:
@@ -204,6 +204,17 @@ def check_external_services(doc, name):
         check_endpoint(endpoint, where)
         check_probe(endpoint, service.get("probe_url"), where)
         check_auth(service.get("auth"), where)
+        rates = service.get("rates_url")
+        if rates:
+            # Same rule as a probe: the call carries the credential, so it may only ever reach the
+            # host the endpoint already names.
+            sample = rates.replace("{key}", "k").replace("{base}", "USD")
+            check_probe(endpoint, sample, where, field="rates_url")
+            if not service.get("rates_path"):
+                warn(where, "declares rates_url but no rates_path; 'rates' is assumed")
+        if service.get("success_value") and not service.get("success_field"):
+            fail(where, "declares success_value with no success_field to read it from")
+
         needs_key = service.get("requires_api_key") or service.get("requiresApiKey")
         if needs_key and not (service.get("api_key_url") or service.get("docsUrl")):
             warn(where, "needs an API key but does not say where to get one")

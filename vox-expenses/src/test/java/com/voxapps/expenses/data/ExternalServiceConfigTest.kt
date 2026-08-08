@@ -109,4 +109,46 @@ class ExternalServiceConfigTest {
     fun `a service with no endpoint yields no probe`() {
         assertNull(ExternalService(id = "nothing").probeSpec("key"))
     }
+
+    /**
+     * The call itself is declared, not compiled in.
+     *
+     * This provider takes its key in the path; another takes it as a query parameter and answers
+     * under a different field. Writing either into the code is what stopped anyone pointing this at
+     * a provider of their own — the whole reason the file is served from a repository.
+     */
+    @Test
+    fun `the rates call is built from the declaration`() {
+        val service = shipped().services.first { it.id == "exchangerate_api" }
+
+        assertEquals(
+            "https://v6.exchangerate-api.com/v6/abc123/latest/RON",
+            service.ratesUrl("abc123", "ron")
+        )
+        assertEquals("conversion_rates", service.ratesPath)
+    }
+
+    /** A provider whose key travels as a query parameter, declared the way one would be. */
+    @Test
+    fun `a query-parameter provider builds its own shape`() {
+        val service = ExternalService(
+            id = "openexchangerates",
+            endpoint = "https://openexchangerates.org/api",
+            ratesUrl = "/latest.json?app_id={key}&base={base}",
+            ratesPath = "rates"
+        )
+
+        assertEquals(
+            "https://openexchangerates.org/api/latest.json?app_id=k1&base=EUR",
+            service.ratesUrl("k1", "eur")
+        )
+    }
+
+    /** A service this app cannot ask says so by returning null, rather than a guessed URL. */
+    @Test
+    fun `a service declaring no rates url yields none`() {
+        val service = ExternalService(id = "mystery", endpoint = "https://example.com")
+
+        assertNull(service.ratesUrl("k", "USD"))
+    }
 }

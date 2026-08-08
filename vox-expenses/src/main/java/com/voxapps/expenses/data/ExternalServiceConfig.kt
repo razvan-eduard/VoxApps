@@ -24,6 +24,17 @@ data class ExternalService(
     /** A cheap URL that proves the service answers and accepts the key, relative to [endpoint].
      *  This one carries `{key}` because the credential travels in the path. */
     @SerializedName("probe_url") val probeUrl: String? = null,
+    /** The call that returns rates, relative to [endpoint]. `{key}` is the credential and `{base}`
+     *  the currency everything is quoted against — written where the service expects them, since
+     *  one provider takes its key in the path and another in a query parameter. */
+    @SerializedName("rates_url") val ratesUrl: String? = null,
+    /** Where the rates live in the answer: `conversion_rates` for one provider, `rates` for most. */
+    @SerializedName("rates_path") val ratesPath: String? = null,
+    /** For a provider that wraps its answer in a status: the field, and what it says when all is
+     *  well. Absent means the HTTP status was the whole answer. */
+    @SerializedName("success_field") val successField: String? = null,
+    @SerializedName("success_value") val successValue: String? = null,
+
     @SerializedName("requires_api_key") val requiresApiKey: Boolean = false,
     @SerializedName("requiresApiKey") val legacyRequiresApiKey: Boolean = false,
     /** Where the user obtains a key. `docsUrl` is the older spelling. */
@@ -36,6 +47,23 @@ data class ExternalService(
     val needsApiKey: Boolean get() = requiresApiKey || legacyRequiresApiKey
 
     val helpUrl: String? get() = apiKeyUrl ?: legacyDocsUrl
+
+    /**
+     * The URL that returns rates for [base], with the credential where this provider wants it.
+     *
+     * Null when the service declares no `rates_url`: something is declared here that this app does
+     * not know how to ask, which is better than guessing a shape and failing at the parse.
+     */
+    fun ratesUrl(apiKey: String, base: String): String? {
+        val template = ratesUrl?.takeIf { it.isNotBlank() } ?: return null
+        val resolved = template.replace("{key}", apiKey).replace("{base}", base.uppercase())
+        val root = serviceUrl.trimEnd('/')
+        return when {
+            resolved.startsWith("?") -> root + resolved
+            resolved.startsWith("/") -> root + resolved
+            else -> "$root/$resolved"
+        }
+    }
 
     /** How to test this service with [apiKey], or null when it declares nothing to reach. */
     fun probeSpec(apiKey: String?): ProbeSpec? =

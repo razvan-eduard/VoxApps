@@ -50,7 +50,11 @@ class ExpensesApplication : Application() {
         SchemaRepo.appFolder = "expenses"
         ExternalServiceConfig.init(this)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            SchemaCatalog.refreshAll(SchemaRepo.DEFAULT_BASE_URL)
+            // The repository this app follows, and whether it is asked at all — its own settings,
+            // so an install can follow a fork here and not in Commander.
+            if (settingsSnapshot.schemaAutoUpdate) {
+                SchemaCatalog.refreshAll(settingsSnapshot.schemaRepoBaseUrl)
+            }
         }
 
         // Apply the persisted debug-logging flag immediately, then keep it in sync with any later

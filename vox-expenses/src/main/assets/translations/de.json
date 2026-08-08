@@ -403,5 +403,14 @@
   "notifications_length_long": "Lang",
   "capture_mode_single": "Einzelaufnahme",
   "capture_mode_stitch": "Zusammenfügen",
-  "capture_mode_batch": "Stapel"
+  "capture_mode_batch": "Stapel",
+  "schema_updates_section": "Schema-Updates",
+  "schema_updates_desc": "Die Dienste, mit denen diese App spricht, sind in mitgelieferten Dateien deklariert. Das Repository unten kann andere liefern.",
+  "schema_auto_update_label": "Beim Start nach Updates suchen",
+  "schema_repository_url": "Schema-Repository-URL",
+  "schema_sync_now": "Jetzt prüfen",
+  "schema_sync_report": "%1$d aktualisiert, %2$d unverändert, %3$d fehlgeschlagen",
+  "schema_source_bundled": "mit der App ausgeliefert",
+  "schema_source_accepted": "aus dem Repository",
+  "schema_source_mixed": "%1$d aus dem Repository, %2$d mit der App ausgeliefert"
 }

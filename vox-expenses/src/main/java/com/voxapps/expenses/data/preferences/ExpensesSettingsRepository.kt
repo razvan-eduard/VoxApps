@@ -22,6 +22,8 @@ interface ExpensesSettingsRepository {
     suspend fun setScheduledMergeInterval(interval: String)
     suspend fun setScheduledExpenseDedupInterval(interval: String)
     suspend fun setHomeCurrency(code: String)
+    suspend fun setSchemaRepoBaseUrl(url: String)
+    suspend fun setSchemaAutoUpdate(enabled: Boolean)
     suspend fun setPaymentSourcePackages(packages: Set<String>)
     suspend fun setBankingSourcePackages(packages: Set<String>)
     suspend fun setAutoAcceptNotificationExpenses(enabled: Boolean)

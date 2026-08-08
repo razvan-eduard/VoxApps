@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "services": [
     {
       "id": "exchangerate_api",
@@ -7,6 +7,10 @@
       "category": "currency_exchange",
       "endpoint": "https://v6.exchangerate-api.com/v6",
       "probe_url": "{key}/latest/USD",
+      "rates_url": "{key}/latest/{base}",
+      "rates_path": "conversion_rates",
+      "success_field": "result",
+      "success_value": "success",
       "requires_api_key": true,
       "api_key_url": "https://www.exchangerate-api.com/docs/free"
     }

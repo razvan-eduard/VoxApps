@@ -39,6 +39,8 @@ import com.voxapps.location.VoxLocationResolver
 import com.voxapps.location.ui.VoxLocationSettingsCard
 import com.voxapps.location.ui.VoxLocationUiState
 import kotlinx.coroutines.launch
+import com.voxapps.design.settings.SchemaUpdatesStrings
+import com.voxapps.design.settings.SchemaUpdatesSection
 
 /** Fixed, common-currency list for the "Default currency" picker — not the full ISO 4217 set. */
 private val COMMON_CURRENCIES = listOf(
@@ -60,6 +62,29 @@ fun GeneralSettingsTab(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(text = languageManager.getString("general"), style = MaterialTheme.typography.titleMedium)
+
+        // The same section Commander shows, from :core:design — this app reads a schema of its own
+        // (the currency services) and can follow a fork just as well.
+        val scope = rememberCoroutineScope()
+        SchemaUpdatesSection(
+            strings = SchemaUpdatesStrings(
+                sectionLabel = languageManager.getString("schema_updates_section"),
+                description = languageManager.getString("schema_updates_desc"),
+                autoUpdateLabel = languageManager.getString("schema_auto_update_label"),
+                repositoryUrlLabel = languageManager.getString("schema_repository_url"),
+                checkNow = languageManager.getString("schema_sync_now"),
+                reportFormat = languageManager.getString("schema_sync_report"),
+                sourceBundled = languageManager.getString("schema_source_bundled"),
+                sourceAccepted = languageManager.getString("schema_source_accepted"),
+                sourceMixedFormat = languageManager.getString("schema_source_mixed")
+            ),
+            repositoryUrl = settings.schemaRepoBaseUrl,
+            autoUpdate = settings.schemaAutoUpdate,
+            onRepositoryUrlChange = { scope.launch { settingsRepo.setSchemaRepoBaseUrl(it) } },
+            onAutoUpdateChange = { scope.launch { settingsRepo.setSchemaAutoUpdate(it) } }
+        )
+
+        HorizontalDivider()
 
         // --- Require fingerprint ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

@@ -22,6 +22,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:services"))
     implementation(project(":core:logging"))
 
     implementation(platform(libs.androidx.compose.bom))

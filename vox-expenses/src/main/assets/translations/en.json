@@ -396,5 +396,14 @@
   "notifications_length_long": "Long",
   "capture_mode_single": "Single shot",
   "capture_mode_stitch": "Stitch",
-  "capture_mode_batch": "Batch"
+  "capture_mode_batch": "Batch",
+  "schema_updates_section": "Schema updates",
+  "schema_updates_desc": "The services this app talks to are declared in files it ships with. The repository below can serve different ones.",
+  "schema_auto_update_label": "Check for updates at startup",
+  "schema_repository_url": "Schema repository URL",
+  "schema_sync_now": "Check now",
+  "schema_sync_report": "%1$d updated, %2$d unchanged, %3$d failed",
+  "schema_source_bundled": "shipped with the app",
+  "schema_source_accepted": "from the repository",
+  "schema_source_mixed": "%1$d from the repository, %2$d shipped with the app"
 }
