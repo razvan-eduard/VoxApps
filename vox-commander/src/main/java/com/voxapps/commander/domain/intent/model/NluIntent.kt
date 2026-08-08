@@ -33,12 +33,17 @@ import androidx.compose.runtime.Immutable
  */
 @Immutable
 data class NluIntent(
-    val actionVerb: String,
+    // Defaulted like every other field here, and it matters most for this class: these are parsed
+    // from what a language model returned. A model that omits a field costs the constructor
+    // otherwise, and then every *other* field arrives null too — `modifiers` and `extras` included,
+    // which the router walks. A missing verb is better handled as an empty one downstream than as a
+    // crash while reading the answer.
+    val actionVerb: String = "",
     val logicalSubject: String? = null,
     val modifiers: List<String> = emptyList(),
     val contextWords: List<String> = emptyList(),
-    val domain: String,
-    val action: String,
+    val domain: String = "",
+    val action: String = "",
     val targetApp: String? = null,
     val category: String? = null,
     val confidence: Float = 1.0f,

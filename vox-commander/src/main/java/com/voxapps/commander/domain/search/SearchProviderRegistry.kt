@@ -1,6 +1,7 @@
 package com.voxapps.commander.domain.search
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import com.voxapps.commander.data.preferences.Credentials
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteSchema
@@ -38,20 +39,37 @@ object SearchProviderRegistry {
     suspend fun fetchRemote(repo: SettingsRepository, force: Boolean = false): Boolean =
         schema.fetchRemote(repo, force)
 
-    private fun rebuildProviders(loaded: SearchDefinitionsSchema) {
+    /**
+     * Turns a parsed schema into the providers the app uses, dropping what it cannot use.
+     *
+     * A provider with no name has nothing to be selected by and one with no endpoint has nothing to
+     * call, so both are dropped and said so — a schema served from a repository is not something to
+     * assume is complete, and a bad entry should cost that entry rather than the category.
+     */
+    @VisibleForTesting
+    internal fun rebuildProviders(loaded: SearchDefinitionsSchema) {
         val newProviders = mutableMapOf<String, Map<String, DynamicSearchProvider>>()
         val newDefaults = mutableMapOf<String, String>()
 
         for (catDef in loaded.categories) {
+            if (catDef.category.isBlank()) {
+                Logger.log("Skipping a category that declares no name", TAG)
+                continue
+            }
+            val usable = catDef.providers.filter { provDef ->
+                val ok = provDef.name.isNotBlank() && provDef.endpoint.isNotBlank()
+                if (!ok) Logger.log("Skipping an incomplete provider in '${catDef.category}'", TAG)
+                ok
+            }
             val providerMap = mutableMapOf<String, DynamicSearchProvider>()
-            for (provDef in catDef.providers) {
+            for (provDef in usable) {
                 providerMap[provDef.name] = DynamicSearchProvider(provDef, catDef.category) {
                     settingsRepo?.getCredentialsSnapshot() ?: Credentials()
                 }
             }
             newProviders[catDef.category] = providerMap
             newDefaults[catDef.category] = catDef.defaultProvider.ifBlank {
-                catDef.providers.firstOrNull()?.name ?: ""
+                usable.firstOrNull()?.name ?: ""
             }
         }
 

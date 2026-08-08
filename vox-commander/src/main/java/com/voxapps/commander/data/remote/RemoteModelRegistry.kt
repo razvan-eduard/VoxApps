@@ -34,7 +34,12 @@ data class RemoteModelSchema(
 data class RemoteEngineConfig(
     val engine_label: String? = null,
     val type: List<String> = emptyList(),
-    val is_multilingual: Boolean,
+    /** Defaulted like everything else here, and this is the parameter that made the rest of them
+     *  worthless: without a default on *every* parameter Kotlin emits no no-arg constructor, so
+     *  Gson allocates the object without running one and each absent field arrives null — which is
+     *  why [withSafeCollections] had to exist at all. Engines that say nothing about languages are
+     *  the common case, not an error. */
+    val is_multilingual: Boolean = false,
     val extension: String = "",
     val is_default_wake_word: Boolean = false,
     val capabilities: List<String> = emptyList(),
@@ -139,12 +144,12 @@ enum class EngineRuntime(val key: String) {
  */
 @Immutable
 data class RemoteModelItem(
-    override val id: String,
-    override val label: String,
+    override val id: String = "",
+    override val label: String = "",
     /** Defaulted for the same Gson reason as the schema's own fields: a virtual engine's model, if
      *  it ever declares one, has nothing to download. */
     val path: String = "",
-    val size_mb: Int,
+    val size_mb: Int = 0,
     val size_label: String? = null,
     val is_multilingual: Boolean? = null,
     val lang_code: String? = null,
@@ -162,9 +167,9 @@ data class RemoteModelItem(
  * Represents a virtual model that doesn't exist as a downloadable file (e.g. Cloud APIs).
  */
 data class VirtualModelItem(
-    override val id: String,
-    override val label: String,
-    override val engineType: String,
+    override val id: String = "",
+    override val label: String = "",
+    override val engineType: String = "",
     override val sizeDescription: String = "Cloud API",
     override val url: String = "",
     override val langCode: String? = null,
@@ -392,11 +397,11 @@ object RemoteModelRegistry {
     /**
      * Replaces the collections Gson may have left null with empty ones.
      *
-     * Gson instantiates without running the Kotlin constructor, so a field the JSON omits stays null
-     * even though its type says it cannot be — and the failure surfaces later, at some unrelated
-     * `in` or `forEach`, on a schema that looked perfectly valid. Normalising once, where the schema
-     * is installed, means no reader has to defend itself; that this applies to a repository-served
-     * copy as much as to the bundled one is the point, since only one of the two is reviewed.
+     * Every parameter of [RemoteEngineConfig] now has a default, so Gson builds it through the
+     * constructor and an *absent* field takes that default. This still earns its place for the
+     * other half of the problem: a field written as an explicit `null` is null whichever way the
+     * object was made, and a schema served from a repository can say anything at all. Normalising
+     * once, where the schema is installed, means no reader has to defend itself.
      */
     /** The same normalisation [applySchema] performs, so a test can assert against a schema in the
      *  shape the app actually runs rather than the shape Gson happened to produce. */

@@ -38,9 +38,11 @@ object AppRegistry {
     }
 
     @Immutable
+    // Defaults throughout, so Gson reads the cache through the constructor: without them it skips
+    // the constructor entirely and an absent `domains` or `uriTemplates` arrives null.
     data class AppEntry(
-        val packageName: String,
-        val displayName: String,
+        val packageName: String = "",
+        val displayName: String = "",
         val domains: List<String> = emptyList(),
         val uriTemplates: Map<String, String> = emptyMap(),
         val isSystemApp: Boolean = false

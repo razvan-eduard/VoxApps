@@ -37,15 +37,28 @@ data class SearchDefinitionsSchema(
     val categories: List<CategoryDefinition> = emptyList()
 )
 
+/**
+ * Every field has a default, and that is load-bearing rather than tidy.
+ *
+ * Gson builds these by reflection: with a parameter that has no default, Kotlin generates no no-arg
+ * constructor, Gson allocates the object without running any constructor at all, and *every* absent
+ * field lands null — including the ones typed as non-null. This class had one such parameter, so a
+ * category that omitted `providers` produced a null list behind `List<ProviderDefinition>` and the
+ * ingest below walked into it. These schemas are served from a repository, so "the file omits a
+ * field" is a thing that happens rather than a thing we control.
+ */
 data class CategoryDefinition(
-    val category: String,
+    val category: String = "",
     val defaultProvider: String = "",
     val providers: List<ProviderDefinition> = emptyList()
 )
 
 data class ProviderDefinition(
-    val name: String,
-    val endpoint: String,
+    /** Defaulted for the same reason as [CategoryDefinition]'s fields: a parameter without one
+     *  costs the whole class its constructor, and with it every other field's default. A provider
+     *  that arrives without a name or an endpoint is dropped at ingest instead. */
+    val name: String = "",
+    val endpoint: String = "",
     /** A cheap URL that proves the service answers and accepts the credential, relative to
      *  [endpoint] — see ProbeSpec.from. A search endpoint is usually complete already and needs
      *  only arguments (`?q=…`), which is why most of these are queries rather than paths. */
