@@ -73,6 +73,7 @@ dependencies {
     implementation(project(":core:ipc"))
     implementation(project(":core:attachments"))
     implementation(project(":core:logging"))
+    implementation(project(":core:widget"))
     implementation(project(":core:services"))
     implementation(project(":core:preferences"))
     implementation(project(":core:datahygiene"))

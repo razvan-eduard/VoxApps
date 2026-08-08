@@ -69,6 +69,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
+import com.voxapps.widget.WidgetDayFormats
+import com.voxapps.widget.DaySeparatorStyle
+import com.voxapps.widget.DaySeparatorLabel
 
 /**
  * Home-screen widget: a snapshot of upcoming entries plus quick "Add"/"Scan" actions — lives
@@ -594,43 +597,20 @@ private fun TagChipsRow(tagNames: List<String>) {
 }
 
 private fun dayLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale): String {
-    val shortDate = date.format(DateTimeFormatter.ofPattern("d MMM", locale))
+    val shortDate = WidgetDayFormats.short(date, locale)
     return when (date) {
         today -> "${languageManager.getString("widget_up_next")} (${languageManager.getString("today")}, $shortDate)"
         today.plusDays(1) -> "${languageManager.getString("tomorrow")} - $shortDate"
-        else -> date.format(DateTimeFormatter.ofPattern("EEE, d MMM", locale))
+        else -> WidgetDayFormats.weekday(date, locale)
     }
 }
 
-/** Centered day-card header — styled as a prominent "Pill" for Today. */
+/** The day heading for this widget: its own wording, the shared presentation. */
 @Composable
 private fun DaySeparatorLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale) {
-    val isToday = date == today
-    Box(
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            .padding(bottom = 6.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = GlanceModifier
-                .let { m ->
-                    if (isToday) {
-                        m.background(GlanceTheme.colors.primary)
-                            .cornerRadius(16.dp)
-                            .padding(horizontal = 12.dp, vertical = 2.dp)
-                    } else m
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = dayLabel(date, today, languageManager, locale),
-                style = TextStyle(
-                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                    fontSize = if (isToday) 13.sp else 12.sp,
-                    color = if (isToday) GlanceTheme.colors.onPrimary else GlanceTheme.colors.primary
-                )
-            )
-        }
-    }
+    DaySeparatorLabel(
+        text = dayLabel(date, today, languageManager, locale),
+        isToday = date == today,
+        style = DaySeparatorStyle.Pill
+    )
 }

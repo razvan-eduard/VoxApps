@@ -60,6 +60,9 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import com.voxapps.widget.WidgetDayFormats
+import com.voxapps.widget.DaySeparatorStyle
+import com.voxapps.widget.DaySeparatorLabel
 
 /**
  * Home-screen widget: a snapshot of recent notes plus quick "Add"/"Scan" actions — lives entirely
@@ -381,28 +384,15 @@ private fun dayLabel(date: LocalDate, today: LocalDate, languageManager: Languag
     if (date == today) {
         languageManager.getString("today")
     } else {
-        date.format(DateTimeFormatter.ofPattern("EEE, d MMM", locale))
+        WidgetDayFormats.weekday(date, locale)
     }
 
-/** Centered day-group separator — plain text for every day, "Today" only distinguished by a
- * bolder/larger label and a thicker divider line underneath it (see the caller), not a background
- * badge (reads too much like a button). */
+/** The day heading for this widget: its own wording, the shared presentation. */
 @Composable
 private fun DaySeparatorLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale) {
-    val isToday = date == today
-    Box(
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            .padding(top = 6.dp, bottom = 2.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = dayLabel(date, today, languageManager, locale),
-            style = TextStyle(
-                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                fontSize = if (isToday) 13.sp else 12.sp,
-                color = GlanceTheme.colors.primary
-            )
-        )
-    }
+    DaySeparatorLabel(
+        text = dayLabel(date, today, languageManager, locale),
+        isToday = date == today,
+        style = DaySeparatorStyle.Plain
+    )
 }

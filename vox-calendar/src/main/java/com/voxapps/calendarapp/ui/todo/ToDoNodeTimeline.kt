@@ -77,6 +77,7 @@ import java.util.Date
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import com.voxapps.calendar.rememberNowMillis
 
 private const val DELETE_ZONE_KEY = "delete-zone"
 
@@ -132,8 +133,7 @@ private val StarShape = GenericShape { size, _ ->
  *  [ToDoItem.dueMillis], or — once every dated item's time has already passed (or none have a date at
  *  all) — simply the first not-done item in list order. Used to render one item slightly larger/bolder
  *  than the rest so it's obvious what to do next. */
-private fun computeNextItemId(items: List<ToDoItem>): Long? {
-    val now = System.currentTimeMillis()
+private fun computeNextItemId(items: List<ToDoItem>, now: Long = System.currentTimeMillis()): Long? {
     val upcoming = items
         .filter { !it.done && it.dueMillis != null && it.dueMillis >= now }
         .minByOrNull { it.dueMillis!! }
@@ -157,6 +157,12 @@ private fun computeNowSplitterIndex(items: List<ToDoItem>, now: Long = System.cu
     return if (lastPastTimedIndex != null) lastPastTimedIndex + 1 else timedIndices.first()
 }
 
+/** Whether this card has anything due today at all — what decides that a "now" line belongs on it. */
+private fun hasAnyDueToday(items: List<ToDoItem>, today: LocalDate, zoneId: ZoneId): Boolean =
+    items.any { item ->
+        item.dueMillis?.let { Instant.ofEpochMilli(it).atZone(zoneId).toLocalDate() == today } == true
+    }
+
 /** Whether any item from [fromIndex] onward (in display order) is still due today — used right
  *  after the "now" splitter to decide whether to show a "Nothing else today" line. Undated items
  *  are skipped (they never anchor a day either way); a dated item on a future day doesn't count. */
@@ -171,8 +177,8 @@ private fun hasMoreDueToday(items: List<ToDoItem>, fromIndex: Int, today: LocalD
 /** View-mode-only "ghosting" check: an item reads as behind-us — done, or dated and already overdue —
  *  and should fade back so the "next up" item stays the visual anchor. The "next" item itself is never
  *  ghosted even if it happens to be an overdue-but-undone fallback pick. */
-private fun isPastItem(item: ToDoItem, isNext: Boolean): Boolean =
-    !isNext && (item.done || (item.dueMillis != null && item.dueMillis < System.currentTimeMillis()))
+private fun isPastItem(item: ToDoItem, isNext: Boolean, now: Long = System.currentTimeMillis()): Boolean =
+    !isNext && (item.done || (item.dueMillis != null && item.dueMillis < now))
 
 /** The color a task/node's own [colorArgb] should be darkened to for its glow — a tinted, non-neon
  *  shadow rather than the flat saturated fill color itself (which read as too harsh/neon at full
@@ -225,14 +231,23 @@ fun ToDoNodeTimeline(
     }
 ) {
     val zoneId = remember { ZoneId.systemDefault() }
-    val today = remember { LocalDate.now(zoneId) }
-    val nextItemId = remember(items) { computeNextItemId(items) }
+    // Ticking, not sampled: every answer below is "as of now", and a list nobody touches used to keep
+    // whatever now meant when it was last composed — the line, its clock, and which items read as
+    // past all froze until something unrelated recomposed the card.
+    val now by rememberNowMillis()
+    val today = remember(now) { LocalDate.now(zoneId) }
+    val nextItemId = remember(items, now) { computeNextItemId(items, now) }
     // View mode only: dated items are re-sorted chronologically among themselves; undated items stay
     // pinned at their original absolute index (drag-reorder still governs the real, stored order —
     // this is a display-only reshuffle).
     val displayItems = if (isEditing) items else remember(items) { sortedByDateKeepingUndatedInPlace(items) }
     // View-mode only — see computeNowSplitterIndex's doc comment for the exact placement rule.
-    val nowSplitterIndex = if (isEditing) null else remember(displayItems) { computeNowSplitterIndex(displayItems) }
+    // A "now" line only means something on a card that has something today. A card whose items are
+    // all next week was drawing one anyway, which read as if today were somehow part of that list.
+    val hasItemToday = remember(displayItems, today) { hasAnyDueToday(displayItems, today, zoneId) }
+    val nowSplitterIndex =
+        if (isEditing || !hasItemToday) null
+        else remember(displayItems, now) { computeNowSplitterIndex(displayItems, now) }
     val noMoreToday = nowSplitterIndex != null && !hasMoreDueToday(displayItems, nowSplitterIndex, today, zoneId)
     Column(modifier = modifier.fillMaxWidth()) {
         if (isEditing) {
@@ -242,8 +257,8 @@ fun ToDoNodeTimeline(
         var groupDate: LocalDate? = null
         displayItems.forEachIndexed { index, item ->
             if (nowSplitterIndex == index) {
-                NowSplitter()
-                if (noMoreToday) NothingElseTodayLabel()
+                NowSplitter(now)
+                if (noMoreToday) NothingElseTodayLabel(now)
             }
             val itemDate = item.dueMillis?.let { Instant.ofEpochMilli(it).atZone(zoneId).toLocalDate() }
             val startsNewGroup = !isEditing && itemDate != null && itemDate != groupDate
@@ -254,7 +269,7 @@ fun ToDoNodeTimeline(
                 if (isEditing) {
                     DottedConnector(leadingOffset = UP_NEXT_LABEL_COLUMN_WIDTH)
                 } else {
-                    SolidConnector(Color(item.colorArgb.toInt()), muted = isPastItem(item, item.id == nextItemId), leadingOffset = UP_NEXT_LABEL_COLUMN_WIDTH)
+                    SolidConnector(Color(item.colorArgb.toInt()), muted = isPastItem(item, item.id == nextItemId, now), leadingOffset = UP_NEXT_LABEL_COLUMN_WIDTH)
                 }
             }
             val isNext = item.id == nextItemId
@@ -264,14 +279,14 @@ fun ToDoNodeTimeline(
                     done = item.done,
                     emphasized = isNext,
                     isImportant = item.isImportant,
-                    ghosted = !isEditing && isPastItem(item, isNext),
+                    ghosted = !isEditing && isPastItem(item, isNext, now),
                     onClick = { if (!isEditing) onToggleDone(item) }
                 )
             }
         }
         if (nowSplitterIndex == displayItems.size) {
-            NowSplitter()
-            if (noMoreToday) NothingElseTodayLabel()
+            NowSplitter(now)
+            if (noMoreToday) NothingElseTodayLabel(now)
         }
         if (isEditing) {
             DottedConnector(leadingOffset = UP_NEXT_LABEL_COLUMN_WIDTH)
@@ -284,7 +299,7 @@ fun ToDoNodeTimeline(
  *  small dot sits on the same node axis every connector/node is centered on, so it reads as part of
  *  the same timeline rather than an unrelated divider. */
 @Composable
-private fun NowSplitter() {
+private fun NowSplitter(nowMillis: Long) {
     val color = MaterialTheme.colorScheme.error
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
         Box(modifier = Modifier.width(UP_NEXT_LABEL_COLUMN_WIDTH + NODE_SLOT_SIZE), contentAlignment = Alignment.Center) {
@@ -293,26 +308,33 @@ private fun NowSplitter() {
         HorizontalDivider(color = color, thickness = 1.5.dp, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(6.dp))
         Text(
-            text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date()),
+            text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(nowMillis)),
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
             color = color
         )
     }
 }
 
-/** Shown right under [NowSplitter] when nothing else is due today — same indentation as a regular
- *  timeline row (aligned past the node-slot column) so it reads as part of the timeline rather than
- *  a stray line of text. */
+/** Shown right under [NowSplitter] when nothing else is due today. Centred on the card rather than
+ *  indented to the timeline's text column: it is a remark about the day as a whole, not another row
+ *  in the list, and reading it under the line that says "now" is the point. */
 @Composable
-private fun NothingElseTodayLabel() {
+private fun NothingElseTodayLabel(nowMillis: Long) {
     val languageManager = LocalLanguageManager.current
-    val (leading, trailing) = remember { nothingElseTodayEmojis(LocalTime.now().hour) }
-    Text(
-        text = "$leading ${languageManager.getString("nothing_else_today")} $trailing",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = UP_NEXT_LABEL_COLUMN_WIDTH + NODE_SLOT_SIZE, top = 2.dp, bottom = 4.dp)
-    )
+    val hour = remember(nowMillis) {
+        Instant.ofEpochMilli(nowMillis).atZone(ZoneId.systemDefault()).hour
+    }
+    val (leading, trailing) = remember(hour) { nothingElseTodayEmojis(hour) }
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "$leading ${languageManager.getString("nothing_else_today")} $trailing",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 /** Reorders [items] so that every dated slot (an index whose original item has a non-null
