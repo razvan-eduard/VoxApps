@@ -125,16 +125,50 @@ class AppStateManager private constructor(
     val appScanState: StateFlow<AppScanState> = _appScanState.asStateFlow()
 
     // --- SERVICE LOADING STATE ---
-    private val _serviceLoadingState = MutableStateFlow(ServiceLoadingState())
-    val serviceLoadingState: StateFlow<ServiceLoadingState> = _serviceLoadingState.asStateFlow()
+    /**
+     * Set while the wake-word service is deliberately shutting down. This is the only part of the
+     * loading dialog that cannot be derived: an engine that has gone Idle looks identical whether it
+     * is stopping or was never started.
+     */
+    private val _wakeServiceStopping = MutableStateFlow(false)
 
-    fun setServiceLoading(state: ServiceLoadingState) {
-        _serviceLoadingState.value = state
+    fun setWakeServiceStopping(stopping: Boolean) {
+        _wakeServiceStopping.value = stopping
     }
 
-    fun clearServiceLoading() {
-        _serviceLoadingState.value = ServiceLoadingState()
-    }
+    /**
+     * What the loading dialog shows, derived from the wake-word engine rather than pushed to it.
+     *
+     * The service used to publish this itself: two calls set it and **nine** cleared it, one on each
+     * way out of startWakeWordDetection. A tenth exit path that forgot would have left the dialog on
+     * screen forever, and nothing about the shape made that visible. Clearing is now implicit —
+     * anything other than Loading is not loading — so there is no path to forget.
+     *
+     * The engine's own state supplies the model name, which is why [EngineState.Loading] carries the
+     * spec instead of just a flag.
+     */
+    val serviceLoadingState: StateFlow<ServiceLoadingState> =
+        combine(
+            com.voxapps.commander.domain.engine.EngineRegistry.observe(
+                com.voxapps.commander.domain.engine.EngineRegistry.Domain.WAKE
+            ),
+            _wakeServiceStopping
+        ) { engineState, stopping ->
+            val loading = engineState as? com.voxapps.commander.domain.engine.EngineState.Loading
+            if (loading == null && !stopping) {
+                ServiceLoadingState()
+            } else {
+                val spec = loading?.spec as? com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel
+                ServiceLoadingState(
+                    isActive = true,
+                    serviceName = "Wake Word",
+                    engineName = com.voxapps.commander.data.remote.RemoteModelRegistry
+                        .declaredEngineLabel(repo.getSettingsSnapshot().wakeWordEngineType),
+                    modelName = spec?.modelId ?: spec?.keyword.orEmpty(),
+                    isStopping = stopping
+                )
+            }
+        }.stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, ServiceLoadingState())
 
     private val _systemInfo = MutableStateFlow<String>("")
     val systemInfo: StateFlow<String> = _systemInfo.asStateFlow()

@@ -438,6 +438,16 @@ object RemoteModelRegistry {
         return result
     }
 
+    /**
+     * The label an engine declares in models.json, or the key itself when it declares none.
+     *
+     * For callers with no LanguageManager to hand. It skips the localized fallbacks that
+     * [getEngineLabel] applies to the virtual processors, which is fine for engines the schema
+     * actually describes — every wake-word and downloadable engine carries a label of its own.
+     */
+    fun declaredEngineLabel(engineKey: String): String =
+        cachedSchema?.engines?.get(engineKey)?.engine_label ?: engineKey
+
     fun getEngineLabel(engineKey: String, languageManager: LanguageManager): String {
         val config = cachedSchema?.engines?.get(engineKey)
         if (config?.engine_label != null) return config.engine_label

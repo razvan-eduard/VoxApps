@@ -13,7 +13,6 @@ import com.voxapps.commander.data.preferences.SettingsRepositoryImpl
 import com.voxapps.commander.domain.voice.VoiceManager
 import com.voxapps.commander.domain.voice.WakeWordProfile
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.state.ServiceLoadingState
 import com.voxapps.commander.state.VoiceState
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
@@ -211,21 +210,22 @@ class WakeWordService : Service() {
             currentEngineDisplayName = engineDisplayName
             currentModelDisplayName = modelDisplayName
 
-            appStateManager.setServiceLoading(ServiceLoadingState(
-                isActive = true,
-                serviceName = "Wake Word",
-                engineName = engineDisplayName,
-                modelName = modelDisplayName
-            ))
 
             wakeWordEngine?.release()
             wakeWordEngine = null
+            com.voxapps.commander.domain.engine.EngineRegistry.set(
+                com.voxapps.commander.domain.engine.EngineRegistry.Domain.WAKE, null
+            )
+            appStateManager.setWakeServiceStopping(false)
 
             if (engineType == "wake_porcupine" || engineType == "porcupine") {
                 Logger.log("Using Porcupine wake word engine", TAG)
                 wakeWordEngine = PorcupineWakeWordEngine(this@WakeWordService, settingsRepo, appStateManager) {
                     onWakeWordDetected()
                 }
+                com.voxapps.commander.domain.engine.EngineRegistry.set(
+                    com.voxapps.commander.domain.engine.EngineRegistry.Domain.WAKE, wakeWordEngine
+                )
                 // A built-in keyword: nothing on disk, so the spec carries only the phrase.
                 val initialized = wakeWordEngine?.load(
                     com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(modelId = null, entryPoint = null,
@@ -235,10 +235,8 @@ class WakeWordService : Service() {
                     wakeWordEngine?.startListening()
                     delay(100)
                     updateNotification()
-                    appStateManager.clearServiceLoading()
                 } else {
                     Logger.log("Failed to initialize Porcupine engine", TAG)
-                    appStateManager.clearServiceLoading()
                     stopSelf()
                 }
             } else if (engineType == "wake_openwakeword" || engineType == "openwakeword") {
@@ -247,6 +245,9 @@ class WakeWordService : Service() {
                 wakeWordEngine = OpenWakeWordEngine(this@WakeWordService, appStateManager) {
                     onWakeWordDetected()
                 }
+                com.voxapps.commander.domain.engine.EngineRegistry.set(
+                    com.voxapps.commander.domain.engine.EngineRegistry.Domain.WAKE, wakeWordEngine
+                )
                 val initialized = wakeWordEngine?.load(
                     com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(modelId = modelFileName, entryPoint = null,
                         keyword = engineDisplayWakeWord("wake_openwakeword"), language = snapshot.modelFilterLang)
@@ -255,10 +256,8 @@ class WakeWordService : Service() {
                     wakeWordEngine?.startListening()
                     delay(100)
                     updateNotification()
-                    appStateManager.clearServiceLoading()
                 } else {
                     Logger.log("Failed to initialize OpenWakeWord engine", TAG)
-                    appStateManager.clearServiceLoading()
                     stopSelf()
                 }
             } else {
@@ -289,7 +288,6 @@ class WakeWordService : Service() {
                 val entryPoint = modelId?.let { downloader.resolveEntryPoint(it, engineType) }
                 if (modelId == null || entryPoint == null) {
                     Logger.log("No Vosk model available", TAG)
-                    appStateManager.clearServiceLoading()
                     stopSelf()
                     return@launch
                 }
@@ -297,7 +295,6 @@ class WakeWordService : Service() {
                 if (!downloader.validateModel(modelId, engineType)) {
                     Logger.log("Vosk model $modelId is corrupt/incomplete — cleaning up and marking for re-download", TAG)
                     settingsRepo.setModelDownloaded(modelId, false)
-                    appStateManager.clearServiceLoading()
                     stopSelf()
                     return@launch
                 }
@@ -305,6 +302,9 @@ class WakeWordService : Service() {
                 wakeWordEngine = WakeWordEngine(this@WakeWordService, settingsRepo, appStateManager) {
                     onWakeWordDetected()
                 }
+                com.voxapps.commander.domain.engine.EngineRegistry.set(
+                    com.voxapps.commander.domain.engine.EngineRegistry.Domain.WAKE, wakeWordEngine
+                )
 
                 val initialized = wakeWordEngine?.load(
                     com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(modelId = modelId, entryPoint = entryPoint,
@@ -314,10 +314,8 @@ class WakeWordService : Service() {
                     wakeWordEngine?.startListening()
                     delay(100)
                     updateNotification()
-                    appStateManager.clearServiceLoading()
                 } else {
                     Logger.log("Failed to initialize Vosk engine", TAG)
-                    appStateManager.clearServiceLoading()
                     stopSelf()
                 }
             }
@@ -335,17 +333,13 @@ class WakeWordService : Service() {
         com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineLabel(engineType, languageManager)
 
     private fun stopWakeWordDetection() {
+        // The one thing the engine's state cannot say: an engine that has gone Idle looks the same
+        // whether it is stopping or was never started.
+        appStateManager.setWakeServiceStopping(true)
         Logger.log("Stopping wake word detection and releasing", TAG)
         val engineDisplayName = engineDisplayName(settingsRepo.getSettingsSnapshot().wakeWordEngineType)
-        appStateManager.setServiceLoading(ServiceLoadingState(
-            isActive = true,
-            serviceName = "Wake Word",
-            engineName = engineDisplayName,
-            isStopping = true
-        ))
         wakeWordEngine?.release()
         wakeWordEngine = null
-        appStateManager.clearServiceLoading()
     }
 
     private fun pauseWakeWordDetection() {
