@@ -140,6 +140,9 @@ class VoxApplication : Application() {
             // …and the media backends, whose public instances are the likeliest of all of these to
             // have changed since the release.
             com.voxapps.commander.domain.media.MediaServiceRegistry.fetchRemote(container.settingsRepository, force = true)
+            // …and the API integrations, whose OAuth endpoints and scopes are the service's to
+            // change, not ours.
+            com.voxapps.commander.domain.intent.registry.ApiIntegrationRegistry.fetchRemote(container.settingsRepository, force = true)
         }
     }
 

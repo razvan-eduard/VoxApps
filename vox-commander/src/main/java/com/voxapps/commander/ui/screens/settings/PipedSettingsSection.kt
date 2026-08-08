@@ -6,14 +6,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.intent.handler.NewPipeExtractorHelper
 import com.voxapps.commander.domain.intent.handler.PipedSearchHelper
 import com.voxapps.commander.domain.media.MediaServiceRegistry
 import com.voxapps.commander.domain.service.ServiceProbe
+import com.voxapps.commander.ui.components.CommittedTextField
 import com.voxapps.commander.ui.components.ConnectionTestCard
 import com.voxapps.commander.ui.components.SettingsPicklist
 import kotlinx.coroutines.launch
@@ -154,23 +153,19 @@ fun PipedSettingsSection(
     }
 
     if (customChosen) {
-        var isPipedFocused by remember { mutableStateOf(false) }
-        TextField(
-            value = pipedApiUrl,
-            onValueChange = {
-                pipedApiUrl = it
-                scope.launch { settingsRepo.setPipedApiUrl(it.ifBlank { null }) }
-                PipedSearchHelper.setPipedApiUrl(it.ifBlank { null })
-            },
-            label = { Text(languageManager.getString("piped_custom_url")) },
-            placeholder = { Text(languageManager.getString("piped_api_url_placeholder")) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { isPipedFocused = it.isFocused },
-            colors = if (!isPipedFocused) TextFieldDefaults.colors(
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                unfocusedIndicatorColor = Color.Transparent
-            ) else TextFieldDefaults.colors()
+        // Stored when the field is finished with. Per keystroke it stored a partial URL and, since
+        // the test below is keyed on the URL it would probe, sent a request per character to hosts
+        // spelled half way.
+        CommittedTextField(
+            stored = pipedApiUrl,
+            label = languageManager.getString("piped_custom_url"),
+            placeholder = languageManager.getString("piped_api_url_placeholder"),
+            identity = backendId,
+            onCommit = { entered ->
+                pipedApiUrl = entered
+                scope.launch { settingsRepo.setPipedApiUrl(entered.ifBlank { null }) }
+                PipedSearchHelper.setPipedApiUrl(entered.ifBlank { null })
+            }
         )
     }
 

@@ -1,9 +1,9 @@
 package com.voxapps.commander.domain.intent.registry
 
 import android.content.Context
-import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
-import com.voxapps.logging.Logger
+import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.data.remote.RemoteSchema
 
 /**
  * Declarative external-app-API integration schema. One entry replaces what used to require three
@@ -113,24 +113,29 @@ data class PreferRule(val field: String = "", val equals: Any? = null)
 object ApiIntegrationRegistry {
 
     private const val TAG = "ApiIntegrationRegistry"
-    private const val ASSET_FILE_NAME = "api_integrations.json"
 
-    private val gson = Gson()
-    private var cached: List<ApiIntegration> = emptyList()
+    /**
+     * The last schema that was read from assets and nowhere else.
+     *
+     * It is also the one whose contents change without the app changing: an authorize URL moves, a
+     * scope is added, a service starts requiring a client id. Those were app releases, while the
+     * engines, the search providers and the media backends could all be corrected from the
+     * repository — for no reason other than which loader this file happened to be written against.
+     */
+    private val schema = RemoteSchema(
+        fileName = "api_integrations.json",
+        type = ApiIntegrationsSchema::class.java,
+        versionOf = { it.schemaVersion },
+        usable = { it.integrations.isNotEmpty() },
+        tag = TAG
+    )
 
-    fun init(context: Context) {
-        cached = try {
-            context.assets.open(ASSET_FILE_NAME).use { input ->
-                val text = input.readBytes().decodeToString()
-                val schema = gson.fromJson(text, ApiIntegrationsSchema::class.java)
-                Logger.log("Loaded api_integrations.json: ${schema?.integrations?.size ?: 0} integrations", TAG)
-                schema?.integrations ?: emptyList()
-            }
-        } catch (e: Exception) {
-            Logger.log("Failed to load api_integrations.json: ${e.message}", TAG)
-            emptyList()
-        }
-    }
+    fun init(context: Context) = schema.init(context)
+
+    suspend fun fetchRemote(repo: SettingsRepository, force: Boolean = false): Boolean =
+        schema.fetchRemote(repo, force)
+
+    private val cached: List<ApiIntegration> get() = schema.value?.integrations ?: emptyList()
 
     fun forPackage(packageName: String): ApiIntegration? = cached.firstOrNull { it.packageName == packageName }
 
