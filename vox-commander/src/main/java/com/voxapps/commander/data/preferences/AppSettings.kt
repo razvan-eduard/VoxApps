@@ -195,4 +195,18 @@ data class AppSettings(
     fun getCustomModelPath(engineKey: String, langCode: String? = null): String? {
         return customModelPaths[customModelPathKey(engineKey, langCode)]
     }
+
+    /**
+     * Every language [engineKey] has an imported model for, read from what is stored.
+     *
+     * The caller used to walk a written-down list of four languages and ask for each, so a model
+     * imported for a fifth was stored and then never seen again — the path was in here, and nothing
+     * asked for it.
+     */
+    fun customModelPathsByLanguage(engineKey: String): Map<String, String> {
+        val prefix = "${engineKey}_"
+        return customModelPaths
+            .filterKeys { it.startsWith(prefix) && it.length > prefix.length }
+            .mapKeys { (key, _) -> key.removePrefix(prefix) }
+    }
 }

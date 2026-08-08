@@ -140,4 +140,27 @@ class TextNormalizerTest {
         loadFixture(fixture)
         assertEquals("hello world", TextNormalizer.normalize("hello world", "en"))
     }
+
+    /**
+     * A language the file declares works without the code being told about it.
+     *
+     * The loader walked a list of four language codes written beside it, so adding a fifth to
+     * normalization.json — including from a repository-served copy — silently normalised nothing
+     * for it, which looks exactly like the rules being wrong.
+     */
+    @Test
+    fun `a language the file declares is loaded without being listed in code`() {
+        loadFixture(
+            """
+            {
+              "schema_version": 1,
+              "es": {
+                "layer_1_replacements": { "rules": { "\\bespotifai\\b": "spotify" } }
+              }
+            }
+            """.trimIndent()
+        )
+
+        assertEquals("abre spotify", TextNormalizer.normalize("abre espotifai", "es"))
+    }
 }

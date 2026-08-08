@@ -103,4 +103,34 @@ class AppSettingsTest {
         assertEquals(2, settings.returnAfterActionApps.size)
         assertTrue(settings.returnAfterActionApps.contains("com.spotify.music"))
     }
+
+    /**
+     * A model imported for a language nobody listed is still a model the user imported.
+     *
+     * The caller walked a written-down list of four languages and asked for each, so anything
+     * outside it was stored and never read back — the path was there, and nothing went looking.
+     */
+    @Test
+    fun `custom model paths are found for every language stored, not a listed few`() {
+        val settings = AppSettings(
+            customModelPaths = mapOf(
+                "stt_vosk_en" to "/models/vosk-en",
+                "stt_vosk_es" to "/models/vosk-es",
+                "stt_vosk" to "/models/vosk-default",
+                "stt_whisper_en" to "/models/whisper-en"
+            )
+        )
+
+        val vosk = settings.customModelPathsByLanguage("stt_vosk")
+
+        assertEquals(mapOf("en" to "/models/vosk-en", "es" to "/models/vosk-es"), vosk)
+    }
+
+    /** The engine's own unsuffixed entry is not a language, and neither is another engine's. */
+    @Test
+    fun `custom model paths by language exclude the engine's own entry`() {
+        val settings = AppSettings(customModelPaths = mapOf("stt_vosk" to "/models/vosk"))
+
+        assertTrue(settings.customModelPathsByLanguage("stt_vosk").isEmpty())
+    }
 }

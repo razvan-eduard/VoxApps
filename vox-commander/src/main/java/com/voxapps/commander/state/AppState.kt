@@ -159,16 +159,9 @@ data class AppState(
                 }
             }
 
-            // Load custom Vosk paths
-            val customVoskModelPaths = mutableMapOf<String, String>()
-            val languages = listOf("en", "ro", "de", "fr")
-            languages.forEach { lang ->
-                voskKey?.let { key ->
-                    settings.getCustomModelPath(key, lang)?.let { path ->
-                        customVoskModelPaths[lang] = path
-                    }
-                }
-            }
+            // Whatever languages models were actually imported for, rather than a list of four
+            // written here that the store could always have outgrown.
+            val customVoskModelPaths = voskKey?.let { settings.customModelPathsByLanguage(it) }.orEmpty()
 
             return AppState(
                 language = settings.language,
