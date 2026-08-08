@@ -61,6 +61,23 @@ class OrderIndependentLookupTest {
     }
 
     /**
+     * The fallback checkbox is enabled by `isBuiltIn || isModelDownloaded`, and every virtual model
+     * is built-in — so a cloud service would offer itself as the *offline* fallback as soon as one
+     * joined the registry. Excluding declared-cloud engines is what stops that, and today, with no
+     * engine declaring `cloud`, it excludes nothing.
+     */
+    @Test
+    fun `excluding cloud engines from the fallback offer changes nothing today`() {
+        val schema = shippedSchema()
+
+        val excluded = schema.engines.keys.filter {
+            EngineRuntime.fromKey(schema.engines[it]?.runtime) == EngineRuntime.CLOUD
+        }
+
+        assertEquals(emptyList<String>(), excluded)
+    }
+
+    /**
      * The reason the constraints exist at all. If a voice engine were ever listed before the local
      * ones without being local itself, the unconstrained lookups would hand a fresh install a
      * processor that cannot transcribe anything without a key it has not been given.

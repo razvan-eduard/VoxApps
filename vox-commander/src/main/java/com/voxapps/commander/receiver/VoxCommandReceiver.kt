@@ -53,7 +53,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                             container.settingsRepository.getAllSearchProviderApiKeys()
                         } else {
                             emptyMap()
-                        }
+                        },
+                        credentials = container.settingsRepository.getCredentialsSnapshot()
                     )
                     val rules = container.fastMapDao.getAllRulesOnce()
                     val rulesJson = CommanderExportHandler.buildFastMapRulesJson(rules)

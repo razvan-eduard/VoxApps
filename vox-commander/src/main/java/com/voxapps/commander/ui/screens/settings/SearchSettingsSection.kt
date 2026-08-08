@@ -1,6 +1,12 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.location.VoxNominatimGeocoder
+import com.voxapps.location.CachedCoordinate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.voxapps.commander.ui.LocalLanguageManager
+import com.voxapps.commander.ui.components.EngineApiKeyField
+import com.voxapps.commander.utils.Strings
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -36,6 +42,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchSettingsSection(
+    appStateManager: com.voxapps.commander.state.AppStateManager,
 
     settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository
 ) {
@@ -58,6 +65,7 @@ fun SearchSettingsSection(
             CategoryNode(
                 categoryName = category,
 
+                appStateManager = appStateManager,
                 settingsRepo = settingsRepo,
                 scope = scope,
                 context = context
@@ -86,6 +94,41 @@ private fun CommanderLocationSettingsSection(
         )
     }
     var isRefreshing by remember { mutableStateOf(false) }
+
+    /*
+     * The screen always shows a town for the fix it is showing.
+     *
+     * The town is wanted here and nowhere else, so it is resolved here — the search paths cache
+     * coordinates without one on purpose, to keep a Nominatim round trip out of a spoken query.
+     * This fills the gap, and writes the answer back so the next visit costs nothing.
+     *
+     * Resolved once and never re-resolved: a place name describes the coordinates it was fetched
+     * for, so it cannot go stale while they do not change. What expires is the *fix* — and when the
+     * cache lets it expire, the next resolve replaces the coordinates and the name together. Asking
+     * Nominatim again for a name we already hold would spend their usage policy on redrawing a
+     * screen.
+     */
+    LaunchedEffect(lastLocation?.lat, lastLocation?.lon, lastLocation?.displayName) {
+        val current = lastLocation ?: return@LaunchedEffect
+        if (current.displayName != null) return@LaunchedEffect
+
+        val name = withContext(Dispatchers.IO) {
+            runCatching { VoxNominatimGeocoder().reverseGeocode(current.lat, current.lon) }.getOrNull()
+        } ?: return@LaunchedEffect
+
+        lastLocation = current.copy(displayName = name)
+        val cached = store.getCachedLocationSync()
+        store.setCachedLocation(
+            CachedCoordinate(
+                lat = current.lat,
+                lon = current.lon,
+                // The fix's own age is preserved: naming it is not re-taking it, and pretending
+                // otherwise would keep an old fix alive past the cache life the user chose.
+                timestampMillis = cached?.timestampMillis ?: System.currentTimeMillis(),
+                resolvedName = name
+            )
+        )
+    }
 
     VoxLocationSettingsCard(
         state = VoxLocationUiState(
@@ -121,6 +164,7 @@ private fun CommanderLocationSettingsSection(
 private fun CategoryNode(
     categoryName: String,
 
+    appStateManager: com.voxapps.commander.state.AppStateManager,
     settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context
@@ -213,6 +257,7 @@ private fun CategoryNode(
                                 providerName = providerName,
                                 isSelected = providerName == selectedProvider,
                                 categoryName = categoryName,
+                                appStateManager = appStateManager,
                                 settingsRepo = settingsRepo,
                                 scope = scope,
                                 context = context,
@@ -249,6 +294,7 @@ private fun CategoryNode(
                                 providerName = providerName,
                                 isSelected = false,
                                 categoryName = categoryName,
+                                appStateManager = appStateManager,
                                 settingsRepo = settingsRepo,
                                 scope = scope,
                                 context = context,
@@ -279,6 +325,7 @@ private fun ProviderRow(
     providerName: String,
     isSelected: Boolean,
     categoryName: String,
+    appStateManager: com.voxapps.commander.state.AppStateManager,
     settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context,
@@ -292,6 +339,7 @@ private fun ProviderRow(
         mutableStateOf(settingsRepo.getSearchProviderApiKeySync(providerName) ?: "")
     }
     var isApiKeyFocused by remember { mutableStateOf(false) }
+    val languageManager = LocalLanguageManager.current
 
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
@@ -326,16 +374,27 @@ private fun ProviderRow(
             }
         }
 
-        // Shared-key providers (e.g. OpenAI) reuse the key already entered in Settings → Models —
-        // no separate field to fill in, just a note explaining where the key comes from.
+        // A shared-key provider does not own a key — it borrows the engine's. The field shown here
+        // is that engine's own, writing the same slot the intent engine reads, so entering it in
+        // either place is entering it once. It has to be reachable here: the engine's own screen
+        // shows the field only while that engine is *selected*, and someone running a local intent
+        // model would otherwise have no way to configure the provider that needs this key.
         if (provider?.usesSharedApiKey == true) {
-            val languageManager = LocalLanguageManager.current
             Text(
                 text = languageManager.getString("search_provider_uses_shared_key")
-                    ?: "Uses the API key from Settings → Models",
+                    ?: "Shares the engine's API key",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 48.dp)
+            )
+            EngineApiKeyField(
+                engineKey = Strings.AiProcessors.OPENAI,
+                appStateManager = appStateManager,
+                languageManager = languageManager,
+                onKeyChanged = {
+                    SearchProviderRegistry.applySharedOpenAiKey(it.ifBlank { null })
+                    onApiKeyChanged()
+                }
             )
         }
 

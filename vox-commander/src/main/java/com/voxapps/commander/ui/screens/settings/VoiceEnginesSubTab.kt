@@ -18,6 +18,7 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.components.DropdownGroup
+import com.voxapps.commander.ui.components.EngineApiKeyField
 import com.voxapps.commander.ui.components.EngineModelSection
 import com.voxapps.commander.ui.components.GroupedDropdownContent
 import com.voxapps.commander.ui.components.GroupedDropdownMenu
@@ -79,11 +80,13 @@ fun VoiceEnginesSubTab(
                 list.removeAll { RemoteModelRegistry.getExtension(it) == ".bin" }
             }
             
-            // Add virtual models
-            if (!list.contains(Strings.Processors.GOOGLE)) list.add(Strings.Processors.GOOGLE)
-            if (!list.contains(Strings.Processors.WHISPER_API)) list.add(Strings.Processors.WHISPER_API)
-            
-            // Experimental Vulkan (only if Whisper system is enabled)
+            // The cloud and OS-supplied engines are no longer injected here — they are declared in
+            // virtual_models.json and arrive with every other voice engine. Two screens listing
+            // engines by hand is how one of them came to offer an engine the other did not.
+            //
+            // Experimental Vulkan stays: it is not an engine of its own but stt_whisper asked to run
+            // on the GPU, sharing that engine's models, so declaring it would give it an empty model
+            // list and a claim to be the whisper engine in every by-packaging lookup.
             if (uiState.isWhisperSystemEnabled && uiState.isExperimentalVulkanEnabled && !list.contains(Strings.Processors.WHISPER_VULKAN)) {
                 list.add(0, Strings.Processors.WHISPER_VULKAN)
             }
@@ -96,10 +99,15 @@ fun VoiceEnginesSubTab(
         
         DropdownMenu(expanded = processorExpanded, onDismissRequest = { processorExpanded = false }, modifier = Modifier.fillMaxWidth()) {
             processors.forEach { proc ->
-                val enabled = when (proc) {
-                    Strings.Processors.WHISPER_API -> hasApiKey
-                    Strings.Processors.GOOGLE -> googleSttAvailable
-                    Strings.Processors.WHISPER_VULKAN -> uiState.isWhisperSystemEnabled && !settingsRepo.getSettingsSnapshot().vulkanIncompatible
+                // Asked of the declaration wherever the declaration can answer. "Needs a key" is a
+                // property of the engine and is now written down as one; whether the OS actually
+                // provides a recogniser is a property of the *device*, which no schema can know, so
+                // that one stays a probe the caller performs.
+                val enabled = when {
+                    RemoteModelRegistry.hasCapability(proc, "requires_api_key") -> hasApiKey
+                    proc == Strings.Processors.GOOGLE -> googleSttAvailable
+                    proc == Strings.Processors.WHISPER_VULKAN ->
+                        uiState.isWhisperSystemEnabled && !settingsRepo.getSettingsSnapshot().vulkanIncompatible
                     else -> true
                 }
                 
@@ -116,6 +124,14 @@ fun VoiceEnginesSubTab(
             }
         }
     }
+
+    // Shown only when the selected engine declares it needs a credential — the Whisper API does,
+    // the on-device engines do not.
+    EngineApiKeyField(
+        engineKey = uiState.voiceProcessor,
+        appStateManager = appStateManager,
+        languageManager = languageManager
+    )
 
     HorizontalDivider()
 

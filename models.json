@@ -9,7 +9,9 @@
       "engine_label": "Whisper",
       "extension": ".bin",
       "runtime": "local_file",
-      "entry": { "self": true },
+      "entry": {
+        "self": true
+      },
       "type": [
         "voice"
       ],
@@ -51,7 +53,10 @@
       "engine_label": "Vosk",
       "extension": ".zip",
       "runtime": "local_file",
-      "entry": { "match": "am", "target": "dir" },
+      "entry": {
+        "match": "am",
+        "target": "dir"
+      },
       "is_default_wake_word": true,
       "type": [
         "voice",
@@ -871,7 +876,9 @@
       "engine_label": "openWakeWord",
       "extension": ".onnx",
       "runtime": "local_file",
-      "entry": { "self": true },
+      "entry": {
+        "self": true
+      },
       "type": [
         "wake_word"
       ],
@@ -925,6 +932,8 @@
     "wake_porcupine": {
       "is_multilingual": false,
       "engine_label": "Porcupine",
+      "api_key_url": "https://console.picovoice.ai",
+      "api_key_help_key": "ww_porcupine_accesskey_desc",
       "extension": "",
       "runtime": "device_builtin",
       "type": [
@@ -1073,7 +1082,9 @@
       "engine_label": "NLU (LLM, .task)",
       "extension": ".task",
       "runtime": "local_file",
-      "entry": { "self": true },
+      "entry": {
+        "self": true
+      },
       "type": [
         "llm"
       ],
@@ -1118,7 +1129,9 @@
       "engine_label": "NLU (LLM, .litertlm)",
       "extension": ".litertlm",
       "runtime": "local_file",
-      "entry": { "self": true },
+      "entry": {
+        "self": true
+      },
       "type": [
         "llm"
       ],
@@ -1143,7 +1156,10 @@
       "engine_label": "Piper TTS (Neural Offline)",
       "extension": ".tar.bz2",
       "runtime": "local_file",
-      "entry": { "match": "*.onnx", "target": "file" },
+      "entry": {
+        "match": "*.onnx",
+        "target": "file"
+      },
       "type": [
         "tts"
       ],

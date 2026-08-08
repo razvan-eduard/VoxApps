@@ -15,6 +15,8 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.ui.LocalLanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
+import com.voxapps.commander.data.remote.EngineRuntime
+import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.launch
 
@@ -169,7 +171,18 @@ fun <T> EngineModelSection(
     }
 
     // 4. Categorized Fallback Logic
-    if (showFallback && effectiveSelectedItem != null) {
+    //
+    // A fallback is what answers when the primary could not, and the commonest reason it could not
+    // is that the network was the problem — so an engine that needs the network is not offered as
+    // one. Only a *declared* cloud runtime is excluded: an engine the schema does not describe is
+    // left exactly as it is rather than quietly losing its checkbox. The enablement below is
+    // `isBuiltIn || isModelDownloaded`, and a virtual model is built-in by definition, so without
+    // this every cloud service would offer itself as the offline fallback the moment virtual
+    // engines join the registry.
+    val servesWithoutNetwork =
+        RemoteModelRegistry.runtimeOf(currentProcessor) != EngineRuntime.CLOUD
+
+    if (showFallback && servesWithoutNetwork && effectiveSelectedItem != null) {
         val modelId = modelIdProvider(effectiveSelectedItem)
         val isBuiltIn = (effectiveSelectedItem as? AppModel)?.isBuiltIn == true
         val isDownloaded = isBuiltIn || uiState.isModelDownloaded(modelId)

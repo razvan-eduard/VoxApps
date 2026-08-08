@@ -19,6 +19,7 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.components.DropdownGroup
+import com.voxapps.commander.ui.components.EngineApiKeyField
 import com.voxapps.commander.ui.components.EngineModelSection
 import com.voxapps.commander.utils.Strings
 
@@ -91,14 +92,11 @@ fun IntentEnginesSubTab(
                     
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    // Every engine that interprets, on-device or not. The cloud services used to be
+                    // appended here by hand — three lines that had to be kept in step with a label
+                    // table and an availability check elsewhere; they are declared engines now.
                     val aiOptions = remember(uiState.availableModels) {
-                        val list = RemoteModelRegistry.getLlmEngineKeys().toMutableList()
-                        
-                        // Inject Virtual Services
-                        if (!list.contains(Strings.AiProcessors.OPENAI)) list.add(Strings.AiProcessors.OPENAI)
-                        if (!list.contains(Strings.AiProcessors.GEMINI_NATIVE)) list.add(Strings.AiProcessors.GEMINI_NATIVE)
-                        if (!list.contains(Strings.AiProcessors.GEMINI_CLOUD)) list.add(Strings.AiProcessors.GEMINI_CLOUD)
-                        list
+                        RemoteModelRegistry.getEngineKeysByType("llm")
                     }
 
                     var expanded by remember { mutableStateOf(false) }
@@ -117,9 +115,16 @@ fun IntentEnginesSubTab(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             aiOptions.forEach { id ->
-                                val isEnabled = when (id) {
-                                    Strings.AiProcessors.GEMINI_NATIVE -> !settingsRepo.getSettingsSnapshot().geminiIncompatible
-                                    Strings.AiProcessors.GEMINI_CLOUD -> !settingsRepo.getSettingsSnapshot().geminiApiKey.isNullOrBlank()
+                                // Credentials come from uiState rather than a snapshot read: this is
+                                // composition, so a value fetched here is fixed until something else
+                                // recomposes the menu — the key would be entered and the entry would
+                                // stay greyed out. Whether this device carries Gemini Nano is a
+                                // probe result, which no declaration can supply.
+                                val isEnabled = when {
+                                    RemoteModelRegistry.hasCapability(id, "requires_api_key") ->
+                                        uiState.credentials.has(id)
+                                    id == Strings.AiProcessors.GEMINI_NATIVE ->
+                                        !settingsRepo.getSettingsSnapshot().geminiIncompatible
                                     else -> true
                                 }
                                 
@@ -141,6 +146,22 @@ fun IntentEnginesSubTab(
                             }
                         }
                     }
+
+                    // The credential for whichever engine is selected, and only when that engine
+                    // needs one — asked where the choice is made rather than on another page.
+                    EngineApiKeyField(
+                        engineKey = uiState.aiProcessor,
+                        appStateManager = appStateManager,
+                        languageManager = languageManager,
+                        onKeyChanged = {
+                            // The OpenAI credential is also what the shared-key search providers
+                            // use; they hold their own copy and are told when it changes.
+                            if (uiState.aiProcessor == Strings.AiProcessors.OPENAI) {
+                                com.voxapps.commander.domain.search.SearchProviderRegistry
+                                    .applySharedOpenAiKey(it.ifBlank { null })
+                            }
+                        }
+                    )
                 }
             }
         }

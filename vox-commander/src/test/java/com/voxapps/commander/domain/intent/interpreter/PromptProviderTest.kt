@@ -1,7 +1,14 @@
 package com.voxapps.commander.domain.intent.interpreter
 
+import android.util.Log
 import com.google.gson.Gson
+import com.voxapps.commander.data.remote.EngineRuntime
+import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.data.remote.RemoteModelSchema
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.mockkStatic
+import io.mockk.unmockkObject
 import com.voxapps.ipc.VoxAppInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,6 +21,87 @@ import java.io.File
  * (few-shot examples + trailing input placeholder removed, no dangling header).
  */
 class PromptProviderTest {
+
+    /**
+     * The template an engine is read is resolved, not fixed: what it declares for itself, else one
+     * written for its runtime, else the standard one. A hosted model and a half-gigabyte on-device
+     * one are not the same audience, and until now they were handed identical text.
+     */
+    private fun stubRegistry(
+        declaredId: String? = null,
+        runtime: EngineRuntime? = null,
+        available: Map<String, String> = emptyMap()
+    ) {
+        mockkStatic(Log::class)
+        every { Log.d(any<String>(), any<String>()) } returns 0
+        every { Log.e(any<String>(), any<String>()) } returns 0
+        every { Log.i(any<String>(), any<String>()) } returns 0
+        every { Log.w(any<String>(), any<String>()) } returns 0
+
+        mockkObject(RemoteModelRegistry)
+        every { RemoteModelRegistry.declaredPromptId(any()) } returns declaredId
+        every { RemoteModelRegistry.runtimeOf(any()) } returns runtime
+        every { RemoteModelRegistry.getPrompt(any()) } answers { available[firstArg<String>()] }
+    }
+
+    @org.junit.After
+    fun tearDown() {
+        unmockkObject(RemoteModelRegistry)
+    }
+
+    @Test
+    fun `an engine's own declared prompt wins over every other candidate`() {
+        stubRegistry(
+            declaredId = "nlu_tiny",
+            runtime = EngineRuntime.LOCAL_FILE,
+            available = mapOf(
+                "nlu_tiny" to "DECLARED",
+                "standard_nlu_local_file" to "BY_RUNTIME",
+                "standard_nlu" to "STANDARD"
+            )
+        )
+
+        val prompt = PromptProvider.getNluSystemPrompt(engineKey = "nlu_llm")
+
+        assertTrue(prompt.startsWith("DECLARED"))
+    }
+
+    @Test
+    fun `an engine declaring nothing gets the prompt written for its runtime`() {
+        stubRegistry(
+            runtime = EngineRuntime.LOCAL_FILE,
+            available = mapOf(
+                "standard_nlu_local_file" to "BY_RUNTIME",
+                "standard_nlu" to "STANDARD"
+            )
+        )
+
+        val prompt = PromptProvider.getNluSystemPrompt(engineKey = "nlu_llm")
+
+        assertTrue(prompt.startsWith("BY_RUNTIME"))
+    }
+
+    @Test
+    fun `a runtime with no prompt of its own falls through to the standard one`() {
+        stubRegistry(
+            runtime = EngineRuntime.CLOUD,
+            available = mapOf("standard_nlu" to "STANDARD")
+        )
+
+        val prompt = PromptProvider.getNluSystemPrompt(engineKey = "OPENAI")
+
+        assertTrue(prompt.startsWith("STANDARD"))
+    }
+
+    /** Every caller today: nothing declares a prompt and no per-runtime prompt is written yet. */
+    @Test
+    fun `an unknown engine gets the standard prompt`() {
+        stubRegistry(available = mapOf("standard_nlu" to "STANDARD"))
+
+        val prompt = PromptProvider.getNluSystemPrompt(engineKey = "who_knows")
+
+        assertTrue(prompt.startsWith("STANDARD"))
+    }
 
     private val template = """
         Sentence Anatomy Rules:

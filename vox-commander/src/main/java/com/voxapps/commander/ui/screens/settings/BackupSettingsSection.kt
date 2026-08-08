@@ -34,7 +34,13 @@ private const val DOMAIN = "commander"
  * Commander exports.
  */
 @Composable
-fun BackupSettingsSection(settingsRepo: SettingsRepository, settings: AppSettings) {
+fun BackupSettingsSection(
+    settingsRepo: SettingsRepository,
+    settings: AppSettings,
+    // Handed in rather than read from the repository: credentials reach the UI through
+    // AppStateManager like every other piece of state, and a backup must carry what is on screen.
+    credentials: com.voxapps.commander.data.preferences.Credentials
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val appContainer = remember { (context.applicationContext as VoxApplication).container }
@@ -54,7 +60,12 @@ fun BackupSettingsSection(settingsRepo: SettingsRepository, settings: AppSetting
                 json.put(
                     "settings",
                     JSONObject(
-                        CommanderExportHandler.buildExportJson(settings, settings.backupIncludeApiKeys, keys)
+                        CommanderExportHandler.buildExportJson(
+                            settings,
+                            settings.backupIncludeApiKeys,
+                            keys,
+                            credentials
+                        )
                     )
                 )
             }

@@ -84,7 +84,7 @@ fun GeneralSettingsTab(
                             settingsRepo.getAllSearchProviderApiKeys()
                         )
                         com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
-                            settingsRepo.getApiKeySync()
+                            uiState.credentials.forEngine(Strings.AiProcessors.OPENAI)
                         )
                         com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(settingsRepo, force = true)
                     }

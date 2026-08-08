@@ -1,6 +1,7 @@
 package com.voxapps.commander.state
 
 import android.content.Context
+import com.voxapps.commander.data.preferences.Credentials
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.testutil.TestDataFactory
 import com.voxapps.commander.utils.PermissionUtils
@@ -49,7 +50,7 @@ class AppStateTest {
         val settings = TestDataFactory.createAppSettings(
             voiceProcessor = Strings.Processors.GOOGLE
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
     }
 
@@ -58,7 +59,7 @@ class AppStateTest {
         val settings = TestDataFactory.createAppSettings(
             voiceProcessor = Strings.Processors.WHISPER_API
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
     }
 
@@ -68,7 +69,7 @@ class AppStateTest {
             activeVoiceModelId = "base",
             downloadedModelIds = setOf("base")
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
     }
 
@@ -78,7 +79,7 @@ class AppStateTest {
             activeVoiceModelId = "base",
             downloadedModelIds = emptySet()
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertFalse(state.voiceModelReady)
     }
 
@@ -90,7 +91,7 @@ class AppStateTest {
         ).copy(
             customModelPaths = mapOf("stt_whisper" to "/sdcard/model.bin")
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
     }
 
@@ -102,7 +103,7 @@ class AppStateTest {
             activeVoiceModelId = "vosk-small",
             downloadedModelIds = setOf("vosk-small")
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
     }
 
@@ -114,7 +115,7 @@ class AppStateTest {
             activeVoiceModelId = "vosk-small",
             downloadedModelIds = emptySet()
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertFalse(state.voiceModelReady)
     }
 
@@ -123,7 +124,7 @@ class AppStateTest {
         val settings = TestDataFactory.createAppSettings(
             aiProcessor = Strings.AiProcessors.OPENAI
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.intentModelReady)
     }
 
@@ -132,7 +133,7 @@ class AppStateTest {
         val settings = TestDataFactory.createSettingsWithGeminiNative(
             geminiIncompatible = false
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.intentModelReady)
     }
 
@@ -141,25 +142,25 @@ class AppStateTest {
         val settings = TestDataFactory.createSettingsWithGeminiNative(
             geminiIncompatible = true
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertFalse(state.intentModelReady)
     }
 
     @Test
     fun `intentModelReady is true for GeminiCloud when API key is set`() {
-        val settings = TestDataFactory.createSettingsWithGeminiCloud(
-            geminiApiKey = "test-key"
+        val settings = TestDataFactory.createSettingsWithGeminiCloud()
+        val state = AppState.fromAppSettings(
+            settings, Credentials(mapOf(Strings.AiProcessors.GEMINI_CLOUD to "test-key")), context, emptyMap()
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
         assertTrue(state.intentModelReady)
     }
 
     @Test
     fun `intentModelReady is false for GeminiCloud when API key is null`() {
-        val settings = TestDataFactory.createSettingsWithGeminiCloud(
-            geminiApiKey = null
+        val settings = TestDataFactory.createSettingsWithGeminiCloud()
+        val state = AppState.fromAppSettings(
+            settings, Credentials(), context, emptyMap()
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
         assertFalse(state.intentModelReady)
     }
 
@@ -170,7 +171,7 @@ class AppStateTest {
             activeIntentModelId = "qwen2.5-1.5b-q8",
             downloadedModelIds = setOf("qwen2.5-1.5b-q8")
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.intentModelReady)
     }
 
@@ -181,7 +182,7 @@ class AppStateTest {
             activeIntentModelId = "qwen2.5-1.5b-q8",
             downloadedModelIds = emptySet()
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertFalse(state.intentModelReady)
     }
 
@@ -190,7 +191,7 @@ class AppStateTest {
         val settings = TestDataFactory.createAppSettings(
             aiProcessor = "unknown_processor"
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertFalse(state.intentModelReady)
     }
 
@@ -200,7 +201,7 @@ class AppStateTest {
             voiceProcessor = Strings.Processors.WHISPER_VULKAN,
             voiceLanguage = "ro"
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertEquals(Strings.Processors.WHISPER_VULKAN, state.voiceProcessor)
         assertEquals("ro", state.voiceLanguage)
     }
@@ -211,7 +212,7 @@ class AppStateTest {
             aiProcessor = Strings.AiProcessors.GEMINI_CLOUD,
             cloudIntelligenceEnabled = false
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertEquals(Strings.AiProcessors.GEMINI_CLOUD, state.aiProcessor)
         assertFalse(state.cloudIntelligenceEnabled)
     }
@@ -221,7 +222,7 @@ class AppStateTest {
         val settings = TestDataFactory.createAppSettings(
             downloadedModelIds = setOf("base", "tiny", "qwen")
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertEquals(setOf("base", "tiny", "qwen"), state.downloadedModelIds)
         assertTrue(state.isModelDownloaded("base"))
         assertFalse(state.isModelDownloaded("nonexistent"))
@@ -236,7 +237,7 @@ class AppStateTest {
             )
         )
         val settings = TestDataFactory.createAppSettings()
-        val state = AppState.fromAppSettings(settings, context, models)
+        val state = AppState.fromAppSettings(settings, Credentials(), context, models)
         assertEquals(2, state.availableModels["stt_whisper"]?.size)
     }
 
@@ -248,7 +249,7 @@ class AppStateTest {
             defaultIntentFallbackProcessor = "nlu_llm",
             defaultIntentFallbackModel = "qwen"
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertEquals("stt_whisper", state.defaultVoiceFallbackProcessor)
         assertEquals("tiny", state.defaultVoiceFallbackModel)
         assertEquals("nlu_llm", state.defaultIntentFallbackProcessor)
@@ -264,7 +265,7 @@ class AppStateTest {
             wakeWord = "hi vox",
             wakeWordEnabled = true
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertEquals("hi vox", state.wakeWord)
         assertTrue(state.wakeWordEnabled)
         assertEquals("/path/to/model", state.wakeWordModelPath)

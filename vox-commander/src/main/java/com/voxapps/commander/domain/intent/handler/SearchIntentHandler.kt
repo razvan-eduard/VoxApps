@@ -57,7 +57,16 @@ class SearchIntentHandler(
                     lat = location.lat
                     lon = location.lon
                 } else {
+                    // Say what actually went wrong. Running the search anyway returns nothing, and
+                    // the caller then reports "no results found" — which reads as a broken provider
+                    // or a bad API key and sends the user to check both, when the provider is fine
+                    // and simply has no location to search from.
                     Logger.log("Search requires location but none available", TAG)
+                    val message = "I need your location for $category searches. " +
+                        "Allow location access, or set a home town in settings."
+                    com.voxapps.commander.domain.search.SearchResultsHolder.setResults(message)
+                    ConversationHandler.speakResponse(message)
+                    return@launch
                 }
             }
 

@@ -49,7 +49,7 @@ class IntentDecisionMap(
         val match = stages.firstNotNullOfOrNull { stage ->
             Logger.log("🔍 Trying ${stage.label}...", TAG)
             val result = try {
-                stage.engine.processCommand(spokenText, modelFilterLang)
+                stage.call.invoke(spokenText, modelFilterLang)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Never swallowed: this is the caller abandoning the command, not an engine failing.
                 // Treating it as a miss would send the request on to the next level after the scope
@@ -71,7 +71,7 @@ class IntentDecisionMap(
         return match
     }
 
-    private data class Stage(val label: String, val engine: AssistantEngine)
+    private data class Stage(val label: String, val call: AiEngineResolver.Call)
 
     /**
      * The engines to try, in order: the local regex trigger map, then the user's primary AI
@@ -79,32 +79,32 @@ class IntentDecisionMap(
      *
      * A level is simply absent when it can't run — an unset fallback, an engine whose key resolves
      * to nothing, or a cloud engine while cloud intelligence is off (see [AiEngineResolver]) — so
-     * the loop above never has to ask why. The fallback is also dropped when its processor key
-     * equals the primary's — the one case the old code handled with an explicit equality check
-     * partway down the cascade. (Keys, not resolved engines: two different local model ids both
-     * resolve to the same local engine and still produce two stages, exactly as before.)
+     * the loop above never has to ask why.
+     *
+     * The fallback is dropped only when it is the *same work* as the primary: same engine instance
+     * and same selection. Engine identity alone used to decide that, which was right while the
+     * interpreter loaded whatever model was active — a second on-device key could then only re-run
+     * the inference that had just failed, on the model already in memory. Now that a level carries
+     * its own selection, an on-device fallback on a *different* model is a real fallback (the
+     * primary's model failing to load is exactly when you want the smaller one), so only an
+     * identical selection is skipped. The engine key stays part of that comparison because it is
+     * part of where the model file is looked up, so two keys naming one model id are two lookups,
+     * not one — a mismatched pair from an imported backup fails fast rather than re-inferring.
      */
     private fun stagesFor(snapshot: AppSettings): List<Stage> {
         val cloudOk = snapshot.cloudIntelligenceEnabled
         val primary = snapshot.aiProcessor
         val fallback = snapshot.defaultIntentFallbackProcessor
 
-        val stages = mutableListOf(Stage("L1 (trigger map)", l1Engine))
-        val primaryEngine = resolver.engineFor(primary, cloudOk)
-        primaryEngine?.let { stages += Stage("L2 ($primary)", it) }
+        val stages = mutableListOf(Stage("L1 (trigger map)", AiEngineResolver.Call(l1Engine, null)))
+        val primaryCall = resolver.callFor(primary, snapshot.activeIntentModelId, cloudOk)
+        primaryCall?.let { stages += Stage("L2 ($primary)", it) }
 
-        if (fallback != null && fallback != primary && snapshot.defaultIntentFallbackModel != null) {
-            val fallbackEngine = resolver.engineFor(fallback, cloudOk)
-            // Compared by identity, not by processor key. Every on-device LLM key resolves to the
-            // same LocalLlmInterpreter, and that instance loads whichever model `activeIntentModelId`
-            // names — so when the primary is already on-device, a second on-device key as fallback
-            // would re-run the exact inference that just failed, on the same loaded model, for the
-            // cost of another full timeout. There is no fallback to make in that case: the selected
-            // model is the one in memory. Distinct keys alone don't catch this (nlu_llm vs
-            // nlu_llm_litertlm are different keys, one instance), and the settings can arrive that
-            // way from an imported backup regardless of what the picker allows.
-            if (fallbackEngine != null && fallbackEngine !== primaryEngine) {
-                stages += Stage("L3 fallback ($fallback)", fallbackEngine)
+        val fallbackModel = snapshot.defaultIntentFallbackModel
+        if (fallback != null && fallbackModel != null) {
+            val fallbackCall = resolver.callFor(fallback, fallbackModel, cloudOk)
+            if (fallbackCall != null && (primaryCall == null || !fallbackCall.isSameWorkAs(primaryCall))) {
+                stages += Stage("L3 fallback ($fallback / $fallbackModel)", fallbackCall)
             }
         }
         return stages

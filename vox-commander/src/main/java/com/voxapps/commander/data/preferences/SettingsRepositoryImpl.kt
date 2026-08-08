@@ -1,6 +1,7 @@
 package com.voxapps.commander.data.preferences
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -17,8 +18,11 @@ import com.voxapps.commander.utils.fromJsonOrNull
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.utils.AppScope
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -43,6 +47,45 @@ class SettingsRepositoryImpl(
         masterKey,
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
+    /**
+     * Names of the entries in the encrypted store — [Keys]' counterpart for the other store.
+     *
+     * Written out as constants for the same reason the DataStore keys are: they were string
+     * literals repeated at each read and each write, which is one typo away from a credential that
+     * saves to one name and is read from another. Stored names, so never renamed.
+     */
+    private object SecureKeys {
+        /** One entry per engine that declares `requires_api_key`, addressed by the engine key
+         *  itself: `engine_apikey_OPENAI`, `engine_apikey_wake_porcupine`, and so on. A namespace
+         *  rather than a fixed set of names, so an engine that needs a credential needs no code. */
+        const val ENGINE_PREFIX = "engine_apikey_"
+
+        fun forEngine(engineKey: String) = "$ENGINE_PREFIX$engineKey"
+        fun engineOf(prefName: String) = prefName.removePrefix(ENGINE_PREFIX)
+        fun isEngineKey(prefName: String) = prefName.startsWith(ENGINE_PREFIX)
+
+        /** The single-key names used before credentials were per engine. Read once by
+         *  [migrateLegacyCredentials] and then gone; never written again. */
+        const val LEGACY_OPENAI = "api_key"
+        const val LEGACY_GEMINI = "gemini_api_key"
+        const val LEGACY_PICOVOICE = "picovoice_access_key"
+    }
+
+    /**
+     * Which engine inherits each single-key credential.
+     *
+     * `api_key` seeds *both* cloud OpenAI engines because that is what it was: one value the intent
+     * interpreter and the transcription engine both read. Splitting it without seeding both would
+     * silently unconfigure whichever the user thought of second.
+     */
+    private val legacyCredentialOwners = listOf(
+        SecureKeys.LEGACY_OPENAI to listOf(Strings.AiProcessors.OPENAI, Strings.Processors.WHISPER_API),
+        SecureKeys.LEGACY_GEMINI to listOf(Strings.AiProcessors.GEMINI_CLOUD),
+        // The models.json key for Porcupine. A literal rather than a reference into the service
+        // layer, which the data layer has no business importing — and it is a stored identifier.
+        SecureKeys.LEGACY_PICOVOICE to listOf("wake_porcupine")
     )
 
     // --- DATASTORE KEYS ---
@@ -70,6 +113,8 @@ class SettingsRepositoryImpl(
         val COMMAND_QUEUE_ENABLED = booleanPreferencesKey("command_queue_enabled")
         val WAKE_WORD_PROFILE = stringPreferencesKey("wake_word_profile")
         val WAKE_WORD_ENGINE_TYPE = stringPreferencesKey("wake_word_engine_type")
+        /** Legacy: the Picovoice key lived here in plaintext until [migratePicovoiceKey] moved it
+         *  to the encrypted store. Kept solely so that migration can find and clear it. */
         val PICOVOICE_ACCESS_KEY = stringPreferencesKey("picovoice_access_key")
         val WAKE_WORD_SENSITIVITY = stringPreferencesKey("wake_word_sensitivity")
         val WAKE_WORD_AEC_ENABLED = booleanPreferencesKey("wake_word_aec_enabled")
@@ -205,7 +250,7 @@ class SettingsRepositoryImpl(
 
             // Migrate API key to new secure prefs
             oldPrefs.getString(Strings.Preferences.KEY_API_KEY, null)?.let { key ->
-                encryptedPrefs.edit().putString("api_key", key).apply()
+                encryptedPrefs.edit().putString(SecureKeys.LEGACY_OPENAI, key).apply()
             }
 
             dataStore.edit { prefs ->
@@ -295,8 +340,11 @@ class SettingsRepositoryImpl(
     // --- REACTIVE FLOW ---
     override val settingsFlow: Flow<AppSettings> = dataStore.data.map { prefs ->
         AppSettings(
-            apiKey = encryptedPrefs.getString("api_key", null),
-            geminiApiKey = encryptedPrefs.getString("gemini_api_key", null),
+            // apiKey/geminiApiKey are deliberately absent: they live in the encrypted store, which
+            // this flow cannot observe, so reading them here produced a copy that went stale the
+            // moment a key was entered and stayed stale until an unrelated setting happened to
+            // write. They are served by credentialsFlow, and the fields on AppSettings survive only
+            // as backup transport (see CommanderExportHandler).
 
             language = prefs[Keys.LANGUAGE] ?: Strings.Preferences.DEFAULT_LANGUAGE,
             voiceLanguage = prefs[Keys.VOICE_LANGUAGE] ?: Strings.Preferences.DEFAULT_LANGUAGE,
@@ -320,7 +368,6 @@ class SettingsRepositoryImpl(
             commandQueueEnabled = prefs[Keys.COMMAND_QUEUE_ENABLED] ?: true,
             wakeWordProfileJson = prefs[Keys.WAKE_WORD_PROFILE],
             wakeWordEngineType = normalizeEngineKey(prefs[Keys.WAKE_WORD_ENGINE_TYPE] ?: RemoteModelRegistry.getDefaultWakeWordEngineKey()),
-            picovoiceAccessKey = prefs[Keys.PICOVOICE_ACCESS_KEY],
             wakeWordSensitivity = prefs[Keys.WAKE_WORD_SENSITIVITY] ?: "medium",
             wakeWordAecEnabled = prefs[Keys.WAKE_WORD_AEC_ENABLED] ?: false,
             wakeWordMusicDuckEnabled = prefs[Keys.WAKE_WORD_MUSIC_DUCK_ENABLED] ?: true,
@@ -403,6 +450,12 @@ class SettingsRepositoryImpl(
 
     init {
         AppScope.io.launch {
+            // Ordered: the Picovoice key first reaches the encrypted store under its old single-key
+            // name, and only then can be namespaced with the rest.
+            migratePicovoiceKey()
+            migrateLegacyCredentials()
+        }
+        AppScope.io.launch {
             settingsFlow.collect { cachedSnapshot = it }
         }
     }
@@ -410,27 +463,42 @@ class SettingsRepositoryImpl(
     override suspend fun restoreImportedSettings(imported: AppSettings) {
         // Secrets only round-trip if the export actually carried them (includeSecrets was on) —
         // absent/default means "not part of this import", not "clear it".
-        imported.apiKey?.let { setApiKey(it) }
-        imported.geminiApiKey?.let { setGeminiApiKey(it) }
+        //
+        // The per-engine map is applied first and the single-key fields fill only what it left
+        // unset, so a backup carrying both (every backup this build writes) restores from the map,
+        // while one written before per-engine credentials existed still restores from the old
+        // fields. An engine named by neither keeps whatever is already on the device.
+        val restored = mutableSetOf<String>()
+        for ((engineKey, key) in imported.engineApiKeys) {
+            setEngineApiKey(engineKey, key)
+            restored += engineKey
+        }
+        legacyCredentialOwners.forEach { (legacyName, engines) ->
+            val value = when (legacyName) {
+                SecureKeys.LEGACY_OPENAI -> imported.apiKey
+                SecureKeys.LEGACY_GEMINI -> imported.geminiApiKey
+                else -> imported.picovoiceAccessKey
+            } ?: return@forEach
+            engines.filterNot { it in restored }.forEach { setEngineApiKey(it, value) }
+        }
+
         for ((provider, key) in imported.searchProviderApiKeys) {
             setSearchProviderApiKey(provider, key)
         }
 
         dataStore.edit { prefs ->
-            imported.picovoiceAccessKey?.let { prefs[Keys.PICOVOICE_ACCESS_KEY] = it }
-
             prefs[Keys.LANGUAGE] = imported.language
             prefs[Keys.VOICE_LANGUAGE] = imported.voiceLanguage
             prefs[Keys.VOICE_LANGUAGE_AUTO_DETECT] = imported.voiceLanguageAutoDetect
             prefs[Keys.MODEL_FILTER_LANG] = imported.modelFilterLang
 
-            prefs[Keys.VOICE_PROCESSOR] = imported.voiceProcessor
+            prefs[Keys.VOICE_PROCESSOR] = normalizeEngineKey(imported.voiceProcessor)
             imported.activeVoiceModelId?.let { prefs[Keys.ACTIVE_VOICE_MODEL_ID] = it }
                 ?: prefs.remove(Keys.ACTIVE_VOICE_MODEL_ID)
             imported.activeWakeModelId?.let { prefs[Keys.ACTIVE_WAKE_MODEL_ID] = it }
                 ?: prefs.remove(Keys.ACTIVE_WAKE_MODEL_ID)
 
-            prefs[Keys.AI_PROCESSOR] = imported.aiProcessor
+            prefs[Keys.AI_PROCESSOR] = normalizeEngineKey(imported.aiProcessor)
             imported.activeIntentModelId?.let { prefs[Keys.ACTIVE_INTENT_MODEL_ID] = it }
                 ?: prefs.remove(Keys.ACTIVE_INTENT_MODEL_ID)
             prefs[Keys.CLOUD_INTELLIGENCE_ENABLED] = imported.cloudIntelligenceEnabled
@@ -440,7 +508,7 @@ class SettingsRepositoryImpl(
             prefs[Keys.WAKE_WORD] = imported.wakeWord
             prefs[Keys.WAKE_WORD_ENABLED] = imported.wakeWordEnabled
             prefs[Keys.COMMAND_QUEUE_ENABLED] = imported.commandQueueEnabled
-            prefs[Keys.WAKE_WORD_ENGINE_TYPE] = imported.wakeWordEngineType
+            prefs[Keys.WAKE_WORD_ENGINE_TYPE] = normalizeEngineKey(imported.wakeWordEngineType)
             prefs[Keys.WAKE_WORD_SENSITIVITY] = imported.wakeWordSensitivity
             prefs[Keys.WAKE_WORD_AEC_ENABLED] = imported.wakeWordAecEnabled
             prefs[Keys.WAKE_WORD_MUSIC_DUCK_ENABLED] = imported.wakeWordMusicDuckEnabled
@@ -483,7 +551,7 @@ class SettingsRepositoryImpl(
             prefs[Keys.DOWNLOAD_PREFERENCE] = imported.downloadPreference
 
             prefs[Keys.TTS_ENABLED] = imported.ttsEnabled
-            prefs[Keys.TTS_ENGINE_TYPE] = imported.ttsEngineType
+            prefs[Keys.TTS_ENGINE_TYPE] = normalizeEngineKey(imported.ttsEngineType)
             prefs[Keys.TTS_SPEECH_RATE] = imported.ttsSpeechRate
             prefs[Keys.TTS_PITCH] = imported.ttsPitch
             prefs[Keys.TTS_AUDIO_FOCUS_MODE] = imported.ttsAudioFocusMode
@@ -511,8 +579,41 @@ class SettingsRepositoryImpl(
     override fun getSettingsSnapshot(): AppSettings =
         cachedSnapshot ?: runBlocking { settingsFlow.first() }.also { cachedSnapshot = it }
 
-    override fun getApiKeySync(): String? = encryptedPrefs.getString("api_key", null)
-    override fun getGeminiApiKeySync(): String? = encryptedPrefs.getString("gemini_api_key", null)
+    /**
+     * Read straight from the store rather than from a cache.
+     *
+     * A credential is small, read rarely (once per cloud call, not per frame) and must never be
+     * stale — a key entered a second ago has to be the one the next request uses. That is the
+     * opposite trade-off from [getSettingsSnapshot], which caches because it is read on hot paths.
+     */
+    override fun getCredentialsSnapshot(): Credentials = readCredentials()
+
+    private fun readCredentials(): Credentials {
+        val byEngine = encryptedPrefs.all
+            .filterKeys { SecureKeys.isEngineKey(it) }
+            .mapNotNull { (name, value) -> (value as? String)?.let { SecureKeys.engineOf(name) to it } }
+            .toMap()
+        return Credentials(byEngine)
+    }
+
+    /**
+     * Emits on every credential write, using the store's own change callback.
+     *
+     * `EncryptedSharedPreferences` is a `SharedPreferences`, so it can say when it changed — which
+     * is what makes this a real observation rather than a periodic guess. Nothing has to be nudged
+     * from the DataStore side, and nothing derived from a credential can be left showing a value
+     * that is no longer stored.
+     */
+    override val credentialsFlow: Flow<Credentials> = callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || SecureKeys.isEngineKey(key)) {
+                trySend(readCredentials())
+            }
+        }
+        encryptedPrefs.registerOnSharedPreferenceChangeListener(listener)
+        trySend(readCredentials())
+        awaitClose { encryptedPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }.distinctUntilChanged()
     override fun getSpotifyClientIdSync(): String? = getSettingsSnapshot().spotifyClientId
     override fun getPipedApiUrlSync(): String? = getSettingsSnapshot().pipedApiUrl
     override fun getPipedRegionSync(): String? = getSettingsSnapshot().pipedRegion
@@ -532,16 +633,51 @@ class SettingsRepositoryImpl(
     }
 
     // --- API / CLOUD ---
-    override suspend fun setApiKey(key: String?) {
+    override suspend fun setEngineApiKey(engineKey: String, key: String?) {
+        val name = SecureKeys.forEngine(engineKey)
         encryptedPrefs.edit().apply {
-            if (key != null) putString("api_key", key) else remove("api_key")
+            if (!key.isNullOrBlank()) putString(name, key) else remove(name)
         }.apply()
     }
 
-    override suspend fun setGeminiApiKey(key: String?) {
-        encryptedPrefs.edit().apply {
-            if (key != null) putString("gemini_api_key", key) else remove("gemini_api_key")
-        }.apply()
+    /**
+     * Moves the single-key credentials into the per-engine namespace.
+     *
+     * Self-guarding in the same way as [migratePicovoiceKey]: the legacy entry is removed as part of
+     * the move, so the read finds nothing on every later launch. An engine that already has a
+     * credential keeps it — a migration must never overwrite a value the user has since set.
+     */
+    private fun migrateLegacyCredentials() {
+        val editor = encryptedPrefs.edit()
+        var moved = false
+        legacyCredentialOwners.forEach { (legacyName, engines) ->
+            val value = encryptedPrefs.getString(legacyName, null) ?: return@forEach
+            if (value.isNotBlank()) {
+                engines.filter { encryptedPrefs.getString(SecureKeys.forEngine(it), null) == null }
+                    .forEach { editor.putString(SecureKeys.forEngine(it), value); moved = true }
+            }
+            editor.remove(legacyName)
+        }
+        editor.apply()
+        if (moved) Logger.log("Moved single-key credentials into the per-engine namespace", TAG)
+    }
+
+    /**
+     * Moves an existing Porcupine key out of DataStore, where it was kept in plaintext.
+     *
+     * The backup has always classified it as a secret and stripped it from an export without
+     * "include API keys" — so the app already considered it one while storing it beside the
+     * ordinary preferences. Self-guarding rather than flag-driven: the legacy entry is removed as
+     * part of the move, so the read below finds nothing on every later launch. An existing
+     * encrypted value always wins, so a re-run can never overwrite a newer key with an older one.
+     */
+    private suspend fun migratePicovoiceKey() {
+        val legacy = dataStore.data.first()[Keys.PICOVOICE_ACCESS_KEY] ?: return
+        if (legacy.isNotBlank() && encryptedPrefs.getString(SecureKeys.LEGACY_PICOVOICE, null) == null) {
+            encryptedPrefs.edit().putString(SecureKeys.LEGACY_PICOVOICE, legacy).apply()
+            Logger.log("Moved the Picovoice access key into encrypted storage", TAG)
+        }
+        dataStore.edit { it.remove(Keys.PICOVOICE_ACCESS_KEY) }
     }
 
     // --- LANGUAGE ---
@@ -636,17 +772,6 @@ class SettingsRepositoryImpl(
 
     override suspend fun setWakeWordEngineType(engineType: String) {
         dataStore.edit { it[Keys.WAKE_WORD_ENGINE_TYPE] = engineType }
-    }
-
-    override fun getPicovoiceAccessKeySync(): String? {
-        return runBlocking { dataStore.data.first()[Keys.PICOVOICE_ACCESS_KEY] }
-    }
-
-    override suspend fun setPicovoiceAccessKey(key: String?) {
-        dataStore.edit { prefs ->
-            if (key != null) prefs[Keys.PICOVOICE_ACCESS_KEY] = key
-            else prefs.remove(Keys.PICOVOICE_ACCESS_KEY)
-        }
     }
 
     override suspend fun setWakeWordSensitivity(sensitivity: String) {
@@ -1002,6 +1127,14 @@ class SettingsRepositoryImpl(
      * Nothing is rewritten on disk: stored identifiers stay exactly as they are, because
      * `restoreImportedSettings` writes them verbatim from backups with no version field and there is
      * no migration mechanism. Normalising on read costs nothing and keeps old backups importable.
+     */
+    /**
+     * The current key for an engine spelling that predates the `models.json` keys.
+     *
+     * Applied on every read *and* on import. Import used to write these values raw, which is why
+     * the wake-word service carried its own `"wake_porcupine" || "porcupine"` tests: a restored
+     * backup could put the short name back into storage. Normalising at both doors is what lets the
+     * readers stop guarding, and this table stays the one place the old spellings are known.
      */
     private fun normalizeEngineKey(raw: String): String = when (raw) {
         "vosk" -> "wake_vosk"

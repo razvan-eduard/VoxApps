@@ -87,7 +87,7 @@ class PorcupineWakeWordEngine(
             porcupine?.delete()
             porcupine = null
 
-            val accessKey = settingsRepo.getPicovoiceAccessKeySync()
+            val accessKey = settingsRepo.getCredentialsSnapshot().forEngine(ENGINE_KEY)
             if (accessKey.isNullOrBlank()) {
                 Logger.log("No Picovoice AccessKey configured", TAG)
                 return@withContext false

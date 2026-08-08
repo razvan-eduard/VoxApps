@@ -32,15 +32,29 @@ interface SettingsRepository {
 
     // --- SYNCHRONOUS READS (for non-coroutine consumers during migration) ---
     fun getSettingsSnapshot(): AppSettings
-    fun getApiKeySync(): String?
-    fun getGeminiApiKeySync(): String?
+
+    /**
+     * The encrypted store, managed like the DataStore one: [credentialsFlow] to observe,
+     * [getCredentialsSnapshot] to read, [setEngineApiKey] to write.
+     *
+     * This replaces `getApiKeySync()`/`getGeminiApiKeySync()` *and* the copies that used to ride
+     * along inside [AppSettings]. Two routes to one value is one route too many: they disagreed,
+     * and which caller got the stale one was decided by which line of code it happened to call.
+     */
+    val credentialsFlow: Flow<Credentials>
+    fun getCredentialsSnapshot(): Credentials
 
     // --- SYNCHRONOUS WRITE (crash cookie: must survive process death immediately) ---
     fun setVulkanRuntimeAttemptSync(active: Boolean)
 
-    // --- API / CLOUD ---
-    suspend fun setApiKey(key: String?)
-    suspend fun setGeminiApiKey(key: String?)
+    /**
+     * Stores (or clears, when [key] is null or blank) the credential for [engineKey].
+     *
+     * One per engine, addressed by the same key the schema uses. There is no per-service setter to
+     * add when an engine is added: an engine declaring `requires_api_key` is already asking for a
+     * slot, and this provides it.
+     */
+    suspend fun setEngineApiKey(engineKey: String, key: String?)
 
     // --- LANGUAGE ---
     suspend fun setLanguage(lang: String)
@@ -69,8 +83,6 @@ interface SettingsRepository {
     suspend fun setWakeWordProfile(profileJson: String?)
     fun getWakeWordProfileJson(): String?
     suspend fun setWakeWordEngineType(engineType: String)
-    fun getPicovoiceAccessKeySync(): String?
-    suspend fun setPicovoiceAccessKey(key: String?)
     suspend fun setWakeWordSensitivity(sensitivity: String)
     suspend fun setWakeWordAecEnabled(enabled: Boolean)
     suspend fun setWakeWordMusicDuckEnabled(enabled: Boolean)

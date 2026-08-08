@@ -31,6 +31,11 @@ object PromptProvider {
      * Returns only the system instructions (without the input line).
      * Used by all engines (OpenAI, Gemini Cloud, Local LLM) — they add user input separately.
      *
+     * [engineKey] selects the template — see [templateFor]. It is passed by the caller rather than
+     * derived from `settings.aiProcessor`, because the level running the command is not always the
+     * active processor: the fallback stage runs a different engine entirely, and would otherwise be
+     * handed the prompt written for the one that just failed.
+     *
      * [spokenText] and [fastMapRules] exist purely to scope the apps/domains sections down to
      *  what's actually relevant to this utterance — see [relevantDomains]'s doc comment for why
      *  an empty/missing value here just falls back to "include everything" rather than breaking
@@ -42,9 +47,10 @@ object PromptProvider {
         settings: AppSettings? = null,
         modelFilterLang: String? = null,
         settingsRepo: SettingsRepository? = null,
-        fastMapRules: List<FastMapRule> = emptyList()
+        fastMapRules: List<FastMapRule> = emptyList(),
+        engineKey: String? = null
     ): String {
-        val template = RemoteModelRegistry.getPrompt(ID_STANDARD_NLU)
+        val template = templateFor(engineKey)
         if (template == null) {
             Logger.log("NLU prompt template '$ID_STANDARD_NLU' not found (models.json not loaded?) — returning empty system prompt", TAG)
             return ""
@@ -64,6 +70,34 @@ object PromptProvider {
             .replace(PLACEHOLDER_SEARCH, buildSearchSection(settingsRepo))
             .plus(buildSatelliteHints(VoxSatelliteRegistry.apps.value))
             .plus(langHint)
+    }
+
+    /**
+     * The prompt template for [engineKey]: what the engine declares for itself, else one written for
+     * its runtime, else the single standard prompt.
+     *
+     * A computed key rather than a `when` over engine names, since `prompts` is already a map — so a
+     * new engine or a new runtime needs a JSON entry and no code. What differs between engines is
+     * how much prompt they can take and how literally they follow it: a hosted model and a
+     * half-gigabyte on-device one are not the same audience, and today they are read the same text.
+     *
+     * Nothing declares either of the first two yet, so every caller currently lands on
+     * [ID_STANDARD_NLU] — the resolution ships ahead of the content deliberately, because writing a
+     * second prompt is a judgement about model behaviour, not a refactor.
+     */
+    private fun templateFor(engineKey: String?): String? {
+        val declared = engineKey?.let { RemoteModelRegistry.declaredPromptId(it) }
+        val runtimeId = engineKey
+            ?.let { RemoteModelRegistry.runtimeOf(it) }
+            ?.let { "${ID_STANDARD_NLU}_${it.key}" }
+
+        listOfNotNull(declared, runtimeId).forEach { id ->
+            RemoteModelRegistry.getPrompt(id)?.let {
+                Logger.log("Using prompt '$id' for $engineKey", TAG)
+                return it
+            }
+        }
+        return RemoteModelRegistry.getPrompt(ID_STANDARD_NLU)
     }
 
     /** Which of [domainKeywords]' domains are relevant to [spokenText] — a token-bloat

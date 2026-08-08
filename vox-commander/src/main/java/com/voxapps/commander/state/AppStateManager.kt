@@ -177,11 +177,13 @@ class AppStateManager private constructor(
         // Reactive combine: settings + modelMap + runtime -> AppState
         combine(
             repo.settingsFlow,
+            repo.credentialsFlow,
             RemoteModelRegistry.modelMap,
             _runtimeState
-        ) { settings, modelMap, runtime ->
+        ) { settings, credentials, modelMap, runtime ->
             AppState.fromAppSettings(
                 settings = settings,
+                credentials = credentials,
                 context = context,
                 availableModels = modelMap,
                 voiceState = runtime.voiceState,
@@ -300,12 +302,9 @@ class AppStateManager private constructor(
         }
     }
 
-    fun setApiKey(key: String?) {
-        scope.launch { repo.setApiKey(key) }
-    }
-
-    fun setGeminiApiKey(key: String?) {
-        scope.launch { repo.setGeminiApiKey(key) }
+    /** One writer for every engine credential — see [SettingsRepository.setEngineApiKey]. */
+    fun setEngineApiKey(engineKey: String, key: String?) {
+        scope.launch { repo.setEngineApiKey(engineKey, key) }
     }
 
     fun setAppLanguage(lang: String) {
@@ -369,10 +368,6 @@ class AppStateManager private constructor(
 
     fun setTtsEngineType(engineType: String) {
         scope.launch { repo.setTtsEngineType(engineType) }
-    }
-
-    fun setPicovoiceAccessKey(key: String?) {
-        scope.launch { repo.setPicovoiceAccessKey(key) }
     }
 
     fun setWakeWordSensitivity(sensitivity: String) {

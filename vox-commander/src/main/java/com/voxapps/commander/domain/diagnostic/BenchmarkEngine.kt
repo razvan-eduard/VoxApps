@@ -131,7 +131,7 @@ class BenchmarkEngine(
         }
 
         // --- 5. WHISPER API STT BENCHMARK ---
-        val apiKey = snapshot.apiKey
+        val apiKey = settingsRepo.getCredentialsSnapshot().forEngine(WhisperSttEngine.ENGINE_KEY)
         if (!apiKey.isNullOrBlank()) {
             diagInfo.append("--- CLOUD CONNECTIVITY ---\n")
             diagInfo.append("Whisper API: Active (Endpoint: OpenAI)\n")
@@ -193,7 +193,7 @@ class BenchmarkEngine(
         diagInfo.append("\n")
 
         // --- 10. GEMINI CLOUD INTENT BENCHMARK (Cloud API) ---
-        val geminiKey = settingsRepo.getGeminiApiKeySync()
+        val geminiKey = settingsRepo.getCredentialsSnapshot().forEngine(Strings.AiProcessors.GEMINI_CLOUD)
         if (!geminiKey.isNullOrBlank() && snapshot.cloudIntelligenceEnabled) {
             diagInfo.append("--- GEMINI CLOUD INTENT ENGINE ---\n")
             runGeminiCloudBenchmark()
@@ -270,7 +270,7 @@ class BenchmarkEngine(
 
     private suspend fun runApiBenchmark(apiKey: String, audioData: ByteArray) {
         try {
-            val engine = WhisperSttEngine(apiKey)
+            val engine = WhisperSttEngine(apiKey, settingsRepo)
             val start = System.currentTimeMillis()
             engine.transcribe(audioData)
             val end = System.currentTimeMillis()

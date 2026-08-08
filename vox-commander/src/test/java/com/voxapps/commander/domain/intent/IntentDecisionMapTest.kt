@@ -3,7 +3,9 @@ package com.voxapps.commander.domain.intent
 import android.util.Log
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.domain.engine.EngineSelection
 import com.voxapps.commander.domain.intent.interpreter.AssistantEngine
+import com.voxapps.commander.domain.intent.interpreter.SelectableModelEngine
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
 import com.voxapps.commander.testutil.TestDataFactory
@@ -23,7 +25,7 @@ class IntentDecisionMapTest {
 
     private lateinit var l1Engine: AssistantEngine
     private lateinit var l2CloudEngine: AssistantEngine
-    private lateinit var l3LocalEngine: AssistantEngine
+    private lateinit var l3LocalEngine: SelectableModelEngine
     private lateinit var geminiNanoEngine: AssistantEngine
     private lateinit var geminiCloudEngine: AssistantEngine
     private lateinit var settingsRepo: SettingsRepository
@@ -104,7 +106,7 @@ class IntentDecisionMapTest {
 
         coEvery { l1Engine.processCommand(command, any()) } returns null
         coEvery { l2CloudEngine.processCommand(command, any()) } returns null
-        coEvery { l3LocalEngine.processCommand(command, any()) } returns expectedIntent
+        coEvery { l3LocalEngine.processCommand(command, any(), any()) } returns expectedIntent
 
         val settingsWithFallback = AppSettings(
             cloudIntelligenceEnabled = true,
@@ -123,7 +125,7 @@ class IntentDecisionMapTest {
         assertNotNull(result)
         assertEquals(expectedIntent.domain, result?.domain)
         coVerify { l2CloudEngine.processCommand(command, any()) }
-        coVerify { l3LocalEngine.processCommand(command, any()) }
+        coVerify { l3LocalEngine.processCommand(command, any(), any()) }
     }
 
     @Test
@@ -166,7 +168,7 @@ class IntentDecisionMapTest {
         val expectedIntent = TestDataFactory.createPlayMusicIntent()
 
         coEvery { l1Engine.processCommand(command, any()) } returns null
-        coEvery { l3LocalEngine.processCommand(command, any()) } returns expectedIntent
+        coEvery { l3LocalEngine.processCommand(command, any(), any()) } returns expectedIntent
 
         val settingsCloudDisabled = TestDataFactory.createAppSettings(
             cloudIntelligenceEnabled = false,
@@ -183,7 +185,7 @@ class IntentDecisionMapTest {
 
         assertNotNull(result)
         coVerify(exactly = 0) { l2CloudEngine.processCommand(any(), any()) }
-        coVerify { l3LocalEngine.processCommand(command, any()) }
+        coVerify { l3LocalEngine.processCommand(command, any(), any()) }
     }
 
     @Test
@@ -232,7 +234,7 @@ class IntentDecisionMapTest {
         val expectedIntent = TestDataFactory.createPlayMusicIntent()
 
         coEvery { l1Engine.processCommand(command, any()) } returns null
-        coEvery { l3LocalEngine.processCommand(command, any()) } returns expectedIntent
+        coEvery { l3LocalEngine.processCommand(command, any(), any()) } returns expectedIntent
 
         val settings = TestDataFactory.createAppSettings(
             aiProcessor = Strings.AiProcessors.GEMINI_CLOUD,
@@ -249,7 +251,7 @@ class IntentDecisionMapTest {
 
         assertNotNull(result)
         coVerify(exactly = 0) { geminiCloudEngine.processCommand(any(), any()) }
-        coVerify { l3LocalEngine.processCommand(command, any()) }
+        coVerify { l3LocalEngine.processCommand(command, any(), any()) }
     }
 
     @Test
@@ -305,7 +307,7 @@ class IntentDecisionMapTest {
         val expectedIntent = TestDataFactory.createPlayMusicIntent()
 
         coEvery { l1Engine.processCommand(command, any()) } returns null
-        coEvery { l3LocalEngine.processCommand(command, any()) } returns expectedIntent
+        coEvery { l3LocalEngine.processCommand(command, any(), any()) } returns expectedIntent
 
         val settings = TestDataFactory.createSettingsWithLlmEngine(
             downloadedModelIds = setOf("qwen2.5-1.5b-q8")
@@ -318,7 +320,7 @@ class IntentDecisionMapTest {
         val result = decisionMap.processCommand(command, null)
 
         assertNotNull(result)
-        coVerify { l3LocalEngine.processCommand(command, any()) }
+        coVerify { l3LocalEngine.processCommand(command, any(), any()) }
         coVerify(exactly = 0) { l2CloudEngine.processCommand(any(), any()) }
     }
 
@@ -338,7 +340,7 @@ class IntentDecisionMapTest {
 
         coEvery { l1Engine.processCommand(command, any()) } returns null
         coEvery { l2CloudEngine.processCommand(command, any()) } throws RuntimeException("API error")
-        coEvery { l3LocalEngine.processCommand(command, any()) } returns expectedIntent
+        coEvery { l3LocalEngine.processCommand(command, any(), any()) } returns expectedIntent
 
         val settings = TestDataFactory.createAppSettings(
             cloudIntelligenceEnabled = true,
@@ -355,37 +357,101 @@ class IntentDecisionMapTest {
 
         assertNotNull(result)
         assertEquals(expectedIntent.domain, result?.domain)
-        coVerify { l3LocalEngine.processCommand(command, any()) }
+        coVerify { l3LocalEngine.processCommand(command, any(), any()) }
     }
 
     /**
-     * Two different on-device processor keys both resolve to the same LocalLlmInterpreter, and that
-     * instance runs whichever model `activeIntentModelId` names. So an on-device fallback behind an
-     * on-device primary would re-run the inference that just failed, on the same loaded model, for
-     * the price of a second full timeout. The distinct-keys guard doesn't catch it.
+     * Every on-device processor key resolves to the same LocalLlmInterpreter instance, so a fallback
+     * naming the primary's own selection has nothing to escalate to: it would re-run the inference
+     * that just failed, on the model already in memory, for the price of a second full timeout.
+     * Settings can arrive in that shape from an imported backup whatever the picker allows.
      */
     @Test
-    fun `an on-device fallback behind an on-device primary is not run twice`() = runTest {
+    fun `an on-device fallback on the primary's own selection is not run twice`() = runTest {
         val command = "play music"
 
         coEvery { l1Engine.processCommand(command, any()) } returns null
-        coEvery { l3LocalEngine.processCommand(command, any()) } returns null
+        coEvery { l3LocalEngine.processCommand(command, any(), any()) } returns null
 
         mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
         every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
-        every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm_litertlm") } returns true
 
         every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
             cloudIntelligenceEnabled = true,
             aiProcessor = "nlu_llm",
-            defaultIntentFallbackProcessor = "nlu_llm_litertlm",
+            activeIntentModelId = "qwen2.5-1.5b-q8",
+            defaultIntentFallbackProcessor = "nlu_llm",
             defaultIntentFallbackModel = "qwen2.5-1.5b-q8"
         )
 
         val result = decisionMap.processCommand(command, null)
 
         assertNull(result)
-        // Once as L2. Before the identity check it also ran as L3 — same engine, same loaded model.
-        coVerify(exactly = 1) { l3LocalEngine.processCommand(command, any()) }
+        coVerify(exactly = 1) { l3LocalEngine.processCommand(command, any(), any()) }
+    }
+
+    /**
+     * The other half of the same rule. A *different* on-device model is a real fallback — a primary
+     * that fails to load is exactly when the smaller model earns its place — so it must not be
+     * skipped just because both selections reach the same interpreter instance.
+     */
+    @Test
+    fun `an on-device fallback on a different model is run`() = runTest {
+        val command = "play music"
+        val expectedIntent = TestDataFactory.createPlayMusicIntent()
+
+        coEvery { l1Engine.processCommand(command, any()) } returns null
+        coEvery {
+            l3LocalEngine.processCommand(command, any(), EngineSelection("nlu_llm", "qwen2.5-1.5b-q8"))
+        } returns null
+        coEvery {
+            l3LocalEngine.processCommand(command, any(), EngineSelection("nlu_llm", "qwen2.5-0.5b-q8"))
+        } returns expectedIntent
+
+        mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            aiProcessor = "nlu_llm",
+            activeIntentModelId = "qwen2.5-1.5b-q8",
+            defaultIntentFallbackProcessor = "nlu_llm",
+            defaultIntentFallbackModel = "qwen2.5-0.5b-q8"
+        )
+
+        val result = decisionMap.processCommand(command, null)
+
+        assertEquals(expectedIntent.domain, result?.domain)
+    }
+
+    /**
+     * The defect that made the whole feature inert: the fallback stage ran, but the interpreter
+     * loaded `activeIntentModelId` — the *primary's* model — so it re-ran the failed inference and
+     * the user's chosen fallback model was never loaded by anything.
+     */
+    @Test
+    fun `L3 runs the fallback's own model, not the active one`() = runTest {
+        val command = "play music"
+        val expectedIntent = TestDataFactory.createPlayMusicIntent()
+
+        coEvery { l1Engine.processCommand(command, any()) } returns null
+        coEvery { l2CloudEngine.processCommand(command, any()) } returns null
+        coEvery { l3LocalEngine.processCommand(command, any(), any()) } returns expectedIntent
+
+        mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            aiProcessor = Strings.AiProcessors.OPENAI,
+            activeIntentModelId = "gpt-4o-mini",
+            defaultIntentFallbackProcessor = "nlu_llm",
+            defaultIntentFallbackModel = "qwen2.5-0.5b-q8"
+        )
+
+        val result = decisionMap.processCommand(command, null)
+
+        assertNotNull(result)
+        coVerify {
+            l3LocalEngine.processCommand(command, any(), EngineSelection("nlu_llm", "qwen2.5-0.5b-q8"))
+        }
     }
 }

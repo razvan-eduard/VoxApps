@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
+import com.voxapps.commander.data.remote.RemoteModelRegistry
 
 class WakeWordService : Service() {
 
@@ -199,11 +200,6 @@ class WakeWordService : Service() {
             // detection under the wrong name (confirmed on-device: OpenWakeWord correctly detected
             // Alexa with a real score, but logged/displayed as "hi vosk", which read as if the wrong
             // engine were running at all). Resolve the real model label from the registry instead.
-            fun engineDisplayWakeWord(registryKey: String): String =
-                snapshot.wakeWordModelPath
-                    ?.let { modelId -> com.voxapps.commander.data.remote.RemoteModelRegistry.getModels(registryKey).find { it.id == modelId }?.label }
-                    ?: wakeWord
-
             val engineDisplayName = engineDisplayName(engineType)
             val modelDisplayName = snapshot.wakeWordModelPath ?: snapshot.modelFilterLang.uppercase()
 
@@ -218,108 +214,136 @@ class WakeWordService : Service() {
             )
             appStateManager.setWakeServiceStopping(false)
 
-            if (engineType == "wake_porcupine" || engineType == "porcupine") {
-                Logger.log("Using Porcupine wake word engine", TAG)
-                wakeWordEngine = PorcupineWakeWordEngine(this@WakeWordService, settingsRepo, appStateManager) {
-                    onWakeWordDetected()
-                }
-                com.voxapps.commander.domain.engine.EngineRegistry.set(
-                    com.voxapps.commander.domain.engine.EngineRegistry.Domain.WAKE, wakeWordEngine
-                )
-                // A built-in keyword: nothing on disk, so the spec carries only the phrase.
-                val initialized = wakeWordEngine?.load(
-                    com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(modelId = null, entryPoint = null,
-                        keyword = engineDisplayWakeWord("wake_porcupine"), language = snapshot.modelFilterLang)
-                ) ?: false
-                if (initialized) {
-                    wakeWordEngine?.startListening()
-                    delay(100)
-                    updateNotification()
-                } else {
-                    Logger.log("Failed to initialize Porcupine engine", TAG)
-                    stopSelf()
-                }
-            } else if (engineType == "wake_openwakeword" || engineType == "openwakeword") {
-                Logger.log("Using OpenWakeWord engine", TAG)
-                val modelFileName = snapshot.wakeWordModelPath ?: "alexa_v0.1.onnx"
-                wakeWordEngine = OpenWakeWordEngine(this@WakeWordService, appStateManager) {
-                    onWakeWordDetected()
-                }
-                com.voxapps.commander.domain.engine.EngineRegistry.set(
-                    com.voxapps.commander.domain.engine.EngineRegistry.Domain.WAKE, wakeWordEngine
-                )
-                val initialized = wakeWordEngine?.load(
-                    com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(modelId = modelFileName, entryPoint = null,
-                        keyword = engineDisplayWakeWord("wake_openwakeword"), language = snapshot.modelFilterLang)
-                ) ?: false
-                if (initialized) {
-                    wakeWordEngine?.startListening()
-                    delay(100)
-                    updateNotification()
-                } else {
-                    Logger.log("Failed to initialize OpenWakeWord engine", TAG)
-                    stopSelf()
-                }
+            val engine = WakeWordEngines.create(engineType, this@WakeWordService, settingsRepo, appStateManager) {
+                onWakeWordDetected()
+            }
+            if (engine == null) {
+                stopSelf()
+                return@launch
+            }
+
+            val spec = wakeWordSpecFor(engineType, snapshot, wakeWord)
+            if (spec == null) {
+                stopSelf()
+                return@launch
+            }
+
+            Logger.log("Using ${RemoteModelRegistry.declaredEngineLabel(engineType)} wake word engine", TAG)
+            wakeWordEngine = engine
+            com.voxapps.commander.domain.engine.EngineRegistry.set(
+                com.voxapps.commander.domain.engine.EngineRegistry.Domain.WAKE, engine
+            )
+
+            if (engine.load(spec)) {
+                engine.startListening()
+                delay(100)
+                updateNotification()
             } else {
-                Logger.log("Using Vosk wake word engine", TAG)
-                val modelFilterLang = snapshot.modelFilterLang
-                val downloader = com.voxapps.commander.data.remote.ModelDownloader(this@WakeWordService)
-
-                // Ask the registry where the model is instead of scanning the files directory for a
-                // directory whose name starts with "vosk-model-" and mentions the language. That
-                // scan was a third copy of the same heuristic — the STT engine and the download
-                // validator each had their own — and it matched on substrings, so a rename upstream
-                // could pick a different model than the one selected.
-                val selected = snapshot.activeWakeModelId?.takeIf { it.isNotBlank() }
-                fun firstDownloadedForLanguage(): String? =
-                    com.voxapps.commander.data.remote.RemoteModelRegistry.getModels(engineType)
-                        .firstOrNull {
-                            it.id in snapshot.downloadedModelIds &&
-                                (it.langCode == null || it.langCode.equals(modelFilterLang, ignoreCase = true))
-                        }?.id
-
-                // The stored selection is tried first, then any downloaded model for the language.
-                // The second branch is not only for "nothing selected yet": it also covers a stored
-                // name this build can no longer resolve, which the old substring match would have
-                // papered over.
-                val modelId = selected?.takeIf { downloader.resolveEntryPoint(it, engineType) != null }
-                    ?: firstDownloadedForLanguage()
-
-                val entryPoint = modelId?.let { downloader.resolveEntryPoint(it, engineType) }
-                if (modelId == null || entryPoint == null) {
-                    Logger.log("No Vosk model available", TAG)
-                    stopSelf()
-                    return@launch
-                }
-                val modelPath = entryPoint.absolutePath
-                if (!downloader.validateModel(modelId, engineType)) {
-                    Logger.log("Vosk model $modelId is corrupt/incomplete — cleaning up and marking for re-download", TAG)
-                    settingsRepo.setModelDownloaded(modelId, false)
-                    stopSelf()
-                    return@launch
-                }
-
-                wakeWordEngine = WakeWordEngine(this@WakeWordService, settingsRepo, appStateManager) {
-                    onWakeWordDetected()
-                }
-                com.voxapps.commander.domain.engine.EngineRegistry.set(
-                    com.voxapps.commander.domain.engine.EngineRegistry.Domain.WAKE, wakeWordEngine
-                )
-
-                val initialized = wakeWordEngine?.load(
-                    com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(modelId = modelId, entryPoint = entryPoint,
-                        keyword = wakeWord, language = snapshot.modelFilterLang)
-                ) ?: false
-                if (initialized) {
-                    wakeWordEngine?.startListening()
-                    delay(100)
-                    updateNotification()
-                } else {
-                    Logger.log("Failed to initialize Vosk engine", TAG)
-                    stopSelf()
-                }
+                Logger.log("Failed to initialize $engineType engine", TAG)
+                stopSelf()
             }
         }
+    }
+
+    /**
+     * What the selected wake-word engine needs in order to load.
+     *
+     * Three shapes, because the engines genuinely differ in what a "model" is to them: Porcupine's
+     * keyword is compiled into the engine and has nothing on disk, openWakeWord is handed the name
+     * of its model file, and Vosk needs a resolved, validated directory. What is *not* different —
+     * constructing the engine, registering it, loading, starting to listen — is the caller's, and
+     * happens once.
+     *
+     * Returns null when the engine cannot run as configured, having already said why. Vosk is the
+     * only one that can discover its model is corrupt here, and it marks it for re-download.
+     */
+    /**
+     * The phrase an engine should report as having detected.
+     *
+     * `snapshot.wakeWord` is Commander's single global wake-*phrase* setting and is only meaningful
+     * for Vosk, which detects an arbitrary configurable phrase. openWakeWord and Porcupine detect
+     * whatever their selected pre-trained model was built for (Alexa, Hey Jarvis…), so passing the
+     * Vosk phrase to them mislabels every detection — confirmed on-device: openWakeWord correctly
+     * detected Alexa and reported it as "hi vosk", which read as if the wrong engine were running.
+     * The real model label comes from the registry instead.
+     */
+    private fun engineDisplayWakeWord(
+        registryKey: String,
+        snapshot: com.voxapps.commander.data.preferences.AppSettings,
+        wakeWord: String
+    ): String =
+        snapshot.wakeWordModelPath
+            ?.let { modelId -> RemoteModelRegistry.getModels(registryKey).find { it.id == modelId }?.label }
+            ?: wakeWord
+
+    private suspend fun wakeWordSpecFor(
+        engineType: String,
+        snapshot: com.voxapps.commander.data.preferences.AppSettings,
+        wakeWord: String
+    ): com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel? {
+        val language = snapshot.modelFilterLang
+
+        if (RemoteModelRegistry.runtimeOf(engineType) == com.voxapps.commander.data.remote.EngineRuntime.DEVICE_BUILTIN) {
+            // Nothing on disk: the keyword *is* the model, and the engine holds it.
+            return com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(
+                modelId = null,
+                entryPoint = null,
+                keyword = engineDisplayWakeWord(engineType, snapshot, wakeWord),
+                language = language
+            )
+        }
+
+        if (engineType == OpenWakeWordEngine.ENGINE_KEY) {
+            // Handed a file name rather than a resolved path: this engine still locates its own
+            // model. Moving it onto the resolver is the same change the STT engines already had.
+            return com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(
+                // Null is allowed: the engine falls back to its own default model, which is the
+                // only place that default should live.
+                modelId = snapshot.wakeWordModelPath,
+                entryPoint = null,
+                keyword = engineDisplayWakeWord(engineType, snapshot, wakeWord),
+                language = language
+            )
+        }
+
+        val downloader = com.voxapps.commander.data.remote.ModelDownloader(this@WakeWordService)
+
+        // Ask the registry where the model is instead of scanning the files directory for a
+        // directory whose name starts with "vosk-model-" and mentions the language. That scan was a
+        // third copy of the same heuristic — the STT engine and the download validator each had
+        // their own — and it matched on substrings, so a rename upstream could pick a different
+        // model than the one selected.
+        val selected = snapshot.activeWakeModelId?.takeIf { it.isNotBlank() }
+        fun firstDownloadedForLanguage(): String? =
+            RemoteModelRegistry.getModels(engineType)
+                .firstOrNull {
+                    it.id in snapshot.downloadedModelIds &&
+                        (it.langCode == null || it.langCode.equals(language, ignoreCase = true))
+                }?.id
+
+        // The stored selection is tried first, then any downloaded model for the language. The
+        // second branch is not only for "nothing selected yet": it also covers a stored name this
+        // build can no longer resolve, which the old substring match would have papered over.
+        val modelId = selected?.takeIf { downloader.resolveEntryPoint(it, engineType) != null }
+            ?: firstDownloadedForLanguage()
+
+        val entryPoint = modelId?.let { downloader.resolveEntryPoint(it, engineType) }
+        if (modelId == null || entryPoint == null) {
+            Logger.log("No model available for $engineType", TAG)
+            return null
+        }
+        if (!downloader.validateModel(modelId, engineType)) {
+            Logger.log("Model $modelId is corrupt/incomplete — cleaning up and marking for re-download", TAG)
+            settingsRepo.setModelDownloaded(modelId, false)
+            return null
+        }
+
+        return com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(
+            modelId = modelId,
+            entryPoint = entryPoint,
+            keyword = wakeWord,
+            language = language
+        )
     }
 
     /**

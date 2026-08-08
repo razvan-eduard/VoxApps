@@ -2,7 +2,9 @@ package com.voxapps.commander.receiver
 
 import com.voxapps.backup.VoxSettingsRoundTrip
 import com.voxapps.commander.data.preferences.AppSettings
+import com.voxapps.commander.data.preferences.Credentials
 import com.voxapps.commander.domain.intent.model.FastMapRule
+import com.voxapps.commander.utils.Strings
 
 /**
  * Vox Hub's export/import for Commander's own settings and FastMap rules, extracted from the
@@ -25,12 +27,19 @@ import com.voxapps.commander.domain.intent.model.FastMapRule
  */
 object CommanderExportHandler {
 
+    /** The models.json key for Porcupine, whose licence key is a credential like any other. A
+     *  literal because this object is deliberately free of Android and service-layer imports. */
+    private const val PORCUPINE_ENGINE_KEY = "wake_porcupine"
+
     /**
      * Fields deliberately excluded from [buildExportJson] unless [includeSecrets] is set:
-     *  - Secrets: [AppSettings.apiKey], [AppSettings.geminiApiKey], [AppSettings.picovoiceAccessKey],
-     *    [AppSettings.searchProviderApiKeys] (the last one isn't even carried on [settings] — see
-     *    [searchProviderApiKeys] param — since it lives entirely in encrypted prefs, never in the
-     *    DataStore-backed settings flow).
+     *  - Secrets: [AppSettings.engineApiKeys] and the three single-key fields it replaced
+     *    ([AppSettings.apiKey], [AppSettings.geminiApiKey], [AppSettings.picovoiceAccessKey]), plus
+     *    [AppSettings.searchProviderApiKeys]. None of the encrypted ones are carried on [settings]
+     *    — they live in the encrypted store and reach this function through [credentials] and
+     *    [searchProviderApiKeys], never through the DataStore-backed settings flow. The
+     *    [AppSettings] fields exist so that a backup can carry them and [SettingsRepository
+     *    .restoreImportedSettings] can put them back; they are transport, not state.
      * Always excluded, regardless of [includeSecrets]:
      *  - Raw local filesystem paths, meaningless on another device/after reinstall:
      *    [AppSettings.wakeWordModelPath], [AppSettings.customModelPaths].
@@ -46,12 +55,19 @@ object CommanderExportHandler {
     fun buildExportJson(
         settings: AppSettings,
         includeSecrets: Boolean = false,
-        searchProviderApiKeys: Map<String, String> = emptyMap()
+        searchProviderApiKeys: Map<String, String> = emptyMap(),
+        // Deliberately has no default. A caller that forgot it would export a backup whose secrets
+        // are silently empty — indistinguishable from a backup made without them, and only
+        // discovered on the restore that was supposed to bring the keys back.
+        credentials: Credentials
     ): String {
         val portable = settings.copy(
-            apiKey = if (includeSecrets) settings.apiKey else null,
-            geminiApiKey = if (includeSecrets) settings.geminiApiKey else null,
-            picovoiceAccessKey = if (includeSecrets) settings.picovoiceAccessKey else null,
+            engineApiKeys = if (includeSecrets) credentials.byEngine else emptyMap(),
+            // Written alongside the map so a backup taken here still restores on a build that
+            // predates per-engine credentials. Costs three fields and removes a one-way door.
+            apiKey = if (includeSecrets) credentials.forEngine(Strings.AiProcessors.OPENAI) else null,
+            geminiApiKey = if (includeSecrets) credentials.forEngine(Strings.AiProcessors.GEMINI_CLOUD) else null,
+            picovoiceAccessKey = if (includeSecrets) credentials.forEngine(PORCUPINE_ENGINE_KEY) else null,
             searchProviderApiKeys = if (includeSecrets) searchProviderApiKeys else emptyMap(),
             wakeWordModelPath = null,
             customModelPaths = emptyMap(),
@@ -89,6 +105,9 @@ object CommanderExportHandler {
                 customDomains = parsed.customDomains ?: emptyList(),
                 domainAppFilters = parsed.domainAppFilters ?: emptyMap(),
                 searchProviderApiKeys = parsed.searchProviderApiKeys ?: emptyMap(),
+                // Gson leaves an absent map null behind a non-null type — every collection here is
+                // coalesced once for exactly that reason, and a new one is no exception.
+                engineApiKeys = parsed.engineApiKeys ?: emptyMap(),
                 returnAfterActionApps = parsed.returnAfterActionApps ?: emptyList(),
                 appAliasRules = parsed.appAliasRules ?: emptyList(),
                 locationCacheTtl = parsed.locationCacheTtl ?: "ONE_DAY"

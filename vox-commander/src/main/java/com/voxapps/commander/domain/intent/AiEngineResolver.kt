@@ -1,7 +1,10 @@
 package com.voxapps.commander.domain.intent
 
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.engine.EngineSelection
 import com.voxapps.commander.domain.intent.interpreter.AssistantEngine
+import com.voxapps.commander.domain.intent.interpreter.SelectableModelEngine
+import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.utils.Strings
 
 /**
@@ -49,4 +52,45 @@ class AiEngineResolver(
      */
     fun engineFor(processor: String, cloudIntelligenceEnabled: Boolean): AssistantEngine? =
         resolve(processor)?.takeIf { !it.requiresCloud || cloudIntelligenceEnabled }?.engine
+
+    /**
+     * The engine for [processor] *and* the model it should run — everything needed to make the
+     * call, resolved together.
+     *
+     * Together, because they were resolved apart: the cascade picked an engine here and the engine
+     * picked a model from global settings, so a level running a non-active selection was not
+     * expressible. Only an engine that can be told which model to run gets a selection; for the
+     * rest, [Call.selection] is null because the model is the service's, not ours.
+     */
+    fun callFor(processor: String, modelId: String?, cloudIntelligenceEnabled: Boolean): Call? {
+        val engine = engineFor(processor, cloudIntelligenceEnabled) ?: return null
+        val selection = if (engine is SelectableModelEngine && modelId != null) {
+            EngineSelection(processor, modelId)
+        } else {
+            null
+        }
+        return Call(engine, selection)
+    }
+
+    /**
+     * A resolved level of the cascade: which engine, running which model.
+     *
+     * Two calls are the same work when both fields match — same instance *and* same selection. That
+     * is what a level has to compare against the one before it, not engine identity alone: every
+     * on-device LLM key resolves to the same interpreter, so identity alone cannot tell "the same
+     * model again, which just failed" from "a different model, which is the whole point".
+     */
+    data class Call(val engine: AssistantEngine, val selection: EngineSelection?) {
+        suspend fun invoke(spokenText: String, modelFilterLang: String?): NluIntent? =
+            if (engine is SelectableModelEngine && selection != null) {
+                engine.processCommand(spokenText, modelFilterLang, selection)
+            } else {
+                engine.processCommand(spokenText, modelFilterLang)
+            }
+
+        /** Identity by instance, not by `equals`: two engines are the same engine when they are the
+         *  same object — mocks and stateless engines can otherwise compare equal. */
+        fun isSameWorkAs(other: Call): Boolean =
+            engine === other.engine && selection == other.selection
+    }
 }

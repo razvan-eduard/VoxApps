@@ -323,12 +323,12 @@ object TestDataFactory {
         geminiIncompatible = geminiIncompatible
     )
 
+    /** The Gemini key is not a setting — it lives in the encrypted store and reaches callers as
+     *  [com.voxapps.commander.data.preferences.Credentials], so it is passed there, not here. */
     fun createSettingsWithGeminiCloud(
-        geminiApiKey: String? = "test-key",
         cloudIntelligenceEnabled: Boolean = true
     ) = createAppSettings(
         aiProcessor = com.voxapps.commander.utils.Strings.AiProcessors.GEMINI_CLOUD,
-        geminiApiKey = geminiApiKey,
         cloudIntelligenceEnabled = cloudIntelligenceEnabled
     )
 }

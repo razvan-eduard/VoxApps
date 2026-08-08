@@ -60,10 +60,21 @@ abstract class BaseVoxEngine : VoxEngine {
         _state.value = if (ok) {
             EngineState.Ready(spec, System.currentTimeMillis())
         } else {
-            EngineState.Failed(spec, "engine reported failure")
+            EngineState.Failed(spec, failureReason() ?: "engine reported failure")
         }
         ok
     }
+
+    /**
+     * Why the last [onLoad] returned false, when the engine knows something more useful than
+     * "engine reported failure" — "API key is missing", "speech recognition is unavailable".
+     *
+     * A hook rather than a richer [onLoad] return type: an expected failure stays `false` (throwing
+     * for a missing credential would misreport a configuration state as a crash), and only the
+     * engines that have something to add implement this. The reason is what the picker shows, so
+     * "not available" and "you have not finished configuring it" stop looking the same.
+     */
+    protected open fun failureReason(): String? = null
 
     final override fun unload() {
         synchronized(useLock) {

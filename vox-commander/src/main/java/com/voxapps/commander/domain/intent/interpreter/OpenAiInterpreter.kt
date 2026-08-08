@@ -3,6 +3,7 @@ package com.voxapps.commander.domain.intent.interpreter
 import android.content.Context
 import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
@@ -36,14 +37,14 @@ class OpenAiInterpreter(
     var lastErrorReason: String? = null
         private set
 
+    /** Timeouts come from the interceptor, per call, rather than from the builder: the number is a
+     *  live setting and this client is built once. See [CloudDeadline]. */
     private val client = OkHttpClient.Builder()
-        .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .addInterceptor(CloudDeadline.interceptor(Strings.AiProcessors.OPENAI, settingsRepo))
         .build()
 
     override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? = withContext(Dispatchers.IO) {
-        val apiKey = settingsRepo.getApiKeySync()
+        val apiKey = settingsRepo.getCredentialsSnapshot().forEngine(Strings.AiProcessors.OPENAI)
         if (apiKey.isNullOrBlank()) {
             Logger.log("OpenAI API Key is missing", TAG)
             return@withContext null
@@ -51,7 +52,7 @@ class OpenAiInterpreter(
 
         val snapshot = settingsRepo.getSettingsSnapshot()
         val activeRules = fastMapDao.getAllRulesOnce().filter { it.isActive }
-        val systemPrompt = PromptProvider.getNluSystemPrompt(spokenText, snapshot, modelFilterLang, settingsRepo, activeRules)
+        val systemPrompt = PromptProvider.getNluSystemPrompt(spokenText, snapshot, modelFilterLang, settingsRepo, activeRules, Strings.AiProcessors.OPENAI)
         val userPrompt = PromptProvider.formatUserInput(spokenText)
 
         val content = sendChatCompletion(apiKey, systemPrompt, userPrompt, forceJson = true) ?: return@withContext null
@@ -60,7 +61,7 @@ class OpenAiInterpreter(
     }
 
     override suspend fun rawPrompt(promptText: String, imageUri: String?): String? = withContext(Dispatchers.IO) {
-        val apiKey = settingsRepo.getApiKeySync()
+        val apiKey = settingsRepo.getCredentialsSnapshot().forEngine(Strings.AiProcessors.OPENAI)
         if (apiKey.isNullOrBlank()) {
             lastErrorReason = "API key is missing"
             Logger.log("OpenAI API Key is missing (rawPrompt)", TAG)
@@ -72,9 +73,13 @@ class OpenAiInterpreter(
     /** Shared "send prompt, get raw text" call used by both [processCommand] and [rawPrompt]. [imageUri],
      *  when present, is attached as an additional `image_url` content part on the user message —
      *  requires Commander to already hold a granted read permission on it (the caller's job). */
-    private fun sendChatCompletion(
+    private suspend fun sendChatCompletion(
         apiKey: String, systemPrompt: String?, userPrompt: String, forceJson: Boolean, imageUri: String? = null
     ): String? {
+        // Cleared per call: the reason is read after a failure, and a stale one from a previous
+        // request would be reported as this request's.
+        lastErrorReason = null
+
         val userContent: Any = imageUri?.let { ImageAttachmentUtil.readAsBase64DataUri(appContext, it) }?.let { dataUri ->
             JSONArray().apply {
                 put(JSONObject().apply { put("type", "text"); put("text", userPrompt) })
@@ -101,6 +106,18 @@ class OpenAiInterpreter(
             .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
+        // Bounded so a slow or silent service cannot hold the command: whoever asked gets an answer
+        // — here, a null that sends the cascade on to the user's fallback — within the deadline,
+        // even though the blocking call underneath is released by the interceptor a moment later.
+        return CloudDeadline.run(Strings.AiProcessors.OPENAI, settingsRepo) {
+            executeChatCompletion(request)
+        } ?: run {
+            if (lastErrorReason == null) lastErrorReason = "Timed out waiting for a response"
+            null
+        }
+    }
+
+    private fun executeChatCompletion(request: Request): String? {
         return try {
             val response = client.newCall(request).execute()
             val bodyString = response.body?.string()

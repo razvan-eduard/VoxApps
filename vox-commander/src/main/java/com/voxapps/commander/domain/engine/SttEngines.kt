@@ -43,12 +43,12 @@ object SttEngines {
         GoogleSttEngine.ENGINE_KEY -> GoogleSttEngine(context)
 
         WhisperSttEngine.ENGINE_KEY -> {
-            val apiKey = settingsRepo.getSettingsSnapshot().apiKey
+            val apiKey = settingsRepo.getCredentialsSnapshot().forEngine(WhisperSttEngine.ENGINE_KEY)
             if (apiKey.isNullOrBlank()) {
                 Logger.log("Whisper API selected but no credential is configured", TAG)
                 null
             } else {
-                WhisperSttEngine(apiKey)
+                WhisperSttEngine(apiKey, settingsRepo)
             }
         }
 

@@ -12,6 +12,15 @@ import com.voxapps.commander.utils.Strings
 @Immutable
 data class AppSettings(
     // --- API / CLOUD ---
+    // Backup transport only, and always empty on a settings emission. The credentials live in the
+    // encrypted store and are served by SettingsRepository.credentialsFlow / getCredentialsSnapshot;
+    // these fields exist so an export can carry them and an import can put them back. Reading one
+    // off a live AppSettings gets you nothing, which is the point — there is one route to a secret.
+    //
+    // engineApiKeys is the current shape: one credential per engine, keyed by the engine key. The
+    // three single-key fields below it are what backups carried before that and are still written
+    // and still honoured on import, so a backup moves in both directions between app versions.
+    val engineApiKeys: Map<String, String> = emptyMap(),
     val apiKey: String? = null,
     val geminiApiKey: String? = null,
 
@@ -49,6 +58,7 @@ data class AppSettings(
     val commandQueueEnabled: Boolean = true,
     val wakeWordProfileJson: String? = null,
     val wakeWordEngineType: String = "vosk",
+    /** Backup transport only — see the note on [apiKey]. */
     val picovoiceAccessKey: String? = null,
     val wakeWordSensitivity: String = "medium", // "low", "medium", "high"
     val wakeWordAecEnabled: Boolean = false, // AEC for wake word during media/TTS playback

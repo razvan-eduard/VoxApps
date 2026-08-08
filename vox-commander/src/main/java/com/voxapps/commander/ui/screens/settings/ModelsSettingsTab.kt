@@ -20,7 +20,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
@@ -52,8 +54,6 @@ fun ModelsSettingsTab(
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val nluModels = remember(uiState.availableModels) { uiState.availableModels["nlu_llm"] ?: emptyList() }
 
-    var apiKey by remember(uiState.apiKey) { mutableStateOf(uiState.apiKey ?: "") }
-    var geminiApiKey by remember(uiState.geminiApiKey) { mutableStateOf(uiState.geminiApiKey ?: "") }
     var offlineFallbackTimeout by remember(uiState.refreshTrigger) { mutableIntStateOf(settingsRepo.getSettingsSnapshot().offlineFallbackTimeout) }
 
     var selectedSubTab by remember { mutableIntStateOf(0) }
@@ -72,62 +72,6 @@ fun ModelsSettingsTab(
                 onClick = { focusManager.clearFocus() }
             )
     ) {
-        // --- API KEYS SECTION ---
-        Text(text = languageManager.getString("api_keys_section"), style = MaterialTheme.typography.titleMedium)
-
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            ),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                var isApiFocused by remember { mutableStateOf(false) }
-                TextField(
-                    value = apiKey,
-                    onValueChange = {
-                        apiKey = it
-                        appStateManager.setApiKey(it)
-                        com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(it)
-                    },
-                    label = { Text(languageManager.getString("api_key")) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { isApiFocused = it.isFocused },
-                    visualTransformation = if (isApiFocused) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = !isApiFocused,
-                    maxLines = if (isApiFocused) 5 else 1,
-                    colors = if (!isApiFocused) TextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        unfocusedIndicatorColor = Color.Transparent
-                    ) else TextFieldDefaults.colors()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                var isGeminiKeyFocused by remember { mutableStateOf(false) }
-                TextField(
-                    value = geminiApiKey,
-                    onValueChange = {
-                        geminiApiKey = it
-                        appStateManager.setGeminiApiKey(it)
-                    },
-                    label = { Text(languageManager.getString("gemini_api_key")) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { isGeminiKeyFocused = it.isFocused },
-                    visualTransformation = if (isGeminiKeyFocused) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = !isGeminiKeyFocused,
-                    maxLines = if (isGeminiKeyFocused) 5 else 1,
-                    colors = if (!isGeminiKeyFocused) TextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        unfocusedIndicatorColor = Color.Transparent
-                    ) else TextFieldDefaults.colors()
-                )
-            }
-        }
-
         Spacer(modifier = Modifier.height(8.dp))
 
         // --- OFFLINE FALLBACK SECTION ---

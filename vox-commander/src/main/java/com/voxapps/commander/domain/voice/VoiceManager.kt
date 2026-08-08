@@ -41,6 +41,11 @@ object VoiceManager {
      *  reinitializeEngines, read from Dispatchers.IO while transcribing. */
     @Volatile private var sttEngine: com.voxapps.commander.domain.engine.SttEngine? = null
 
+    /** The user's configured voice fallback, built only once the primary has actually failed.
+     *  [fallbackProcessor] records which processor key it was built for. */
+    @Volatile private var fallbackEngine: com.voxapps.commander.domain.engine.SttEngine? = null
+    @Volatile private var fallbackProcessor: String? = null
+
     @android.annotation.SuppressLint("StaticFieldLeak")
     private var context: Context? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -217,7 +222,6 @@ object VoiceManager {
         
         // 3. RE-INITIALIZE based on new selection
         val snapshot = settings.getSettingsSnapshot()
-        val apiKey = snapshot.apiKey
         val voiceLang = snapshot.voiceLanguage
         
         // Build only the engine this processor actually uses. All four used to be constructed on
@@ -226,17 +230,31 @@ object VoiceManager {
         var builtKey = processor
         if (built == null) {
             // The processor cannot be built as configured — the Whisper API with no credential, or
-            // a key this build has no implementation for. Fall back to the registry's default local
-            // engine rather than to a hardcoded one, and say so.
-            builtKey = RemoteModelRegistry.getDefaultVoiceEngineKey() ?: ""
+            // a key this build has no implementation for. The user's own fallback choice comes
+            // first; only when they have not made one does the registry's default local engine
+            // stand in. Either way, say which.
+            builtKey = snapshot.defaultVoiceFallbackProcessor
+                ?: RemoteModelRegistry.getDefaultVoiceEngineKey()
+                ?: ""
             Logger.log("Cannot build '$processor'; falling back to '$builtKey'", TAG)
             built = SttEngines.create(builtKey, ctx, settings)
         }
         sttEngine = built
 
+        // Whichever engine was actually built gets *its* model, not the active one. Standing in for
+        // the primary and then loading the primary's model id is how a substitution ends up loading
+        // nothing at all: the ids belong to different engines.
+        val builtModelId = when (builtKey) {
+            processor -> snapshot.activeVoiceModelId
+            snapshot.defaultVoiceFallbackProcessor -> snapshot.defaultVoiceFallbackModel
+            // A substitution the user never chose still has a model of its own: the one they last
+            // selected for that engine.
+            else -> snapshot.engineModelSelections[builtKey]
+        }
+
         // Load the model for it. Engines no longer load themselves on first transcribe: locating a
         // model — including honouring a custom import — happens here, where the selection is known.
-        loadSelectedEngine(ctx, settings, builtKey, voiceLang)
+        loadSelectedEngine(ctx, settings, builtKey, builtModelId, voiceLang)
 
         // 4. Return to IDLE state
         hub.setVoiceState(VoiceState.IDLE)
@@ -252,24 +270,37 @@ object VoiceManager {
         ctx: android.content.Context,
         settings: com.voxapps.commander.data.preferences.SettingsRepository,
         processor: String,
+        modelId: String?,
         voiceLang: String
     ) {
         val engine = selectEngine(processor) ?: return
+        loadEngine(ctx, settings, engine, modelId, voiceLang)
+    }
+
+    /** Shared by the selected engine and the fallback: same resolution, same logging, one place. */
+    private suspend fun loadEngine(
+        ctx: android.content.Context,
+        settings: com.voxapps.commander.data.preferences.SettingsRepository,
+        engine: SttEngine,
+        modelId: String?,
+        voiceLang: String
+    ): Boolean {
         val snapshot = settings.getSettingsSnapshot()
         val spec = com.voxapps.commander.domain.engine.EngineSpecs.build(
             context = ctx,
             settingsRepo = settings,
             engineKey = engine.engineKey,
-            modelId = snapshot.activeVoiceModelId,
+            modelId = modelId,
             language = voiceLang,
             langCode = snapshot.modelFilterLang
         )
         if (spec == null) {
             Logger.log("No model available for ${engine.engineKey}; it will report not-ready", TAG)
-            return
+            return false
         }
         val ok = engine.load(spec)
         Logger.log("Engine ${engine.engineKey} load ${if (ok) "succeeded" else "failed"}", TAG)
+        return ok
     }
 
     fun handleIntentResult(text: String) {
@@ -374,17 +405,104 @@ object VoiceManager {
         }
     }
 
-    fun setOfflineFallbackSettings(timeout: Int, model: String) {
-        // Update settings
+    /**
+     * Transcribes with [engine], and on a failed outcome tries the user's configured voice fallback
+     * on the same audio.
+     *
+     * Triggered by what the primary *returned*, never by a readiness probe: a cloud engine can be
+     * online, credentialled and still time out, and a local model can be present and still fail to
+     * load. The captured buffer is what makes this possible at all — the second attempt costs the
+     * user nothing more to say.
+     *
+     * The primary's answer is what comes back if the fallback has nothing better, so a fallback that
+     * cannot replay a buffer (the platform recogniser transcribes through the OS, not from bytes)
+     * costs a log line and changes nothing.
+     */
+    private suspend fun transcribeWithFallback(
+        engine: SttEngine,
+        audio: ByteArray,
+        langCode: String?
+    ): String {
+        val primary = engine.transcribe(audio, langCode)
+        if (isUsableTranscript(primary)) return primary
+
+        val fallback = ensureFallbackEngine() ?: return primary
+        Logger.log("'${engine.engineKey}' produced no transcript ($primary) — trying fallback '${fallback.engineKey}'", TAG)
+        val fallbackResult = try {
+            fallback.transcribe(audio, langCode)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.log("Voice fallback failed: ${e.message}", TAG)
+            return primary
+        }
+        return if (isUsableTranscript(fallbackResult)) fallbackResult else primary
+    }
+
+    /**
+     * Whether an engine actually produced words.
+     *
+     * The `"Error: …"` prefix is the STT engines' shared way of reporting a failure through a
+     * non-null return type. A blank result counts as a failure too: this path only runs when the
+     * recording rose above the silence threshold, so audio was captured and the engine had
+     * something to work with.
+     */
+    private fun isUsableTranscript(text: String): Boolean =
+        text.isNotBlank() && !text.trimStart().startsWith("Error:", ignoreCase = true)
+
+    /**
+     * The fallback engine, built and loaded the first time it is actually needed.
+     *
+     * Not built alongside the primary: holding a second loaded model permanently to serve a path
+     * that may never run is what the single-engine rewrite deliberately stopped doing. The load cost
+     * is paid on the failure it exists for.
+     */
+    private suspend fun ensureFallbackEngine(): SttEngine? {
+        val ctx = context ?: return null
+        val settings = settingsRepo ?: return null
+        val snapshot = settings.getSettingsSnapshot()
+
+        val processor = snapshot.defaultVoiceFallbackProcessor ?: return null
+        val modelId = snapshot.defaultVoiceFallbackModel ?: return null
+        if (processor == snapshot.voiceProcessor && modelId == snapshot.activeVoiceModelId) {
+            // The same engine on the same model cannot answer differently — it just failed.
+            Logger.log("Voice fallback matches the active selection; nothing to escalate to", TAG)
+            return null
+        }
+
+        fallbackEngine?.takeIf { fallbackProcessor == processor }?.let { return it }
+
+        // Keyed by the processor the user chose rather than by the engine's own key: two processors
+        // can share one implementation (Whisper on CPU and on Vulkan), so the engine key cannot tell
+        // them apart.
+        releaseFallbackEngine()
+        val built = SttEngines.create(processor, ctx, settings) ?: run {
+            Logger.log("Voice fallback '$processor' cannot be built as configured", TAG)
+            return null
+        }
+        if (!loadEngine(ctx, settings, built, modelId, snapshot.voiceLanguage)) {
+            built.release()
+            return null
+        }
+        fallbackEngine = built
+        fallbackProcessor = processor
+        return built
+    }
+
+    private fun releaseFallbackEngine() {
+        fallbackEngine?.release()
+        fallbackEngine = null
+        fallbackProcessor = null
     }
 
     fun release() {
         stopListening()
         speechRecognizer?.destroy()
         speechRecognizer = null
-        
+
         sttEngine?.release()
         sttEngine = null
+        releaseFallbackEngine()
     }
 
     /**
@@ -394,7 +512,7 @@ object VoiceManager {
      * releasing mid-transcription.
      */
     fun releaseForMemoryPressure() {
-        listOfNotNull(sttEngine)
+        listOfNotNull(sttEngine, fallbackEngine)
             .forEach { it.releaseForMemoryPressure() }
     }
 
@@ -549,8 +667,8 @@ object VoiceManager {
                         // Pass language code to engine if it supports it
                         // Engines that cannot be told a language ignore it, so there is no longer
                         // a type test here deciding whether passing one is possible.
-                        val rawResult = engine.transcribe(byteArray, effectiveLangCode)
-                        
+                        val rawResult = transcribeWithFallback(engine, byteArray, effectiveLangCode)
+
                         // Clean up transcription to remove trailing noise/formatting that kills regex matches
                         rawResult.trim().lowercase().removeSuffix(".")
                     } ?: "Error: Sync failed"

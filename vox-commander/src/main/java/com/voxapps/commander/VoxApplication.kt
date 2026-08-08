@@ -60,7 +60,7 @@ class VoxApplication : Application() {
             container.settingsRepository.getAllSearchProviderApiKeys()
         )
         com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
-            container.settingsRepository.getApiKeySync()
+            container.settingsRepository.getCredentialsSnapshot().forEngine(Strings.AiProcessors.OPENAI)
         )
 
         // Initialize IntentCatalog (data-driven intent probe catalog) — must be ready
@@ -142,7 +142,7 @@ class VoxApplication : Application() {
                 container.settingsRepository.getAllSearchProviderApiKeys()
             )
             com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
-                container.settingsRepository.getApiKeySync()
+                container.settingsRepository.getCredentialsSnapshot().forEngine(Strings.AiProcessors.OPENAI)
             )
             // Also fetch the intent catalog from the remote repo (hot-reload)
             com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(container.settingsRepository, force = true)

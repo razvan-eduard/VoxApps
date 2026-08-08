@@ -16,6 +16,7 @@ import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.engine.EngineSelection
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.Dispatchers
@@ -85,7 +86,7 @@ class LocalLlmInterpreter(
     private val settingsRepo: SettingsRepository,
     private val modelDownloader: ModelDownloader,
     private val fastMapDao: FastMapDao
-) : AssistantEngine {
+) : SelectableModelEngine {
 
     private val TAG = Strings.Tags.LOCAL_LLM_INTERPRETER
     private var engine: Engine? = null
@@ -107,10 +108,28 @@ class LocalLlmInterpreter(
      *  nothing ever reached `LlmHookWorker`'s `catch` block to send one. */
     private val mutex = Mutex()
 
-    private fun setupLlm() {
+    /**
+     * The user's *active* intent selection — what a caller means when it does not say which model
+     * it wants. Null when no model is selected at all.
+     */
+    private fun activeSelection(): EngineSelection? {
         val snapshot = settingsRepo.getSettingsSnapshot()
-        val modelId = snapshot.activeIntentModelId ?: return
-        val engineKey = snapshot.aiProcessor
+        val modelId = snapshot.activeIntentModelId ?: return null
+        return EngineSelection(snapshot.aiProcessor, modelId)
+    }
+
+    /**
+     * Loads [selection]'s model, replacing whatever is loaded.
+     *
+     * Takes the selection as a parameter rather than reading `activeIntentModelId`/`aiProcessor`
+     * itself. That read is why a configured intent fallback produced nothing: this class is one
+     * process-wide instance, so the fallback stage reached the same interpreter and it loaded the
+     * *primary's* model — re-running, on the model that had just failed, the inference that had
+     * just failed.
+     */
+    private fun setupLlm(selection: EngineSelection) {
+        val modelId = selection.modelId ?: return
+        val engineKey = selection.engineKey
 
         // If model or engine changed, tear down everything and reload
         if (engine != null && (loadedModelId != modelId || loadedEngineKey != engineKey)) {
@@ -183,14 +202,15 @@ class LocalLlmInterpreter(
      */
     suspend fun preload(modelFilterLang: String? = null): Boolean =
         withContext(Dispatchers.IO) {
+            val selection = activeSelection() ?: return@withContext false
             mutex.withLock {
                 withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) {
-                    setupLlm()
+                    setupLlm(selection)
                     val currentEngine = engine ?: return@withTimeoutOrNull false
                     // No spokenText yet (this runs before any command exists) — PromptProvider
                     // falls back to every domain in that case, so there's no FastMap rules to
                     // fetch for keyword-matching purposes; skip that DB read entirely.
-                    ensureBaseConversation(currentEngine, modelFilterLang) != null
+                    ensureBaseConversation(currentEngine, selection.engineKey, modelFilterLang) != null
                 }
             } ?: false
         }
@@ -199,12 +219,13 @@ class LocalLlmInterpreter(
      *  shared by [doProcessCommand] and [preload] so both pay/skip the exact same warm-up cost. */
     private fun ensureBaseConversation(
         currentEngine: Engine,
+        engineKey: String,
         modelFilterLang: String?,
         spokenText: String = "",
         fastMapRules: List<FastMapRule> = emptyList()
     ): Conversation? {
         val settings = settingsRepo.getSettingsSnapshot()
-        val systemPrompt = PromptProvider.getNluSystemPrompt(spokenText, settings, modelFilterLang, settingsRepo, fastMapRules)
+        val systemPrompt = PromptProvider.getNluSystemPrompt(spokenText, settings, modelFilterLang, settingsRepo, fastMapRules, engineKey)
         val promptHash = sha256(systemPrompt)
 
         // Invalidate cached conversation if system prompt changed (apps, language, defaults, etc.)
@@ -240,30 +261,53 @@ class LocalLlmInterpreter(
         return baseConversation
     }
 
-    override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? =
+    /** Runs the user's active intent model — the [AssistantEngine] contract, which says nothing
+     *  about which model, so it means "the selected one". */
+    override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? {
+        val selection = activeSelection() ?: return null
+        return processCommand(spokenText, modelFilterLang, selection)
+    }
+
+    /**
+     * Runs [selection]'s model, whether or not it is the active one.
+     *
+     * A selection that differs from what is loaded costs a full model swap — teardown, load, and on
+     * a first-ever load of that model an XNNPACK cache build. That is the price of a fallback to a
+     * *different* on-device model and it is paid only when the levels above have already failed.
+     */
+    override suspend fun processCommand(
+        spokenText: String,
+        modelFilterLang: String?,
+        selection: EngineSelection
+    ): NluIntent? =
         withContext(Dispatchers.IO) {
             mutex.withLock {
                 withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) {
                     val activeRules = fastMapDao.getAllRulesOnce().filter { it.isActive }
-                    doProcessCommand(spokenText, modelFilterLang, activeRules)
+                    doProcessCommand(spokenText, modelFilterLang, activeRules, selection)
                 }
             }
         }
 
-    private fun doProcessCommand(spokenText: String, modelFilterLang: String?, fastMapRules: List<FastMapRule>): NluIntent? {
+    private fun doProcessCommand(
+        spokenText: String,
+        modelFilterLang: String?,
+        fastMapRules: List<FastMapRule>,
+        selection: EngineSelection
+    ): NluIntent? {
         isProcessing = true
         try {
-            setupLlm()
+            setupLlm(selection)
             val currentEngine = engine ?: return null
 
             val userInput = PromptProvider.formatUserInput(spokenText)
-            val conversation = ensureBaseConversation(currentEngine, modelFilterLang, spokenText, fastMapRules)
+            val conversation = ensureBaseConversation(currentEngine, selection.engineKey, modelFilterLang, spokenText, fastMapRules)
             if (conversation == null) {
                 // Fallback: no cached conversation, use a one-shot conversation with the system
                 // prompt inlined into the same message instead of as a persisted systemInstruction.
                 return try {
                     val settings = settingsRepo.getSettingsSnapshot()
-                    val systemPrompt = PromptProvider.getNluSystemPrompt(spokenText, settings, modelFilterLang, settingsRepo, fastMapRules)
+                    val systemPrompt = PromptProvider.getNluSystemPrompt(spokenText, settings, modelFilterLang, settingsRepo, fastMapRules, selection.engineKey)
                     val fullPrompt = "$systemPrompt\n$userInput"
                     val domains = (IntentTaxonomy.Domains.ALL + settings.customDomains).distinct()
                     val schema = buildNluResponseSchema(domains, IntentTaxonomy.Actions.ALL)
@@ -309,18 +353,19 @@ class LocalLlmInterpreter(
 
     override suspend fun rawPrompt(promptText: String, imageUri: String?): String? =
         withContext(Dispatchers.IO) {
+            val selection = activeSelection() ?: return@withContext null
             mutex.withLock {
-                withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) { doRawPrompt(promptText) }
+                withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) { doRawPrompt(promptText, selection) }
             }
         }
 
-    private fun doRawPrompt(promptText: String): String? {
+    private fun doRawPrompt(promptText: String, selection: EngineSelection): String? {
         // LiteRT-LM on-device models aren't multimodal-capable here today — imageUri is always null
         // here (RemoteModelRegistry.isMultimodal never reports true for a local engine unless it
         // declares "multimodal" in models.json, which none currently do), silently ignored otherwise.
         isProcessing = true
         try {
-            setupLlm()
+            setupLlm(selection)
             val currentEngine = engine ?: return null
             // Deliberately does NOT touch baseConversation/cachedSystemPromptHash — those are primed
             // with the NLU system prompt for processCommand()'s per-utterance path. A raw-prompt call

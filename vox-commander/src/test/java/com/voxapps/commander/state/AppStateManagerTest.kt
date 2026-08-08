@@ -28,6 +28,7 @@ class AppStateManagerTest {
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var stateManager: AppStateManager
     private lateinit var settingsFlow: MutableStateFlow<AppSettings>
+    private lateinit var credentialsFlow: MutableStateFlow<com.voxapps.commander.data.preferences.Credentials>
 
     @After
     fun tearDown() {
@@ -80,6 +81,10 @@ class AppStateManagerTest {
         )
         settingsFlow = MutableStateFlow(initialSettings)
         every { settingsRepo.settingsFlow } returns settingsFlow
+        // The encrypted store is a second source feeding uiState; without it the combine never
+        // emits and every assertion below would read the initial state.
+        credentialsFlow = MutableStateFlow(com.voxapps.commander.data.preferences.Credentials())
+        every { settingsRepo.credentialsFlow } returns credentialsFlow
         every { settingsRepo.getSettingsSnapshot() } returns initialSettings
 
         // Reset singleton
@@ -340,14 +345,14 @@ class AppStateManagerTest {
     }
 
     @Test
-    fun `setApiKey delegates to SettingsRepository`() = runTest {
+    fun `setEngineApiKey delegates to SettingsRepository, keyed by engine`() = runTest {
         stateManager.uiState.test {
             awaitItem()
 
-            stateManager.setApiKey("new-key")
+            stateManager.setEngineApiKey(Strings.AiProcessors.OPENAI, "new-key")
 
             testScheduler.advanceUntilIdle()
-            coVerify { settingsRepo.setApiKey("new-key") }
+            coVerify { settingsRepo.setEngineApiKey(Strings.AiProcessors.OPENAI, "new-key") }
         }
     }
 

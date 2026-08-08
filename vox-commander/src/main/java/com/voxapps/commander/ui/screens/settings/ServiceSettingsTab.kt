@@ -24,6 +24,7 @@ import androidx.compose.ui.text.withAnnotation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
+import androidx.core.net.toUri
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.engine.AndroidTtsEngine
 import com.voxapps.commander.domain.engine.PiperTtsEngine
@@ -35,6 +36,7 @@ import com.voxapps.commander.domain.voice.WakeWordProfile
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.components.DropdownGroup
 import com.voxapps.commander.ui.components.GroupedDropdownContent
+import com.voxapps.commander.ui.components.EngineApiKeyField
 import com.voxapps.commander.ui.components.EngineModelSection
 import com.voxapps.commander.ui.components.GroupedDropdownMenu
 import com.voxapps.commander.ui.components.ServiceLoadingDialog
@@ -287,60 +289,15 @@ fun ServiceSettingsTab(
             )
         }
 
-        // Picovoice AccessKey input (only for engines that require it)
+        // The credential for whichever wake-word engine is selected, shown only when that engine
+        // declares it needs one. The field carries its own label and its own "where to get a key"
+        // link, both from the declaration — this screen used to spell out Picovoice's inside a gate
+        // that was already generic, so any other engine needing a key was sent to Picovoice for it.
         if (requiresApiKey) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = languageManager.getString("ww_porcupine_accesskey"),
-                style = MaterialTheme.typography.labelLarge
-            )
-            val uriHandler = LocalUriHandler.current
-            val descText = languageManager.getString("ww_porcupine_accesskey_desc")
-            val linkUrl = "https://console.picovoice.ai"
-            val annotatedDesc = remember(descText) {
-                buildAnnotatedString {
-                    val linkStart = descText.indexOf("console.picovoice.ai")
-                    if (linkStart >= 0) {
-                        append(descText.substring(0, linkStart))
-                        withStyle(
-                            SpanStyle(
-                                color = Color.Unspecified,
-                                textDecoration = TextDecoration.Underline
-                            )
-                        ) {
-                            withAnnotation(tag = "URL", annotation = linkUrl) {
-                                append("console.picovoice.ai")
-                            }
-                        }
-                        append(descText.substring(linkStart + "console.picovoice.ai".length))
-                    } else {
-                        append(descText)
-                    }
-                }
-            }
-            ClickableText(
-                text = annotatedDesc,
-                style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
-                onClick = { offset ->
-                    annotatedDesc.getStringAnnotations("URL", offset, offset)
-                        .firstOrNull()?.let { uriHandler.openUri(it.item) }
-                }
-            )
-            var localAccessKey by remember { mutableStateOf(uiState.picovoiceAccessKey ?: "") }
-            LaunchedEffect(uiState.picovoiceAccessKey) {
-                if ((uiState.picovoiceAccessKey ?: "") != localAccessKey) {
-                    localAccessKey = uiState.picovoiceAccessKey ?: ""
-                }
-            }
-            OutlinedTextField(
-                value = localAccessKey,
-                onValueChange = {
-                    localAccessKey = it
-                    appStateManager.setPicovoiceAccessKey(it.ifBlank { null })
-                },
-                label = { Text("AccessKey") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+            EngineApiKeyField(
+                engineKey = currentEngineKey,
+                appStateManager = appStateManager,
+                languageManager = languageManager
             )
         }
 
@@ -755,7 +712,7 @@ fun ServiceSettingsTab(
 
         // Engines flagged `requires_api_key` (e.g. Porcupine → Picovoice AccessKey) can't start
         // without a key — block it here instead of failing at runtime.
-        val hasApiKey = !uiState.picovoiceAccessKey.isNullOrBlank()
+        val hasApiKey = uiState.credentials.has(currentEngineKey)
         val apiKeyOk = !requiresApiKey || hasApiKey
 
         Button(
@@ -834,20 +791,16 @@ fun ServiceSettingsTab(
                     onClick = { ttsEngineExpanded = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        if (currentTtsEngineKey == "android") languageManager.getString("tts_engine_android") ?: "Android (system default)"
-                        else RemoteModelRegistry.getEngineLabel(currentTtsEngineKey, languageManager)
-                    )
+                    Text(RemoteModelRegistry.getEngineLabel(currentTtsEngineKey, languageManager))
                 }
                 DropdownMenu(
                     expanded = ttsEngineExpanded,
                     onDismissRequest = { ttsEngineExpanded = false },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    DropdownMenuItem(
-                        text = { Text(languageManager.getString("tts_engine_android") ?: "Android (system default)") },
-                        onClick = { appStateManager.setTtsEngineType(AndroidTtsEngine.ENGINE_KEY); ttsEngineExpanded = false }
-                    )
+                    // The platform engine used to be listed here by hand, ahead of whatever the
+                    // registry knew about, and labelled by a second special case just above. It is
+                    // a declared engine now and arrives with the others.
                     ttsEngines.forEach { engKey ->
                         DropdownMenuItem(
                             text = { Text(RemoteModelRegistry.getEngineLabel(engKey, languageManager)) },

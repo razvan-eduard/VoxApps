@@ -159,7 +159,7 @@ class VoxLocationResolver(
             context: Context,
             store: VoxLocationStore,
             needsReverseGeocode: Boolean = false,
-            userAgent: String = "VoxApps (github.com/razvan-eduard/VoxApps)"
+            userAgent: String = VOX_NOMINATIM_USER_AGENT
         ): VoxLocationResolver = VoxLocationResolver(
             store = store,
             liveLocationProvider = AndroidLiveLocationProvider(context),

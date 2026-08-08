@@ -169,13 +169,6 @@ class AppContainer(context: Context) {
     fun initVoiceManager(context: Context, voiceIntentLauncher: com.voxapps.commander.utils.VoiceIntentLauncher) {
         VoiceManager.init(context, settingsRepository, appStateManager)
 
-        // Set offline fallback settings in VoiceManager
-        val snapshot = settingsRepository.getSettingsSnapshot()
-        VoiceManager.setOfflineFallbackSettings(
-            snapshot.offlineFallbackTimeout,
-            snapshot.defaultOfflineModel
-        )
-
         // Initialize TTS manager
         TtsManager.init(context, settingsRepository, appStateManager)
 

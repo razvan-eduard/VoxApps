@@ -20,11 +20,15 @@ import android.content.Context
 
 /**
  * Models.json Schema Objects - The Wrapper
+ *
+ * Every field defaults, so a repo serving `{}` parses into a schema with no engines rather than
+ * throwing or producing nulls behind non-null types. That is what makes "point the repository at
+ * something empty and get only what is compiled in" a supported configuration instead of a crash.
  */
 data class RemoteModelSchema(
-    val schema_version: Int,
+    val schema_version: Int = 0,
     val prompts: Map<String, String>? = null,
-    val engines: Map<String, RemoteEngineConfig>
+    val engines: Map<String, RemoteEngineConfig> = emptyMap()
 )
 
 data class RemoteEngineConfig(
@@ -40,7 +44,24 @@ data class RemoteEngineConfig(
     val runtime: String? = null,
     /** See [EntryPoint]. Nullable for the same reason, and because virtual engines have no file. */
     val entry: EntryPoint? = null,
-    val models: List<RemoteModelItem>
+    /** How long a call to this engine may take, when the engine knows better than the user's
+     *  general setting — see [com.voxapps.commander.domain.engine.CloudDeadline]. Null means the
+     *  setting decides. */
+    val timeout_seconds: Int? = null,
+    /** The `prompts` entry this engine wants, when the one written for its runtime does not suit
+     *  it. Null means the runtime's prompt, then the standard one. */
+    val prompt_id: String? = null,
+    /** A translations key for this engine's name, resolved before [engine_label]. Without it a
+     *  schema could only ship one language's label to a four-language settings screen —
+     *  [engine_label] is the fallback for whoever has no translation. */
+    val label_key: String? = null,
+    /** Where the user obtains a credential for this engine — shown as a link beside the key field.
+     *  An engine that needs a key but says nothing about where to get one simply shows no link. */
+    val api_key_url: String? = null,
+    /** A translations key for the sentence explaining how to get that credential. A key rather than
+     *  the sentence itself, for the same reason as [label_key]. */
+    val api_key_help_key: String? = null,
+    val models: List<RemoteModelItem> = emptyList()
 )
 
 /**
@@ -105,7 +126,9 @@ enum class EngineRuntime(val key: String) {
 data class RemoteModelItem(
     override val id: String,
     override val label: String,
-    val path: String,
+    /** Defaulted for the same Gson reason as the schema's own fields: a virtual engine's model, if
+     *  it ever declares one, has nothing to download. */
+    val path: String = "",
     val size_mb: Int,
     val size_label: String? = null,
     val is_multilingual: Boolean? = null,
@@ -170,6 +193,7 @@ object RemoteModelRegistry {
     val loadStatus: StateFlow<LoadStatus> = _loadStatus.asStateFlow()
 
     private const val LOCAL_FILE_NAME = "models.json"
+    private const val VIRTUAL_FILE_NAME = "virtual_models.json"
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -226,10 +250,10 @@ object RemoteModelRegistry {
                     return@withContext cachedSchema != null
                 }
                 saveLocalFile(jsonText)
-                cachedSchema = schema
-                Logger.log("Remote JSON parsed and saved locally. Engines found: ${schema.engines.keys}", TAG)
+                fetchVirtualSchema(baseUrl)
+                applySchema(schema)
+                Logger.log("Remote JSON parsed and saved locally. Engines found: ${cachedSchema?.engines?.keys}", TAG)
                 repo.saveModelsJsonCache(jsonText)
-                rebuildModelMap()
                 _registryUpdateSignal.value++
                 _loadStatus.value = LoadStatus.LOADED_FROM_REMOTE
                 true
@@ -307,6 +331,104 @@ object RemoteModelRegistry {
     }
 
     /**
+     * Best-effort refresh of the virtual declarations from the same repository as models.json.
+     *
+     * Deliberately silent on failure: a repository that does not carry the file at all is the
+     * ordinary case, and the bundled copy then stands. A repository that *does* carry it — including
+     * one carrying `{}` — replaces it, which is what lets a deployment say "nothing here leaves the
+     * device" and be believed.
+     */
+    private fun fetchVirtualSchema(baseUrl: String) {
+        val ctx = appContext ?: return
+        val rawBase = if (baseUrl.contains("github.com") && !baseUrl.contains("raw.githubusercontent.com")) {
+            baseUrl.replace("github.com", "raw.githubusercontent.com").removeSuffix("/") + "/main/$VIRTUAL_FILE_NAME"
+        } else {
+            if (baseUrl.endsWith("/")) "$baseUrl$VIRTUAL_FILE_NAME" else "$baseUrl/$VIRTUAL_FILE_NAME"
+        }
+        try {
+            val text = URL("$rawBase?t=${System.currentTimeMillis()}").readText()
+            // Parsed before it is stored: a corrupt download must not replace a copy that works.
+            gson.fromJson(text, RemoteModelSchema::class.java) ?: return
+            java.io.File(ctx.filesDir, VIRTUAL_FILE_NAME).writeText(text)
+            Logger.log("Updated $VIRTUAL_FILE_NAME from the repository", TAG)
+        } catch (e: Exception) {
+            Logger.log("No $VIRTUAL_FILE_NAME served by the repository (${e.message}) — keeping the bundled one", TAG)
+        }
+    }
+
+    /**
+     * Installs [schema] as the registry's contents, with the virtual engines merged in after it.
+     *
+     * Every path that assigns the schema goes through here — remote fetch, local copy, and the
+     * recovery reparse — because a merge that only some of them perform is a registry whose contents
+     * depend on how the app happened to start. Virtual engines are merged *after* so that a schema
+     * describing an engine of its own always wins over the compiled-in declaration of the same key.
+     */
+    private fun applySchema(schema: RemoteModelSchema?) {
+        if (schema == null) {
+            cachedSchema = null
+            return
+        }
+        val virtual = loadVirtualEngines()
+        val engines = (virtual + schema.engines).mapValues { it.value.withSafeCollections() }
+        cachedSchema = schema.copy(engines = engines)
+        rebuildModelMap()
+    }
+
+    /**
+     * Replaces the collections Gson may have left null with empty ones.
+     *
+     * Gson instantiates without running the Kotlin constructor, so a field the JSON omits stays null
+     * even though its type says it cannot be — and the failure surfaces later, at some unrelated
+     * `in` or `forEach`, on a schema that looked perfectly valid. Normalising once, where the schema
+     * is installed, means no reader has to defend itself; that this applies to a repository-served
+     * copy as much as to the bundled one is the point, since only one of the two is reviewed.
+     */
+    /** The same normalisation [applySchema] performs, so a test can assert against a schema in the
+     *  shape the app actually runs rather than the shape Gson happened to produce. */
+    @VisibleForTesting
+    internal fun normalised(schema: RemoteModelSchema): RemoteModelSchema =
+        schema.copy(engines = schema.engines.mapValues { it.value.withSafeCollections() })
+
+    @Suppress("SENSELESS_COMPARISON")
+    private fun RemoteEngineConfig.withSafeCollections(): RemoteEngineConfig = copy(
+        // Not only the collections: `extension` is a non-null String with a default, and Gson leaves
+        // it null just the same when the field is absent — which then fails inside `copy` itself,
+        // before anything has a chance to read it.
+        extension = extension ?: "",
+        type = type ?: emptyList(),
+        capabilities = capabilities ?: emptyList(),
+        models = models ?: emptyList()
+    )
+
+    /**
+     * The engines that have no downloadable artefact — cloud services and OS-supplied ones.
+     *
+     * They are declared rather than injected by the screens that happen to show them, which is how
+     * the same engine came to be listed in one place, labelled in a second, and have its
+     * availability decided in a third. A repository may serve its own copy; failing that, the one
+     * bundled with the app is used. A copy that parses to zero engines is a legitimate answer —
+     * "this deployment offers nothing that leaves the device" — and not an error.
+     */
+    private fun loadVirtualEngines(): Map<String, RemoteEngineConfig> {
+        val ctx = appContext ?: return emptyMap()
+        val local = java.io.File(ctx.filesDir, VIRTUAL_FILE_NAME)
+        val json = try {
+            if (local.exists()) local.readText()
+            else ctx.assets.open(VIRTUAL_FILE_NAME).use { it.readBytes().decodeToString() }
+        } catch (e: Exception) {
+            Logger.log("No virtual engine declarations available: ${e.message}", TAG)
+            return emptyMap()
+        }
+        return try {
+            gson.fromJson(json, RemoteModelSchema::class.java)?.engines.orEmpty()
+        } catch (e: Exception) {
+            Logger.log("Failed to parse $VIRTUAL_FILE_NAME: ${e.message}", TAG)
+            emptyMap()
+        }
+    }
+
+    /**
      * Loads and parses models.json from filesDir (the writable local copy).
      */
     private fun loadFromFilesDir() {
@@ -318,10 +440,9 @@ object RemoteModelRegistry {
         }
         try {
             val jsonText = localFile.readText()
-            cachedSchema = gson.fromJson(jsonText, RemoteModelSchema::class.java)
+            applySchema(gson.fromJson(jsonText, RemoteModelSchema::class.java))
             if (cachedSchema != null) {
                 Logger.log("Loaded models.json from filesDir. Engines: ${cachedSchema?.engines?.keys}", TAG)
-                rebuildModelMap()
             }
         } catch (e: Exception) {
             Logger.log("Failed to parse local models.json: ${e.message}. Overwriting from assets.", TAG)
@@ -330,10 +451,9 @@ object RemoteModelRegistry {
                     localFile.outputStream().use { output -> input.copyTo(output) }
                 }
                 val freshText = localFile.readText()
-                cachedSchema = gson.fromJson(freshText, RemoteModelSchema::class.java)
+                applySchema(gson.fromJson(freshText, RemoteModelSchema::class.java))
                 if (cachedSchema != null) {
                     Logger.log("Recovered models.json from assets. Engines: ${cachedSchema?.engines?.keys}", TAG)
-                    rebuildModelMap()
                 }
             } catch (e2: Exception) {
                 Logger.log("Failed to recover models.json from assets: ${e2.message}", TAG)
@@ -421,6 +541,16 @@ object RemoteModelRegistry {
         return null
     }
 
+    /**
+     * The call budget this engine declares for itself, or null to let the user's setting decide.
+     *
+     * Only the engines the schema describes can answer; the cloud processors are still built-in
+     * keys rather than schema entries, so today they all fall through to the setting. That is the
+     * intended resolution order either way — declaring the value is a data change, not a code one.
+     */
+    fun declaredTimeoutSeconds(engineKey: String): Int? =
+        cachedSchema?.engines?.get(engineKey)?.timeout_seconds?.takeIf { it > 0 }
+
     fun getEngineTypes(): List<String> = cachedSchema?.engines?.keys?.toList() ?: emptyList()
 
     /**
@@ -448,18 +578,25 @@ object RemoteModelRegistry {
     fun declaredEngineLabel(engineKey: String): String =
         cachedSchema?.engines?.get(engineKey)?.engine_label ?: engineKey
 
+    /**
+     * The engine's name for a settings screen: its translated label, then the one written in the
+     * schema, then the key made presentable.
+     *
+     * The translation comes first because a label in JSON can only ever be in one language, and this
+     * app ships four. A `when` over engine names used to do this for the virtual engines alone,
+     * which is why adding one meant editing a label table, an availability check and a list — the
+     * engines now declare `label_key` and none of those exist.
+     */
     fun getEngineLabel(engineKey: String, languageManager: LanguageManager): String {
         val config = cachedSchema?.engines?.get(engineKey)
+        config?.label_key?.let { key ->
+            val translated = languageManager.getString(key)
+            if (translated.isNotBlank() && translated != key) return translated
+        }
         if (config?.engine_label != null) return config.engine_label
-        
-        // Local/Virtual fallbacks
         return when (engineKey) {
-            Strings.Processors.GOOGLE -> languageManager.getString("engine_label_google")
-            Strings.Processors.WHISPER_API -> languageManager.getString("engine_label_whisper_api")
+            // Not a declared engine: it is stt_whisper asked to run on the GPU. See VoiceEnginesSubTab.
             Strings.Processors.WHISPER_VULKAN -> languageManager.getString("engine_label_vulkan_experimental")
-            Strings.AiProcessors.OPENAI -> languageManager.getString("engine_label_openai_gpt")
-            Strings.AiProcessors.GEMINI_NATIVE -> languageManager.getString("engine_label_gemini_nano")
-            Strings.AiProcessors.GEMINI_CLOUD -> languageManager.getString("engine_label_gemini_cloud")
             else -> engineKey.replace("_", " ").uppercase()
         }
     }
@@ -544,8 +681,9 @@ object RemoteModelRegistry {
      * the same hardcoded-cloud-first, JSON-fallback duality [LlmHookEngineSelector]/[IntentDecisionMap]
      * already use to *select* an engine, rather than inventing a new lookup shape for capability.
      */
-    fun isMultimodal(processor: String): Boolean =
-        processor in Strings.AiProcessors.MULTIMODAL_CAPABLE || hasCapability(processor, "multimodal")
+    /** Declared, not listed. The hardcoded set this used to consult named the same two engines the
+     *  schema now does, and could only ever be edited in lockstep with it. */
+    fun isMultimodal(processor: String): Boolean = hasCapability(processor, "multimodal")
 
     /**
      * Whether [processor] runs on-device rather than calling out to a cloud API.
@@ -587,6 +725,19 @@ object RemoteModelRegistry {
     }
 
     fun getPrompt(id: String): String? = cachedSchema?.prompts?.get(id)
+
+    /** Where to obtain this engine's credential, if it says. */
+    fun declaredApiKeyUrl(engineKey: String): String? =
+        cachedSchema?.engines?.get(engineKey)?.api_key_url?.takeIf { it.isNotBlank() }
+
+    /** The translations key for this engine's "how to get a key" sentence, if it declares one. */
+    fun declaredApiKeyHelpKey(engineKey: String): String? =
+        cachedSchema?.engines?.get(engineKey)?.api_key_help_key?.takeIf { it.isNotBlank() }
+
+    /** The prompt this engine asks for by name, if any — see
+     *  [com.voxapps.commander.domain.intent.interpreter.PromptProvider]. */
+    fun declaredPromptId(engineKey: String): String? =
+        cachedSchema?.engines?.get(engineKey)?.prompt_id?.takeIf { it.isNotBlank() }
 
     fun getModelMapNow(): Map<String, List<AppModel>> {
         return _modelMap.value

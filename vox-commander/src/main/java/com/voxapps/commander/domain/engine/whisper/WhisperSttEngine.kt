@@ -1,6 +1,8 @@
 package com.voxapps.commander.domain.engine.whisper
 
-import com.voxapps.commander.domain.engine.BaseVoxEngine
+import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.domain.engine.BaseVirtualEngine
+import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.commander.domain.engine.ModelSpec
 import com.voxapps.commander.domain.engine.SttEngine
 import com.voxapps.logging.Logger
@@ -8,6 +10,7 @@ import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.utils.WavUtils
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -31,13 +34,21 @@ data class WhisperResponse(val text: String)
 
 class WhisperSttEngine(
     private val apiKey: String,
+    private val settingsRepo: SettingsRepository,
     private val modelName: String = MODEL_NAME
-) : BaseVoxEngine(), SttEngine {
+) : BaseVirtualEngine(), SttEngine {
 
     override val engineKey: String = ENGINE_KEY
 
     private val api = Retrofit.Builder()
         .baseUrl(BASE_URL)
+        .client(
+            // Retrofit's default client would apply OkHttp's own timeouts, which nothing here
+            // chose. Same deadline as every other cloud call, read per request. See [CloudDeadline].
+            OkHttpClient.Builder()
+                .addInterceptor(CloudDeadline.interceptor(ENGINE_KEY, settingsRepo))
+                .build()
+        )
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(WhisperApi::class.java)
@@ -54,7 +65,9 @@ class WhisperSttEngine(
         }
         
         return try {
-            val response = api.transcribe(AUTH_PREFIX + apiKey, filePart, modelPart, langPart)
+            val response = CloudDeadline.run(ENGINE_KEY, settingsRepo) {
+                api.transcribe(AUTH_PREFIX + apiKey, filePart, modelPart, langPart)
+            } ?: return "Error: timed out"
             response.text
         } catch (e: Exception) {
             Logger.log("Whisper API transcription failed: ${e.message}", "WhisperSttEngine")
@@ -67,11 +80,8 @@ class WhisperSttEngine(
      * be present. Deliberately no round-trip: a real API call at startup costs money, can rate-limit,
      * and tells a third party the app launched. An invalid key surfaces from an actual transcription.
      */
-    override suspend fun onLoad(spec: ModelSpec): Boolean = apiKey.isNotBlank()
-
-    override fun onUnload() {
-        // The Retrofit client holds no model and no meaningful memory.
-    }
+    override suspend fun unavailableReason(spec: ModelSpec): String? =
+        if (apiKey.isNotBlank()) null else "API key is missing"
 
     companion object {
         const val ENGINE_KEY = "WHISPER_API"

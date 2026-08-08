@@ -39,7 +39,6 @@ data class AppState(
     val commandQueueEnabled: Boolean,
     val wakeWordProfileJson: String?,
     val wakeWordEngineType: String,
-    val picovoiceAccessKey: String?,
     val wakeWordSensitivity: String,
     val wakeWordAecEnabled: Boolean,
     val wakeWordMusicDuckEnabled: Boolean,
@@ -63,8 +62,10 @@ data class AppState(
     val appAliasRules: List<com.voxapps.commander.data.preferences.AppAliasRule> = emptyList(),
     
     // --- API SETTINGS ---
-    val apiKey: String?,
-    val geminiApiKey: String?,
+    /** The encrypted store's contents, carried whole rather than unpacked into loose fields:
+     *  the UI reads credentials the same way it reads every other piece of state, through
+     *  [AppStateManager], and there is one thing to pass on when it needs them all. */
+    val credentials: com.voxapps.commander.data.preferences.Credentials,
     
     // --- RUNTIME STATE ---
     val voiceState: VoiceState,
@@ -99,6 +100,7 @@ data class AppState(
          */
         fun fromAppSettings(
             settings: AppSettings,
+            credentials: com.voxapps.commander.data.preferences.Credentials,
             context: Context,
             availableModels: Map<String, List<AppModel>>,
             voiceState: VoiceState = VoiceState.IDLE,
@@ -143,9 +145,7 @@ data class AppState(
                 Strings.AiProcessors.GEMINI_NATIVE -> {
                     !settings.geminiIncompatible
                 }
-                Strings.AiProcessors.GEMINI_CLOUD -> {
-                    !settings.geminiApiKey.isNullOrBlank()
-                }
+                Strings.AiProcessors.GEMINI_CLOUD -> credentials.has(Strings.AiProcessors.GEMINI_CLOUD)
                 Strings.AiProcessors.OPENAI -> true
                 else -> {
                     // JSON-defined LLM engines
@@ -185,7 +185,6 @@ data class AppState(
                 commandQueueEnabled = settings.commandQueueEnabled,
                 wakeWordProfileJson = settings.wakeWordProfileJson,
                 wakeWordEngineType = settings.wakeWordEngineType,
-                picovoiceAccessKey = settings.picovoiceAccessKey,
                 wakeWordSensitivity = settings.wakeWordSensitivity,
                 wakeWordAecEnabled = settings.wakeWordAecEnabled,
                 wakeWordMusicDuckEnabled = settings.wakeWordMusicDuckEnabled,
@@ -205,8 +204,7 @@ data class AppState(
                 overlayTextSize = settings.overlayTextSize,
                 piperVoiceModelId = settings.piperVoiceModelId,
                 appAliasRules = settings.appAliasRules,
-                apiKey = settings.apiKey,
-                geminiApiKey = settings.geminiApiKey,
+                credentials = credentials,
                 voiceState = voiceState,
                 defaultVoiceFallbackProcessor = settings.defaultVoiceFallbackProcessor,
                 defaultVoiceFallbackModel = settings.defaultVoiceFallbackModel,
@@ -244,7 +242,6 @@ data class AppState(
             commandQueueEnabled = true,
             wakeWordProfileJson = null,
             wakeWordEngineType = "wake_vosk",
-            picovoiceAccessKey = null,
             wakeWordSensitivity = "medium",
             wakeWordAecEnabled = false,
             wakeWordMusicDuckEnabled = true,
@@ -264,8 +261,7 @@ data class AppState(
             overlayTextSize = 1.0f,
             piperVoiceModelId = null,
             appAliasRules = emptyList(),
-            apiKey = null,
-            geminiApiKey = null,
+            credentials = com.voxapps.commander.data.preferences.Credentials(),
             voiceState = VoiceState.IDLE,
             defaultVoiceFallbackProcessor = null,
             defaultVoiceFallbackModel = null,

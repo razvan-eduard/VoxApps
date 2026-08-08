@@ -156,7 +156,11 @@ fun SettingsContent(
                         Column(
                             modifier = Modifier.fillMaxSize().padding(top = 16.dp).verticalScroll(rememberScrollState())
                         ) {
-                            BackupSettingsSection(settingsRepo = settingsRepo, settings = settings)
+                            BackupSettingsSection(
+                                settingsRepo = settingsRepo,
+                                settings = settings,
+                                credentials = uiState.credentials
+                            )
                         }
                     } else if (page == 8) { // Theme (ThemeSettingsScreen already scrolls itself, no outer scroll wrapper)
                         ThemeSettingsScreen(
@@ -190,7 +194,7 @@ fun SettingsContent(
                                     onProcessorSelected = {
                                         appStateManager.setVoiceProcessor(it)
                                     },
-                                    hasApiKey = uiState.apiKey != null,
+                                    hasApiKey = uiState.credentials.has(Strings.AiProcessors.OPENAI),
                                     googleSttAvailable = googleSttAvailable,
                                     onVoiceLanguageSelected = {
                                         appStateManager.setModelFilterLang(it)
@@ -249,6 +253,7 @@ fun SettingsContent(
                                     )
                                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                                     SearchSettingsSection(
+                                        appStateManager = appStateManager,
 
                                         settingsRepo = settingsRepo
                                     )
