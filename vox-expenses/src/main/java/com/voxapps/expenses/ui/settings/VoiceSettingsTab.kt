@@ -5,12 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.state.ExpensesStateManager
@@ -68,26 +66,14 @@ fun VoiceSettingsTab(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        var expanded by remember { mutableStateOf(false) }
-        val currentName = categories.firstOrNull { it.id == settings.defaultVoiceCategoryId }?.name
-            ?: languageManager.getString("none")
-        Column {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(currentName)
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                DropdownMenuItem(
-                    text = { Text(languageManager.getString("none")) },
-                    onClick = { stateManager.setDefaultVoiceCategoryId(null); expanded = false }
-                )
-                categories.forEach { cat ->
-                    DropdownMenuItem(
-                        text = { Text(cat.name) },
-                        onClick = { stateManager.setDefaultVoiceCategoryId(cat.id); expanded = false }
-                    )
-                }
-            }
-        }
+        Picklist(
+            items = categories,
+            selected = categories.firstOrNull { it.id == settings.defaultVoiceCategoryId },
+            itemLabel = { it.name },
+            onSelect = { stateManager.setDefaultVoiceCategoryId(it.id) },
+            noneLabel = languageManager.getString("none"),
+            onNoneSelected = { stateManager.setDefaultVoiceCategoryId(null) }
+        )
 
         HorizontalDivider()
 

@@ -202,7 +202,7 @@
   "currency_settings_title": "Währung & Wechselkurse",
   "home_currency_label": "Heimatwährung",
   "home_currency_desc": "Berichte rechnen Ausgaben in unterschiedlichen Währungen zum Berichtszeitpunkt in diese Währung um",
-  "exchange_rate_api_key_label": "ExchangeRate-API-Schlüssel",
+  "exchange_rate_api_key_label": "API-Schlüssel",
   "exchange_rate_api_key_desc": "Kostenloser Schlüssel von %1$s — wird nur verwendet, wenn ein Bericht eine andere Währung umrechnen muss",
   "exchange_rate_service_missing": "In external_services.json fehlt der Eintrag für den Wechselkurs",
   "exchange_rate_testing": "Wird getestet…",

@@ -1,5 +1,7 @@
 package com.voxapps.commander.ui.screens.rules
 
+import com.voxapps.design.picklist.Picklist
+import com.voxapps.design.picklist.PicklistFieldAnchor
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -650,60 +652,28 @@ fun RulesManagerContent(
                             val systemDomains = IntentTaxonomy.Domains.ALL.filter { it != "custom" }
                             val domainActions = IntentTaxonomy.getActionsForDomain(selectedDomain)
 
-                            var domainExpanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(
-                                expanded = domainExpanded,
-                                onExpandedChange = { domainExpanded = !domainExpanded },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = selectedDomain.replaceFirstChar { it.uppercase() },
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("Domain") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = domainExpanded) },
-                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
-                                )
-                                ExposedDropdownMenu(expanded = domainExpanded, onDismissRequest = { domainExpanded = false }) {
-                                    systemDomains.forEach { domain ->
-                                        DropdownMenuItem(
-                                            text = { Text(domain.replaceFirstChar { it.uppercase() }) },
-                                            onClick = {
-                                                selectedDomain = domain
-                                                selectedAction = IntentTaxonomy.getActionsForDomain(domain).firstOrNull() ?: ""
-                                                domainExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                            Picklist(
+                                items = systemDomains,
+                                selected = selectedDomain,
+                                itemLabel = { it.replaceFirstChar { c -> c.uppercase() } },
+                                // The action list is the domain's, so a domain change that left the
+                                // old action standing would name a pair the taxonomy does not have.
+                                onSelect = { domain ->
+                                    selectedDomain = domain
+                                    selectedAction = IntentTaxonomy.getActionsForDomain(domain).firstOrNull() ?: ""
+                                },
+                                anchor = { value, onClick -> PicklistFieldAnchor("Domain", value, onClick) }
+                            )
 
-                            var actionExpanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(
-                                expanded = actionExpanded,
-                                onExpandedChange = { actionExpanded = !actionExpanded },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = selectedAction.replaceFirstChar { it.uppercase() }.replace("_", " "),
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("Action") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = actionExpanded) },
-                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
-                                )
-                                ExposedDropdownMenu(expanded = actionExpanded, onDismissRequest = { actionExpanded = false }) {
-                                    domainActions.forEach { act ->
-                                        DropdownMenuItem(
-                                            text = { Text(act.replaceFirstChar { it.uppercase() }.replace("_", " ")) },
-                                            onClick = {
-                                                selectedAction = act
-                                                actionExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                            val actionLabel: (String) -> String =
+                                { it.replaceFirstChar { c -> c.uppercase() }.replace("_", " ") }
+                            Picklist(
+                                items = domainActions,
+                                selected = selectedAction,
+                                itemLabel = actionLabel,
+                                onSelect = { selectedAction = it },
+                                anchor = { value, onClick -> PicklistFieldAnchor("Action", value, onClick) }
+                            )
 
                             // --- MEDIA CONTROL TYPE SELECTOR ---
                             // Show only for audio domain transport controls (play/pause/next/prev)
@@ -756,35 +726,16 @@ fun RulesManagerContent(
 
                         // --- INTENT DROPDOWN ---
                         if (availableIntents.isNotEmpty()) {
-                            var intentExpanded by remember { mutableStateOf(false) }
                             val selectedOption = availableIntents.getOrNull(selectedIntentIndex) ?: availableIntents.first()
-                            val selectedIntentLabel = selectedOption.variant.label
+                            val intentCaption = languageManager.getString("intent_action_label")
 
-                            ExposedDropdownMenuBox(
-                                expanded = intentExpanded,
-                                onExpandedChange = { intentExpanded = !intentExpanded },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = selectedIntentLabel,
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text(languageManager.getString("intent_action_label")) },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = intentExpanded) },
-                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
-                                )
-                                ExposedDropdownMenu(expanded = intentExpanded, onDismissRequest = { intentExpanded = false }) {
-                                    availableIntents.forEachIndexed { idx, option ->
-                                        DropdownMenuItem(
-                                            text = { Text(option.variant.label) },
-                                            onClick = {
-                                                selectedIntentIndex = idx
-                                                intentExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                            Picklist(
+                                items = availableIntents,
+                                selected = selectedOption,
+                                itemLabel = { it.variant.label },
+                                onSelect = { option -> selectedIntentIndex = availableIntents.indexOf(option) },
+                                anchor = { value, onClick -> PicklistFieldAnchor(intentCaption, value, onClick) }
+                            )
                         }
                         }
 

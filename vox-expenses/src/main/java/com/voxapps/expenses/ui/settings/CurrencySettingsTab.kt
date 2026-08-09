@@ -19,7 +19,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.voxapps.expenses.data.ExchangeRateApiKeyStore
 import com.voxapps.expenses.data.ExchangeRateRepository
@@ -30,12 +29,9 @@ import com.voxapps.expenses.ui.LocalLanguageManager
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
-import com.voxapps.services.ServiceProbe
-import com.voxapps.design.ConnectionTestAuto
-import com.voxapps.design.CommittedTextField
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
-import com.voxapps.design.SettingsPicklist
+import com.voxapps.design.picklist.ServicePicklist
 
 /**
  * Home currency + exchange-rate API key (a real secret, stored separately via
@@ -88,55 +84,46 @@ fun CurrencySettingsTab(
 
         HorizontalDivider()
 
-        if (services.size > 1) {
-            Text(languageManager.getString("exchange_rate_provider_label"), style = MaterialTheme.typography.labelLarge)
-            SettingsPicklist(
-                items = services,
-                selected = service,
-                itemLabel = { it.name.ifBlank { it.id } },
-                itemNote = { if (it.needsApiKey) languageManager.getString("exchange_rate_needs_key_note") else "" },
-                onSelect = { chosen -> stateManager.setExchangeRateServiceId(chosen.id) }
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Text(languageManager.getString("exchange_rate_api_key_label"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            service?.let { String.format(languageManager.getString("exchange_rate_api_key_desc"), it.helpUrl.orEmpty()) }
-                ?: languageManager.getString("exchange_rate_service_missing"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        // Stored when the field is finished with, not per keystroke: a key written a character at a
-        // time is written to the secure store a dozen times half-typed, and each write is what the
-        // test below keys on.
-        if (service?.needsApiKey != false) {
-        CommittedTextField(
-            stored = apiKeyText,
-            label = languageManager.getString("exchange_rate_api_key_label"),
-            identity = service?.id ?: "exchangerate_api",
-            masked = true,
-            onCommit = { entered ->
-                apiKeyText = entered
-                ExchangeRateApiKeyStore.set(context, entered.takeIf { key -> key.isNotBlank() })
+        // Drawn whatever the count. With one declared provider the button is still the answer to
+        // "where do my rates come from?", and a screen that hides the control until a second entry
+        // arrives is indistinguishable from one where the feature never shipped.
+        //
+        // What appears beneath it — the key field, the reachability test — is decided from what the
+        // provider declares, by the same component the engine and search screens use. Frankfurter
+        // needs no key and shows none; ExchangeRate-API shows both.
+        Text(languageManager.getString("exchange_rate_provider_label"), style = MaterialTheme.typography.labelLarge)
+        ServicePicklist(
+            items = services,
+            selected = service,
+            itemLabel = { it.fallbackLabel },
+            onSelect = { chosen -> stateManager.setExchangeRateServiceId(chosen.id) },
+            credentialFor = { apiKeyText },
+            onCredentialCommit = { _, entered ->
+                apiKeyText = entered.orEmpty()
+                ExchangeRateApiKeyStore.set(context, entered)
+            },
+            credentialLabel = languageManager.getString("exchange_rate_api_key_label"),
+            itemNote = { if (it.requiresCredential) languageManager.getString("exchange_rate_needs_key_note") else "" },
+            helpTextFor = { entry ->
+                entry.apiKeyUrl?.let {
+                    String.format(languageManager.getString("exchange_rate_api_key_desc"), it)
+                }
+            },
+            testingLabel = languageManager.getString("exchange_rate_testing"),
+            onlineLabel = languageManager.getString("exchange_rate_online"),
+            offlineLabel = languageManager.getString("exchange_rate_offline"),
+            missingCredentialLabel = languageManager.getString("exchange_rate_needs_key"),
+            notes = {
+                if (service == null) {
+                    Text(
+                        text = languageManager.getString("exchange_rate_service_missing"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         )
-
-        // The same card every declared service in VoxApps gets: does it answer, and does it accept
-        // this key? Previously the only way to find out was to fetch rates and read the error.
-        }
-
-        service?.probeSpec(apiKeyText.takeIf { it.isNotBlank() })?.let { spec ->
-            ConnectionTestAuto(
-                keys = listOf(spec.id, spec.url, apiKeyText.length),
-                testFn = { ServiceProbe.run(spec) },
-                testingLabel = languageManager.getString("exchange_rate_testing"),
-                onlineLabel = languageManager.getString("exchange_rate_online"),
-                offlineLabel = if (spec.missingCredential)
-                    languageManager.getString("exchange_rate_needs_key")
-                else languageManager.getString("exchange_rate_offline")
-            )
-        }
+        Spacer(Modifier.height(8.dp))
 
         OutlinedButton(
             onClick = {

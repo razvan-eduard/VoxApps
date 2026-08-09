@@ -34,11 +34,11 @@ import com.voxapps.commander.domain.voice.VoiceManager
 import com.voxapps.commander.domain.voice.WakeWordCalibrator
 import com.voxapps.commander.domain.voice.WakeWordProfile
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.ui.components.DropdownGroup
-import com.voxapps.commander.ui.components.GroupedDropdownContent
-import com.voxapps.commander.ui.components.EngineApiKeyField
+import com.voxapps.commander.domain.engine.CloudDeadline
+import com.voxapps.design.picklist.ServicePicklist
+import com.voxapps.design.picklist.GroupedPicklistSheet
 import com.voxapps.commander.ui.components.EngineModelSection
-import com.voxapps.commander.ui.components.GroupedDropdownMenu
+import com.voxapps.design.picklist.GroupedPicklist
 import com.voxapps.commander.ui.components.ServiceLoadingDialog
 import com.voxapps.commander.ui.components.VoiceInputTextField
 import com.voxapps.commander.ui.screens.main.ListeningScreen
@@ -203,33 +203,31 @@ fun ServiceSettingsTab(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         val wakeEngines = remember(uiState.availableModels) {
-            RemoteModelRegistry.getEngineKeysByType("wake_word")
+            RemoteModelRegistry.serviceEntries("wake_word")
         }
 
-        Box {
-            var engineExpanded by remember { mutableStateOf(false) }
-            OutlinedButton(
-                onClick = { engineExpanded = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(RemoteModelRegistry.getEngineLabel(currentEngineKey, languageManager))
+        // Porcupine declares that it needs a key; until this screen used the shared component there
+        // was nowhere on it to enter one, and nothing to say whether the engine could be reached.
+        ServicePicklist(
+            items = wakeEngines,
+            selected = wakeEngines.firstOrNull { it.id == currentEngineKey },
+            itemLabel = { RemoteModelRegistry.getEngineLabel(it.id, languageManager) },
+            onSelect = { selectEngine(it.id) },
+            credentialFor = { uiState.credentials.forEngine(it.credentialOwnerId) },
+            onCredentialCommit = { entry, key ->
+                appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+            },
+            credentialLabel = languageManager.getString("engine_api_key"),
+            helpTextFor = { entry ->
+                entry.helpTextKey?.let { languageManager.getString(it) }
+                    ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+            },
+            timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) },
+            itemNote = { entry ->
+                if (entry.requiresCredential && !uiState.credentials.has(entry.id))
+                    " — needs an API key" else ""
             }
-            DropdownMenu(
-                expanded = engineExpanded,
-                onDismissRequest = { engineExpanded = false },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                wakeEngines.forEach { engKey ->
-                    DropdownMenuItem(
-                        text = { Text(RemoteModelRegistry.getEngineLabel(engKey, languageManager)) },
-                        onClick = {
-                            selectEngine(engKey)
-                            engineExpanded = false
-                        }
-                    )
-                }
-            }
-        }
+        )
 
         // --- COMMON: Command Queue Toggle ---
         Row(
@@ -286,18 +284,6 @@ fun ServiceSettingsTab(
             Switch(
                 checked = uiState.wakeWordMusicDuckEnabled,
                 onCheckedChange = { appStateManager.setWakeWordMusicDuckEnabled(it) }
-            )
-        }
-
-        // The credential for whichever wake-word engine is selected, shown only when that engine
-        // declares it needs one. The field carries its own label and its own "where to get a key"
-        // link, both from the declaration — this screen used to spell out Picovoice's inside a gate
-        // that was already generic, so any other engine needing a key was sent to Picovoice for it.
-        if (requiresApiKey) {
-            EngineApiKeyField(
-                engineKey = currentEngineKey,
-                appStateManager = appStateManager,
-                languageManager = languageManager
             )
         }
 
@@ -621,9 +607,8 @@ fun ServiceSettingsTab(
 
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,
-                groups = remember(displayModels, refreshTrigger) {
-                    listOf(DropdownGroup(languageManager.getString("available_models_header") ?: "AVAILABLE MODELS", displayModels))
-                },
+                header = languageManager.getString("available_models_header") ?: "AVAILABLE MODELS",
+                items = displayModels,
                 selectedItem = selectedModel,
                 itemLabel = { if (supportsModelDownload) "${it.label} (${it.sizeDescription})" else it.label },
                 modelIdProvider = { it.id },
@@ -781,34 +766,33 @@ fun ServiceSettingsTab(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             val ttsEngines = remember(uiState.availableModels) {
-                RemoteModelRegistry.getEngineKeysByType("tts")
+                RemoteModelRegistry.serviceEntries("tts")
             }
             val currentTtsEngineKey = uiState.ttsEngineType
 
-            Box {
-                var ttsEngineExpanded by remember { mutableStateOf(false) }
-                OutlinedButton(
-                    onClick = { ttsEngineExpanded = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(RemoteModelRegistry.getEngineLabel(currentTtsEngineKey, languageManager))
+            // The platform engine used to be listed here by hand, ahead of whatever the registry
+            // knew about, and labelled by a second special case just above. It is a declared engine
+            // now and arrives with the others.
+            ServicePicklist(
+                items = ttsEngines,
+                selected = ttsEngines.firstOrNull { it.id == currentTtsEngineKey },
+                itemLabel = { RemoteModelRegistry.getEngineLabel(it.id, languageManager) },
+                onSelect = { appStateManager.setTtsEngineType(it.id) },
+                credentialFor = { uiState.credentials.forEngine(it.credentialOwnerId) },
+                onCredentialCommit = { entry, key ->
+                    appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+                },
+                credentialLabel = languageManager.getString("engine_api_key"),
+                helpTextFor = { entry ->
+                    entry.helpTextKey?.let { languageManager.getString(it) }
+                        ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+                },
+                timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) },
+                itemNote = { entry ->
+                    if (entry.requiresCredential && !uiState.credentials.has(entry.id))
+                        " — needs an API key" else ""
                 }
-                DropdownMenu(
-                    expanded = ttsEngineExpanded,
-                    onDismissRequest = { ttsEngineExpanded = false },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    // The platform engine used to be listed here by hand, ahead of whatever the
-                    // registry knew about, and labelled by a second special case just above. It is
-                    // a declared engine now and arrives with the others.
-                    ttsEngines.forEach { engKey ->
-                        DropdownMenuItem(
-                            text = { Text(RemoteModelRegistry.getEngineLabel(engKey, languageManager)) },
-                            onClick = { appStateManager.setTtsEngineType(engKey); ttsEngineExpanded = false }
-                        )
-                    }
-                }
-            }
+            )
 
             // --- PIPER VOICE MODELS (only relevant once Piper is selected) ---
             // The stored value is already normalised by SettingsRepositoryImpl, so comparing it to
@@ -822,9 +806,8 @@ fun ServiceSettingsTab(
                         title = languageManager.getString("tts_voice_models") ?: "Piper voice models",
                         settingsRepo = settingsRepo,
                         appStateManager = appStateManager,
-                        groups = remember(piperModels, refreshTrigger) {
-                            listOf(DropdownGroup(languageManager.getString("available_models_header") ?: "AVAILABLE MODELS", piperModels))
-                        },
+                        header = languageManager.getString("available_models_header") ?: "AVAILABLE MODELS",
+                items = piperModels,
                         selectedItem = remember(piperModels, uiState.piperVoiceModelId) {
                             piperModels.find { it.id == uiState.piperVoiceModelId }
                         },

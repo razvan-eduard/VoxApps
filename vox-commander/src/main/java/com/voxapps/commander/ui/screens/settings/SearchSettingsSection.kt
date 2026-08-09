@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.commander.ui.LocalLanguageManager
-import com.voxapps.commander.ui.components.EngineApiKeyField
 import com.voxapps.commander.utils.Strings
 
 import androidx.compose.animation.AnimatedVisibility
@@ -28,9 +27,10 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.location.CommanderLocationStore
 import com.voxapps.commander.domain.search.SearchProviderRegistry
 import com.voxapps.commander.domain.search.SearchProviderRouter
-import com.voxapps.commander.ui.components.ConnectionTestCard
-import com.voxapps.commander.ui.components.CredentialField
-import com.voxapps.design.SettingsPicklist
+import com.voxapps.commander.domain.engine.CloudDeadline
+import com.voxapps.design.picklist.ConnectionTestCard
+import com.voxapps.design.picklist.CredentialField
+import com.voxapps.design.picklist.ServicePicklist
 import com.voxapps.location.LocationSource
 import com.voxapps.location.ResolvedLocation
 import com.voxapps.location.VoxLocationResolver
@@ -255,22 +255,43 @@ private fun CategoryNode(
                      * thing.
                      */
                     if (providerNames.isNotEmpty()) {
-                        SettingsPicklist(
-                            items = providerNames,
-                            selected = selectedProvider,
-                            itemLabel = { it },
-                            onSelect = { appStateManager.setSearchProvider(categoryName, it) },
-                            itemNote = { name ->
-                                if (needsCredential(categoryName, name, uiState)) " — needs an API key" else ""
+                        val entries = remember(providerNames, categoryName, uiState.language) {
+                            providerNames.mapNotNull { name ->
+                                SearchProviderRegistry.getProvider(categoryName, name)
+                                    ?.serviceEntry(uiState.language)
                             }
-                        ) {
-                            SelectedProviderDetails(
-                                categoryName = categoryName,
-                                providerName = selectedProvider,
-                                appStateManager = appStateManager,
-                                settingsRepo = settingsRepo
-                            )
                         }
+                        val selectedEntry = entries.firstOrNull { it.id == selectedProvider }
+
+                        ServicePicklist(
+                            items = entries,
+                            selected = selectedEntry,
+                            itemLabel = { it.id },
+                            onSelect = { appStateManager.setSearchProvider(categoryName, it.id) },
+                            // A borrowed key belongs to the engine, not to the provider, and the
+                            // entry says which. Entering it here and on that engine's own screen is
+                            // entering it once.
+                            credentialFor = { entry ->
+                                if (entry.credentialOwnerId != entry.id)
+                                    uiState.credentials.forEngine(entry.credentialOwnerId)
+                                else uiState.credentials.forSearchProvider(entry.id)
+                            },
+                            onCredentialCommit = { entry, key ->
+                                if (entry.credentialOwnerId != entry.id)
+                                    appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+                                else appStateManager.setSearchProviderApiKey(entry.id, key)
+                            },
+                            credentialLabel = languageManager.getString("engine_api_key"),
+                            itemNote = { entry ->
+                                if (needsCredential(categoryName, entry.id, uiState)) " — needs an API key" else ""
+                            },
+                            helpTextFor = { entry ->
+                                entry.helpTextKey?.let { languageManager.getString(it) }
+                                    ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+                            },
+                            timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) },
+                            notes = { SelectedProviderNotes(categoryName, selectedProvider) }
+                        )
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -302,27 +323,18 @@ private fun needsCredential(
 }
 
 /**
- * Whatever the chosen provider needs said about it: where it gets its key, and whether it answers.
+ * The two things about a provider that no declaration covers: that it needs a location before it can
+ * answer, and that its key is really the engine's.
  *
- * Under the collapsed dropdown rather than on the rows, so opening the menu costs no requests — a
- * test per row would be one request per provider every time someone looked at the list.
+ * Everything else the chosen provider has to say — the field, the link, the reachability test — is
+ * the same for every declared service and is drawn by ServicePicklist from the entry.
  */
 @Composable
-private fun SelectedProviderDetails(
-    categoryName: String,
-    providerName: String,
-    appStateManager: com.voxapps.commander.state.AppStateManager,
-    settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository
-) {
+private fun SelectedProviderNotes(categoryName: String, providerName: String) {
     val languageManager = LocalLanguageManager.current
-    val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val provider = remember(categoryName, providerName) {
         SearchProviderRegistry.getProvider(categoryName, providerName)
     } ?: return
-
-    val borrowedEngine = provider.borrowsFromEngine
-    val credential = borrowedEngine?.let { uiState.credentials.forEngine(it) }
-        ?: uiState.credentials.forSearchProvider(providerName)
 
     if (provider.requiresLocation) {
         Text(
@@ -332,38 +344,14 @@ private fun SelectedProviderDetails(
         )
     }
 
-    // A shared-key provider does not own a key — it borrows the engine's. The field shown here is
-    // that engine's own, writing the same slot the intent engine reads, so entering it in either
-    // place is entering it once. It has to be reachable here: the engine's own screen shows the
-    // field only while that engine is *selected*, and someone running a local intent model would
-    // otherwise have no way to configure the provider that needs this key.
-    if (borrowedEngine != null) {
+    if (provider.borrowsFromEngine != null) {
         Text(
             text = languageManager.getString("search_provider_uses_shared_key")
                 ?: "Shares the engine's API key",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        EngineApiKeyField(
-            engineKey = borrowedEngine,
-            appStateManager = appStateManager,
-            languageManager = languageManager
-        )
-    } else if (provider.requiresApiKey) {
-        CredentialField(
-            stored = credential ?: "",
-            label = languageManager.getString("engine_api_key"),
-            identity = providerName,
-            onCommit = { appStateManager.setSearchProviderApiKey(providerName, it.ifBlank { null }) }
-        )
     }
-
-    // The credential the screen holds is what gets tested, rather than whatever copy the registry
-    // was last pushed — the test then answers for the key that is on screen.
-    val spec = remember(providerName, credential, uiState.language) {
-        provider.probeSpec(uiState.language)?.copy(credential = credential)
-    }
-    ConnectionTestCard(spec = spec, settingsRepo = settingsRepo)
 }
 
 @Composable

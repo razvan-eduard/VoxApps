@@ -202,7 +202,7 @@
   "currency_settings_title": "Devise et taux de change",
   "home_currency_label": "Devise de référence",
   "home_currency_desc": "Les rapports convertissent les dépenses en devises différentes vers cette devise au moment du rapport",
-  "exchange_rate_api_key_label": "Clé ExchangeRate-API",
+  "exchange_rate_api_key_label": "Clé API",
   "exchange_rate_api_key_desc": "Clé gratuite depuis %1$s — utilisée uniquement quand un rapport doit convertir une autre devise",
   "exchange_rate_service_missing": "external_services.json ne contient pas l'entrée du taux de change",
   "exchange_rate_testing": "Test en cours…",

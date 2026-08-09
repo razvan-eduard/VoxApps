@@ -10,6 +10,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.picklist.GroupedPicklist
+import com.voxapps.design.picklist.GroupedPicklistSheet
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.ui.LocalLanguageManager
@@ -30,7 +32,10 @@ fun <T> EngineModelSection(
     title: String,
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
-    groups: List<DropdownGroup<T>>,
+    /** The caption above the rows, and the rows. There was a list of sections here and every caller
+     *  passed exactly one, so the grouping was a shape nothing used. */
+    header: String?,
+    items: List<T>,
     selectedItem: T?,
     itemLabel: (T) -> String,
     modelIdProvider: (T) -> String,
@@ -54,7 +59,7 @@ fun <T> EngineModelSection(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Preselection priority: stored id -> first on-device model -> first item.
-    val allItems = groups.flatMap { it.items }
+    val allItems = items
     val isOnDevice: (T) -> Boolean = { (it as? AppModel)?.isBuiltIn == true || uiState.isModelDownloaded(modelIdProvider(it)) }
     val firstOnDevice = allItems.firstOrNull(isOnDevice)
     val effectiveSelectedItem = selectedItem ?: firstOnDevice ?: allItems.firstOrNull()
@@ -64,7 +69,7 @@ fun <T> EngineModelSection(
     // tabs; the STT reload happens reactively). One-shot & convergent: after persist,
     // selectedItem becomes non-null so this won't re-fire. Never auto-persists a not-downloaded
     // item. isDownloaded=true (it's on-device) so no download is triggered.
-    LaunchedEffect(selectedItem, groups) {
+    LaunchedEffect(selectedItem, items) {
         if (selectedItem == null && firstOnDevice != null) {
             onItemSelected(firstOnDevice, true)
         }
@@ -84,7 +89,7 @@ fun <T> EngineModelSection(
         }
     }
 
-    if (groups.isEmpty()) {
+    if (items.isEmpty()) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f))
@@ -100,9 +105,8 @@ fun <T> EngineModelSection(
     }
 
     // 2. Main Dropdown
-    GroupedDropdownMenu(
+    GroupedPicklist(
         selectedItem = effectiveSelectedItem,
-        groups = groups,
         itemLabel = itemLabel,
         isDownloaded = { item -> uiState.isModelDownloaded(modelIdProvider(item)) },
         isDefault = { item ->
@@ -137,10 +141,11 @@ fun <T> EngineModelSection(
             sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface
         ) {
-            GroupedDropdownContent(
+            GroupedPicklistSheet(
                 title = title,
-                groups = groups,
-                itemLabel = itemLabel,
+                header = header,
+                items = items,
+                        itemLabel = itemLabel,
                 isDownloaded = { item -> uiState.isModelDownloaded(modelIdProvider(item)) },
                 isDefault = { item ->
                     item == effectiveSelectedItem

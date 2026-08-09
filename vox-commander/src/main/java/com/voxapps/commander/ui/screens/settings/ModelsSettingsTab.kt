@@ -1,5 +1,7 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.design.picklist.Picklist
+import com.voxapps.design.picklist.PicklistCompactAnchor
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import androidx.compose.foundation.clickable
@@ -80,8 +82,7 @@ fun ModelsSettingsTab(
             5 to "5 s", 10 to "10 s", 20 to "20 s", 35 to "35 s", 50 to "50 s",
             60 to "1 min", 300 to "5 min", 600 to "10 min"
         )
-        var timeoutExpanded by remember { mutableStateOf(false) }
-
+    
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -89,32 +90,22 @@ fun ModelsSettingsTab(
         ) {
             Text(text = languageManager.getString("timeout_label"), style = MaterialTheme.typography.labelLarge)
 
-            Box {
-                OutlinedButton(
-                    onClick = { timeoutExpanded = true },
-                    modifier = Modifier.widthIn(min = 120.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                ) {
-                    val currentLabel = timeoutOptions.find { it.first == offlineFallbackTimeout }?.second ?: "$offlineFallbackTimeout s"
-                    Text(currentLabel)
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                }
-                DropdownMenu(
-                    expanded = timeoutExpanded,
-                    onDismissRequest = { timeoutExpanded = false }
-                ) {
-                    timeoutOptions.forEach { (seconds, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = {
-                                offlineFallbackTimeout = seconds
-                                appStateManager.setOfflineFallbackTimeout(seconds)
-                                timeoutExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
+            Picklist(
+                items = timeoutOptions,
+                // A stored value the option list does not offer still has to name itself — it can
+                // come from a backup written when the list was different.
+                selected = timeoutOptions.find { it.first == offlineFallbackTimeout }
+                    ?: (offlineFallbackTimeout to "$offlineFallbackTimeout s"),
+                itemLabel = { it.second },
+                onSelect = { (seconds, _) ->
+                    offlineFallbackTimeout = seconds
+                    appStateManager.setOfflineFallbackTimeout(seconds)
+                },
+                // Sits at the end of its own labelled row, so it takes the inline anchor and a menu
+                // that drops from the button rather than spanning the row.
+                anchor = { label, onClick -> PicklistCompactAnchor(label, onClick) },
+                menuFillsWidth = false
+            )
         }
 
         if (uiState.defaultVoiceFallbackProcessor != null && uiState.defaultVoiceFallbackModel != null) {

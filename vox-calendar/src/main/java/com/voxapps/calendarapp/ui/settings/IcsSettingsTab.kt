@@ -12,13 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -34,6 +29,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.color.VoxColorSwatchPicker
+import com.voxapps.design.picklist.Picklist
+import com.voxapps.design.picklist.PicklistFieldAnchor
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.CalendarLayerKind
 import com.voxapps.calendarapp.data.CalendarRepository
@@ -199,27 +196,14 @@ private fun ImportTargetDialog(
                 if (existingLayers.isNotEmpty()) {
                     ImportTargetChoiceRow(!createNew, onClick = { createNew = false }, label = languageManager.getString("import_target_existing"))
                     if (!createNew) {
-                        ExposedDropdownMenuBox(
-                            expanded = dropdownExpanded,
-                            onExpandedChange = { dropdownExpanded = it },
+                        Picklist(
+                            items = existingLayers,
+                            selected = selectedExisting,
+                            itemLabel = { it.name },
+                            onSelect = { selectedExisting = it },
+                            anchor = { value, onClick -> PicklistFieldAnchor(null, value, onClick) },
                             modifier = Modifier.padding(start = 32.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = selectedExisting?.name.orEmpty(),
-                                onValueChange = {},
-                                readOnly = true,
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
-                                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                            )
-                            DropdownMenu(expanded = dropdownExpanded, onDismissRequest = { dropdownExpanded = false }) {
-                                existingLayers.forEach { layer ->
-                                    DropdownMenuItem(
-                                        text = { Text(layer.name) },
-                                        onClick = { selectedExisting = layer; dropdownExpanded = false }
-                                    )
-                                }
-                            }
-                        }
+                        )
                     }
                 }
             }

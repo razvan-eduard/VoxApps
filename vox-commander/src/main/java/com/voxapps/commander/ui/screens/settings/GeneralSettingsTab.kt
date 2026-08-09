@@ -1,5 +1,6 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.design.picklist.Picklist
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import androidx.compose.foundation.clickable
@@ -42,7 +43,6 @@ fun GeneralSettingsTab(
 
     var modelRepoUrl by remember { mutableStateOf(settingsRepo.getSettingsSnapshot().modelRepoBaseUrl) }
     var selectedLanguage by remember(uiState.language) { mutableStateOf(uiState.language) }
-    var expanded by remember { mutableStateOf(false) }
     val languages = languageManager.getAvailableLanguages()
 
     Column(
@@ -88,24 +88,16 @@ fun GeneralSettingsTab(
 
         Text(text = languageManager.getString("language"), style = MaterialTheme.typography.labelLarge)
 
-        Box {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(selectedLanguage.uppercase())
+        Picklist(
+            items = languages,
+            selected = selectedLanguage,
+            itemLabel = { it.uppercase() },
+            onSelect = { lang ->
+                selectedLanguage = lang
+                languageManager.loadLanguage(lang)
+                appStateManager.setAppLanguage(lang)
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.fillMaxWidth()) {
-                languages.forEach { lang ->
-                    DropdownMenuItem(
-                        text = { Text(lang.uppercase()) },
-                        onClick = {
-                            selectedLanguage = lang
-                            languageManager.loadLanguage(lang)
-                            appStateManager.setAppLanguage(lang)
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
+        )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -118,27 +110,17 @@ fun GeneralSettingsTab(
         )
 
         val voiceLanguages = Strings.VoiceLanguages.ALL
-        var voiceLangExpanded by remember { mutableStateOf(false) }
         val autoDetect = uiState.voiceLanguageAutoDetect
         Column {
-            OutlinedButton(
-                onClick = { voiceLangExpanded = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(uiState.voiceLanguage.uppercase())
-            }
-            DropdownMenu(expanded = voiceLangExpanded, onDismissRequest = { voiceLangExpanded = false }, modifier = Modifier.fillMaxWidth()) {
-                voiceLanguages.forEach { lang ->
-                    DropdownMenuItem(
-                        text = { Text(lang.uppercase()) },
-                        onClick = {
-                            appStateManager.setVoiceLanguage(lang)
-                            appStateManager.setModelFilterLang(lang)
-                            voiceLangExpanded = false
-                        }
-                    )
+            Picklist(
+                items = voiceLanguages,
+                selected = uiState.voiceLanguage,
+                itemLabel = { it.uppercase() },
+                onSelect = { lang ->
+                    appStateManager.setVoiceLanguage(lang)
+                    appStateManager.setModelFilterLang(lang)
                 }
-            }
+            )
             Spacer(modifier = Modifier.height(4.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,

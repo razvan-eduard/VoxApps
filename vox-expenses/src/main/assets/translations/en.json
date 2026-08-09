@@ -267,7 +267,7 @@
   "currency_settings_title": "Currency & exchange rates",
   "home_currency_label": "Home currency",
   "home_currency_desc": "Reports convert mixed-currency expenses into this currency at report time",
-  "exchange_rate_api_key_label": "ExchangeRate-API key",
+  "exchange_rate_api_key_label": "API key",
   "exchange_rate_api_key_desc": "Free key from %1$s — only used when a report needs to convert a different currency",
   "exchange_rate_service_missing": "external_services.json is missing the exchange-rate entry",
   "exchange_rate_testing": "Testing…",

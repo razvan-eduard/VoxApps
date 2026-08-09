@@ -13,16 +13,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.EngineRuntime
+import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.intent.interpreter.LlmModelInfo
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.ui.components.DropdownGroup
 import com.voxapps.services.ServiceProbe
-import com.voxapps.commander.ui.components.ConnectionTestCard
-import com.voxapps.design.SettingsPicklist
-import com.voxapps.commander.ui.components.EngineApiKeyField
+import com.voxapps.design.picklist.ConnectionTestCard
+import com.voxapps.design.picklist.ServicePicklist
 import com.voxapps.commander.ui.components.EngineModelSection
 import com.voxapps.commander.utils.Strings
 
@@ -99,52 +98,46 @@ fun IntentEnginesSubTab(
                     // appended here by hand — three lines that had to be kept in step with a label
                     // table and an availability check elsewhere; they are declared engines now.
                     val aiOptions = remember(uiState.availableModels) {
-                        RemoteModelRegistry.getEngineKeysByType("llm")
+                        RemoteModelRegistry.serviceEntries("llm")
                     }
 
-                    SettingsPicklist(
+                    // One component decides what belongs under the selection, from what the engine
+                    // declares: the key field for a cloud service, the reachability test for
+                    // anything with an endpoint, neither for an on-device one. This screen used to
+                    // draw the test inside the picklist and the key field after it, which is the
+                    // opposite order from the search providers doing the same job.
+                    ServicePicklist(
                         items = aiOptions,
-                        selected = uiState.aiProcessor,
-                        itemLabel = { RemoteModelRegistry.getEngineLabel(it, languageManager) },
-                        onSelect = { appStateManager.setAiProcessor(it) },
+                        selected = aiOptions.firstOrNull { it.id == uiState.aiProcessor },
+                        itemLabel = { RemoteModelRegistry.getEngineLabel(it.id, languageManager) },
+                        onSelect = { appStateManager.setAiProcessor(it.id) },
+                        credentialFor = { uiState.credentials.forEngine(it.credentialOwnerId) },
+                        onCredentialCommit = { entry, key ->
+                            appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+                        },
+                        credentialLabel = languageManager.getString("engine_api_key"),
                         disabledSuffix = " (Incompatible)",
-                        itemEnabled = { id ->
+                        itemEnabled = { entry ->
                             // Only what this device cannot run is disabled — whether it carries
                             // Gemini Nano is a probe result no declaration can supply. A missing
                             // credential is not a reason to disable: the field that fixes it sits
                             // under the selection, so greying the engine out made its own key
                             // unreachable.
-                            id != Strings.AiProcessors.GEMINI_NATIVE ||
+                            entry.id != Strings.AiProcessors.GEMINI_NATIVE ||
                                 !settingsRepo.getSettingsSnapshot().geminiIncompatible
                         },
-                        itemNote = { id ->
+                        itemNote = { entry ->
                             // Credentials come from uiState rather than a snapshot read: this is
                             // composition, so a value fetched here would be fixed until something
                             // else recomposed the menu.
-                            if (RemoteModelRegistry.hasCapability(id, "requires_api_key") &&
-                                !uiState.credentials.has(id)
-                            ) " — needs an API key" else ""
-                        }
-                    ) {
-                        ConnectionTestCard(
-                            spec = RemoteModelRegistry.probeSpecFor(
-                                uiState.aiProcessor,
-                                uiState.credentials.forEngine(uiState.aiProcessor)
-                            ),
-                            // The "where to get a key" link belongs to the credential field,
-                            // which also shows for engines with no endpoint to probe. Drawing it
-                            // here too put it on screen twice.
-                            settingsRepo = settingsRepo
-                        )
-                    }
-
-
-                    // The credential for whichever engine is selected, and only when that engine
-                    // needs one — asked where the choice is made rather than on another page.
-                    EngineApiKeyField(
-                        engineKey = uiState.aiProcessor,
-                        appStateManager = appStateManager,
-                        languageManager = languageManager
+                            if (entry.requiresCredential && !uiState.credentials.has(entry.id))
+                                " — needs an API key" else ""
+                        },
+                        helpTextFor = { entry ->
+                            entry.helpTextKey?.let { languageManager.getString(it) }
+                                ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+                        },
+                        timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) }
                     )
                 }
             }
@@ -159,10 +152,6 @@ fun IntentEnginesSubTab(
                 nluModels.find { it.id == uiState.activeIntentModelId }
             }
 
-            val nluGroups = remember(nluModels) {
-                listOf(DropdownGroup(languageManager.getString("available_models_header"), nluModels))
-            }
-
             EngineModelSection(
                 title = languageManager.getString("nlu_model_selection_title"),
                 // Only a downloadable engine can be an offline fallback. Left at its default, the
@@ -172,7 +161,8 @@ fun IntentEnginesSubTab(
 
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,
-                groups = remember(nluGroups, uiState, refreshTrigger) { nluGroups },
+                header = languageManager.getString("available_models_header"),
+                items = nluModels,
                 selectedItem = selectedModel,
                 itemLabel = { "${it.label} (${it.sizeDescription})" },
                 modelIdProvider = { it.id },

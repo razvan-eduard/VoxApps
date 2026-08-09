@@ -1,4 +1,4 @@
-package com.voxapps.commander.ui.components
+package com.voxapps.design.picklist
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,9 +17,7 @@ import androidx.compose.ui.text.withAnnotation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.services.ProbeSpec
-import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.services.ServiceProbe
 import java.text.DateFormat
 import java.util.Calendar
@@ -87,8 +85,8 @@ fun ConnectionTestCard(
 @Composable
 fun ConnectionTestCard(
     spec: ProbeSpec?,
-    settingsRepo: SettingsRepository,
     modifier: Modifier = Modifier,
+    timeoutSeconds: Int? = null,
     extraKeys: List<Any?> = emptyList(),
     tokenState: TokenState? = null,
     helpUrl: String? = null,
@@ -102,10 +100,9 @@ fun ConnectionTestCard(
 
     ConnectionTestCard(
         keys = listOf(spec.id, spec.url, spec.credential?.length ?: 0) + extraKeys,
-        // The deadline every other outbound call in this app obeys, including whatever the engine
-        // itself declared — the prober takes a number so it can live beside services rather than
-        // beside one app's settings.
-        testFn = { ServiceProbe.run(spec, CloudDeadline.secondsFor(spec.id, settingsRepo)) },
+        // The deadline is the caller's to decide: it is the app that knows what the user configured
+        // and what the engine declared. Left out, the prober's own default applies.
+        testFn = { timeoutSeconds?.let { ServiceProbe.run(spec, it) } ?: ServiceProbe.run(spec) },
         modifier = modifier,
         tokenState = tokenState,
         helpUrl = helpUrl,
@@ -156,7 +153,7 @@ data class TokenState(val present: Boolean, val expiresAtMillis: Long = 0L) {
 
 /** "Get a key at <host>", from the service's own declaration — shared by the card and the key field. */
 @Composable
-private fun CredentialHelpLink(helpUrl: String?, helpText: String?) {
+internal fun CredentialHelpLink(helpUrl: String?, helpText: String?) {
     val host = helpUrl?.toUri()?.host ?: return
     val uriHandler = LocalUriHandler.current
 

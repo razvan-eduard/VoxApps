@@ -3,6 +3,8 @@ package com.voxapps.expenses.data
 import android.content.Context
 import com.google.gson.annotations.SerializedName
 import com.voxapps.services.ProbeSpec
+import com.voxapps.services.ServiceEntry
+import com.voxapps.services.ServiceRuntime
 import com.voxapps.services.RemoteSchema
 
 /**
@@ -14,7 +16,7 @@ import com.voxapps.services.RemoteSchema
  * null regardless of what its type says.
  */
 data class ExternalService(
-    val id: String = "",
+    override val id: String = "",
     val name: String = "",
     val category: String = "",
     /** Where the service lives. `baseEndpoint` is the older spelling, still read, since this file
@@ -38,15 +40,25 @@ data class ExternalService(
     @SerializedName("requires_api_key") val requiresApiKey: Boolean = false,
     @SerializedName("requiresApiKey") val legacyRequiresApiKey: Boolean = false,
     /** Where the user obtains a key. `docsUrl` is the older spelling. */
-    @SerializedName("api_key_url") val apiKeyUrl: String? = null,
+    @SerializedName("api_key_url") val declaredApiKeyUrl: String? = null,
     @SerializedName("docsUrl") val legacyDocsUrl: String? = null
-) {
+) : ServiceEntry {
+
+    // --- The shared service vocabulary. Every one of these was already here under a local name;
+    // declaring the interface is what lets a shared picklist ask instead of the screen deriving.
+    override val labelKey: String? get() = null
+    override val fallbackLabel: String get() = name.ifBlank { id }
+    /** A rate provider is always something answered over the network. */
+    override val runtime: ServiceRuntime get() = ServiceRuntime.CLOUD
+    override val requiresCredential: Boolean get() = needsApiKey
+    override val apiKeyUrl: String? get() = helpUrl
+
     /** The endpoint under either spelling. */
     val serviceUrl: String get() = endpoint.ifBlank { legacyBaseEndpoint.orEmpty() }
 
     val needsApiKey: Boolean get() = requiresApiKey || legacyRequiresApiKey
 
-    val helpUrl: String? get() = apiKeyUrl ?: legacyDocsUrl
+    val helpUrl: String? get() = declaredApiKeyUrl ?: legacyDocsUrl
 
     /**
      * The URL that returns rates for [base], with the credential where this provider wants it.
@@ -64,7 +76,7 @@ data class ExternalService(
     }
 
     /** How to test this service with [apiKey], or null when it declares nothing to reach. */
-    fun probeSpec(apiKey: String?): ProbeSpec? =
+    override fun probeSpec(apiKey: String?): ProbeSpec? =
         ProbeSpec.from(id = id, endpoint = serviceUrl, probeUrl = probeUrl, credential = apiKey)
 }
 

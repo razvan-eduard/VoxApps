@@ -1,5 +1,6 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.design.picklist.PicklistButtonAnchor
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import androidx.compose.foundation.layout.*
@@ -13,18 +14,16 @@ import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelItem
+import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.ui.components.DropdownGroup
 import com.voxapps.services.ServiceProbe
-import com.voxapps.commander.ui.components.ConnectionTestCard
-import com.voxapps.design.SettingsPicklist
-import com.voxapps.commander.ui.components.EngineApiKeyField
+import com.voxapps.design.picklist.ConnectionTestCard
+import com.voxapps.design.picklist.Picklist
+import com.voxapps.design.picklist.ServicePicklist
 import com.voxapps.commander.ui.components.EngineModelSection
-import com.voxapps.commander.ui.components.GroupedDropdownContent
-import com.voxapps.commander.ui.components.GroupedDropdownMenu
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 
@@ -92,12 +91,25 @@ fun VoiceEnginesSubTab(
             list
         }
 
-        SettingsPicklist(
-            items = processors,
-            selected = uiState.voiceProcessor,
-            itemLabel = { RemoteModelRegistry.getEngineLabel(it, languageManager) },
-            onSelect = { onProcessorSelected(it) },
-            itemEnabled = { proc ->
+        val engineEntries = remember(processors) { processors.map { RemoteModelRegistry.serviceEntry(it) } }
+
+        ServicePicklist(
+            items = engineEntries,
+            selected = engineEntries.firstOrNull { it.id == uiState.voiceProcessor },
+            itemLabel = { RemoteModelRegistry.getEngineLabel(it.id, languageManager) },
+            onSelect = { onProcessorSelected(it.id) },
+            credentialFor = { uiState.credentials.forEngine(it.credentialOwnerId) },
+            onCredentialCommit = { entry, key ->
+                appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+            },
+            credentialLabel = languageManager.getString("engine_api_key"),
+            helpTextFor = { entry ->
+                entry.helpTextKey?.let { languageManager.getString(it) }
+                    ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+            },
+            timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) },
+            itemEnabled = { entry ->
+                val proc = entry.id
                 /*
                  * Only what this device cannot do disables a row.
                  *
@@ -114,34 +126,11 @@ fun VoiceEnginesSubTab(
                     else -> true
                 }
             },
-            itemNote = { proc ->
-                if (RemoteModelRegistry.hasCapability(proc, "requires_api_key") &&
-                    !uiState.credentials.has(proc)
-                ) " — needs an API key" else ""
+            itemNote = { entry ->
+                if (entry.requiresCredential && !uiState.credentials.has(entry.id))
+                    " — needs an API key" else ""
             }
-        ) {
-            // Beneath the collapsed dropdown, describing whatever is selected in it. Null when the
-            // engine declares nothing to reach — an on-device engine has no endpoint, and
-            // Porcupine's key is validated inside its SDK with no URL to call.
-            ConnectionTestCard(
-                spec = RemoteModelRegistry.probeSpecFor(
-                    uiState.voiceProcessor,
-                    uiState.credentials.forEngine(uiState.voiceProcessor)
-                ),
-                // The "where to get a key" link belongs to the credential field, which is shown
-                // for engines that have no endpoint to probe either (Porcupine). Drawing it here
-                // too put it on screen twice.
-                settingsRepo = settingsRepo
-            )
-        }
-
-    // Shown only when the selected engine declares it needs a credential — the Whisper API does,
-    // the on-device engines do not.
-    EngineApiKeyField(
-        engineKey = uiState.voiceProcessor,
-        appStateManager = appStateManager,
-        languageManager = languageManager
-    )
+        )
 
     HorizontalDivider()
 
@@ -159,42 +148,20 @@ fun VoiceEnginesSubTab(
     }
 
     if (!isCurrentProcessorMultilingual && availableLanguages.isNotEmpty()) {
-        val languages = availableLanguages.map { lang ->
-            lang to lang.uppercase()
-        }
-
-        var showLanguageSheet by remember { mutableStateOf(false) }
-        val languageSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-        val languageGroups = listOf(DropdownGroup(languageManager.getString("available_languages_header") ?: "AVAILABLE LANGUAGES", languages))
-        val selectedLangPair = languages.find { it.first == modelFilterLang }
-
         Text(text = languageManager.getString("model_language_filter") ?: "Model Language Filter", style = MaterialTheme.typography.labelLarge)
 
-        GroupedDropdownMenu(
-            selectedItem = selectedLangPair,
-            groups = languageGroups,
-            itemLabel = { it.second },
-            isDownloaded = { true },
-            onDeviceLabel = "",
-            onItemSelected = { pair, _ -> modelFilterLang = pair.first; appStateManager.setModelFilterLang(pair.first) },
-            onExpandedChange = { showSheet -> showLanguageSheet = showSheet }
-
-        )
-
-        if (showLanguageSheet) {
-            ModalBottomSheet(onDismissRequest = { showLanguageSheet = false }, sheetState = languageSheetState) {
-                GroupedDropdownContent(
-                    title = languageManager.getString("model_language_filter") ?: "Model Language Filter",
-                    groups = languageGroups,
-                    itemLabel = { it.second },
-                    isDownloaded = { true },
-                    onDeviceLabel = "",
-                    onItemSelected = { pair, _ -> modelFilterLang = pair.first; appStateManager.setModelFilterLang(pair.first); showLanguageSheet = false }
-
-                )
+        // A plain choice, drawn plainly. It used the model picker — the one with per-row download
+        // arrows, on-device badges and a bottom sheet — with every row told it was already
+        // downloaded and no download callback given, because a language is not a file.
+        Picklist(
+            items = availableLanguages,
+            selected = modelFilterLang.takeIf { it in availableLanguages },
+            itemLabel = { it.uppercase() },
+            onSelect = { lang ->
+                modelFilterLang = lang
+                appStateManager.setModelFilterLang(lang)
             }
-        }
+        )
 
         HorizontalDivider()
     }
@@ -211,32 +178,15 @@ fun VoiceEnginesSubTab(
             color = if (isSelectionEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
         )
         
-        var expanded by remember { mutableStateOf(false) }
-        Box {
-            OutlinedButton(
-                onClick = { if (isSelectionEnabled) expanded = true }, 
-                modifier = Modifier.fillMaxWidth(),
-                enabled = isSelectionEnabled
-            ) {
-                Text(text = selectedApiModel)
+        Picklist(
+            items = apiModels,
+            selected = selectedApiModel,
+            itemLabel = { it },
+            onSelect = { selectedApiModel = it },
+            anchor = { label, onClick ->
+                PicklistButtonAnchor(label, onClick, enabled = isSelectionEnabled)
             }
-            
-            DropdownMenu(
-                expanded = expanded, 
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.fillMaxWidth(0.9f)
-            ) {
-                apiModels.forEach { model ->
-                    DropdownMenuItem(
-                        text = { Text(model, modifier = Modifier.fillMaxWidth()) },
-                        onClick = {
-                            selectedApiModel = model
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
+        )
         HorizontalDivider()
     }
 
@@ -314,9 +264,8 @@ fun VoiceEnginesSubTab(
 
             settingsRepo = settingsRepo,
             appStateManager = appStateManager,
-            groups = remember(filteredModels, refreshTrigger) {
-                listOf(DropdownGroup(languageManager.getString("available_models_header"), filteredModels))
-            },
+            header = languageManager.getString("available_models_header"),
+                items = filteredModels,
             selectedItem = remember(uiState.activeVoiceModelId, filteredModels) {
                 filteredModels.find { it.id == uiState.activeVoiceModelId }
             },

@@ -267,7 +267,7 @@
   "currency_settings_title": "Monedă și cursuri de schimb",
   "home_currency_label": "Moneda principală",
   "home_currency_desc": "Rapoartele convertesc cheltuielile cu monede diferite în această monedă, la generarea raportului",
-  "exchange_rate_api_key_label": "Cheie ExchangeRate-API",
+  "exchange_rate_api_key_label": "Cheie API",
   "exchange_rate_api_key_desc": "Cheie gratuită de la %1$s — folosită doar când un raport trebuie să convertească o altă monedă",
   "exchange_rate_service_missing": "external_services.json nu conține intrarea pentru cursul de schimb",
   "exchange_rate_testing": "Se testează…",

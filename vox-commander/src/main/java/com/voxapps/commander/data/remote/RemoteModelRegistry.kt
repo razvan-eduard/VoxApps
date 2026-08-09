@@ -576,6 +576,39 @@ object RemoteModelRegistry {
         )
     }
 
+    /**
+     * Every engine of [type], said in the vocabulary every service in VoxApps is described with.
+     *
+     * The facts were all here already — scattered across [runtimeOf], [hasCapability],
+     * [declaredApiKeyUrl], [declaredApiKeyHelpKey], [probeSpecFor] — and each settings screen
+     * gathered them itself, in its own order, guarding each part separately. Gathered once, a
+     * screen can ask the entry what it needs instead of asking this object five questions.
+     *
+     * Declarations only: nothing here consults a stored credential, a downloaded file or this
+     * device's capabilities. Those stay live lookups where they are used.
+     */
+    fun serviceEntries(type: String): List<com.voxapps.services.DeclaredService> =
+        getEngineKeysByType(type).map { serviceEntry(it) }
+
+    /** As [serviceEntries], for a single engine key. */
+    fun serviceEntry(engineKey: String): com.voxapps.services.DeclaredService {
+        val config = cachedSchema?.engines?.get(engineKey)
+        return com.voxapps.services.DeclaredService(
+            id = engineKey,
+            fallbackLabel = config?.engine_label ?: engineKey,
+            labelKey = config?.label_key?.takeIf { it.isNotBlank() },
+            runtime = com.voxapps.services.ServiceRuntime.fromKey(runtimeOf(engineKey)?.key)
+                ?: com.voxapps.services.ServiceRuntime.BUILTIN,
+            requiresCredential = hasCapability(engineKey, "requires_api_key"),
+            apiKeyUrl = declaredApiKeyUrl(engineKey),
+            helpTextKey = declaredApiKeyHelpKey(engineKey),
+            // What the schema says this engine has, not what is on disk right now — an engine with
+            // a model list that nothing has downloaded yet still has one.
+            hasDownloadableModels = config?.models?.isNotEmpty() == true,
+            probe = { credential -> probeSpecFor(engineKey, credential) }
+        )
+    }
+
     /** The translations key for this engine's "how to get a key" sentence, if it declares one. */
     fun declaredApiKeyHelpKey(engineKey: String): String? =
         cachedSchema?.engines?.get(engineKey)?.api_key_help_key?.takeIf { it.isNotBlank() }

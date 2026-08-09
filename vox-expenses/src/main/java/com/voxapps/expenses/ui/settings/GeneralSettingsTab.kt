@@ -8,13 +8,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.voxapps.design.color.VoxColorSwatchPicker
+import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.location.ExpensesLocationStore
@@ -134,23 +132,12 @@ fun GeneralSettingsTab(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        var currencyMenuExpanded by remember { mutableStateOf(false) }
-        Column {
-            OutlinedButton(onClick = { currencyMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(settings.defaultCurrency)
-            }
-            DropdownMenu(expanded = currencyMenuExpanded, onDismissRequest = { currencyMenuExpanded = false }) {
-                COMMON_CURRENCIES.forEach { code ->
-                    DropdownMenuItem(
-                        text = { Text(code) },
-                        onClick = {
-                            stateManager.setDefaultCurrency(code)
-                            currencyMenuExpanded = false
-                        }
-                    )
-                }
-            }
-        }
+        Picklist(
+            items = COMMON_CURRENCIES,
+            selected = settings.defaultCurrency,
+            itemLabel = { it },
+            onSelect = { stateManager.setDefaultCurrency(it) }
+        )
 
         HorizontalDivider()
 

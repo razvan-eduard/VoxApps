@@ -47,8 +47,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -95,9 +93,11 @@ import com.voxapps.attachments.ui.AttachmentsSection
 import com.voxapps.attachments.ui.GroupDeleteConfig
 import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
+import com.voxapps.design.PaperTapField
 import com.voxapps.design.SpeedDialAction
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.ipc.VoxOcrRequest
+import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Category
@@ -280,10 +280,8 @@ fun ExpenseEditScreen(
             (groupIdsNow - known).forEach { if (it !in sessionAddedGroupIds) sessionAddedGroupIds.add(it) }
         }
     }
-    var categoryMenuExpanded by remember { mutableStateOf(false) }
     var showNewCategoryDialog by remember { mutableStateOf(false) }
     var direction by remember { mutableStateOf(existing?.expense?.direction ?: TransactionDirection.OUTGOING) }
-    var directionMenuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showDeleteExpenseConfirm by remember { mutableStateOf(false) }
@@ -594,54 +592,51 @@ fun ExpenseEditScreen(
                             )
                         }
                     )
-                    Box {
-                        // Only offered when the suggested name matches an EXISTING category
-                        // (case-insensitive) — no auto-create here, unlike the voice/scan-create
-                        // paths, to keep applying a suggestion a synchronous, no-surprises action.
-                        val suggestedCategory = pendingSuggestion?.category?.let { name ->
-                            categories.firstOrNull { it.name.equals(name, ignoreCase = true) }
-                        }?.takeIf { it.id != categoryId && "category" !in dismissedSuggestionFields }
-                        PaperTapField(
-                            label = languageManager.getString("expense_category"),
-                            value = categories.firstOrNull { it.id == categoryId }?.name ?: languageManager.getString("none"),
-                            onClick = { categoryMenuExpanded = true },
-                            trailingIcon = {
-                                Icon(
-                                    Icons.Filled.ExpandMore,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            },
-                            suggestion = suggestedCategory?.let { cat ->
-                                { FieldSuggestionChip(cat.name, onDismiss = { dismissedSuggestionFields += "category" }) { categoryId = cat.id } }
-                            }
-                        )
-                        DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
-                            DropdownMenuItem(
-                                text = { Text(languageManager.getString("none")) },
-                                onClick = { categoryId = null; categoryMenuExpanded = false }
+                    // Only offered when the suggested name matches an EXISTING category
+                    // (case-insensitive) — no auto-create here, unlike the voice/scan-create
+                    // paths, to keep applying a suggestion a synchronous, no-surprises action.
+                    val suggestedCategory = pendingSuggestion?.category?.let { name ->
+                        categories.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                    }?.takeIf { it.id != categoryId && "category" !in dismissedSuggestionFields }
+
+                    Picklist(
+                        items = categories,
+                        selected = categories.firstOrNull { it.id == categoryId },
+                        itemLabel = { it.name },
+                        onSelect = { categoryId = it.id },
+                        noneLabel = languageManager.getString("none"),
+                        onNoneSelected = { categoryId = null },
+                        // Not a category, so not a row that selects one: it opens the dialog that
+                        // makes a new one.
+                        actionLabel = languageManager.getString("new_category_dropdown_item"),
+                        onAction = { showNewCategoryDialog = true },
+                        itemLeading = { cat ->
+                            Box(
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .clip(CircleShape)
+                                    .background(CategoryColors.fromStored(cat.colorArgb))
                             )
-                            DropdownMenuItem(
-                                text = { Text(languageManager.getString("new_category_dropdown_item")) },
-                                onClick = { categoryMenuExpanded = false; showNewCategoryDialog = true }
+                        },
+                        anchor = { value, onClick ->
+                            PaperTapField(
+                                label = languageManager.getString("expense_category"),
+                                value = value,
+                                onClick = onClick,
+                                trailingIcon = {
+                                    Icon(
+                                        Icons.Filled.ExpandMore,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                suggestion = suggestedCategory?.let { cat ->
+                                    { FieldSuggestionChip(cat.name, onDismiss = { dismissedSuggestionFields += "category" }) { categoryId = cat.id } }
+                                }
                             )
-                            categories.forEach { cat ->
-                                DropdownMenuItem(
-                                    text = { Text(cat.name) },
-                                    leadingIcon = {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(14.dp)
-                                                .clip(CircleShape)
-                                                .background(CategoryColors.fromStored(cat.colorArgb))
-                                        )
-                                    },
-                                    onClick = { categoryId = cat.id; categoryMenuExpanded = false }
-                                )
-                            }
                         }
-                    }
+                    )
                     PaperField(
                         label = languageManager.getString("expense_comments"),
                         value = comments,
@@ -684,33 +679,32 @@ fun ExpenseEditScreen(
                             color = MaterialTheme.colorScheme.error
                         )
                     }
-                    Box {
-                        PaperTapField(
-                            label = languageManager.getString("expense_direction"),
-                            value = languageManager.getString(
-                                if (direction == TransactionDirection.OUTGOING) "transaction_direction_outgoing" else "transaction_direction_incoming"
-                            ),
-                            onClick = { directionMenuExpanded = true },
-                            trailingIcon = {
-                                Icon(
-                                    Icons.Filled.ExpandMore,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        )
-                        DropdownMenu(expanded = directionMenuExpanded, onDismissRequest = { directionMenuExpanded = false }) {
-                            DropdownMenuItem(
-                                text = { Text(languageManager.getString("transaction_direction_outgoing")) },
-                                onClick = { direction = TransactionDirection.OUTGOING; directionMenuExpanded = false }
+                    Picklist(
+                        items = listOf(TransactionDirection.OUTGOING, TransactionDirection.INCOMING),
+                        selected = direction,
+                        itemLabel = {
+                            languageManager.getString(
+                                if (it == TransactionDirection.OUTGOING) "transaction_direction_outgoing"
+                                else "transaction_direction_incoming"
                             )
-                            DropdownMenuItem(
-                                text = { Text(languageManager.getString("transaction_direction_incoming")) },
-                                onClick = { direction = TransactionDirection.INCOMING; directionMenuExpanded = false }
+                        },
+                        onSelect = { direction = it },
+                        anchor = { value, onClick ->
+                            PaperTapField(
+                                label = languageManager.getString("expense_direction"),
+                                value = value,
+                                onClick = onClick,
+                                trailingIcon = {
+                                    Icon(
+                                        Icons.Filled.ExpandMore,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             )
                         }
-                    }
+                    )
                 }
             }
 
@@ -1416,34 +1410,6 @@ private fun PaperField(
     }
 }
 
-@Composable
-private fun PaperTapField(
-    label: String,
-    value: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    trailingIcon: @Composable () -> Unit = {},
-    suggestion: (@Composable () -> Unit)? = null
-) {
-    Column(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
-        ) {
-            Text(
-                value,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f)
-            )
-            suggestion?.invoke()
-            trailingIcon()
-        }
-        Spacer(Modifier.height(4.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), thickness = 1.dp)
-    }
-}
 
 @Composable
 private fun ConfirmDeleteDialog(title: String, message: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {

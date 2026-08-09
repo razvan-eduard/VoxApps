@@ -1,4 +1,4 @@
-package com.voxapps.commander.ui.components
+package com.voxapps.design.picklist
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -19,19 +19,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.logging.Logger
-
-data class DropdownGroup<T>(
-    val header: String,
-    val items: List<T>
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun <T> GroupedDropdownContent(
+fun <T> GroupedPicklistSheet(
     title: String?,
-    groups: List<DropdownGroup<T>>,
+    /** The caption above the rows — "AVAILABLE MODELS" and the like. */
+    header: String?,
+    items: List<T>,
     itemLabel: (T) -> String,
     isDownloaded: @Composable (T) -> Boolean, // UPDATED TO @Composable
     isDefault: @Composable (T) -> Boolean = { false },
@@ -61,121 +57,121 @@ fun <T> GroupedDropdownContent(
             modifier = Modifier.weight(1f, fill = false),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            groups.forEach { group ->
+            header?.let { caption ->
                 item {
                     Text(
-                        text = group.header,
+                        text = caption,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                     )
                 }
+            }
 
-                items(group.items) { item ->
-                    val label = itemLabel(item)
-                    val builtIn = isBuiltIn(item)
-                    val downloaded = builtIn || isDownloaded(item) // Now reactive @Composable
-                    val isDefault = isDefault(item)
-                    val isDownloading = downloadingItem == item
+            items(items) { item ->
+                val label = itemLabel(item)
+                val builtIn = isBuiltIn(item)
+                val downloaded = builtIn || isDownloaded(item) // Now reactive @Composable
+                val isDefault = isDefault(item)
+                val isDownloading = downloadingItem == item
 
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                Logger.log("Item clicked: label=$label, downloaded=$downloaded", "GroupedDropdown")
-                                onItemSelected(item, downloaded)
-                            },
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (downloaded) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                    if (isDefault) {
-                                        Icon(
-                                            Icons.Default.Check,
-                                            contentDescription = "Default",
-                                            tint = Color(0xFF2E7D32),
-                                            modifier = Modifier.padding(end = 8.dp)
-                                        )
-                                    }
-                                    Column {
-                                        Text(
-                                            text = label,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = if (downloaded) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                        if (downloaded) {
-                                            Text(
-                                                text = onDeviceLabel,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color(0xFF2E7D32)
-                                            )
-                                        }
-                                    }
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            Logger.log("Item clicked: label=$label, downloaded=$downloaded", "GroupedPicklist")
+                            onItemSelected(item, downloaded)
+                        },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (downloaded) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                if (isDefault) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = "Default",
+                                        tint = Color(0xFF2E7D32),
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
                                 }
-
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (isDownloading) {
-                                        IconButton(onClick = { onCancelDownload?.invoke() }) {
-                                            Icon(
-                                                Icons.Default.Close,
-                                                contentDescription = "Cancel",
-                                                tint = MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                    } else if (builtIn) {
-                                        // Built-in models: no download/delete buttons
-                                    } else if (downloaded) {
-                                        if (onDeleteRequest != null) {
-                                            IconButton(onClick = { onDeleteRequest(item) }) {
-                                                Icon(
-                                                    Icons.Default.Delete,
-                                                    contentDescription = "Delete",
-                                                    tint = MaterialTheme.colorScheme.error
-                                                )
-                                            }
-                                        }
-                                    } else if (onDownloadRequest != null) {
-                                        IconButton(onClick = {
-                                            // Click on arrow: trigger download but DO NOT close the sheet
-                                            onDownloadRequest(item)
-                                        }) {
-                                            Icon(
-                                                Icons.Default.Download,
-                                                contentDescription = "Download",
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
+                                Column {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = if (downloaded) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                    if (downloaded) {
+                                        Text(
+                                            text = onDeviceLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF2E7D32)
+                                        )
                                     }
                                 }
                             }
 
-                            if (isDownloading) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                if (downloadProgress != null) {
-                                    LinearProgressIndicator(
-                                        progress = { downloadProgress },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                    )
-                                    Text(
-                                        text = "${(downloadProgress * 100).toInt()}%",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        modifier = Modifier.align(Alignment.End)
-                                    )
-                                } else {
-                                    LinearProgressIndicator(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                    )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isDownloading) {
+                                    IconButton(onClick = { onCancelDownload?.invoke() }) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Cancel",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                } else if (builtIn) {
+                                    // Built-in models: no download/delete buttons
+                                } else if (downloaded) {
+                                    if (onDeleteRequest != null) {
+                                        IconButton(onClick = { onDeleteRequest(item) }) {
+                                            Icon(
+                                                Icons.Default.Delete,
+                                                contentDescription = "Delete",
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    }
+                                } else if (onDownloadRequest != null) {
+                                    IconButton(onClick = {
+                                        // Click on arrow: trigger download but DO NOT close the sheet
+                                        onDownloadRequest(item)
+                                    }) {
+                                        Icon(
+                                            Icons.Default.Download,
+                                            contentDescription = "Download",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
+                            }
+                        }
+
+                        if (isDownloading) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            if (downloadProgress != null) {
+                                LinearProgressIndicator(
+                                    progress = { downloadProgress },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                )
+                                Text(
+                                    text = "${(downloadProgress * 100).toInt()}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.align(Alignment.End)
+                                )
+                            } else {
+                                LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                )
                             }
                         }
                     }
@@ -187,9 +183,8 @@ fun <T> GroupedDropdownContent(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun <T> GroupedDropdownMenu(
+fun <T> GroupedPicklist(
     selectedItem: T?,
-    groups: List<DropdownGroup<T>>,
     itemLabel: (T) -> String,
     isDownloaded: @Composable (T) -> Boolean, // UPDATED TO @Composable
     isDefault: @Composable (T) -> Boolean = { false },

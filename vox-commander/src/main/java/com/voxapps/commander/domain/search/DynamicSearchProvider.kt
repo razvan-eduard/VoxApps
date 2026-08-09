@@ -7,6 +7,8 @@ import com.google.gson.annotations.SerializedName
 import com.voxapps.commander.data.preferences.Credentials
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.services.AuthDeclaration
+import com.voxapps.services.DeclaredService
+import com.voxapps.services.ServiceRuntime
 import com.voxapps.services.ProbeSpec
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -218,6 +220,25 @@ class DynamicSearchProvider(
         probeUrl = def.probeUrl,
         auth = def.auth?.probeStyle() ?: ProbeSpec.AuthStyle.None,
         credential = apiKey
+    )
+
+    /**
+     * This provider said in the vocabulary every declared service shares, so the settings screens
+     * can treat it exactly like an engine or a rate provider.
+     *
+     * A provider is always reached over the network and never has files of its own, so the runtime
+     * is fixed. [ServiceEntry.credentialOwnerId] is where the borrowing shows: it names the engine
+     * whose key this provider uses, which is the slot a credential field must write.
+     */
+    fun serviceEntry(lang: String = currentLang): DeclaredService = DeclaredService(
+        id = def.name,
+        fallbackLabel = def.name,
+        runtime = ServiceRuntime.CLOUD,
+        requiresCredential = def.requiresApiKey,
+        credentialOwnerId = borrowsFromEngine ?: def.name,
+        apiKeyUrl = borrowsFromEngine?.let { RemoteModelRegistry.declaredApiKeyUrl(it) },
+        helpTextKey = borrowsFromEngine?.let { RemoteModelRegistry.declaredApiKeyHelpKey(it) },
+        probe = { credential -> probeSpec(lang)?.copy(credential = credential) }
     )
 
     suspend fun search(query: String, lat: Double? = null, lon: Double? = null, lang: String = "en"): List<SearchResult> =

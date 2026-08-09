@@ -13,8 +13,8 @@ import com.voxapps.commander.domain.intent.handler.PipedSearchHelper
 import com.voxapps.commander.domain.media.MediaServiceRegistry
 import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.services.ServiceProbe
-import com.voxapps.commander.ui.components.ConnectionTestCard
-import com.voxapps.design.SettingsPicklist
+import com.voxapps.design.picklist.ConnectionTestCard
+import com.voxapps.design.picklist.Picklist
 import kotlinx.coroutines.launch
 import com.voxapps.design.CommittedTextField
 
@@ -54,7 +54,7 @@ fun PipedSettingsSection(
         ?: backends.firstOrNull { it.isDefault }
         ?: backends.firstOrNull()
 
-    SettingsPicklist(
+    Picklist(
         items = backends,
         selected = selectedBackend,
         itemLabel = { if (it.isDefault) "${it.label} (Default)" else it.label },
@@ -115,7 +115,7 @@ fun PipedSettingsSection(
         mutableStateOf(pipedApiUrl.isNotBlank() && pipedApiUrl !in instances)
     }
 
-    SettingsPicklist(
+    Picklist(
         items = instanceOptions,
         // With nothing stored, the first declared instance is what answers — so that is what the
         // button says. Showing "custom" for an unconfigured default named the one thing it was not.
@@ -144,9 +144,10 @@ fun PipedSettingsSection(
             }
         }
     ) {
+        val spec = MediaServiceRegistry.probeSpecFor(backendId, pipedApiUrl)
         ConnectionTestCard(
-            spec = MediaServiceRegistry.probeSpecFor(backendId, pipedApiUrl),
-            settingsRepo = settingsRepo,
+            spec = spec,
+            timeoutSeconds = spec?.let { CloudDeadline.secondsFor(it.id, settingsRepo) },
             testingLabel = languageManager.getString("piped_testing"),
             onlineLabel = languageManager.getString("piped_online"),
             offlineLabel = languageManager.getString("piped_offline")
@@ -184,7 +185,7 @@ fun PipedSettingsSection(
     val systemDefaultLabel = languageManager.getString(REGION_DEFAULT_KEY)
         .takeIf { it != REGION_DEFAULT_KEY } ?: "System Default"
 
-    SettingsPicklist(
+    Picklist(
         items = regionCodes,
         selected = pipedRegion,
         itemLabel = { code ->
