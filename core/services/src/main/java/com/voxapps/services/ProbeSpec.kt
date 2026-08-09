@@ -94,15 +94,26 @@ data class ProbeSpec(
                 return null
             }
 
-            val base = endpoint?.trimEnd('/')?.takeIf { it.isNotBlank() } ?: return null
-            val url = when {
-                probeUrl.isNullOrBlank() -> base
-                probeUrl.startsWith("?") -> base + probeUrl
-                probeUrl.startsWith("/") -> originOf(base) + probeUrl
-                else -> "$base/$probeUrl"
-            }
-
+            val url = resolve(endpoint, probeUrl) ?: return null
             return ProbeSpec(id = id, url = url, auth = auth, credential = credential)
+        }
+
+        /**
+         * Resolves [relative] against [endpoint], by the rules above.
+         *
+         * Public because a probe is not the only relative URL a declaration carries — a rate
+         * provider's own call is another — and two fields resolving the same syntax differently is
+         * a trap rather than a nicety. It cost exactly that once: a `/v1/latest` that the prober
+         * read as host-relative and the caller read as endpoint-relative, producing `/v1/v1/latest`.
+         */
+        fun resolve(endpoint: String?, relative: String?): String? {
+            val base = endpoint?.trimEnd('/')?.takeIf { it.isNotBlank() } ?: return null
+            return when {
+                relative.isNullOrBlank() -> base
+                relative.startsWith("?") -> base + relative
+                relative.startsWith("/") -> originOf(base) + relative
+                else -> "$base/$relative"
+            }
         }
 
         /** Scheme and host of [url], so a root-relative probe stays on the declared host. */

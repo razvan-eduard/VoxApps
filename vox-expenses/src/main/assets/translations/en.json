@@ -414,5 +414,7 @@
   "schema_use_remote_label": "Use schemas from the repository",
   "schema_use_remote_desc": "Off runs exactly what this build shipped with, and deletes anything downloaded.",
   "schema_using_bundled": "Using the schemas shipped with the app",
-  "schema_serving": "The repository supplies %1$d schema(s)"
+  "schema_serving": "The repository supplies %1$d schema(s)",
+  "exchange_rate_provider_label": "Rate provider",
+  "exchange_rate_needs_key_note": " — needs an API key"
 }

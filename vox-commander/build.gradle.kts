@@ -213,6 +213,7 @@ dependencies {
     implementation(libs.androidx.glance.appwidget)
     // STT Engines (Whisper.cpp integration)
 
+    testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -296,3 +297,7 @@ tasks.withType<Test> {
     forkEvery = 1
 }
 
+// The Gson keep-rule test reads proguard-rules.pro, so a change there must invalidate the test task.
+tasks.withType<Test>().configureEach {
+    inputs.file("proguard-rules.pro").withPathSensitivity(PathSensitivity.RELATIVE)
+}

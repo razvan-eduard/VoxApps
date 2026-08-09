@@ -125,20 +125,21 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Date
 import java.util.UUID
+import com.voxapps.design.VoxSemanticColors
 
 private val OffenseRed = Color(0xFFD32F2F)
 
 /** Colors for the tappable "important" toggle star — same bright-red-on/darker-red-off convention as
  *  the to-do item's own toggle in `ToDoListCard.kt`'s `TaskEditDialog`, since [CalendarEntry
  *  .isImportant] is now a general field, not to-do-exclusive. */
-private val IMPORTANT_TOGGLE_ON_COLOR = Color(0xFFE53935)
-private val IMPORTANT_TOGGLE_OFF_COLOR = Color(0xFF8B1A1A)
+private val IMPORTANT_TOGGLE_ON_COLOR = VoxSemanticColors.importantToggleOn
+private val IMPORTANT_TOGGLE_OFF_COLOR = VoxSemanticColors.importantToggleOff
 
 /** Same fixed green as `ToDoNodeTimeline`'s/`ToDoListCard`'s `DONE_CHECK_COLOR` — [completed] is the
  *  exact same underlying field as a to-do item's `done` now (unification — see [CalendarEntry]'s doc
  *  comment), so its toggle here matches that one's icon/color/row style exactly instead of the old
  *  plain Material Checkbox. */
-private val DONE_CHECK_COLOR = Color(0xFF2E7D32)
+private val DONE_CHECK_COLOR = VoxSemanticColors.done
 
 private data class PendingCleanup(val entry: CalendarEntry, val tags: List<String>, val dirtyFields: List<DirtyField>)
 

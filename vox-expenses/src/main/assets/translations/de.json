@@ -421,5 +421,7 @@
   "schema_use_remote_label": "Schemas aus dem Repository verwenden",
   "schema_use_remote_desc": "Aus führt genau das aus, was mit diesem Build ausgeliefert wurde, und löscht Heruntergeladenes.",
   "schema_using_bundled": "Es werden die mit der App ausgelieferten Schemas verwendet",
-  "schema_serving": "Das Repository liefert %1$d Schema(s)"
+  "schema_serving": "Das Repository liefert %1$d Schema(s)",
+  "exchange_rate_provider_label": "Kursanbieter",
+  "exchange_rate_needs_key_note": " — benötigt einen API-Schlüssel"
 }

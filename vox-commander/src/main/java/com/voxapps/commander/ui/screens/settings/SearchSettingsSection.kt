@@ -30,7 +30,7 @@ import com.voxapps.commander.domain.search.SearchProviderRegistry
 import com.voxapps.commander.domain.search.SearchProviderRouter
 import com.voxapps.commander.ui.components.ConnectionTestCard
 import com.voxapps.commander.ui.components.CredentialField
-import com.voxapps.commander.ui.components.SettingsPicklist
+import com.voxapps.design.SettingsPicklist
 import com.voxapps.location.LocationSource
 import com.voxapps.location.ResolvedLocation
 import com.voxapps.location.VoxLocationResolver

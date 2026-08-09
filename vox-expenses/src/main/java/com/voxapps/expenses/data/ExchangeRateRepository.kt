@@ -64,10 +64,17 @@ class ExchangeRateRepository(private val context: Context) {
             return@withContext RatesResult.Success(decodeRates(cachedJson!!), cachedAt)
         }
 
-        val apiKey = ExchangeRateApiKeyStore.get(context)
-            ?: return@withContext RatesResult.Error("No exchange-rate API key configured")
-        val service = ExternalServiceConfig.exchangeRateService(context)
-            ?: return@withContext RatesResult.Error("external_services.json missing exchangerate_api entry")
+        // Whichever currency service the user chose — the declaration says whether it needs a key
+        // at all, so a keyless provider is not asked for one.
+        val chosenId = prefs[stringPreferencesKey("exchange_rate_service_id")].orEmpty()
+        val service = ExternalServiceConfig.chosenCurrencyService(context, chosenId)
+            ?: return@withContext RatesResult.Error("no currency service is declared")
+
+        val apiKey = if (service.needsApiKey) {
+            ExchangeRateApiKeyStore.get(context)
+                ?: return@withContext RatesResult.Error("No exchange-rate API key configured")
+        } else ""
+
 
         // The call and the answer are both described by the declaration: one provider takes its key
         // in the path and answers under "conversion_rates", another takes it as a query parameter

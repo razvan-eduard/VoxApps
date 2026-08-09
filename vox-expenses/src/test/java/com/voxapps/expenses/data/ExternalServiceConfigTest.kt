@@ -134,7 +134,7 @@ class ExternalServiceConfigTest {
         val service = ExternalService(
             id = "openexchangerates",
             endpoint = "https://openexchangerates.org/api",
-            ratesUrl = "/latest.json?app_id={key}&base={base}",
+            ratesUrl = "latest.json?app_id={key}&base={base}",
             ratesPath = "rates"
         )
 
@@ -142,6 +142,22 @@ class ExternalServiceConfigTest {
             "https://openexchangerates.org/api/latest.json?app_id=k1&base=EUR",
             service.ratesUrl("k1", "eur")
         )
+    }
+
+    /**
+     * `rates_url` resolves exactly as `probe_url` does — one syntax, one meaning. A leading slash
+     * starts at the host, which is what caught a declaration that meant "under the endpoint" and
+     * would have produced `/v1/v1/latest`.
+     */
+    @Test
+    fun `a leading slash in rates_url starts at the host`() {
+        val service = ExternalService(
+            id = "somewhere",
+            endpoint = "https://api.example.com/v1",
+            ratesUrl = "/other/latest?base={base}"
+        )
+
+        assertEquals("https://api.example.com/other/latest?base=USD", service.ratesUrl("", "usd"))
     }
 
     /** A service this app cannot ask says so by returning null, rather than a guessed URL. */

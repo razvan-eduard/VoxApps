@@ -24,6 +24,7 @@ interface ExpensesSettingsRepository {
     suspend fun setHomeCurrency(code: String)
     suspend fun setSchemaRepoBaseUrl(url: String)
     suspend fun setUseRemoteSchemas(enabled: Boolean)
+    suspend fun setExchangeRateServiceId(id: String)
     suspend fun setPaymentSourcePackages(packages: Set<String>)
     suspend fun setBankingSourcePackages(packages: Set<String>)
     suspend fun setAutoAcceptNotificationExpenses(enabled: Boolean)

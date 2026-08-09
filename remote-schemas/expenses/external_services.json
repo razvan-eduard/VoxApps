@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "services": [
     {
       "id": "exchangerate_api",
@@ -13,6 +13,17 @@
       "success_value": "success",
       "requires_api_key": true,
       "api_key_url": "https://www.exchangerate-api.com/docs/free"
+    },
+    {
+      "id": "frankfurter",
+      "name": "Frankfurter",
+      "category": "currency_exchange",
+      "endpoint": "https://api.frankfurter.dev/v1",
+      "probe_url": "latest?base=USD",
+      "rates_url": "latest?base={base}",
+      "rates_path": "rates",
+      "requires_api_key": false,
+      "api_key_url": "https://www.frankfurter.app/docs/"
     }
   ]
 }

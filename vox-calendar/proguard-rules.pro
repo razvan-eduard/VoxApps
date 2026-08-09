@@ -25,3 +25,8 @@
 -keep class androidx.work.** { *; }
 -keep class androidx.glance.** { *; }
 -keep class com.voxapps.calendarapp.ui.widget.** { *; }
+
+# Parsed from JSON by Gson for settings backup and restore, so the field names must survive R8.
+# A stripped field is not a compile error and not a unit-test failure — the release build simply
+# reads an object with nothing in it, and a restore quietly produces defaults.
+-keep class com.voxapps.calendarapp.data.preferences.CalendarSettings { *; }

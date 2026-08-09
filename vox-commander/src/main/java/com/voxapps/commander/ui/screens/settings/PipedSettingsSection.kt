@@ -14,7 +14,7 @@ import com.voxapps.commander.domain.media.MediaServiceRegistry
 import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.services.ServiceProbe
 import com.voxapps.commander.ui.components.ConnectionTestCard
-import com.voxapps.commander.ui.components.SettingsPicklist
+import com.voxapps.design.SettingsPicklist
 import kotlinx.coroutines.launch
 import com.voxapps.design.CommittedTextField
 

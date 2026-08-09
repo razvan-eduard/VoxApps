@@ -39,6 +39,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val HOME_CURRENCY = stringPreferencesKey("home_currency")
         val SCHEMA_REPO_BASE_URL = stringPreferencesKey("schema_repo_base_url")
         val USE_REMOTE_SCHEMAS = booleanPreferencesKey("use_remote_schemas")
+        val EXCHANGE_RATE_SERVICE_ID = stringPreferencesKey("exchange_rate_service_id")
         val PAYMENT_SOURCE_PACKAGES = stringSetPreferencesKey("payment_source_packages")
         val BANKING_SOURCE_PACKAGES = stringSetPreferencesKey("banking_source_packages")
         val AUTO_ACCEPT_NOTIFICATION_EXPENSES = booleanPreferencesKey("auto_accept_notification_expenses")
@@ -109,6 +110,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             homeCurrency = prefs[Keys.HOME_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
             schemaRepoBaseUrl = prefs[Keys.SCHEMA_REPO_BASE_URL] ?: com.voxapps.services.SchemaRepo.DEFAULT_BASE_URL,
             useRemoteSchemas = prefs[Keys.USE_REMOTE_SCHEMAS] ?: true,
+            exchangeRateServiceId = prefs[Keys.EXCHANGE_RATE_SERVICE_ID] ?: "",
             paymentSourcePackages = prefs[Keys.PAYMENT_SOURCE_PACKAGES] ?: emptySet(),
             bankingSourcePackages = prefs[Keys.BANKING_SOURCE_PACKAGES] ?: emptySet(),
             autoAcceptNotificationExpenses = prefs[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] ?: false,
@@ -221,6 +223,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
 
     override suspend fun setSchemaRepoBaseUrl(url: String) {
         dataStore.edit { it[Keys.SCHEMA_REPO_BASE_URL] = url }
+    }
+
+    override suspend fun setExchangeRateServiceId(id: String) {
+        dataStore.edit { it[Keys.EXCHANGE_RATE_SERVICE_ID] = id }
     }
 
     override suspend fun setUseRemoteSchemas(enabled: Boolean) {

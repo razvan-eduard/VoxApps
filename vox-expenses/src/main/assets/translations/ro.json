@@ -418,5 +418,7 @@
   "schema_use_remote_label": "Folosește schemele din depozit",
   "schema_use_remote_desc": "Dezactivat rulează exact ce a fost livrat cu această versiune și șterge ce a fost descărcat.",
   "schema_using_bundled": "Se folosesc schemele livrate cu aplicația",
-  "schema_serving": "Depozitul furnizează %1$d schemă(e)"
+  "schema_serving": "Depozitul furnizează %1$d schemă(e)",
+  "exchange_rate_provider_label": "Furnizor de cursuri",
+  "exchange_rate_needs_key_note": " — necesită o cheie API"
 }

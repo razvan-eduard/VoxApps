@@ -38,6 +38,8 @@ import java.security.MessageDigest
  * log noise. Only a real change is adopted, and only if it survives [usable] — an empty or truncated
  * catalogue is a broken download, not a deliberate emptying.
  */
+private const val DEFAULT_BRANCH = "main"
+
 class RemoteSchema<T : Any>(
     /** The file's name in the shipped folder — also how a screen names it to the user. */
     val fileName: String,
@@ -146,15 +148,21 @@ class RemoteSchema<T : Any>(
      * The repository holds these files at its root; a GitHub page URL is rewritten to the raw host
      * because the page is HTML and would parse as nothing. The timestamp defeats CDN caching, which
      * otherwise serves the previous schema for as long as it feels like.
+     *
+     * A branch may be named with `@`: `https://github.com/you/your-fork@develop`. Without it `main`
+     * is assumed — which silently 404s to the bundled copy for a fork whose default branch is
+     * anything else, and a fork is the whole point of pointing this elsewhere.
      */
     private fun remoteUrl(baseUrl: String): String {
         // Resolved per call rather than captured at construction: a registry is an object, so it may
         // be built before the Application has said which app this is.
         val path = "${SchemaRepo.FOLDER}/${folder ?: SchemaRepo.appFolder}/$fileName"
-        val base = if (baseUrl.contains("github.com") && !baseUrl.contains("raw.githubusercontent.com")) {
-            baseUrl.replace("github.com", "raw.githubusercontent.com").removeSuffix("/") + "/main/$path"
+        val branch = baseUrl.substringAfterLast('@', "").takeIf { it.isNotBlank() } ?: DEFAULT_BRANCH
+        val repo = baseUrl.substringBeforeLast('@')
+        val base = if (repo.contains("github.com") && !repo.contains("raw.githubusercontent.com")) {
+            repo.replace("github.com", "raw.githubusercontent.com").removeSuffix("/") + "/$branch/$path"
         } else {
-            val root = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+            val root = if (repo.endsWith("/")) repo else "$repo/"
             "$root$path"
         }
         return "$base?t=${System.currentTimeMillis()}"

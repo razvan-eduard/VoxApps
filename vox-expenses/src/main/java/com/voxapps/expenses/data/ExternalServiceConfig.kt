@@ -56,13 +56,11 @@ data class ExternalService(
      */
     fun ratesUrl(apiKey: String, base: String): String? {
         val template = ratesUrl?.takeIf { it.isNotBlank() } ?: return null
-        val resolved = template.replace("{key}", apiKey).replace("{base}", base.uppercase())
-        val root = serviceUrl.trimEnd('/')
-        return when {
-            resolved.startsWith("?") -> root + resolved
-            resolved.startsWith("/") -> root + resolved
-            else -> "$root/$resolved"
-        }
+        // Resolved by the same rule as a probe — one syntax, one meaning, whichever field carries it.
+        return ProbeSpec.resolve(
+            serviceUrl,
+            template.replace("{key}", apiKey).replace("{base}", base.uppercase())
+        )
     }
 
     /** How to test this service with [apiKey], or null when it declares nothing to reach. */
@@ -87,6 +85,7 @@ object ExternalServiceConfig {
 
     private const val TAG = "ExternalServiceConfig"
     private const val EXCHANGE_RATE_API_ID = "exchangerate_api"
+    private const val CURRENCY_EXCHANGE = "currency_exchange"
 
     private val schema = RemoteSchema(
         fileName = "external_services.json",
@@ -112,6 +111,24 @@ object ExternalServiceConfig {
      */
     fun exchangeRateService(context: Context): ExternalService? {
         if (!schema.isLoaded) init(context)
-        return byId(EXCHANGE_RATE_API_ID)
+        return byId(EXCHANGE_RATE_API_ID) ?: currencyServices(context).firstOrNull()
+    }
+
+    /**
+     * Every declared currency service, for a screen that lets the user choose between them.
+     *
+     * The category is the declaration's own word for what it is, so adding a provider is a schema
+     * edit — nothing here lists them.
+     */
+    fun currencyServices(context: Context): List<ExternalService> {
+        if (!schema.isLoaded) init(context)
+        return all().filter { it.category == CURRENCY_EXCHANGE }
+    }
+
+    /** The chosen service, falling back to the first declared one when the choice is empty or gone
+     *  — a repository can stop serving a provider the user had selected. */
+    fun chosenCurrencyService(context: Context, chosenId: String): ExternalService? {
+        val services = currencyServices(context)
+        return services.firstOrNull { it.id == chosenId } ?: services.firstOrNull()
     }
 }

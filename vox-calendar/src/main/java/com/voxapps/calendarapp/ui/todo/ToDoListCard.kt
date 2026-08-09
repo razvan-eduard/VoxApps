@@ -89,22 +89,23 @@ import java.time.ZonedDateTime
 import java.util.Date
 import com.voxapps.design.color.VoxSwatchShapes
 import androidx.compose.foundation.gestures.Orientation
+import com.voxapps.design.VoxSemanticColors
 
 /** Fixed amber tint for the "important" star — same fixed-color-regardless-of-item-hue treatment as
  *  [DONE_CHECK_COLOR] in ToDoNodeTimeline.kt. */
-private val IMPORTANT_STAR_COLOR = Color(0xFFF9A825)
+private val IMPORTANT_STAR_COLOR = VoxSemanticColors.important
 
 /** Colors for the tappable "important" toggle star in [TaskEditDialog] — bright red when active,
  *  a darker red outline glyph when inactive, distinct from [IMPORTANT_STAR_COLOR]'s amber (which
  *  marks already-important items elsewhere) since this is the control that sets the flag. */
-private val IMPORTANT_TOGGLE_ON_COLOR = Color(0xFFE53935)
-private val IMPORTANT_TOGGLE_OFF_COLOR = Color(0xFF8B1A1A)
+private val IMPORTANT_TOGGLE_ON_COLOR = VoxSemanticColors.importantToggleOn
+private val IMPORTANT_TOGGLE_OFF_COLOR = VoxSemanticColors.importantToggleOff
 
 /** Same fixed green as [ToDoNodeTimeline]'s own `DONE_CHECK_COLOR` (duplicated here rather than
  *  exported — same "fixed-color-regardless-of-item-hue" constant, same cross-file duplication
  *  convention [IMPORTANT_STAR_COLOR] above already follows) — the "Done" toggle uses the exact same
  *  green a done item's node/chip check icon already uses elsewhere, on or off. */
-private val DONE_CHECK_COLOR = Color(0xFF2E7D32)
+private val DONE_CHECK_COLOR = VoxSemanticColors.done
 
 /** offsetMinutesBefore -> translation key, identical preset set to EntryEditScreen's event reminders
  *  so setting a reminder on a checklist item's due date feels the same as setting one on an event. */

@@ -78,6 +78,8 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 import com.voxapps.calendar.rememberNowMillis
+import com.voxapps.design.VoxSemanticColors
+import com.voxapps.design.NowLine
 
 private const val DELETE_ZONE_KEY = "delete-zone"
 
@@ -103,11 +105,11 @@ private val DRAG_HANDLE_COLUMN_WIDTH = 32.dp
 
 /** Fixed tint for the "done" checkmark (both the node's inline check and the chip's trailing one) —
  *  always this green regardless of the item's own color, rather than a contrast-derived color. */
-private val DONE_CHECK_COLOR = Color(0xFF2E7D32)
+private val DONE_CHECK_COLOR = VoxSemanticColors.done
 
 /** Fixed amber tint for the "important" star badge — same fixed-color-regardless-of-item-hue
  *  treatment as [DONE_CHECK_COLOR]. */
-private val IMPORTANT_STAR_COLOR = Color(0xFFF9A825)
+private val IMPORTANT_STAR_COLOR = VoxSemanticColors.important
 
 /** 5-point star silhouette an important [TimelineNode] is shaped as (instead of a plain circle with a
  *  corner badge) — drawn as a closed [androidx.compose.ui.graphics.Path] alternating between the outer
@@ -300,19 +302,14 @@ fun ToDoNodeTimeline(
  *  the same timeline rather than an unrelated divider. */
 @Composable
 private fun NowSplitter(nowMillis: Long) {
-    val color = MaterialTheme.colorScheme.error
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Box(modifier = Modifier.width(UP_NEXT_LABEL_COLUMN_WIDTH + NODE_SLOT_SIZE), contentAlignment = Alignment.Center) {
-            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
-        }
-        HorizontalDivider(color = color, thickness = 1.5.dp, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(nowMillis)),
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = color
-        )
-    }
+    // The same line the day and week grids draw; this surface's gutter is the "up next" label
+    // column plus the node slot, so the dot lands on the axis every node is centred on.
+    NowLine(
+        nowMillis = nowMillis,
+        leadingWidth = UP_NEXT_LABEL_COLUMN_WIDTH + NODE_SLOT_SIZE - 8.dp,
+        thickness = 1.5.dp,
+        modifier = Modifier.padding(vertical = 2.dp)
+    )
 }
 
 /** Shown right under [NowSplitter] when nothing else is due today. Centred on the card rather than

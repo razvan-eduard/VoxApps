@@ -118,6 +118,7 @@ dependencies {
     implementation(libs.androidx.glance.appwidget)
 
     // --- Unit tests (JVM, mirror vox-commander) ---
+    testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -126,4 +127,9 @@ dependencies {
     // org.json ships in android.jar at compile time; unit tests need the real implementation
     // (mirrors :core:ipc, which needed this for the exact same reason).
     testImplementation("org.json:json:20260719")
+}
+
+// The Gson keep-rule test reads proguard-rules.pro, so a change there must invalidate the test task.
+tasks.withType<Test>().configureEach {
+    inputs.file("proguard-rules.pro").withPathSensitivity(PathSensitivity.RELATIVE)
 }

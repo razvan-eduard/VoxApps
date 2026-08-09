@@ -33,6 +33,9 @@ import java.util.Date
 import com.voxapps.services.ServiceProbe
 import com.voxapps.design.ConnectionTestAuto
 import com.voxapps.design.CommittedTextField
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import com.voxapps.design.SettingsPicklist
 
 /**
  * Home currency + exchange-rate API key (a real secret, stored separately via
@@ -57,7 +60,13 @@ fun CurrencySettingsTab(
     var fetching by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf<String?>(null) }
 
-    val service = remember { ExternalServiceConfig.exchangeRateService(context) }
+    // The declared currency services, and whichever the user picked. Adding a provider is a schema
+    // edit; this screen only chooses between what is declared — the same arrangement the search
+    // providers use, through the same picklist.
+    val services = remember { ExternalServiceConfig.currencyServices(context) }
+    val service = remember(services, settings.exchangeRateServiceId) {
+        ExternalServiceConfig.chosenCurrencyService(context, settings.exchangeRateServiceId)
+    }
 
     Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(languageManager.getString("currency_settings_title"), style = MaterialTheme.typography.titleMedium)
@@ -79,6 +88,18 @@ fun CurrencySettingsTab(
 
         HorizontalDivider()
 
+        if (services.size > 1) {
+            Text(languageManager.getString("exchange_rate_provider_label"), style = MaterialTheme.typography.labelLarge)
+            SettingsPicklist(
+                items = services,
+                selected = service,
+                itemLabel = { it.name.ifBlank { it.id } },
+                itemNote = { if (it.needsApiKey) languageManager.getString("exchange_rate_needs_key_note") else "" },
+                onSelect = { chosen -> stateManager.setExchangeRateServiceId(chosen.id) }
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
         Text(languageManager.getString("exchange_rate_api_key_label"), style = MaterialTheme.typography.labelLarge)
         Text(
             service?.let { String.format(languageManager.getString("exchange_rate_api_key_desc"), it.helpUrl.orEmpty()) }
@@ -89,6 +110,7 @@ fun CurrencySettingsTab(
         // Stored when the field is finished with, not per keystroke: a key written a character at a
         // time is written to the secure store a dozen times half-typed, and each write is what the
         // test below keys on.
+        if (service?.needsApiKey != false) {
         CommittedTextField(
             stored = apiKeyText,
             label = languageManager.getString("exchange_rate_api_key_label"),
@@ -102,6 +124,8 @@ fun CurrencySettingsTab(
 
         // The same card every declared service in VoxApps gets: does it answer, and does it accept
         // this key? Previously the only way to find out was to fetch rates and read the error.
+        }
+
         service?.probeSpec(apiKeyText.takeIf { it.isNotBlank() })?.let { spec ->
             ConnectionTestAuto(
                 keys = listOf(spec.id, spec.url, apiKeyText.length),

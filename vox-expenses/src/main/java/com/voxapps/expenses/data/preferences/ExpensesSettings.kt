@@ -66,6 +66,8 @@ data class ExpensesSettings(
     val schemaRepoBaseUrl: String = com.voxapps.services.SchemaRepo.DEFAULT_BASE_URL,
     /** Whether that repository is asked at startup, or only when the user presses check. */
     val useRemoteSchemas: Boolean = true,
+    /** Which declared currency service supplies rates. Empty means the first one declared. */
+    val exchangeRateServiceId: String = "",
 
     val isBiometricRequired: Boolean = false,
     val sessionTimeoutMinutes: Int = TIMEOUT_30M,

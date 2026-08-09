@@ -421,5 +421,7 @@
   "schema_use_remote_label": "Utiliser les schémas du dépôt",
   "schema_use_remote_desc": "Désactivé exécute exactement ce qui a été livré avec cette version et supprime ce qui a été téléchargé.",
   "schema_using_bundled": "Utilisation des schémas livrés avec l'application",
-  "schema_serving": "Le dépôt fournit %1$d schéma(s)"
+  "schema_serving": "Le dépôt fournit %1$d schéma(s)",
+  "exchange_rate_provider_label": "Fournisseur de taux",
+  "exchange_rate_needs_key_note": " — nécessite une clé API"
 }

@@ -161,6 +161,8 @@ class ExpensesStateManager(
         ExpenseDeduplicationScheduler.reschedule(context, interval)
     }
     fun setHomeCurrency(code: String) { scope.launch { settingsRepo.setHomeCurrency(code) } }
+    /** Which declared currency service supplies rates — see ExternalServiceConfig.currencyServices. */
+    fun setExchangeRateServiceId(id: String) { scope.launch { settingsRepo.setExchangeRateServiceId(id) } }
     fun setPaymentSourcePackages(packages: Set<String>) { scope.launch { settingsRepo.setPaymentSourcePackages(packages) } }
     fun setBankingSourcePackages(packages: Set<String>) { scope.launch { settingsRepo.setBankingSourcePackages(packages) } }
     fun setAutoAcceptNotificationExpenses(enabled: Boolean) { scope.launch { settingsRepo.setAutoAcceptNotificationExpenses(enabled) } }

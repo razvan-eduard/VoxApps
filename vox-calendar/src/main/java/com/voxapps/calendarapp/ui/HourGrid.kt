@@ -38,6 +38,7 @@ import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
 import androidx.compose.ui.text.style.TextAlign
+import com.voxapps.design.NowLine
 
 /** Shared hour-of-day grid mechanics used by both [WeekView] and [DayView] — one column per day, a
  *  shared hour axis on the left. Kept local to `:vox-calendar`: `core:calendar` only offers a
@@ -145,29 +146,11 @@ internal fun DayColumn(
             val nowColor = MaterialTheme.colorScheme.error
             val nowTop = (HOUR_HEIGHT * currentTimeFraction) - dotSize / 2
             if (showNowLine) {
-                Row(
-                    modifier = Modifier
-                        .padding(top = nowTop)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(modifier = Modifier.size(dotSize).background(nowColor, CircleShape))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(2.dp)
-                            .background(nowColor)
-                    )
-                    // Matches the "now" time label already shown in the to-do timeline (NowSplitter)
-                    // and the home-screen widget's Today section (NowSplitterRow), so the current-time
-                    // marker reads the same way across the app.
-                    Text(
-                        text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date()),
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = nowColor,
-                        modifier = Modifier.padding(start = 6.dp, end = 4.dp)
-                    )
-                }
+                NowLine(
+                    nowMillis = System.currentTimeMillis(),
+                    dotSize = dotSize,
+                    modifier = Modifier.padding(top = nowTop)
+                )
                 // Belongs to the now-line, so it is drawn with it. Outside this guard it also
                 // appeared in the week view — inside a ~45dp column, under no line at all, wrapping
                 // onto three lines. WeekView draws its own full-width line for the same reason.

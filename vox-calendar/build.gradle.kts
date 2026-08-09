@@ -130,6 +130,7 @@ dependencies {
     implementation(libs.okhttp)
 
     // --- Unit tests (JVM, mirror vox-notes/vox-expenses) ---
+    testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -139,4 +140,9 @@ dependencies {
     // Pure-JVM SQLite (no Android/Robolectric) — lets the 9->10 migration test replay its real SQL
     // against a genuine SQLite engine, same "avoid Android-framework test doubles" spirit as org.json above.
     testImplementation("org.xerial:sqlite-jdbc:3.53.2.1")
+}
+
+// The Gson keep-rule test reads proguard-rules.pro, so a change there must invalidate the test task.
+tasks.withType<Test>().configureEach {
+    inputs.file("proguard-rules.pro").withPathSensitivity(PathSensitivity.RELATIVE)
 }

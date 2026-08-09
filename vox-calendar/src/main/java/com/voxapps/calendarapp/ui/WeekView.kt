@@ -54,6 +54,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.AnimatedContent
+import com.voxapps.design.VoxSemanticColors
+import com.voxapps.design.NowLine
 
 @Composable
 fun WeekView(
@@ -267,27 +269,13 @@ fun WeekView(
             if (days.contains(today)) {
                 val currentTimeFraction by rememberCurrentTimeFraction()
                 val dotSize = 8.dp
-                val nowColor = MaterialTheme.colorScheme.error
                 val nowTop = (HOUR_HEIGHT * currentTimeFraction) - dotSize / 2
-                Row(
-                    modifier = Modifier.padding(top = nowTop).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Spacer(Modifier.width(HOUR_LABEL_WIDTH))
-                    Box(modifier = Modifier.size(dotSize).background(nowColor, CircleShape))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(2.dp)
-                            .background(nowColor)
-                    )
-                    Text(
-                        text = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date()),
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = nowColor,
-                        modifier = Modifier.padding(start = 6.dp, end = 4.dp)
-                    )
-                }
+                NowLine(
+                    nowMillis = System.currentTimeMillis(),
+                    leadingWidth = HOUR_LABEL_WIDTH,
+                    dotSize = dotSize,
+                    modifier = Modifier.padding(top = nowTop)
+                )
             }
         }
         }
@@ -299,7 +287,7 @@ fun WeekView(
 private const val ALTERNATE_DAY_ALPHA = 0.05f
 
 /** Today's column fades from this colour, strongest at the top. */
-private val TODAY_COLUMN_COLOR = Color(0xFF4CAF50)
+private val TODAY_COLUMN_COLOR = VoxSemanticColors.today
 private const val TODAY_COLUMN_TOP_ALPHA = 0.28f
 private const val TODAY_COLUMN_BOTTOM_ALPHA = 0.04f
 
