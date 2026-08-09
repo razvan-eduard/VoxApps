@@ -402,12 +402,21 @@
   "capture_mode_stitch": "Îmbinare",
   "capture_mode_batch": "Lot",
   "schema_updates_section": "Actualizări de scheme",
-  "schema_updates_desc": "Serviciile cu care vorbește aplicația sunt declarate în fișiere livrate cu ea. Depozitul de mai jos poate oferi altele.",
+  "schema_updates_desc": "Serviciile cu care vorbește aplicația sunt declarate în fișiere servite de depozitul de mai jos. Cele livrate cu aplicația sunt rezerva.",
   "schema_auto_update_label": "Verifică actualizările la pornire",
   "schema_repository_url": "URL depozit scheme",
   "schema_sync_now": "Verifică acum",
   "schema_sync_report": "%1$d actualizate, %2$d neschimbate, %3$d eșuate",
   "schema_source_bundled": "livrate cu aplicația",
   "schema_source_accepted": "din depozit",
-  "schema_source_mixed": "%1$d din depozit, %2$d livrate cu aplicația"
+  "schema_source_mixed": "%1$d din depozit, %2$d livrate cu aplicația",
+  "schema_following": "Urmărește %1$s",
+  "schema_in_step": "La zi cu depozitul",
+  "schema_diverged": "%1$d fișier(e) diferă de cele livrate",
+  "schema_unreachable": "Nu a putut fi accesat: %1$s",
+  "schema_not_checked": "Neverificat încă",
+  "schema_use_remote_label": "Folosește schemele din depozit",
+  "schema_use_remote_desc": "Dezactivat rulează exact ce a fost livrat cu această versiune și șterge ce a fost descărcat.",
+  "schema_using_bundled": "Se folosesc schemele livrate cu aplicația",
+  "schema_serving": "Depozitul furnizează %1$d schemă(e)"
 }

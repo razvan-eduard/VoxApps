@@ -41,6 +41,19 @@ import java.util.Date
 import java.util.Locale
 import java.time.LocalTime
 import androidx.compose.ui.text.style.TextAlign
+import kotlin.math.abs
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.AnimatedContent
 
 @Composable
 fun WeekView(
@@ -56,7 +69,11 @@ fun WeekView(
     todayEffectSecondaryColor: Color? = null,
     todayEffectSpeed: Float = 1f,
     selectedIds: Set<Long> = emptySet(),
-    onItemLongClick: (EntryCalendarItem) -> Unit = {}
+    onItemLongClick: (EntryCalendarItem) -> Unit = {},
+    /** Swiping the grid moves a week at a time; the caller owns which date is selected. */
+    onWeekChange: (Long) -> Unit = {},
+    /** The app-wide animation switch. Off means the new week simply appears. */
+    animationsEnabled: Boolean = true
 ) {
     val zoneId = ZoneId.systemDefault()
     val languageManager = LocalLanguageManager.current
@@ -66,13 +83,36 @@ fun WeekView(
     val weekNumber = remember(weekStart) { weekStart.get(WeekFields.ISO.weekOfWeekBasedYear()) }
     val layerById = remember(layers) { layers.associateBy { it.id } }
     val today = LocalDate.now()
+    // Which way the last swipe went, so the slide matches it.
+    var movingForward by remember { mutableStateOf(true) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    // Horizontal drags move between weeks; the grid's own vertical scrolling is untouched, since
+    // the two gestures claim different axes.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(weekStart) {
+                var dragged = 0f
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (abs(dragged) > SWIPE_WEEK_THRESHOLD_PX) {
+                            movingForward = dragged < 0
+                            val target = if (movingForward) weekStart.plusWeeks(1) else weekStart.minusWeeks(1)
+                            onWeekChange(target.atStartOfDay(zoneId).toInstant().toEpochMilli())
+                        }
+                        dragged = 0f
+                    },
+                    onDragCancel = { dragged = 0f },
+                    onHorizontalDrag = { _, amount -> dragged += amount }
+                )
+            }
+    ) {
         Text(
             text = String.format(languageManager.getString("week_number_label"), weekNumber),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth().padding(start = HOUR_LABEL_WIDTH, top = 4.dp)
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
         )
         Row(modifier = Modifier.fillMaxWidth()) {
             Spacer(Modifier.width(HOUR_LABEL_WIDTH))
@@ -150,6 +190,22 @@ fun WeekView(
         }
 
         HorizontalDivider()
+        // The grid slides in the direction the finger went — the incoming week enters from the side
+        // the swipe came from and the outgoing one leaves the other way. Without a remembered
+        // direction the transition has no idea whether "next" is left or right.
+        AnimatedContent(
+            targetState = weekStart,
+            transitionSpec = {
+                if (!animationsEnabled) {
+                    EnterTransition.None togetherWith ExitTransition.None
+                } else {
+                    val direction = if (movingForward) 1 else -1
+                    slideInHorizontally(tween(WEEK_SLIDE_MILLIS)) { width -> direction * width } togetherWith
+                        slideOutHorizontally(tween(WEEK_SLIDE_MILLIS)) { width -> -direction * width }
+                }
+            },
+            label = "week"
+        ) { _ ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -162,6 +218,7 @@ fun WeekView(
                     val dayItems = remember(items, day) {
                         items.filter { Instant.ofEpochMilli(it.occurrenceStartMillis).atZone(zoneId).toLocalDate() == day }
                     }
+                    val isAlternate = days.indexOf(day) % 2 == 1
                     Box(modifier = Modifier.weight(1f)) {
                         DayColumn(
                             date = day,
@@ -173,14 +230,32 @@ fun WeekView(
                             onItemLongClick = onItemLongClick,
                             showNowLine = false
                         )
-                        // A translucent tint drawn ON TOP of the column (not behind it) — DayColumn's
-                        // own alternating hour-cell backgrounds are fully opaque, so a tint placed
-                        // behind them would be completely hidden.
+                        // Tints are drawn ON TOP of the column, never behind it: DayColumn's own
+                        // hour-cell backgrounds are opaque, so anything behind them is invisible.
+                        //
+                        // Every other day carries a faint wash, so seven columns read as seven days
+                        // at a glance instead of one field of lines you have to count across.
+                        if (isAlternate) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = ALTERNATE_DAY_ALPHA))
+                            )
+                        }
+                        // Today is not just another stripe: a fade down the column, strongest at the
+                        // top where the eye lands. One constant either way if the colour is wrong.
                         if (day == today) {
                             Box(
                                 modifier = Modifier
                                     .matchParentSize()
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f))
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(
+                                                TODAY_COLUMN_COLOR.copy(alpha = TODAY_COLUMN_TOP_ALPHA),
+                                                TODAY_COLUMN_COLOR.copy(alpha = TODAY_COLUMN_BOTTOM_ALPHA)
+                                            )
+                                        )
+                                    )
                             )
                         }
                     }
@@ -213,28 +288,25 @@ fun WeekView(
                         modifier = Modifier.padding(start = 6.dp, end = 4.dp)
                     )
                 }
-
-                // The remark belongs to the line, so it lives with it. DayColumn used to draw its
-                // own copy per column, which in a week meant it landed in a ~45dp-wide column and
-                // wrapped onto three lines; here it spans the same width the line does.
-                val nowMillis = System.currentTimeMillis()
-                val hasMoreToday = items.any {
-                    !it.entryWithTags.entry.allDay &&
-                        it.occurrenceStartMillis > nowMillis &&
-                        Instant.ofEpochMilli(it.occurrenceStartMillis).atZone(zoneId).toLocalDate() == today
-                }
-                if (!hasMoreToday) {
-                    val languageManager = LocalLanguageManager.current
-                    val (leading, trailing) = nothingElseTodayEmojis(LocalTime.now().hour)
-                    Text(
-                        text = "$leading ${languageManager.getString("nothing_else_today")} $trailing",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(top = nowTop + dotSize + 4.dp)
-                    )
-                }
             }
+        }
         }
     }
 }
+
+/** Every other column carries this much of [MaterialTheme.colorScheme.onSurface], so the week reads
+ *  as seven days rather than one ruled field. */
+private const val ALTERNATE_DAY_ALPHA = 0.05f
+
+/** Today's column fades from this colour, strongest at the top. */
+private val TODAY_COLUMN_COLOR = Color(0xFF4CAF50)
+private const val TODAY_COLUMN_TOP_ALPHA = 0.28f
+private const val TODAY_COLUMN_BOTTOM_ALPHA = 0.04f
+
+/** How far a horizontal drag must travel before it counts as "next week" rather than a stray
+ *  sideways wobble during a vertical scroll. */
+private const val SWIPE_WEEK_THRESHOLD_PX = 120f
+
+/** How long a week takes to slide past. Long enough to read as movement, short enough that a run of
+ *  swipes does not queue up behind it. */
+private const val WEEK_SLIDE_MILLIS = 260

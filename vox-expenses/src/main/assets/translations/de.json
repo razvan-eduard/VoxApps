@@ -405,12 +405,21 @@
   "capture_mode_stitch": "Zusammenfügen",
   "capture_mode_batch": "Stapel",
   "schema_updates_section": "Schema-Updates",
-  "schema_updates_desc": "Die Dienste, mit denen diese App spricht, sind in mitgelieferten Dateien deklariert. Das Repository unten kann andere liefern.",
+  "schema_updates_desc": "Die Dienste, mit denen diese App spricht, sind in Dateien deklariert, die das Repository unten liefert. Was mit der App ausgeliefert wurde, ist der Rückfall.",
   "schema_auto_update_label": "Beim Start nach Updates suchen",
   "schema_repository_url": "Schema-Repository-URL",
   "schema_sync_now": "Jetzt prüfen",
   "schema_sync_report": "%1$d aktualisiert, %2$d unverändert, %3$d fehlgeschlagen",
   "schema_source_bundled": "mit der App ausgeliefert",
   "schema_source_accepted": "aus dem Repository",
-  "schema_source_mixed": "%1$d aus dem Repository, %2$d mit der App ausgeliefert"
+  "schema_source_mixed": "%1$d aus dem Repository, %2$d mit der App ausgeliefert",
+  "schema_following": "Folgt %1$s",
+  "schema_in_step": "Auf dem Stand des Repositorys",
+  "schema_diverged": "%1$d Datei(en) weichen vom Auslieferungsstand ab",
+  "schema_unreachable": "Nicht erreichbar: %1$s",
+  "schema_not_checked": "Noch nicht geprüft",
+  "schema_use_remote_label": "Schemas aus dem Repository verwenden",
+  "schema_use_remote_desc": "Aus führt genau das aus, was mit diesem Build ausgeliefert wurde, und löscht Heruntergeladenes.",
+  "schema_using_bundled": "Es werden die mit der App ausgelieferten Schemas verwendet",
+  "schema_serving": "Das Repository liefert %1$d Schema(s)"
 }

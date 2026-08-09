@@ -32,15 +32,22 @@ import kotlinx.coroutines.launch
 data class SchemaUpdatesStrings(
     val sectionLabel: String,
     val description: String,
-    val autoUpdateLabel: String,
+    val useRemoteLabel: String,
+    val useRemoteDescription: String,
     val repositoryUrlLabel: String,
     val checkNow: String,
-    /** Three counts, in order: updated, unchanged, failed. */
-    val reportFormat: String,
-    val sourceBundled: String,
-    val sourceAccepted: String,
-    /** Two counts: from the repository, shipped with the app. */
-    val sourceMixedFormat: String
+    /** Which repository this app follows. One argument: the host and path. */
+    val followingFormat: String,
+    /** Everything the repository serves is what the app is already running. */
+    val inStep: String,
+    /** One argument: how many schemas the repository is currently supplying. */
+    val servingFormat: String,
+    /** The repository could not be read at all — one argument: why. */
+    val unreachableFormat: String,
+    /** No check has succeeded yet this session. */
+    val notCheckedYet: String,
+    /** Shown in place of everything else when the switch is off. */
+    val usingBundled: String
 )
 
 /**
@@ -58,15 +65,15 @@ data class SchemaUpdatesStrings(
 fun SchemaUpdatesSection(
     strings: SchemaUpdatesStrings,
     repositoryUrl: String,
-    autoUpdate: Boolean,
+    useRemote: Boolean,
     onRepositoryUrlChange: (String) -> Unit,
-    onAutoUpdateChange: (Boolean) -> Unit,
+    onUseRemoteChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onSchemasChanged: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     var syncing by remember { mutableStateOf(false) }
-    var report by remember { mutableStateOf<String?>(null) }
+    var lastResults by remember { mutableStateOf<Map<String, RemoteSchema.Refreshed>?>(null) }
     var refreshedAt by remember { mutableStateOf(0) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -82,12 +89,50 @@ fun SchemaUpdatesSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = strings.autoUpdateLabel,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(strings.useRemoteLabel, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = strings.useRemoteDescription,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            /*
+             * The one deliberate decision here: follow the repository, or run what shipped.
+             *
+             * Turning it off *is* the reset — the downloaded copies are deleted and the build's own
+             * schemas apply again — which is why there is no separate "reset schemas" button
+             * anywhere. Turning it on asks the repository straight away rather than waiting for a
+             * launch, since someone who just flipped it is asking for exactly that.
+             */
+            Switch(
+                checked = useRemote,
+                onCheckedChange = { enabled ->
+                    onUseRemoteChange(enabled)
+                    if (!enabled) {
+                        SchemaCatalog.resetAll()
+                        lastResults = null
+                        refreshedAt++
+                        onSchemasChanged()
+                    } else {
+                        scope.launch {
+                            val results = SchemaCatalog.refreshAll(repositoryUrl)
+                            lastResults = results
+                            refreshedAt++
+                            onSchemasChanged()
+                        }
+                    }
+                }
             )
-            Switch(checked = autoUpdate, onCheckedChange = onAutoUpdateChange)
+        }
+
+        if (!useRemote) {
+            Text(
+                text = strings.usingBundled,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@Column
         }
 
         // Committed when the field is finished with: a URL stored per keystroke is a URL fetched
@@ -104,18 +149,12 @@ fun SchemaUpdatesSection(
                 enabled = !syncing,
                 onClick = {
                     syncing = true
-                    report = null
                     scope.launch {
                         // Every schema this app loaded — the catalog is the list, so a section that
                         // knows nothing about which app it is in still covers all of them.
                         val results = SchemaCatalog.refreshAll(repositoryUrl)
-                        val updated = results.count { it.value is RemoteSchema.Refreshed.Updated }
-                        val unchanged = results.count { it.value is RemoteSchema.Refreshed.Unchanged }
-                        report = String.format(
-                            strings.reportFormat,
-                            updated, unchanged, results.size - updated - unchanged
-                        )
-                        if (updated > 0) onSchemasChanged()
+                        if (results.values.any { it is RemoteSchema.Refreshed.Updated }) onSchemasChanged()
+                        lastResults = results
                         refreshedAt++
                         syncing = false
                     }
@@ -124,32 +163,41 @@ fun SchemaUpdatesSection(
                 if (syncing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 else Icon(Icons.Default.Refresh, contentDescription = strings.checkNow)
             }
-            Text(
-                text = report ?: strings.checkNow,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
 
-        // The files, then one line for where they came from. Recomputed after a refresh, which is
-        // what refreshedAt is for — provenance is read from the catalog rather than held in state.
-        val provenance = remember(refreshedAt) { SchemaCatalog.provenance() }
-        if (provenance.isNotEmpty()) {
-            Text(
-                text = provenance.joinToString(" · ") { it.fileName },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            val fromRepo = provenance.count { it.source == RemoteSchema.Source.ACCEPTED }
-            Text(
-                text = when (fromRepo) {
-                    0 -> strings.sourceBundled
-                    provenance.size -> strings.sourceAccepted
-                    else -> String.format(strings.sourceMixedFormat, fromRepo, provenance.size - fromRepo)
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            /*
+             * Two facts, kept apart on purpose.
+             *
+             * *Which* repository this app follows is a choice about the whole set. *Whether it
+             * answered* is what a check tells you. Neither is a per-file property, which is what the
+             * earlier "this file came from assets, that one from the repository" line implied — and
+             * with the repository as the source of truth, every file comes from it anyway.
+             */
+            val results = lastResults
+            val serving = remember(refreshedAt) {
+                SchemaCatalog.provenance().count { it.source == RemoteSchema.Source.ACCEPTED }
+            }
+            val unreachable = results?.values
+                ?.filterIsInstance<RemoteSchema.Refreshed.Unreachable>()
+                ?.firstOrNull()
+
+            Column {
+                Text(
+                    text = String.format(strings.followingFormat, repositoryUrl.substringAfter("://")),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = when {
+                        unreachable != null -> String.format(strings.unreachableFormat, unreachable.reason)
+                        results == null && serving == 0 -> strings.notCheckedYet
+                        serving == 0 -> strings.usingBundled
+                        results != null -> strings.inStep
+                        else -> String.format(strings.servingFormat, serving)
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

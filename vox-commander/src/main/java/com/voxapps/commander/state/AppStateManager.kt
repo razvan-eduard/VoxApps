@@ -315,9 +315,9 @@ class AppStateManager private constructor(
         scope.launch { repo.setSearchProviderApiKey(providerName, key) }
     }
 
-    /** Whether the repository is asked for newer schemas at startup — see [AppSettings.schemaAutoUpdate]. */
-    fun setSchemaAutoUpdate(enabled: Boolean) {
-        scope.launch { repo.setSchemaAutoUpdate(enabled) }
+    /** Whether the repository is asked for newer schemas at startup — see [AppSettings.useRemoteSchemas]. */
+    fun setUseRemoteSchemas(enabled: Boolean) {
+        scope.launch { repo.setUseRemoteSchemas(enabled) }
     }
 
     fun setAppLanguage(lang: String) {

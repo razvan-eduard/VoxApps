@@ -145,3 +145,9 @@ val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
 tasks.named("preBuild") {
     dependsOn(copyShippedSchemas)
 }
+
+// SchemaKeepRulesTest reads proguard-rules.pro, so a change there has to invalidate the test task —
+// otherwise Gradle calls it up to date and the check silently stops running (which it did).
+tasks.withType<Test>().configureEach {
+    inputs.file("proguard-rules.pro").withPathSensitivity(PathSensitivity.RELATIVE)
+}

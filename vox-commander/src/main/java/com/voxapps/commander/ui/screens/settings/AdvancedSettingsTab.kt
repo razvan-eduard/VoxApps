@@ -32,7 +32,6 @@ import com.voxapps.logging.ui.LogViewerStrings
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import com.voxapps.services.SchemaCatalog
 
 @Composable
 fun AdvancedSettingsTab(
@@ -48,7 +47,6 @@ fun AdvancedSettingsTab(
     val scope = rememberCoroutineScope()
 
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
-    var showResetSchemas by remember { mutableStateOf(false) }
     var showResetSettings by remember { mutableStateOf(false) }
     val benchmarkResults by appStateManager.benchmarkResults.collectAsStateWithLifecycle()
     val systemInfo by appStateManager.systemInfo.collectAsStateWithLifecycle()
@@ -361,24 +359,8 @@ fun AdvancedSettingsTab(
             Spacer(modifier = Modifier.height(12.dp))
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // The way back from a repository that served something broken — or that the user
-                    // simply wants to stop following. It deletes the accepted copies; what shipped in
-                    // the app applies again, and it can never be less than what this build was
-                    // tested against.
-                    OutlinedButton(
-                        onClick = { showResetSchemas = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(languageManager.getString("reset_schemas_button"))
-                    }
-                    Text(
-                        text = languageManager.getString("reset_schemas_description"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    HorizontalDivider()
-
+                    // No "reset schemas" here: turning off *Use schemas from the repository* in
+                    // General is that reset, and one way to undo something is enough.
                     OutlinedButton(
                         onClick = { showResetSettings = true },
                         modifier = Modifier.fillMaxWidth(),
@@ -509,27 +491,6 @@ fun AdvancedSettingsTab(
             }
         )
     }
-    if (showResetSchemas) {
-        AlertDialog(
-            onDismissRequest = { showResetSchemas = false },
-            title = { Text(languageManager.getString("reset_schemas_button")) },
-            text = { Text(languageManager.getString("reset_schemas_confirm")) },
-            confirmButton = {
-                TextButton(onClick = {
-                    val reset = SchemaCatalog.resetAll()
-                    Logger.log("Reset to bundled: $reset", "AdvancedSettings")
-                    showResetSchemas = false
-                    appStateManager.refreshAll()
-                }) { Text(languageManager.getString("ok_button")) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetSchemas = false }) {
-                    Text(languageManager.getString("cancel_button"))
-                }
-            }
-        )
-    }
-
     if (showResetSettings) {
         AlertDialog(
             onDismissRequest = { showResetSettings = false },

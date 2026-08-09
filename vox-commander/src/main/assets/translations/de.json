@@ -486,7 +486,7 @@
   "ww_delete_profile_msg": "Dadurch wird dein Sprachkalibrierungsprofil entfernt. Die Weckwort-Erkennung fällt auf den Basismodus zurück. Bist du sicher?",
   "ww_delete_profile_title": "Sprachprofil löschen",
   "schema_updates_section": "Schema-Updates",
-  "schema_updates_desc": "Engines, Suchanbieter, Medien-Backends und Integrationen sind in Dateien deklariert, die mit der App ausgeliefert werden. Das Repository unten kann neuere liefern.",
+  "schema_updates_desc": "Engines, Suchanbieter, Medien-Backends und Integrationen sind in Dateien deklariert, die das Repository unten liefert. Was mit der App ausgeliefert wurde, ist der Rückfall.",
   "schema_auto_update_label": "Beim Start nach Updates suchen",
   "schema_sync_now": "Jetzt prüfen",
   "schema_sync_report": "%1$d aktualisiert, %2$d unverändert, %3$d fehlgeschlagen",
@@ -499,5 +499,14 @@
   "reset_settings_button": "Alle Einstellungen zurücksetzen",
   "reset_settings_description": "Setzt jede Einstellung auf den Standard zurück. API-Schlüssel und geladene Modelle bleiben erhalten.",
   "reset_settings_confirm": "Jede Einstellung auf den Standard zurücksetzen? API-Schlüssel und geladene Modelle bleiben. Die App startet neu.",
-  "schema_source_mixed": "%1$d aus dem Repository, %2$d mit der App ausgeliefert"
+  "schema_source_mixed": "%1$d aus dem Repository, %2$d mit der App ausgeliefert",
+  "schema_following": "Folgt %1$s",
+  "schema_in_step": "Auf dem Stand des Repositorys",
+  "schema_diverged": "%1$d Datei(en) weichen vom Auslieferungsstand ab",
+  "schema_unreachable": "Nicht erreichbar: %1$s",
+  "schema_not_checked": "Noch nicht geprüft",
+  "schema_use_remote_label": "Schemas aus dem Repository verwenden",
+  "schema_use_remote_desc": "Aus führt genau das aus, was mit diesem Build ausgeliefert wurde, und löscht Heruntergeladenes.",
+  "schema_using_bundled": "Es werden die mit der App ausgelieferten Schemas verwendet",
+  "schema_serving": "Das Repository liefert %1$d Schema(s)"
 }

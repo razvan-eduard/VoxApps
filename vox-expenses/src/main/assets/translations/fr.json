@@ -405,12 +405,21 @@
   "capture_mode_stitch": "Assemblage",
   "capture_mode_batch": "Lot",
   "schema_updates_section": "Mises à jour des schémas",
-  "schema_updates_desc": "Les services utilisés par cette application sont déclarés dans des fichiers livrés avec elle. Le dépôt ci-dessous peut en fournir d'autres.",
+  "schema_updates_desc": "Les services utilisés par cette application sont déclarés dans des fichiers servis par le dépôt ci-dessous. Ce qui est livré avec l'application sert de repli.",
   "schema_auto_update_label": "Vérifier au démarrage",
   "schema_repository_url": "URL du dépôt de schémas",
   "schema_sync_now": "Vérifier maintenant",
   "schema_sync_report": "%1$d mis à jour, %2$d inchangés, %3$d en échec",
   "schema_source_bundled": "livrés avec l'application",
   "schema_source_accepted": "depuis le dépôt",
-  "schema_source_mixed": "%1$d depuis le dépôt, %2$d livrés avec l'application"
+  "schema_source_mixed": "%1$d depuis le dépôt, %2$d livrés avec l'application",
+  "schema_following": "Suit %1$s",
+  "schema_in_step": "À jour avec le dépôt",
+  "schema_diverged": "%1$d fichier(s) diffèrent de la version livrée",
+  "schema_unreachable": "Inaccessible : %1$s",
+  "schema_not_checked": "Pas encore vérifié",
+  "schema_use_remote_label": "Utiliser les schémas du dépôt",
+  "schema_use_remote_desc": "Désactivé exécute exactement ce qui a été livré avec cette version et supprime ce qui a été téléchargé.",
+  "schema_using_bundled": "Utilisation des schémas livrés avec l'application",
+  "schema_serving": "Le dépôt fournit %1$d schéma(s)"
 }

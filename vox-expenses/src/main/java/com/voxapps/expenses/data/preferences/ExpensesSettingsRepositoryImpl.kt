@@ -38,7 +38,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val SCHEDULED_EXPENSE_DEDUP_INTERVAL = stringPreferencesKey("scheduled_expense_dedup_interval")
         val HOME_CURRENCY = stringPreferencesKey("home_currency")
         val SCHEMA_REPO_BASE_URL = stringPreferencesKey("schema_repo_base_url")
-        val SCHEMA_AUTO_UPDATE = booleanPreferencesKey("schema_auto_update")
+        val USE_REMOTE_SCHEMAS = booleanPreferencesKey("use_remote_schemas")
         val PAYMENT_SOURCE_PACKAGES = stringSetPreferencesKey("payment_source_packages")
         val BANKING_SOURCE_PACKAGES = stringSetPreferencesKey("banking_source_packages")
         val AUTO_ACCEPT_NOTIFICATION_EXPENSES = booleanPreferencesKey("auto_accept_notification_expenses")
@@ -108,7 +108,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             scheduledExpenseDedupInterval = prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             homeCurrency = prefs[Keys.HOME_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
             schemaRepoBaseUrl = prefs[Keys.SCHEMA_REPO_BASE_URL] ?: com.voxapps.services.SchemaRepo.DEFAULT_BASE_URL,
-            schemaAutoUpdate = prefs[Keys.SCHEMA_AUTO_UPDATE] ?: true,
+            useRemoteSchemas = prefs[Keys.USE_REMOTE_SCHEMAS] ?: true,
             paymentSourcePackages = prefs[Keys.PAYMENT_SOURCE_PACKAGES] ?: emptySet(),
             bankingSourcePackages = prefs[Keys.BANKING_SOURCE_PACKAGES] ?: emptySet(),
             autoAcceptNotificationExpenses = prefs[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] ?: false,
@@ -223,8 +223,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.SCHEMA_REPO_BASE_URL] = url }
     }
 
-    override suspend fun setSchemaAutoUpdate(enabled: Boolean) {
-        dataStore.edit { it[Keys.SCHEMA_AUTO_UPDATE] = enabled }
+    override suspend fun setUseRemoteSchemas(enabled: Boolean) {
+        dataStore.edit { it[Keys.USE_REMOTE_SCHEMAS] = enabled }
     }
 
     override suspend fun setPaymentSourcePackages(packages: Set<String>) {

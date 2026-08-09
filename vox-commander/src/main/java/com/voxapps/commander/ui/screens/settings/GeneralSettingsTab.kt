@@ -63,21 +63,24 @@ fun GeneralSettingsTab(
             strings = SchemaUpdatesStrings(
                 sectionLabel = languageManager.getString("schema_updates_section"),
                 description = languageManager.getString("schema_updates_desc"),
-                autoUpdateLabel = languageManager.getString("schema_auto_update_label"),
+                useRemoteLabel = languageManager.getString("schema_use_remote_label"),
+                useRemoteDescription = languageManager.getString("schema_use_remote_desc"),
                 repositoryUrlLabel = languageManager.getString("model_repository_url"),
                 checkNow = languageManager.getString("schema_sync_now"),
-                reportFormat = languageManager.getString("schema_sync_report"),
-                sourceBundled = languageManager.getString("schema_source_bundled"),
-                sourceAccepted = languageManager.getString("schema_source_accepted"),
-                sourceMixedFormat = languageManager.getString("schema_source_mixed")
+                followingFormat = languageManager.getString("schema_following"),
+                inStep = languageManager.getString("schema_in_step"),
+                servingFormat = languageManager.getString("schema_serving"),
+                unreachableFormat = languageManager.getString("schema_unreachable"),
+                notCheckedYet = languageManager.getString("schema_not_checked"),
+                usingBundled = languageManager.getString("schema_using_bundled")
             ),
             repositoryUrl = modelRepoUrl,
-            autoUpdate = uiState.schemaAutoUpdate,
+            useRemote = uiState.useRemoteSchemas,
             onRepositoryUrlChange = {
                 modelRepoUrl = it
                 scope.launch { settingsRepo.setModelRepoBaseUrl(it) }
             },
-            onAutoUpdateChange = { appStateManager.setSchemaAutoUpdate(it) },
+            onUseRemoteChange = { appStateManager.setUseRemoteSchemas(it) },
             onSchemasChanged = { appStateManager.refreshAll() }
         )
 

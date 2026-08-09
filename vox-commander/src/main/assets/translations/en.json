@@ -486,7 +486,7 @@
   "onboarding_permissions_intro": "Grant these so the voice assistant and its floating microphone work anywhere. You can change them later in Settings.",
   "continue_button": "Continue",
   "schema_updates_section": "Schema updates",
-  "schema_updates_desc": "Engines, search providers, media backends and integrations are declared in files this app ships with. The repository below can serve newer ones.",
+  "schema_updates_desc": "Engines, search providers, media backends and integrations are declared in files served by the repository below. What shipped with the app is the fallback.",
   "schema_auto_update_label": "Check for updates at startup",
   "schema_sync_now": "Check now",
   "schema_sync_report": "%1$d updated, %2$d unchanged, %3$d failed",
@@ -499,5 +499,14 @@
   "reset_settings_button": "Reset all settings",
   "reset_settings_description": "Puts every setting back to its default. API keys and downloaded models are kept.",
   "reset_settings_confirm": "Put every setting back to its default? API keys and downloaded models are kept. The app will restart.",
-  "schema_source_mixed": "%1$d from the repository, %2$d shipped with the app"
+  "schema_source_mixed": "%1$d from the repository, %2$d shipped with the app",
+  "schema_following": "Following %1$s",
+  "schema_in_step": "In step with the repository",
+  "schema_diverged": "%1$d file(s) differ from what shipped",
+  "schema_unreachable": "Could not reach it: %1$s",
+  "schema_not_checked": "Not checked yet",
+  "schema_use_remote_label": "Use schemas from the repository",
+  "schema_use_remote_desc": "Off runs exactly what this build shipped with, and deletes anything downloaded.",
+  "schema_using_bundled": "Using the schemas shipped with the app",
+  "schema_serving": "The repository supplies %1$d schema(s)"
 }

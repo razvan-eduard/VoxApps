@@ -486,7 +486,7 @@
   "ww_aec_desc": "Permite detectarea cuvântului de trezire în timpul redării TTS/muzicii",
   "ww_aec_label": "Anulare ecou (AEC)",
   "schema_updates_section": "Actualizări de scheme",
-  "schema_updates_desc": "Motoarele, furnizorii de căutare, serviciile media și integrările sunt declarate în fișiere livrate cu aplicația. Depozitul de mai jos poate oferi versiuni mai noi.",
+  "schema_updates_desc": "Motoarele, furnizorii de căutare, serviciile media și integrările sunt declarate în fișiere servite de depozitul de mai jos. Cele livrate cu aplicația sunt rezerva.",
   "schema_auto_update_label": "Verifică actualizările la pornire",
   "schema_sync_now": "Verifică acum",
   "schema_sync_report": "%1$d actualizate, %2$d neschimbate, %3$d eșuate",
@@ -499,5 +499,14 @@
   "reset_settings_button": "Resetează toate setările",
   "reset_settings_description": "Readuce fiecare setare la valoarea implicită. Cheile API și modelele descărcate se păstrează.",
   "reset_settings_confirm": "Readuci fiecare setare la valoarea implicită? Cheile API și modelele descărcate se păstrează. Aplicația va reporni.",
-  "schema_source_mixed": "%1$d din depozit, %2$d livrate cu aplicația"
+  "schema_source_mixed": "%1$d din depozit, %2$d livrate cu aplicația",
+  "schema_following": "Urmărește %1$s",
+  "schema_in_step": "La zi cu depozitul",
+  "schema_diverged": "%1$d fișier(e) diferă de cele livrate",
+  "schema_unreachable": "Nu a putut fi accesat: %1$s",
+  "schema_not_checked": "Neverificat încă",
+  "schema_use_remote_label": "Folosește schemele din depozit",
+  "schema_use_remote_desc": "Dezactivat rulează exact ce a fost livrat cu această versiune și șterge ce a fost descărcat.",
+  "schema_using_bundled": "Se folosesc schemele livrate cu aplicația",
+  "schema_serving": "Depozitul furnizează %1$d schemă(e)"
 }

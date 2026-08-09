@@ -378,7 +378,11 @@ fun CalendarScreen(
                         todayEffectSecondaryColor = todayEffectSecondaryColor,
                         todayEffectSpeed = todayEffectSpeed,
                         selectedIds = selectedIds,
-                        onItemLongClick = effectiveOnItemLongClick
+                        onItemLongClick = effectiveOnItemLongClick,
+                        // Selecting the new week's Monday is enough: WeekView derives the week it
+                        // shows from whatever date is selected.
+                        onWeekChange = { millis -> stateManager.setSelectedDate(millis) },
+                        animationsEnabled = settings.animationsEnabled
                     )
                     CalendarViewMode.DAY -> DayView(
                         items = items,

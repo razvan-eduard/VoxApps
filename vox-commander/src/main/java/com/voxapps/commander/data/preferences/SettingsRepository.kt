@@ -118,7 +118,7 @@ interface SettingsRepository {
 
     // --- REMOTE REPOSITORY ---
     suspend fun setModelRepoBaseUrl(url: String)
-    suspend fun setSchemaAutoUpdate(enabled: Boolean)
+    suspend fun setUseRemoteSchemas(enabled: Boolean)
     suspend fun setSchemaStoreMigrated(done: Boolean)
 
     /**

@@ -138,11 +138,12 @@ class VoxApplication : Application() {
             }
         )
 
-        // Ask the repository for newer schemas, if the user leaves that on. Every schema the app
-        // loaded takes part — the catalog is the list, so a new one is covered by existing.
+        // The repository is the source of truth unless the user said otherwise, so every launch
+        // asks it. Every schema the app loaded takes part — the catalog is the list, so a new one is
+        // covered by existing.
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
-            if (!container.settingsRepository.getSettingsSnapshot().schemaAutoUpdate) {
-                Logger.log("Schema updates are off — staying on the copies in force", "VoxApplication")
+            if (!container.settingsRepository.getSettingsSnapshot().useRemoteSchemas) {
+                Logger.log("Running the schemas this build shipped with, by choice", "VoxApplication")
                 return@launch
             }
             val results = SchemaCatalog.refreshAll(

@@ -19,9 +19,11 @@ import java.security.MessageDigest
  *
  * ### Which copy wins
  *
- *  - **assets** — what shipped in this APK. Constant for the life of the build, and the safety net.
- *  - **`filesDir`** — a copy the user accepted, by leaving updates on or by asking for one. While it
- *    exists it *is* the schema, with no version arithmetic deciding otherwise.
+ *  - **`filesDir`** — what the repository served. While it exists it *is* the schema, and a check
+ *    compares against it rather than against the build: the repository is the source of truth while
+ *    it is in use.
+ *  - **assets** — what shipped in this APK. The floor: used before the first successful fetch, when
+ *    the repository cannot be reached, and permanently once the user turns the repository off.
  *
  * There is no version arithmetic anywhere, and no `schema_version` is read: a number cannot tell
  * whether a copy is right for this build — only which was written later — and comparing it silently
@@ -111,7 +113,7 @@ class RemoteSchema<T : Any>(
             return@withContext Refreshed.Unreachable(e.message ?: "unreachable")
         }
 
-        if (hash(text) == currentHash()) {
+        if (hash(text) == savedHash()) {
             Logger.log("$fileName is unchanged", tag)
             return@withContext Refreshed.Unchanged
         }
@@ -179,11 +181,16 @@ class RemoteSchema<T : Any>(
         onLoaded(schema)
     }
 
-    /** The bytes currently in force, so a refresh can tell "same file" from "new file". */
-    private fun currentHash(): String? {
-        val saved = savedFile()?.takeIf { it.exists() }?.let { runCatching { it.readText() }.getOrNull() }
-        return hash(saved ?: assetText() ?: return null)
-    }
+    /**
+     * The bytes of the copy we hold from the repository, or null when we hold none.
+     *
+     * Deliberately *not* falling back to the bundled copy. The repository is the source of truth
+     * while it is in use, so "have we got this already?" is a question about what was downloaded —
+     * comparing against assets instead meant a first run whose repository happened to match the
+     * build downloaded nothing and went on calling itself bundled, which is a different claim.
+     */
+    private fun savedHash(): String? =
+        savedFile()?.takeIf { it.exists() }?.let { runCatching { it.readText() }.getOrNull() }?.let(::hash)
 
     private fun hash(text: String): String =
         MessageDigest.getInstance("SHA-256")

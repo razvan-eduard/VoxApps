@@ -65,7 +65,7 @@ data class ExpensesSettings(
      *  install may follow a fork for one app and not the other. */
     val schemaRepoBaseUrl: String = com.voxapps.services.SchemaRepo.DEFAULT_BASE_URL,
     /** Whether that repository is asked at startup, or only when the user presses check. */
-    val schemaAutoUpdate: Boolean = true,
+    val useRemoteSchemas: Boolean = true,
 
     val isBiometricRequired: Boolean = false,
     val sessionTimeoutMinutes: Int = TIMEOUT_30M,

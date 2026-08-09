@@ -157,7 +157,7 @@ class SettingsRepositoryImpl(
 
         // Remote repository
         val MODEL_REPO_BASE_URL = stringPreferencesKey("model_repo_base_url")
-        val SCHEMA_AUTO_UPDATE = booleanPreferencesKey("schema_auto_update")
+        val USE_REMOTE_SCHEMAS = booleanPreferencesKey("use_remote_schemas")
         val SCHEMA_STORE_MIGRATED = booleanPreferencesKey("schema_store_migrated")
 
         // Model download state
@@ -407,7 +407,7 @@ class SettingsRepositoryImpl(
             geminiIncompatible = prefs[Keys.GEMINI_INCOMPATIBLE] ?: false,
 
             modelRepoBaseUrl = prefs[Keys.MODEL_REPO_BASE_URL] ?: Strings.Preferences.DEFAULT_MODEL_REPO_URL,
-            schemaAutoUpdate = prefs[Keys.SCHEMA_AUTO_UPDATE] ?: true,
+            useRemoteSchemas = prefs[Keys.USE_REMOTE_SCHEMAS] ?: true,
             schemaStoreMigrated = prefs[Keys.SCHEMA_STORE_MIGRATED] ?: false,
 
             downloadedModelIds = prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet(),
@@ -908,8 +908,8 @@ class SettingsRepositoryImpl(
         dataStore.edit { it[Keys.SCHEMA_STORE_MIGRATED] = done }
     }
 
-    override suspend fun setSchemaAutoUpdate(enabled: Boolean) {
-        dataStore.edit { it[Keys.SCHEMA_AUTO_UPDATE] = enabled }
+    override suspend fun setUseRemoteSchemas(enabled: Boolean) {
+        dataStore.edit { it[Keys.USE_REMOTE_SCHEMAS] = enabled }
     }
 
     override suspend fun setModelRepoBaseUrl(url: String) {
