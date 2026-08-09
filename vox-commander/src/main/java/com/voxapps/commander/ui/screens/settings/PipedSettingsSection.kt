@@ -13,6 +13,7 @@ import com.voxapps.commander.domain.intent.handler.PipedSearchHelper
 import com.voxapps.commander.domain.media.MediaServiceRegistry
 import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.services.ServiceProbe
+import com.voxapps.design.ConnectionTestState
 import com.voxapps.design.picklist.ConnectionTestCard
 import com.voxapps.design.picklist.Picklist
 import kotlinx.coroutines.launch
@@ -84,9 +85,13 @@ fun PipedSettingsSection(
                 // Nothing configurable to depend on, so the retry button is the only way to ask again.
                 keys = listOf(selectedBackend.id),
                 testFn = {
-                    ServiceProbe.run(selectedBackend.id, CloudDeadline.secondsFor(selectedBackend.id, settingsRepo)) {
-                        NewPipeExtractorHelper.testConnection()
-                    }
+                    // On-device parsing: it either produced results or it did not. There is no
+                    // host to fail to resolve, so this test has only two answers.
+                    val ok = ServiceProbe.run(
+                        selectedBackend.id,
+                        CloudDeadline.secondsFor(selectedBackend.id, settingsRepo)
+                    ) { NewPipeExtractorHelper.testConnection() }
+                    if (ok) ConnectionTestState.Online else ConnectionTestState.Offline
                 },
                 testingLabel = "Testing YouTube search…",
                 onlineLabel = "Connection OK",

@@ -423,5 +423,6 @@
   "schema_using_bundled": "Utilisation des schémas livrés avec l'application",
   "schema_serving": "Le dépôt fournit %1$d schéma(s)",
   "exchange_rate_provider_label": "Fournisseur de taux",
-  "exchange_rate_needs_key_note": " — nécessite une clé API"
+  "exchange_rate_needs_key_note": " — nécessite une clé API",
+  "connection_no_network": "Pas de connexion"
 }

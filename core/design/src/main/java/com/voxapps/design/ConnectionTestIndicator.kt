@@ -27,7 +27,23 @@ import kotlinx.coroutines.launch
  * Shared connection test status enum.
  * Used by ConnectionTestIndicator and ConnectionTestAuto.
  */
-enum class ConnectionTestState { Idle, Testing, Online, Offline }
+enum class ConnectionTestState {
+    Idle,
+    Testing,
+    Online,
+
+    /** The service was reached and did not answer as it should. Something is known about it. */
+    Offline,
+
+    /**
+     * The service was never reached — its name did not resolve.
+     *
+     * Distinct from [Offline] because nothing was learned about the service: showing a red cross for
+     * a phone whose Wi-Fi had not finished associating blames the endpoint for the device. It
+     * happens on the first test after a cold start, which is exactly when a card first appears.
+     */
+    NoNetwork
+}
 
 /**
  * Reusable inline status indicator — shows spinner / ✅ / ❌ with label.
@@ -42,6 +58,7 @@ fun ConnectionTestIndicator(
     testingLabel: String = "Testing…",
     onlineLabel: String = "Online",
     offlineLabel: String = "Offline",
+    noNetworkLabel: String = "No connection",
     modifier: Modifier = Modifier
 ) {
     when (state) {
@@ -69,7 +86,20 @@ fun ConnectionTestIndicator(
                 color = MaterialTheme.colorScheme.primary
             )
         }
-        ConnectionTestState.Offline -> Row(
+        ConnectionTestState.NoNetwork -> Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = modifier.padding(vertical = 2.dp)
+        ) {
+            // Not a cross: nothing was found wrong with the service.
+            Text(text = "\u26A0\uFE0F", style = MaterialTheme.typography.labelSmall)
+            Text(
+                text = noNetworkLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+                ConnectionTestState.Offline -> Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = modifier.padding(vertical = 2.dp)
@@ -105,10 +135,13 @@ fun ConnectionTestIndicator(
 @Composable
 fun ConnectionTestAuto(
     keys: List<Any?>,
-    testFn: suspend () -> Boolean,
+    /** The test, reporting which of the three outcomes it found. A caller with only a boolean maps
+     *  it: `if (ok) Online else Offline`. */
+    testFn: suspend () -> ConnectionTestState,
     testingLabel: String = "Testing…",
     onlineLabel: String = "Online",
     offlineLabel: String = "Offline",
+    noNetworkLabel: String = "No connection",
     retryDescription: String = "Test connection again",
     modifier: Modifier = Modifier
 ) {
@@ -124,13 +157,13 @@ fun ConnectionTestAuto(
             return@LaunchedEffect
         }
         state = ConnectionTestState.Testing
-        state = if (testFn()) ConnectionTestState.Online else ConnectionTestState.Offline
+        state = testFn()
     }
 
     if (!selected) return
 
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
-        ConnectionTestIndicator(state, testingLabel, onlineLabel, offlineLabel)
+        ConnectionTestIndicator(state, testingLabel, onlineLabel, offlineLabel, noNetworkLabel)
         if (state != ConnectionTestState.Testing) {
             IconButton(onClick = { retries++ }, modifier = Modifier.size(28.dp)) {
                 Icon(

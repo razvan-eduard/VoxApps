@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import com.voxapps.design.ConnectionTestState
 import com.voxapps.design.picklist.ConnectionTestCard
 import com.voxapps.design.picklist.TokenState
 import com.voxapps.commander.data.preferences.SettingsRepository
@@ -162,7 +163,11 @@ fun IntegrationCard(
             if (probeSpec != null) {
                 ConnectionTestCard(
                     keys = listOf(integration.id, connected, accessToken?.length ?: 0),
-                    testFn = { probeWithRefresh(probeSpec, integration, clientId, settingsRepo) },
+                    testFn = {
+                        if (probeWithRefresh(probeSpec, integration, clientId, settingsRepo))
+                            ConnectionTestState.Online
+                        else ConnectionTestState.Offline
+                    },
                     tokenState = TokenState(
                         present = !accessToken.isNullOrBlank(),
                         expiresAtMillis = settingsRepo.getServiceTokenExpirySync(integration.id)

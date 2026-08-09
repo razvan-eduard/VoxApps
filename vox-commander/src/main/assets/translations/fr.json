@@ -524,5 +524,6 @@
   "import_delete_source": "Supprimer l’archive ?",
   "import_keep_source": "La garder",
   "import_source_delete_failed": "L’archive n’a pas pu être supprimée.",
-  "import_language_prompt": "Pour quelle langue est ce modèle ?"
+  "import_language_prompt": "Pour quelle langue est ce modèle ?",
+  "connection_no_network": "Pas de connexion"
 }

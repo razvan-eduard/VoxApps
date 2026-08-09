@@ -524,5 +524,6 @@
   "import_delete_source": "Ștergi arhiva?",
   "import_keep_source": "Păstreaz-o",
   "import_source_delete_failed": "Arhiva nu a putut fi ștearsă.",
-  "import_language_prompt": "Pentru ce limbă este acest model?"
+  "import_language_prompt": "Pentru ce limbă este acest model?",
+  "connection_no_network": "Fără conexiune"
 }

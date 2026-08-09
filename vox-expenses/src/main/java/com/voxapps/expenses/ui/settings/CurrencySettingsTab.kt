@@ -113,6 +113,7 @@ fun CurrencySettingsTab(
             onlineLabel = languageManager.getString("exchange_rate_online"),
             offlineLabel = languageManager.getString("exchange_rate_offline"),
             missingCredentialLabel = languageManager.getString("exchange_rate_needs_key"),
+            noNetworkLabel = languageManager.getString("connection_no_network"),
             notes = {
                 if (service == null) {
                     Text(

@@ -524,5 +524,6 @@
   "import_delete_source": "Delete the archive?",
   "import_keep_source": "Keep it",
   "import_source_delete_failed": "The archive could not be deleted.",
-  "import_language_prompt": "Which language is this model for?"
+  "import_language_prompt": "Which language is this model for?",
+  "connection_no_network": "No connection"
 }

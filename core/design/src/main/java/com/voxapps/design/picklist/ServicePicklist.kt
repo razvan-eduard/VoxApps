@@ -48,6 +48,7 @@ fun <T : ServiceEntry> ServicePicklist(
     onlineLabel: String = "Reachable",
     offlineLabel: String = "Not reachable",
     missingCredentialLabel: String = "Needs an API key",
+    noNetworkLabel: String = "No connection",
     anchor: @Composable (label: String, onClick: () -> Unit) -> Unit = { label, onClick ->
         PicklistButtonAnchor(label, onClick)
     },
@@ -93,7 +94,8 @@ fun <T : ServiceEntry> ServicePicklist(
             testingLabel = testingLabel,
             onlineLabel = onlineLabel,
             offlineLabel = offlineLabel,
-            missingCredentialLabel = missingCredentialLabel
+            missingCredentialLabel = missingCredentialLabel,
+            noNetworkLabel = noNetworkLabel
         )
 
         if (entry.hasDownloadableModels) models()

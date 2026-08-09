@@ -23,6 +23,7 @@ import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
 import com.voxapps.design.ConnectionTestAuto
+import com.voxapps.design.ConnectionTestState
 
 /**
  * Everything a declared service says about its own health, in one place.
@@ -41,14 +42,15 @@ import com.voxapps.design.ConnectionTestAuto
 @Composable
 fun ConnectionTestCard(
     keys: List<Any?>,
-    testFn: suspend () -> Boolean,
+    testFn: suspend () -> ConnectionTestState,
     modifier: Modifier = Modifier,
     tokenState: TokenState? = null,
     helpUrl: String? = null,
     helpText: String? = null,
     testingLabel: String = "Testing…",
     onlineLabel: String = "Reachable",
-    offlineLabel: String = "Not reachable"
+    offlineLabel: String = "Not reachable",
+    noNetworkLabel: String = "No connection"
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         CredentialHelpLink(helpUrl, helpText)
@@ -67,7 +69,8 @@ fun ConnectionTestCard(
             testFn = testFn,
             testingLabel = testingLabel,
             onlineLabel = onlineLabel,
-            offlineLabel = offlineLabel
+            offlineLabel = offlineLabel,
+            noNetworkLabel = noNetworkLabel
         )
     }
 }
@@ -94,7 +97,8 @@ fun ConnectionTestCard(
     testingLabel: String = "Testing…",
     onlineLabel: String = "Reachable",
     offlineLabel: String = "Not reachable",
-    missingCredentialLabel: String = "Needs an API key"
+    missingCredentialLabel: String = "Needs an API key",
+    noNetworkLabel: String = "No connection"
 ) {
     if (spec == null) return
 
@@ -102,7 +106,17 @@ fun ConnectionTestCard(
         keys = listOf(spec.id, spec.url, spec.credential?.length ?: 0) + extraKeys,
         // The deadline is the caller's to decide: it is the app that knows what the user configured
         // and what the engine declared. Left out, the prober's own default applies.
-        testFn = { timeoutSeconds?.let { ServiceProbe.run(spec, it) } ?: ServiceProbe.run(spec) },
+        // The prober tells a service that answered badly from one that was never reached; the card
+        // shows the difference rather than blaming the endpoint for the phone's network.
+        testFn = {
+            val outcome = timeoutSeconds?.let { ServiceProbe.detailed(spec, it) }
+                ?: ServiceProbe.detailed(spec)
+            when {
+                outcome.ok -> ConnectionTestState.Online
+                outcome.offline -> ConnectionTestState.NoNetwork
+                else -> ConnectionTestState.Offline
+            }
+        },
         modifier = modifier,
         tokenState = tokenState,
         helpUrl = helpUrl,
@@ -111,7 +125,8 @@ fun ConnectionTestCard(
         onlineLabel = onlineLabel,
         // No request is made when the credential is missing, so "not reachable" would blame the
         // network for something the field directly above it is asking for.
-        offlineLabel = if (spec.missingCredential) missingCredentialLabel else offlineLabel
+        offlineLabel = if (spec.missingCredential) missingCredentialLabel else offlineLabel,
+        noNetworkLabel = noNetworkLabel
     )
 }
 

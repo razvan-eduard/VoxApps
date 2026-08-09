@@ -44,12 +44,23 @@ object ServiceProbe {
      * probe for exactly that reason.
      */
     /** What a probe found: whether it answered, and — for HTTP — with what. */
-    data class Outcome(val ok: Boolean, val code: Int? = null) {
+    data class Outcome(val ok: Boolean, val code: Int? = null, val offline: Boolean = false) {
         /** The one status worth acting on: a credential the service will not accept. An OAuth token
          *  that has merely expired can often be refreshed, which is a different thing from a wrong
          *  key and needs to be told apart from "the network is down". */
         val rejected: Boolean get() = code == 401 || code == 403
     }
+
+    /**
+     * How long to wait before the one retry a name resolution gets.
+     *
+     * A probe runs when its card appears, which on a fresh launch can be a second after the process
+     * started — before Wi-Fi has associated or DNS is answering. The request then fails on the name,
+     * not on the service, and the card said "not reachable" about something it never reached. One
+     * short retry covers the gap; a second would be a reconnection strategy, which is not this
+     * object's job.
+     */
+    private const val OFFLINE_RETRY_DELAY_MS = 1500L
 
     suspend fun run(spec: ProbeSpec, timeoutSeconds: Int = DEFAULT_TIMEOUT_SECONDS): Boolean =
         detailed(spec, timeoutSeconds).ok
@@ -70,7 +81,8 @@ object ServiceProbe {
         Logger.log("Probing ${spec.id} at ${request.url.host}", TAG)
 
         var code: Int? = null
-        val ok = bounded(spec.id, timeoutSeconds) {
+        var offline = false
+        val call: suspend () -> Boolean = {
             client.newCall(request).execute().use { response ->
                 code = response.code
                 if (!response.isSuccessful) {
@@ -79,7 +91,20 @@ object ServiceProbe {
                 response.isSuccessful
             }
         }
-        return Outcome(ok = ok, code = code)
+
+        var ok = bounded(spec.id, timeoutSeconds, onUnresolvable = { offline = true }, block = call)
+
+        // The service was never reached, so nothing was learned about it. Asked once more, because
+        // the commonest reason is a network that came up a moment later — and reporting "not
+        // reachable" for that blames the endpoint for the phone.
+        if (!ok && offline) {
+            Logger.log("${spec.id} could not be resolved — retrying once", TAG)
+            kotlinx.coroutines.delay(OFFLINE_RETRY_DELAY_MS)
+            offline = false
+            ok = bounded(spec.id, timeoutSeconds, onUnresolvable = { offline = true }, block = call)
+        }
+
+        return Outcome(ok = ok, code = code, offline = !ok && offline)
     }
 
     /**
@@ -107,6 +132,8 @@ object ServiceProbe {
     private suspend fun bounded(
         id: String,
         timeoutSeconds: Int,
+        /** Called when the failure was "no such host" — the network, not the service. */
+        onUnresolvable: () -> Unit = {},
         block: suspend () -> Boolean
     ): Boolean = try {
         withContext(Dispatchers.IO) {
@@ -115,6 +142,11 @@ object ServiceProbe {
                 false
             }
         }
+    } catch (e: java.net.UnknownHostException) {
+        // Not a verdict on the service: the name never resolved, so nothing was asked of it.
+        Logger.log("Probe for $id could not resolve its host: ${e.message}", TAG)
+        onUnresolvable()
+        false
     } catch (e: Exception) {
         Logger.log("Probe for $id failed: ${e.message}", TAG)
         false

@@ -423,5 +423,6 @@
   "schema_using_bundled": "Es werden die mit der App ausgelieferten Schemas verwendet",
   "schema_serving": "Das Repository liefert %1$d Schema(s)",
   "exchange_rate_provider_label": "Kursanbieter",
-  "exchange_rate_needs_key_note": " — benötigt einen API-Schlüssel"
+  "exchange_rate_needs_key_note": " — benötigt einen API-Schlüssel",
+  "connection_no_network": "Keine Verbindung"
 }

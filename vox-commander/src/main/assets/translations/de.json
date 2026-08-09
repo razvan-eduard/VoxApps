@@ -524,5 +524,6 @@
   "import_delete_source": "Archiv löschen?",
   "import_keep_source": "Behalten",
   "import_source_delete_failed": "Das Archiv konnte nicht gelöscht werden.",
-  "import_language_prompt": "Für welche Sprache ist dieses Modell?"
+  "import_language_prompt": "Für welche Sprache ist dieses Modell?",
+  "connection_no_network": "Keine Verbindung"
 }
