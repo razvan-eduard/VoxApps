@@ -126,8 +126,13 @@ jobs:
             fi
           } > CHANGELOG.md
 
+      # Publishing is for a push, not for a dispatch. `check_bump` only runs on a push to main, so
+      # its output is empty on a manual run — and an empty value is not 'false', which meant every
+      # "just build it and see" dispatch tagged the commit and cut a release at whatever version
+      # happened to be current, walking straight around the guard that exists to prevent exactly
+      # that. Building and testing still run: that is what a dispatch is for.
       - name: Force update tag to current commit
-        if: steps.check_bump.outputs.changed != 'false'
+        if: steps.check_bump.outputs.changed != 'false' && github.event_name != 'workflow_dispatch'
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           git config user.name "github-actions[bot]"
@@ -136,7 +141,7 @@ jobs:
           git push origin "$TAG" --force
 
       - name: Delete existing release for a fresh publish date
-        if: steps.check_bump.outputs.changed != 'false'
+        if: steps.check_bump.outputs.changed != 'false' && github.event_name != 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -144,7 +149,7 @@ jobs:
           gh release delete "$TAG" --yes || true
 
       - name: Create GitHub Release
-        if: steps.check_bump.outputs.changed != 'false'
+        if: steps.check_bump.outputs.changed != 'false' && github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
