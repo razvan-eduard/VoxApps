@@ -6,7 +6,8 @@ name: Sync Vosk Version
 # artifacts), which is why scripts/check_vosk_version.sh exists as a manual, local-only check. This
 # workflow runs the same check on a schedule and, if newer, bumps gradle/libs.versions.toml.
 #
-# Auto-merges on green (assembleDebug + testDebugUnitTest), — this
+# Compiles and unit-tests the bump, then opens a PR for a person. It used to merge itself on
+# green; a green build here cannot speak to wake-word recognition at all — this
 # is the one sync-*.yml that does, since Vosk itself carries no local patch and isn't compiled
 # in-repo, the closest risk profile to a normal Dependabot bump. Accepted residual risk: a green
 # build can't confirm wake-word model-loading/recognition accuracy is unaffected, only that Vosk's
@@ -21,6 +22,13 @@ on:
 permissions:
   contents: write
   pull-requests: write
+
+# A native build that hangs must not be lapped by the next run — both would push the same
+# branch. Queued rather than cancelled: these push branches and open PRs, so killing one
+# mid-flight leaves more mess than letting it finish.
+concurrency:
+  group: sync-vosk
+  cancel-in-progress: false
 
 jobs:
   check-and-open-pr:
@@ -104,7 +112,7 @@ jobs:
         if: steps.versions.outputs.has_update == 'true'
         run: |
           ./gradlew :vox-commander:compileDebugKotlin :vox-commander:testDebugUnitTest \
-                    -x autoCompileWhisper -x autoCheckVosk -x autoCheckNewPipeExtractor -x autoCheckOpenWakeWord \
+                    -PvoxSkipNativePrep \
                     --no-daemon
 
       - name: Commit and push
@@ -126,13 +134,9 @@ jobs:
             --title "chore: bump Vosk ${{ steps.versions.outputs.current }} -> ${{ steps.versions.outputs.latest }}" \
             --body "New Vosk Android version detected on JitPack (dependabot does not reliably track this coordinate — see scripts/check_vosk_version.sh).
 
-          Compiles and unit tests pass — auto-merging. A green build doesn't confirm wake-word model-loading or recognition accuracy is unaffected, only that Vosk's API surface still resolves and compiles; if you notice wake-word/STT regressions after this lands, this PR is the first place to check." \
+          Compiles and unit tests pass. That is a weaker claim than it looks: no unit test loads a native model, so this says Vosk's API surface still resolves — not that wake-word model loading or recognition accuracy are unaffected. Worth a quick wake-word check before merging." \
             --base main \
             --head "${{ steps.bump.outputs.branch }}")
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
-      - name: Auto-merge
-        if: steps.versions.outputs.has_update == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge "${{ steps.pr.outputs.url }}" --squash --delete-branch
+# Nothing merges itself here. The PR above is where this workflow stops.

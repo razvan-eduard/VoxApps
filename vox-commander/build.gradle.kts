@@ -279,21 +279,70 @@ val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
     into("${projectDir}/src/main/assets/schemas")
 }
 
-// The four scripts above prepare and police *upstream* sources: they compile whisper.cpp from a
-// submodule and ask JitPack whether Vosk, NewPipeExtractor or OpenWakeWord have moved. That is what
-// a developer machine and a release runner want, and precisely what a verification build does not:
-// it needs the submodules, the NDK, shaderc and an SDK symlink to get to the same Kotlin compile,
-// and reaches the network to answer a question no commit is asking. `-PvoxSkipNativePrep` drops
-// them; everything after preBuild — compiling every module, running every test — is unchanged.
+// The three autoCheck* tasks above are deliberately NOT wired into preBuild.
+//
+// "A newer Vosk exists" is a maintenance fact, not a build fact, and it already has a home: the
+// weekly sync-*.yml workflows open a PR when an upstream actually moves. Delivering it a second
+// time as a warning in every build bought nothing and cost three network round-trips per build,
+// builds that behave differently offline, and — the one that mattered — a version check that
+// overwrites vendored source files to dry-run a patch against upstream while the build is running.
+// Nothing attached to a compile should be writing to the source tree.
+//
+// They remain runnable on demand, which is how a maintenance task should be reached:
+//     ./gradlew :vox-commander:autoCheckVosk
+//     ./scripts/check_openwakeword_version.sh
 val skipNativePrep = providers.gradleProperty("voxSkipNativePrep").isPresent
 
-// Forțează procesul de build al aplicației să ruleze aceste scripturi chiar la început
+// The APK that ships is not the one assembleRelease produces: the DLC libs are stripped out of the
+// built zip afterwards (see the release packaging comment above for why AGP can't be trusted to
+// exclude them). That stripping used to exist only inside release-commander.yml, so a locally built
+// release APK bundled every lib and the DLC download path could not be exercised on a real device
+// at all — which is how two bugs in it reached users. This runs the same script CI runs.
+//
+//     ./gradlew :vox-commander:packageReleaseApk
+//
+// Needs RELEASE_KEYSTORE_PATH and RELEASE_KEYSTORE_PASSWORD, same as any signed local build.
+tasks.register<Exec>("packageReleaseApk") {
+    group = "build"
+    description = "assembleRelease, then strip the DLC libs and re-sign — the APK as published."
+    dependsOn("assembleRelease")
+
+    val keystore = System.getenv("RELEASE_KEYSTORE_PATH") ?: ""
+    val password = System.getenv("RELEASE_KEYSTORE_PASSWORD") ?: ""
+    val outDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+
+    // A local assembleRelease signs the APK when the keystore env vars are set and leaves it
+    // "-unsigned" when they are not; CI is always the latter. Take whichever exists.
+    doFirst {
+        val candidates = listOf(
+            File(outDir, "vox-commander-release.apk"),
+            File(outDir, "vox-commander-release-unsigned.apk")
+        )
+        val input = candidates.firstOrNull { it.isFile }
+            ?: throw GradleException("No release APK in $outDir — did assembleRelease run?")
+        if (keystore.isEmpty() || password.isEmpty()) {
+            throw GradleException(
+                "RELEASE_KEYSTORE_PATH and RELEASE_KEYSTORE_PASSWORD must be set — see docs/BUILD_AND_RELEASE.md"
+            )
+        }
+        commandLine(
+            "bash", "${project.rootDir}/scripts/package_commander_release.sh",
+            input.absolutePath,
+            File(outDir, "VoxCommander-release-stripped.apk").absolutePath,
+            keystore, password
+        )
+    }
+    // Replaced in doFirst once the real input is known; Exec requires something here at configure time.
+    commandLine("true")
+}
+
 tasks.named("preBuild") {
+    // Whisper stays: unlike the checks, it produces build output — the .so files this app links.
+    // `-PvoxSkipNativePrep` drops it for a verification build that only needs to know whether the
+    // Kotlin compiles, and would otherwise need the submodule, the NDK, shaderc and an SDK symlink
+    // to reach the same answer.
     if (!skipNativePrep) {
         dependsOn(autoCompileWhisper)
-        dependsOn(autoCheckVosk)
-        dependsOn(autoCheckNewPipeExtractor)
-        dependsOn(autoCheckOpenWakeWord)
     }
     // Not optional anywhere: the shipped schemas are generated into assets, and the tests that
     // check code against them read the generated copy.

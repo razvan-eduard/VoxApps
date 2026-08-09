@@ -66,13 +66,28 @@ if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
     PATCH_FILES=("$PROJECT_ROOT"/core/wakeword/patches/*.patch)
     shopt -u nullglob
 
+    # This dry-run swaps upstream's files into the working tree and copies ours back afterwards.
+    # Without a trap, an interrupt in that window — Ctrl-C, a cancelled build, this script running
+    # under autoCheckOpenWakeWord at preBuild — leaves the tree holding pristine upstream files in
+    # place of the patched ones. That reverts our adaptations silently, and the wake word one still
+    # compiles afterwards: the RMS silence gate would simply be gone.
+    BACKUP_ROOT=$(mktemp -d)
+    restore_all() {
+        [ -d "$BACKUP_ROOT" ] || return 0
+        (cd "$BACKUP_ROOT" && find . -type f -print0 2>/dev/null) | while IFS= read -r -d '' f; do
+            cp "$BACKUP_ROOT/${f#./}" "$PROJECT_ROOT/${f#./}" 2>/dev/null || true
+        done
+        rm -rf "$BACKUP_ROOT"
+    }
+    trap 'restore_all' EXIT INT TERM
+
     for PATCH_FILE in "${PATCH_FILES[@]}"; do
         REL_PATHS=()
         while read -r path; do
             REL_PATHS+=("$path")
         done < <(cd "$PROJECT_ROOT" && git apply --numstat "$PATCH_FILE" | awk '{print $3}')
 
-        BACKUP_DIR=$(mktemp -d)
+        BACKUP_DIR="$BACKUP_ROOT"
         FETCH_OK=true
         for REL_PATH in "${REL_PATHS[@]}"; do
             UPSTREAM_SUBPATH="wakeword/${REL_PATH#core/wakeword/}"
@@ -100,8 +115,10 @@ if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
         for REL_PATH in "${REL_PATHS[@]}"; do
             cp "$BACKUP_DIR/$REL_PATH" "$PROJECT_ROOT/$REL_PATH"
         done
-        rm -rf "$BACKUP_DIR"
     done
+
+    restore_all
+    trap - EXIT INT TERM
 
     echo -e "\nThis is a ${YELLOW}vendored + patched${NC} fork. To update:"
     echo "  1. cd vendor/openwakeword-android-kt && git checkout $LATEST_TAG && cd -"

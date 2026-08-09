@@ -6,21 +6,27 @@ name: Sync NewPipeExtractor Version
 # is why scripts/check_newpipe_extractor_version.sh exists as a manual, local-only check. This
 # workflow runs the same check on a schedule and, if newer, bumps gradle/libs.versions.toml.
 #
-# Auto-merges on green (assembleDebug + testDebugUnitTest), same as sync-vosk.yml and
-# sync-vosk.yml — this one's risk profile is just as low: no patch, no in-repo compile. Accepted
-# residual risk: a green build can't confirm YouTube search/extraction still actually works against
-# YouTube's current page structure (NewPipeExtractor is inherently fragile to upstream YouTube
-# changes — that's exactly why it needs frequent updates), only that its API surface still resolves
+# Compiles and unit-tests the bump, then opens a PR for a person. It used to merge itself on green,
+# and this dependency is the worst candidate in the repo for that: NewPipeExtractor breaks when
+# YouTube changes its page structure, not when its API changes, so a green build cannot see the
+# failure mode that actually happens. It says the API surface still resolves
 # and compiles.
 
 on:
   schedule:
-    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC
+    - cron: '0 6 * * 2' # weekly, Tuesday 06:00 UTC
   workflow_dispatch: {}
 
 permissions:
   contents: write
   pull-requests: write
+
+# A native build that hangs must not be lapped by the next run — both would push the same
+# branch. Queued rather than cancelled: these push branches and open PRs, so killing one
+# mid-flight leaves more mess than letting it finish.
+concurrency:
+  group: sync-newpipe-extractor
+  cancel-in-progress: false
 
 jobs:
   check-and-open-pr:
@@ -105,7 +111,7 @@ jobs:
         if: steps.versions.outputs.has_update == 'true'
         run: |
           ./gradlew :vox-commander:compileDebugKotlin :vox-commander:testDebugUnitTest \
-                    -x autoCompileWhisper -x autoCheckVosk -x autoCheckNewPipeExtractor -x autoCheckOpenWakeWord \
+                    -PvoxSkipNativePrep \
                     --no-daemon
 
       - name: Commit and push
@@ -127,13 +133,9 @@ jobs:
             --title "chore: bump NewPipeExtractor ${{ steps.versions.outputs.current }} -> ${{ steps.versions.outputs.latest }}" \
             --body "New NewPipeExtractor version detected on JitPack/GitHub (dependabot does not reliably track this coordinate — see scripts/check_newpipe_extractor_version.sh).
 
-          Compiles and unit tests pass — auto-merging. A green build doesn't confirm YouTube search/extraction still works against YouTube's current page structure, only that NewPipeExtractor's API surface still resolves and compiles; if you notice YouTube search/playback regressions after this lands, this PR is the first place to check." \
+          Compiles and unit tests pass. That is a weaker claim than it looks for this dependency: NewPipeExtractor breaks when YouTube changes its page structure, which a compile cannot see. Worth a quick check of YouTube search/playback before merging." \
             --base main \
             --head "${{ steps.bump.outputs.branch }}")
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
-      - name: Auto-merge
-        if: steps.versions.outputs.has_update == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge "${{ steps.pr.outputs.url }}" --squash --delete-branch
+# Nothing merges itself here. The PR above is where this workflow stops.

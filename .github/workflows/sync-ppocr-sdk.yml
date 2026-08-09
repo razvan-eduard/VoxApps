@@ -22,12 +22,24 @@ name: Sync PaddleOCR ppocr-sdk Fork
 
 on:
   schedule:
-    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC
+    - cron: '0 6 * * 5' # weekly, Friday 06:00 UTC
   workflow_dispatch: {}
 
 permissions:
   contents: write
   pull-requests: write
+
+env:
+  # How far behind upstream's tip this sync deliberately stays. See the "Determine current pin"
+  # step for why a default-branch tip is not something to follow the same day.
+  STALENESS_FLOOR_DAYS: 7
+
+# A native build that hangs must not be lapped by the next run — both would push the same
+# branch. Queued rather than cancelled: these push branches and open PRs, so killing one
+# mid-flight leaves more mess than letting it finish.
+concurrency:
+  group: sync-ppocr-sdk
+  cancel-in-progress: false
 
 jobs:
   check-and-open-pr:
@@ -39,12 +51,21 @@ jobs:
           submodules: false
           fetch-depth: 0
 
-      - name: Determine current pin and latest upstream commit
+      - name: Determine current pin and latest eligible upstream commit
         id: versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          UPSTREAM_URL="https://github.com/PaddlePaddle/PaddleOCR.git"
           CURRENT_SHA=$(git ls-tree HEAD vendor/paddleocr-upstream | awk '{print $3}')
-          LATEST_SHA=$(git ls-remote "$UPSTREAM_URL" HEAD | awk '{print $1}')
+
+          # Deliberately NOT upstream's tip. This is the only sync that follows a default branch
+          # rather than a tag — nobody upstream decides a commit is ready, so we impose the wait
+          # ourselves: take the newest commit that is at least a week old. A bad commit (or a
+          # compromised one) is usually reverted upstream well inside that window, and we lose
+          # nothing by being a week behind an OCR SDK.
+          UNTIL=$(date -u -d "$STALENESS_FLOOR_DAYS days ago" +%Y-%m-%dT%H:%M:%SZ)
+          LATEST_SHA=$(gh api "repos/PaddlePaddle/PaddleOCR/commits?until=$UNTIL&per_page=1" --jq '.[0].sha' || true)
+          echo "Newest upstream commit older than $UNTIL: ${LATEST_SHA:-<none>}"
 
           echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
           echo "latest_sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
@@ -69,9 +90,13 @@ jobs:
         run: |
           LATEST_SHA="${{ steps.versions.outputs.latest_sha }}"
           BRANCH="chore/sync-ppocr-sdk-${LATEST_SHA:0:9}"
-          EXISTING=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' || true)
+          # --state all, not open: closing a sync PR without merging is a decision — "we are not
+          # taking this upstream commit" — and it has to stick. Deduping on open PRs only meant a
+          # closed one came straight back the following week, identical, so declining an update was
+          # impossible and the PRs accumulated as permanent noise instead.
+          EXISTING=$(gh pr list --head "$BRANCH" --state all --json number,state -q '.[0] | "\(.number) \(.state)"' || true)
           if [ -n "$EXISTING" ]; then
-            echo "PR #$EXISTING already open for $BRANCH — skipping re-sync"
+            echo "PR $EXISTING already exists for $BRANCH — skipping re-sync"
             echo "proceed=false" >> "$GITHUB_OUTPUT"
           else
             echo "proceed=true" >> "$GITHUB_OUTPUT"
@@ -129,6 +154,30 @@ jobs:
               cat /tmp/apply-reject.txt
             fi
           done
+
+      # A re-vendor is a wholesale copy of someone else's source tree, and the review it gets is a
+      # human reading a diff of dozens of third-party files. Files upstream has *added* are what
+      # that reading is least likely to catch and what an injection would use, so they are called
+      # out by name rather than left to be noticed.
+      - name: Guard — did upstream add or remove files?
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        id: guard
+        run: |
+          ADDED=$(git status --porcelain vendor/ppocr-sdk/src/main/java/com/paddle \
+                  | awk '/^\?\?/ {print "  + " $2}')
+          REMOVED=$(git status --porcelain vendor/ppocr-sdk/src/main/java/com/paddle \
+                  | awk '/^ ?D/ {print "  - " $2}')
+          {
+            echo "added<<EOF"; echo "$ADDED"; echo "EOF"
+            echo "removed<<EOF"; echo "$REMOVED"; echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$ADDED" ] || [ -n "$REMOVED" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Upstream changed the file set:"; echo "$ADDED"; echo "$REMOVED"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "File set unchanged — same files as the pinned version."
+          fi
 
       - name: Set up JDK 17
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
@@ -201,6 +250,16 @@ jobs:
           {
             echo "Upstream [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) (deploy/ppocr-android/ppocr-sdk) moved to \`$LATEST_SHORT\` (we were pinned at \`$CURRENT_SHORT\`)."
             echo ""
+            echo "This is the newest upstream commit at least ${{ env.STALENESS_FLOOR_DAYS }} days old, not the tip — PaddleOCR has no release tags for this path, so the wait stands in for upstream deciding a commit is ready."
+            echo ""
+            if [ "${{ steps.guard.outputs.changed }}" == "true" ]; then
+              echo "**📂 Upstream changed the file set.** Added files are the part of a re-vendor a diff review is least likely to catch — read these before the rest:"
+              echo '```'
+              echo "${{ steps.guard.outputs.added }}"
+              echo "${{ steps.guard.outputs.removed }}"
+              echo '```'
+              echo ""
+            fi
             if [ "$APPLY_STATUS" == "clean" ] && [ "$BUILD_STATUS" == "pass" ]; then
               echo "**✅ Patch applied automatically. Compiles.** All sources are re-vendored and the byte-loading patch (vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch) is already re-applied — nothing left to hand-merge. Please review the diff and approve."
             elif [ "$APPLY_STATUS" == "clean" ] && [ "$BUILD_STATUS" == "fail" ]; then

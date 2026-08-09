@@ -59,6 +59,19 @@ if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
 
     git -C "$SUBMODULE_DIR" fetch --depth 1 origin "$LATEST_SHA" --quiet 2>/dev/null
 
+    # The swap below puts upstream's files into the working tree and copies ours back afterwards.
+    # An interrupt in that window would otherwise leave the tree holding upstream's copies, silently
+    # reverting our patches — so the restore is bound to EXIT rather than only to the happy path.
+    BACKUP_ROOT=$(mktemp -d)
+    restore_all() {
+        [ -d "$BACKUP_ROOT" ] || return 0
+        (cd "$BACKUP_ROOT" && find . -type f -print0 2>/dev/null) | while IFS= read -r -d '' f; do
+            cp "$BACKUP_ROOT/${f#./}" "$PROJECT_ROOT/vendor/ppocr-sdk/${f#./}" 2>/dev/null || true
+        done
+        rm -rf "$BACKUP_ROOT"
+    }
+    trap 'restore_all' EXIT INT TERM
+
     for PATCH_FILE in "${PATCH_FILES[@]}"; do
         PATCH_NAME=$(basename "$PATCH_FILE")
 
@@ -67,7 +80,7 @@ if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
             REL_PATHS+=("${path#vendor/ppocr-sdk/}")
         done < <(cd "$PROJECT_ROOT" && git apply --numstat "$PATCH_FILE" | awk '{print $3}')
 
-        BACKUP_DIR=$(mktemp -d)
+        BACKUP_DIR="$BACKUP_ROOT"
         FETCH_OK=true
         for rel in "${REL_PATHS[@]}"; do
             mkdir -p "$BACKUP_DIR/$(dirname "$rel")"
@@ -93,8 +106,10 @@ if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
         for rel in "${REL_PATHS[@]}"; do
             cp "$BACKUP_DIR/$rel" "$PROJECT_ROOT/vendor/ppocr-sdk/$rel"
         done
-        rm -rf "$BACKUP_DIR"
     done
+
+    restore_all
+    trap - EXIT INT TERM
 
     echo -e "\nThis is a ${YELLOW}vendored + patched${NC} module. To update:"
     echo "  1. cd vendor/paddleocr-upstream && git fetch --depth 1 origin $LATEST_SHA && git checkout $LATEST_SHA && cd -"

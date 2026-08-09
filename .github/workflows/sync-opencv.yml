@@ -14,12 +14,19 @@ name: Sync OpenCV Fork
 
 on:
   schedule:
-    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC
+    - cron: '0 6 * * 4' # weekly, Thursday 06:00 UTC
   workflow_dispatch: {}
 
 permissions:
   contents: write
   pull-requests: write
+
+# A native build that hangs must not be lapped by the next run — both would push the same
+# branch. Queued rather than cancelled: these push branches and open PRs, so killing one
+# mid-flight leaves more mess than letting it finish.
+concurrency:
+  group: sync-opencv
+  cancel-in-progress: false
 
 jobs:
   check-and-open-pr:
@@ -59,8 +66,26 @@ jobs:
             echo "has_update=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Bump submodule to latest tag
+      # A PR for this exact target in ANY state means it has already been proposed. Open: nothing
+      # new to say until someone reviews it. Closed unmerged: that was a decision to decline this
+      # upstream version, and re-opening it every week would make declining impossible.
+      - name: Check whether this target was already proposed
         if: steps.versions.outputs.has_update == 'true'
+        id: dedup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="chore/sync-opencv-${{ steps.versions.outputs.latest_tag }}"
+          EXISTING=$(gh pr list --head "$BRANCH" --state all --json number,state -q '.[0] | "\(.number) \(.state)"' || true)
+          if [ -n "$EXISTING" ]; then
+            echo "PR $EXISTING already exists for $BRANCH — nothing to do"
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump submodule to latest tag
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: bump
         run: |
           LATEST_TAG="${{ steps.versions.outputs.latest_tag }}"
@@ -81,32 +106,32 @@ jobs:
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Set up Android SDK
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         uses: android-actions/setup-android@v3
         with:
           accept-android-licenses: true
 
       - name: Install NDK and CMake
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
 
       - name: Symlink SDK for the OpenCV build script (hardcodes the macOS SDK path)
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           mkdir -p ~/Library/Android/sdk
           ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
 
       - name: Grant execute permission for gradlew
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: chmod +x gradlew
 
       # Compiles vendor/ppocr-sdk (which triggers autoCompileOpenCv as a preBuild dependency, building
@@ -114,7 +139,7 @@ jobs:
       # apply here — OpenCV is used unmodified — so this is the only correctness gate before opening
       # the PR. Expect this step to take a few minutes (a real OpenCV native build).
       - name: Compile
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: build
         run: |
           if ./gradlew :vendor:ppocr-sdk:compileDebugKotlin :vox-vision:compileDebugKotlin \
@@ -126,7 +151,7 @@ jobs:
           fi
 
       - name: Commit submodule bump
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: commit
         run: |
           git config user.name "github-actions[bot]"
@@ -146,7 +171,7 @@ jobs:
           echo "committed=true" >> "$GITHUB_OUTPUT"
 
       - name: Prepare PR body
-        if: steps.versions.outputs.has_update == 'true' && steps.commit.outputs.committed == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true' && steps.commit.outputs.committed == 'true'
         run: |
           BUILD_STATUS="${{ steps.build.outputs.status }}"
           CURRENT_SHORT="${{ steps.versions.outputs.current_sha }}"
@@ -168,7 +193,7 @@ jobs:
           } > /tmp/pr-body.md
 
       - name: Open PR
-        if: steps.versions.outputs.has_update == 'true' && steps.commit.outputs.committed == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true' && steps.commit.outputs.committed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

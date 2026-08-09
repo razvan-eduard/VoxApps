@@ -18,12 +18,19 @@ name: Sync OpenWakeword Fork
 
 on:
   schedule:
-    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC
+    - cron: '0 6 * * 3' # weekly, Wednesday 06:00 UTC
   workflow_dispatch: {}
 
 permissions:
   contents: write
   pull-requests: write
+
+# A native build that hangs must not be lapped by the next run — both would push the same
+# branch. Queued rather than cancelled: these push branches and open PRs, so killing one
+# mid-flight leaves more mess than letting it finish.
+concurrency:
+  group: sync-openwakeword
+  cancel-in-progress: false
 
 jobs:
   check-and-open-pr:
@@ -56,8 +63,26 @@ jobs:
             echo "has_update=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Bump submodule + re-vendor sources
+      # A PR for this exact target in ANY state means it has already been proposed. Open: nothing
+      # new to say until someone reviews it. Closed unmerged: that was a decision to decline this
+      # upstream version, and re-opening it every week would make declining impossible.
+      - name: Check whether this target was already proposed
         if: steps.versions.outputs.has_update == 'true'
+        id: dedup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="chore/sync-openwakeword-${{ steps.versions.outputs.latest_tag }}"
+          EXISTING=$(gh pr list --head "$BRANCH" --state all --json number,state -q '.[0] | "\(.number) \(.state)"' || true)
+          if [ -n "$EXISTING" ]; then
+            echo "PR $EXISTING already exists for $BRANCH — nothing to do"
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump submodule + re-vendor sources
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: bump
         run: |
           LATEST_TAG="${{ steps.versions.outputs.latest_tag }}"
@@ -80,7 +105,7 @@ jobs:
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Apply local patches
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: apply
         run: |
           rm -f /tmp/apply-reject-*.txt
@@ -100,20 +125,20 @@ jobs:
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Set up Android SDK
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         uses: android-actions/setup-android@v3
         with:
           accept-android-licenses: true
 
       - name: Grant execute permission for gradlew
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: chmod +x gradlew
 
       # Only run the build when the patch applied cleanly — a conflict already means "needs manual
@@ -122,13 +147,13 @@ jobs:
       # version-check tasks wired into preBuild — this workflow only needs to prove the OpenWakeWord
       # module and its consumer still compile and pass unit tests.
       - name: Compile + test (only if the patch applied cleanly)
-        if: steps.versions.outputs.has_update == 'true' && steps.apply.outputs.status == 'clean'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true' && steps.apply.outputs.status == 'clean'
         id: build
         run: |
           if ./gradlew :core:wakeword:compileDebugKotlin \
                        :vox-commander:compileDebugKotlin \
                        :vox-commander:testDebugUnitTest \
-                       -x autoCompileWhisper -x autoCheckVosk -x autoCheckOpenWakeWord \
+                       -PvoxSkipNativePrep \
                        --no-daemon > /tmp/build.log 2>&1; then
             echo "status=pass" >> "$GITHUB_OUTPUT"
           else
@@ -137,7 +162,7 @@ jobs:
           fi
 
       - name: Commit re-vendor + submodule bump
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -146,7 +171,7 @@ jobs:
           git push origin "${{ steps.bump.outputs.branch }}"
 
       - name: Prepare PR body
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           APPLY_STATUS="${{ steps.apply.outputs.status }}"
           BUILD_STATUS="${{ steps.build.outputs.status }}"
@@ -174,7 +199,7 @@ jobs:
           } > /tmp/pr-body.md
 
       - name: Open PR
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

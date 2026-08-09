@@ -155,30 +155,15 @@ jobs:
       - name: Strip DLC libs and sign APK
         if: steps.check_bump.outputs.changed != 'false'
         run: |
-          # AGP's packaging.jniLibs.excludes is unreliable on arm64-v8a for this dependency set
-          # (see build.gradle.kts's release packaging comment / docs/BUILD_TIME_DEPENDENCIES.md), so
-          # instead of asking AGP to exclude these at merge time, the APK is built fully bundled and
-          # these libs are stripped directly from the built zip — a plain, deterministic file
-          # operation that isn't subject to that bug.
-          MERGED_LIBS_DIR="vox-commander/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib/arm64-v8a"
-
-          # sherpa-onnx ships two alternate native entry points; only sherpa-onnx-jni.so is
-          # actually used (confirmed via readelf: its only external NEEDED lib is libonnxruntime.so,
-          # and the Java bindings' compiled classes reference "sherpa-onnx-jni" via loadLibrary — not
-          # "-c-api" or "-cxx-api"). Those two are dead weight — stripped, never uploaded/downloaded.
-          zip -d vox-commander/build/outputs/apk/release/vox-commander-release-unsigned.apk \
-            "lib/arm64-v8a/libsherpa-onnx-c-api.so" \
-            "lib/arm64-v8a/libsherpa-onnx-cxx-api.so"
-
-          bash scripts/strip_dlc_libs.sh \
+          # The stripping itself lives in scripts/package_commander_release.sh, which Gradle's
+          # :vox-commander:packageReleaseApk also calls. One definition, so the APK built here and
+          # the one a developer can build locally cannot drift — they differ in behaviour, not just
+          # size, since the stripped one downloads its native libs at first launch.
+          bash scripts/package_commander_release.sh \
             vox-commander/build/outputs/apk/release/vox-commander-release-unsigned.apk \
             VoxCommander-${{ steps.version.outputs.tag }}.apk \
             "$RUNNER_TEMP/release.jks" \
-            "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
-            vox-apps \
-            dlc-libs \
-            "$MERGED_LIBS_DIR" \
-            libonnxruntime.so liblitertlm_jni.so libvosk.so libsherpa-onnx-jni.so
+            "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}"
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
 
