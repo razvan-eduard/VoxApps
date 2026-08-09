@@ -520,10 +520,10 @@
   "import_source_body": "Acest motor acceptă folderul unui model dezarhivat sau arhiva în care a fost publicat.",
   "import_source_folder": "Folder",
   "import_source_archive": "Arhivă",
-  "model_imported_suffix": "%1$s — importat",
   "import_delete_source": "Ștergi arhiva?",
   "import_keep_source": "Păstreaz-o",
   "import_source_delete_failed": "Arhiva nu a putut fi ștearsă.",
   "import_language_prompt": "Pentru ce limbă este acest model?",
-  "connection_no_network": "Fără conexiune"
+  "connection_no_network": "Fără conexiune",
+  "model_imported_name": "Model importat"
 }

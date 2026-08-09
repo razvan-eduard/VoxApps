@@ -192,7 +192,9 @@ fun VoiceEnginesSubTab(
     }
 
     // 4. Engine Specific Sections
-    // A directory-packaged engine keeps one import per language; a single-file engine keeps one.
+    // Two different questions that used to be one. Which language slot an import belongs to is
+    // about the engine's models; which picker to open is about how its model is packaged.
+    val isPerLanguage = RemoteModelRegistry.isPerLanguage(engineKey)
     val isDirectoryBased = RemoteModelRegistry.isArchiveEngine(engineKey) ||
         RemoteModelRegistry.getExtension(engineKey).isBlank()
 
@@ -211,7 +213,7 @@ fun VoiceEnginesSubTab(
         val imported = EngineSpecs.importedRow(
             settingsRepo,
             engineKey,
-            modelFilterLang.takeIf { isDirectoryBased }
+            modelFilterLang.takeIf { isPerLanguage }
         )
         listOfNotNull(imported) + declared
     }
@@ -228,7 +230,7 @@ fun VoiceEnginesSubTab(
         // imported, selected like any other model and deleted by the same trash icon. The card said
         // the same thing in a second place and was the only way to remove one.
         OutlinedButton(
-            onClick = { onImportCustomModel(if (isDirectoryBased) modelFilterLang else null) },
+            onClick = { onImportCustomModel(if (isPerLanguage) modelFilterLang else null) },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(languageManager.getString("import_custom_model"))
@@ -258,11 +260,19 @@ fun VoiceEnginesSubTab(
                 filteredModels.find { it.id == uiState.activeVoiceModelId }
             },
             itemLabel = { model ->
-                val name = "${model.label} (${model.sizeDescription})"
-                // Marked, because where it came from decides what happens when it is deleted:
-                // a downloaded model can be fetched again, this one cannot.
-                if (model is ImportedModel) String.format(languageManager.getString("model_imported_suffix"), name)
-                else name
+                // An import is named for what it is and which language slot it fills — the two
+                // facts that decide how it behaves. Its file name is one we invented when we copied
+                // it in ("wake_vosk_custom_de"), and the name the user picked is not kept anywhere.
+                // Marked, too: a downloaded model can be fetched again, this one cannot.
+                if (model is ImportedModel) {
+                    // No "— imported" suffix: the name says it once, and saying it twice was
+                    // what the suffix existed to do back when the name was a directory path.
+                    val name = languageManager.getString("model_imported_name") +
+                        (model.langCode?.let { " (${it.uppercase()})" } ?: "")
+                    "$name (${model.sizeDescription})"
+                } else {
+                    "${model.label} (${model.sizeDescription})"
+                }
             },
             modelIdProvider = { it.id },
             onItemSelected = { model, isDownloaded ->

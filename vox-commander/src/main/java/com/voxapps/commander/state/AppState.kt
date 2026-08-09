@@ -130,7 +130,7 @@ data class AppState(
             val customVoiceModelPath = settings.getCustomModelPath(
                 voiceEngineKey,
                 modelFilterLang.takeIf {
-                    com.voxapps.commander.data.remote.RemoteModelRegistry.isArchiveEngine(voiceEngineKey)
+                    com.voxapps.commander.data.remote.RemoteModelRegistry.isPerLanguage(voiceEngineKey)
                 }
             )
 

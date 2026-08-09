@@ -520,10 +520,10 @@
   "import_source_body": "Ce moteur accepte le dossier d’un modèle décompressé ou l’archive dans laquelle il a été publié.",
   "import_source_folder": "Dossier",
   "import_source_archive": "Archive",
-  "model_imported_suffix": "%1$s — importé",
   "import_delete_source": "Supprimer l’archive ?",
   "import_keep_source": "La garder",
   "import_source_delete_failed": "L’archive n’a pas pu être supprimée.",
   "import_language_prompt": "Pour quelle langue est ce modèle ?",
-  "connection_no_network": "Pas de connexion"
+  "connection_no_network": "Pas de connexion",
+  "model_imported_name": "Modèle importé"
 }

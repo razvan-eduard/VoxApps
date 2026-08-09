@@ -520,10 +520,10 @@
   "import_source_body": "Diese Engine nimmt den Ordner eines entpackten Modells oder das Archiv, in dem es veröffentlicht wurde.",
   "import_source_folder": "Ordner",
   "import_source_archive": "Archiv",
-  "model_imported_suffix": "%1$s — importiert",
   "import_delete_source": "Archiv löschen?",
   "import_keep_source": "Behalten",
   "import_source_delete_failed": "Das Archiv konnte nicht gelöscht werden.",
   "import_language_prompt": "Für welche Sprache ist dieses Modell?",
-  "connection_no_network": "Keine Verbindung"
+  "connection_no_network": "Keine Verbindung",
+  "model_imported_name": "Importiertes Modell"
 }

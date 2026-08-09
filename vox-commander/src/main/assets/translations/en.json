@@ -520,10 +520,10 @@
   "import_source_body": "This engine can take the folder of an extracted model, or the archive it was published in.",
   "import_source_folder": "Folder",
   "import_source_archive": "Archive",
-  "model_imported_suffix": "%1$s — imported",
   "import_delete_source": "Delete the archive?",
   "import_keep_source": "Keep it",
   "import_source_delete_failed": "The archive could not be deleted.",
   "import_language_prompt": "Which language is this model for?",
-  "connection_no_network": "No connection"
+  "connection_no_network": "No connection",
+  "model_imported_name": "Imported model"
 }

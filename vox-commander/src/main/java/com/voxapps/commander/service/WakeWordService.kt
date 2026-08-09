@@ -296,7 +296,7 @@ class WakeWordService : Service() {
         // asked through the same helper the speech and speech-synthesis paths use. This service was
         // the one domain that never asked at all, so an import here was stored, displayed as
         // configured, and then never loaded.
-        val customLang = if (RemoteModelRegistry.isArchiveEngine(engineType)) language else null
+        val customLang = if (RemoteModelRegistry.isPerLanguage(engineType)) language else null
         if (ImportedModelId.isImported(snapshot.activeWakeModelId)) {
             val imported = com.voxapps.commander.domain.engine.EngineSpecs
                 .importedModel(settingsRepo, engineType, customLang)

@@ -158,14 +158,14 @@ class VoxApplication : Application() {
                 val voiceEngine = SttEngines.backingEngineKey(settings.voiceProcessor)
                 adopt(
                     voiceEngine,
-                    settings.modelFilterLang.takeIf { RemoteModelRegistry.isArchiveEngine(voiceEngine) },
+                    settings.modelFilterLang.takeIf { RemoteModelRegistry.isPerLanguage(voiceEngine) },
                     isWakeWord = false
                 )
 
                 val wakeEngine = settings.wakeWordEngineType
                 adopt(
                     wakeEngine,
-                    settings.modelFilterLang.takeIf { RemoteModelRegistry.isArchiveEngine(wakeEngine) },
+                    settings.modelFilterLang.takeIf { RemoteModelRegistry.isPerLanguage(wakeEngine) },
                     isWakeWord = true
                 )
 

@@ -604,7 +604,7 @@ fun ServiceSettingsTab(
             val imported = com.voxapps.commander.domain.engine.EngineSpecs.importedRow(
                 settingsRepo,
                 currentEngineKey,
-                uiState.modelFilterLang.takeIf { RemoteModelRegistry.isArchiveEngine(currentEngineKey) }
+                uiState.modelFilterLang.takeIf { RemoteModelRegistry.isPerLanguage(currentEngineKey) }
             )
             listOfNotNull(imported) + declared
         }
@@ -626,10 +626,15 @@ fun ServiceSettingsTab(
                 items = displayModels,
                 selectedItem = selectedModel,
                 itemLabel = { model ->
-                    val name = if (supportsModelDownload) "${model.label} (${model.sizeDescription})" else model.label
-                    if (model is com.voxapps.commander.domain.model.ImportedModel)
-                        String.format(languageManager.getString("model_imported_suffix"), name)
-                    else name
+                    if (model is com.voxapps.commander.domain.model.ImportedModel) {
+                        val name = languageManager.getString("model_imported_name") +
+                            (model.langCode?.let { " (${it.uppercase()})" } ?: "")
+                        "$name (${model.sizeDescription})"
+                    } else if (supportsModelDownload) {
+                        "${model.label} (${model.sizeDescription})"
+                    } else {
+                        model.label
+                    }
                 },
                 modelIdProvider = { it.id },
                 onItemSelected = { model, _ ->

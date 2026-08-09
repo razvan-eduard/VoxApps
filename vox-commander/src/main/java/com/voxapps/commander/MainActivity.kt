@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
             // too — it is how the vendor's .zip is picked. Dropping the language here stored the
             // model under a key nothing looks up, so it vanished from the list it had just joined.
             val langCode = pendingModelLanguage
-                ?.takeIf { com.voxapps.commander.data.remote.RemoteModelRegistry.isArchiveEngine(engineKey) }
+                ?.takeIf { com.voxapps.commander.data.remote.RemoteModelRegistry.isPerLanguage(engineKey) }
             appContainer.modelManagementViewModel.selectCustomModel(it, engineKey, langCode)
         }
     }

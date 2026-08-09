@@ -496,6 +496,21 @@ object RemoteModelRegistry {
         else -> arrayOf("*/*")
     }
 
+    /**
+     * Whether this engine keeps one model *per language*.
+     *
+     * The question a custom import's storage key asks, and the one the model filter asks. It used to
+     * be answered by [isArchiveEngine] — whether the download arrives compressed — which is about
+     * packaging and says nothing about language. The two agree today only because the two archive
+     * engines happen to be the two per-language ones; a per-language engine shipping single files
+     * would have filed every language under one key, so importing a second would overwrite the
+     * first.
+     *
+     * Derived from the models themselves, so a multilingual engine — one model serving every
+     * language — answers no.
+     */
+    fun isPerLanguage(engineKey: String): Boolean = getLanguages(engineKey).isNotEmpty()
+
     fun isArchiveEngine(engineKey: String): Boolean =
         ARCHIVE_EXTENSIONS.any { getExtension(engineKey).equals(it, ignoreCase = true) }
 
