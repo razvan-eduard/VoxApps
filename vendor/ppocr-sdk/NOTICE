@@ -12,7 +12,7 @@ CTC decode). The pristine upstream source is kept as a git submodule at vendor/p
 sparse-checked-out to just deploy/ppocr-android/ppocr-sdk (PaddleOCR itself is a large monorepo we
 otherwise have no use for).
 
-Local patch 1 of 2: load models from raw bytes/files, not just APK assets. Upstream's
+Local patch 1 of 4: load models from raw bytes/files, not just APK assets. Upstream's
 `ORTSessionManager`/`ModelConfig`/`OCREngine`/`PaddleOCR` only ever read model/config files from
 `context.assets`, but Vision's models are downloaded at runtime into app-internal storage (never
 bundled in the APK or committed to git — see vox-vision/src/main/java/com/voxapps/vision/ocr/). Added
@@ -21,18 +21,33 @@ purely-additive overloads (`ORTSessionManager.loadModels(ByteArray, ByteArray)`,
 constructor params, `PaddleOCR.create(..., detModelFile: File, recModelFile: File, recConfigFile:
 File)`) — every original asset-path-based method/constructor is untouched and still works.
 
-Local patch 2 of 2: the OpenCV 5 geometry API. Upstream targets OpenCV 4.x, where `minAreaRect` and
+Local patch 2 of 4: the OpenCV 5 geometry API. Upstream targets OpenCV 4.x, where `minAreaRect` and
 `getPerspectiveTransform` live on `Imgproc`; we build OpenCV 5.0, which moved both into
 `org.opencv.geometry.Geometry`. `DBPostProcessor` and `QuadTextCrop` are rewritten to call them
 there. The failure this prevents is deceptive: with `Imgproc.minAreaRect` unresolved, the
 `RotatedRect` it returns has no type either, so `.size` and `.points` fail too and one missing symbol
 reads as a dozen unrelated errors in files nobody touched.
 
-Both patches are maintained as real, storable diffs under patches/ (regenerate with
+Local patch 3 of 4: resize without `Imgproc.resize`. That routine has a confirmed native SIGSEGV in
+the vendored libopencv_imgproc.so build (SEGV_ACCERR at a tagged-pointer address — Scudo catching an
+out-of-bounds native read), reproduced on-device across call sites and unaffected by
+`Core.setUseOptimized(false)`. `ImageUtils` does the same spatial resize by hand over the Mat's raw
+bytes instead, so it never enters that kernel.
+
+Local patch 4 of 4: `System.loadLibrary("opencv_java5")`, not `opencv_java4`. The .so name encodes
+OpenCV's major version, and we build 5.0 (see scripts/build_opencv_android.sh).
+
+Patches 3 and 4 are why the verification below exists: neither would fail to compile if a re-vendor
+dropped it. They would ship as an intermittent native crash and a failure to initialise OpenCV.
+
+All four are maintained as real, storable diffs under patches/ (regenerate with
 scripts/regen_ppocr_sdk_patch.sh whenever a patch changes). Which files belong to which patch is read
 out of the patch itself, so adding one to that folder is the whole of adding a patch — nothing else
 lists them. scripts/check_ppocr_sdk_version.sh checks whether upstream has moved past the pinned
-commit and whether each stored patch would still apply cleanly against the newer tree.
+commit and whether each stored patch would still apply cleanly against the newer tree, and
+scripts/verify_ppocr_sdk_patches.sh asserts that src/main is exactly upstream plus these patches —
+run in CI by .github/workflows/verify-vendor-patches.yml whenever the vendored tree or a patch
+changes.
 
 Used by vox-vision for on-device OCR (PP-OCRv5 mobile detection + recognition models). Model files
 themselves are NOT vendored here — they are downloaded at runtime from a GitHub Release on this repo

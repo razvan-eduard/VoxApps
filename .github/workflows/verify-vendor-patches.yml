@@ -1,0 +1,45 @@
+name: Verify vendored patches
+
+# A vendored fork is upstream plus a set of patches, and that has to stay literally true. When it
+# does not, nothing complains: the edit is committed, it builds, it works — and the next sync copies
+# upstream over it and it is gone. Three adaptations in vendor/ppocr-sdk were in that state, and two
+# of them would still have compiled afterwards, so the loss would have surfaced as an intermittent
+# native crash and a failure to initialise OpenCV rather than as a build error.
+#
+# Its own workflow rather than a step in CI: it needs the paddleocr-upstream submodule, which the
+# main verification job has no other use for, and it only has anything to say when the vendored tree
+# or its patches change.
+on:
+  push:
+    paths:
+      - 'vendor/ppocr-sdk/src/**'
+      - 'vendor/ppocr-sdk/patches/**'
+      - 'scripts/verify_ppocr_sdk_patches.sh'
+  pull_request:
+    paths:
+      - 'vendor/ppocr-sdk/src/**'
+      - 'vendor/ppocr-sdk/patches/**'
+      - 'scripts/verify_ppocr_sdk_patches.sh'
+  workflow_dispatch: {}
+
+concurrency:
+  group: verify-vendor-patches-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ppocr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Sparse and shallow: PaddleOCR is a large monorepo and the only part that matters here is the
+      # subtree the fork was taken from.
+      - name: Fetch the pristine upstream subtree
+        run: |
+          git submodule update --init --depth 1 vendor/paddleocr-upstream
+          git -C vendor/paddleocr-upstream sparse-checkout set deploy/ppocr-android/ppocr-sdk
+
+      - name: vendor/ppocr-sdk is upstream + patches
+        run: ./scripts/verify_ppocr_sdk_patches.sh
