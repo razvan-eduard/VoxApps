@@ -107,18 +107,28 @@ jobs:
 
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      - name: Apply the byte-loading patch
+      # Every patch in the folder, in name order — the folder is the list. Naming one patch here
+      # meant 0002 would have had to be remembered twice, and the way that failure shows up is a
+      # re-vendor that silently drops an adaptation and reports thirteen compile errors with no
+      # mention of the patch that was never applied.
+      - name: Re-apply our patches
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: apply
         run: |
-          if git apply --check vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch 2>/tmp/apply-reject.txt; then
-            git apply vendor/ppocr-sdk/patches/0001-load-models-from-bytes.patch
-            echo "status=clean" >> "$GITHUB_OUTPUT"
-          else
-            echo "status=conflict" >> "$GITHUB_OUTPUT"
-            echo "Patch did not apply — see reject details below:"
-            cat /tmp/apply-reject.txt
-          fi
+          echo "status=clean" >> "$GITHUB_OUTPUT"
+          for patch in vendor/ppocr-sdk/patches/*.patch; do
+            echo "--- $patch"
+            if git apply --check "$patch" 2>/tmp/apply-reject.txt; then
+              git apply "$patch"
+              echo "    applied"
+            else
+              # One failure decides the whole step: a partially patched tree is not something to
+              # hand to a build and describe as clean.
+              echo "status=conflict" >> "$GITHUB_OUTPUT"
+              echo "    did not apply — reject details:"
+              cat /tmp/apply-reject.txt
+            fi
+          done
 
       - name: Set up JDK 17
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
