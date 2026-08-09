@@ -6,6 +6,10 @@ set -e
 # change one of these local patches (not for upstream syncs — that's what sync-openwakeword.yml /
 # check_openwakeword_version.sh handle). Each patched file gets its own numbered patch so a future
 # upstream change conflicting with only one of them doesn't block the other from re-applying cleanly.
+#
+# Which file a patch covers is read out of the patch itself. A hardcoded pairs list here was one more
+# thing to remember when adding a patch, and forgetting it is silent: the fork keeps working locally
+# and the adaptation disappears at the next re-vendor.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -19,64 +23,100 @@ log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# patch_file:rel_path pairs. rel_path is core/wakeword's copy; the pristine counterpart is the same
-# path under vendor/openwakeword-android-kt/wakeword/ with the "core/wakeword/" prefix swapped out.
-PATCHES=(
-    "core/wakeword/patches/0001-rms-silence-gate.patch:core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt"
-    "core/wakeword/patches/0002-wakeword-engine-params.patch:core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/WakeWordEngine.kt"
-)
+shopt -s nullglob
+PATCH_FILES=(core/wakeword/patches/*.patch)
+shopt -u nullglob
+
+if [ ${#PATCH_FILES[@]} -eq 0 ]; then
+    log_error "❌ No patches found under core/wakeword/patches/."
+    exit 1
+fi
 
 FAILED=0
 
-for ENTRY in "${PATCHES[@]}"; do
-    PATCH_FILE="${ENTRY%%:*}"
-    REL_PATH="${ENTRY##*:}"
-    PRISTINE="vendor/openwakeword-android-kt/wakeword/${REL_PATH#core/wakeword/}"
+for PATCH_FILE in "${PATCH_FILES[@]}"; do
+    # The patch is the list. Read it before the file is truncated below.
+    REL_PATHS=()
+    while read -r path; do
+        REL_PATHS+=("$path")
+    done < <(git apply --numstat "$PATCH_FILE" | awk '{print $3}')
 
-    if [ ! -f "$PRISTINE" ]; then
-        log_error "❌ Submodule not initialized: $PRISTINE not found."
-        log_error "   Run: git submodule update --init vendor/openwakeword-android-kt"
+    if [ ${#REL_PATHS[@]} -eq 0 ]; then
+        log_error "❌ Could not read any file paths out of $PATCH_FILE."
+        FAILED=1
+        continue
+    fi
+
+    # The pristine counterpart is the same path under vendor/openwakeword-android-kt/wakeword/ with
+    # the "core/wakeword/" prefix swapped out.
+    MISSING=false
+    for REL_PATH in "${REL_PATHS[@]}"; do
+        PRISTINE="vendor/openwakeword-android-kt/wakeword/${REL_PATH#core/wakeword/}"
+        if [ ! -f "$PRISTINE" ]; then
+            log_error "❌ Submodule not initialized: $PRISTINE not found."
+            log_error "   Run: git submodule update --init vendor/openwakeword-android-kt"
+            MISSING=true
+        fi
+    done
+    if [ "$MISSING" = true ]; then
         exit 1
     fi
 
-    log_blue "🔧 Regenerating $PATCH_FILE from pristine ($PRISTINE) vs. patched ($REL_PATH)..."
+    log_blue "🔧 Regenerating $PATCH_FILE from pristine vs. patched..."
 
     mkdir -p "$(dirname "$PATCH_FILE")"
-    diff -u --label "a/$REL_PATH" --label "b/$REL_PATH" "$PRISTINE" "$REL_PATH" > "$PATCH_FILE" || true
+    : > "$PATCH_FILE"
+    for REL_PATH in "${REL_PATHS[@]}"; do
+        PRISTINE="vendor/openwakeword-android-kt/wakeword/${REL_PATH#core/wakeword/}"
+        diff -u --label "a/$REL_PATH" --label "b/$REL_PATH" "$PRISTINE" "$REL_PATH" >> "$PATCH_FILE" || true
+    done
 
     if [ ! -s "$PATCH_FILE" ]; then
         log_error "⚠️ Generated patch is empty — core/wakeword's copy is identical to the pristine submodule."
-        log_error "   Did you forget to apply your change to $REL_PATH first?"
+        log_error "   Did you forget to apply your change first?"
         FAILED=1
         continue
     fi
 
-    # Sanity check: overwrite the working copy with pristine, apply the freshly generated patch, and
-    # confirm it reproduces the original patched file byte-for-byte — then restore either way. Runs
-    # in-repo (git apply needs a git worktree), exactly how sync-openwakeword.yml uses it for real.
-    BACKUP="/tmp/oww_patch_regen_backup_$(basename "$REL_PATH").kt"
-    cp "$REL_PATH" "$BACKUP"
-    cp "$PRISTINE" "$REL_PATH"
+    # Sanity check: overwrite the working copies with pristine, apply the freshly generated patch,
+    # and confirm it reproduces the original patched files byte-for-byte — then restore either way.
+    # Runs in-repo (git apply needs a git worktree), exactly how sync-openwakeword.yml uses it.
+    BACKUP_DIR=$(mktemp -d)
+    for REL_PATH in "${REL_PATHS[@]}"; do
+        PRISTINE="vendor/openwakeword-android-kt/wakeword/${REL_PATH#core/wakeword/}"
+        mkdir -p "$BACKUP_DIR/$(dirname "$REL_PATH")"
+        cp "$REL_PATH" "$BACKUP_DIR/$REL_PATH"
+        cp "$PRISTINE" "$REL_PATH"
+    done
+
+    restore_backup() {
+        for REL_PATH in "${REL_PATHS[@]}"; do
+            cp "$BACKUP_DIR/$REL_PATH" "$REL_PATH"
+        done
+        rm -rf "$BACKUP_DIR"
+    }
 
     if git apply --check "$PATCH_FILE" 2>/dev/null && git apply "$PATCH_FILE"; then
-        if diff -q "$REL_PATH" "$BACKUP" > /dev/null; then
-            log_info "✅ Patch regenerated and verified: re-applying it reproduces the exact patched source."
+        ALL_MATCH=true
+        for REL_PATH in "${REL_PATHS[@]}"; do
+            if ! diff -q "$REL_PATH" "$BACKUP_DIR/$REL_PATH" > /dev/null; then
+                ALL_MATCH=false
+            fi
+        done
+        if [ "$ALL_MATCH" = true ]; then
+            log_info "✅ Verified: re-applying it reproduces the exact patched source."
             log_info "Wrote $PATCH_FILE ($(wc -l < "$PATCH_FILE") lines)."
+            restore_backup
         else
             log_error "❌ Patch applied but result differs from the original patched file. Investigate."
-            cp "$BACKUP" "$REL_PATH"
-            rm -f "$BACKUP"
+            restore_backup
             FAILED=1
-            continue
         fi
     else
         log_error "❌ Sanity check failed — the regenerated patch does not apply to its own source. Investigate."
-        cp "$BACKUP" "$REL_PATH"
-        rm -f "$BACKUP"
+        restore_backup
         FAILED=1
-        continue
     fi
-    rm -f "$BACKUP"
 done
 
 exit $FAILED

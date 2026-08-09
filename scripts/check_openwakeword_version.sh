@@ -59,35 +59,48 @@ if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
     # no working-tree checkout), swap it in temporarily, try that file's patch, then always restore.
     git -C "$SUBMODULE_DIR" fetch --tags --quiet 2>/dev/null
 
-    PATCHES=(
-        "core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt:core/wakeword/patches/0001-rms-silence-gate.patch"
-        "core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/WakeWordEngine.kt:core/wakeword/patches/0002-wakeword-engine-params.patch"
-    )
+    # Which files a patch covers is read out of the patch, so adding one to the folder is the whole
+    # of adding a patch — a hardcoded pairs list here was a second place to remember, and forgetting
+    # it fails silently: the adaptation survives locally and vanishes at the next re-vendor.
+    shopt -s nullglob
+    PATCH_FILES=("$PROJECT_ROOT"/core/wakeword/patches/*.patch)
+    shopt -u nullglob
 
-    for ENTRY in "${PATCHES[@]}"; do
-        REL_PATH="${ENTRY%%:*}"
-        PATCH_FILE="$PROJECT_ROOT/${ENTRY##*:}"
-        UPSTREAM_SUBPATH="wakeword/${REL_PATH#core/wakeword/}"
-        NEW_PRISTINE=$(mktemp)
+    for PATCH_FILE in "${PATCH_FILES[@]}"; do
+        REL_PATHS=()
+        while read -r path; do
+            REL_PATHS+=("$path")
+        done < <(cd "$PROJECT_ROOT" && git apply --numstat "$PATCH_FILE" | awk '{print $3}')
 
-        UPSTREAM_BLOB=$(git -C "$SUBMODULE_DIR" ls-tree "$LATEST_TAG" -- "$UPSTREAM_SUBPATH" 2>/dev/null | awk '{print $3}')
-        if [ -n "$UPSTREAM_BLOB" ] && git -C "$SUBMODULE_DIR" cat-file -p "$UPSTREAM_BLOB" > "$NEW_PRISTINE" 2>/dev/null; then
-            BACKUP="/tmp/oww_check_backup_$(basename "$REL_PATH").kt"
-            cp "$PROJECT_ROOT/$REL_PATH" "$BACKUP"
-            cp "$NEW_PRISTINE" "$PROJECT_ROOT/$REL_PATH"
+        BACKUP_DIR=$(mktemp -d)
+        FETCH_OK=true
+        for REL_PATH in "${REL_PATHS[@]}"; do
+            UPSTREAM_SUBPATH="wakeword/${REL_PATH#core/wakeword/}"
+            mkdir -p "$BACKUP_DIR/$(dirname "$REL_PATH")"
+            cp "$PROJECT_ROOT/$REL_PATH" "$BACKUP_DIR/$REL_PATH"
 
+            UPSTREAM_BLOB=$(git -C "$SUBMODULE_DIR" ls-tree "$LATEST_TAG" -- "$UPSTREAM_SUBPATH" 2>/dev/null | awk '{print $3}')
+            if [ -n "$UPSTREAM_BLOB" ] && git -C "$SUBMODULE_DIR" cat-file -p "$UPSTREAM_BLOB" > "$PROJECT_ROOT/$REL_PATH" 2>/dev/null; then
+                :
+            else
+                FETCH_OK=false
+            fi
+        done
+
+        if [ "$FETCH_OK" = true ]; then
             if (cd "$PROJECT_ROOT" && git apply --check "$PATCH_FILE" 2>/dev/null); then
                 log_info "✅ $(basename "$PATCH_FILE") would still apply cleanly against $LATEST_TAG."
             else
                 log_warn "⚠️ $(basename "$PATCH_FILE") would CONFLICT against $LATEST_TAG — manual merge needed."
             fi
-
-            cp "$BACKUP" "$PROJECT_ROOT/$REL_PATH"
-            rm -f "$BACKUP"
         else
-            log_warn "⚠️ Could not fetch $(basename "$REL_PATH") at $LATEST_TAG to dry-run its patch."
+            log_warn "⚠️ Could not fetch one or more of $(basename "$PATCH_FILE")'s files at $LATEST_TAG to dry-run it."
         fi
-        rm -f "$NEW_PRISTINE"
+
+        for REL_PATH in "${REL_PATHS[@]}"; do
+            cp "$BACKUP_DIR/$REL_PATH" "$PROJECT_ROOT/$REL_PATH"
+        done
+        rm -rf "$BACKUP_DIR"
     done
 
     echo -e "\nThis is a ${YELLOW}vendored + patched${NC} fork. To update:"

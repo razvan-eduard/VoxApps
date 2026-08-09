@@ -14,12 +14,18 @@ core/wakeword/src/main/kotlin. Local patches (see the "VoxCommander patch" marke
   RMS sits above a fixed floor.
 - WakeWordEngine.kt: forwards the RMS gate floor, adaptive-margin, and configurable audio source
   (AEC) constructor parameters through to AudioRecorder, and a comment noting the gate's invariant.
+- audio/AudioProcessor.kt: logs a prediction score only above 0.05, so the log shows near misses
+  rather than a line per inference, and formats it with Locale.US.
 
 The pristine upstream source is kept as a git submodule at vendor/openwakeword-android-kt.
 
-Each patch is maintained as a real, storable diff under core/wakeword/patches/ (0001-rms-silence-
-gate.patch for AudioRecorder.kt, 0002-wakeword-engine-params.patch for WakeWordEngine.kt —
-regenerate both with scripts/regen_openwakeword_patch.sh whenever either patch changes). On an
+Each patch is maintained as a real, storable diff under core/wakeword/patches/ — one per patched
+file, regenerated with scripts/regen_openwakeword_patch.sh whenever a patch changes. Which file a
+patch covers is read out of the patch itself, so adding one to that folder is the whole of adding a
+patch; nothing else lists them. scripts/verify_vendored_patches.sh asserts that src/main is exactly
+upstream plus these patches, and .github/workflows/verify-vendor-patches.yml runs it whenever the
+vendored tree or a patch changes — the 0.05 logging change above had been sitting in the vendored
+copy unrecorded, which means the next re-vendor would have dropped it without failing a build. On an
 upstream release, the scheduled sync-openwakeword.yml workflow re-vendors the sources and
 auto-applies every patch file — opening a PR that's already merged + compiled + tested in the
 common case. It only needs a manual merge if a patch genuinely conflicts (upstream changed the same

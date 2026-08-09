@@ -9,17 +9,23 @@ name: Verify vendored patches
 # Its own workflow rather than a step in CI: it needs the paddleocr-upstream submodule, which the
 # main verification job has no other use for, and it only has anything to say when the vendored tree
 # or its patches change.
+# The two lists are duplicated rather than shared through a YAML anchor: Actions' workflow parser
+# does not support anchors, and it fails on the runner while looking correct to every local linter.
 on:
   push:
     paths:
       - 'vendor/ppocr-sdk/src/**'
       - 'vendor/ppocr-sdk/patches/**'
-      - 'scripts/verify_ppocr_sdk_patches.sh'
+      - 'core/wakeword/src/**'
+      - 'core/wakeword/patches/**'
+      - 'scripts/verify_vendored_patches.sh'
   pull_request:
     paths:
       - 'vendor/ppocr-sdk/src/**'
       - 'vendor/ppocr-sdk/patches/**'
-      - 'scripts/verify_ppocr_sdk_patches.sh'
+      - 'core/wakeword/src/**'
+      - 'core/wakeword/patches/**'
+      - 'scripts/verify_vendored_patches.sh'
   workflow_dispatch: {}
 
 concurrency:
@@ -27,19 +33,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ppocr:
+  vendored:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Sparse and shallow: PaddleOCR is a large monorepo and the only part that matters here is the
-      # subtree the fork was taken from.
-      - name: Fetch the pristine upstream subtree
+      # Sparse and shallow for PaddleOCR: it is a large monorepo and the only part that matters here
+      # is the subtree the fork was taken from. OpenWakeWord is small enough to take whole.
+      - name: Fetch the pristine upstream sources
         run: |
           git submodule update --init --depth 1 vendor/paddleocr-upstream
           git -C vendor/paddleocr-upstream sparse-checkout set deploy/ppocr-android/ppocr-sdk
+          git submodule update --init --depth 1 vendor/openwakeword-android-kt
 
-      - name: vendor/ppocr-sdk is upstream + patches
-        run: ./scripts/verify_ppocr_sdk_patches.sh
+      - name: Each vendored fork is upstream + patches
+        run: ./scripts/verify_vendored_patches.sh
