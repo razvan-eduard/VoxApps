@@ -8,7 +8,17 @@ on:
       - main
     paths:
       - 'vox-expenses/build.gradle.kts'
-  workflow_dispatch: {}
+  # A dispatched run builds but does not publish, unless you tick this. Six accidental dispatches
+  # once published six GitHub Releases, which is why publishing was blocked here at all — but a
+  # blanket block also removes the only way to re-publish a release whose build succeeded and whose
+  # publish step failed. An explicit opt-in keeps the accident impossible and the deliberate case
+  # available.
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a GitHub Release (move the tag, upload the APK). Off = build only.'
+        type: boolean
+        default: false
 
 # One release at a time per app. Two pushes landing close together would both force-move the same
 # tag and both delete the same release before recreating it — whichever finished second would win,
@@ -141,7 +151,7 @@ jobs:
       # happened to be current, walking straight around the guard that exists to prevent exactly
       # that. Building and testing still run: that is what a dispatch is for.
       - name: Point the tag at this commit
-        if: steps.check_bump.outputs.changed != 'false' && github.event_name != 'workflow_dispatch'
+        if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -163,7 +173,7 @@ jobs:
           fi
 
       - name: Delete existing release for a fresh publish date
-        if: steps.check_bump.outputs.changed != 'false' && github.event_name != 'workflow_dispatch'
+        if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -171,7 +181,7 @@ jobs:
           gh release delete "$TAG" --yes || true
 
       - name: Create GitHub Release
-        if: steps.check_bump.outputs.changed != 'false' && github.event_name != 'workflow_dispatch'
+        if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
