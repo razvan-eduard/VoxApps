@@ -51,19 +51,33 @@ VISION_JNI_DIR="$PROJECT_ROOT/vox-vision/src/main/jniLibs"
 ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$(find "$ANDROID_HOME/ndk" -maxdepth 1 -type d -name "[0-9]*" | sort -V | tail -1)}"
 
-if [ ! -e "$OPENCV_DIR/.git" ]; then
-    echo "vendor/opencv submodule not initialized — run: git submodule update --init vendor/opencv"
-    exit 1
-fi
-
 # Stamped with the built commit SHA on success (see bottom of this script) — skipping only on
 # "output exists" (no version check) would silently keep serving a stale build after someone bumps
 # the vendor/opencv submodule pin, since nothing else would force a rebuild.
 BUILT_COMMIT_FILE="$OUTPUT_DIR/.built-commit"
+
+have_output() {
+    ls "$OUTPUT_DIR"/libs/arm64-v8a/libopencv_java*.so >/dev/null 2>&1 \
+        && [ -d "$OUTPUT_DIR/java/org" ] \
+        && ls "$VISION_JNI_DIR"/arm64-v8a/libopencv_java*.so >/dev/null 2>&1
+}
+
+if [ ! -e "$OPENCV_DIR/.git" ]; then
+    # A build restored from a cache rather than made here: the submodule is a few hundred MB that
+    # only a rebuild needs, so a CI job that already has the output should not have to fetch it just
+    # to read a SHA. Freshness cannot be checked without it — whoever restored the output is
+    # responsible for keying the cache on the submodule pin, which is what the CI workflow does.
+    if have_output && [ -f "$BUILT_COMMIT_FILE" ]; then
+        echo "vendor/opencv not initialized, but a build stamped $(cat "$BUILT_COMMIT_FILE") is present — using it."
+        exit 0
+    fi
+    echo "vendor/opencv submodule not initialized — run: git submodule update --init vendor/opencv"
+    exit 1
+fi
+
 CURRENT_COMMIT="$(git -C "$OPENCV_DIR" rev-parse HEAD)"
 
-if ls "$OUTPUT_DIR"/libs/arm64-v8a/libopencv_java*.so >/dev/null 2>&1 && [ -d "$OUTPUT_DIR/java/org" ] \
-    && ls "$VISION_JNI_DIR"/arm64-v8a/libopencv_java*.so >/dev/null 2>&1; then
+if have_output; then
     if [ -f "$BUILT_COMMIT_FILE" ] && [ "$(cat "$BUILT_COMMIT_FILE")" = "$CURRENT_COMMIT" ]; then
         echo "OpenCV already built at $OUTPUT_DIR for commit $CURRENT_COMMIT — skipping."
         exit 0
