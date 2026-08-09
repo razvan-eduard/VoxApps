@@ -50,17 +50,26 @@ for entry in "${APPS[@]}"; do
             # a shared core/* touch still shows up here whenever it happens to land in the
             # same commit as a change to this app's own files (build.gradle.kts, manifest,
             # source), but a pure core-only commit no longer leaks into every app's changelog
-            # just because every app depends on that module. Also keep only user-facing commit
-            # types (feat/fix/perf); docs/chore/ci/deps/test/refactor/style commits are noise
-            # nobody released an app for.
+            # just because every app depends on that module.
+            #
+            # Kept: feat, fix, perf and refactor. Refactor was excluded as noise, on the reasoning
+            # that nobody releases an app for one — but in this repo a refactor is routinely what
+            # changes the app: a settings screen rebuilt on a shared component, a model list that
+            # starts listing something it never showed. A release made only of those reported
+            # "Maintenance update and performance improvements", which tells the user nothing and
+            # is not even true.
+            #
+            # Still dropped: docs, chore, ci, deps, test, style, build — changes to the project
+            # rather than to the thing installed on someone's phone.
+            KEEP_TYPES='^- (feat|fix|perf|refactor)(\(|!?:)'
             if [ -n "$PREV_TAG" ]; then
                 echo "  Generating changelog from $PREV_TAG to $LATEST_TAG..."
                 CHANGELOG=$(git log "$PREV_TAG..$LATEST_TAG" --pretty=format:"- %s" --no-merges -- "$DIR" \
-                    | grep -iE '^- (feat|fix|perf)(\(|!?:)' || true)
+                    | grep -iE "$KEEP_TYPES" || true)
             else
                 echo "  No previous tag found. Using last 1 commit for $LATEST_TAG..."
                 CHANGELOG=$(git log "$LATEST_TAG" -1 --pretty=format:"- %s" --no-merges -- "$DIR" \
-                    | grep -iE '^- (feat|fix|perf)(\(|!?:)' || true)
+                    | grep -iE "$KEEP_TYPES" || true)
             fi
 
             if [ -z "$CHANGELOG" ]; then

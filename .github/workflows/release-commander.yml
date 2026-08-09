@@ -10,6 +10,14 @@ on:
       - 'vox-commander/build.gradle.kts'
   workflow_dispatch: {}
 
+# One release at a time per app. Two pushes landing close together would both force-move the same
+# tag and both delete the same release before recreating it — whichever finished second would win,
+# and which one that was would depend on runner scheduling. Queued rather than cancelled: a publish
+# interrupted half way leaves a tag pointing at a release that no longer exists.
+concurrency:
+  group: release-commander
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest

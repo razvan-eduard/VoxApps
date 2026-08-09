@@ -1,0 +1,59 @@
+name: CI
+
+# Every push to main, and every pull request against it.
+#
+# The release workflows only wake when an app's own build.gradle.kts changes — a version bump — so
+# until this existed, a commit that touched shared code and no app's build file was never compiled
+# or tested by anything. Most commits are exactly that shape: work in core/ that every app links.
+# The gap was invisible because it fails late, at the next release, and blames whoever released.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# A second push while the first is still running makes the first irrelevant: only the tip needs to
+# be green. Releases deliberately do not do this — cancelling a publish half way is a different kind
+# of mess — but a verification run is safe to abandon.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Every module's tests, not one app's. The shared modules — design, services, ipc, backup,
+      # calendar, voxconnect — carry the checks that tie code to the shipped schemas, and the only
+      # workflow that ran them was the dependabot one. Human changes went untested; a bot's did not.
+      - name: Unit tests, all modules
+        run: ./gradlew test --no-daemon
+
+      # Compiling every app is what catches a shared-module change that only breaks one of them.
+      # Debug rather than release: no signing secrets are needed to prove the code builds, and the
+      # release job still does the real thing before publishing.
+      - name: Assemble every app
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/build/reports/tests/**'
+          retention-days: 7
+          if-no-files-found: ignore
