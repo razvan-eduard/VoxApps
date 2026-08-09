@@ -38,6 +38,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
@@ -243,7 +247,25 @@ fun SettingsScreen(
                         ringtonePickerLauncher.launch(intent)
                     },
                     onPreview = triggerPreview,
-                    getString = { languageManager.getString(it) }
+                    getString = { languageManager.getString(it) },
+                    // The confirmation a voice-saved note shows. It went missing when this screen
+                    // moved to the shared card, which had nowhere to put a setting only Notes has.
+                    extra = {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(languageManager.getString("voice_save_toast"), style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    languageManager.getString("voice_save_toast_desc"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = settings.voiceSaveToastEnabled,
+                                onCheckedChange = { stateManager.setVoiceSaveToastEnabled(it) }
+                            )
+                        }
+                    }
                 )
             }
             SettingsPage.CATEGORIES -> CategoriesSettingsTab(

@@ -37,7 +37,13 @@ fun NotificationSettingsCard(
     onPickSound: () -> Unit,
     onPreview: (Boolean, Int?, String?, Boolean?) -> Unit,
     getString: (String) -> String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * Rows an app adds to its own notification settings — Notes' "toast when a voice note is
+     * saved", for instance. Inside the card rather than loose beneath it: they are notification
+     * settings, and a row outside the card reads as belonging to some other section.
+     */
+    extra: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     val soundName = remember(soundUri) {
@@ -182,6 +188,8 @@ fun NotificationSettingsCard(
                     }
                 }
             }
+
+            extra()
         }
     }
 }
