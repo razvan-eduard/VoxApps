@@ -6,7 +6,7 @@ name: Sync NewPipeExtractor Version
 # is why scripts/check_newpipe_extractor_version.sh exists as a manual, local-only check. This
 # workflow runs the same check on a schedule and, if newer, bumps gradle/libs.versions.toml.
 #
-# Auto-merges on green (assembleDebug + testDebugUnitTest), same as dependabot-automerge.yml and
+# Auto-merges on green (assembleDebug + testDebugUnitTest), same as sync-vosk.yml and
 # sync-vosk.yml — this one's risk profile is just as low: no patch, no in-repo compile. Accepted
 # residual risk: a green build can't confirm YouTube search/extraction still actually works against
 # YouTube's current page structure (NewPipeExtractor is inherently fragile to upstream YouTube

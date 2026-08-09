@@ -119,6 +119,54 @@ That single `implementation(project(":core:ipc"))` line is doing more than it lo
 the Kotlin DTO classes **and**, via Android's manifest merger, six `signature`-level `<permission>`
 + matching `<uses-permission>` declarations. You do not write any `<permission>` XML yourself.
 
+### 2.1b Shared modules a satellite usually wants
+
+`:core:ipc` is the only one this guide strictly requires. In practice a satellite takes several more,
+and taking them is cheaper than re-solving what they cover:
+
+| Module | What you get |
+|---|---|
+| `:core:design` | `VoxTheme` (dark × colored/Material You), the picklist family (`Picklist`, `GroupedPicklist`, `ServicePicklist`), `VoxColorPicker`, `PaperTapField`, shared settings sections |
+| `:core:preferences` | The settings plumbing every app repeats |
+| `:core:backup` | Export/import, the biometric gate, snapshot-replace import, attachment zips |
+| `:core:services` | `ServiceEntry`/`ProbeSpec` for anything with an API key or endpoint, and `SchemaRepo`/`RemoteSchema` if your app ships schemas |
+| `:core:datahygiene` | Normalisation, duplicate rules, merge-quality scoring (§6.6, §6.7) |
+| `:core:attachments`, `:core:location`, `:core:widget`, `:core:onboarding` | As needed |
+
+If your app offers a choice between services that may need an API key or a reachability test, use
+`ServicePicklist` rather than assembling a dropdown, a key field and a test button yourself — it
+draws each part only when the selected entry declares it. See
+[`TECHNICAL_DOCUMENTATION.md` §12](TECHNICAL_DOCUMENTATION.md#12-ui-architecture).
+
+### 2.1c Wiring into the build and release machinery
+
+Adding the module is not the same as being built and released. In order:
+
+1. **CI needs nothing.** `.github/workflows/ci.yml` runs `./gradlew test` and `assembleDebug` across
+   the whole project, so a newly included module is verified on the next push. Dependabot likewise
+   covers it, since it reads the version catalogue.
+2. **Release workflow** — copy any `release-<app>.yml` and change the app prefix, the module path and
+   the `paths:` filter (`vox-yourapp/build.gradle.kts`). Three places must agree on the prefix: the
+   workflow's `on.push.tags` pattern, the `app-prefix` input to `.github/actions/compute-release-tag`,
+   and — if your app downloads DLC native libs — its `NativeLibManager.getReleaseTag()`.
+3. **Add it to the two follower workflows' trigger lists**, by workflow *name*:
+   `deploy-fdroid.yml` and `update-readme-releases.yml` each enumerate the six release workflows
+   under `workflow_run.workflows`. A new app that is not in those lists releases fine and is simply
+   never mirrored to F-Droid nor added to the README table — a silent omission, so do it at the same
+   time.
+4. **Fastlane metadata** — `vox-yourapp/fastlane/metadata/android/en-US/` with
+   `short_description.txt`, `full_description.txt` and `images/phoneScreenshots/`. F-Droid metadata is
+   generated from these by `scripts/sync_fdroid_metadata.sh`.
+5. **Schemas, if any** — create `remote-schemas/yourapp/`, add a `copyShippedSchemas` task copying
+   `<yours>/*.json` + `shared/*.json` into `src/main/assets/schemas/`, wire it into `preBuild`, and
+   set `SchemaRepo.appFolder` in your `Application` before any registry starts. The folder is the
+   list; never name individual files in the build script.
+6. **Signing** — the `keyAlias = "vox-apps"` block above, byte-for-byte. See §8.
+
+Bump `versionCode`/`versionName` and push a change to `vox-yourapp/build.gradle.kts` to cut the first
+release. See [`BUILD_AND_RELEASE.md`](BUILD_AND_RELEASE.md) for what happens next, including the one
+rule worth knowing in advance: don't edit workflow files while a release is building.
+
 ### 2.2 Manifest
 
 ```xml

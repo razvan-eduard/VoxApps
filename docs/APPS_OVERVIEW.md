@@ -108,6 +108,16 @@ ecosystem plugs into, though it works completely on its own with no companion ap
 
   <img width="388" height="850" alt="Location settings — Home town, cache duration, Always use this location" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/26_location_hometown_cache.png" />
 
+- **Bring your own model** — any engine that reads a model file accepts one you supply, listed as a
+  row beside the downloadable ones: chosen the same way, deleted by the same trash icon, and shown
+  with its real size. The file picker is filtered to the kind that engine expects, vendor archives are
+  unpacked for you, and a file that isn't what the engine needs is refused *with the reason* rather
+  than failing later — after which you're offered the deletion of the archive it came from. For
+  engines that keep a model per language (Vosk), the language is asked at import.
+- **Schema updates are a choice, not something that happens** — the JSON that defines engines, search
+  providers, intents and normalisation is served from a repository and can be updated in place from
+  Settings, with the version the app shipped with always available to return to. Each app can follow
+  its own repository, so a fork works without touching the app.
 - **Backup & Restore** (Settings → Backup tab) — back up FastMap rules and portable settings to a
   file you pick, or restore from one, using the same zip format Vox Hub's own export/import produces;
   restoring offers a choice of **Full override**, **Merge**, or **Additive** reconciliation (see

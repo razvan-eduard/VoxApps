@@ -40,8 +40,9 @@ fully generated from this repo's actual GitHub Releases (see below the table for
      which triggers update-readme-releases.yml to regenerate the block above from whatever's
      actually published, APK size included (fetched from the release asset itself, not a
      hand-maintained snapshot — see scripts/update_release_readme_links.sh). A manual
-     workflow_dispatch re-run of any release workflow force-rebuilds under the current version
-     without needing a version bump — see docs/TECHNICAL_DOCUMENTATION.md §23. -->
+     workflow_dispatch run of any release workflow rebuilds under the current version without a
+     version bump, and publishes only if you tick its `publish` input — see
+     docs/BUILD_AND_RELEASE.md. -->
 
 
 Official F-DROID Repo : https://razvan-eduard.github.io/vox-fdroid-repo/repo/
@@ -124,6 +125,20 @@ cd VoxApps
 ./gradlew :<app>:installDebug
 ```
 
+**Submodules.** Commander compiles whisper.cpp from source and Vision needs OpenCV built locally, so
+those two need their vendored upstreams before they will build:
+
+```bash
+git submodule update --init --depth 1 vox-commander/src/main/cpp/whisper.cpp   # Commander
+git submodule update --init --depth 1 vendor/openwakeword-android-kt           # Commander
+git submodule update --init --depth 1 vendor/opencv                            # Vision
+```
+
+The first Commander and Vision builds are slow because of those native compiles; later builds reuse
+the output. `-PvoxSkipNativePrep` skips Commander's whisper compile and its three upstream-version
+checks when you only want to know whether the Kotlin compiles. Notes, Expenses, Calendar and Hub
+need no submodules at all.
+
 ### Run Tests
 
 ```bash
@@ -133,6 +148,10 @@ cd VoxApps
 # Instrumented tests (requires connected device/emulator)
 ./gradlew :<app>:connectedAndroidTest
 ```
+
+Every push to `main` and every pull request runs the whole suite plus a debug build of all six apps
+(`.github/workflows/ci.yml`). See [Build & Release](docs/BUILD_AND_RELEASE.md) for what else runs and
+when.
 
 [↖ Back to top](#readme-top)
 

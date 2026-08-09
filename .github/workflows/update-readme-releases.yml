@@ -7,8 +7,8 @@ name: Update README Release Links
 # workflow_run, not release: published: every release-*.yml creates its GitHub Release with the
 # default GITHUB_TOKEN (see their "Create release" steps) — and GitHub explicitly does not let an
 # event triggered by GITHUB_TOKEN cascade into starting *another* workflow run (the same
-# anti-recursion rule dependabot-automerge.yml's `pull_request_target` note documents for a different
-# trigger). A plain `on: release: published` here would simply never fire. `workflow_run` is GitHub's
+# anti-recursion rule that also stops a token-triggered PR event from starting a workflow run). A
+# plain `on: release: published` here would simply never fire. `workflow_run` is GitHub's
 # documented workaround for chaining a follow-up workflow onto one you don't want to (or can't) edit
 # to call it directly — it isn't subject to that restriction.
 #

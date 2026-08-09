@@ -783,8 +783,45 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 | Component | File | Usage |
 |-----------|------|-------|
 | `AppSelectorDropdown` | `ui/components/AppSelectorDropdown.kt` | Single + multi-select app picker with search |
-| `ConnectionTestIndicator` | `ui/components/ConnectionTestIndicator.kt` | ✅/❌/spinner status for API tests |
-| `ConnectionTestAuto` | `ui/components/ConnectionTestIndicator.kt` | Auto-testing variant with `LaunchedEffect` |
+| `ConnectionTestIndicator` | `:core:design/ConnectionTestIndicator.kt` | ✅/❌/⚠️/spinner status for API tests |
+
+### The picklist family (`:core:design/picklist/`)
+
+Choosing one of N things used to be hand-rolled at roughly twenty sites across the apps, each with
+its own anchor, its own menu, and its own idea of where a related API-key field or connection test
+belonged. They are now three shared components, in `:core:design` so every app gets them:
+
+| Component | What it is |
+|---|---|
+| `Picklist` | The flat one-of-N picker. Slots for the anchor (`PicklistButtonAnchor`, `PicklistCompactAnchor`, `PicklistFieldAnchor`), an optional "none" entry, a per-item note and leading icon, an action row, and a `below` slot for anything that belongs under the selection. |
+| `GroupedPicklist` | The grouped variant, used where items arrive in labelled sections. Unchanged in behaviour — it was moved here, not rewritten, because it carries the per-row download/delete/progress UI. |
+| `ServicePicklist` | `Picklist` plus everything a *declared service* says about itself. |
+
+`ServicePicklist` renders, in a fixed order and only when the selected entry declares each part:
+notes → credential field (`requiresCredential`) → `ConnectionTestCard` (`probeSpec()` non-null) →
+a `models` slot (`hasDownloadableModels`). An entry declaring none of them draws nothing beneath the
+button, calls no lambda and makes no request — an on-device engine, the platform TTS, a local model
+runtime. Before this, four screens assembled the same three pieces by hand in three different orders,
+and one of them tested the credential a registry had last been handed rather than the one on screen.
+
+The model list is a *slot* rather than something the component draws: per-row download state is
+something only an app knows how to produce. Where a credential is stored is likewise the caller's
+(`credentialFor` / `onCredentialCommit`), because a search provider borrows the credential of the
+engine it is built on rather than owning one.
+
+### `ServiceEntry` (`:core:services`)
+
+The same idea arrives in three shapes — an engine key to look up in the model registry, a provider
+name to look up in the search registry, and an object parsed straight out of a schema. `ServiceEntry`
+is the one vocabulary they all answer in: `id`, `labelKey`/`fallbackLabel`, `runtime`,
+`requiresCredential`, `credentialOwnerId`, `apiKeyUrl`, `hasDownloadableModels`, and
+`probeSpec(credential)`. `DeclaredService` is the data-class implementation for registries whose own
+type is a key or a name; a schema-parsed class implements the interface directly.
+
+**Declarations only.** What a service *is* belongs there; what is currently true about it does not —
+the stored credential, whether a model is on disk, whether this device can run it, all stay live
+lookups at the call site. A snapshot of those inside an entry is exactly how a screen once came to
+test a stale credential.
 
 ### State Management
 
@@ -824,6 +861,31 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 - Download preference: `wifi_only` or `wifi_and_metered`
 - **Archive extraction** — `.zip` (Vosk) / `.tar.bz2` (Piper) are unpacked, then `flattenNestedDir()` collapses a single wrapper directory (`model/model/…` → `model/…`) using a `renameTo` move with a `copyRecursively` fallback. (A plain `File.copyTo` is non-recursive for directories, which used to leave a Vosk model's `am/ conf/ graph/` empty → "Failed to create a model".)
 - **Validation** — `validateModel()` requires a *populated* `am/` for Vosk/zip models; if it finds a nested wrapper it self-heals by flattening in place, otherwise it deletes the corrupt dir and returns false.
+
+### Imported models are models (`domain/model/ImportedModel.kt`)
+
+A model the user imports from storage is a row in the same list as a downloaded one, with the same
+weight: selected the same way, deleted by the same trash icon, and loaded **because it is selected**
+rather than because it exists.
+
+That last part is a behaviour change worth stating plainly. An import used to be invisible to the one
+screen that lists models and unconditional everywhere else — `EngineSpecs.localSpec` returned it
+before consulting the registry, so picking a downloaded model marked that model as chosen while the
+imported file kept running.
+
+- **Id scheme** — `ImportedModelId`: `custom:<engineKey>` or `custom:<engineKey>:<langCode>`,
+  mirroring the key `setCustomModelPath` already uses, so a stored selection is recognised as an
+  import without consulting anything and the engine is read back out of the id.
+- **Selection decides loading** — a selected imported id whose file has gone yields *null* rather
+  than silently loading the registry model instead.
+- **Import validation** (`ModelDownloader.importCustomModel`) returns an `ImportOutcome`:
+  `Accepted(file, fromArchive)`, `WrongKind(picked, expected)`, `Empty` or `Failed(message)`. The
+  file picker is filtered to the extension the schema declares for that engine; vendor archives are
+  accepted and unzipped; the user is told why a rejection happened and offered the deletion of the
+  source archive; for per-language engines the language is asked with the same shared picklist.
+- **Archive safety** — extraction confines every entry to the target directory (`confine()`), so a
+  crafted archive cannot write outside the model folder. See the note on what this does *not* cover
+  in [§17](#17-dynamic-json-configuration).
 
 ### Startup Reconciliation (`VoxApplication.reconcileDownloadedModels()`)
 
@@ -1015,11 +1077,42 @@ UI: Settings → App Manager → External voice trigger toggle
 
 ## 17. Dynamic JSON Configuration
 
-VoxCommander uses four external JSON files for extensible, hot-reloadable configuration. All ship in `vox-commander/src/main/assets/` and can be updated from a remote GitHub repo at runtime — no app update required. `models.json`, `search_definitions.json`, and `intents.json` are authored at the repo root and copied into assets by Gradle; `normalization.json` lives directly in assets.
+VoxCommander uses external JSON files for extensible, hot-reloadable configuration. They ship in the
+APK's assets **and** are served from a repository at runtime, so the same file is both what the app
+ships with and what it can be corrected by — no app update required.
+
+### Where schemas live (`remote-schemas/`, `:core:services`)
+
+Every schema in the family lives in one folder at the repo root:
+
+```
+remote-schemas/commander/   read by vox-commander
+remote-schemas/expenses/    read by vox-expenses
+remote-schemas/shared/      read by more than one app
+```
+
+**The folder is the list.** An app's `copyShippedSchemas` Gradle task copies `<its own>/*.json` plus
+`shared/*.json` into `src/main/assets/schemas/`, and nothing names individual files — dropping a JSON
+into a folder ships it, and moving it between folders changes which apps read it. (It replaced a
+per-file `copyModelsJson` task, where adding a schema meant remembering to add it.)
+
+`SchemaRepo` in `:core:services` holds the arrangement in one place: `DEFAULT_BASE_URL` (the
+repository serving the schemas when nothing else is configured), `FOLDER`, `ASSET_FOLDER`, `SHARED`,
+and `appFolder` — set once by each `Application` before any registry starts, so one app cannot fetch
+another's files. **Each app can follow its own schema repository**, which is what makes a fork usable
+without touching the apps.
+
+`RemoteSchema` fetches each file from `<repo>/main/remote-schemas/<folder>/<file>` and compares it by
+hash with the copy in force. A copy that differs *and still parses* is written to the app's `filesDir`
+and becomes the source of truth until the user resets it — updating is something the user does, with
+the bundled schema always available as the choice to return to (`SchemaUpdatesSection` in
+`:core:design`). `validate-schemas.yml` validates the folder on any push that touches it.
 
 ### models.json
 
-**Location**: Repo root → copied to assets by `copyModelsJson` Gradle task (`preBuild` dependency)
+**Location**: `remote-schemas/commander/models.json` → copied to assets by `copyShippedSchemas`
+(a `preBuild` dependency, and the one prep task `-PvoxSkipNativePrep` does *not* skip, because the
+schema tests read the generated assets)
 
 **Parsed by**: `RemoteModelRegistry` (`data/remote/RemoteModelRegistry.kt`)
 
@@ -2190,6 +2283,31 @@ same rough shape (`data/`, `di/`, `domain/`, `receiver/` for the `:core:ipc` con
 at a smaller scale — see [`SATELLITE_APP_GUIDE.md`](SATELLITE_APP_GUIDE.md) for the full convention a
 new satellite app is expected to follow.
 
+### Shared modules
+
+Twenty `:core:*` modules, plus two vendored forks compiled in-tree:
+
+```
+:core:apppicker      :core:attachments   :core:audio        :core:backup
+:core:calendar       :core:datahygiene   :core:design       :core:ipc
+:core:location       :core:logging       :core:onboarding   :core:preferences
+:core:schema-annotations  :core:schema-processor
+:core:services       :core:testing       :core:textmatch    :core:voxconnect
+:core:wakeword       :core:widget
+
+vendor/ppocr-sdk     PaddleOCR fork (+ 4 patches), compiled into vox-vision
+core/wakeword        OpenWakeWord fork (+ 3 patches), compiled into vox-commander
+```
+
+The ones this documentation leans on most: `:core:design` (theme, the picklist family, the colour
+picker, shared settings sections), `:core:services` (`ServiceEntry`, `ProbeSpec`/`ServiceProbe`,
+`SchemaRepo`/`RemoteSchema`), `:core:ipc` (the cross-app plugin bus — §19), `:core:backup`
+(export/import, biometric gate, snapshot replace), and `:core:datahygiene` (§21).
+
+A vendored fork is upstream **plus** the diffs in its `patches/` folder, and that is checked rather
+than assumed — `scripts/verify_vendored_patches.sh`, run in CI by `verify-vendor-patches.yml`. See
+[`BUILD_TIME_DEPENDENCIES.md`](BUILD_TIME_DEPENDENCIES.md) for why, and what it caught.
+
 ---
 
 ## 23. Release Process & CI Automation
@@ -2198,16 +2316,43 @@ Each of the six apps has its own independent release pipeline — a `.github/wor
 per app (`release-commander.yml`, `release-calendar.yml`, `release-expenses.yml`, `release-notes.yml`,
 `release-vision.yml`, `release-hub.yml`), all following the same shape.
 
+### Verification on every push (`ci.yml`)
+
+Before any of this: every push to `main` and every pull request runs `.github/workflows/ci.yml` —
+`./gradlew test` across all modules, then `assembleDebug` for all six apps. Release workflows only
+wake when an app's own `build.gradle.kts` changes, so until CI existed, a commit that touched shared
+`core/` code and no app's build file was never compiled or tested by anything. That gap failed late,
+at the next release, and blamed whoever released.
+
+CI runs with `-PvoxSkipNativePrep` (skips Commander's whisper compile and its three JitPack version
+checks) and asks for 6 GB of heap, because dexing six apps in one invocation ran D8 out of memory on
+`vox-vision`. The OpenCV build is cached, keyed on the pinned `vendor/opencv` commit plus its build
+script; that one cannot be skipped, since `org.opencv.*` comes from it and two modules import it.
+
+Two narrower checks run on matching paths: `validate-schemas.yml` and `verify-vendor-patches.yml`
+(see [§17](#17-dynamic-json-configuration) and `BUILD_TIME_DEPENDENCIES.md`).
+
 ### Triggering a release
 
 - **Push to `main` that touches that app's `build.gradle.kts`** — the normal path. A "Detect
-  versionCode bump" step compares the current `versionCode` against the previous commit's; if
-  unchanged, the rest of the job is skipped (`if: steps.check_bump.outputs.changed != 'false'` on every
-  later step) — so pushing unrelated changes never triggers a rebuild, only an actual version bump does.
-- **`workflow_dispatch`** — a manual run from the Actions tab always builds, bypassing the bump check
-  (useful to force-rebuild without changing the version).
+  versionCode bump" step asks GitHub whether a Release already exists for the computed tag; if it
+  does, the rest of the job is skipped (`if: steps.check_bump.outputs.changed != 'false'` on every
+  later step) — so pushing unrelated changes never triggers a rebuild, only an actual version bump
+  does.
+
+  It asks GitHub rather than diffing `HEAD~1`, which silently broke whenever a push landed more than
+  one commit at once: `HEAD~1` then lands *inside* the same push, already showing the bumped value,
+  so `prev == curr` and the release was skipped for a version that had never been published.
+- **`workflow_dispatch`** — a manual run builds, and publishes only if its `publish` input is ticked
+  (`gh workflow run release-<app>.yml -f publish=true`). The default is off because six accidental
+  dispatches once published six GitHub Releases. `check_bump` doesn't run on a dispatch at all, so a
+  deliberate dispatched publish can release a version whose tag already exists — which is how a build
+  that succeeded but failed to publish gets recovered.
 - **A direct tag push** (e.g. `git push origin calendar-v0.5`) also triggers the workflow (its
   `on.push.tags` pattern) and publishes under that exact tag.
+
+Each release is serialised per app (`concurrency: release-<app>`, queued rather than cancelled), so
+two pushes landing together can't both force-move the same tag and both delete the same release.
 
 ### Tag naming (`.github/actions/compute-release-tag`)
 
@@ -2231,6 +2376,16 @@ instead of recomputing it. It also derives `is_prerelease` from whether the vers
 3. The APK is renamed to `Vox<App>-<tag>.apk` (e.g. `VoxCalendar-calendar-v0.5.apk`) and published via
    `softprops/action-gh-release`, which creates the GitHub Release, uploads the APK as an asset, and
    auto-generates release notes from the commits since the previous tag.
+
+Publishing force-moves the app's tag onto the built commit with `git tag -f` + `git push --force`.
+That step has exactly one failure mode, and it is worth knowing before it bites: `GITHUB_TOKEN` can
+never hold the `workflows` scope, and that scope gates making a ref point at a tree whose
+`.github/workflows` content differs from the repository's own. So the push is refused when a workflow
+edit lands on `main` while a release is building, because the tag then moves onto a commit whose
+workflow files are already stale — `refusing to allow a GitHub App to create or update workflow …`.
+Routing the same operation through the `git/refs` REST API is subject to the identical rule and only
+replaces that message with a bare `403`. **Don't edit workflow files while a release is building**;
+a PAT with `workflow` scope is the only thing that would make the step immune.
 
 ### Keeping README.md's release table in sync
 
@@ -2256,4 +2411,4 @@ follow-up workflow onto one that creates its own releases/PRs with the default t
 
 ---
 
-*This documentation reflects the codebase as of July 2026. For the latest changes, refer to the git history.*
+*This documentation reflects the codebase as of August 2026. For the latest changes, refer to the git history.*
