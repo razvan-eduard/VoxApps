@@ -178,6 +178,39 @@ class ShippedSchemaTest {
      * quieter still: an implementation nothing can select looks like working code forever.
      */
     @Test
+    fun `an engine that accepts a custom model can actually receive one`() {
+        // The screens gate the import on this capability alone. An engine claiming it while having
+        // nowhere to put the file would offer a picker whose result goes nowhere — which is how the
+        // capability came to be declared by two engines and read by none.
+        (assetModels().engines + assetVirtual().engines)
+            .filter { (_, config) -> "custom_model_import" in config.capabilities }
+            .forEach { (key, config) ->
+                assertEquals(
+                    "engine '$key' accepts custom models but is not a local-file engine",
+                    EngineRuntime.LOCAL_FILE,
+                    EngineRuntime.fromKey(config.runtime)
+                )
+                assertNotNull("engine '$key' accepts custom models but declares no entry point", config.entry)
+            }
+    }
+
+    @Test
+    fun `every local file voice engine says whether it accepts a custom model`() {
+        // Not a claim that they all should — Porcupine's keywords are licence-locked and it says no.
+        // The point is that the answer is written down rather than inferred from the file extension,
+        // which is what the settings screen used to do and what made stt_whisper's import work while
+        // the schema said it did not exist.
+        assetModels().engines
+            .filter { (_, config) -> EngineRuntime.fromKey(config.runtime) == EngineRuntime.LOCAL_FILE }
+            .forEach { (key, config) ->
+                assertTrue(
+                    "engine '$key' has an extension but no import capability either way — decide in the schema",
+                    config.extension.isBlank() || config.capabilities.isNotEmpty()
+                )
+            }
+    }
+
+    @Test
     fun `wake word engines and their implementations agree`() {
         val declared = assetModels().engines
             .filter { "wake_word" in it.value.type }

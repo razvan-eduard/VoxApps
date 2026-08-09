@@ -2,6 +2,7 @@ package com.voxapps.commander.state
 
 import android.content.Context
 import com.voxapps.commander.data.preferences.Credentials
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.testutil.TestDataFactory
 import com.voxapps.commander.utils.PermissionUtils
@@ -31,10 +32,14 @@ class AppStateTest {
         every { com.voxapps.logging.Logger.log(any(), any()) } returns Unit
 
         mockkObject(RemoteModelRegistry)
-        every { RemoteModelRegistry.getEngineKeyByExtension(".bin") } returns "stt_whisper"
-        every { RemoteModelRegistry.getEngineKeyByExtension(".zip") } returns "wake_vosk"
         every { RemoteModelRegistry.isZipEngine(any()) } returns false
         every { RemoteModelRegistry.isLlmEngine(any()) } returns false
+        // The engine's own declaration is what readiness now asks about — a cloud or OS-supplied
+        // engine has nothing to have on disk, a local one needs a model or an import.
+        every { RemoteModelRegistry.runtimeOf(any()) } returns EngineRuntime.LOCAL_FILE
+        every { RemoteModelRegistry.runtimeOf(Strings.Processors.GOOGLE) } returns EngineRuntime.ANDROID_LOCAL
+        every { RemoteModelRegistry.runtimeOf(Strings.Processors.WHISPER_API) } returns EngineRuntime.CLOUD
+        every { RemoteModelRegistry.isArchiveEngine(any()) } returns false
 
         mockkObject(PermissionUtils)
         every { PermissionUtils.canDrawOverlays(any()) } returns false
@@ -84,20 +89,38 @@ class AppStateTest {
     }
 
     @Test
-    fun `voiceModelReady is true for Whisper Vulkan when custom path is set`() {
+    fun `voiceModelReady is true for Whisper Vulkan when the imported model is on disk`() {
+        // A path is not a model. The directory-packaged engine always checked the file was still
+        // there; the single-file one only checked the string was non-empty, so a model deleted from
+        // outside the app kept reporting ready until something tried to load it.
+        val imported = java.io.File.createTempFile("custom-whisper", ".bin").apply { deleteOnExit() }
         val settings = TestDataFactory.createSettingsWithWhisperVulkan(
             activeVoiceModelId = null,
             downloadedModelIds = emptySet()
         ).copy(
-            customModelPaths = mapOf("stt_whisper" to "/sdcard/model.bin")
+            // Stored under the engine that backs the selection: Vulkan is whisper on the GPU.
+            customModelPaths = mapOf("stt_whisper" to imported.absolutePath)
         )
         val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
     }
 
     @Test
+    fun `voiceModelReady is false when the imported model has been deleted`() {
+        val settings = TestDataFactory.createSettingsWithWhisperVulkan(
+            activeVoiceModelId = null,
+            downloadedModelIds = emptySet()
+        ).copy(
+            customModelPaths = mapOf("stt_whisper" to "/sdcard/gone.bin")
+        )
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
+        assertFalse(state.voiceModelReady)
+    }
+
+    @Test
     fun `voiceModelReady is true for Vosk when model downloaded`() {
         every { RemoteModelRegistry.isZipEngine("wake_vosk") } returns true
+        every { RemoteModelRegistry.isArchiveEngine("wake_vosk") } returns true
         val settings = TestDataFactory.createAppSettings(
             voiceProcessor = "wake_vosk",
             activeVoiceModelId = "vosk-small",
@@ -110,6 +133,7 @@ class AppStateTest {
     @Test
     fun `voiceModelReady is false for Vosk when model not downloaded and no custom path`() {
         every { RemoteModelRegistry.isZipEngine("wake_vosk") } returns true
+        every { RemoteModelRegistry.isArchiveEngine("wake_vosk") } returns true
         val settings = TestDataFactory.createAppSettings(
             voiceProcessor = "wake_vosk",
             activeVoiceModelId = "vosk-small",

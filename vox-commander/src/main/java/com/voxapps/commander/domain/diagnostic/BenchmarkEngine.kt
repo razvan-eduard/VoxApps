@@ -79,10 +79,10 @@ class BenchmarkEngine(
         // --- 3. WHISPER STT BENCHMARKS (CPU + GPU per downloaded model) ---
         // Skip if Whisper engine is not enabled
         if (snapshot.isWhisperSystemEnabled) {
-            val whisperKey = RemoteModelRegistry.getEngineKeyByExtension(".bin")
-            val downloadedWhisperModels = whisperKey?.let { RemoteModelRegistry.getModels(it) }?.filter {
+            val whisperKey = com.voxapps.commander.domain.engine.whisper.WhisperCppSttEngine.ENGINE_KEY
+            val downloadedWhisperModels = RemoteModelRegistry.getModels(whisperKey).filter {
                 snapshot.isModelDownloaded(it.id)
-            } ?: emptyList()
+            }
 
             if (downloadedWhisperModels.isNotEmpty()) {
                 diagInfo.append("--- WHISPER MODELS DETECTED ---\n")
@@ -112,10 +112,10 @@ class BenchmarkEngine(
         }
 
         // --- 4. VOSK STT BENCHMARKS (all downloaded Vosk models) ---
-        val voskKey = RemoteModelRegistry.getEngineKeyByExtension(".zip")
-        val downloadedVoskModels = voskKey?.let { RemoteModelRegistry.getModels(it) }?.filter {
+        val voskKey = com.voxapps.commander.domain.engine.vosk.VoskSttEngine.ENGINE_KEY
+        val downloadedVoskModels = RemoteModelRegistry.getModels(voskKey).filter {
             snapshot.isModelDownloaded(it.id)
-        } ?: emptyList()
+        }
 
         if (downloadedVoskModels.isNotEmpty()) {
             diagInfo.append("--- VOSK MODELS DETECTED ---\n")

@@ -198,7 +198,7 @@ object VoiceManager {
             hub.uiState
                 .map {
                     Triple(it.voiceProcessor, it.modelFilterLang, it.activeVoiceModelId) to
-                    Pair(it.activeVoiceModelId, it.customWhisperModelPath)
+                    Pair(it.activeVoiceModelId, it.customVoiceModelPath)
                 }
                 .distinctUntilChanged()
                 .collectLatest {

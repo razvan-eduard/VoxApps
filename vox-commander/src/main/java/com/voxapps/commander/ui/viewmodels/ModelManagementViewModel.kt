@@ -314,7 +314,10 @@ class ModelManagementViewModel(
 
     fun clearCustomModel(engineKey: String, langCode: String? = null) {
         viewModelScope.launch {
+            // Read the path before forgetting it — afterwards nothing knows where the file was.
+            val path = settingsRepo.getSettingsSnapshot().getCustomModelPath(engineKey, langCode)
             settingsRepo.setCustomModelPath(engineKey, "", langCode)
+            path?.let { modelDownloader.deleteCustomModel(it) }
             appStateManager.refreshAll()
         }
     }

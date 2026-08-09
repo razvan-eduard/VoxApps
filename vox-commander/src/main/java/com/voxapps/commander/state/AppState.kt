@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 import android.content.Context
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.domain.model.AppModel
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.utils.Strings
 
 /**
@@ -24,8 +25,10 @@ data class AppState(
     val modelFilterLang: String,
     val activeVoiceModelId: String?,
     val activeWakeModelId: String?,
-    val customWhisperModelPath: String?,
-    val customVoskModelPaths: Map<String, String>,
+    /** The custom model the current voice selection would load, if one was imported for it. Was
+     *  two fields, each named after an engine that happened to accept imports — so a third such
+     *  engine had nowhere to put its path, and readers picked between them by file extension. */
+    val customVoiceModelPath: String?,
 
     // --- INTENT SETTINGS ---
     val aiProcessor: String,
@@ -117,34 +120,40 @@ data class AppState(
             val voiceProcessor = settings.voiceProcessor
             val modelFilterLang = settings.modelFilterLang
             val activeVoiceModelId = settings.activeVoiceModelId
-            val whisperKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".bin")
-            val voskKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".zip")
-            val customWhisperModelPath = whisperKey?.let { settings.getCustomModelPath(it) }
+            // Whose declaration answers for this selection. See SttEngines.backingEngineKey — every
+            // processor is its own engine key except the one that is a mode of another engine.
+            val voiceEngineKey =
+                com.voxapps.commander.domain.engine.SttEngines.backingEngineKey(voiceProcessor)
 
-            // Calculate voiceModelReady
-            val voiceModelReady = when (voiceProcessor) {
-                Strings.Processors.GOOGLE,
-                Strings.Processors.WHISPER_API -> true
-                Strings.Processors.WHISPER_VULKAN -> {
-                    val isDownloaded = activeVoiceModelId != null && settings.isModelDownloaded(activeVoiceModelId)
-                    isDownloaded || !customWhisperModelPath.isNullOrBlank()
+            // A directory-packaged engine keeps one custom model per language; a single-file engine
+            // keeps one. Both live under the engine's own key, so the selection resolves its own.
+            val customVoiceModelPath = settings.getCustomModelPath(
+                voiceEngineKey,
+                modelFilterLang.takeIf {
+                    com.voxapps.commander.data.remote.RemoteModelRegistry.isArchiveEngine(voiceEngineKey)
                 }
-                else -> {
-                    // JSON-defined voice engines — check by type
-                    if (!com.voxapps.commander.data.remote.RemoteModelRegistry.isZipEngine(voiceProcessor)) {
-                        // Whisper-like (.bin) engine
-                        val isDownloaded = activeVoiceModelId != null && settings.isModelDownloaded(activeVoiceModelId)
-                        isDownloaded || !customWhisperModelPath.isNullOrBlank()
-                    } else {
-                        // Vosk-like (.zip) engine
-                        val customPath = voskKey?.let { settings.getCustomModelPath(it, modelFilterLang) }
-                        if (!customPath.isNullOrBlank()) {
-                            java.io.File(customPath).exists()
-                        } else {
-                            !activeVoiceModelId.isNullOrBlank() && settings.isModelDownloaded(activeVoiceModelId)
-                        }
-                    }
-                }
+            )
+
+            /*
+             * Ready means "this engine has something to run with", and what that takes is declared.
+             *
+             * It used to be asked as a chain of names: Google and the Whisper API answered true by
+             * being listed, Vulkan by being listed again, and everything else was sorted into
+             * "whisper-like" or "vosk-like" by file extension — which read the *whisper* custom path
+             * for any engine that was not zip-packaged, so a third local engine would have been
+             * judged by a model it does not own.
+             */
+            val voiceModelReady = when (
+                com.voxapps.commander.data.remote.RemoteModelRegistry.runtimeOf(voiceEngineKey)
+            ) {
+                // Nothing to have on disk: the OS supplies it, or an endpoint does.
+                EngineRuntime.CLOUD,
+                EngineRuntime.ANDROID_LOCAL,
+                EngineRuntime.DEVICE_BUILTIN -> true
+
+                else ->
+                    if (!customVoiceModelPath.isNullOrBlank()) java.io.File(customVoiceModelPath).exists()
+                    else !activeVoiceModelId.isNullOrBlank() && settings.isModelDownloaded(activeVoiceModelId)
             }
 
             // Calculate intentModelReady
@@ -162,10 +171,6 @@ data class AppState(
                 }
             }
 
-            // Whatever languages models were actually imported for, rather than a list of four
-            // written here that the store could always have outgrown.
-            val customVoskModelPaths = voskKey?.let { settings.customModelPathsByLanguage(it) }.orEmpty()
-
             return AppState(
                 language = settings.language,
                 voiceProcessor = voiceProcessor,
@@ -174,8 +179,7 @@ data class AppState(
                 modelFilterLang = modelFilterLang,
                 activeVoiceModelId = activeVoiceModelId,
                 activeWakeModelId = settings.activeWakeModelId,
-                customWhisperModelPath = customWhisperModelPath,
-                customVoskModelPaths = customVoskModelPaths,
+                customVoiceModelPath = customVoiceModelPath,
                 aiProcessor = settings.aiProcessor,
                 activeIntentModelId = settings.activeIntentModelId,
                 cloudIntelligenceEnabled = settings.cloudIntelligenceEnabled,
@@ -233,8 +237,7 @@ data class AppState(
             modelFilterLang = Strings.Preferences.DEFAULT_LANGUAGE,
             activeVoiceModelId = null,
             activeWakeModelId = null,
-            customWhisperModelPath = null,
-            customVoskModelPaths = emptyMap(),
+            customVoiceModelPath = null,
             aiProcessor = "",
             activeIntentModelId = null,
             cloudIntelligenceEnabled = false,

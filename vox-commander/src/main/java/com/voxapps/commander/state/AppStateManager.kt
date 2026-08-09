@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 import android.content.Context
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.engine.SttEngines
 import com.voxapps.commander.domain.engine.whisper.WhisperCppSttEngine
 import com.voxapps.commander.domain.engine.vosk.VoskSttEngine
 import com.voxapps.commander.domain.intent.registry.AppRegistry
@@ -291,20 +292,6 @@ class AppStateManager private constructor(
         scope.launch { repo.setEngineModelSelection(engineKey, modelId) }
     }
 
-    fun setCustomWhisperModelPath(path: String?) {
-        if (path != null) {
-            val whisperKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".bin")
-            whisperKey?.let { scope.launch { repo.setCustomModelPath(it, path) } }
-        }
-    }
-
-    fun setCustomVoskModelPath(language: String, path: String?) {
-        if (path != null) {
-            val voskKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".zip")
-            voskKey?.let { scope.launch { repo.setCustomModelPath(it, path, language) } }
-        }
-    }
-
     /** One writer for every engine credential — see [SettingsRepository.setEngineApiKey]. */
     fun setEngineApiKey(engineKey: String, key: String?) {
         scope.launch { repo.setEngineApiKey(engineKey, key) }
@@ -548,9 +535,7 @@ class AppStateManager private constructor(
                 //
                 // Whisper on the GPU is the same engine asked to run differently, and the only
                 // selection whose stored value is not an engine key of its own.
-                val selectedVoiceEngine =
-                    if (voiceProcessor == Strings.Processors.WHISPER_VULKAN) WhisperCppSttEngine.ENGINE_KEY
-                    else voiceProcessor
+                val selectedVoiceEngine = SttEngines.backingEngineKey(voiceProcessor)
                 isActive = category == selectedVoiceEngine ||
                     category == aiProcessor ||
                     category == currentState.wakeWordEngineType
@@ -604,8 +589,11 @@ class AppStateManager private constructor(
         _vulkanTestPassed.value = null
 
         val modelId = _uiState.value.activeVoiceModelId
-        val whisperKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".bin")
-        val extension = whisperKey?.let { com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(it) } ?: ""
+        // The GPU probe runs the whisper engine's own model — WHISPER_VULKAN is that engine asked
+        // to run on the GPU, not an engine of its own, so it is that engine's key that resolves the
+        // file. Asked by extension, this would answer "whichever engine ships .bin files first".
+        val whisperKey = SttEngines.backingEngineKey(Strings.Processors.WHISPER_VULKAN)
+        val extension = com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(whisperKey)
         val modelPath = java.io.File(context.getExternalFilesDir(null), "$modelId$extension").absolutePath
 
         Logger.log("Starting Vulkan compatibility test with model: $modelPath", "VulkanTest")

@@ -26,6 +26,20 @@ object SttEngines {
 
     private const val TAG = "SttEngines"
 
+    /**
+     * The engine key whose *declaration* answers for [processorKey] — its models, its packaging, its
+     * custom import.
+     *
+     * Every stored processor value is an engine key of its own, with one exception: `WHISPER_VULKAN`
+     * is `stt_whisper` asked to run on the GPU. It has no schema entry, no models and no extension
+     * of its own, so anything that consults the registry about the current selection has to ask
+     * about whisper instead. That fact was written out wherever it was needed — readiness, cleanup,
+     * the GPU probe — and each copy was free to forget it.
+     */
+    fun backingEngineKey(processorKey: String): String =
+        if (processorKey == Strings.Processors.WHISPER_VULKAN) WhisperCppSttEngine.ENGINE_KEY
+        else processorKey
+
     fun create(
         processorKey: String,
         context: Context,

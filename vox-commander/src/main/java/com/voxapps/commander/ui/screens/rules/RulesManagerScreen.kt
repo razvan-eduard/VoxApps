@@ -234,30 +234,11 @@ fun RulesManagerContent(
     val modelFilterLang = uiState.modelFilterLang
     val voiceProcessor = uiState.voiceProcessor
 
-    val isDefaultModelOnDevice = remember(voiceProcessor, modelFilterLang) {
-        when (voiceProcessor) {
-            Strings.Processors.WHISPER_VULKAN -> {
-                val modelId = uiState.activeVoiceModelId
-                modelId != null && uiState.isModelDownloaded(modelId)
-            }
-            Strings.Processors.GOOGLE, Strings.Processors.WHISPER_API -> true
-            else -> {
-                if (com.voxapps.commander.data.remote.RemoteModelRegistry.isZipEngine(voiceProcessor)) {
-                    val customPath = uiState.customVoskModelPaths[modelFilterLang]
-                    if (!customPath.isNullOrBlank()) {
-                        File(customPath).exists()
-                    } else {
-                        val rootDir = context.getExternalFilesDir(null)
-                        val modelDir = rootDir?.listFiles()?.find { it.isDirectory && it.name.startsWith("vosk-model-") && it.name.contains(modelFilterLang, ignoreCase = true) }
-                        modelDir != null && modelDir.exists()
-                    }
-                } else {
-                    val modelId = uiState.activeVoiceModelId
-                    modelId != null && uiState.isModelDownloaded(modelId)
-                }
-            }
-        }
-    }
+    // The same question the rest of the app asks, answered in the one place that computes it.
+    // This was a third copy, and the only one that looked for a directory whose *name* began with
+    // "vosk-model-" — a convention the entry-point resolver replaced, so an imported model stored
+    // under any other name read as missing here while every other screen saw it.
+    val isDefaultModelOnDevice = uiState.voiceModelReady
 
     // Update available intents when app changes
     LaunchedEffect(selectedTargetPackage) {

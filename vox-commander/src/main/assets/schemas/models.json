@@ -46,6 +46,9 @@
           "engine_type": null,
           "is_remote": true
         }
+      ],
+      "capabilities": [
+        "custom_model_import"
       ]
     },
     "wake_vosk": {

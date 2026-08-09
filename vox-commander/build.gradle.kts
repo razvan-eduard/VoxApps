@@ -297,7 +297,11 @@ tasks.withType<Test> {
     forkEvery = 1
 }
 
-// The Gson keep-rule test reads proguard-rules.pro, so a change there must invalidate the test task.
+// Some tests read files the compiler never sees, so nothing else would make Gradle re-run them when
+// those files change. The schemas are named at their source rather than in assets: assets/schemas is
+// this build's own output, and a task cannot sensibly treat another task's output as its input.
 tasks.withType<Test>().configureEach {
     inputs.file("proguard-rules.pro").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir("${project.rootDir}/remote-schemas").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir("src/main/assets/translations").withPathSensitivity(PathSensitivity.RELATIVE)
 }

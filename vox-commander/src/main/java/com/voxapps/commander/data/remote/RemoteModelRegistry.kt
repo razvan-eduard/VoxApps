@@ -434,6 +434,17 @@ object RemoteModelRegistry {
 
     fun getEngineType(engineKey: String): String? = getEngineTypes(engineKey).firstOrNull()
 
+    /**
+     * Whether the user may hand this engine a model of their own.
+     *
+     * A declaration, because it is a property of the engine: Porcupine's keywords are licence-locked
+     * to the account that generated them, so its files cannot be imported however local it is. The
+     * screens used to ask "does it have a file extension?" instead, which answered yes for engines
+     * that had never been considered and left the declared capability read by nobody.
+     */
+    fun supportsCustomImport(engineKey: String): Boolean =
+        hasCapability(engineKey, "custom_model_import")
+
     fun isZipEngine(engineKey: String): Boolean = getExtension(engineKey).equals(".zip", ignoreCase = true)
 
     /**
@@ -466,11 +477,6 @@ object RemoteModelRegistry {
     fun isWakeWordEngine(engineKey: String): Boolean = "wake_word" in getEngineTypes(engineKey)
 
     fun isVoiceEngine(engineKey: String): Boolean = "voice" in getEngineTypes(engineKey)
-
-    fun getEngineKeyByExtension(ext: String): String? {
-        return cachedSchema?.engines?.entries
-            ?.firstOrNull { it.value.extension.equals(ext, ignoreCase = true) }?.key
-    }
 
     /**
      * The engine a fresh install starts on (`SettingsRepositoryImpl` falls back to this when no

@@ -200,12 +200,10 @@ fun VoiceEnginesSubTab(
     // --- CUSTOM MODEL IMPORT ---
     val isDirectoryBased = RemoteModelRegistry.isArchiveEngine(engineKey) ||
         RemoteModelRegistry.getExtension(engineKey).isBlank()
-    val supportsCustomModel = RemoteModelRegistry.getExtension(engineKey).isNotEmpty()
-    val customModelPath = if (isDirectoryBased) {
-        uiState.customVoskModelPaths[modelFilterLang]
-    } else {
-        uiState.customWhisperModelPath
-    }
+    val supportsCustomModel = RemoteModelRegistry.supportsCustomImport(engineKey)
+    // Already resolved for this engine and language by AppState — the screen used to choose
+    // between two engine-named fields by asking how the engine is packaged.
+    val customModelPath = uiState.customVoiceModelPath
     val hasCustomModel = !customModelPath.isNullOrBlank() && java.io.File(customModelPath).exists()
 
     if (supportsCustomModel) {

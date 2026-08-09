@@ -240,7 +240,7 @@ fun SettingsContent(
                                         onCancelDownload = onCancelDownload,
                                         downloadProgress = downloadProgress,
                                         downloadingItem = vmDownloadingItem,
-                                        onImportCustomModel = { onImportOpenWakeWordModel() },
+                                        onImportCustomModel = onImportOpenWakeWordModel,
                                         refreshTrigger = uiState.refreshTrigger
                                     )
                                 }

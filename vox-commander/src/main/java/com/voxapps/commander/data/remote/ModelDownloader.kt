@@ -282,6 +282,31 @@ class ModelDownloader(private val context: Context) {
     /**
      * Generic delete method.
      */
+    /**
+     * Removes the file or directory a custom import copied in, given the path that was stored.
+     *
+     * Clearing the selection used to leave it on disk. Nothing else knew the file: it is not a
+     * registry model, so no delete path reached it, and the cleanup sweep protects exactly the paths
+     * that are still stored — so a cleared model became collectable only if the user happened to run
+     * "delete unused models" afterwards. A Vosk directory is a gigabyte; it should go when the
+     * selection that named it goes.
+     */
+    fun deleteCustomModel(path: String) {
+        if (path.isBlank()) return
+        val file = File(path)
+        val root = context.getExternalFilesDir(null)?.canonicalFile ?: return
+        // An imported path is one this app wrote under its own directory. Anything else is a
+        // pointer we did not create, and deleting by a stored string is not something to do blind.
+        if (!file.canonicalFile.path.startsWith(root.path + File.separator)) {
+            Logger.log("Refusing to delete custom model outside app storage: $path", TAG)
+            return
+        }
+        if (file.exists()) {
+            Logger.log("Deleting custom model at ${file.absolutePath}", TAG)
+            file.deleteRecursively()
+        }
+    }
+
     fun deleteModelFile(modelId: String, engineKey: String) {
         val file = resolveLocalFile(modelId, engineKey)
         if (file?.exists() == true) {

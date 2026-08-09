@@ -5,6 +5,7 @@ import android.util.Log
 import app.cash.turbine.test
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.utils.PermissionUtils
 import com.voxapps.commander.utils.Strings
@@ -51,10 +52,14 @@ class AppStateManagerTest {
         every { PermissionUtils.hasLocationPermission(any()) } returns false
 
         mockkObject(RemoteModelRegistry)
-        every { RemoteModelRegistry.getEngineKeyByExtension(".bin") } returns "stt_whisper"
-        every { RemoteModelRegistry.getEngineKeyByExtension(".zip") } returns "wake_vosk"
         every { RemoteModelRegistry.isZipEngine(any()) } returns false
         every { RemoteModelRegistry.isLlmEngine(any()) } returns false
+        // The engine's own declaration is what readiness now asks about — a cloud or OS-supplied
+        // engine has nothing to have on disk, a local one needs a model or an import.
+        every { RemoteModelRegistry.runtimeOf(any()) } returns EngineRuntime.LOCAL_FILE
+        every { RemoteModelRegistry.runtimeOf(Strings.Processors.GOOGLE) } returns EngineRuntime.ANDROID_LOCAL
+        every { RemoteModelRegistry.runtimeOf(Strings.Processors.WHISPER_API) } returns EngineRuntime.CLOUD
+        every { RemoteModelRegistry.isArchiveEngine(any()) } returns false
         every { RemoteModelRegistry.getModels(any()) } returns emptyList()
         every { RemoteModelRegistry.modelMap } returns MutableStateFlow(emptyMap())
         every { RemoteModelRegistry.getExtension(any()) } returns ""

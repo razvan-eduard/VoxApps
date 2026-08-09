@@ -294,18 +294,6 @@ class RemoteModelRegistryTest {
     }
 
     @Test
-    fun `getEngineKeyByExtension returns key for matching extension`() {
-        mockkObject(RemoteModelRegistry)
-        every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
-        every { RemoteModelRegistry.getExtension("wake_vosk") } returns ".zip"
-        every { RemoteModelRegistry.getEngineTypes() } returns listOf("stt_whisper", "wake_vosk")
-
-        // We can't easily test getEngineKeyByExtension without a real cachedSchema
-        // but we can test the logic via the extension lookup
-        assertEquals(".bin", RemoteModelRegistry.getExtension("stt_whisper"))
-    }
-
-    @Test
     fun `getModels returns empty list for unknown engine key`() {
         mockkObject(RemoteModelRegistry)
         every { RemoteModelRegistry.getModels("unknown_engine") } returns emptyList()

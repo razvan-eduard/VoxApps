@@ -135,7 +135,6 @@ class WhisperEngineManagerTest {
         File(externalDir, "notabin.txt").writeText("text")
 
         mockkObject(RemoteModelRegistry)
-        every { RemoteModelRegistry.getEngineKeyByExtension(".bin") } returns "stt_whisper"
 
         manager.disable(deleteLibs = false, deleteModels = true)
 

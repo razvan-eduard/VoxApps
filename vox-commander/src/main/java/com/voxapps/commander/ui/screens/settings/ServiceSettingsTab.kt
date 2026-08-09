@@ -59,7 +59,10 @@ fun ServiceSettingsTab(
     onCancelDownload: () -> Unit,
     downloadProgress: Float?,
     downloadingItem: Any? = null,
-    onImportCustomModel: ((String?) -> Unit)? = null,
+    /** Hand the selected wake-word engine a model of the user's own, for the engines that declare
+     *  they accept one. Was declared and never called, so openWakeWord's custom import — which the
+     *  schema advertises and MainActivity is wired for — had no way in. */
+    onImportCustomModel: (() -> Unit)? = null,
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
@@ -630,6 +633,24 @@ fun ServiceSettingsTab(
                 fallbackCategory = Strings.FallbackCategories.VOICE,
                 refreshTrigger = refreshTrigger,
                 showFallback = false
+            )
+        }
+
+        // Only for an engine that says it takes one: Porcupine is local too, but its keywords are
+        // licence-locked to the account that generated them, so there is nothing a user could pick.
+        if (onImportCustomModel != null &&
+            RemoteModelRegistry.supportsCustomImport(currentEngineKey)
+        ) {
+            OutlinedButton(
+                onClick = { onImportCustomModel() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(languageManager.getString("import_custom_model"))
+            }
+            Text(
+                text = languageManager.getString("import_custom_model_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
