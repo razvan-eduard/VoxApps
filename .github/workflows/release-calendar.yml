@@ -139,14 +139,27 @@ jobs:
       # "just build it and see" dispatch tagged the commit and cut a release at whatever version
       # happened to be current, walking straight around the guard that exists to prevent exactly
       # that. Building and testing still run: that is what a dispatch is for.
-      - name: Force update tag to current commit
+      - name: Point the tag at this commit
         if: steps.check_bump.outputs.changed != 'false' && github.event_name != 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.version.outputs.tag }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f "$TAG"
-          git push origin "$TAG" --force
+          # Created through the API rather than `git push origin <tag>`. A tag push carries the whole
+          # tree, so if any workflow file differs between this commit and the remote — which happens
+          # whenever a CI change lands while a release is building — GitHub rejects the push with
+          # "refusing to allow a GitHub App to create or update workflow ... without `workflows`
+          # permission", and no `permissions:` block can grant GITHUB_TOKEN that. Moving a ref to an
+          # existing commit carries no file content and is not subject to that rule.
+          if gh api "repos/${{ github.repository }}/git/refs/tags/$TAG" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${{ github.repository }}/git/refs/tags/$TAG" \
+              -f sha="${{ github.sha }}" -F force=true >/dev/null
+            echo "Moved $TAG to ${{ github.sha }}"
+          else
+            gh api -X POST "repos/${{ github.repository }}/git/refs" \
+              -f ref="refs/tags/$TAG" -f sha="${{ github.sha }}" >/dev/null
+            echo "Created $TAG at ${{ github.sha }}"
+          fi
 
       - name: Delete existing release for a fresh publish date
         if: steps.check_bump.outputs.changed != 'false' && github.event_name != 'workflow_dispatch'
