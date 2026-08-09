@@ -18,29 +18,52 @@ two patterns:
 
 | Dependency | Module | Pristine reference | Local copy | Patched? | Built at build time? | Gradle task | Sync workflow |
 |---|---|---|---|---|---|---|---|
-| Vosk | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckVosk` | `sync-vosk.yml` (weekly) |
-| NewPipeExtractor | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckNewPipeExtractor` | `sync-newpipe-extractor.yml` (weekly) |
+| Vosk | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckVosk` | `sync-vosk.yml` (Mon) |
+| NewPipeExtractor | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckNewPipeExtractor` | `sync-newpipe-extractor.yml` (Tue) |
 | onnxruntime-android | `vox-vision` (via `vendor/ppocr-sdk`), `core/wakeword` | — (Maven Central coordinate) | — | No | No | none | Dependabot (weekly) |
-| Whisper.cpp | `vox-commander/src/main/cpp/whisper.cpp` | *is* the submodule | *is* the submodule | No | Yes (CMake, every build if stale) | `autoCompileWhisper` | `sync-whisper.yml` (monthly, compile-check only) |
-| OpenWakeWord | `core/wakeword` | `vendor/openwakeword-android-kt` (submodule) | `core/wakeword/src/...` | Yes — 3 patches | No (plain Kotlin/ONNX Runtime) | `autoCheckOpenWakeWord` | `sync-openwakeword.yml` (weekly) |
-| OpenCV | `vendor/ppocr-sdk/opencv/` (gitignored output) | `vendor/opencv` (submodule, tag `5.0.0`) | — (build output only, not vendored as source) | No | Yes (CMake, skips only if the built commit matches the pinned submodule commit — see below) | `autoCompileOpenCv` | `sync-opencv.yml` (weekly) |
-| PaddleOCR ppocr-sdk | `vendor/ppocr-sdk` | `vendor/paddleocr-upstream` (submodule, sparse-checked-out) | `vendor/ppocr-sdk/src/...` | Yes — 4 patches | No (plain Kotlin) | none yet | `sync-ppocr-sdk.yml` (weekly) |
+| Whisper.cpp | `vox-commander/src/main/cpp/whisper.cpp` | *is* the submodule | *is* the submodule | No | Yes (CMake, every build if stale) | `autoCompileWhisper` | `sync-whisper.yml` (monthly) |
+| OpenWakeWord | `core/wakeword` | `vendor/openwakeword-android-kt` (submodule) | `core/wakeword/src/...` | Yes — 3 patches | No (plain Kotlin/ONNX Runtime) | `autoCheckOpenWakeWord` | `sync-openwakeword.yml` (Wed) |
+| OpenCV | `vendor/ppocr-sdk/opencv/` (gitignored output) | `vendor/opencv` (submodule, tag `5.0.0`) | — (build output only, not vendored as source) | No | Yes (CMake, skips only if the built commit matches the pinned submodule commit — see below) | `autoCompileOpenCv` | `sync-opencv.yml` (Thu) |
+| PaddleOCR ppocr-sdk | `vendor/ppocr-sdk` | `vendor/paddleocr-upstream` (submodule, sparse-checked-out) | `vendor/ppocr-sdk/src/...` | Yes — 4 patches | No (plain Kotlin) | none yet | `sync-ppocr-sdk.yml` (Fri) |
 
 `autoCompileOpenCv`'s Gradle task is wired into `preBuild`, but at `vendor/ppocr-sdk`'s own module
 level (it runs automatically whenever that module builds) rather than a root-level task like
 `autoCompileWhisper`/`autoCheckVosk`/`autoCheckOpenWakeWord` are.
 
-### Skipping the checks
+### What actually runs at build time
 
-`-PvoxSkipNativePrep` drops Commander's four `preBuild` tasks — `autoCompileWhisper`,
-`autoCheckVosk`, `autoCheckNewPipeExtractor`, `autoCheckOpenWakeWord`. CI passes it, because a
-verification build has no use for a whisper compile or three JitPack queries about upstream
-versions. `copyShippedSchemas` runs regardless: the schema tests read the assets it generates.
+Only two of these scripts are wired into a build:
+
+| Task | Script | Module | Effect on your tree |
+|---|---|---|---|
+| `autoCompileWhisper` | `check_whisper.sh` | `vox-commander` | Builds the `.so` files. Can check out a newer whisper tag, but only with `--upgrade` or a typed `y` at an interactive prompt — unreachable under Gradle, whose `Exec` stdin is not a TTY. |
+| `autoCompileOpenCv` | `build_opencv_android.sh` | `vendor/ppocr-sdk` | Builds from the **pinned** submodule; never moves the pin. Early-exits when the built commit matches. |
+
+The three `autoCheck*` tasks are **deliberately not wired into `preBuild`**. "A newer Vosk exists" is
+a maintenance fact, and it already has a home: the weekly sync workflow that opens a PR. Delivering
+it a second time in every build cost three network round-trips per build, made builds behave
+differently offline, and — the reason it had to stop — ran a check that *overwrites vendored source
+files* to dry-run a patch while a compile is in progress. Nothing attached to a compile should be
+writing to the source tree. They remain runnable on demand:
+
+```
+./gradlew :vox-commander:autoCheckVosk
+./scripts/check_openwakeword_version.sh
+```
+
+Both dry-run scripts now restore the swapped files on `EXIT`/`INT`/`TERM`. Before that, interrupting
+one left pristine upstream files in place of the patched ones — and the wake-word case still
+compiles that way, just without the RMS silence gate.
+
+`-PvoxSkipNativePrep` now drops exactly one thing, `autoCompileWhisper`, for a verification build
+that only needs to know whether the Kotlin compiles. `copyShippedSchemas` runs regardless: the schema
+tests read the assets it generates.
 
 `autoCompileOpenCv` has no such flag and must not get one — `vendor/ppocr-sdk/opencv/java` is
 generated by that build, and both `vendor/ppocr-sdk` and `vox-vision` import `org.opencv.*` from it.
 Skipping it means those modules don't compile at all. CI caches the output instead, keyed on the
-pinned `vendor/opencv` commit plus `scripts/build_opencv_android.sh`.
+pinned `vendor/opencv` commit, `scripts/build_opencv_android.sh`, **and the NDK version** — native
+output built by one NDK is not interchangeable with another's.
 
 ---
 
@@ -53,13 +76,13 @@ JitPack-style coordinate (confirmed empirically — it has never opened a PR for
 - **`scripts/check_vosk_version.sh`** — queries the JitPack API (with a Maven Central search fallback)
   for the latest published version, compares it against `gradle/libs.versions.toml`, and prints an
   update notice (no automatic change).
-- **`autoCheckVosk`** Gradle task (`vox-commander/build.gradle.kts`) runs this on every `preBuild`.
-- **`.github/workflows/sync-vosk.yml`** — same check on a weekly schedule; bumps
-  `libs.versions.toml`, runs `assembleDebug` + `testDebugUnitTest`, and — one of two `sync-*.yml`
-  workflows that does — **auto-merges on green**. Vosk carries no
-  local patch and isn't compiled in-repo, the closest risk profile to a normal Dependabot bump;
-  accepted residual risk is that a green build can't confirm wake-word model-loading/recognition
-  accuracy, only that Vosk's API surface still resolves and compiles.
+- **`autoCheckVosk`** Gradle task — runnable on demand (`./gradlew :vox-commander:autoCheckVosk`),
+  deliberately *not* wired into `preBuild`.
+- **`.github/workflows/sync-vosk.yml`** — same check weekly (Monday 06:00 UTC); bumps
+  `libs.versions.toml`, runs `compileDebugKotlin` + `testDebugUnitTest`, and opens a PR for a
+  person. It used to merge itself on green; a green build cannot confirm wake-word model loading or
+  recognition accuracy, only that Vosk's API surface still resolves — and no unit test loads a
+  native model.
 
 ---
 
@@ -72,14 +95,12 @@ reliably track this JitPack-style coordinate either.
 - **`scripts/check_newpipe_extractor_version.sh`** — queries the JitPack API (with a GitHub-tags
   fallback, since unlike Vosk this isn't published on Maven Central at all) for the latest tag,
   compares it against `gradle/libs.versions.toml`, and prints an update notice (no automatic change).
-- **`autoCheckNewPipeExtractor`** Gradle task (`vox-commander/build.gradle.kts`) runs this on every
-  `preBuild`.
-- **`.github/workflows/sync-newpipe-extractor.yml`** — same check weekly; bumps `libs.versions.toml`,
-  runs `assembleDebug` + `testDebugUnitTest`, and — like Vosk — **auto-merges on green**. Same risk
-  profile as Vosk (no patch, no in-repo compile); accepted residual risk is that a green build can't
-  confirm YouTube search/extraction still works against YouTube's current page structure — that's
-  exactly the kind of breakage this library needs frequent updates for — only that its API surface
-  still resolves and compiles.
+- **`autoCheckNewPipeExtractor`** Gradle task — runnable on demand, not wired into `preBuild`.
+- **`.github/workflows/sync-newpipe-extractor.yml`** — same check weekly (Tuesday 06:00 UTC); bumps
+  `libs.versions.toml`, compiles, unit-tests, and opens a PR for a person. It used to merge itself
+  on green, and this is the worst candidate in the repo for that: NewPipeExtractor breaks when
+  YouTube changes its page structure, not when its API changes, so the green build cannot see the
+  failure mode that actually happens.
 
 ---
 
@@ -210,8 +231,9 @@ summarized here for completeness alongside its siblings:
 
 - **`scripts/check_openwakeword_version.sh`** — non-destructive dry-run: is a newer upstream tag
   available, and would each stored patch still `git apply --check` cleanly against it?
-- **`autoCheckOpenWakeWord`** Gradle task runs this on every `preBuild` (via `bash`, not `sh` — the
-  script uses a bash array), unless `-PvoxSkipNativePrep` is passed.
+- **`autoCheckOpenWakeWord`** Gradle task — runnable on demand, **not** wired into `preBuild`. This
+  is the one whose dry-run swaps upstream files into the working tree, which is why a version check
+  no longer runs during a compile.
 - **`.github/workflows/sync-openwakeword.yml`** — weekly: bumps the submodule, fully re-vendors
   `core/wakeword`'s sources, tries to `git apply` each stored patch, and if they all apply cleanly
   *and* the module compiles + unit tests pass, opens a PR that's already ready to merge. Only
@@ -299,8 +321,16 @@ initialises — which is why the invariant below is checked rather than assumed.
 - **`scripts/check_ppocr_sdk_version.sh`** — non-destructive dry-run: has upstream's default branch
   moved past the pinned commit, and would each stored patch still apply cleanly against the newer
   tree? Reported per patch, so a conflict names the one that needs attention.
-- **`.github/workflows/sync-ppocr-sdk.yml`** — weekly: re-clones `vendor/paddleocr-upstream` sparse +
-  shallow at upstream's current default-branch tip, fully re-vendors
+**Not upstream's tip.** This is the only sync that follows a default branch rather than a tag, so
+nobody upstream ever decides a commit is ready — the workflow imposes that wait itself and takes the
+newest commit **at least `STALENESS_FLOOR_DAYS` (7) old**. A bad or hostile commit is usually
+reverted upstream well inside a week, and being seven days behind an OCR SDK costs nothing. The PR
+also names any file upstream **added or removed**, because a re-vendor is a wholesale copy of
+someone else's tree reviewed by a human reading a diff, and an added file is what that reading is
+least likely to catch.
+
+- **`.github/workflows/sync-ppocr-sdk.yml`** — weekly (Friday): re-clones `vendor/paddleocr-upstream`
+  sparse + shallow at that eligible commit, fully re-vendors
   `vendor/ppocr-sdk/src/main/java/com/paddle` from it, applies every patch in `patches/` in name
   order, and if they all apply cleanly *and* the module compiles, opens a PR that's already ready to
   merge. Any patch failing marks the whole step conflicted — a partly patched tree isn't something to
@@ -326,21 +356,44 @@ Across Pattern B dependencies:
 - **Naming**: `scripts/check_<name>_version.sh` (dry-run, non-destructive, safe to run anytime),
   `scripts/regen_<name>_patch.sh` (regenerates the stored patch — only run when you've intentionally
   changed the patch itself), `.github/workflows/sync-<name>.yml` (the scheduled job that does the real
-  work: re-vendor + re-apply + build/test + open a PR). Only `sync-vosk.yml` and
-  `sync-newpipe-extractor.yml` auto-merge on green (Pattern A, no patch, no in-repo compile) —
-  every other one always waits for manual review, since a green build can't verify audio/wake-word/
-  speech/vision *behavior*, only that the code still compiles.
+  work: re-vendor + re-apply + build/test + open a PR).
 
-  Those two are now the only automatic merges left in the repo: Dependabot's auto-merge workflow was
-  removed (a green build is a weak claim here — R8 strips Gson-only classes, and no unit test loads
-  a native model), so its PRs are reviewed by a person. Whether the same argument should retire
-  these two is an open question, not a settled one.
+  **Nothing auto-merges.** `sync-vosk.yml` and `sync-newpipe-extractor.yml` used to squash their own
+  PRs on green; they were the last automatic merges in the repo after Dependabot's was removed, and
+  they went for the same reason. A green build is a weak claim here — no unit test loads a native
+  model, so it says Vosk's API still resolves rather than that recognition still works, and
+  NewPipeExtractor breaks when YouTube changes its page structure, which a compile cannot see at
+  all. They also merged *seconds* after opening the PR, before CI could report on it.
 - **NOTICE** file per vendored module: upstream attribution, the exact pinned commit/tag, what the
   local patch does and why, and pointers to the check/regen scripts.
 - **One patch per concern, never one combined patch.** `git apply` is all-or-nothing, so a monolith
   means an upstream change conflicting with any single hunk drops *every* adaptation, including ones
   unrelated to the conflict. Separate patches also let the check scripts name which one needs
   attention, and let a patch be deleted on its own when upstream absorbs it.
+
+### Sync schedule
+
+One bot per day, not five at once. They used to share `0 6 * * 1`, which meant five jobs starting
+together — `sync-opencv` building OpenCV from source, `sync-ppocr-sdk` building OpenCV *and*
+compiling Vision, `sync-openwakeword` compiling Commander — contending for runners and, now that
+nothing auto-merges, producing up to five PRs in one morning, each triggering its own CI run.
+
+| Day (06:00 UTC) | Bot |
+|---|---|
+| Monday | `sync-vosk` |
+| Tuesday | `sync-newpipe-extractor` |
+| Wednesday | `sync-openwakeword` |
+| Thursday | `sync-opencv` |
+| Friday | `sync-ppocr-sdk` |
+| 2nd of the month, 09:00 | `sync-whisper` |
+
+Each has a `concurrency` group with `cancel-in-progress: false`, so a hung native build cannot be
+lapped by the next run pushing the same branch, and an in-flight run is never killed mid-push.
+
+**A closed PR stays closed.** Dedup asks for a PR on that branch in *any* state, not just open ones.
+Deduping on open PRs only meant closing one without merging — a decision to decline that upstream
+version — brought it straight back the following week, identical, so declining was impossible and
+the PRs accumulated as permanent noise.
 
 ### The invariant: vendored source == upstream + patches
 
