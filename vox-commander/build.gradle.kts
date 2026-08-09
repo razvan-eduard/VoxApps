@@ -279,12 +279,24 @@ val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
     into("${projectDir}/src/main/assets/schemas")
 }
 
+// The four scripts above prepare and police *upstream* sources: they compile whisper.cpp from a
+// submodule and ask JitPack whether Vosk, NewPipeExtractor or OpenWakeWord have moved. That is what
+// a developer machine and a release runner want, and precisely what a verification build does not:
+// it needs the submodules, the NDK, shaderc and an SDK symlink to get to the same Kotlin compile,
+// and reaches the network to answer a question no commit is asking. `-PvoxSkipNativePrep` drops
+// them; everything after preBuild — compiling every module, running every test — is unchanged.
+val skipNativePrep = providers.gradleProperty("voxSkipNativePrep").isPresent
+
 // Forțează procesul de build al aplicației să ruleze aceste scripturi chiar la început
 tasks.named("preBuild") {
-    dependsOn(autoCompileWhisper)
-    dependsOn(autoCheckVosk)
-    dependsOn(autoCheckNewPipeExtractor)
-    dependsOn(autoCheckOpenWakeWord)
+    if (!skipNativePrep) {
+        dependsOn(autoCompileWhisper)
+        dependsOn(autoCheckVosk)
+        dependsOn(autoCheckNewPipeExtractor)
+        dependsOn(autoCheckOpenWakeWord)
+    }
+    // Not optional anywhere: the shipped schemas are generated into assets, and the tests that
+    // check code against them read the generated copy.
     dependsOn(copyShippedSchemas)
 }
 

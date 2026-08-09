@@ -40,14 +40,20 @@ jobs:
       # Every module's tests, not one app's. The shared modules — design, services, ipc, backup,
       # calendar, voxconnect — carry the checks that tie code to the shipped schemas, and the only
       # workflow that ran them was the dependabot one. Human changes went untested; a bot's did not.
+      #
+      # -PvoxSkipNativePrep skips Commander's preBuild scripts: compiling whisper.cpp from its
+      # submodule (NDK + shaderc + an SDK symlink, minutes per run) and three JitPack queries about
+      # upstream versions. None of that verifies a commit — the release workflow does the native
+      # build for real, with its own prerequisites, before anything ships. Everything downstream of
+      # preBuild still runs, so a change that breaks Commander's Kotlin still fails here.
       - name: Unit tests, all modules
-        run: ./gradlew test --no-daemon
+        run: ./gradlew test --no-daemon -PvoxSkipNativePrep
 
       # Compiling every app is what catches a shared-module change that only breaks one of them.
       # Debug rather than release: no signing secrets are needed to prove the code builds, and the
       # release job still does the real thing before publishing.
       - name: Assemble every app
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon -PvoxSkipNativePrep
 
       - name: Publish test results
         if: always()
