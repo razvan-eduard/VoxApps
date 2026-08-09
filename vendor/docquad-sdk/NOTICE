@@ -1,0 +1,54 @@
+This module ports and adapts code from:
+
+MakeACopy — DocQuadNet-256 ML document corner detector
+Copyright 2025 Christian Kierdorf
+https://github.com/egdels/makeacopy (Apache License, Version 2.0)
+Path: app/src/main/java/de/schliweb/makeacopy/ml/{corners,docquad}
+
+Unlike vendor/ppocr-sdk (a straight vendored copy of upstream Java, modified via a stored patch),
+this module is a from-scratch Kotlin port/adaptation of 4 of upstream's files — a literal patch
+doesn't apply across a language rewrite. The pristine upstream source is kept as a git submodule at
+vendor/makeacopy-upstream, sparse-checked-out to just
+app/src/main/java/de/schliweb/makeacopy/ml/* and app/src/main/assets/docquad/* (MakeACopy is a full
+document-scanner app we otherwise have no use for).
+
+Ported (Apache-2.0, GPLv3-compatible — see LICENSE at the repo root) into
+src/main/java/com/voxapps/vision/ml/docquad/:
+
+- DocQuadLetterbox.kt <- ml/docquad/DocQuadLetterbox.java (near-literal port, same logic)
+- DocQuadOrtRunner.kt <- ml/docquad/DocQuadOrtRunner.java (simplified: single-instance lifecycle
+  owned by DocumentCropper.init()/release() instead of a lazy static singleton; dropped the
+  NNAPI/XNNPACK execution-provider tiering — this model's small 64x64 heatmap output runs fast
+  enough on plain CPU that the added failure surface wasn't worth it here)
+- DocQuadPostprocessor.kt <- ml/docquad/DocQuadPostprocessor.java (ports only the primary
+  argmax + 5x5 sub-pixel corner-heatmap refinement path; upstream also fuses in a
+  segmentation-mask-derived quad with an agreement-scoring system between the two, and flags
+  "suspicious" detections for product telemetry — neither needed here, and
+  DocumentCropper.kt's own existing rectScore/aspect-ratio/convexity validation, shared with its
+  classical fallback detector, already rejects implausible quads downstream)
+- DocQuadDetector.kt <- ml/corners/DocQuadDetector.java (near-literal port: letterbox preprocessing,
+  NCHW float32 tensor prep, and the isValidQuad/isConvexTlTrBrBl geometric sanity checks)
+
+Reasoning for adding this at all: vox-vision's original classical OpenCV document detector (Canny
+edges + contour scoring, in vox-vision's own DocumentCropper.kt) proved unreliable against real
+cluttered/low-contrast backgrounds — confirmed on-device, it matched the *entire frame* as "the
+document" against a patterned rug background. DocQuadNet-256 is a small CNN trained specifically for
+this task and isn't fooled the same way. The classical detector is kept as an automatic fallback
+(DocumentCropper.detectLiveBounds/crop try this module first, then fall back to classical quad/blob
+detection if the model isn't loaded or returns nothing usable).
+
+Model file: src/main/assets/docquad/docquadnet256_trained_opset17.ort (13.4 MB, MIT-licensed weights
+per upstream's own licensing — see vendor/makeacopy-upstream's LICENSE) — committed directly here
+(unlike ppocr-sdk's OCR models, which are downloaded at runtime) since there's no existing
+runtime-download mechanism for this one and it's a single static file, not a versioned set.
+
+scripts/check_docquad_sdk_version.sh checks whether vendor/makeacopy-upstream has moved past the
+pinned commit — informational only (there's no stored patch to dry-run the way ppocr-sdk's check
+script does, since this is a port, not a patch); a human still needs to re-review upstream's diff and
+re-port by hand if anything material changed.
+
+Dependency pulled in by this module:
+
+1. ONNX Runtime Android
+   Copyright (c) Microsoft Corporation
+   Licensed under the MIT License

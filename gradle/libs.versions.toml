@@ -11,7 +11,7 @@ composeBom = "2026.06.01"
 room = "2.8.4"
 retrofit = "3.0.0"
 okhttp = "5.4.0"
-ksp = "2.3.10"
+ksp = "2.3.11"
 mockk = "1.14.11"
 coroutines = "1.11.0"
 securityCrypto = "1.1.0"
@@ -20,17 +20,20 @@ gson = "2.14.0"
 vosk = "0.3.75"
 newpipeExtractor = "v0.26.4"
 jna = "5.19.1"
-jsoup = "1.22.2"
+jsoup = "1.23.1"
 whisperCpp = "0.2.1"
-mediapipeGenai = "0.10.35"
+litertLm = "0.15.0"
 androidxMedia = "1.8.0"
 datastorePreferences = "1.2.1"
 reorderable = "3.1.0"
 work = "2.11.2"
-onnxruntime = "1.27.0"
+onnxruntime = "1.28.0"
 opencv = "4.5.3"
 camerax = "1.6.1"
 glanceAppwidget = "1.1.1"
+kizitonwoseCalendar = "2.10.1"
+ktor = "3.5.2"
+zxing = "3.5.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -78,7 +81,7 @@ newpipe-extractor = { group = "com.github.teamnewpipe", name = "NewPipeExtractor
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 whisper-android = { group = "com.github.PavelDoichev", name = "whisper-android", version = "v1.1.0" }
-mediapipe-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeGenai" }
+litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertLm" }
 androidx-media = { group = "androidx.media", name = "media", version.ref = "androidxMedia" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
@@ -89,6 +92,14 @@ androidx-camera-core = { group = "androidx.camera", name = "camera-core", versio
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+kizitonwose-calendar = { group = "com.kizitonwose.calendar", name = "compose", version.ref = "kizitonwoseCalendar" }
+
+# VoxConnect bridge: embedded HTTP+WebSocket server (core:voxconnect) and QR generation (display-only,
+# no scanning library needed — the desktop app is the one that scans).
+ktor-server-core = { group = "io.ktor", name = "ktor-server-core", version.ref = "ktor" }
+ktor-server-cio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktor" }
+ktor-server-websockets = { group = "io.ktor", name = "ktor-server-websockets", version.ref = "ktor" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -5,6 +5,9 @@ import com.voxapps.hub.data.preferences.HubSettingsRepository
 import com.voxapps.hub.data.preferences.HubSettingsRepositoryImpl
 import com.voxapps.hub.domain.localization.LanguageManager
 import com.voxapps.hub.domain.sync.SyncPeerStore
+import com.voxapps.voxconnect.PairedDeviceStore
+import com.voxapps.voxconnect.VoxConnectPairing
+import com.voxapps.voxconnect.VoxConnectServer
 import java.util.Locale
 
 /**
@@ -23,4 +26,22 @@ class HubContainer(context: Context) {
     val settingsRepository: HubSettingsRepository = HubSettingsRepositoryImpl(appContext)
 
     val syncPeerStore: SyncPeerStore by lazy { SyncPeerStore(appContext) }
+
+    val voxConnectPairing: VoxConnectPairing by lazy { VoxConnectPairing() }
+    val voxConnectDeviceStore: PairedDeviceStore by lazy { PairedDeviceStore(appContext) }
+
+    /** Start/stop is driven by [HubSettings.voxConnectEnabled] — see `HubApplication.onCreate()`,
+     *  which mirrors the same settings-flow-collect-and-react pattern already used to live-sync the
+     *  debug-logging flags. */
+    val voxConnectServer: VoxConnectServer by lazy {
+        VoxConnectServer(
+            context = appContext,
+            deviceStore = voxConnectDeviceStore,
+            allowedDomains = {
+                settingsRepository.getSnapshot().voxConnectMonitoredApps
+                    .filterValues { it }.keys
+            },
+            mediaControlEnabled = { settingsRepository.getSnapshot().voxConnectMediaControlEnabled }
+        )
+    }
 }

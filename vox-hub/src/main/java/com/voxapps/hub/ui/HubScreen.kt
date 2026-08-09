@@ -58,10 +58,10 @@ import com.voxapps.hub.domain.backup.wantsExport
 import com.voxapps.hub.domain.backup.zipEntriesFor
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.ipc.BalGraceFlash
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxIpc
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -76,7 +76,12 @@ import java.util.zip.ZipInputStream
 
 private data class ImportPreview(
     val perDomain: Map<String, JSONObject>,
-    val summaries: Map<String, Map<String, Int>>
+    val summaries: Map<String, Map<String, Int>>,
+    /** Apps that were selected when this archive was written but contributed nothing to it — read
+     *  back from the document's `missing_apps`. Surfaced before the import runs so a partial backup
+     *  isn't silently restored as if it were complete. Empty for a complete archive, and for any
+     *  archive written before the field existed. */
+    val missingApps: List<String> = emptyList()
 )
 
 /** One attachment zip staged from an import file, ready to inject into its owning domain's import
@@ -106,6 +111,7 @@ fun HubScreen(
     // *later* failure re-shows even if an earlier one was dismissed.
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = HubSettings())
     var dismissedFailureTimestamp by remember { mutableStateOf<Long?>(null) }
+    var dismissedPartialTimestamp by remember { mutableStateOf<Long?>(null) }
 
     var apps by remember { mutableStateOf<List<VoxAppInfo>>(emptyList()) }
     var isExporting by remember { mutableStateOf(false) }
@@ -127,6 +133,9 @@ fun HubScreen(
     var isImporting by remember { mutableStateOf(false) }
     var importPreview by remember { mutableStateOf<ImportPreview?>(null) }
     var selectedForImport by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Distinguishes the first prompt ("these were never opened") from a repeat one ("still not
+    // responding after we opened them"), so the second offer doesn't repeat a now-false reason.
+    var hasRetriedFlash by remember { mutableStateOf(false) }
     var importStatus by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var importError by remember { mutableStateOf<String?>(null) }
 
@@ -144,14 +153,38 @@ fun HubScreen(
         }
     }
 
-    fun finalizeExport(uri: Uri, perDomainJson: Map<String, String>, attachmentZipEntries: Map<String, String>) {
+    // Any app that got flashed to clear its "stopped" flag (see retryUnreachableThenFinalize/
+    // retryImportUnreachableThenFinalize below) leaves its own activity briefly in front of Hub's.
+    // Those functions already try to return to Hub mid-flow, but that call can get BAL-blocked (see
+    // their own comment) — this is the final, always-runs safety net so the user actually lands
+    // back on Hub once the whole backup/restore is done, not on whichever app was flashed last.
+    fun bringHubToForeground() {
+        context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        }
+    }
+
+    /**
+     * @param missingApps labels of apps that were selected but contributed nothing. Written into
+     *   export.json rather than only shown on screen: once this dialog is dismissed there is
+     *   otherwise no way — now or months later, on another device — to tell a partial archive from
+     *   a complete one. Mirrors what BackupWorker already records for scheduled runs.
+     */
+    fun finalizeExport(
+        uri: Uri,
+        perDomainJson: Map<String, String>,
+        attachmentZipEntries: Map<String, String>,
+        missingApps: List<String> = emptyList()
+    ) {
         if (perDomainJson.isNotEmpty()) {
             context.contentResolver.openOutputStream(uri)?.use { out ->
-                BackupZipWriter.write(out, context.contentResolver, perDomainJson, attachmentZipEntries)
+                BackupZipWriter.write(out, context.contentResolver, perDomainJson, attachmentZipEntries, missingApps)
             }
             Toast.makeText(context, languageManager.getString("hub_export_saved_toast"), Toast.LENGTH_SHORT).show()
         }
         isExporting = false
+        bringHubToForeground()
     }
 
     /**
@@ -171,26 +204,7 @@ fun HubScreen(
         isExporting = true
         scope.launch {
             // Clearing Android's "stopped" flag requires the target app's activity to genuinely
-            // reach RESUMED (visible) state, not merely be started — batching every launch into one
-            // startActivities() call avoids BAL blocking but never lets the non-final entries
-            // actually resume (confirmed via dumpsys: their stopped flag stayed true even though a
-            // process spawned). So each target needs its own startActivity() call with enough delay
-            // to really finish its transition — but a delay much past ~1s makes Hub's own next call
-            // BAL-blocked (confirmed via logcat "Background activity launch blocked!" at 700ms).
-            // 350ms threads that needle: long enough for a real activity transition, short enough to
-            // stay inside Hub's post-tap BAL grace window for every call in the chain.
-            for (pkg in targetPackages) {
-                context.packageManager.getLaunchIntentForPackage(pkg)?.let { intent ->
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                    delay(350L)
-                }
-            }
-            context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-            }
-            delay(300L)
+            BalGraceFlash.flashThenRefocus(context, targetPackages)
 
             val results = priorResults.toMutableMap()
             val okFlags = priorOkFlags.toMutableMap()
@@ -212,13 +226,30 @@ fun HubScreen(
                 exportStatus = results.toMap()
                 exportOk = okFlags.toMap()
             }
-            finalizeExport(uri, perDomainJson, attachmentZipEntries)
+            // Re-offer instead of finalizing unconditionally. Flashing wakes an app only if its
+            // activity actually reaches RESUMED, and with several stopped apps the later launches
+            // in the chain can fall outside Hub's background-activity-launch grace window (see
+            // BalGraceFlash) — so a retry can legitimately still come up short. Writing the zip
+            // here regardless is what made a partial backup look like a successful one.
+            val stillMissing = targetPackages.filter { okFlags[it] != true }.toSet()
+            if (stillMissing.isNotEmpty()) {
+                pendingUnreachable = stillMissing
+                pendingResults = results
+                pendingOkFlags = okFlags
+                pendingPerDomainJson = perDomainJson
+                pendingAttachmentZipEntries = attachmentZipEntries
+                hasRetriedFlash = true
+                showFlashRetryDialog = true
+            } else {
+                finalizeExport(uri, perDomainJson, attachmentZipEntries)
+            }
         }
     }
 
     fun finalizeImport(results: Map<String, String>) {
         importStatus = results
         isImporting = false
+        bringHubToForeground()
     }
 
     /**
@@ -233,25 +264,13 @@ fun HubScreen(
     ) {
         isImporting = true
         scope.launch {
-            // Same BAL-grace-window-tuned flash sequence as export — see its comment above.
-            for (pkg in targetPackages) {
-                context.packageManager.getLaunchIntentForPackage(pkg)?.let { intent ->
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                    delay(350L)
-                }
-            }
-            context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-            }
-            delay(300L)
+            BalGraceFlash.flashThenRefocus(context, targetPackages)
 
             val results = priorResults.toMutableMap()
             for ((domain, data) in targets) {
                 val app = apps.firstOrNull { it.domain == domain } ?: continue
                 if (app.packageName !in targetPackages) continue
-                val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString())
+                val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString(), importMode = settings.importMode)
                 results[domain] = if (result != null && result.ok) {
                     result.text
                 } else {
@@ -407,7 +426,7 @@ fun HubScreen(
                     return@launch
                 }
                 val summaries = available.mapValues { (_, data) -> ExportImportUtil.summarize(data) }
-                importPreview = ImportPreview(available, summaries)
+                importPreview = ImportPreview(available, summaries, ExportImportUtil.missingAppsIn(text))
                 selectedForImport = available.keys
                 importStatus = emptyMap()
             } catch (e: Exception) {
@@ -470,6 +489,42 @@ fun HubScreen(
                         )
                         TextButton(
                             onClick = { dismissedFailureTimestamp = backupTimestamp },
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            Text(languageManager.getString("dismiss_button"))
+                        }
+                    }
+                }
+            }
+            // A scheduled run can "succeed" (produce a zip) while still missing one or more apps
+            // that never woke up in time or whose export failed — see pingUntilReady/BackupWorker's
+            // doc comments. Distinct banner from the failure one above (warning tone, not error)
+            // since there IS a usable backup, just an incomplete one.
+            if (settings.lastBackupSuccess == true && settings.lastBackupMissingApps.isNotEmpty() &&
+                backupTimestamp != null && backupTimestamp != dismissedPartialTimestamp
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            languageManager.getString("backup_partial_banner_title"),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            String.format(
+                                languageManager.getString("backup_partial_banner_message"),
+                                SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(backupTimestamp)),
+                                settings.lastBackupMissingApps.joinToString(", ")
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        TextButton(
+                            onClick = { dismissedPartialTimestamp = backupTimestamp },
                             modifier = Modifier.padding(top = 4.dp)
                         ) {
                             Text(languageManager.getString("dismiss_button"))
@@ -618,6 +673,20 @@ fun HubScreen(
             title = { Text(languageManager.getString("hub_import_confirm_title")) },
             text = {
                 Column {
+                    // Shown before anything is restored: the archive records which selected apps
+                    // produced nothing when it was written, and restoring a partial backup while
+                    // believing it complete is exactly the mistake that record exists to prevent.
+                    if (preview.missingApps.isNotEmpty()) {
+                        Text(
+                            String.format(
+                                languageManager.getString("hub_import_partial_warning"),
+                                preview.missingApps.joinToString(", ")
+                            ),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
                     preview.summaries.forEach { (domain, counts) ->
                         val label = apps.firstOrNull { it.domain == domain }?.label ?: domain
                         val summaryText = counts.entries.joinToString(", ") { (key, count) -> "$count $key" }
@@ -654,7 +723,7 @@ fun HubScreen(
                                     results[domain] = languageManager.getString("hub_status_timeout")
                                     unreachable += app.packageName
                                 } else {
-                                    val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString())
+                                    val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString(), importMode = settings.importMode)
                                     results[domain] = if (result != null && result.ok) {
                                         result.text
                                     } else {
@@ -683,16 +752,30 @@ fun HubScreen(
     }
 
     if (showFlashRetryDialog) {
-        val unreachableLabels = apps
-            .filter { it.packageName in pendingUnreachable }
-            .joinToString(", ") { it.label }
+        val missingLabels = apps.filter { it.packageName in pendingUnreachable }.map { it.label }
+        val unreachableLabels = missingLabels.joinToString(", ")
+        // Saving now writes a partial archive, so the labels ride along into export.json.
+        val saveAnyway: () -> Unit = {
+            showFlashRetryDialog = false
+            pendingExportUri?.let {
+                finalizeExport(it, pendingPerDomainJson, pendingAttachmentZipEntries, missingLabels)
+            }
+        }
         AlertDialog(
-            onDismissRequest = {
-                showFlashRetryDialog = false
-                pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson, pendingAttachmentZipEntries) }
+            onDismissRequest = saveAnyway,
+            title = {
+                Text(languageManager.getString(
+                    if (hasRetriedFlash) "hub_prewarm_retry_title" else "hub_prewarm_title"
+                ))
             },
-            title = { Text(languageManager.getString("hub_prewarm_title")) },
-            text = { Text(String.format(languageManager.getString("hub_prewarm_message"), unreachableLabels)) },
+            text = {
+                Text(String.format(
+                    languageManager.getString(
+                        if (hasRetriedFlash) "hub_prewarm_retry_message" else "hub_prewarm_message"
+                    ),
+                    unreachableLabels
+                ))
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -712,12 +795,7 @@ fun HubScreen(
                 ) { Text(languageManager.getString("hub_prewarm_flash_button")) }
             },
             dismissButton = {
-                TextButton(
-                    onClick = {
-                        showFlashRetryDialog = false
-                        pendingExportUri?.let { finalizeExport(it, pendingPerDomainJson, pendingAttachmentZipEntries) }
-                    }
-                ) { Text(languageManager.getString("hub_prewarm_skip_button")) }
+                TextButton(onClick = saveAnyway) { Text(languageManager.getString("hub_prewarm_skip_button")) }
             }
         )
     }

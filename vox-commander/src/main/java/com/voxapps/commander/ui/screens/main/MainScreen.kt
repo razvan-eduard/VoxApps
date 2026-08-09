@@ -62,7 +62,6 @@ fun MainScreen(
     onRequestLocationPermission: () -> Unit = {},
     onRequestBatteryOptimizationPermission: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
-    onClearCustomModel: () -> Unit = {},
     onImportOpenWakeWordModel: () -> Unit = {},
     // Incremented (not a plain Boolean) by MainActivity whenever a widget "tap to speak" launch
     // arrives — from onCreate's initial intent AND from onNewIntent if the activity was already
@@ -284,7 +283,6 @@ fun MainScreen(
             onRequestLocationPermission = onRequestLocationPermission,
             onRequestBatteryOptimizationPermission = onRequestBatteryOptimizationPermission,
             onImportCustomModel = onImportCustomModel,
-            onClearCustomModel = onClearCustomModel,
             onImportOpenWakeWordModel = onImportOpenWakeWordModel
         )
 

@@ -60,6 +60,14 @@ object NluIntentParser {
             text = text.replace(Regex("```"), "")
         }
 
+        // Some on-device models (confirmed: Qwen-based nlu_llm) occasionally emit literal
+        // backslash-n/backslash-t escape *text* for their own pretty-printing whitespace instead
+        // of real newline/tab characters — as if the whole object were written as though it were
+        // a JSON string value, minus the surrounding quotes. A real, unescaped backslash-n/t is
+        // never valid JSON syntax outside a quoted string, so unescaping it here can only turn
+        // invalid syntax into valid whitespace; it can't corrupt an already-valid response.
+        text = text.replace("\\n", "\n").replace("\\t", "\t")
+
         // Find the first { ... } block (handles multiple JSON objects)
         val firstBrace = text.indexOf('{')
         if (firstBrace < 0) return text
@@ -108,10 +116,7 @@ object NluIntentParser {
         val el = get(key) ?: return emptyMap()
         if (el.isJsonNull) return emptyMap()
         return try {
-            val type = TypeToken.getParameterized(
-                Map::class.java, String::class.java, String::class.java
-            ).type
-            gson.fromJson(el, type) ?: emptyMap()
+            gson.fromJson(el, object : TypeToken<Map<String, String>>() {}.type) ?: emptyMap()
         } catch (e: Exception) {
             emptyMap()
         }

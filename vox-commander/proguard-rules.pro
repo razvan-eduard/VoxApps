@@ -8,10 +8,9 @@
 -dontwarn com.spotify.**
 -dontwarn com.fasterxml.jackson.databind.**
 
-# MediaPipe / Google GenAI
--keep class com.google.mediapipe.** { *; }
--dontwarn com.google.mediapipe.**
--dontwarn com.google.auto.value.**
+# LiteRT-LM (on-device LLM)
+-keep class com.google.ai.edge.litertlm.** { *; }
+-dontwarn com.google.ai.edge.litertlm.**
 
 # Rhino / Mozilla (Scripting)
 -dontwarn java.beans.**
@@ -102,11 +101,20 @@
 # Plus explicit keeps for every class actually passed to gson.fromJson(...)/gson.toJson(...) in this
 # app — @SerializedName-only protection isn't enough, these need to survive intact (fields AND a
 # usable constructor), not just have their field names preserved.
+#
+# This list must grow with every new schema type, INCLUDING types only reached as a nested field of
+# one already listed here: R8 judges each class on its own, and a class Gson alone instantiates has
+# no visible constructor call, so it gets abstracted away. Adding EntryPoint to models.json without
+# this line made the bundled schema unparseable in release builds only — which then read as
+# "asset version 0", losing the no-downgrade comparison and silently handing the app an older remote
+# schema. Debug builds and unit tests cannot see any of it; only a release install can.
 -keep class com.voxapps.commander.data.preferences.AppSettings { *; }
 -keep class com.voxapps.commander.data.preferences.AppAliasRule { *; }
 -keep class com.voxapps.commander.data.remote.RemoteModelSchema { *; }
 -keep class com.voxapps.commander.data.remote.RemoteEngineConfig { *; }
 -keep class com.voxapps.commander.data.remote.RemoteModelItem { *; }
+-keep class com.voxapps.commander.data.remote.EntryPoint { *; }
+# AuthDeclaration now ships in :core:services and is kept by that module's consumer rules.
 -keep class com.voxapps.commander.data.remote.VirtualModelItem { *; }
 -keep class com.voxapps.commander.domain.intent.model.NluIntent { *; }
 -keep class com.voxapps.commander.domain.intent.registry.IntentCatalog$IntentsSchema { *; }
@@ -118,9 +126,11 @@
 -keep class com.voxapps.commander.domain.search.CategoryDefinition { *; }
 -keep class com.voxapps.commander.domain.search.ProviderDefinition { *; }
 -keep class com.voxapps.commander.domain.search.FieldMapping { *; }
+-keep class com.voxapps.commander.domain.media.MediaServiceRegistry$MediaSchema { *; }
+-keep class com.voxapps.commander.domain.media.MediaServiceRegistry$MediaBackend { *; }
+-keep class com.voxapps.commander.domain.media.MediaServiceRegistry$MediaRegion { *; }
 -keep class com.voxapps.commander.domain.intent.registry.ApiIntegrationsSchema { *; }
 -keep class com.voxapps.commander.domain.intent.registry.ApiIntegration { *; }
--keep class com.voxapps.commander.domain.intent.registry.AuthDef { *; }
 -keep class com.voxapps.commander.domain.intent.registry.CapabilitySlot { *; }
 -keep class com.voxapps.commander.domain.intent.registry.SequenceStep { *; }
 -keep class com.voxapps.commander.domain.intent.registry.RetryDef { *; }

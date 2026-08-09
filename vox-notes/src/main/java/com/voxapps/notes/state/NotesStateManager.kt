@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
  * either [NotesUiState.Locked] or [NotesUiState.Unlocked]. Persistence is delegated to
  * [NotesRepository]; the biometric session lives in [SessionManager].
  */
-class NotesStateManager internal constructor(
+class NotesStateManager(
     private val settingsRepo: NotesSettingsRepository,
     private val notesRepo: NotesRepository,
     private val sessionManager: SessionManager,
@@ -52,6 +52,7 @@ class NotesStateManager internal constructor(
     private data class Runtime(
         val selectedCategoryId: Long? = null,
         val sort: SortMode = SortMode.NEWEST,
+        val selectedDateMillis: Long = System.currentTimeMillis(),
         val dateFrom: Long? = null,
         val dateTo: Long? = null,
         val sessionTick: Int = 0
@@ -79,16 +80,33 @@ class NotesStateManager internal constructor(
                     categories = categories,
                     selectedCategoryId = rt.selectedCategoryId,
                     sort = rt.sort,
+                    isGridView = settings.isGridView,
+                    selectedDateMillis = rt.selectedDateMillis,
                     dateFrom = rt.dateFrom,
                     dateTo = rt.dateTo
                 )
             }
-        }.onEach { _uiState.value = it }.launchIn(scope)
+        }
+        // Deliberately NOT flowOn(Default) and NOT stateIn/WhileSubscribed, though the combine
+        // above is real CPU work on the scope's Main dispatcher:
+        //
+        //  - flowOn moves the transform off this thread, which makes _uiState update
+        //    asynchronously. Today a change published into _runtime settles into _uiState within
+        //    the same call, and the synchronous accessors below rely on that; adding flowOn broke
+        //    exactly those expectations in NotesStateManagerTest.
+        //  - WhileSubscribed would leave uiState.value at its initial Loading value whenever no UI
+        //    is attached, and it is read synchronously, with no subscription, by headless callers
+        //    (IPC read/export responders and the widget refresh).
+        //
+        // Both are worth revisiting only behind a measurement showing this combine actually costs
+        // frames, together with a plan for those synchronous readers.
+            .onEach { _uiState.value = it }.launchIn(scope)
     }
 
     // --- FILTERS ---
     fun setCategoryFilter(categoryId: Long?) = _runtime.update { it.copy(selectedCategoryId = categoryId) }
     fun setSort(sort: SortMode) = _runtime.update { it.copy(sort = sort) }
+    fun setSelectedDate(millis: Long) = _runtime.update { it.copy(selectedDateMillis = millis) }
     fun setDateFilter(from: Long?, to: Long?) = _runtime.update { it.copy(dateFrom = from, dateTo = to) }
     fun clearDateFilter() = _runtime.update { it.copy(dateFrom = null, dateTo = null) }
 
@@ -112,6 +130,7 @@ class NotesStateManager internal constructor(
         scope.launch { settingsRepo.setDebugToastsEnabled(enabled) }
     }
     fun setCalendarViewEnabled(enabled: Boolean) { scope.launch { settingsRepo.setCalendarViewEnabled(enabled) } }
+    fun setIsGridView(enabled: Boolean) { scope.launch { settingsRepo.setIsGridView(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setScanImageRetention(mode: String) { scope.launch { settingsRepo.setScanImageRetention(mode) } }
 
@@ -119,7 +138,7 @@ class NotesStateManager internal constructor(
     fun observeAttachments(noteId: Long): Flow<List<AttachmentEntity>> =
         attachmentDao.observeFor(NotesAttachments.RECORD_TYPE, noteId)
 
-    fun addManualAttachment(noteId: Long, fileName: String) {
+    fun addManualAttachment(noteId: Long, fileName: String, groupId: String? = null, groupOrder: Int = 0) {
         scope.launch {
             attachmentDao.insert(
                 AttachmentEntity(
@@ -127,7 +146,9 @@ class NotesStateManager internal constructor(
                     recordId = noteId,
                     fileName = fileName,
                     source = AttachmentSource.MANUAL,
-                    createdAt = System.currentTimeMillis()
+                    createdAt = System.currentTimeMillis(),
+                    groupId = groupId,
+                    groupOrder = groupOrder
                 )
             )
         }
@@ -139,8 +160,62 @@ class NotesStateManager internal constructor(
             AttachmentFileStore.delete(context, NotesAttachments.DIR, entity.fileName)
         }
     }
+
+    /** Cancels a burst mid-capture (see [com.voxapps.attachments.ui.rememberBurstCaptureLauncher]) —
+     *  deletes every row+file already committed under [groupId] for this note. */
+    fun deleteAttachmentGroup(noteId: Long, groupId: String, context: Context) {
+        scope.launch {
+            val deleted = attachmentDao.deleteGroup(NotesAttachments.RECORD_TYPE, noteId, groupId)
+            deleted.forEach { AttachmentFileStore.delete(context, NotesAttachments.DIR, it.fileName) }
+        }
+    }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
     fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
+    fun setTodayEffect(effect: String) { scope.launch { settingsRepo.setTodayEffect(effect) } }
+    fun setTodayEffectStyle(style: String) { scope.launch { settingsRepo.setTodayEffectStyle(style) } }
+    fun setTodayEffectColor(colorArgb: Long) { scope.launch { settingsRepo.setTodayEffectColor(colorArgb) } }
+    fun setTodayEffectColor2(colorArgb: Long?) { scope.launch { settingsRepo.setTodayEffectColor2(colorArgb) } }
+    fun setTodayEffectSpeed(speed: Float) { scope.launch { settingsRepo.setTodayEffectSpeed(speed) } }
+
+    fun setNotificationsSystemDefault(enabled: Boolean) {
+        scope.launch {
+            settingsRepo.setNotificationsSystemDefault(enabled)
+            if (!enabled) incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsVibrationEnabled(enabled: Boolean) {
+        scope.launch {
+            settingsRepo.setNotificationsVibrationEnabled(enabled)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsSoundUri(uri: String?) {
+        scope.launch {
+            settingsRepo.setNotificationsSoundUri(uri)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsVolume(volume: Int) {
+        scope.launch {
+            settingsRepo.setNotificationsVolume(volume)
+        }
+    }
+
+    fun setNotificationsLength(length: String) {
+        scope.launch {
+            settingsRepo.setNotificationsLength(length)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    private suspend fun incrementNotificationChannelVersion() {
+        val current = settingsRepo.getSnapshot().notificationsChannelVersion
+        settingsRepo.setNotificationsChannelVersion(current + 1)
+    }
+
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }
     fun seedDebugTestData() {
         scope.launch { com.voxapps.notes.domain.debug.DebugDataSeeder.seed(notesRepo) }
@@ -239,21 +314,5 @@ class NotesStateManager internal constructor(
     /** User dismissed the suggestion without applying anything. */
     fun dismissNoteDeduplication() {
         scope.launch { noteDeduplicationRepo.clearPendingGroups() }
-    }
-
-    companion object {
-        @Volatile private var instance: NotesStateManager? = null
-
-        fun getInstance(
-            settingsRepo: NotesSettingsRepository,
-            notesRepo: NotesRepository,
-            sessionManager: SessionManager,
-            noteDeduplicationRepo: NoteDeduplicationRepository,
-            pendingLlmRequestQueue: VoxLlmRequestQueue,
-            attachmentDao: AttachmentDao
-        ): NotesStateManager = instance ?: synchronized(this) {
-            instance ?: NotesStateManager(settingsRepo, notesRepo, sessionManager, noteDeduplicationRepo, pendingLlmRequestQueue, attachmentDao)
-                .also { instance = it }
-        }
     }
 }

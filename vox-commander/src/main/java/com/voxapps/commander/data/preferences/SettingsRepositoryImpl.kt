@@ -1,6 +1,7 @@
 package com.voxapps.commander.data.preferences
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -13,11 +14,15 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.utils.fromJsonOrNull
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.utils.AppScope
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -44,6 +49,52 @@ class SettingsRepositoryImpl(
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
+    /**
+     * Names of the entries in the encrypted store — [Keys]' counterpart for the other store.
+     *
+     * Written out as constants for the same reason the DataStore keys are: they were string
+     * literals repeated at each read and each write, which is one typo away from a credential that
+     * saves to one name and is read from another. Stored names, so never renamed.
+     */
+    private object SecureKeys {
+        /** One entry per engine that declares `requires_api_key`, addressed by the engine key
+         *  itself: `engine_apikey_OPENAI`, `engine_apikey_wake_porcupine`, and so on. A namespace
+         *  rather than a fixed set of names, so an engine that needs a credential needs no code. */
+        const val ENGINE_PREFIX = "engine_apikey_"
+
+        fun forEngine(engineKey: String) = "$ENGINE_PREFIX$engineKey"
+        fun engineOf(prefName: String) = prefName.removePrefix(ENGINE_PREFIX)
+        fun isEngineKey(prefName: String) = prefName.startsWith(ENGINE_PREFIX)
+
+        /** The same idea for search providers, which own their keys by provider name. */
+        const val SEARCH_PREFIX = "search_apikey_"
+
+        fun forSearchProvider(providerName: String) = "$SEARCH_PREFIX$providerName"
+        fun searchProviderOf(prefName: String) = prefName.removePrefix(SEARCH_PREFIX)
+        fun isSearchKey(prefName: String) = prefName.startsWith(SEARCH_PREFIX)
+
+        /** The single-key names used before credentials were per engine. Read once by
+         *  [migrateLegacyCredentials] and then gone; never written again. */
+        const val LEGACY_OPENAI = "api_key"
+        const val LEGACY_GEMINI = "gemini_api_key"
+        const val LEGACY_PICOVOICE = "picovoice_access_key"
+    }
+
+    /**
+     * Which engine inherits each single-key credential.
+     *
+     * `api_key` seeds *both* cloud OpenAI engines because that is what it was: one value the intent
+     * interpreter and the transcription engine both read. Splitting it without seeding both would
+     * silently unconfigure whichever the user thought of second.
+     */
+    private val legacyCredentialOwners = listOf(
+        SecureKeys.LEGACY_OPENAI to listOf(Strings.AiProcessors.OPENAI, Strings.Processors.WHISPER_API),
+        SecureKeys.LEGACY_GEMINI to listOf(Strings.AiProcessors.GEMINI_CLOUD),
+        // The models.json key for Porcupine. A literal rather than a reference into the service
+        // layer, which the data layer has no business importing — and it is a stored identifier.
+        SecureKeys.LEGACY_PICOVOICE to listOf("wake_porcupine")
+    )
+
     // --- DATASTORE KEYS ---
     private object Keys {
         // Language
@@ -55,6 +106,7 @@ class SettingsRepositoryImpl(
         // Voice engine
         val VOICE_PROCESSOR = stringPreferencesKey("voice_processor")
         val ACTIVE_VOICE_MODEL_ID = stringPreferencesKey("active_voice_model_id")
+        val ACTIVE_WAKE_MODEL_ID = stringPreferencesKey("active_wake_model_id")
 
         // Intent engine
         val AI_PROCESSOR = stringPreferencesKey("ai_processor")
@@ -68,6 +120,8 @@ class SettingsRepositoryImpl(
         val COMMAND_QUEUE_ENABLED = booleanPreferencesKey("command_queue_enabled")
         val WAKE_WORD_PROFILE = stringPreferencesKey("wake_word_profile")
         val WAKE_WORD_ENGINE_TYPE = stringPreferencesKey("wake_word_engine_type")
+        /** Legacy: the Picovoice key lived here in plaintext until [migratePicovoiceKey] moved it
+         *  to the encrypted store. Kept solely so that migration can find and clear it. */
         val PICOVOICE_ACCESS_KEY = stringPreferencesKey("picovoice_access_key")
         val WAKE_WORD_SENSITIVITY = stringPreferencesKey("wake_word_sensitivity")
         val WAKE_WORD_AEC_ENABLED = booleanPreferencesKey("wake_word_aec_enabled")
@@ -103,7 +157,9 @@ class SettingsRepositoryImpl(
 
         // Remote repository
         val MODEL_REPO_BASE_URL = stringPreferencesKey("model_repo_base_url")
-        val MODELS_JSON_CACHE = stringPreferencesKey("models_json_cache")
+        val USE_REMOTE_SCHEMAS = booleanPreferencesKey("use_remote_schemas")
+        val SCHEMA_STORE_MIGRATED = booleanPreferencesKey("schema_store_migrated")
+        val IMPORT_SELECTION_MIGRATED = booleanPreferencesKey("import_selection_migrated")
 
         // Model download state
         val DOWNLOADED_MODEL_IDS = stringSetPreferencesKey("downloaded_model_ids")
@@ -113,6 +169,9 @@ class SettingsRepositoryImpl(
 
         // Per-engine model selections (stored as JSON map)
         val ENGINE_MODEL_SELECTIONS_JSON = stringPreferencesKey("engine_model_selections_json")
+
+        // Per-category search provider selections (stored as JSON map)
+        val SEARCH_PROVIDER_SELECTIONS_JSON = stringPreferencesKey("search_provider_selections_json")
 
         // Default apps per domain (stored as JSON map: "audio" -> "com.spotify.music")
         val DEFAULT_APP_PACKAGES_JSON = stringPreferencesKey("default_app_packages_json")
@@ -152,9 +211,18 @@ class SettingsRepositoryImpl(
         // App Aliases
         val APP_ALIAS_RULES_JSON = stringPreferencesKey("app_alias_rules_json")
 
-        // Manual location fallback (stored as strings since DataStore has no doublePreferencesKey)
-        val MANUAL_LOCATION_LAT = stringPreferencesKey("manual_location_lat")
-        val MANUAL_LOCATION_LON = stringPreferencesKey("manual_location_lon")
+        // Location: Home Town fallback (stored as strings since DataStore has no doublePreferencesKey),
+        // cache TTL, and "always use this location" (shared :core:location module).
+        val LOCATION_HOME_TOWN_LAT = stringPreferencesKey("location_home_town_lat")
+        val LOCATION_HOME_TOWN_LON = stringPreferencesKey("location_home_town_lon")
+        val LOCATION_CACHE_TTL = stringPreferencesKey("location_cache_ttl")
+        val LOCATION_ALWAYS_USE_HOME_TOWN = booleanPreferencesKey("location_always_use_home_town")
+
+        // Backup & Restore (local)
+        val BACKUP_INCLUDE_SETTINGS = booleanPreferencesKey("backup_include_settings")
+        val BACKUP_INCLUDE_DATA = booleanPreferencesKey("backup_include_data")
+        val BACKUP_INCLUDE_API_KEYS = booleanPreferencesKey("backup_include_api_keys")
+        val BACKUP_IMPORT_MODE = stringPreferencesKey("backup_import_mode")
 
         // First launch / tutorial
         val FIRST_LAUNCH_COMPLETED = booleanPreferencesKey("first_launch_completed")
@@ -194,7 +262,7 @@ class SettingsRepositoryImpl(
 
             // Migrate API key to new secure prefs
             oldPrefs.getString(Strings.Preferences.KEY_API_KEY, null)?.let { key ->
-                encryptedPrefs.edit().putString("api_key", key).apply()
+                encryptedPrefs.edit().putString(SecureKeys.LEGACY_OPENAI, key).apply()
             }
 
             dataStore.edit { prefs ->
@@ -243,7 +311,6 @@ class SettingsRepositoryImpl(
 
                 // Remote repository
                 all[Strings.Preferences.KEY_MODEL_REPO_BASE_URL]?.let { prefs[Keys.MODEL_REPO_BASE_URL] = it as String }
-                all[Strings.Preferences.KEY_MODELS_JSON_CACHE]?.let { prefs[Keys.MODELS_JSON_CACHE] = it as String }
 
                 // Model downloaded flags -> collect into set
                 val downloadedIds = all.keys
@@ -284,8 +351,11 @@ class SettingsRepositoryImpl(
     // --- REACTIVE FLOW ---
     override val settingsFlow: Flow<AppSettings> = dataStore.data.map { prefs ->
         AppSettings(
-            apiKey = encryptedPrefs.getString("api_key", null),
-            geminiApiKey = encryptedPrefs.getString("gemini_api_key", null),
+            // apiKey/geminiApiKey are deliberately absent: they live in the encrypted store, which
+            // this flow cannot observe, so reading them here produced a copy that went stale the
+            // moment a key was entered and stayed stale until an unrelated setting happened to
+            // write. They are served by credentialsFlow, and the fields on AppSettings survive only
+            // as backup transport (see CommanderExportHandler).
 
             language = prefs[Keys.LANGUAGE] ?: Strings.Preferences.DEFAULT_LANGUAGE,
             voiceLanguage = prefs[Keys.VOICE_LANGUAGE] ?: Strings.Preferences.DEFAULT_LANGUAGE,
@@ -294,12 +364,15 @@ class SettingsRepositoryImpl(
 
             voiceProcessor = prefs[Keys.VOICE_PROCESSOR] ?: com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultVoiceEngineKey() ?: "",
             activeVoiceModelId = prefs[Keys.ACTIVE_VOICE_MODEL_ID],
+            // Falls back to the legacy key so an existing install keeps the model it was using.
+            activeWakeModelId = prefs[Keys.ACTIVE_WAKE_MODEL_ID] ?: prefs[Keys.WAKE_WORD_MODEL_PATH],
 
             aiProcessor = prefs[Keys.AI_PROCESSOR] ?: com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultLlmEngineKey() ?: "",
             activeIntentModelId = prefs[Keys.ACTIVE_INTENT_MODEL_ID],
             cloudIntelligenceEnabled = prefs[Keys.CLOUD_INTELLIGENCE_ENABLED] ?: false,
 
             engineModelSelections = parseStringMap(prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON]),
+            searchProviderSelections = parseStringMap(prefs[Keys.SEARCH_PROVIDER_SELECTIONS_JSON]),
 
             wakeWord = prefs[Keys.WAKE_WORD] ?: "hi vosk",
             wakeWordEnabled = prefs[Keys.WAKE_WORD_ENABLED] ?: false,
@@ -307,7 +380,6 @@ class SettingsRepositoryImpl(
             commandQueueEnabled = prefs[Keys.COMMAND_QUEUE_ENABLED] ?: true,
             wakeWordProfileJson = prefs[Keys.WAKE_WORD_PROFILE],
             wakeWordEngineType = normalizeEngineKey(prefs[Keys.WAKE_WORD_ENGINE_TYPE] ?: RemoteModelRegistry.getDefaultWakeWordEngineKey()),
-            picovoiceAccessKey = prefs[Keys.PICOVOICE_ACCESS_KEY],
             wakeWordSensitivity = prefs[Keys.WAKE_WORD_SENSITIVITY] ?: "medium",
             wakeWordAecEnabled = prefs[Keys.WAKE_WORD_AEC_ENABLED] ?: false,
             wakeWordMusicDuckEnabled = prefs[Keys.WAKE_WORD_MUSIC_DUCK_ENABLED] ?: true,
@@ -336,7 +408,9 @@ class SettingsRepositoryImpl(
             geminiIncompatible = prefs[Keys.GEMINI_INCOMPATIBLE] ?: false,
 
             modelRepoBaseUrl = prefs[Keys.MODEL_REPO_BASE_URL] ?: Strings.Preferences.DEFAULT_MODEL_REPO_URL,
-            modelsJsonCache = prefs[Keys.MODELS_JSON_CACHE],
+            useRemoteSchemas = prefs[Keys.USE_REMOTE_SCHEMAS] ?: true,
+            schemaStoreMigrated = prefs[Keys.SCHEMA_STORE_MIGRATED] ?: false,
+            importSelectionMigrated = prefs[Keys.IMPORT_SELECTION_MIGRATED] ?: false,
 
             downloadedModelIds = prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet(),
             customModelPaths = parseCustomModelPaths(prefs[Keys.CUSTOM_MODEL_PATHS_JSON]),
@@ -361,15 +435,21 @@ class SettingsRepositoryImpl(
             downloadPreference = prefs[Keys.DOWNLOAD_PREFERENCE] ?: "wifi_and_metered",
 
             ttsEnabled = prefs[Keys.TTS_ENABLED] ?: true,
-            ttsEngineType = prefs[Keys.TTS_ENGINE_TYPE] ?: "android",
+            ttsEngineType = normalizeEngineKey(prefs[Keys.TTS_ENGINE_TYPE] ?: "android"),
             ttsSpeechRate = prefs[Keys.TTS_SPEECH_RATE] ?: 1.0f,
             ttsPitch = prefs[Keys.TTS_PITCH] ?: 1.0f,
             ttsAudioFocusMode = prefs[Keys.TTS_AUDIO_FOCUS_MODE] ?: "duck",
             overlayTextSize = prefs[Keys.OVERLAY_TEXT_SIZE] ?: 1.0f,
             piperVoiceModelId = prefs[Keys.PIPER_VOICE_MODEL_ID],
             appAliasRules = parseAppAliasRules(prefs[Keys.APP_ALIAS_RULES_JSON]),
-            manualLocationLat = prefs[Keys.MANUAL_LOCATION_LAT]?.toDoubleOrNull(),
-            manualLocationLon = prefs[Keys.MANUAL_LOCATION_LON]?.toDoubleOrNull(),
+            locationHomeTownLat = prefs[Keys.LOCATION_HOME_TOWN_LAT]?.toDoubleOrNull(),
+            locationHomeTownLon = prefs[Keys.LOCATION_HOME_TOWN_LON]?.toDoubleOrNull(),
+            locationCacheTtl = prefs[Keys.LOCATION_CACHE_TTL] ?: "ONE_DAY",
+            locationAlwaysUseHomeTown = prefs[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] ?: false,
+            backupIncludeSettings = prefs[Keys.BACKUP_INCLUDE_SETTINGS] ?: true,
+            backupIncludeData = prefs[Keys.BACKUP_INCLUDE_DATA] ?: true,
+            backupIncludeApiKeys = prefs[Keys.BACKUP_INCLUDE_API_KEYS] ?: false,
+            backupImportMode = prefs[Keys.BACKUP_IMPORT_MODE] ?: "merge",
             firstLaunchCompleted = prefs[Keys.FIRST_LAUNCH_COMPLETED] ?: false,
             tutorialCompleted = prefs[Keys.TUTORIAL_COMPLETED] ?: false
         )
@@ -384,6 +464,12 @@ class SettingsRepositoryImpl(
 
     init {
         AppScope.io.launch {
+            // Ordered: the Picovoice key first reaches the encrypted store under its old single-key
+            // name, and only then can be namespaced with the rest.
+            migratePicovoiceKey()
+            migrateLegacyCredentials()
+        }
+        AppScope.io.launch {
             settingsFlow.collect { cachedSnapshot = it }
         }
     }
@@ -391,35 +477,53 @@ class SettingsRepositoryImpl(
     override suspend fun restoreImportedSettings(imported: AppSettings) {
         // Secrets only round-trip if the export actually carried them (includeSecrets was on) —
         // absent/default means "not part of this import", not "clear it".
-        imported.apiKey?.let { setApiKey(it) }
-        imported.geminiApiKey?.let { setGeminiApiKey(it) }
+        //
+        // The per-engine map is applied first and the single-key fields fill only what it left
+        // unset, so a backup carrying both (every backup this build writes) restores from the map,
+        // while one written before per-engine credentials existed still restores from the old
+        // fields. An engine named by neither keeps whatever is already on the device.
+        val restored = mutableSetOf<String>()
+        for ((engineKey, key) in imported.engineApiKeys) {
+            setEngineApiKey(engineKey, key)
+            restored += engineKey
+        }
+        legacyCredentialOwners.forEach { (legacyName, engines) ->
+            val value = when (legacyName) {
+                SecureKeys.LEGACY_OPENAI -> imported.apiKey
+                SecureKeys.LEGACY_GEMINI -> imported.geminiApiKey
+                else -> imported.picovoiceAccessKey
+            } ?: return@forEach
+            engines.filterNot { it in restored }.forEach { setEngineApiKey(it, value) }
+        }
+
         for ((provider, key) in imported.searchProviderApiKeys) {
             setSearchProviderApiKey(provider, key)
         }
 
         dataStore.edit { prefs ->
-            imported.picovoiceAccessKey?.let { prefs[Keys.PICOVOICE_ACCESS_KEY] = it }
-
             prefs[Keys.LANGUAGE] = imported.language
             prefs[Keys.VOICE_LANGUAGE] = imported.voiceLanguage
             prefs[Keys.VOICE_LANGUAGE_AUTO_DETECT] = imported.voiceLanguageAutoDetect
             prefs[Keys.MODEL_FILTER_LANG] = imported.modelFilterLang
 
-            prefs[Keys.VOICE_PROCESSOR] = imported.voiceProcessor
+            prefs[Keys.VOICE_PROCESSOR] = normalizeEngineKey(imported.voiceProcessor)
             imported.activeVoiceModelId?.let { prefs[Keys.ACTIVE_VOICE_MODEL_ID] = it }
                 ?: prefs.remove(Keys.ACTIVE_VOICE_MODEL_ID)
+            imported.activeWakeModelId?.let { prefs[Keys.ACTIVE_WAKE_MODEL_ID] = it }
+                ?: prefs.remove(Keys.ACTIVE_WAKE_MODEL_ID)
 
-            prefs[Keys.AI_PROCESSOR] = imported.aiProcessor
+            prefs[Keys.AI_PROCESSOR] = normalizeEngineKey(imported.aiProcessor)
             imported.activeIntentModelId?.let { prefs[Keys.ACTIVE_INTENT_MODEL_ID] = it }
                 ?: prefs.remove(Keys.ACTIVE_INTENT_MODEL_ID)
             prefs[Keys.CLOUD_INTELLIGENCE_ENABLED] = imported.cloudIntelligenceEnabled
 
             prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON] = gson.toJson(imported.engineModelSelections)
+            prefs[Keys.SEARCH_PROVIDER_SELECTIONS_JSON] = gson.toJson(imported.searchProviderSelections)
 
             prefs[Keys.WAKE_WORD] = imported.wakeWord
             prefs[Keys.WAKE_WORD_ENABLED] = imported.wakeWordEnabled
             prefs[Keys.COMMAND_QUEUE_ENABLED] = imported.commandQueueEnabled
-            prefs[Keys.WAKE_WORD_ENGINE_TYPE] = imported.wakeWordEngineType
+            prefs[Keys.WAKE_WORD_ENGINE_TYPE] = normalizeEngineKey(imported.wakeWordEngineType)
             prefs[Keys.WAKE_WORD_SENSITIVITY] = imported.wakeWordSensitivity
             prefs[Keys.WAKE_WORD_AEC_ENABLED] = imported.wakeWordAecEnabled
             prefs[Keys.WAKE_WORD_MUSIC_DUCK_ENABLED] = imported.wakeWordMusicDuckEnabled
@@ -462,7 +566,7 @@ class SettingsRepositoryImpl(
             prefs[Keys.DOWNLOAD_PREFERENCE] = imported.downloadPreference
 
             prefs[Keys.TTS_ENABLED] = imported.ttsEnabled
-            prefs[Keys.TTS_ENGINE_TYPE] = imported.ttsEngineType
+            prefs[Keys.TTS_ENGINE_TYPE] = normalizeEngineKey(imported.ttsEngineType)
             prefs[Keys.TTS_SPEECH_RATE] = imported.ttsSpeechRate
             prefs[Keys.TTS_PITCH] = imported.ttsPitch
             prefs[Keys.TTS_AUDIO_FOCUS_MODE] = imported.ttsAudioFocusMode
@@ -471,10 +575,16 @@ class SettingsRepositoryImpl(
 
             prefs[Keys.APP_ALIAS_RULES_JSON] = gson.toJson(imported.appAliasRules)
 
-            imported.manualLocationLat?.let { prefs[Keys.MANUAL_LOCATION_LAT] = it.toString() }
-                ?: prefs.remove(Keys.MANUAL_LOCATION_LAT)
-            imported.manualLocationLon?.let { prefs[Keys.MANUAL_LOCATION_LON] = it.toString() }
-                ?: prefs.remove(Keys.MANUAL_LOCATION_LON)
+            imported.locationHomeTownLat?.let { prefs[Keys.LOCATION_HOME_TOWN_LAT] = it.toString() }
+                ?: prefs.remove(Keys.LOCATION_HOME_TOWN_LAT)
+            imported.locationHomeTownLon?.let { prefs[Keys.LOCATION_HOME_TOWN_LON] = it.toString() }
+                ?: prefs.remove(Keys.LOCATION_HOME_TOWN_LON)
+            prefs[Keys.LOCATION_CACHE_TTL] = imported.locationCacheTtl
+            prefs[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] = imported.locationAlwaysUseHomeTown
+            prefs[Keys.BACKUP_INCLUDE_SETTINGS] = imported.backupIncludeSettings
+            prefs[Keys.BACKUP_INCLUDE_DATA] = imported.backupIncludeData
+            prefs[Keys.BACKUP_INCLUDE_API_KEYS] = imported.backupIncludeApiKeys
+            prefs[Keys.BACKUP_IMPORT_MODE] = imported.backupImportMode
 
             prefs[Keys.FIRST_LAUNCH_COMPLETED] = imported.firstLaunchCompleted
             prefs[Keys.TUTORIAL_COMPLETED] = imported.tutorialCompleted
@@ -484,8 +594,46 @@ class SettingsRepositoryImpl(
     override fun getSettingsSnapshot(): AppSettings =
         cachedSnapshot ?: runBlocking { settingsFlow.first() }.also { cachedSnapshot = it }
 
-    override fun getApiKeySync(): String? = encryptedPrefs.getString("api_key", null)
-    override fun getGeminiApiKeySync(): String? = encryptedPrefs.getString("gemini_api_key", null)
+    /**
+     * Read straight from the store rather than from a cache.
+     *
+     * A credential is small, read rarely (once per cloud call, not per frame) and must never be
+     * stale — a key entered a second ago has to be the one the next request uses. That is the
+     * opposite trade-off from [getSettingsSnapshot], which caches because it is read on hot paths.
+     */
+    override fun getCredentialsSnapshot(): Credentials = readCredentials()
+
+    private fun readCredentials(): Credentials {
+        val all = encryptedPrefs.all
+        val byEngine = all
+            .filterKeys { SecureKeys.isEngineKey(it) }
+            .mapNotNull { (name, value) -> (value as? String)?.let { SecureKeys.engineOf(name) to it } }
+            .toMap()
+        val bySearchProvider = all
+            .filterKeys { SecureKeys.isSearchKey(it) }
+            .mapNotNull { (name, value) -> (value as? String)?.let { SecureKeys.searchProviderOf(name) to it } }
+            .toMap()
+        return Credentials(byEngine, bySearchProvider)
+    }
+
+    /**
+     * Emits on every credential write, using the store's own change callback.
+     *
+     * `EncryptedSharedPreferences` is a `SharedPreferences`, so it can say when it changed — which
+     * is what makes this a real observation rather than a periodic guess. Nothing has to be nudged
+     * from the DataStore side, and nothing derived from a credential can be left showing a value
+     * that is no longer stored.
+     */
+    override val credentialsFlow: Flow<Credentials> = callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || SecureKeys.isEngineKey(key) || SecureKeys.isSearchKey(key)) {
+                trySend(readCredentials())
+            }
+        }
+        encryptedPrefs.registerOnSharedPreferenceChangeListener(listener)
+        trySend(readCredentials())
+        awaitClose { encryptedPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }.distinctUntilChanged()
     override fun getSpotifyClientIdSync(): String? = getSettingsSnapshot().spotifyClientId
     override fun getPipedApiUrlSync(): String? = getSettingsSnapshot().pipedApiUrl
     override fun getPipedRegionSync(): String? = getSettingsSnapshot().pipedRegion
@@ -505,16 +653,51 @@ class SettingsRepositoryImpl(
     }
 
     // --- API / CLOUD ---
-    override suspend fun setApiKey(key: String?) {
+    override suspend fun setEngineApiKey(engineKey: String, key: String?) {
+        val name = SecureKeys.forEngine(engineKey)
         encryptedPrefs.edit().apply {
-            if (key != null) putString("api_key", key) else remove("api_key")
+            if (!key.isNullOrBlank()) putString(name, key) else remove(name)
         }.apply()
     }
 
-    override suspend fun setGeminiApiKey(key: String?) {
-        encryptedPrefs.edit().apply {
-            if (key != null) putString("gemini_api_key", key) else remove("gemini_api_key")
-        }.apply()
+    /**
+     * Moves the single-key credentials into the per-engine namespace.
+     *
+     * Self-guarding in the same way as [migratePicovoiceKey]: the legacy entry is removed as part of
+     * the move, so the read finds nothing on every later launch. An engine that already has a
+     * credential keeps it — a migration must never overwrite a value the user has since set.
+     */
+    private fun migrateLegacyCredentials() {
+        val editor = encryptedPrefs.edit()
+        var moved = false
+        legacyCredentialOwners.forEach { (legacyName, engines) ->
+            val value = encryptedPrefs.getString(legacyName, null) ?: return@forEach
+            if (value.isNotBlank()) {
+                engines.filter { encryptedPrefs.getString(SecureKeys.forEngine(it), null) == null }
+                    .forEach { editor.putString(SecureKeys.forEngine(it), value); moved = true }
+            }
+            editor.remove(legacyName)
+        }
+        editor.apply()
+        if (moved) Logger.log("Moved single-key credentials into the per-engine namespace", TAG)
+    }
+
+    /**
+     * Moves an existing Porcupine key out of DataStore, where it was kept in plaintext.
+     *
+     * The backup has always classified it as a secret and stripped it from an export without
+     * "include API keys" — so the app already considered it one while storing it beside the
+     * ordinary preferences. Self-guarding rather than flag-driven: the legacy entry is removed as
+     * part of the move, so the read below finds nothing on every later launch. An existing
+     * encrypted value always wins, so a re-run can never overwrite a newer key with an older one.
+     */
+    private suspend fun migratePicovoiceKey() {
+        val legacy = dataStore.data.first()[Keys.PICOVOICE_ACCESS_KEY] ?: return
+        if (legacy.isNotBlank() && encryptedPrefs.getString(SecureKeys.LEGACY_PICOVOICE, null) == null) {
+            encryptedPrefs.edit().putString(SecureKeys.LEGACY_PICOVOICE, legacy).apply()
+            Logger.log("Moved the Picovoice access key into encrypted storage", TAG)
+        }
+        dataStore.edit { it.remove(Keys.PICOVOICE_ACCESS_KEY) }
     }
 
     // --- LANGUAGE ---
@@ -537,6 +720,12 @@ class SettingsRepositoryImpl(
     // --- VOICE ENGINE ---
     override suspend fun setVoiceProcessor(processor: String) {
         dataStore.edit { it[Keys.VOICE_PROCESSOR] = processor }
+    }
+
+    override suspend fun setActiveWakeModelId(modelId: String?) {
+        dataStore.edit { prefs ->
+            if (modelId == null) prefs.remove(Keys.ACTIVE_WAKE_MODEL_ID) else prefs[Keys.ACTIVE_WAKE_MODEL_ID] = modelId
+        }
     }
 
     override suspend fun setActiveVoiceModelId(modelId: String?) {
@@ -603,17 +792,6 @@ class SettingsRepositoryImpl(
 
     override suspend fun setWakeWordEngineType(engineType: String) {
         dataStore.edit { it[Keys.WAKE_WORD_ENGINE_TYPE] = engineType }
-    }
-
-    override fun getPicovoiceAccessKeySync(): String? {
-        return runBlocking { dataStore.data.first()[Keys.PICOVOICE_ACCESS_KEY] }
-    }
-
-    override suspend fun setPicovoiceAccessKey(key: String?) {
-        dataStore.edit { prefs ->
-            if (key != null) prefs[Keys.PICOVOICE_ACCESS_KEY] = key
-            else prefs.remove(Keys.PICOVOICE_ACCESS_KEY)
-        }
     }
 
     override suspend fun setWakeWordSensitivity(sensitivity: String) {
@@ -723,16 +901,25 @@ class SettingsRepositoryImpl(
     }
 
     // --- REMOTE REPOSITORY ---
+    override suspend fun clearAllSettings() {
+        dataStore.edit { it.clear() }
+        Logger.log("Settings cleared — every setting is back to its default", TAG)
+    }
+
+    override suspend fun setImportSelectionMigrated(done: Boolean) {
+        dataStore.edit { it[Keys.IMPORT_SELECTION_MIGRATED] = done }
+    }
+
+    override suspend fun setSchemaStoreMigrated(done: Boolean) {
+        dataStore.edit { it[Keys.SCHEMA_STORE_MIGRATED] = done }
+    }
+
+    override suspend fun setUseRemoteSchemas(enabled: Boolean) {
+        dataStore.edit { it[Keys.USE_REMOTE_SCHEMAS] = enabled }
+    }
+
     override suspend fun setModelRepoBaseUrl(url: String) {
         dataStore.edit { it[Keys.MODEL_REPO_BASE_URL] = url }
-    }
-
-    override suspend fun saveModelsJsonCache(json: String) {
-        dataStore.edit { it[Keys.MODELS_JSON_CACHE] = json }
-    }
-
-    override suspend fun clearModelsJsonCache() {
-        dataStore.edit { it.remove(Keys.MODELS_JSON_CACHE) }
     }
 
     // --- MODEL DOWNLOAD STATE ---
@@ -741,13 +928,6 @@ class SettingsRepositoryImpl(
             val current = prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet()
             val updated = if (isDownloaded) current + modelId else current - modelId
             prefs[Keys.DOWNLOADED_MODEL_IDS] = updated
-        }
-    }
-
-    override suspend fun clearUnusedModelFlags(protectedIds: Set<String>) {
-        dataStore.edit { prefs ->
-            val current = prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet()
-            prefs[Keys.DOWNLOADED_MODEL_IDS] = current.intersect(protectedIds)
         }
     }
 
@@ -880,26 +1060,27 @@ class SettingsRepositoryImpl(
         dataStore.edit { it[Keys.DOWNLOAD_PREFERENCE] = preference }
     }
 
+    override suspend fun setSearchProviderSelection(category: String, providerName: String) {
+        dataStore.edit { prefs ->
+            val currentMap = parseStringMap(prefs[Keys.SEARCH_PROVIDER_SELECTIONS_JSON]).toMutableMap()
+            currentMap[category] = providerName
+            prefs[Keys.SEARCH_PROVIDER_SELECTIONS_JSON] = gson.toJson(currentMap)
+        }
+    }
+
     // --- SEARCH PROVIDER API KEYS (stored in encrypted prefs) ---
     override fun getSearchProviderApiKeySync(providerName: String): String? =
-        encryptedPrefs.getString("search_apikey_$providerName", null)
+        encryptedPrefs.getString(SecureKeys.forSearchProvider(providerName), null)
 
     override suspend fun setSearchProviderApiKey(providerName: String, key: String?) {
+        val name = SecureKeys.forSearchProvider(providerName)
         encryptedPrefs.edit().apply {
-            if (key != null) putString("search_apikey_$providerName", key)
-            else remove("search_apikey_$providerName")
+            if (key != null) putString(name, key) else remove(name)
         }.apply()
     }
 
-    override fun getAllSearchProviderApiKeys(): Map<String, String> {
-        val result = mutableMapOf<String, String>()
-        for ((k, v) in encryptedPrefs.all) {
-            if (k.startsWith("search_apikey_") && v is String) {
-                result[k.removePrefix("search_apikey_")] = v
-            }
-        }
-        return result
-    }
+    override fun getAllSearchProviderApiKeys(): Map<String, String> =
+        readCredentials().bySearchProvider
 
     // --- DECLARATIVE API INTEGRATION OAUTH TOKENS (stored in encrypted prefs, keyed by service id).
     // Key format "${serviceId}_access_token" etc matches the pre-existing "spotify_access_token"
@@ -917,6 +1098,18 @@ class SettingsRepositoryImpl(
     }
 
     // --- DECLARATIVE API INTEGRATION DEVICE ID (stored in encrypted prefs, keyed by service id) ---
+    override fun getServiceClientIdSync(serviceId: String): String? =
+        encryptedPrefs.getString("${'$'}{serviceId}_client_id", null)
+            // Spotify's client id predates per-service storage; read the old key until it is moved.
+            ?: if (serviceId == "spotify") getSettingsSnapshot().spotifyClientId else null
+
+    override suspend fun setServiceClientId(serviceId: String, clientId: String?) {
+        encryptedPrefs.edit().apply {
+            if (!clientId.isNullOrBlank()) putString("${'$'}{serviceId}_client_id", clientId)
+            else remove("${'$'}{serviceId}_client_id")
+        }.apply()
+    }
+
     override fun getServiceDeviceIdSync(serviceId: String): String? = encryptedPrefs.getString("${serviceId}_device_id", null)
 
     override suspend fun setServiceDeviceId(serviceId: String, deviceId: String?) {
@@ -959,65 +1152,52 @@ class SettingsRepositoryImpl(
     // --- HELPERS ---
     private fun parseCustomModelPaths(json: String?): Map<String, String> = parseStringMap(json)
 
+    /**
+     * Maps legacy engine spellings onto the `models.json` keys the app uses today.
+     *
+     * One table for every domain, applied where settings are read. The TTS alias used to live in a
+     * `TtsEngineType` enum resolved at the point of use instead, which meant two mechanisms for the
+     * same problem and an unnormalised value persisting in DataStore indefinitely.
+     *
+     * Nothing is rewritten on disk: stored identifiers stay exactly as they are, because
+     * `restoreImportedSettings` writes them verbatim from backups with no version field and there is
+     * no migration mechanism. Normalising on read costs nothing and keeps old backups importable.
+     */
+    /**
+     * The current key for an engine spelling that predates the `models.json` keys.
+     *
+     * Applied on every read *and* on import. Import used to write these values raw, which is why
+     * the wake-word service carried its own `"wake_porcupine" || "porcupine"` tests: a restored
+     * backup could put the short name back into storage. Normalising at both doors is what lets the
+     * readers stop guarding, and this table stays the one place the old spellings are known.
+     */
     private fun normalizeEngineKey(raw: String): String = when (raw) {
         "vosk" -> "wake_vosk"
         "porcupine" -> "wake_porcupine"
         "openwakeword" -> "wake_openwakeword"
+        "piper" -> "piper_tts"
         else -> raw
     }
 
-    private fun parseStringMap(json: String?): Map<String, String> {
-        if (json.isNullOrBlank()) return emptyMap()
-        return try {
-            val type = com.google.gson.reflect.TypeToken.getParameterized(
-                Map::class.java, String::class.java, String::class.java
-            ).type
-            gson.fromJson(json, type) ?: emptyMap()
-        } catch (e: Exception) {
-            Logger.log("Failed to parse string map: ${e.message}", TAG)
-            emptyMap()
-        }
-    }
+    private fun parseStringMap(json: String?): Map<String, String> =
+        gson.fromJsonOrNull<Map<String, String>>(json) {
+            Logger.log("Failed to parse string map: ${it.message}", TAG)
+        } ?: emptyMap()
 
-    private fun parseStringListMap(json: String?): Map<String, List<String>> {
-        if (json.isNullOrBlank()) return emptyMap()
-        return try {
-            val type = com.google.gson.reflect.TypeToken.getParameterized(
-                Map::class.java, String::class.java,
-                com.google.gson.reflect.TypeToken.getParameterized(List::class.java, String::class.java).type
-            ).type
-            gson.fromJson(json, type) ?: emptyMap()
-        } catch (e: Exception) {
-            Logger.log("Failed to parse string list map: ${e.message}", TAG)
-            emptyMap()
-        }
-    }
+    private fun parseStringListMap(json: String?): Map<String, List<String>> =
+        gson.fromJsonOrNull<Map<String, List<String>>>(json) {
+            Logger.log("Failed to parse string list map: ${it.message}", TAG)
+        } ?: emptyMap()
 
-    private fun parseStringList(json: String?): List<String> {
-        if (json.isNullOrBlank()) return emptyList()
-        return try {
-            val type = com.google.gson.reflect.TypeToken.getParameterized(
-                List::class.java, String::class.java
-            ).type
-            gson.fromJson(json, type) ?: emptyList()
-        } catch (e: Exception) {
-            Logger.log("Failed to parse string list: ${e.message}", TAG)
-            emptyList()
-        }
-    }
+    private fun parseStringList(json: String?): List<String> =
+        gson.fromJsonOrNull<List<String>>(json) {
+            Logger.log("Failed to parse string list: ${it.message}", TAG)
+        } ?: emptyList()
 
-    private fun parseAppAliasRules(json: String?): List<AppAliasRule> {
-        if (json.isNullOrBlank()) return emptyList()
-        return try {
-            val type = com.google.gson.reflect.TypeToken.getParameterized(
-                List::class.java, AppAliasRule::class.java
-            ).type
-            gson.fromJson(json, type) ?: emptyList()
-        } catch (e: Exception) {
-            Logger.log("Failed to parse app alias rules: ${e.message}", TAG)
-            emptyList()
-        }
-    }
+    private fun parseAppAliasRules(json: String?): List<AppAliasRule> =
+        gson.fromJsonOrNull<List<AppAliasRule>>(json) {
+            Logger.log("Failed to parse app alias rules: ${it.message}", TAG)
+        } ?: emptyList()
 
     override suspend fun setAppAliasRules(rules: List<AppAliasRule>) {
         dataStore.edit { prefs ->
@@ -1025,17 +1205,48 @@ class SettingsRepositoryImpl(
         }
     }
 
-    // --- MANUAL LOCATION ---
-    override fun getManualLocationLatSync(): Double? = runBlocking { dataStore.data.first()[Keys.MANUAL_LOCATION_LAT]?.toDoubleOrNull() }
-    override fun getManualLocationLonSync(): Double? = runBlocking { dataStore.data.first()[Keys.MANUAL_LOCATION_LON]?.toDoubleOrNull() }
+    // --- LOCATION (Home Town / cache TTL / always-use) ---
+    override fun getLocationHomeTownLatSync(): Double? = runBlocking { dataStore.data.first()[Keys.LOCATION_HOME_TOWN_LAT]?.toDoubleOrNull() }
+    override fun getLocationHomeTownLonSync(): Double? = runBlocking { dataStore.data.first()[Keys.LOCATION_HOME_TOWN_LON]?.toDoubleOrNull() }
 
-    override suspend fun setManualLocation(lat: Double?, lon: Double?) {
+    override suspend fun setLocationHomeTown(lat: Double?, lon: Double?) {
         dataStore.edit { prefs ->
-            if (lat != null) prefs[Keys.MANUAL_LOCATION_LAT] = lat.toString()
-            else prefs.remove(Keys.MANUAL_LOCATION_LAT)
-            if (lon != null) prefs[Keys.MANUAL_LOCATION_LON] = lon.toString()
-            else prefs.remove(Keys.MANUAL_LOCATION_LON)
+            if (lat != null) prefs[Keys.LOCATION_HOME_TOWN_LAT] = lat.toString()
+            else prefs.remove(Keys.LOCATION_HOME_TOWN_LAT)
+            if (lon != null) prefs[Keys.LOCATION_HOME_TOWN_LON] = lon.toString()
+            else prefs.remove(Keys.LOCATION_HOME_TOWN_LON)
         }
+    }
+
+    override fun getLocationCacheTtlSync(): String = runBlocking { dataStore.data.first()[Keys.LOCATION_CACHE_TTL] ?: "ONE_DAY" }
+    override suspend fun setLocationCacheTtl(ttl: String) {
+        dataStore.edit { it[Keys.LOCATION_CACHE_TTL] = ttl }
+    }
+
+    override fun getLocationAlwaysUseHomeTownSync(): Boolean = runBlocking { dataStore.data.first()[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] ?: false }
+    override suspend fun setLocationAlwaysUseHomeTown(enabled: Boolean) {
+        dataStore.edit { it[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] = enabled }
+    }
+
+    // --- BACKUP & RESTORE (local) ---
+    override fun getBackupIncludeSettingsSync(): Boolean = runBlocking { dataStore.data.first()[Keys.BACKUP_INCLUDE_SETTINGS] ?: true }
+    override suspend fun setBackupIncludeSettings(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_SETTINGS] = enabled }
+    }
+
+    override fun getBackupIncludeDataSync(): Boolean = runBlocking { dataStore.data.first()[Keys.BACKUP_INCLUDE_DATA] ?: true }
+    override suspend fun setBackupIncludeData(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_DATA] = enabled }
+    }
+
+    override fun getBackupIncludeApiKeysSync(): Boolean = runBlocking { dataStore.data.first()[Keys.BACKUP_INCLUDE_API_KEYS] ?: false }
+    override suspend fun setBackupIncludeApiKeys(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_API_KEYS] = enabled }
+    }
+
+    override fun getBackupImportModeSync(): String = runBlocking { dataStore.data.first()[Keys.BACKUP_IMPORT_MODE] ?: "merge" }
+    override suspend fun setBackupImportMode(mode: String) {
+        dataStore.edit { it[Keys.BACKUP_IMPORT_MODE] = mode }
     }
 
     // --- FIRST LAUNCH / TUTORIAL ---

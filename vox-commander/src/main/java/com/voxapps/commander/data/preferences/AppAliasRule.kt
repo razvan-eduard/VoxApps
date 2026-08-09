@@ -14,9 +14,14 @@ import androidx.compose.runtime.Immutable
  */
 @Immutable
 data class AppAliasRule(
-    val id: String,
-    val packageName: String,
-    val displayName: String,
-    val aliases: List<String>,
+    // Every parameter carries a default so Gson builds these through the Kotlin constructor. One
+    // without a default and Kotlin generates no no-arg constructor, Gson allocates the object
+    // without running any constructor at all, and every absent field arrives null — including
+    // `aliases`, which the matcher then iterates. These come back from an exported backup that may
+    // have been edited or written by an older build.
+    val id: String = "",
+    val packageName: String = "",
+    val displayName: String = "",
+    val aliases: List<String> = emptyList(),
     val enabled: Boolean = true
 )

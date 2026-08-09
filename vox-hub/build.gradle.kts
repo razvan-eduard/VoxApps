@@ -11,8 +11,8 @@ android {
         applicationId = "com.voxapps.hub"
         minSdk = 29
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.9"
+        versionCode = 12
+        versionName = "0.12"
     }
 
     // CI-only release signing: RELEASE_KEYSTORE_PATH is only set in the release-*.yml workflows
@@ -60,9 +60,18 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:backup"))
     implementation(project(":core:design"))
     implementation(project(":core:ipc"))
+    // For SyncDeltaKeys only: the Hub builds sync deltas itself, so it's a participant in the same
+    // wire contract as the satellites' *SyncHandlers and must share their key definitions.
+    implementation(project(":core:datahygiene"))
     implementation(project(":core:logging"))
+    implementation(project(":core:preferences"))
+    implementation(project(":core:voxconnect"))
+    // PreviewView for the pairing QR scanner's camera preview (VoxConnectSettingsCard.kt) — the
+    // rest of CameraX comes from :core:voxconnect's own (implementation-scoped) dependency.
+    implementation(libs.androidx.camera.view)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -76,5 +85,5 @@ dependencies {
     implementation(libs.androidx.security.crypto)
 
     testImplementation(libs.junit)
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260719")
 }

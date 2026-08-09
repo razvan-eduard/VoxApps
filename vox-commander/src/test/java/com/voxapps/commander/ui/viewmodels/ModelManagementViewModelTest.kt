@@ -81,7 +81,9 @@ class ModelManagementViewModelTest {
 
         mockkObject(RemoteModelRegistry)
         every { RemoteModelRegistry.getEngineKeysByType("voice") } returns listOf("stt_whisper")
-        every { RemoteModelRegistry.getEngineKeysByType("llm") } returns listOf("nlu_llm")
+        every { RemoteModelRegistry.getLlmEngineKeys() } returns listOf("nlu_llm")
+        every { RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { RemoteModelRegistry.isLlmEngine("stt_whisper") } returns false
         every { RemoteModelRegistry.isZipEngine("stt_whisper") } returns false
         every { RemoteModelRegistry.isZipEngine("nlu_llm") } returns false
         every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
@@ -94,7 +96,6 @@ class ModelManagementViewModelTest {
             TestDataFactory.createRemoteModelItem(id = "qwen", path = "models/qwen.gguf")
         )
         every { RemoteModelRegistry.resolveUrl(any(), any()) } returns "https://example.com/models/base.bin"
-        coEvery { RemoteModelRegistry.fetchJson(any(), any()) } returns true
         every { RemoteModelRegistry.registryUpdateSignal } returns kotlinx.coroutines.flow.MutableStateFlow(0L)
 
         val settings = TestDataFactory.createAppSettings()
@@ -225,18 +226,29 @@ class ModelManagementViewModelTest {
     }
 
     @Test
-    fun `clearCustomModel delegates to settingsRepo and refreshes`() = runTest {
-        viewModel.clearCustomModel("stt_whisper")
+    fun `deleting an imported model clears its path and its file`() = runTest {
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            customModelPaths = mapOf("stt_whisper" to "/data/files/stt_whisper.bin")
+        )
+
+        viewModel.deleteModel("custom:stt_whisper", "stt_whisper")
 
         coVerify { settingsRepo.setCustomModelPath("stt_whisper", "", null) }
-        verify { appStateManager.refreshAll() }
+        verify { modelDownloader.deleteCustomModel("/data/files/stt_whisper.bin") }
+        // Not the registry delete: there is no registry model behind an import to resolve.
+        verify(exactly = 0) { modelDownloader.deleteModelFile(any(), any()) }
     }
 
     @Test
-    fun `clearCustomModel with langCode passes it through`() = runTest {
-        viewModel.clearCustomModel("wake_vosk", "en")
+    fun `deleting an imported model keyed by language clears that language`() = runTest {
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            customModelPaths = mapOf("wake_vosk_en" to "/data/files/wake_vosk_custom_en")
+        )
+
+        viewModel.deleteModel("custom:wake_vosk:en", "wake_vosk")
 
         coVerify { settingsRepo.setCustomModelPath("wake_vosk", "", "en") }
+        verify { modelDownloader.deleteCustomModel("/data/files/wake_vosk_custom_en") }
     }
 
     @Test
@@ -257,7 +269,7 @@ class ModelManagementViewModelTest {
     }
 
     @Test
-    fun `deleteModel reassigns voice fallback when deleted model was fallback`() = runTest {
+    fun `deleteModel clears the voice fallback when the deleted model was it`() = runTest {
         val settings = TestDataFactory.createAppSettings(
             voiceProcessor = Strings.Processors.WHISPER_VULKAN,
             activeVoiceModelId = "base",
@@ -269,7 +281,7 @@ class ModelManagementViewModelTest {
 
         viewModel.deleteModel("tiny", "stt_whisper")
 
-        coVerify { settingsRepo.setDefaultVoiceFallback(Strings.Processors.WHISPER_VULKAN, "base") }
+        coVerify { settingsRepo.clearDefaultVoiceFallback() }
     }
 
     @Test
@@ -289,7 +301,7 @@ class ModelManagementViewModelTest {
     }
 
     @Test
-    fun `deleteModel reassigns intent fallback when deleted model was fallback`() = runTest {
+    fun `deleteModel clears the intent fallback when the deleted model was it`() = runTest {
         val settings = TestDataFactory.createSettingsWithLlmEngine(
             activeIntentModelId = "qwen",
             downloadedModelIds = setOf("qwen"),
@@ -299,7 +311,7 @@ class ModelManagementViewModelTest {
 
         viewModel.deleteModel("tiny-llm", "nlu_llm")
 
-        coVerify { settingsRepo.setDefaultIntentFallback("nlu_llm", "qwen") }
+        coVerify { settingsRepo.clearDefaultIntentFallback() }
     }
 
     @Test
@@ -341,44 +353,89 @@ class ModelManagementViewModelTest {
     }
 
     @Test
-    fun `selectCustomModel with blank extension uses directory-based strategy`() = runTest {
+    /**
+     * A directory-based engine is copied, and what is stored is where the copy landed.
+     *
+     * This used to store `uri.path` of the picked tree — a document-id string, not a filesystem
+     * path — so the import reported success and left a value nothing could open.
+     */
+    fun `selectCustomModel stores the copied directory, not the picked tree`() = runTest {
         val uri = mockk<Uri>()
-        every { uri.path } returns "/sdcard/vosk-model"
-        every { uri.toString() } returns "content://uri"
         every { RemoteModelRegistry.getExtension("wake_vosk") } returns ""
+        every { modelDownloader.importCustomModel(uri, "wake_vosk", "en") } returns
+            ModelDownloader.ImportOutcome.Accepted(java.io.File("/data/files/wake_vosk_custom_en"))
 
         viewModel.selectCustomModel(uri, "wake_vosk", "en")
 
-        coVerify { settingsRepo.setCustomModelPath("wake_vosk", "/sdcard/vosk-model", "en") }
+        coVerify { settingsRepo.setCustomModelPath("wake_vosk", "/data/files/wake_vosk_custom_en", "en") }
         verify { appStateManager.refreshAll() }
     }
 
     @Test
-    fun `selectCustomModel with file extension uses file-based strategy`() = runTest {
+    fun `selectCustomModel stores where the import actually landed`() = runTest {
         val uri = mockk<Uri>()
         every { uri.toString() } returns "content://com.android.providers.documents/document/abc"
         every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
 
-        mockkObject(com.voxapps.commander.utils.FileHelper)
-        every { com.voxapps.commander.utils.FileHelper.copyUriToInternal(any(), any(), any()) } returns "/data/files/stt_whisper.bin"
+        every { modelDownloader.importCustomModel(any(), any(), any()) } returns
+            ModelDownloader.ImportOutcome.Accepted(java.io.File("/data/files/stt_whisper.bin"))
 
         viewModel.selectCustomModel(uri, "stt_whisper")
 
         coVerify { settingsRepo.setCustomModelPath("stt_whisper", "/data/files/stt_whisper.bin") }
+        // An import is loaded because it is selected, so it selects itself.
+        coVerify { settingsRepo.setEngineModelSelection("stt_whisper", "custom:stt_whisper") }
+        coVerify { settingsRepo.setActiveVoiceModelId("custom:stt_whisper") }
         verify { appStateManager.refreshAll() }
     }
 
     @Test
-    fun `selectCustomModel with file extension and copy failure does not set path`() = runTest {
+    fun `selectCustomModel stores nothing when the import failed`() = runTest {
         val uri = mockk<Uri>()
         every { uri.toString() } returns "content://com.android.providers.documents/document/abc"
         every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
 
-        mockkObject(com.voxapps.commander.utils.FileHelper)
-        every { com.voxapps.commander.utils.FileHelper.copyUriToInternal(any(), any(), any()) } returns null
+        every { modelDownloader.importCustomModel(any(), any(), any()) } returns
+            ModelDownloader.ImportOutcome.Failed("could not read the file")
 
         viewModel.selectCustomModel(uri, "stt_whisper")
 
         coVerify(exactly = 0) { settingsRepo.setCustomModelPath(any(), any()) }
+    }
+
+    @Test
+    fun `a rejected import says what the engine wanted instead`() = runTest {
+        val uri = mockk<Uri>()
+        every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
+        // The reason is built by substituting the engine's declaration into the sentence, so the
+        // stub has to be a sentence with a slot rather than the blanket "test-message".
+        every { languageManager.getString("import_rejected_wrong_kind") } returns "This engine loads %1\$s."
+        every { modelDownloader.importCustomModel(any(), any(), any()) } returns
+            ModelDownloader.ImportOutcome.WrongKind(picked = "shopping-list.txt", expected = ".bin")
+
+        viewModel.selectCustomModel(uri, "stt_whisper")
+
+        val result = viewModel.importResult.value
+        assertNotNull(result)
+        assertFalse(result!!.accepted)
+        assertEquals("shopping-list.txt", result.modelName)
+        // The reason is the engine's own declaration, not a generic failure.
+        assertTrue(result.detail!!.contains(".bin"))
+        coVerify(exactly = 0) { settingsRepo.setCustomModelPath(any(), any()) }
+    }
+
+    @Test
+    fun `an accepted import is reported as added`() = runTest {
+        val uri = mockk<Uri>()
+        every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
+        every { modelDownloader.importCustomModel(any(), any(), any()) } returns
+            ModelDownloader.ImportOutcome.Accepted(java.io.File("/data/files/stt_whisper.bin"))
+
+        viewModel.selectCustomModel(uri, "stt_whisper")
+
+        val result = viewModel.importResult.value
+        assertNotNull(result)
+        assertTrue(result!!.accepted)
+        assertEquals("stt_whisper.bin", result.modelName)
     }
 }

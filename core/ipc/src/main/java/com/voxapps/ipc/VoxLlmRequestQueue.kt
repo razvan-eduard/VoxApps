@@ -6,9 +6,14 @@ import java.util.UUID
 
 /**
  * Wraps a raw `ACTION_LLM_PROCESS` broadcast with durable, retryable delivery: [enqueueAndSend]
- * persists the request before attempting to send it, so a broadcast Android silently drops (target
- * app stopped/killed, briefly uninstalled — `FLAG_INCLUDE_STOPPED_PACKAGES` mitigates but doesn't
- * eliminate this) is recovered by a later [retryStale] pass instead of vanishing outright. A fresh
+ * persists the request before attempting to send it, so a broadcast Android silently drops is
+ * recovered by a later [retryStale] pass instead of vanishing outright.
+ *
+ * `FLAG_INCLUDE_STOPPED_PACKAGES` (set below, and on [VoxAppsDiscovery.ping]) does handle the
+ * stopped-app case — measured, see that function. What it cannot cover is the rest of why a
+ * fire-and-forget broadcast goes unanswered: there is no delivery confirmation at all, the target
+ * may be mid-reinstall, or its process may die after receiving the request but before replying.
+ * Those are what the queue exists for; the flag narrows the window rather than closing it. A fresh
  * request id rides along as a new trailing segment of [VoxLlmRequest.task] — [VoxLlmResult.task]
  * already round-trips its input verbatim (Commander never interprets it), so this needs no changes
  * on Commander's side. Callers extract that trailing segment from a reply via [splitRequestId] before
@@ -68,7 +73,11 @@ class VoxLlmRequestQueue(
      *  [maxAttempts] — called from each app's periodic retry worker. Rows that exhaust [maxAttempts]
      *  are left in place rather than deleted, so they stay inspectable instead of silently vanishing
      *  a second time. */
-    suspend fun retryStale(context: Context, staleAfterMillis: Long, maxAttempts: Int) {
+    suspend fun retryStale(
+        context: Context,
+        staleAfterMillis: Long = DEFAULT_STALE_AFTER_MILLIS,
+        maxAttempts: Int = DEFAULT_MAX_ATTEMPTS
+    ) {
         val threshold = System.currentTimeMillis() - staleAfterMillis
         for (entry in dao.getStale(threshold, maxAttempts)) {
             val request = VoxLlmRequest.fromJson(entry.payloadJson) ?: continue
@@ -78,6 +87,17 @@ class VoxLlmRequestQueue(
     }
 
     companion object {
+        /** How long a row may sit unanswered before the periodic worker re-dispatches it. */
+        val DEFAULT_STALE_AFTER_MILLIS: Long = java.util.concurrent.TimeUnit.MINUTES.toMillis(5)
+
+        /** At the workers' 15-minute cadence this is roughly 12.5 hours of retrying before a row is
+         *  left dormant — not deleted, so it stays inspectable — rather than retried forever.
+         *
+         *  Defaults live here rather than in each app's worker because they are policy of *this*
+         *  queue: all three satellites had identical private copies, so a change to the retry budget
+         *  had to be made in three places or silently diverge. */
+        const val DEFAULT_MAX_ATTEMPTS = 50
+
         private fun defaultSend(context: Context, request: VoxLlmRequest, targetPackage: String) {
             context.sendBroadcast(
                 Intent(VoxIpc.ACTION_LLM_PROCESS)

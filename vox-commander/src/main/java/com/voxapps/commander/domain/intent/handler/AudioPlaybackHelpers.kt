@@ -8,6 +8,7 @@ import com.voxapps.commander.service.OAuth2Manager
 import com.voxapps.commander.service.OAuthConfig
 import com.voxapps.commander.service.SpotifyRemoteManager
 import com.voxapps.logging.Logger
+import com.voxapps.commander.domain.service.toOAuthConfig
 
 /**
  * Playback helpers used by [AudioIntentHandler]'s search-based `play` fallback chain. Renamed
@@ -38,7 +39,7 @@ object AudioPlaybackHelpers {
         if (!OAuth2Manager.isAuthorized(integration.id)) return false
 
         val clientId = clientIdFor(integration.id) ?: return false
-        val config = oauthConfigFor(integration, auth)
+        val config = auth.toOAuthConfig(integration.id) ?: return false
         val token = OAuth2Manager.getValidAccessToken(config, clientId) ?: run {
             Logger.log("${integration.id}: no valid access token", TAG)
             return false
@@ -48,7 +49,16 @@ object AudioPlaybackHelpers {
             val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
             if (launchIntent != null) {
                 launchIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                try { context.startActivity(launchIntent) } catch (_: Exception) {}
+                // Logged, not swallowed: the sleep below exists to give this activity time to
+                // come to the foreground, and the declarative API call after it assumes that
+                // happened. If the launch was blocked (background-activity-launch restrictions,
+                // the package disabled mid-flight), the request still goes out against an app that
+                // never came up — so the failure has to be visible when diagnosing why.
+                try {
+                    context.startActivity(launchIntent)
+                } catch (e: Exception) {
+                    Logger.log("${integration.id}: could not foreground $pkg before the API call: ${e.message}", TAG)
+                }
                 Thread.sleep(waitMs)
             }
         }
@@ -70,16 +80,6 @@ object AudioPlaybackHelpers {
         else -> null
     }
 
-    private fun oauthConfigFor(integration: ApiIntegration, auth: com.voxapps.commander.domain.intent.registry.AuthDef): OAuthConfig {
-        return OAuthConfig(
-            serviceId = integration.id,
-            authorizeUrl = auth.authorizeUrl,
-            tokenUrl = auth.tokenUrl,
-            redirectUri = auth.redirectUri,
-            scopes = auth.scopes,
-            usePkce = auth.type == "oauth2_pkce"
-        )
-    }
 
     fun pipedPlayDirect(context: Context, pkg: String?, query: String): Boolean {
         return try {

@@ -8,7 +8,25 @@ on:
       - main
     paths:
       - 'vox-commander/build.gradle.kts'
-  workflow_dispatch: {}
+  # A dispatched run builds but does not publish, unless you tick this. Six accidental dispatches
+  # once published six GitHub Releases, which is why publishing was blocked here at all — but a
+  # blanket block also removes the only way to re-publish a release whose build succeeded and whose
+  # publish step failed. An explicit opt-in keeps the accident impossible and the deliberate case
+  # available.
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a GitHub Release (move the tag, upload the APK). Off = build only.'
+        type: boolean
+        default: false
+
+# One release at a time per app. Two pushes landing close together would both force-move the same
+# tag and both delete the same release before recreating it — whichever finished second would win,
+# and which one that was would depend on runner scheduling. Queued rather than cancelled: a publish
+# interrupted half way leaves a tag pointing at a release that no longer exists.
+concurrency:
+  group: release-commander
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -17,11 +35,31 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout (with submodules)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
-          fetch-depth: 0
+          # No submodules here — Commander only needs whisper.cpp + openwakeword-android-kt
+          # (checked out explicitly below), not the opencv/paddleocr/makeacopy submodules
+          # vox-vision uses. `submodules:` on this action can't select a subset (only
+          # true/false/recursive), so those 3 unrelated submodules — 565MB+ of OpenCV
+          # upstream's own multi-year history alone — were being cloned on every Commander
+          # release for zero benefit. Verified via an isolated worktree with those 3 left
+          # uninitialized: full Gradle project configuration succeeds, and Commander's
+          # release runtime classpath has no dependency edge into :vendor:ppocr-sdk or
+          # :vendor:docquad-sdk (the modules that touch them).
+          submodules: false
+          # Shallow on purpose: full history (fetch-depth: 0) was pulling ~1.6GB of main-repo
+          # history per run that the build never needs. The version-bump check below no longer
+          # needs any git history either (it checks GitHub Releases directly, not HEAD~1), so
+          # this can be the true minimum (1) — the changelog step further down deepens on demand
+          # only when a release is actually being cut (see "Deepen checkout for changelog").
+          fetch-depth: 1
+
+      - name: Checkout whisper.cpp and openwakeword submodules
+        run: |
+          git submodule update --init --depth 1 \
+            vox-commander/src/main/cpp/whisper.cpp \
+            vendor/openwakeword-android-kt
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -68,22 +106,35 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Detect versionCode bump (skip build if unchanged)
+      - name: Determine version tag
+        id: version
+        uses: ./.github/actions/compute-release-tag
+        with:
+          app-prefix: commander
+
+      - name: Detect versionCode bump (skip build if this version was already released)
         id: check_bump
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PREV_CODE=$(git show HEAD~1:vox-commander/build.gradle.kts 2>/dev/null | grep 'versionCode' | grep -oE '[0-9]+' || echo "0")
-          CURR_CODE=$(grep 'versionCode' vox-commander/build.gradle.kts | grep -oE '[0-9]+')
-          echo "prev=$PREV_CODE curr=$CURR_CODE"
-          if [ "$PREV_CODE" = "$CURR_CODE" ]; then
-            echo "changed=false" >> $GITHUB_OUTPUT
+          # Checks whether a GitHub Release already exists for this exact version, instead of
+          # diffing versionCode against git's HEAD~1 — the old approach silently broke whenever
+          # a push landed more than one commit at once (HEAD~1 then lands *inside* the same
+          # push, already showing the bumped value, so prev==curr and the build gets skipped
+          # even though this version has never been released).
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "$TAG already released — skipping build"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "$TAG not yet released — building"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Skip build (versionCode not bumped)
+      - name: Skip build (version already released)
         if: steps.check_bump.outputs.changed == 'false'
-        run: echo "versionCode unchanged — skipping build"
+        run: echo "${{ steps.version.outputs.tag }} already released — skipping build"
 
       - name: Run unit tests
         if: steps.check_bump.outputs.changed != 'false'
@@ -93,18 +144,13 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
 
-      - name: Build release APK (unsigned — signed after DLC stripping below)
+      - name: Build release APK and AAB (unsigned — signed after DLC stripping below)
         if: steps.check_bump.outputs.changed != 'false'
-        run: ./gradlew :vox-commander:assembleRelease --no-daemon
+        run: |
+          ./gradlew :vox-commander:assembleRelease --no-daemon
+          ./gradlew :vox-commander:bundleRelease --no-daemon
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Determine version tag
-        if: steps.check_bump.outputs.changed != 'false'
-        id: version
-        uses: ./.github/actions/compute-release-tag
-        with:
-          app-prefix: commander
 
       - name: Strip DLC libs and sign APK
         if: steps.check_bump.outputs.changed != 'false'
@@ -132,14 +178,22 @@ jobs:
             vox-apps \
             dlc-libs \
             "$MERGED_LIBS_DIR" \
-            libonnxruntime.so libllm_inference_engine_jni.so libvosk.so libsherpa-onnx-jni.so
+            libonnxruntime.so liblitertlm_jni.so libvosk.so libsherpa-onnx-jni.so
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
 
-      - name: Set APK path output
+      - name: Set APK and AAB path output
         if: steps.check_bump.outputs.changed != 'false'
         id: rename
-        run: echo "apk_path=VoxCommander-${{ steps.version.outputs.tag }}.apk" >> $GITHUB_OUTPUT
+        run: |
+          echo "apk_path=VoxCommander-${{ steps.version.outputs.tag }}.apk" >> $GITHUB_OUTPUT
+          cp vox-commander/build/outputs/bundle/release/vox-commander-release.aab \
+             VoxCommander-${{ steps.version.outputs.tag }}.aab
+          echo "aab_path=VoxCommander-${{ steps.version.outputs.tag }}.aab" >> $GITHUB_OUTPUT
+
+      - name: Deepen checkout for changelog
+        if: steps.check_bump.outputs.changed != 'false'
+        run: git fetch --prune --unshallow --tags origin
 
       - name: Generate CHANGELOG.md
         if: steps.check_bump.outputs.changed != 'false'
@@ -159,7 +213,11 @@ jobs:
             echo ""
             echo "## Changes"
             echo ""
-            git log ${RANGE} --pretty=format:"- %s (%h)" --no-merges
+            # Scoped to this app's own directory, and restricted to user-facing commit
+            # types (feat/fix/perf) — otherwise the changelog lists every other app's
+            # (and docs/chore/ci) commits too.
+            git log ${RANGE} --pretty=format:"- %s (%h)" --no-merges -- vox-commander/ \
+              | grep -iE '^- (feat|fix|perf)(\(|!?:)' || echo "- Maintenance update"
             echo ""
             echo ""
             echo "## Full Changelog"
@@ -181,13 +239,40 @@ jobs:
             VoxCommander-*.apk
             CHANGELOG.md
 
+      # Publishing is for a push, not for a dispatch. `check_bump` only runs on a push to main, so
+      # its output is empty on a manual run — and an empty value is not 'false', which meant every
+      # "just build it and see" dispatch tagged the commit and cut a release at whatever version
+      # happened to be current, walking straight around the guard that exists to prevent exactly
+      # that. Building and testing still run: that is what a dispatch is for.
+      - name: Point the tag at this commit
+        if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          # GITHUB_TOKEN can never hold the `workflows` scope, and what that forbids is making a ref
+          # point at a tree whose .github/workflows content differs from the repository's own. It
+          # bites when a workflow edit lands while a release is building: the tag then moves to a
+          # commit whose workflow files are already stale. Going through the git/refs API was tried
+          # and is subject to the same rule — it only trades an error naming the offending file for
+          # a bare 403, so this is a push again. Tag the tip and nothing is stale.
+          git tag -f "$TAG"
+          git push origin "$TAG" --force
+
+      - name: Delete existing release for a fresh publish date
+        if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          gh release delete "$TAG" --yes || true
+
       - name: Create GitHub Release
-        if: steps.check_bump.outputs.changed != 'false'
+        if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           files: |
             VoxCommander-*.apk
+            VoxCommander-*.aab
             CHANGELOG.md
             dlc-libs/*.so
           body_path: CHANGELOG.md

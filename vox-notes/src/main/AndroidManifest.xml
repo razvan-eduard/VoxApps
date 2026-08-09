@@ -7,6 +7,7 @@
     <!-- Android 13+ suppresses toasts from backgrounded apps unless notifications are allowed.
          Needed for the "toast on voice save" setting (the save is headless via broadcast). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Taking a photo directly for an attachment, via the system camera app. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <!--
@@ -28,7 +29,8 @@
         <activity
             android:name=".NotesActivity"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:launchMode="singleTask">
 
             <!-- Standalone launcher: works fully without VoxCommander -->
             <intent-filter>
@@ -52,7 +54,7 @@
             <!-- Capability advertising: Commander reads this at scan time to route the "notes" NLU
                  domain here (create/read), with no per-app config on Commander's side. -->
             <meta-data android:name="com.voxapps.vox.domain" android:value="notes" />
-            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import,get_schema,sync_export,sync_merge" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import,get_schema,sync_export,sync_merge,get_field_schema" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Notes" />
             <meta-data
                 android:name="com.voxapps.vox.nluHint"

@@ -1,5 +1,7 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.design.picklist.Picklist
+import com.voxapps.design.picklist.PicklistCompactAnchor
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import androidx.compose.foundation.clickable
@@ -20,7 +22,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.utils.Strings
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
@@ -32,7 +36,6 @@ fun ModelsSettingsTab(
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     onProcessorSelected: (String) -> Unit,
-    hasApiKey: Boolean,
     googleSttAvailable: Boolean,
     onVoiceLanguageSelected: (String) -> Unit,
     onModelSelected: (AppModel, Boolean, String) -> Unit,
@@ -45,15 +48,12 @@ fun ModelsSettingsTab(
     downloadedColor: Color,
     onFallbackChanged: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
-    onClearCustomModel: () -> Unit = {},
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val nluModels = remember(uiState.availableModels) { uiState.availableModels["nlu_llm"] ?: emptyList() }
 
-    var apiKey by remember(uiState.apiKey) { mutableStateOf(uiState.apiKey ?: "") }
-    var geminiApiKey by remember(uiState.geminiApiKey) { mutableStateOf(uiState.geminiApiKey ?: "") }
     var offlineFallbackTimeout by remember(uiState.refreshTrigger) { mutableIntStateOf(settingsRepo.getSettingsSnapshot().offlineFallbackTimeout) }
 
     var selectedSubTab by remember { mutableIntStateOf(0) }
@@ -72,62 +72,6 @@ fun ModelsSettingsTab(
                 onClick = { focusManager.clearFocus() }
             )
     ) {
-        // --- API KEYS SECTION ---
-        Text(text = languageManager.getString("api_keys_section"), style = MaterialTheme.typography.titleMedium)
-
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            ),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                var isApiFocused by remember { mutableStateOf(false) }
-                TextField(
-                    value = apiKey,
-                    onValueChange = {
-                        apiKey = it
-                        appStateManager.setApiKey(it)
-                        com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(it)
-                    },
-                    label = { Text(languageManager.getString("api_key")) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { isApiFocused = it.isFocused },
-                    visualTransformation = if (isApiFocused) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = !isApiFocused,
-                    maxLines = if (isApiFocused) 5 else 1,
-                    colors = if (!isApiFocused) TextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        unfocusedIndicatorColor = Color.Transparent
-                    ) else TextFieldDefaults.colors()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                var isGeminiKeyFocused by remember { mutableStateOf(false) }
-                TextField(
-                    value = geminiApiKey,
-                    onValueChange = {
-                        geminiApiKey = it
-                        appStateManager.setGeminiApiKey(it)
-                    },
-                    label = { Text(languageManager.getString("gemini_api_key")) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { isGeminiKeyFocused = it.isFocused },
-                    visualTransformation = if (isGeminiKeyFocused) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = !isGeminiKeyFocused,
-                    maxLines = if (isGeminiKeyFocused) 5 else 1,
-                    colors = if (!isGeminiKeyFocused) TextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        unfocusedIndicatorColor = Color.Transparent
-                    ) else TextFieldDefaults.colors()
-                )
-            }
-        }
-
         Spacer(modifier = Modifier.height(8.dp))
 
         // --- OFFLINE FALLBACK SECTION ---
@@ -137,8 +81,7 @@ fun ModelsSettingsTab(
             5 to "5 s", 10 to "10 s", 20 to "20 s", 35 to "35 s", 50 to "50 s",
             60 to "1 min", 300 to "5 min", 600 to "10 min"
         )
-        var timeoutExpanded by remember { mutableStateOf(false) }
-
+    
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -146,32 +89,22 @@ fun ModelsSettingsTab(
         ) {
             Text(text = languageManager.getString("timeout_label"), style = MaterialTheme.typography.labelLarge)
 
-            Box {
-                OutlinedButton(
-                    onClick = { timeoutExpanded = true },
-                    modifier = Modifier.widthIn(min = 120.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                ) {
-                    val currentLabel = timeoutOptions.find { it.first == offlineFallbackTimeout }?.second ?: "$offlineFallbackTimeout s"
-                    Text(currentLabel)
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                }
-                DropdownMenu(
-                    expanded = timeoutExpanded,
-                    onDismissRequest = { timeoutExpanded = false }
-                ) {
-                    timeoutOptions.forEach { (seconds, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = {
-                                offlineFallbackTimeout = seconds
-                                appStateManager.setOfflineFallbackTimeout(seconds)
-                                timeoutExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
+            Picklist(
+                items = timeoutOptions,
+                // A stored value the option list does not offer still has to name itself — it can
+                // come from a backup written when the list was different.
+                selected = timeoutOptions.find { it.first == offlineFallbackTimeout }
+                    ?: (offlineFallbackTimeout to "$offlineFallbackTimeout s"),
+                itemLabel = { it.second },
+                onSelect = { (seconds, _) ->
+                    offlineFallbackTimeout = seconds
+                    appStateManager.setOfflineFallbackTimeout(seconds)
+                },
+                // Sits at the end of its own labelled row, so it takes the inline anchor and a menu
+                // that drops from the button rather than spanning the row.
+                anchor = { label, onClick -> PicklistCompactAnchor(label, onClick) },
+                menuFillsWidth = false
+            )
         }
 
         if (uiState.defaultVoiceFallbackProcessor != null && uiState.defaultVoiceFallbackModel != null) {
@@ -229,7 +162,6 @@ fun ModelsSettingsTab(
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,
                 onProcessorSelected = onProcessorSelected,
-                hasApiKey = hasApiKey,
                 googleSttAvailable = googleSttAvailable,
                 onVoiceLanguageSelected = onVoiceLanguageSelected,
                 onModelSelected = onModelSelected,
@@ -241,7 +173,6 @@ fun ModelsSettingsTab(
                 onDeleteRequest = onDeleteRequest,
                 onFallbackChanged = onFallbackChanged,
                 onImportCustomModel = onImportCustomModel,
-                onClearCustomModel = onClearCustomModel,
                 refreshTrigger = refreshTrigger
             )
         } else {

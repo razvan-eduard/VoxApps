@@ -5,10 +5,13 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.voxapps.design.color.VoxColorPalette
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,10 +37,31 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
         val THEME_COLORED = booleanPreferencesKey("theme_colored")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+
+        // Backup & Restore (local)
+        val BACKUP_INCLUDE_SETTINGS = booleanPreferencesKey("backup_include_settings")
+        val BACKUP_INCLUDE_DATA = booleanPreferencesKey("backup_include_data")
+        val BACKUP_INCLUDE_ATTACHMENTS = booleanPreferencesKey("backup_include_attachments")
+        val BACKUP_IMPORT_MODE = stringPreferencesKey("backup_import_mode")
+        val IS_GRID_VIEW = booleanPreferencesKey("is_grid_view")
         val SHOW_EVENT_DETAILS_IN_WIDGET = booleanPreferencesKey("show_event_details_in_widget")
         val WIDGET_BORDER_ENABLED = booleanPreferencesKey("widget_border_enabled")
         val WIDGET_BORDER_THICKNESS_DP = intPreferencesKey("widget_border_thickness_dp")
         val WIDGET_BORDER_COLOR_ARGB = longPreferencesKey("widget_border_color_argb")
+        val TODAY_EFFECT = stringPreferencesKey("today_effect")
+        val TODAY_EFFECT_STYLE = stringPreferencesKey("today_effect_style")
+        val TODAY_EFFECT_COLOR = longPreferencesKey("today_effect_color")
+        val TODAY_EFFECT_COLOR_2 = longPreferencesKey("today_effect_color_2")
+        val TODAY_EFFECT_SPEED = floatPreferencesKey("today_effect_speed")
+        val TODAY_EFFECT_SHOW_IN_WIDGET = booleanPreferencesKey("today_effect_show_in_widget")
+        val NOTIFICATIONS_SYSTEM_DEFAULT = booleanPreferencesKey("notifications_system_default")
+        val NOTIFICATIONS_VIBRATION_ENABLED = booleanPreferencesKey("notifications_vibration_enabled")
+        val NOTIFICATIONS_SOUND_URI = stringPreferencesKey("notifications_sound_uri")
+        val NOTIFICATIONS_VOLUME = intPreferencesKey("notifications_volume")
+        val NOTIFICATIONS_LENGTH = stringPreferencesKey("notifications_length")
+        val NOTIFICATIONS_CHANNEL_VERSION = intPreferencesKey("notifications_channel_version")
+        val TODO_BLEED_TO_CALENDAR = booleanPreferencesKey("todo_bleed_to_calendar")
+        val ANIMATIONS_ENABLED = booleanPreferencesKey("animations_enabled")
     }
 
     override val settingsFlow: Flow<CalendarSettings> = dataStore.data.map { prefs ->
@@ -53,10 +77,29 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: CalendarSettings.THEME_SYSTEM,
             themeColored = prefs[Keys.THEME_COLORED] ?: true,
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+            backupIncludeSettings = prefs[Keys.BACKUP_INCLUDE_SETTINGS] ?: true,
+            backupIncludeData = prefs[Keys.BACKUP_INCLUDE_DATA] ?: true,
+            backupIncludeAttachments = prefs[Keys.BACKUP_INCLUDE_ATTACHMENTS] ?: false,
+            backupImportMode = prefs[Keys.BACKUP_IMPORT_MODE] ?: "merge",
+            isGridView = prefs[Keys.IS_GRID_VIEW] ?: false,
             showEventDetailsInWidget = prefs[Keys.SHOW_EVENT_DETAILS_IN_WIDGET] ?: true,
             widgetBorderEnabled = prefs[Keys.WIDGET_BORDER_ENABLED] ?: true,
             widgetBorderThicknessDp = prefs[Keys.WIDGET_BORDER_THICKNESS_DP] ?: CalendarSettings.THICKNESS_MEDIUM,
-            widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first()
+            widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first(),
+            todayEffect = prefs[Keys.TODAY_EFFECT] ?: TodayEffect.NONE.name,
+            todayEffectStyle = prefs[Keys.TODAY_EFFECT_STYLE] ?: TodayEffectStyle.RING.name,
+            todayEffectColor = prefs[Keys.TODAY_EFFECT_COLOR] ?: CalendarSettings.TODAY_EFFECT_DEFAULT_COLOR,
+            todayEffectColor2 = prefs[Keys.TODAY_EFFECT_COLOR_2],
+            todayEffectSpeed = prefs[Keys.TODAY_EFFECT_SPEED] ?: 1f,
+            todayEffectShowInWidget = prefs[Keys.TODAY_EFFECT_SHOW_IN_WIDGET] ?: true,
+            notificationsSystemDefault = prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] ?: true,
+            notificationsVibrationEnabled = prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] ?: true,
+            notificationsSoundUri = prefs[Keys.NOTIFICATIONS_SOUND_URI],
+            notificationsVolume = prefs[Keys.NOTIFICATIONS_VOLUME] ?: 100,
+            notificationsLength = prefs[Keys.NOTIFICATIONS_LENGTH] ?: CalendarSettings.LENGTH_SHORT,
+            notificationsChannelVersion = prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] ?: 1,
+            todoBleedToCalendar = prefs[Keys.TODO_BLEED_TO_CALENDAR] ?: true,
+            animationsEnabled = prefs[Keys.ANIMATIONS_ENABLED] ?: true
         )
     }
 
@@ -117,6 +160,10 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
+    override suspend fun setIsGridView(enabled: Boolean) {
+        dataStore.edit { it[Keys.IS_GRID_VIEW] = enabled }
+    }
+
     override suspend fun setShowEventDetailsInWidget(enabled: Boolean) {
         dataStore.edit { it[Keys.SHOW_EVENT_DETAILS_IN_WIDGET] = enabled }
     }
@@ -131,6 +178,66 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
 
     override suspend fun setWidgetBorderColorArgb(colorArgb: Long) {
         dataStore.edit { it[Keys.WIDGET_BORDER_COLOR_ARGB] = colorArgb }
+    }
+
+    override suspend fun setTodayEffect(effect: String) {
+        dataStore.edit { it[Keys.TODAY_EFFECT] = effect }
+    }
+
+    override suspend fun setTodayEffectStyle(style: String) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_STYLE] = style }
+    }
+
+    override suspend fun setTodayEffectColor(colorArgb: Long) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_COLOR] = colorArgb }
+    }
+
+    override suspend fun setTodayEffectColor2(colorArgb: Long?) {
+        dataStore.edit {
+            if (colorArgb == null) it.remove(Keys.TODAY_EFFECT_COLOR_2) else it[Keys.TODAY_EFFECT_COLOR_2] = colorArgb
+        }
+    }
+
+    override suspend fun setTodayEffectSpeed(speed: Float) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_SPEED] = speed }
+    }
+
+    override suspend fun setTodayEffectShowInWidget(enabled: Boolean) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_SHOW_IN_WIDGET] = enabled }
+    }
+
+    override suspend fun setNotificationsSystemDefault(enabled: Boolean) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = enabled }
+    }
+
+    override suspend fun setNotificationsVibrationEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_VIBRATION_ENABLED] = enabled }
+    }
+
+    override suspend fun setNotificationsSoundUri(uri: String?) {
+        dataStore.edit {
+            if (uri == null) it.remove(Keys.NOTIFICATIONS_SOUND_URI) else it[Keys.NOTIFICATIONS_SOUND_URI] = uri
+        }
+    }
+
+    override suspend fun setNotificationsVolume(volume: Int) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_VOLUME] = volume }
+    }
+
+    override suspend fun setNotificationsLength(length: String) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_LENGTH] = length }
+    }
+
+    override suspend fun setNotificationsChannelVersion(version: Int) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_CHANNEL_VERSION] = version }
+    }
+
+    override suspend fun setTodoBleedToCalendar(enabled: Boolean) {
+        dataStore.edit { it[Keys.TODO_BLEED_TO_CALENDAR] = enabled }
+    }
+
+    override suspend fun setAnimationsEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.ANIMATIONS_ENABLED] = enabled }
     }
 
     override suspend fun restoreSettings(settings: CalendarSettings) {
@@ -149,11 +256,54 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
+            prefs[Keys.IS_GRID_VIEW] = settings.isGridView
             prefs[Keys.SHOW_EVENT_DETAILS_IN_WIDGET] = settings.showEventDetailsInWidget
             prefs[Keys.WIDGET_BORDER_ENABLED] = settings.widgetBorderEnabled
             prefs[Keys.WIDGET_BORDER_THICKNESS_DP] = settings.widgetBorderThicknessDp
             prefs[Keys.WIDGET_BORDER_COLOR_ARGB] = settings.widgetBorderColorArgb
+            prefs[Keys.TODAY_EFFECT] = settings.todayEffect
+            prefs[Keys.TODAY_EFFECT_STYLE] = settings.todayEffectStyle
+            prefs[Keys.TODAY_EFFECT_COLOR] = settings.todayEffectColor
+            if (settings.todayEffectColor2 == null) {
+                prefs.remove(Keys.TODAY_EFFECT_COLOR_2)
+            } else {
+                prefs[Keys.TODAY_EFFECT_COLOR_2] = settings.todayEffectColor2
+            }
+            prefs[Keys.TODAY_EFFECT_SPEED] = settings.todayEffectSpeed
+            prefs[Keys.TODAY_EFFECT_SHOW_IN_WIDGET] = settings.todayEffectShowInWidget
+            prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = settings.notificationsSystemDefault
+            prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] = settings.notificationsVibrationEnabled
+            if (settings.notificationsSoundUri == null) {
+                prefs.remove(Keys.NOTIFICATIONS_SOUND_URI)
+            } else {
+                prefs[Keys.NOTIFICATIONS_SOUND_URI] = settings.notificationsSoundUri
+            }
+            prefs[Keys.NOTIFICATIONS_VOLUME] = settings.notificationsVolume
+            prefs[Keys.NOTIFICATIONS_LENGTH] = settings.notificationsLength
+            prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] = settings.notificationsChannelVersion
+            prefs[Keys.TODO_BLEED_TO_CALENDAR] = settings.todoBleedToCalendar
+            prefs[Keys.ANIMATIONS_ENABLED] = settings.animationsEnabled
+            prefs[Keys.BACKUP_INCLUDE_SETTINGS] = settings.backupIncludeSettings
+            prefs[Keys.BACKUP_INCLUDE_DATA] = settings.backupIncludeData
+            prefs[Keys.BACKUP_INCLUDE_ATTACHMENTS] = settings.backupIncludeAttachments
+            prefs[Keys.BACKUP_IMPORT_MODE] = settings.backupImportMode
         }
+    }
+
+    override suspend fun setBackupIncludeSettings(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_SETTINGS] = enabled }
+    }
+
+    override suspend fun setBackupIncludeData(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_DATA] = enabled }
+    }
+
+    override suspend fun setBackupIncludeAttachments(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_ATTACHMENTS] = enabled }
+    }
+
+    override suspend fun setBackupImportMode(mode: String) {
+        dataStore.edit { it[Keys.BACKUP_IMPORT_MODE] = mode }
     }
 
     private fun defaultDeviceLanguage(): String =

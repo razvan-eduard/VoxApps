@@ -12,12 +12,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -41,6 +46,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -49,6 +56,8 @@ private val SWATCH_OUTER_SIZE = 36.dp
 private val SWATCH_RING_WIDTH = 2.dp
 private val SWATCH_RING_GAP = 3.dp
 private val SWATCH_SPACING = 10.dp
+private val SWATCH_STACK_PEEK_OFFSET = 10.dp
+private val SWATCH_STACK_PEEK_ALPHAS = listOf(0.75f, 0.5f, 0.3f)
 
 /**
  * Shared preset-color picker used by every satellite's category/layer "add"/"edit" dialogs
@@ -56,6 +65,22 @@ private val SWATCH_SPACING = 10.dp
  * trailing "custom" entry that opens [VoxCustomColorDialog] — its result feeds back through
  * [onColorSelected] exactly like tapping a preset, so callers only ever handle one color-changed
  * callback regardless of which path picked it.
+ *
+ * When [collapsible] is true (the default), the picker starts collapsed — a single swatch showing
+ * [selectedColor] with a few others peeking out from behind it — and expands into the full row on
+ * tap, so an entity-color picker doesn't dominate a form before the user has asked to change it.
+ * [showSelectionRing] controls whether the currently-selected preset draws its ring once expanded;
+ * callers whose color is reassigned often/randomly (e.g. a single to-do task) can turn this off so
+ * the ring doesn't anchor attention on a color that's about to be replaced anyway.
+ *
+ * By default the expanded/collapsed state is managed internally. Callers whose surrounding
+ * composition churns a lot on selection (e.g. reacting to a Room `Flow` write triggered by
+ * [onColorSelected] itself) can instead hoist it via [expanded]/[onExpandedChange] so the flag lives
+ * somewhere more stable than this composable's own slot.
+ *
+ * [shape] outlines every swatch (see [VoxSwatchShapes]) — circles by default. A caller can pass a
+ * different shape to give the whole picker a second meaning beyond color: vox-calendar passes
+ * [VoxSwatchShapes.Star] for the Main calendar, matching the star its sidebar dot switches to.
  */
 @Composable
 fun VoxColorSwatchPicker(
@@ -63,6 +88,17 @@ fun VoxColorSwatchPicker(
     onColorSelected: (Long) -> Unit,
     modifier: Modifier = Modifier,
     presetColors: List<Long> = VoxColorPalette.presets,
+    collapsible: Boolean = true,
+    /** Which way the swatches run. A column is the same picker on its side — vox-calendar's to-do
+     *  card needs one on the trailing edge of a row-shaped card, and used to carry its own copy of
+     *  this component to get it. */
+    orientation: Orientation = Orientation.Horizontal,
+    /** Swatch footprint. Smaller where the picker sits beside content rather than under it. */
+    swatchSize: Dp = SWATCH_OUTER_SIZE,
+    expanded: Boolean? = null,
+    onExpandedChange: ((Boolean) -> Unit)? = null,
+    showSelectionRing: Boolean = true,
+    shape: Shape = CircleShape,
     customColorDialogTitle: String = "Custom color",
     customColorUseLabel: String = "Use this color",
     customColorCancelLabel: String = "Cancel",
@@ -70,29 +106,69 @@ fun VoxColorSwatchPicker(
     customColorSaturationLabel: String = "Saturation",
     customColorBrightnessLabel: String = "Brightness"
 ) {
+    var internalExpanded by remember { mutableStateOf(!collapsible) }
+    val expandedState = expanded ?: internalExpanded
+    val setExpanded: (Boolean) -> Unit = { value ->
+        onExpandedChange?.invoke(value) ?: run { internalExpanded = value }
+    }
     var showCustomDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     // Starts scrolled to whichever swatch is already selected (the randomly-picked default for a
     // new category, or the category's own color when editing) so it isn't hidden off-screen the
-    // moment the picker first renders.
-    LaunchedEffect(Unit) {
+    // moment the row expands.
+    LaunchedEffect(expandedState) {
+        if (!expandedState) return@LaunchedEffect
         val index = presetColors.indexOf(selectedColor)
         if (index > 0) listState.scrollToItem(index)
     }
 
-    LazyRow(
-        state = listState,
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(SWATCH_SPACING),
-        contentPadding = PaddingValues(vertical = 4.dp)
-    ) {
+    // The two directions share their item content exactly; only the container and which axis the
+    // spacing applies to differ, which is why one component can be both.
+    val swatches: LazyListScope.() -> Unit = {
         items(presetColors) { color ->
-            VoxColorSwatch(color = color, selected = color == selectedColor, onClick = { onColorSelected(color) })
+            VoxColorSwatch(
+                color = color,
+                selected = showSelectionRing && color == selectedColor,
+                onClick = { onColorSelected(color) },
+                shape = shape,
+                size = swatchSize
+            )
         }
         item {
-            VoxCustomColorEntry(onClick = { showCustomDialog = true })
+            VoxCustomColorEntry(onClick = { showCustomDialog = true }, size = swatchSize)
         }
+    }
+
+    if (expandedState) {
+        if (orientation == Orientation.Vertical) {
+            LazyColumn(
+                state = listState,
+                modifier = modifier,
+                verticalArrangement = Arrangement.spacedBy(SWATCH_SPACING),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(horizontal = 4.dp),
+                content = swatches
+            )
+        } else {
+            LazyRow(
+                state = listState,
+                modifier = modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(SWATCH_SPACING),
+                contentPadding = PaddingValues(vertical = 4.dp),
+                content = swatches
+            )
+        }
+    } else {
+        CollapsedSwatchStack(
+            selectedColor = selectedColor,
+            peekColors = presetColors.filter { it != selectedColor }.take(SWATCH_STACK_PEEK_ALPHAS.size),
+            onClick = { setExpanded(true) },
+            modifier = modifier,
+            shape = shape,
+            orientation = orientation,
+            size = swatchSize
+        )
     }
 
     if (showCustomDialog) {
@@ -114,33 +190,80 @@ fun VoxColorSwatchPicker(
     }
 }
 
+/** Collapsed preview for [VoxColorSwatchPicker]: [selectedColor] up front, a few [peekColors]
+ *  fanned out behind it (decreasing size/alpha) to hint that tapping reveals more. */
+@Composable
+private fun CollapsedSwatchStack(
+    selectedColor: Long,
+    peekColors: List<Long>,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    shape: Shape = CircleShape,
+    orientation: Orientation = Orientation.Horizontal,
+    size: Dp = SWATCH_OUTER_SIZE
+) {
+    // The peeks fan out along whichever axis the expanded picker will use, so the collapsed state
+    // points at where the rest of the swatches are about to appear.
+    val vertical = orientation == Orientation.Vertical
+    val spread = SWATCH_STACK_PEEK_OFFSET * peekColors.size
+    Box(
+        modifier = modifier
+            .height(if (vertical) size + spread else size)
+            .width(if (vertical) size else size + spread)
+            .clickable(onClick = onClick)
+    ) {
+        peekColors.forEachIndexed { index, color ->
+            val offset = SWATCH_STACK_PEEK_OFFSET * (index + 1)
+            Box(
+                modifier = Modifier
+                    .offset(x = if (vertical) 0.dp else offset, y = if (vertical) offset else 0.dp)
+                    .size(size)
+                    .clip(shape)
+                    .background(Color(color.toInt()).copy(alpha = SWATCH_STACK_PEEK_ALPHAS[index]))
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(shape)
+                .background(Color(selectedColor.toInt()))
+        )
+    }
+}
+
 /** A fixed-footprint swatch so selecting one never reflows the row: unselected swatches fill the
  *  whole [SWATCH_OUTER_SIZE] circle; the selected one draws a ring on the outer edge and shrinks
  *  the solid color inward, leaving a visible gap — a genuine outline around the color rather than
  *  a border drawn on the color itself. */
 @Composable
-internal fun VoxColorSwatch(color: Long, selected: Boolean, onClick: () -> Unit) {
+internal fun VoxColorSwatch(
+    color: Long,
+    selected: Boolean,
+    onClick: () -> Unit,
+    shape: Shape = CircleShape,
+    size: Dp = SWATCH_OUTER_SIZE
+) {
     Box(
         modifier = Modifier
-            .size(SWATCH_OUTER_SIZE)
-            .then(if (selected) Modifier.border(SWATCH_RING_WIDTH, MaterialTheme.colorScheme.primary, CircleShape) else Modifier)
+            .size(size)
+            .then(if (selected) Modifier.border(SWATCH_RING_WIDTH, MaterialTheme.colorScheme.primary, shape) else Modifier)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(if (selected) SWATCH_OUTER_SIZE - (SWATCH_RING_WIDTH + SWATCH_RING_GAP) * 2 else SWATCH_OUTER_SIZE)
-                .clip(CircleShape)
+                .size(if (selected) size - (SWATCH_RING_WIDTH + SWATCH_RING_GAP) * 2 else size)
+                .clip(shape)
                 .background(Color(color.toInt()))
         )
     }
 }
 
 @Composable
-private fun VoxCustomColorEntry(onClick: () -> Unit) {
+private fun VoxCustomColorEntry(onClick: () -> Unit, size: Dp = SWATCH_OUTER_SIZE) {
     Box(
         modifier = Modifier
-            .size(SWATCH_OUTER_SIZE)
+            .size(size)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)

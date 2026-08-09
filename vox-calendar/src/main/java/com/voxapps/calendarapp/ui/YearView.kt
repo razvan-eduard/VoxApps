@@ -27,6 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendar.CalendarDateUtils
 import com.voxapps.calendarapp.data.CalendarLayer
+import com.voxapps.design.effects.ApplyTodayEffect
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -40,7 +43,13 @@ fun YearView(
     layers: List<CalendarLayer>,
     selectedDateMillis: Long,
     locale: Locale,
-    onDayClick: (Long) -> Unit
+    onDayClick: (Long) -> Unit,
+    onMonthClick: (Long) -> Unit,
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
 ) {
     val zoneId = ZoneId.systemDefault()
     val year = remember(selectedDateMillis) { Instant.ofEpochMilli(selectedDateMillis).atZone(zoneId).toLocalDate().year }
@@ -62,7 +71,13 @@ fun YearView(
                 itemsByDay = itemsByDay,
                 layerById = layerById,
                 locale = locale,
-                onDayClick = onDayClick
+                onDayClick = onDayClick,
+                onMonthClick = onMonthClick,
+                todayEffect = todayEffect,
+                todayEffectStyle = todayEffectStyle,
+                todayEffectPrimaryColor = todayEffectPrimaryColor,
+                todayEffectSecondaryColor = todayEffectSecondaryColor,
+                todayEffectSpeed = todayEffectSpeed
             )
         }
     }
@@ -74,43 +89,62 @@ private fun MiniMonth(
     itemsByDay: Map<LocalDate, List<EntryCalendarItem>>,
     layerById: Map<Long, CalendarLayer>,
     locale: Locale,
-    onDayClick: (Long) -> Unit
+    onDayClick: (Long) -> Unit,
+    onMonthClick: (Long) -> Unit,
+    todayEffect: TodayEffect,
+    todayEffectStyle: TodayEffectStyle,
+    todayEffectPrimaryColor: Color,
+    todayEffectSecondaryColor: Color?,
+    todayEffectSpeed: Float
 ) {
     val zoneId = ZoneId.systemDefault()
     val today = LocalDate.now()
     Column(Modifier.fillMaxWidth()) {
         Text(
             text = "${month.month.getDisplayName(TextStyle.FULL, locale)} ${month.year}",
-            style = MaterialTheme.typography.labelLarge
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.clickable {
+                onMonthClick(month.atDay(1).atStartOfDay(zoneId).toInstant().toEpochMilli())
+            }
         )
         val leadingBlanks = month.atDay(1).dayOfWeek.value - 1
         val cells: List<LocalDate?> = List(leadingBlanks) { null } + CalendarDateUtils.daysInMonth(month)
         cells.chunked(7).forEach { week ->
             Row(Modifier.fillMaxWidth()) {
                 week.forEach { day ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .aspectRatio(1f)
-                            .clickable(enabled = day != null) {
-                                day?.let { onDayClick(it.atStartOfDay(zoneId).toInstant().toEpochMilli()) }
-                            },
-                        contentAlignment = Alignment.Center
+                    ApplyTodayEffect(
+                        enabled = day != null && day == today,
+                        elementName = "year_mini_day_$day",
+                        effect = todayEffect,
+                        style = todayEffectStyle,
+                        primaryColor = todayEffectPrimaryColor,
+                        secondaryColor = todayEffectSecondaryColor,
+                        speedMultiplier = todayEffectSpeed,
+                        modifier = Modifier.weight(1f).aspectRatio(1f)
                     ) {
-                        if (day != null) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "${day.dayOfMonth}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (day == today) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (day == today) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
-                                val dayItems = itemsByDay[day].orEmpty()
-                                if (dayItems.isNotEmpty()) {
-                                    val color = layerById[dayItems.first().entryWithTags.entry.layerId]
-                                        ?.let { Color(it.colorArgb.toInt()) }
-                                        ?: MaterialTheme.colorScheme.primary
-                                    Box(Modifier.size(4.dp).background(color, CircleShape))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable(enabled = day != null) {
+                                    day?.let { onDayClick(it.atStartOfDay(zoneId).toInstant().toEpochMilli()) }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (day != null) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "${day.dayOfMonth}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (day == today) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (day == today) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    val dayItems = itemsByDay[day].orEmpty()
+                                    if (dayItems.isNotEmpty()) {
+                                        val color = layerById[dayItems.first().entryWithTags.entry.layerId]
+                                            ?.let { Color(it.colorArgb.toInt()) }
+                                            ?: MaterialTheme.colorScheme.primary
+                                        Box(Modifier.size(4.dp).background(color, CircleShape))
+                                    }
                                 }
                             }
                         }

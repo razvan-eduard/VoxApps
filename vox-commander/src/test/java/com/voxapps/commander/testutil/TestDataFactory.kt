@@ -82,6 +82,7 @@ object TestDataFactory {
         intentAction: String = "",
         uriTemplate: String? = null,
         lazyQuery: Boolean = false,
+        anyOrder: Boolean = false,
         sortOrder: Int = 0,
         isActive: Boolean = true,
         domain: String = "custom",
@@ -96,6 +97,7 @@ object TestDataFactory {
         intentAction = intentAction,
         uriTemplate = uriTemplate,
         lazyQuery = lazyQuery,
+        anyOrder = anyOrder,
         sortOrder = sortOrder,
         isActive = isActive,
         domain = domain,
@@ -321,12 +323,12 @@ object TestDataFactory {
         geminiIncompatible = geminiIncompatible
     )
 
+    /** The Gemini key is not a setting — it lives in the encrypted store and reaches callers as
+     *  [com.voxapps.commander.data.preferences.Credentials], so it is passed there, not here. */
     fun createSettingsWithGeminiCloud(
-        geminiApiKey: String? = "test-key",
         cloudIntelligenceEnabled: Boolean = true
     ) = createAppSettings(
         aiProcessor = com.voxapps.commander.utils.Strings.AiProcessors.GEMINI_CLOUD,
-        geminiApiKey = geminiApiKey,
         cloudIntelligenceEnabled = cloudIntelligenceEnabled
     )
 }

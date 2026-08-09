@@ -6,7 +6,7 @@
          time (never per-expense), a plain outbound HTTPS GET to exchangerate-api.com, and reverse
          geocoding a captured GPS fix into a city name (OpenStreetMap Nominatim — deliberately not
          Android's on-device Geocoder, whose backend is Google-owned on most real devices; see
-         ExpensesLocationHelper's doc comment). -->
+         VoxNominatimGeocoder's doc comment in :core:location). -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Opt-in, requested in onboarding: lets a captured expense (voice, scan, or manual) prefill
@@ -28,6 +28,7 @@
     <!-- Android 13+ suppresses toasts from backgrounded apps unless notifications are allowed.
          Needed for the "toast on voice save" setting (the save is headless via broadcast). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Taking a photo directly for an attachment, via the system camera app. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Lets the Notification Capture settings screen show the system's "Ignore battery
@@ -57,7 +58,8 @@
             android:exported="true"
             android:icon="@mipmap/ic_launcher"
             android:roundIcon="@mipmap/ic_launcher"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:launchMode="singleTask">
 
             <!-- Standalone launcher: works fully without VoxCommander -->
             <intent-filter>
@@ -81,7 +83,7 @@
             <!-- Capability advertising: Commander reads this at scan time to route the "expenses"
                  NLU domain here (create/read), with no per-app config on Commander's side. -->
             <meta-data android:name="com.voxapps.vox.domain" android:value="expenses" />
-            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import,get_schema,sync_export,sync_merge" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import,get_schema,sync_export,sync_merge,get_field_schema" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Expenses" />
             <meta-data
                 android:name="com.voxapps.vox.nluHint"

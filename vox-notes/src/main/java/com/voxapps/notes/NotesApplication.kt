@@ -5,6 +5,7 @@ import com.voxapps.logging.Logger
 import com.voxapps.notes.di.NotesContainer
 import com.voxapps.notes.domain.llm.CategoryAutoMergeScheduler
 import com.voxapps.notes.domain.llm.PendingLlmRequestScheduler
+import com.voxapps.notes.domain.widget.WidgetMidnightRefreshScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,6 +26,7 @@ class NotesApplication : Application() {
         // still honored.
         CategoryAutoMergeScheduler.reschedule(this, container.settingsRepository.getSnapshot().scheduledMergeInterval)
         PendingLlmRequestScheduler.ensureScheduled(this)
+        WidgetMidnightRefreshScheduler.ensureScheduled(this)
 
         // Apply the persisted debug-logging flags immediately (no lag waiting for the first
         // settingsFlow emission), then keep them in sync with any later Settings toggle.

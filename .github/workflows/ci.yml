@@ -1,0 +1,121 @@
+name: CI
+
+# Every push to main, and every pull request against it.
+#
+# The release workflows only wake when an app's own build.gradle.kts changes — a version bump — so
+# until this existed, a commit that touched shared code and no app's build file was never compiled
+# or tested by anything. Most commits are exactly that shape: work in core/ that every app links.
+# The gap was invisible because it fails late, at the next release, and blames whoever released.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# A second push while the first is still running makes the first irrelevant: only the tip needs to
+# be green. Releases deliberately do not do this — cancelling a publish half way is a different kind
+# of mess — but a verification run is safe to abandon.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    # gradle.properties asks for 4 GB, which is sized for building one app at a time on a developer
+    # machine. This job dexes all six in a single invocation, and D8 died with an OutOfMemoryError
+    # on vox-vision — the heaviest, carrying the OpenCV bindings, ONNX and Paddle. Raised here
+    # rather than in gradle.properties so a laptop is not asked to reserve 6 GB for every build.
+    env:
+      GRADLE_HEAP: -Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # vox-vision and :vendor:ppocr-sdk import org.opencv.* from vendor/ppocr-sdk/opencv/java,
+      # which is not in git — build_opencv_android.sh generates it. Unlike the whisper build this
+      # one cannot be skipped: without it those two modules do not compile at all.
+      #
+      # So build it once and keep it. The key is the pinned submodule commit, read out of the tree
+      # without cloning the submodule, plus the script that does the building — the two things that
+      # can make the output stale. A miss costs one long run; every push after it restores.
+      - name: Resolve the pinned OpenCV commit
+        id: opencv_pin
+        run: echo "sha=$(git ls-tree HEAD vendor/opencv | awk '{print $3}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore built OpenCV
+        id: opencv_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            vendor/ppocr-sdk/opencv
+            vox-vision/src/main/jniLibs
+          key: opencv-${{ runner.os }}-${{ steps.opencv_pin.outputs.sha }}-${{ hashFiles('scripts/build_opencv_android.sh') }}
+
+      # Only on a miss: the submodule is a few hundred megabytes and the NDK is a slow install, and
+      # a restored build needs neither — the script takes the cached output on trust precisely
+      # because the cache key above already accounts for the pin.
+      - name: Fetch OpenCV sources
+        if: steps.opencv_cache.outputs.cache-hit != 'true'
+        run: git submodule update --init --depth 1 vendor/opencv
+
+      - name: Set up Android SDK
+        if: steps.opencv_cache.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-licenses: true
+
+      - name: Install NDK and CMake
+        if: steps.opencv_cache.outputs.cache-hit != 'true'
+        run: sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+
+      # Every module's tests, not one app's. The shared modules — design, services, ipc, backup,
+      # calendar, voxconnect — carry the checks that tie code to the shipped schemas, and the only
+      # workflow that ran them was the dependabot one. Human changes went untested; a bot's did not.
+      #
+      # -PvoxSkipNativePrep skips Commander's preBuild scripts: compiling whisper.cpp from its
+      # submodule (NDK + shaderc + an SDK symlink, minutes per run) and three JitPack queries about
+      # upstream versions. None of that verifies a commit — the release workflow does the native
+      # build for real, with its own prerequisites, before anything ships. Everything downstream of
+      # preBuild still runs, so a change that breaks Commander's Kotlin still fails here.
+      - name: Unit tests, all modules
+        run: ./gradlew test --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP"
+
+      # Split restore/save so the build is kept even when a later step fails. The combined action
+      # saves in a post step that a failed job skips — which meant the first red run threw away the
+      # OpenCV build it had just spent minutes on, and the next run paid for it again.
+      - name: Save built OpenCV
+        if: always() && steps.opencv_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            vendor/ppocr-sdk/opencv
+            vox-vision/src/main/jniLibs
+          key: ${{ steps.opencv_cache.outputs.cache-primary-key }}
+
+      # Compiling every app is what catches a shared-module change that only breaks one of them.
+      # Debug rather than release: no signing secrets are needed to prove the code builds, and the
+      # release job still does the real thing before publishing.
+      - name: Assemble every app
+        run: ./gradlew assembleDebug --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP"
+
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/build/reports/tests/**'
+          retention-days: 7
+          if-no-files-found: ignore

@@ -1,5 +1,6 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.design.picklist.PicklistButtonAnchor
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import androidx.compose.foundation.layout.*
@@ -11,15 +12,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelItem
+import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.engine.EngineSpecs
+import com.voxapps.commander.domain.model.ImportedModel
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.ui.components.DropdownGroup
+import com.voxapps.services.ServiceProbe
+import com.voxapps.design.picklist.ConnectionTestCard
+import com.voxapps.design.picklist.Picklist
+import com.voxapps.design.picklist.ServicePicklist
 import com.voxapps.commander.ui.components.EngineModelSection
-import com.voxapps.commander.ui.components.GroupedDropdownContent
-import com.voxapps.commander.ui.components.GroupedDropdownMenu
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 
@@ -30,7 +36,6 @@ fun VoiceEnginesSubTab(
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     onProcessorSelected: (String) -> Unit,
-    hasApiKey: Boolean,
     googleSttAvailable: Boolean,
     onVoiceLanguageSelected: (String) -> Unit,
     onModelSelected: (AppModel, Boolean, String) -> Unit,
@@ -42,7 +47,6 @@ fun VoiceEnginesSubTab(
     onDeleteRequest: (AppModel) -> Unit,
     onFallbackChanged: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
-    onClearCustomModel: () -> Unit = {},
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
@@ -66,10 +70,7 @@ fun VoiceEnginesSubTab(
 
     // 1. Processor Selection
     Text(text = languageManager.getString("voice_processor_section"), style = MaterialTheme.typography.titleMedium)
-    Box {
-        var processorExpanded by remember { mutableStateOf(false) }
-        
-        // Build list of processors: JSON engines (type=voice) + Local/Virtual injections
+    // Build list of processors: JSON engines (type=voice) + Local/Virtual injections
         val processors = remember(uiState.availableModels, uiState.isExperimentalVulkanEnabled, uiState.isWhisperSystemEnabled) {
             val list = RemoteModelRegistry.getEngineKeysByType("voice").toMutableList()
 
@@ -78,43 +79,59 @@ fun VoiceEnginesSubTab(
                 list.removeAll { RemoteModelRegistry.getExtension(it) == ".bin" }
             }
             
-            // Add virtual models
-            if (!list.contains(Strings.Processors.GOOGLE)) list.add(Strings.Processors.GOOGLE)
-            if (!list.contains(Strings.Processors.WHISPER_API)) list.add(Strings.Processors.WHISPER_API)
-            
-            // Experimental Vulkan (only if Whisper system is enabled)
+            // The cloud and OS-supplied engines are no longer injected here — they are declared in
+            // virtual_models.json and arrive with every other voice engine. Two screens listing
+            // engines by hand is how one of them came to offer an engine the other did not.
+            //
+            // Experimental Vulkan stays: it is not an engine of its own but stt_whisper asked to run
+            // on the GPU, sharing that engine's models, so declaring it would give it an empty model
+            // list and a claim to be the whisper engine in every by-packaging lookup.
             if (uiState.isWhisperSystemEnabled && uiState.isExperimentalVulkanEnabled && !list.contains(Strings.Processors.WHISPER_VULKAN)) {
                 list.add(0, Strings.Processors.WHISPER_VULKAN)
             }
             list
         }
 
-        OutlinedButton(onClick = { processorExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(RemoteModelRegistry.getEngineLabel(uiState.voiceProcessor, languageManager))
-        }
-        
-        DropdownMenu(expanded = processorExpanded, onDismissRequest = { processorExpanded = false }, modifier = Modifier.fillMaxWidth()) {
-            processors.forEach { proc ->
-                val enabled = when (proc) {
-                    Strings.Processors.WHISPER_API -> hasApiKey
-                    Strings.Processors.GOOGLE -> googleSttAvailable
-                    Strings.Processors.WHISPER_VULKAN -> uiState.isWhisperSystemEnabled && !settingsRepo.getSettingsSnapshot().vulkanIncompatible
+        val engineEntries = remember(processors) { processors.map { RemoteModelRegistry.serviceEntry(it) } }
+
+        ServicePicklist(
+            items = engineEntries,
+            selected = engineEntries.firstOrNull { it.id == uiState.voiceProcessor },
+            itemLabel = { RemoteModelRegistry.getEngineLabel(it.id, languageManager) },
+            onSelect = { onProcessorSelected(it.id) },
+            credentialFor = { uiState.credentials.forEngine(it.credentialOwnerId) },
+            onCredentialCommit = { entry, key ->
+                appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+            },
+            credentialLabel = languageManager.getString("engine_api_key"),
+            helpTextFor = { entry ->
+                entry.helpTextKey?.let { languageManager.getString(it) }
+                    ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+            },
+            timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) },
+            itemEnabled = { entry ->
+                val proc = entry.id
+                /*
+                 * Only what this device cannot do disables a row.
+                 *
+                 * A missing key does not: the field for it appears under the selection, so an
+                 * engine greyed out for wanting a credential is an engine whose credential can
+                 * never be entered. It was worse than that here — the guard consulted the *intent*
+                 * engine's OpenAI key, a leftover from when every service shared one — so the
+                 * transcription engine unlocked when a key for something else was entered.
+                 */
+                when {
+                    proc == Strings.Processors.GOOGLE -> googleSttAvailable
+                    proc == Strings.Processors.WHISPER_VULKAN ->
+                        uiState.isWhisperSystemEnabled && !settingsRepo.getSettingsSnapshot().vulkanIncompatible
                     else -> true
                 }
-                
-                DropdownMenuItem(
-                    text = { 
-                        Text(
-                            text = RemoteModelRegistry.getEngineLabel(proc, languageManager), 
-                            color = if (enabled) LocalContentColor.current else Color.Gray
-                        ) 
-                    },
-                    onClick = { if (enabled) { onProcessorSelected(proc); processorExpanded = false } },
-                    enabled = enabled
-                )
+            },
+            itemNote = { entry ->
+                if (entry.requiresCredential && !uiState.credentials.has(entry.id))
+                    " — needs an API key" else ""
             }
-        }
-    }
+        )
 
     HorizontalDivider()
 
@@ -132,42 +149,20 @@ fun VoiceEnginesSubTab(
     }
 
     if (!isCurrentProcessorMultilingual && availableLanguages.isNotEmpty()) {
-        val languages = availableLanguages.map { lang ->
-            lang to lang.uppercase()
-        }
-
-        var showLanguageSheet by remember { mutableStateOf(false) }
-        val languageSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-        val languageGroups = listOf(DropdownGroup(languageManager.getString("available_languages_header") ?: "AVAILABLE LANGUAGES", languages))
-        val selectedLangPair = languages.find { it.first == modelFilterLang }
-
         Text(text = languageManager.getString("model_language_filter") ?: "Model Language Filter", style = MaterialTheme.typography.labelLarge)
 
-        GroupedDropdownMenu(
-            selectedItem = selectedLangPair,
-            groups = languageGroups,
-            itemLabel = { it.second },
-            isDownloaded = { true },
-            onDeviceLabel = "",
-            onItemSelected = { pair, _ -> modelFilterLang = pair.first; appStateManager.setModelFilterLang(pair.first) },
-            onExpandedChange = { showSheet -> showLanguageSheet = showSheet }
-
-        )
-
-        if (showLanguageSheet) {
-            ModalBottomSheet(onDismissRequest = { showLanguageSheet = false }, sheetState = languageSheetState) {
-                GroupedDropdownContent(
-                    title = languageManager.getString("model_language_filter") ?: "Model Language Filter",
-                    groups = languageGroups,
-                    itemLabel = { it.second },
-                    isDownloaded = { true },
-                    onDeviceLabel = "",
-                    onItemSelected = { pair, _ -> modelFilterLang = pair.first; appStateManager.setModelFilterLang(pair.first); showLanguageSheet = false }
-
-                )
+        // A plain choice, drawn plainly. It used the model picker — the one with per-row download
+        // arrows, on-device badges and a bottom sheet — with every row told it was already
+        // downloaded and no download callback given, because a language is not a file.
+        Picklist(
+            items = availableLanguages,
+            selected = modelFilterLang.takeIf { it in availableLanguages },
+            itemLabel = { it.uppercase() },
+            onSelect = { lang ->
+                modelFilterLang = lang
+                appStateManager.setModelFilterLang(lang)
             }
-        }
+        )
 
         HorizontalDivider()
     }
@@ -184,84 +179,58 @@ fun VoiceEnginesSubTab(
             color = if (isSelectionEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
         )
         
-        var expanded by remember { mutableStateOf(false) }
-        Box {
-            OutlinedButton(
-                onClick = { if (isSelectionEnabled) expanded = true }, 
-                modifier = Modifier.fillMaxWidth(),
-                enabled = isSelectionEnabled
-            ) {
-                Text(text = selectedApiModel)
+        Picklist(
+            items = apiModels,
+            selected = selectedApiModel,
+            itemLabel = { it },
+            onSelect = { selectedApiModel = it },
+            anchor = { label, onClick ->
+                PicklistButtonAnchor(label, onClick, enabled = isSelectionEnabled)
             }
-            
-            DropdownMenu(
-                expanded = expanded, 
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.fillMaxWidth(0.9f)
-            ) {
-                apiModels.forEach { model ->
-                    DropdownMenuItem(
-                        text = { Text(model, modifier = Modifier.fillMaxWidth()) },
-                        onClick = {
-                            selectedApiModel = model
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
+        )
         HorizontalDivider()
     }
 
     // 4. Engine Specific Sections
+    // Two different questions that used to be one. Which language slot an import belongs to is
+    // about the engine's models; which picker to open is about how its model is packaged.
+    val isPerLanguage = RemoteModelRegistry.isPerLanguage(engineKey)
+    val isDirectoryBased = RemoteModelRegistry.isArchiveEngine(engineKey) ||
+        RemoteModelRegistry.getExtension(engineKey).isBlank()
+
     // Agnostic model filtering by language
-    val filteredModels = remember(models, modelFilterLang, isCurrentProcessorMultilingual) {
-        if (isCurrentProcessorMultilingual) models 
-        else models.filter { it.langCode == modelFilterLang }
+    // Keyed on the imported path as well: an import lands while this screen is composed, and
+    // nothing else in these keys changes when it does — the row appeared only after leaving the
+    // tab and coming back.
+    val filteredModels = remember(
+        models, modelFilterLang, isCurrentProcessorMultilingual, refreshTrigger, uiState.customVoiceModelPath
+    ) {
+        val declared = if (isCurrentProcessorMultilingual) models
+            else models.filter { it.langCode == modelFilterLang }
+        // What the user imported, listed first and treated like any other model: it is chosen from
+        // here, and removed by the same trash icon. It used to live in a card of its own below,
+        // outranking whatever this list showed as selected.
+        val imported = EngineSpecs.importedRow(
+            settingsRepo,
+            engineKey,
+            modelFilterLang.takeIf { isPerLanguage }
+        )
+        listOfNotNull(imported) + declared
     }
 
     // --- CUSTOM MODEL IMPORT ---
-    val isZipEngine = RemoteModelRegistry.isZipEngine(engineKey)
-    val supportsCustomModel = RemoteModelRegistry.getExtension(engineKey).isNotEmpty()
-    val customModelPath = if (isZipEngine) {
-        uiState.customVoskModelPaths[modelFilterLang]
-    } else {
-        uiState.customWhisperModelPath
-    }
+    val supportsCustomModel = RemoteModelRegistry.supportsCustomImport(engineKey)
+    // Already resolved for this engine and language by AppState — the screen used to choose
+    // between two engine-named fields by asking how the engine is packaged.
+    val customModelPath = uiState.customVoiceModelPath
     val hasCustomModel = !customModelPath.isNullOrBlank() && java.io.File(customModelPath).exists()
 
     if (supportsCustomModel) {
-        if (hasCustomModel) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = languageManager.getString("custom_model_active"),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = customModelPath,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onClearCustomModel,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(languageManager.getString("clear_custom_model"))
-                }
-            }
-        }
-    } else {
+        // No "custom model active" card any more: an import is a row in the list above, marked as
+        // imported, selected like any other model and deleted by the same trash icon. The card said
+        // the same thing in a second place and was the only way to remove one.
         OutlinedButton(
-            onClick = { onImportCustomModel(if (isZipEngine) modelFilterLang else null) },
+            onClick = { onImportCustomModel(if (isPerLanguage) modelFilterLang else null) },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(languageManager.getString("import_custom_model"))
@@ -272,23 +241,39 @@ fun VoiceEnginesSubTab(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
-    } // end if (supportsCustomModel)
 
     Spacer(modifier = Modifier.height(12.dp))
 
     if (filteredModels.isNotEmpty()) {
         EngineModelSection(
             title = languageManager.getString("select_model"),
+            // Only a downloadable engine can be an offline fallback. Left at its default, the
+            // checkbox would also appear for a cloud engine — whose models report isBuiltIn, which
+            // this section reads as "already downloaded" and therefore selectable.
+            showFallback = RemoteModelRegistry.runtimeOf(engineKey) == EngineRuntime.LOCAL_FILE,
 
             settingsRepo = settingsRepo,
             appStateManager = appStateManager,
-            groups = remember(filteredModels, refreshTrigger) {
-                listOf(DropdownGroup(languageManager.getString("available_models_header"), filteredModels))
-            },
+            header = languageManager.getString("available_models_header"),
+                items = filteredModels,
             selectedItem = remember(uiState.activeVoiceModelId, filteredModels) {
                 filteredModels.find { it.id == uiState.activeVoiceModelId }
             },
-            itemLabel = { "${it.label} (${it.sizeDescription})" },
+            itemLabel = { model ->
+                // An import is named for what it is and which language slot it fills — the two
+                // facts that decide how it behaves. Its file name is one we invented when we copied
+                // it in ("wake_vosk_custom_de"), and the name the user picked is not kept anywhere.
+                // Marked, too: a downloaded model can be fetched again, this one cannot.
+                if (model is ImportedModel) {
+                    // No "— imported" suffix: the name says it once, and saying it twice was
+                    // what the suffix existed to do back when the name was a directory path.
+                    val name = languageManager.getString("model_imported_name") +
+                        (model.langCode?.let { " (${it.uppercase()})" } ?: "")
+                    "$name (${model.sizeDescription})"
+                } else {
+                    "${model.label} (${model.sizeDescription})"
+                }
+            },
             modelIdProvider = { it.id },
             onItemSelected = { model, isDownloaded ->
                 val code = model.langCode ?: uiState.modelFilterLang

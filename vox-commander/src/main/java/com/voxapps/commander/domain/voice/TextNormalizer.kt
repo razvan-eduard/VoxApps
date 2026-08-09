@@ -20,7 +20,8 @@ import java.util.regex.Pattern
 object TextNormalizer {
 
     private const val TAG = "TextNormalizer"
-    private const val ASSET_FILE = "normalization.json"
+    private const val ASSET_FILE = "schemas/normalization.json"
+    private const val KEY_SCHEMA_VERSION = "schema_version"
 
     // @Volatile: load() runs on the init thread while normalize() reads the pattern maps
     // on the command thread — this guarantees the published maps are visible once loaded.
@@ -50,12 +51,13 @@ object TextNormalizer {
             val json = context.assets.open(ASSET_FILE).bufferedReader().use { it.readText() }
             val root = JSONObject(json)
 
-            schemaVersion = root.optInt("schema_version", 1)
+            schemaVersion = root.optInt(KEY_SCHEMA_VERSION, 1)
 
-            val supportedLangs = listOf("en", "ro", "de", "fr")
-            for (lang in supportedLangs) {
-                if (!root.has(lang)) continue
-
+            // The file says which languages it covers: every key but the version. A language added
+            // to it used to need this list edited to match, and adding one without that edit looked
+            // exactly like the rules not working.
+            val declaredLangs = root.keys().asSequence().filter { it != KEY_SCHEMA_VERSION }.toList()
+            for (lang in declaredLangs) {
                 val langObj = root.getJSONObject(lang)
                 val hasL1 = langObj.has("layer_1_replacements")
                 val hasL2 = langObj.has("layer_2_regex")

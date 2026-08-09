@@ -3,12 +3,16 @@ package com.voxapps.hub.data.preferences
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.preferencesDataStore
+import com.voxapps.preferences.VoxDataStore
 
-private val Context.hubDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "vox_hub_settings"
-)
-
+/**
+ * This app's settings store. Only the name lives here now; the instance-per-file caching that every
+ * app used to re-implement is in [VoxDataStore].
+ *
+ * STORE_NAME is the on-disk identity of the user's settings and must never change.
+ */
 object DataStoreProvider {
-    fun get(context: Context): DataStore<Preferences> = context.applicationContext.hubDataStore
+    private const val STORE_NAME = "vox_hub_settings"
+
+    fun get(context: Context): DataStore<Preferences> = VoxDataStore.get(context, STORE_NAME)
 }

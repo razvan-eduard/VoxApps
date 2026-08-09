@@ -9,6 +9,7 @@ import com.voxapps.expenses.domain.llm.ExpenseParsePromptBuilder
 import com.voxapps.expenses.domain.llm.GeneratedParsedSchema
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.PendingLlmRequestScheduler
+import com.voxapps.expenses.domain.widget.WidgetMidnightRefreshScheduler
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxSatelliteSchema
 import com.voxapps.logging.Logger
@@ -20,6 +21,10 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import com.voxapps.services.SchemaCatalog
+import com.voxapps.services.SchemaRepo
+import com.voxapps.expenses.data.ExternalServiceConfig
 
 class ExpensesApplication : Application() {
     lateinit var container: ExpensesContainer
@@ -37,6 +42,20 @@ class ExpensesApplication : Application() {
         ExpenseDeduplicationScheduler.reschedule(this, settingsSnapshot.scheduledExpenseDedupInterval)
         SpendingLimitScheduler.ensureScheduled(this)
         PendingLlmRequestScheduler.ensureScheduled(this)
+        WidgetMidnightRefreshScheduler.ensureScheduled(this)
+
+        // The services this app talks to but does not own — the rate provider's endpoint and the URL
+        // where its key is obtained. Bundled copy first so nothing waits on the network, then the
+        // repository's, which is how a moved endpoint gets corrected without an app release.
+        SchemaRepo.appFolder = "expenses"
+        ExternalServiceConfig.init(this)
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            // The repository this app follows, and whether it is asked at all — its own settings,
+            // so an install can follow a fork here and not in Commander.
+            if (settingsSnapshot.useRemoteSchemas) {
+                SchemaCatalog.refreshAll(settingsSnapshot.schemaRepoBaseUrl)
+            }
+        }
 
         // Apply the persisted debug-logging flag immediately, then keep it in sync with any later
         // Settings toggle (mirrors vox-notes' NotesApplication).

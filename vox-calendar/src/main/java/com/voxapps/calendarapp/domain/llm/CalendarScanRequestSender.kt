@@ -17,17 +17,21 @@ private const val TAG = "CalendarScanRequestSender"
  * already is an Activity (foreground calendar is still in this app's task background-activity-launch
  * restriction applies to the *calling* app's state, not Vision's, either way). Vision replies
  * asynchronously via [com.voxapps.calendarapp.receiver.OcrResultReceiver] with the raw recognized
- * text; Calendar takes it from there (LLM cleanup, then save). Mirrors vox-notes' `ScanRequestSender`.
+ * text (for [VoxOcrRequest.CAPTURE_MODE_BATCH], one text per photo — see [com.voxapps.ipc.
+ * VoxOcrResult.rawTexts]'s doc comment for why Vision does that OCR itself rather than this app
+ * relaunching it headlessly per photo); Calendar takes it from there (LLM cleanup, then save).
+ * Mirrors vox-notes' `ScanRequestSender`.
  */
 object CalendarScanRequestSender {
-    fun send(context: Context) {
+    fun send(context: Context, captureMode: String = VoxOcrRequest.CAPTURE_MODE_SINGLE) {
         val payload = VoxOcrRequest(
             sourcePackage = context.packageName,
             task = LlmTasks.CALENDAR_SCAN_CLEANUP,
-            hint = "Scanning for Calendar"
+            hint = "Scanning for Calendar",
+            captureMode = captureMode
         ).toJson()
 
-        Logger.d(TAG, "Launching Vision directly for a scan")
+        Logger.d(TAG, "Launching Vision directly for a scan (captureMode=$captureMode)")
         context.startActivity(
             Intent().apply {
                 setClassName(VoxIpc.VISION_PACKAGE, VoxIpc.VISION_ACTIVITY_CLASS)

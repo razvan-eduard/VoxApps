@@ -7,9 +7,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
+import com.voxapps.design.toEnumOr
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
@@ -110,6 +114,7 @@ fun ExpensesRoot(
                                 vatDisplayEnabled = container.settingsRepository.getSnapshot().vatDisplayEnabled,
                                 decimalSeparator = container.settingsRepository.getSnapshot().decimalSeparator,
                                 locationPrefillEnabled = container.settingsRepository.getSnapshot().locationPrefillEnabled,
+                                settingsRepository = container.settingsRepository,
                                 mostRecentCategoryColor = mostRecentCategoryColor,
                                 stateManager = container.expensesStateManager,
                                 onDone = { editTarget = null }
@@ -134,7 +139,12 @@ fun ExpensesRoot(
                                 onAddExpense = { editTarget = EditTarget.New },
                                 onEditExpense = { editTarget = EditTarget.Existing(it) },
                                 onOpenSettings = { showSettings = true },
-                                onOpenReports = { showReports = true }
+                                onOpenReports = { showReports = true },
+                                todayEffect = settings.todayEffect.toEnumOr(TodayEffect.NONE),
+                                todayEffectStyle = settings.todayEffectStyle.toEnumOr(TodayEffectStyle.RING),
+                                todayEffectPrimaryColor = Color(settings.todayEffectColor.toInt()),
+                                todayEffectSecondaryColor = settings.todayEffectColor2?.let { Color(it.toInt()) },
+                                todayEffectSpeed = settings.todayEffectSpeed
                             )
                         }
                     }

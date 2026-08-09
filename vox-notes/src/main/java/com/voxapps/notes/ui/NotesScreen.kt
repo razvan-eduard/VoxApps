@@ -1,6 +1,7 @@
 package com.voxapps.notes.ui
 
 import android.content.Context
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,9 +21,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -59,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.calendar.CalendarView
 import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.RecordSource
@@ -66,13 +72,20 @@ import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.design.SpeedDialAction
+import com.voxapps.design.SpeedDialFab
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.NoteSanitizer
 import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.notes.data.NoteWithCategory
+import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.ipc.VoxOcrRequest
+import com.voxapps.notes.domain.llm.LlmTasks
 import com.voxapps.notes.domain.llm.ScanRequestSender
 import com.voxapps.notes.domain.localization.LanguageManager
 import com.voxapps.notes.state.NotesStateManager
@@ -84,14 +97,18 @@ import kotlinx.coroutines.launch
 fun NotesScreen(
     state: NotesUiState.Unlocked,
     stateManager: NotesStateManager,
-    calendarViewEnabled: Boolean,
-    language: String,
+    settings: NotesSettings,
     onOpenSettings: () -> Unit,
     // Widget "Add"/tap-a-note-to-edit triggers (see NotesRoot's doc comments) — 0 = no pending
     // request. Counters, not plain values, so a repeat of the same request still re-fires.
     quickAddTrigger: Int = 0,
     editNoteId: Long = -1L,
-    editNoteTrigger: Int = 0
+    editNoteTrigger: Int = 0,
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
 ) {
     val languageManager = LocalLanguageManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -138,6 +155,40 @@ fun NotesScreen(
         enabled = editing == null
     )
 
+    val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
+    val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+
+    val scanSingle = rememberVisionCaptureLauncher(
+        baseTask = LlmTasks.NOTE_SCAN_CLEANUP, hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE
+    )
+    val scanStitch = rememberVisionCaptureLauncher(
+        baseTask = LlmTasks.NOTE_SCAN_CLEANUP, hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH
+    )
+    val scanBatch = rememberVisionCaptureLauncher(
+        baseTask = LlmTasks.NOTE_SCAN_CLEANUP, hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
+    )
+
+    fun gatedScan(action: () -> Unit) {
+        if (visionInstalled && commanderInstalled) {
+            action()
+        } else {
+            Toast.makeText(
+                context,
+                languageManager.getString(if (!visionInstalled) "vision_required_message" else "commander_required_message"),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    val scanActions = listOf(
+        SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single")) { gatedScan(scanSingle) },
+        SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch")) { gatedScan(scanStitch) },
+        SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch")) { gatedScan(scanBatch) }
+    )
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -166,22 +217,6 @@ fun NotesScreen(
                         }
                     },
                     actions = {
-                        val context = LocalContext.current
-                        // Scan needs Vision installed to even launch, and Commander installed for
-                        // the OCR-cleanup step that runs after — stays visible but dimmed, with an
-                        // explanatory toast on tap naming whichever one is missing, rather than
-                        // silently failing (or crashing, for the Vision case).
-                        val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
-                        val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
-                        val scanGate = rememberRequirementGate(
-                            satisfied = visionInstalled && commanderInstalled,
-                            requiredMessage = languageManager.getString(
-                                if (!visionInstalled) "vision_required_message" else "commander_required_message"
-                            )
-                        ) { ScanRequestSender.send(context) }
-                        IconButton(onClick = scanGate.onClick, modifier = Modifier.alpha(scanGate.alpha)) {
-                            Icon(Icons.Filled.DocumentScanner, contentDescription = languageManager.getString("scan_note"))
-                        }
                         IconButton(onClick = { showDateSheet = true }) {
                             Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("sort_and_filter"))
                         }
@@ -197,24 +232,49 @@ fun NotesScreen(
                 // whatever's currently open before starting a new draft, which read as a confusing
                 // double-action rather than a clear "add note" affordance.
                 if (editing == null) {
-                    FloatingActionButton(onClick = {
-                        commitEdit(editing, stateManager, context)
-                        editing = EditBuffer(id = null, title = "", text = "", categoryId = state.selectedCategoryId)
-                        scope.launch { listState.animateScrollToItem(0) }
-                    }) {
-                        Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_note"))
+                    Column(horizontalAlignment = Alignment.End) {
+                        SpeedDialFab(
+                            actions = scanActions,
+                            mainIcon = Icons.Filled.DocumentScanner,
+                            mainContentDescription = languageManager.getString("scan_note"),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        FloatingActionButton(onClick = {
+                            commitEdit(editing, stateManager, context)
+                            editing = EditBuffer(id = null, title = "", text = "", categoryId = state.selectedCategoryId)
+                            scope.launch { listState.animateScrollToItem(0) }
+                        }) {
+                            Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_note"))
+                        }
                     }
                 }
             }
         ) { pad ->
+            val dayDots = remember(state.notes) {
+                state.notes.groupBy {
+                    com.voxapps.calendar.CalendarDateUtils.millisToLocalDate(it.note.createdAt)
+                }.mapValues { (_, notes) ->
+                    notes.mapNotNull { it.category?.colorArgb }.distinct()
+                }
+            }
             Column(modifier = Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp)) {
                 FilterChipsRow(state = state, stateManager = stateManager)
-                if (calendarViewEnabled) {
+                if (settings.calendarViewEnabled) {
                     CalendarView(
                         items = state.notes.map(::NoteCalendarItem),
                         modifier = Modifier.fillMaxSize(),
-                        locale = java.util.Locale.forLanguageTag(language),
+                        locale = java.util.Locale.forLanguageTag(settings.language),
                         todayContentDescription = languageManager.getString("today"),
+                        selectedDateMillis = state.selectedDateMillis,
+                        isGridView = state.isGridView,
+                        onToggleGridView = { stateManager.setIsGridView(!state.isGridView) },
+                        onDateSelected = { stateManager.setSelectedDate(it) },
+                        dayDots = dayDots,
+                        todayEffect = todayEffect,
+                        todayEffectStyle = todayEffectStyle,
+                        todayEffectPrimaryColor = todayEffectPrimaryColor,
+                        todayEffectSecondaryColor = todayEffectSecondaryColor,
+                        todayEffectSpeed = todayEffectSpeed,
                         itemContent = { calItem ->
                             CollapsedNoteCard(
                                 item = calItem.nwc,
@@ -236,48 +296,56 @@ fun NotesScreen(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // New-note draft editor at the top.
-                        if (editing?.id == null && editing != null) {
+                        // New-note draft editor at the top. `draft` is bound once so the reads below
+                        // are statically non-null — the old `editing!!` form re-read the nullable
+                        // state on every access, and the callbacks in particular run *after*
+                        // composition, so an intervening `editing = null` (BackHandler, onDone) made
+                        // them a live NPE. Writes deliberately go through `editing?.` rather than
+                        // `draft` so they still act on the current value, just without the bang.
+                        val draft = editing
+                        if (draft != null && draft.id == null) {
                             item(key = "new-note-editor") {
                                 NoteEditorCard(
-                                    noteId = editing!!.id,
+                                    noteId = draft.id,
                                     stateManager = stateManager,
-                                    title = editing!!.title,
-                                    text = editing!!.text,
-                                    categoryId = editing!!.categoryId,
+                                    title = draft.title,
+                                    text = draft.text,
+                                    categoryId = draft.categoryId,
                                     categories = state.categories,
-                                    pendingAttachments = editing!!.pendingAttachments,
-                                    onTitleChange = { editing = editing!!.copy(title = it) },
-                                    onTextChange = { editing = editing!!.copy(text = it) },
-                                    onCategoryChange = { editing = editing!!.copy(categoryId = it) },
+                                    pendingAttachments = draft.pendingAttachments,
+                                    onTitleChange = { editing = editing?.copy(title = it) },
+                                    onTextChange = { editing = editing?.copy(text = it) },
+                                    onCategoryChange = { editing = editing?.copy(categoryId = it) },
                                     onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
-                                    onPendingAttachmentsChange = { editing = editing!!.copy(pendingAttachments = it) },
+                                    onPendingAttachmentsChange = { editing = editing?.copy(pendingAttachments = it) },
                                     onDone = {
                                         val cleanup = commitEdit(editing, stateManager, context, confirmCleanup = true)
                                         if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
                                     },
                                     onDelete = {
-                                        discardPendingAttachments(editing!!.pendingAttachments, context)
+                                        discardPendingAttachments(editing?.pendingAttachments.orEmpty(), context)
                                         editing = null
                                     }
                                 )
                             }
                         }
                         items(state.notes, key = { it.note.id }) { nwc ->
-                            if (editing?.id == nwc.note.id) {
+                            // Same bind-once-then-null-safe-writes split as the draft editor above.
+                            val current = editing
+                            if (current != null && current.id == nwc.note.id) {
                                 NoteEditorCard(
-                                    noteId = editing!!.id,
+                                    noteId = current.id,
                                     stateManager = stateManager,
-                                    title = editing!!.title,
-                                    text = editing!!.text,
-                                    categoryId = editing!!.categoryId,
+                                    title = current.title,
+                                    text = current.text,
+                                    categoryId = current.categoryId,
                                     categories = state.categories,
-                                    pendingAttachments = editing!!.pendingAttachments,
-                                    onTitleChange = { editing = editing!!.copy(title = it) },
-                                    onTextChange = { editing = editing!!.copy(text = it) },
-                                    onCategoryChange = { editing = editing!!.copy(categoryId = it) },
+                                    pendingAttachments = current.pendingAttachments,
+                                    onTitleChange = { editing = editing?.copy(title = it) },
+                                    onTextChange = { editing = editing?.copy(text = it) },
+                                    onCategoryChange = { editing = editing?.copy(categoryId = it) },
                                     onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
-                                    onPendingAttachmentsChange = { editing = editing!!.copy(pendingAttachments = it) },
+                                    onPendingAttachmentsChange = { editing = editing?.copy(pendingAttachments = it) },
                                     onDone = {
                                         val cleanup = commitEdit(editing, stateManager, context, confirmCleanup = true)
                                         if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
@@ -302,7 +370,7 @@ fun NotesScreen(
 
     // In calendar view, editing (new or existing note) happens in a bottom sheet instead of an
     // inline LazyColumn swap — the calendar's day cells have no natural "replace this row" slot.
-    if (calendarViewEnabled && editing != null) {
+    if (settings.calendarViewEnabled && editing != null) {
         val current = editing!!
         ModalBottomSheet(
             onDismissRequest = {
@@ -541,4 +609,3 @@ private fun FilterChipsRow(state: NotesUiState.Unlocked, stateManager: NotesStat
         }
     }
 }
-

@@ -1,10 +1,10 @@
 package com.voxapps.expenses.domain.llm
 
 import android.content.Context
+import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.logging.Logger
 
-private const val COMMANDER_PACKAGE = "com.voxapps.commander"
 
 /**
  * The single reusable "fire the category-merge request" call — used identically by the manual

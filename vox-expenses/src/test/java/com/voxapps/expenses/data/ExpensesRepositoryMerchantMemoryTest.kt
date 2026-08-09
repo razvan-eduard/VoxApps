@@ -27,7 +27,8 @@ class ExpensesRepositoryMerchantMemoryTest {
         spendingLimitDao = mockk(relaxed = true)
         merchantCategoryMemoryDao = mockk(relaxed = true)
         repository = ExpensesRepository(
-            expenseDao, categoryDao, lineItemDao, spendingLimitDao, merchantCategoryMemoryDao, mockk<Context>(), mockk(relaxed = true), mockk(relaxed = true)
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, merchantCategoryMemoryDao, mockk<Context>(), mockk(relaxed = true), mockk(relaxed = true),
+            mockk(relaxed = true)
         )
     }
 

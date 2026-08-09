@@ -10,3 +10,6 @@
 [submodule "vendor/paddleocr-upstream"]
 	path = vendor/paddleocr-upstream
 	url = https://github.com/PaddlePaddle/PaddleOCR.git
+[submodule "vendor/makeacopy-upstream"]
+	path = vendor/makeacopy-upstream
+	url = https://github.com/egdels/makeacopy.git

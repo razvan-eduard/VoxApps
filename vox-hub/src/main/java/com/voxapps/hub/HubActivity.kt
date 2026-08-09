@@ -47,6 +47,9 @@ class HubActivity : ComponentActivity() {
                     when {
                         showSettings -> HubSettingsScreen(
                             settingsRepo = container.settingsRepository,
+                            voxConnectServer = container.voxConnectServer,
+                            voxConnectPairing = container.voxConnectPairing,
+                            voxConnectDeviceStore = container.voxConnectDeviceStore,
                             onBack = { showSettings = false },
                             onRestoreBackup = { file ->
                                 restoreFileUri = FileProvider.getUriForFile(context, "com.voxapps.hub.fileprovider", file)

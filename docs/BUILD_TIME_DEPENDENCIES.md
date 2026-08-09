@@ -6,12 +6,12 @@
 > *build-time mechanism* — what gets fetched, built, or patched before compilation, and how it stays
 > in sync with upstream — as its own cross-cutting topic.
 
-VoxApps depends on six native/ML libraries that aren't simple Maven artifacts. Each falls into one of
+VoxApps depends on seven native/ML libraries that aren't simple Maven artifacts. Each falls into one of
 two patterns:
 
 | Pattern | Meaning | Used by |
 |---|---|---|
-| **A — binary dependency, version-check only** | A normal Maven/JitPack artifact; no source vendored, nothing compiled locally. A script just checks whether a newer published version exists. | Vosk, NewPipeExtractor |
+| **A — binary dependency, version-check only** | A normal Maven/JitPack artifact; no source vendored, nothing compiled locally. A script just checks whether a newer published version exists. | Vosk, NewPipeExtractor, onnxruntime-android |
 | **B — vendored source, built and/or patched locally** | The actual source (unmodified, or with a small local patch) lives in this repo/is compiled from a submodule at build time, because the upstream binary is broken, unmaintained, or missing a feature we need. | Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk |
 
 ## At a glance
@@ -20,6 +20,7 @@ two patterns:
 |---|---|---|---|---|---|---|---|
 | Vosk | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckVosk` | `sync-vosk.yml` (weekly) |
 | NewPipeExtractor | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckNewPipeExtractor` | `sync-newpipe-extractor.yml` (weekly) |
+| onnxruntime-android | `vox-vision` (via `vendor/ppocr-sdk`), `core/wakeword` | — (Maven Central coordinate) | — | No | No | none | Dependabot (weekly) |
 | Whisper.cpp | `vox-commander/src/main/cpp/whisper.cpp` | *is* the submodule | *is* the submodule | No | Yes (CMake, every build if stale) | `autoCompileWhisper` | `sync-whisper.yml` (monthly, compile-check only) |
 | OpenWakeWord | `core/wakeword` | `vendor/openwakeword-android-kt` (submodule) | `core/wakeword/src/...` | Yes — RMS silence gate | No (plain Kotlin/ONNX Runtime) | `autoCheckOpenWakeWord` | `sync-openwakeword.yml` (weekly) |
 | OpenCV | `vendor/ppocr-sdk/opencv/` (gitignored output) | `vendor/opencv` (submodule) | — (build output only, not vendored as source) | No | Yes (CMake, skips only if the built commit matches the pinned submodule commit — see below) | `autoCompileOpenCv` | `sync-opencv.yml` (weekly) |
@@ -70,6 +71,37 @@ reliably track this JitPack-style coordinate either.
 
 ---
 
+## Pattern A: onnxruntime-android (version-check only)
+
+`com.microsoft.onnxruntime:onnxruntime-android` (resolved via Maven Central) — the ONNX inference
+engine behind Vision's OCR (`vendor/ppocr-sdk`), Commander's OpenWakeWord wake-word detection
+(`core/wakeword`), and indirectly Piper TTS (`sherpa-onnx`, which bundles its own separate copy of
+`libonnxruntime.so` inside its own AAR rather than resolving this Maven coordinate — see
+`vox-commander/build.gradle.kts`'s `pickFirst`/dependencies comments for how that second copy is kept
+version-compatible with this one). Same shape as Vosk/NewPipeExtractor otherwise: no source vendored,
+nothing compiled locally, Dependabot tracks it reliably (unlike their JitPack coordinates), and bumps
+**auto-merge on green** the same as any other Pattern A dependency.
+
+`gradle/libs.versions.toml`'s `onnxruntime` entry tracks latest (currently `1.28.0`) rather than being
+pinned — `core/wakeword` pins independently to `1.27.0` to match sherpa-onnx's own bundled copy instead;
+see that module's `build.gradle.kts` for why these two are genuinely different constraints, not
+accidental drift.
+
+- No dedicated check/sync script exists for this one (Dependabot's own weekly PRs are sufficient since
+  it reliably tracks Maven Central, unlike Vosk/NewPipeExtractor's JitPack coordinates).
+- `NativeLibManagerInstrumentedTest` (`vox-vision/src/androidTest`, `vox-commander/src/androidTest`) —
+  a real on-device instrumented test that calls `NativeLibManager.init()` and asserts `Status.READY`,
+  exercising actual native `.so` loading (a JVM unit test can't — the linker only resolves the real
+  files on a real device). Run manually via
+  `./gradlew :vox-vision:connectedDebugAndroidTest :vox-commander:connectedDebugAndroidTest` against a
+  real device/emulator if you want extra confidence on a native/ABI-sensitive bump. Not wired into CI —
+  no GitHub-hosted runner (macOS+HVF, ARM64 Linux+KVM, ARM64 Linux without acceleration, x86_64 Linux
+  cross-arch, macOS same-arch software) can boot a full Android system image within a practical
+  timeout, confirmed via live runs across all five; Firebase Test Lab would work but needs a new
+  GCP/Firebase account + billing, not set up.
+
+---
+
 ## Pattern B: Whisper.cpp (vendored unmodified, compiled at build time)
 
 `vox-commander/src/main/cpp/whisper.cpp` is a **git submodule** pointing at `ggerganov/whisper.cpp`
@@ -99,11 +131,11 @@ artifact could cover well.
   after the PR is merged, because CI can only verify "it compiles," never "it still transcribes
   correctly" — that needs an actual on-device sanity check.
 
-### Stripping onnxruntime/Vosk/mediapipe-genai/sherpa-onnx (post-build strip, not AGP excludes)
+### Stripping onnxruntime/Vosk/litertlm-android/sherpa-onnx (post-build strip, not AGP excludes)
 
 A local `./gradlew :vox-commander:assembleRelease` alone produces a ~40MB APK — only Whisper is
 excluded via AGP. The actual CI-published release gets to ~16MB, because
-`libonnxruntime.so`/`libllm_inference_engine_jni.so`/`libvosk.so`/`libsherpa-onnx-jni.so` are also
+`libonnxruntime.so`/`liblitertlm_jni.so`/`libvosk.so`/`libsherpa-onnx-jni.so` are also
 stripped, just via a different mechanism than Whisper. Deliberately **not** called "DLC" here —
 unlike Whisper's model download (a genuine user choice: pick tiny/base/small in Settings), these are
 mandatory libraries the app can't function without; they're stripped from the APK and silently

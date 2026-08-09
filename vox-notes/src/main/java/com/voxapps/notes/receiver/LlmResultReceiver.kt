@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.glance.appwidget.updateAll
+import com.voxapps.notes.ui.widget.NotesWidget
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
@@ -22,9 +24,21 @@ import com.voxapps.notes.domain.llm.NoteScanCleanupResultParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private const val TAG = "LlmResultReceiver"
+
+// A batch scan delivers its NOTE_SCAN_CLEANUP replies as several separate broadcasts in quick
+// succession, each with its own goAsync()-scoped coroutine calling NotesWidget().updateAll()
+// independently. Confirmed on-device: firing updateAll() from several near-simultaneous coroutines
+// without this lock only ever produces ONE actual widget redraw (the first), leaving the widget stuck
+// showing whatever data existed at that point — later notes never appear until something else happens
+// to trigger a redraw. Serializing here (so each call's updateAll() fully returns before the next one
+// starts) avoids whatever internal coalescing causes calls made while one is still in flight to be
+// dropped rather than queued.
+private val widgetUpdateMutex = Mutex()
 
 /**
  * Notes' end of Commander's generic LLM hook: receives the async [VoxIpc.ACTION_LLM_RESULT] reply
@@ -113,6 +127,16 @@ class LlmResultReceiver : BroadcastReceiver() {
                                             createdAt = System.currentTimeMillis()
                                         )
                                     )
+                                    // Explicit, not left to NotesContainer's DB-driven widget collector —
+                                    // that collector runs in its own coroutine, decoupled from this
+                                    // receiver's goAsync() lifecycle. A batch reply creates several notes
+                                    // back-to-back and each pending.finish() below is the OS's cue that
+                                    // this process can be reclaimed; without forcing the refresh here,
+                                    // process death can beat the collector to actually observing the new
+                                    // row and calling updateAll(), leaving the widget stale until the app
+                                    // is opened directly. See widgetUpdateMutex's doc comment for why
+                                    // this is also serialized against sibling batch-reply receivers.
+                                    widgetUpdateMutex.withLock { NotesWidget().updateAll(context.applicationContext) }
                                 }
                             } else {
                                 if (storedImageName != null) {
@@ -153,6 +177,10 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 AttachmentFileStore.delete(context.applicationContext, NotesAttachments.DIR, storedImageName)
                             }
                         }
+                        // See the stub-note branch above for why this is explicit rather than left to
+                        // NotesContainer's DB-driven widget collector, and widgetUpdateMutex's doc
+                        // comment for why it's also serialized against sibling batch-reply receivers.
+                        widgetUpdateMutex.withLock { NotesWidget().updateAll(context.applicationContext) }
                     } finally {
                         pending.finish()
                     }

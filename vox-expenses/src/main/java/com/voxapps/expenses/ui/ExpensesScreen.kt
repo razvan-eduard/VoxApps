@@ -1,5 +1,6 @@
 package com.voxapps.expenses.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,12 +13,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -32,20 +35,27 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.calendar.CalendarView
 import com.voxapps.design.DoubleBackToExitHandler
-import com.voxapps.design.rememberRequirementGate
+import com.voxapps.design.SpeedDialAction
+import com.voxapps.design.SpeedDialFab
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
+import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpenseWithDetails
-import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
+import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.state.SortMode
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.ipc.VoxOcrRequest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,10 +67,16 @@ fun ExpensesScreen(
     onAddExpense: () -> Unit,
     onEditExpense: (ExpenseWithDetails) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenReports: () -> Unit
+    onOpenReports: () -> Unit,
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
 ) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
+    val container = (context.applicationContext as ExpensesApplication).container
     var showFilterSheet by remember { mutableStateOf(false) }
     // Scan needs Vision installed to even launch, and Commander installed for the OCR-cleanup step
     // that runs after — stays visible but dimmed, with an explanatory toast on tap naming whichever
@@ -68,12 +84,39 @@ fun ExpensesScreen(
     // either isn't installed.
     val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
-    val scanGate = rememberRequirementGate(
-        satisfied = visionInstalled && commanderInstalled,
-        requiredMessage = languageManager.getString(
-            if (!visionInstalled) "vision_required_message" else "commander_required_message"
-        )
-    ) { ExpenseScanRequestSender.send(context, returnToCaller = true) }
+
+    // Scan: single/stitch/batch (see VoxOcrRequest.captureMode) — one launch, one reply, handled
+    // entirely by OcrResultReceiver.handlePendingScanCreate. No Compose-side state needed here at all
+    // (previously a correlationId-keyed bus reassembled shots landing one at a time; that trickle
+    // doesn't exist anymore now that capture itself isn't per-shot).
+    val scanSingle = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE
+    )
+    val scanStitch = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH
+    )
+    val scanBatch = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", hint = null, produceOCR = true,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
+    )
+    fun gatedScan(action: () -> Unit) {
+        if (visionInstalled && commanderInstalled) {
+            action()
+        } else {
+            Toast.makeText(
+                context,
+                languageManager.getString(if (!visionInstalled) "vision_required_message" else "commander_required_message"),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    val scanActions = listOf(
+        SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single")) { gatedScan(scanSingle) },
+        SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch")) { gatedScan(scanStitch) },
+        SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch")) { gatedScan(scanBatch) }
+    )
 
     // Amount-sorted order isn't chronological, so it doesn't fit a per-day calendar layout — a
     // derived rule, no extra persisted state: clearing the sort (the chip's X) automatically
@@ -100,12 +143,12 @@ fun ExpensesScreen(
             )
         },
         floatingActionButton = {
-            Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                ExtendedFloatingActionButton(
-                    onClick = scanGate.onClick,
-                    icon = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
-                    text = { Text(languageManager.getString("scan_receipt")) },
-                    modifier = Modifier.padding(bottom = 12.dp).alpha(scanGate.alpha)
+            Column(horizontalAlignment = Alignment.End) {
+                SpeedDialFab(
+                    actions = scanActions,
+                    mainIcon = Icons.Filled.DocumentScanner,
+                    mainContentDescription = languageManager.getString("scan_receipt"),
+                    modifier = Modifier.padding(bottom = 12.dp)
                 )
                 FloatingActionButton(onClick = onAddExpense) {
                     Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_expense"))
@@ -113,6 +156,13 @@ fun ExpensesScreen(
             }
         }
     ) { padding ->
+        val dayDots = remember(state.expenses) {
+            state.expenses.groupBy {
+                com.voxapps.calendar.CalendarDateUtils.millisToLocalDate(it.expense.dateTime)
+            }.mapValues { (_, expenses) ->
+                expenses.mapNotNull { it.category?.colorArgb }.distinct()
+            }
+        }
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (state.categories.isNotEmpty() || state.isAmountSort) {
                 Row(
@@ -163,6 +213,16 @@ fun ExpensesScreen(
                     modifier = Modifier.fillMaxSize(),
                     locale = java.util.Locale.forLanguageTag(language),
                     todayContentDescription = languageManager.getString("today"),
+                    selectedDateMillis = state.selectedDateMillis,
+                    isGridView = state.isGridView,
+                    onToggleGridView = { stateManager.setIsGridView(!state.isGridView) },
+                    onDateSelected = { stateManager.setSelectedDate(it) },
+                    dayDots = dayDots,
+                    todayEffect = todayEffect,
+                    todayEffectStyle = todayEffectStyle,
+                    todayEffectPrimaryColor = todayEffectPrimaryColor,
+                    todayEffectSecondaryColor = todayEffectSecondaryColor,
+                    todayEffectSpeed = todayEffectSpeed,
                     itemContent = { calItem ->
                         ExpenseCard(expenseWithDetails = calItem.ewd, onClick = { onEditExpense(calItem.ewd) })
                     }

@@ -211,7 +211,7 @@ owning the source.
 - **Release builds**: Whisper native libs excluded from APK via AGP's
   `packaging.jniLibs.excludes` (reliable for this lib), downloaded as real, user-facing DLC — the
   model download above is the user-visible part of the same mechanism. onnxruntime, Vosk,
-  mediapipe-genai, and sherpa-onnx-jni are stripped from the APK the same way but aren't DLC in that
+  litertlm-android, and sherpa-onnx-jni are stripped from the APK the same way but aren't DLC in that
   sense: there's no user choice involved, they're mandatory libraries the app needs to function at
   all, silently fetched once on first launch — stripped via a post-build script instead of AGP's
   exclude mechanism, which is confirmed-unreliable on arm64-v8a for those specific libs (see
@@ -251,34 +251,31 @@ Whisper models are multilingual. `voiceLanguage` and `voiceLanguageAutoDetect` s
 
 ### Triple AI Brain (`IntentDecisionMap`)
 
-The NLU pipeline has three levels with fallback:
+The NLU pipeline uses a three-level redundant attempt mechanism:
 
 ```
-L1: FastMap (regex rules) — instant, no ML
+L1: FastMap (Regex rules) — Instant, non-ML matching
   ↓ miss
-L2: Primary selected engine — user's chosen AI
-  ↓ miss/failure
-L3: Offline fallback — user's configured fallback model
+L2: Primary AI Attempt — User's chosen primary engine (Cloud or Local)
+  ↓ failure (timeout, network error, or model crash)
+L3: Offline Fallback Attempt — User's configured secondary engine (usually Local)
 ```
 
 #### L1: FastMap (`FastMapEngine.kt`)
-
-- Regex-based pattern matching against user-defined rules
-- Rules stored in Room database (`FastIntentEntity`)
-- Each rule maps a regex pattern to a `NluIntent` directly
-- Confidence: always 1.0 (exact match)
-- Editable via UI (Settings → Rules)
+- Regex-based pattern matching against user-defined rules.
+- Confidence: always 1.0 (exact match).
+- Stored in Room (`FastIntentEntity`).
+- Editable via UI (Settings → Rules).
 
 #### L2: Primary Engine
-
-User selects via `aiProcessor` setting:
+The first AI attempt. User selects via `aiProcessor` setting:
 
 | Processor | Engine | Description |
 |-----------|--------|-------------|
-| `openai` | `OpenAiInterpreter` | OpenAI Chat Completions API (cloud) |
+| `openai` | `OpenAiInterpreter` | OpenAI Chat Completions API (Cloud) |
 | `gemini_native` | `GeminiNanoInterpreter` | Gemini Nano on-device (AICore) |
-| `gemini_cloud` | `GeminiCloudInterpreter` | Gemini Pro API (cloud) |
-| Custom LLM | `LocalLlmInterpreter` | llama.cpp via MediaPipe GenAI |
+| `gemini_cloud` | `GeminiCloudInterpreter` | Gemini Pro API (Cloud) |
+| Custom LLM | `LocalLlmInterpreter` | On-device LLM (LiteRT-LM) |
 
 All interpreters implement `AssistantEngine`:
 
@@ -288,9 +285,8 @@ interface AssistantEngine {
 }
 ```
 
-#### L3: Offline Fallback
-
-If L2 fails (no internet, model not loaded, API error), L3 tries the user's configured fallback model (`defaultIntentFallbackProcessor` + `defaultIntentFallbackModel`). Skips if same as L2.
+#### L3: Offline Fallback Mechanism
+If L2 fails (e.g., no internet for Cloud engines, or a Local engine crash), the system automatically retries using the engine configured in `defaultIntentFallbackProcessor`. This ensures the assistant remains functional in challenging environments. It skips the retry if the fallback engine is the same as the primary one.
 
 ### NluIntent Data Model
 
@@ -1165,7 +1161,7 @@ tasks.named("preBuild") {
 | Vosk Android | (via libs.versions) | Wake word + STT |
 | Whisper.cpp | (submodule, CMake) | On-device STT |
 | sherpa-onnx | v1.13.4 (JitPack) | Piper TTS |
-| MediaPipe GenAI | (via libs.versions) | Local LLM (llama.cpp) |
+| LiteRT-LM | (via libs.versions) | On-device LLM inference |
 | Google Generative AI | 0.9.0 | Gemini Nano |
 | Picovoice Porcupine | 4.0.2 | Wake word engine |
 | OpenWakeWord | v0.1.5 (rementia, vendored fork — `:core:wakeword`) | Wake word engine, RMS silence-gate patched |
@@ -1197,7 +1193,7 @@ All six tasks are dependencies of `preBuild`.
 
 ### Repositories
 
-- **Google Maven** — AndroidX, Compose, MediaPipe
+- **Google Maven** — AndroidX, Compose, LiteRT-LM
 - **Maven Central** — OkHttp, Retrofit, Gson, Apache Commons, ONNX Runtime
 - **JitPack** — Vosk, sherpa-onnx, NewPipe Extractor
 - **Picovoice Maven** — Porcupine
@@ -1357,9 +1353,11 @@ command bus but carrying opaque prompt/result payloads instead of structured not
   a generous 90s timeout. It's a process-wide singleton with a check-then-act `setupLlm()` and no
   synchronization of its own; a burst of concurrent callers (confirmed on-device: Expenses' "Force-check
   notifications now" forwarding several matched notifications at once) each saw the model unloaded and
-  each triggered a concurrent, memory-heavy `LlmInference.createFromOptions(...)` — N full copies of the
-  model loading into RAM at once, crashing the process and silently dropping every one of those
-  requests (nothing ever reached `LlmHookWorker`'s `catch` to send a reply).
+  each triggered a concurrent, memory-heavy model-load call (originally `LlmInference
+  .createFromOptions(...)` under MediaPipe GenAI, now `Engine(...).initialize()` under LiteRT-LM — the
+  engine was migrated in Aug 2026, but this hazard and the `Mutex` fix are engine-agnostic) — N full
+  copies of the model loading into RAM at once, crashing the process and silently dropping every one of
+  those requests (nothing ever reached `LlmHookWorker`'s `catch` to send a reply).
 - **Reply** — `LlmHookWorker` applies only generic cleanup (`NluIntentParser.cleanGenericOutput`,
   stripping markdown/prose fences) to the LLM's raw text, wraps it in a `VoxLlmResult{task, status,
   rawJson}`, and delivers it as an **explicit-intent** broadcast (`ACTION_LLM_RESULT`, targeted at

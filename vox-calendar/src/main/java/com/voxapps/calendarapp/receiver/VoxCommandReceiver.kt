@@ -4,12 +4,15 @@ import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.voxapps.backup.VoxBackupDispatch
+import com.voxapps.backup.VoxImportMode
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.domain.llm.CalendarEventParsePromptBuilder
 import com.voxapps.calendarapp.domain.llm.CalendarEventParseRequestSender
 import com.voxapps.calendarapp.domain.llm.GeneratedParsedSchema
 import com.voxapps.calendarapp.domain.llm.LlmTasks
 import com.voxapps.ipc.VoxCommand
+import com.voxapps.ipc.VoxFormSchema
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxResult
 import com.voxapps.ipc.VoxSatelliteSchema
@@ -46,11 +49,16 @@ class VoxCommandReceiver : BroadcastReceiver() {
             VoxIpc.OP_CREATE -> {
                 val text = command.text.orEmpty()
                 if (text.isBlank()) return
-                val settings = container.settingsRepository.getSnapshot()
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        // Read inside the coroutine, not in onReceive: getSnapshot() falls back to a
+                        // blocking DataStore read until its cache warms, and a broadcast can be what
+                        // cold-starts this process — so on main it was a guaranteed disk read on the
+                        // main thread. OP_GET_SCHEMA below already had it in the right place.
+                        val settings = container.settingsRepository.getSnapshot()
                         val layerNames = container.calendarRepository.layers.first().map { it.name }
+                        val todoListNames = container.toDoRepository.lists.first().map { it.title }
                         CalendarEventParseRequestSender.send(
                             context = context.applicationContext,
                             queue = container.pendingLlmRequestQueue,
@@ -62,6 +70,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                                 ?.let { "$text (calendar: $it)" }
                                 ?: text,
                             existingLayers = layerNames,
+                            existingTodoLists = todoListNames,
                             languageCode = settings.language
                         )
                     } finally {
@@ -78,10 +87,11 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     try {
                         val settings = container.settingsRepository.getSnapshot()
                         val layerNames = container.calendarRepository.layers.first().map { it.name }
+                        val todoListNames = container.toDoRepository.lists.first().map { it.title }
                         val schema = VoxSatelliteSchema(
                             needsExtractionPass = true,
                             promptTemplate = CalendarEventParsePromptBuilder.buildTemplate(
-                                layerNames, settings.language
+                                layerNames, todoListNames, settings.language
                             ),
                             fieldSchemaVersion = GeneratedParsedSchema.VERSION,
                             taskId = LlmTasks.CALENDAR_EVENT_PARSE
@@ -119,16 +129,12 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.settingsRepository,
                     container.sessionManager,
                     container.calendarRepository,
-                    container.attachmentDao
+                    container.attachmentDao,
+                    container.toDoListDao
                 )
-                val pending = goAsync()
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        pending.setResultData(handler.export(scope, includePhotos = command.includePhotos).toJson())
-                    } finally {
-                        pending.finish()
-                    }
+                VoxBackupDispatch.dispatch(this) {
+                    handler.export(scope, includePhotos = command.includePhotos)
                 }
             }
 
@@ -138,15 +144,11 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.settingsRepository,
                     container.sessionManager,
                     container.calendarRepository,
-                    container.attachmentDao
+                    container.attachmentDao,
+                    container.toDoListDao
                 )
-                val pending = goAsync()
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        pending.setResultData(handler.import(command.text.orEmpty()).toJson())
-                    } finally {
-                        pending.finish()
-                    }
+                VoxBackupDispatch.dispatch(this) {
+                    handler.import(command.text.orEmpty(), VoxImportMode.fromWireValue(command.importMode))
                 }
             }
 
@@ -176,6 +178,48 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         pending.setResultData(handler.merge(command.text.orEmpty()).toJson())
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            VoxIpc.OP_GET_FIELD_SCHEMA -> {
+                // Field keys/types mirror CalendarSyncHandler's export JSON exactly. "Category" here
+                // is calendar's own concept — a layer — hence the categoryName-shaped field is keyed
+                // layerName, not categoryName, to match the wire shape sync_export/sync_merge use.
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val layerNames = container.calendarRepository.layers.first().map { it.name }
+                        val schema = VoxFormSchema.domainSchema(
+                            domain = "calendar",
+                            titleField = "title",
+                            subtitleFields = listOf("startMillis", "layerName", "tags"),
+                            sortField = "startMillis",
+                            sortDescending = false,
+                            upcomingOnlyField = "startMillis",
+                            fields = listOf(
+                                VoxFormSchema.field(
+                                    "type", "Type", "enum",
+                                    required = true, options = listOf("EVENT", "TASK")
+                                ),
+                                VoxFormSchema.field("title", "Title", "text", required = true),
+                                VoxFormSchema.field("description", "Description", "text"),
+                                VoxFormSchema.field("location", "Location", "text"),
+                                VoxFormSchema.field("startMillis", "Start", "datetime", required = true),
+                                VoxFormSchema.field("endMillis", "End", "datetime"),
+                                VoxFormSchema.field("allDay", "All day", "bool"),
+                                VoxFormSchema.field("completed", "Completed", "bool"),
+                                VoxFormSchema.field(
+                                    "recurrenceFrequency", "Repeats", "enum",
+                                    options = listOf("NONE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY")
+                                ),
+                                VoxFormSchema.field("layerName", "Layer", "category", options = layerNames),
+                                VoxFormSchema.field("tags", "Tags", "tags"),
+                            )
+                        )
+                        pending.setResultData(VoxResult(ok = true, text = schema.toString()).toJson())
                     } finally {
                         pending.finish()
                     }

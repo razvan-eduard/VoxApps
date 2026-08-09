@@ -25,19 +25,24 @@ object RecurrenceExpander {
         windowEndMillis: Long,
         zoneId: ZoneId = ZoneId.systemDefault()
     ): List<Occurrence> {
-        val durationMillis = entry.endMillis?.let { it - entry.startMillis }
+        // Non-null: this is only ever called on date-bearing entries (the grid's own query already
+        // excludes dateless to-do items — see CalendarEntryDao.observeEntriesWithTags' doc comment —
+        // and reminder scheduling only ever fires for a dated entry to begin with).
+        val startMillis = entry.startMillis!!
+        val durationMillis = entry.endMillis?.let { it - startMillis }
 
         if (entry.recurrenceFrequency == RecurrenceFrequency.NONE) {
-            return if (occurrenceOverlapsWindow(entry.startMillis, entry.endMillis, windowStartMillis, windowEndMillis)) {
-                listOf(Occurrence(entry.startMillis, entry.endMillis))
+            return if (occurrenceOverlapsWindow(startMillis, entry.endMillis, windowStartMillis, windowEndMillis)) {
+                listOf(Occurrence(startMillis, entry.endMillis))
             } else {
                 emptyList()
             }
         }
 
-        val entryStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(entry.startMillis), zoneId)
+        val entryStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(startMillis), zoneId)
         val windowStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(windowStartMillis), zoneId)
         val until = entry.recurrenceUntilMillis
+        val interval = entry.recurrenceInterval.coerceAtLeast(1)
 
         // Skip ahead analytically to roughly the first occurrence index that could fall in-or-after
         // the window (with one step of slack for rounding), rather than iterating one-by-one from the
@@ -45,14 +50,16 @@ object RecurrenceExpander {
         // otherwise take thousands of loop passes. Always computed as an offset from the ORIGINAL
         // start (not by chaining plusMonths/plusYears off a previously-clamped date), so month-end
         // clamping (e.g. Jan 31 -> Feb 28) never compounds into date drift across occurrences.
+        // Divided by [interval] since periodsBetween counts single periods, but occurrences only land
+        // every [interval]-th one.
         var index = (
-            when (entry.recurrenceFrequency) {
+            (when (entry.recurrenceFrequency) {
                 RecurrenceFrequency.DAILY -> ChronoUnit.DAYS.between(entryStart, windowStart)
                 RecurrenceFrequency.WEEKLY -> ChronoUnit.WEEKS.between(entryStart, windowStart)
                 RecurrenceFrequency.MONTHLY -> ChronoUnit.MONTHS.between(entryStart, windowStart)
                 RecurrenceFrequency.YEARLY -> ChronoUnit.YEARS.between(entryStart, windowStart)
                 RecurrenceFrequency.NONE -> 0L
-            }.coerceAtLeast(0L) - 1
+            } / interval).coerceAtLeast(0L) - 1
             )
 
         val occurrences = mutableListOf<Occurrence>()
@@ -63,11 +70,12 @@ object RecurrenceExpander {
                 index++
                 continue
             }
+            val step = index * interval
             val occurrenceStart = when (entry.recurrenceFrequency) {
-                RecurrenceFrequency.DAILY -> entryStart.plusDays(index)
-                RecurrenceFrequency.WEEKLY -> entryStart.plusWeeks(index)
-                RecurrenceFrequency.MONTHLY -> entryStart.plusMonths(index)
-                RecurrenceFrequency.YEARLY -> entryStart.plusYears(index)
+                RecurrenceFrequency.DAILY -> entryStart.plusDays(step)
+                RecurrenceFrequency.WEEKLY -> entryStart.plusWeeks(step)
+                RecurrenceFrequency.MONTHLY -> entryStart.plusMonths(step)
+                RecurrenceFrequency.YEARLY -> entryStart.plusYears(step)
                 RecurrenceFrequency.NONE -> entryStart
             }
             val occStartMillis = occurrenceStart.toInstant().toEpochMilli()
@@ -81,6 +89,28 @@ object RecurrenceExpander {
             index++
         }
         return occurrences
+    }
+
+    /**
+     * The single next occurrence starting at-or-after [fromMillis], or `null` if [entry] is
+     * non-recurring and its one-shot [CalendarEntry.startMillis] already passed, or recurrence has
+     * been exhausted via [CalendarEntry.recurrenceUntilMillis]. Used by reminder scheduling, which
+     * needs one specific future fire point rather than a windowed list.
+     */
+    fun nextOccurrenceOnOrAfter(
+        entry: CalendarEntry,
+        fromMillis: Long,
+        zoneId: ZoneId = ZoneId.systemDefault()
+    ): Occurrence? {
+        if (entry.recurrenceFrequency == RecurrenceFrequency.NONE) {
+            val startMillis = entry.startMillis!!
+            return if (startMillis >= fromMillis) Occurrence(startMillis, entry.endMillis) else null
+        }
+        // A window from fromMillis out far enough to be sure of catching the next occurrence even for
+        // the coarsest frequency (YEARLY) at the largest reasonable interval; MAX_ITERATIONS bounds the
+        // loop regardless, so this is a generous-but-safe upper bound, not a hard correctness limit.
+        val windowEnd = fromMillis + 100L * 366 * 24 * 60 * 60 * 1000L
+        return expand(entry, fromMillis, windowEnd, zoneId).minByOrNull { it.startMillis }
     }
 
     private fun occurrenceOverlapsWindow(start: Long, end: Long?, windowStart: Long, windowEnd: Long): Boolean {

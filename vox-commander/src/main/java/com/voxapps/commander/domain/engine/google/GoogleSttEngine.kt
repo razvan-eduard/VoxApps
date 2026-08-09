@@ -3,6 +3,8 @@ package com.voxapps.commander.domain.engine.google
 import android.content.Context
 import android.speech.SpeechRecognizer
 import com.voxapps.logging.Logger
+import com.voxapps.commander.domain.engine.BaseVirtualEngine
+import com.voxapps.commander.domain.engine.ModelSpec
 import com.voxapps.commander.domain.engine.SttEngine
 import com.voxapps.commander.utils.Strings
 
@@ -10,7 +12,9 @@ import com.voxapps.commander.utils.Strings
  * Google STT Engine using Intent-based approach to avoid rate limiting.
  * This engine delegates to MainActivity's speechLauncher for actual speech recognition.
  */
-class GoogleSttEngine(private val context: Context) : SttEngine {
+class GoogleSttEngine(private val context: Context) : BaseVirtualEngine(), SttEngine {
+
+    override val engineKey: String = ENGINE_KEY
 
     var isAvailable = false
     private val TAG = Strings.Tags.GOOGLE_STT_ENGINE
@@ -29,15 +33,21 @@ class GoogleSttEngine(private val context: Context) : SttEngine {
         }
     }
 
-    override suspend fun transcribe(audio: ByteArray): String {
+    override suspend fun transcribe(audio: ByteArray, langCode: String?): String {
         return ""
     }
 
-    override fun releaseHardware() {
-        // No direct hardware usage as it uses system intent
+    /**
+     * There is no model to load — "loading" is asking the OS whether it can recognise speech at all.
+     * The platform service can be absent on a device, which is exactly what this reports, and a
+     * caller can now see that through [state] instead of reaching for a public flag.
+     */
+    override suspend fun unavailableReason(spec: ModelSpec): String? {
+        isAvailable = checkAvailability()
+        return if (isAvailable) null else "speech recognition is not available on this device"
     }
 
-    override fun releaseResources() {
-        // No local resources to clear
+    companion object {
+        const val ENGINE_KEY = "GOOGLE"
     }
 }

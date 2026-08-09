@@ -64,13 +64,26 @@ class ExchangeRateRepository(private val context: Context) {
             return@withContext RatesResult.Success(decodeRates(cachedJson!!), cachedAt)
         }
 
-        val apiKey = ExchangeRateApiKeyStore.get(context)
-            ?: return@withContext RatesResult.Error("No exchange-rate API key configured")
-        val service = ExternalServiceConfig.exchangeRateService(context)
-            ?: return@withContext RatesResult.Error("external_services.json missing exchangerate_api entry")
+        // Whichever currency service the user chose — the declaration says whether it needs a key
+        // at all, so a keyless provider is not asked for one.
+        val chosenId = prefs[stringPreferencesKey("exchange_rate_service_id")].orEmpty()
+        val service = ExternalServiceConfig.chosenCurrencyService(context, chosenId)
+            ?: return@withContext RatesResult.Error("no currency service is declared")
+
+        val apiKey = if (service.needsApiKey) {
+            ExchangeRateApiKeyStore.get(context)
+                ?: return@withContext RatesResult.Error("No exchange-rate API key configured")
+        } else ""
+
+
+        // The call and the answer are both described by the declaration: one provider takes its key
+        // in the path and answers under "conversion_rates", another takes it as a query parameter
+        // and answers under "rates". Spelling either into the code is what stopped a user pointing
+        // this at a provider of their own.
+        val url = service.ratesUrl(apiKey, homeCurrency)
+            ?: return@withContext RatesResult.Error("${service.id} declares no rates_url")
 
         try {
-            val url = "${service.baseEndpoint}/$apiKey/latest/$homeCurrency"
             val request = Request.Builder().url(url).get().build()
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
@@ -78,11 +91,17 @@ class ExchangeRateRepository(private val context: Context) {
                 }
                 val body = response.body?.string() ?: return@withContext RatesResult.Error("Empty response")
                 val root = JSONObject(body)
-                if (root.optString("result") != "success") {
-                    return@withContext RatesResult.Error(root.optString("error-type", "Unknown API error"))
+                // A provider that wraps its answer in a status says so; one that lets the HTTP code
+                // speak for itself declares no success_field, and this is skipped.
+                val statusField = service.successField
+                if (statusField != null && root.optString(statusField) != service.successValue) {
+                    return@withContext RatesResult.Error(
+                        root.optString("error-type", root.optString(statusField, "Unknown API error"))
+                    )
                 }
-                val ratesObj = root.optJSONObject("conversion_rates")
-                    ?: return@withContext RatesResult.Error("Response missing conversion_rates")
+                val ratesPath = service.ratesPath ?: "rates"
+                val ratesObj = root.optJSONObject(ratesPath)
+                    ?: return@withContext RatesResult.Error("Response missing $ratesPath")
                 val rates = ratesObj.keys().asSequence().associateWith { ratesObj.optDouble(it) }
                 val now = System.currentTimeMillis()
                 dataStore.edit {

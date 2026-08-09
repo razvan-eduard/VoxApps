@@ -2,12 +2,12 @@ package com.voxapps.hub.domain.sync
 
 import android.content.Context
 import android.util.Base64
+import com.voxapps.datahygiene.SyncDeltaKeys
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxIpc
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -36,6 +36,15 @@ class SyncOrchestrator(
     private val context: Context,
     private val peerStore: SyncPeerStore
 ) {
+    /**
+     * The whole call chain below ([performSync] -> [runSession] -> [syncOneApp]) is `suspend` rather
+     * than plain functions bridged by `runBlocking`. The IPC calls are suspending, and wrapping each
+     * in `runBlocking` started a *root* coroutine — not a child of this job — so cancelling a sync
+     * left the in-flight export/merge request running to completion. Suspending straight through
+     * makes each IPC round-trip a real cancellation point. (The socket reads in between are blocking
+     * and stay uninterruptible; that is inherent to BluetoothSocket, and the accept path is bounded
+     * by [ACCEPT_TIMEOUT_MS].)
+     */
     suspend fun syncNow(peer: PairedPeer): SyncSessionResult = withContext(Dispatchers.IO) {
         val result = performSync(peer)
         val attemptedAt = System.currentTimeMillis()
@@ -51,7 +60,7 @@ class SyncOrchestrator(
         result
     }
 
-    private fun performSync(peer: PairedPeer): SyncSessionResult {
+    private suspend fun performSync(peer: PairedPeer): SyncSessionResult {
         val keyBytes = try {
             Base64.decode(peer.sharedKeyBase64, Base64.NO_WRAP)
         } catch (e: IllegalArgumentException) {
@@ -69,13 +78,20 @@ class SyncOrchestrator(
         return SecureSyncChannel(socket, keyBytes).use { channel ->
             try {
                 runSession(channel, peer)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Rethrown, not converted to a Failure. This catch predates the suspend conversion
+                // above: while the IPC waits were walled off inside runBlocking they could never
+                // surface a cancellation here, so "any exception is a failed sync" was safe. Now
+                // that they are real suspension points, swallowing it would record a spurious
+                // "sync failed" against the peer for what was the user cancelling.
+                throw e
             } catch (e: Exception) {
                 SyncSessionResult.Failure(e.message ?: "Sync session failed")
             }
         }
     }
 
-    private fun runSession(channel: SecureSyncChannel, peer: PairedPeer): SyncSessionResult {
+    private suspend fun runSession(channel: SecureSyncChannel, peer: PairedPeer): SyncSessionResult {
         val localApps = VoxAppsDiscovery.discover(context)
             .filter { VoxIpc.OP_SYNC_EXPORT in it.actions && VoxIpc.OP_SYNC_MERGE in it.actions }
         val localPackages = localApps.map { it.packageName }.sorted()
@@ -101,12 +117,12 @@ class SyncOrchestrator(
         return SyncSessionResult.Success(results)
     }
 
-    private fun syncOneApp(channel: SecureSyncChannel, peer: PairedPeer, appInfo: VoxAppInfo): AppSyncResult {
+    private suspend fun syncOneApp(channel: SecureSyncChannel, peer: PairedPeer, appInfo: VoxAppInfo): AppSyncResult {
         val since = peer.lastSyncAtByApp[appInfo.packageName] ?: 0L
         val scopeNames = peer.scopeNamesByApp[appInfo.packageName]
 
-        val localExport = requestSuspending { VoxDataTransferClient.requestSyncExport(context, appInfo.packageName, since, scopeNames) }
-        val localExportJson = if (localExport?.ok == true) localExport.text else EMPTY_DELTA
+        val localExport = VoxDataTransferClient.requestSyncExport(context, appInfo.packageName, since, scopeNames)
+        val localExportJson = if (localExport?.ok == true) localExport.text else SyncDeltaKeys.EMPTY_DELTA
 
         // Client sends first, then waits for the server's delta; server does the mirror image — this
         // fixed ordering (tied to the role NFC pairing already assigned) is what keeps both sides from
@@ -120,7 +136,7 @@ class SyncOrchestrator(
             incoming
         }
 
-        val mergeResult = requestSuspending { VoxDataTransferClient.requestSyncMerge(context, appInfo.packageName, peerDeltaJson) }
+        val mergeResult = VoxDataTransferClient.requestSyncMerge(context, appInfo.packageName, peerDeltaJson)
         val success = localExport?.ok == true && mergeResult?.ok == true
         val summary = when {
             localExport?.ok != true -> "Export failed: ${localExport?.text ?: "no response"}"
@@ -130,14 +146,8 @@ class SyncOrchestrator(
         return AppSyncResult(appInfo.packageName, appInfo.label, success, summary)
     }
 
-    /** [VoxDataTransferClient]'s functions are suspend (ordered-broadcast IPC) but this whole
-     *  orchestrator otherwise runs synchronous blocking socket I/O on [Dispatchers.IO] — bridges the
-     *  two without spawning a nested coroutine scope. */
-    private fun <T> requestSuspending(block: suspend () -> T): T = runBlocking { block() }
-
     companion object {
         private const val ACCEPT_TIMEOUT_MS = 60_000
-        private const val EMPTY_DELTA = """{"entries":[],"tombstones":[]}"""
     }
 }
 

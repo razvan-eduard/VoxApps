@@ -46,12 +46,12 @@ import androidx.compose.ui.draw.alpha
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.expenses.data.Category
-import com.voxapps.expenses.data.CategoryPalette
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.CategoryColors
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.design.color.VoxColorPalette
 
 /**
  * Category CRUD, the Auto-Merge Categories trigger + schedule, and — unlike vox-notes, where the
@@ -116,7 +116,7 @@ fun CategoriesSettingsTab(
         }
 
         if (addingNew) {
-            var newColor by remember { mutableStateOf(CategoryPalette.unusedOrRandomColor(categories.map { it.colorArgb })) }
+            var newColor by remember { mutableStateOf(VoxColorPalette.unusedOrRandomColor(categories.map { it.colorArgb })) }
             OutlinedTextField(
                 value = newName,
                 onValueChange = { newName = it },

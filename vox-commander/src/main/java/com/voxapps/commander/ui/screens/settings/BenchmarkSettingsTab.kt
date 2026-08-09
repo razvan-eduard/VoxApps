@@ -1,5 +1,6 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.ui.LocalLanguageManager
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
@@ -57,6 +58,7 @@ fun BenchmarkSettingsTab(
             appContainer.settingsRepository,
             appStateManager,
             appContainer.modelDownloader,
+            appContainer.fastMapDao,
             appContainer.localLlmInterpreter,
             appContainer.geminiNanoInterpreter,
             appContainer.geminiCloudInterpreter
@@ -136,15 +138,18 @@ fun BenchmarkSettingsTab(
         }
         
         item {
-            val whisperLibs = nativeLibsStatus.filter { it.name.contains("whisper") || it.name.contains("ggml") }
-            val voskLibs = nativeLibsStatus.filter { it.name.contains("vosk") }
-            val nluLibs = nativeLibsStatus.filter { it.name.contains("mediapipe") || it.name.contains("genai") }
-            val otherLibs = nativeLibsStatus.filter { !whisperLibs.contains(it) && !voskLibs.contains(it) && !nluLibs.contains(it) }
+            // Grouped by the engine each library belongs to, and titled from the registry — the
+            // same name the engine has everywhere else, in the user's language. This was three
+            // hardcoded filters against three invented category names, with three hardcoded English
+            // titles beside them, so an engine's libraries could only be grouped by editing here.
+            // Anything belonging to no single engine keeps its own group at the end.
+            val byEngine = nativeLibsStatus.filter { it.category.isNotBlank() }.groupBy { it.category }
+            val otherLibs = nativeLibsStatus.filter { it.category.isBlank() }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (whisperLibs.isNotEmpty()) EngineLibGroupCard("Voice: Whisper & GGML", whisperLibs)
-                if (voskLibs.isNotEmpty()) EngineLibGroupCard("Voice: Vosk Engine", voskLibs)
-                if (nluLibs.isNotEmpty()) EngineLibGroupCard("Intent: NLU (MediaPipe)", nluLibs)
+                byEngine.forEach { (engineKey, libs) ->
+                    EngineLibGroupCard(RemoteModelRegistry.getEngineLabel(engineKey, languageManager), libs)
+                }
                 if (otherLibs.isNotEmpty()) EngineLibGroupCard("System & Runtime", otherLibs)
             }
         }

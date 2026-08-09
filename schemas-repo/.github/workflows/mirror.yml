@@ -1,0 +1,66 @@
+# Keeps this repository in step with the app repository, where the schemas are edited.
+#
+# It pulls rather than being pushed to, which is what keeps this arrangement free of credentials:
+# the app repository is public, so reading it needs nothing, and writing here uses the token GitHub
+# hands every workflow for its own repository. No secret to create, none to rotate.
+#
+# In a fork it does nothing, three times over. GitHub does not run scheduled workflows in forks at
+# all; Actions are disabled in a new fork until its owner turns them on; and the guard below stops
+# the job even if someone enables Actions and presses Run. A fork of this repository owns its
+# schemas — nothing here reaches in and overwrites them.
+#
+# (A file cannot be left out of a fork. This is the next best thing: present, and unable to run.)
+name: Mirror schemas
+
+on:
+  schedule:
+    - cron: "17 4 * * *"      # daily, at a minute nobody else picked
+  workflow_dispatch:           # and whenever you want it now
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_REPO: razvan-eduard/VoxCommander
+  SOURCE_BRANCH: main
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    # Upstream only. Change this if you re-point a fork at a source of your own.
+    if: github.repository == 'razvan-eduard/VoxApps-schemas'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the schemas and the validator from the app repository
+        run: |
+          set -euo pipefail
+          rm -rf .mirror && mkdir .mirror
+          # Sparse and shallow: this repository wants two paths, not the app's history.
+          git clone --depth 1 --filter=blob:none --sparse \
+            "https://github.com/${SOURCE_REPO}.git" --branch "${SOURCE_BRANCH}" .mirror
+          # Cone mode takes directories, not files — hence scripts/ rather than the one script.
+          git -C .mirror sparse-checkout set remote-schemas scripts
+          rm -rf remote-schemas scripts
+          mkdir -p scripts
+          cp -r .mirror/remote-schemas ./remote-schemas
+          cp .mirror/scripts/validate_schemas.py ./scripts/validate_schemas.py
+          rm -rf .mirror
+
+      # The rules and the files they describe arrive together, so what is published here is never
+      # checked by a validator that predates it.
+      - name: Check what arrived before offering it to anyone
+        run: python3 scripts/validate_schemas.py remote-schemas
+
+      - name: Commit, if anything actually changed
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "The schemas are already in step with ${SOURCE_REPO}."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add remote-schemas scripts/validate_schemas.py
+          git commit -m "Mirror schemas from ${SOURCE_REPO}"
+          git push

@@ -42,7 +42,7 @@ VISION_SOURCE="$PROJECT_ROOT/vox-vision/src/main/jniLibs/arm64-v8a"
 # the APK but never uploaded/downloaded.
 COMMANDER_LIBS=(
     "libonnxruntime.so"
-    "libllm_inference_engine_jni.so"
+    "liblitertlm_jni.so"
     "libvosk.so"
     "libsherpa-onnx-jni.so"
 )

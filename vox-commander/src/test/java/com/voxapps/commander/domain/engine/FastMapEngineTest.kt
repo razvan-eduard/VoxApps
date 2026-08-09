@@ -290,4 +290,47 @@ class FastMapEngineTest {
         assertNotNull(result)
         assertEquals("com.example.app", result?.targetApp)
     }
+
+    @Test
+    fun `anyOrder rule matches trigger words regardless of spoken order`() = runTest {
+        val rule = TestDataFactory.createFastMapRule(
+            triggerWords = listOf("flashlight", "on"),
+            anyOrder = true,
+            domain = IntentTaxonomy.Domains.SETTINGS,
+            action = "flashlight_on"
+        )
+        every { fastMapDao.getAllRules() } returns flowOf(listOf(rule))
+
+        val forward = engine.processCommand("turn flashlight on", null)
+        val reversed = engine.processCommand("turn on flashlight", null)
+
+        assertNotNull(forward)
+        assertNotNull(reversed)
+        assertEquals("flashlight_on", forward?.action)
+        assertEquals("flashlight_on", reversed?.action)
+    }
+
+    @Test
+    fun `anyOrder rule with both flags set falls back to queryWords instead of corrupting via replace`() = runTest {
+        // Defensive guard: the UI enforces lazyQuery/anyOrder are mutually exclusive, but a
+        // stale/hand-edited row could still have both set. Since an anyOrder trigger regex is
+        // built from zero-width lookaheads, .replace()-ing it out of the spoken text (the
+        // lazyQuery mechanism) would remove nothing — this pins that the engine instead falls
+        // back to queryWords (here empty, so logicalSubject should be null) rather than emitting
+        // a corrupted query still containing the trigger words.
+        val rule = TestDataFactory.createFastMapRule(
+            triggerWords = listOf("flashlight", "on"),
+            lazyQuery = true,
+            anyOrder = true,
+            queryWords = emptyList(),
+            domain = IntentTaxonomy.Domains.SETTINGS,
+            action = "flashlight_on"
+        )
+        every { fastMapDao.getAllRules() } returns flowOf(listOf(rule))
+
+        val result = engine.processCommand("turn on flashlight", null)
+
+        assertNotNull(result)
+        assertNull(result?.logicalSubject)
+    }
 }

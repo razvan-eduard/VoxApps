@@ -16,7 +16,9 @@ import androidx.compose.runtime.Immutable
  *
  * @param domain          Broad category: "audio", "settings", "maps", "messaging", "system", "home", "search"
  * @param action          Specific action: "play", "pause", "next", "prev", "volume_up", "volume_down",
- *                        "wifi_toggle", "bluetooth_toggle", "navigate", "send", "query"
+ *                        "wifi_toggle", "bluetooth_toggle", "gps_toggle", "flashlight_toggle",
+ *                        "airplane_mode_toggle", "dnd_toggle", "nfc_toggle", "auto_rotate_toggle",
+ *                        "silent_mode_toggle", "navigate", "send", "query"
  * @param targetApp       Explicitly requested app (e.g. "spotify", "youtube", "waze"). null = use default.
  * @param category        Search category: "general", "news", "knowledge", "weather". null for non-search.
  * @param confidence      LLM confidence 0.0–1.0. FastMap rules always 1.0.
@@ -31,12 +33,17 @@ import androidx.compose.runtime.Immutable
  */
 @Immutable
 data class NluIntent(
-    val actionVerb: String,
+    // Defaulted like every other field here, and it matters most for this class: these are parsed
+    // from what a language model returned. A model that omits a field costs the constructor
+    // otherwise, and then every *other* field arrives null too — `modifiers` and `extras` included,
+    // which the router walks. A missing verb is better handled as an empty one downstream than as a
+    // crash while reading the answer.
+    val actionVerb: String = "",
     val logicalSubject: String? = null,
     val modifiers: List<String> = emptyList(),
     val contextWords: List<String> = emptyList(),
-    val domain: String,
-    val action: String,
+    val domain: String = "",
+    val action: String = "",
     val targetApp: String? = null,
     val category: String? = null,
     val confidence: Float = 1.0f,

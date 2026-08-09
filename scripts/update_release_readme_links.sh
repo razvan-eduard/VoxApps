@@ -40,7 +40,15 @@ hub:Vox Hub:VoxHub
 "
 
 log_blue "🔍 Fetching releases from $REPO..."
-ALL_RELEASES_JSON=$(gh api "repos/$REPO/releases" --paginate --jq '[.[] | select(.draft==false) | {tag: .tag_name, published_at: .published_at, prerelease: .prerelease, assets: [.assets[] | {name: .name, size: .size}]}]')
+# --slurp (+ a separate jq, since gh rejects --slurp together with --jq) rather than --paginate
+# --jq: with --jq, gh applies the filter to EACH PAGE, so once this repo passed 100 releases the
+# command started emitting one array per page instead of a single array. Everything downstream then
+# ran twice — and for any prefix whose match lived on the other page, `... | last` yielded null,
+# which `.assets[]` promptly failed on with "Cannot iterate over null". --slurp returns an array of
+# per-page arrays, hence `.[][]` to flatten. `.assets // []` is belt-and-braces for a release caught
+# mid-(re)creation.
+ALL_RELEASES_JSON=$(gh api "repos/$REPO/releases" --paginate --slurp \
+    | jq '[.[][] | select(.draft==false) | {tag: .tag_name, published_at: .published_at, prerelease: .prerelease, assets: [(.assets // [])[] | {name: .name, size: .size}]}]')
 
 TABLE_ROWS=""
 MISSING=""

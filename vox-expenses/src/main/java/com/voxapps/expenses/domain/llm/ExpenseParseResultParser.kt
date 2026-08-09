@@ -2,6 +2,7 @@ package com.voxapps.expenses.domain.llm
 
 import com.voxapps.datahygiene.optCleanString
 import com.voxapps.expenses.data.TransactionDirection
+import com.voxapps.logging.Logger
 import com.voxapps.schema.VoxExtractionSchema
 import org.json.JSONArray
 import org.json.JSONObject
@@ -12,6 +13,8 @@ import org.json.JSONObject
  * [parse] returns null (discard, don't create a broken expense) if it's missing or unparseable.
  */
 object ExpenseParseResultParser {
+    private const val TAG = "ExpenseParseResultParser"
+
     data class ParsedItem(
         val name: String,
         val quantity: Double,
@@ -30,7 +33,7 @@ object ExpenseParseResultParser {
         val bank: String?,
         // Only ever populated by the OCR scan-cleanup task (a receipt's printed store address, city
         // only) — the voice-parse prompt never asks the LLM for this, so it's always null there;
-        // LlmResultReceiver falls back to ExpensesLocationHelper's GPS-derived city in that case.
+        // LlmResultReceiver falls back to resolveCurrentCityName's GPS-derived city in that case.
         val location: String?,
         val category: String?,
         val date: String?, // YYYY-MM-DD format
@@ -62,16 +65,36 @@ object ExpenseParseResultParser {
         return null
     }
 
-    fun parse(json: String): Parsed? = try {
+    /**
+     * [requireTotalAmount] is only ever false for [LlmTasks.EXPENSE_LINEITEMS_RESCAN] (see
+     * [com.voxapps.expenses.receiver.LlmResultReceiver]) — a photo with no clear printed total
+     * shouldn't discard genuinely-found line items (or other fields) along with it. [Double.NaN] is
+     * a distinguishable "not found" sentinel in that case (never a real amount) — callers that care
+     * check `!totalAmount.isNaN()` rather than treating it as a real, suggestible value.
+     */
+    fun parse(json: String, requireTotalAmount: Boolean = true): Parsed? = try {
         val o = JSONObject(json)
-        val totalAmount = o.optNullableDouble("totalAmount") ?: return null
+        val totalAmount = o.optNullableDouble("totalAmount")
+            ?: (if (requireTotalAmount) return null else Double.NaN)
 
         val itemsArray = o.optJSONArray("items") ?: JSONArray()
         val items = (0 until itemsArray.length()).mapNotNull { i ->
-            val item = itemsArray.optJSONObject(i) ?: return@mapNotNull null
-            val name = item.optCleanString("name") ?: return@mapNotNull null
+            val item = itemsArray.optJSONObject(i)
+            if (item == null) {
+                Logger.w(TAG, "Dropping items[$i]: not a JSON object")
+                return@mapNotNull null
+            }
+            val name = item.optCleanString("name")
+            if (name == null) {
+                Logger.w(TAG, "Dropping items[$i]: missing/blank \"name\" ($item)")
+                return@mapNotNull null
+            }
             val quantity = item.optNullableDouble("quantity") ?: 1.0
-            val unitPrice = item.optNullableDouble("unitPrice") ?: return@mapNotNull null
+            val unitPrice = item.optNullableDouble("unitPrice")
+            if (unitPrice == null) {
+                Logger.w(TAG, "Dropping items[$i] \"$name\": missing/unparseable \"unitPrice\" ($item)")
+                return@mapNotNull null
+            }
             ParsedItem(
                 name = name,
                 quantity = quantity,

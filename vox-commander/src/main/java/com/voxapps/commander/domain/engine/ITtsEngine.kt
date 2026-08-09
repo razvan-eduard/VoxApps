@@ -4,13 +4,7 @@ package com.voxapps.commander.domain.engine
  * Pluggable Text-to-Speech engine interface.
  * Mirrors the SttEngine pattern: init → use → release.
  */
-interface ITtsEngine : MemoryManagedComponent {
-
-    /**
-     * Initializes the engine with the given context and language.
-     * @return true if initialization succeeded.
-     */
-    fun initialize(context: android.content.Context, language: String): Boolean
+interface ITtsEngine : VoxEngine {
 
     /**
      * Speaks the given text. If [utteranceId] is non-null, [onDone] is invoked
@@ -38,21 +32,4 @@ interface ITtsEngine : MemoryManagedComponent {
      */
     fun setPitch(pitch: Float)
 
-    /**
-     * Releases all resources. After calling this, the engine must be
-     * re-initialized before use.
-     */
-    fun release()
-}
-
-/**
- * Supported TTS engine types.
- */
-enum class TtsEngineType(val key: String) {
-    ANDROID("android"),
-    PIPER("piper");
-
-    companion object {
-        fun fromKey(key: String?): TtsEngineType? = entries.find { it.key == key }
-    }
 }

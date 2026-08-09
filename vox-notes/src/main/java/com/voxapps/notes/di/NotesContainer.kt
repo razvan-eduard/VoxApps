@@ -2,6 +2,7 @@ package com.voxapps.notes.di
 
 import android.content.Context
 import androidx.glance.appwidget.updateAll
+import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.notes.data.NotesDatabase
 import com.voxapps.notes.data.NotesRepository
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
@@ -16,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 
 /**
@@ -36,7 +38,7 @@ class NotesContainer(context: Context) {
 
     val sessionManager = SessionManager()
 
-    val notesStateManager = NotesStateManager.getInstance(
+    val notesStateManager = NotesStateManager(
         settingsRepository,
         notesRepository,
         sessionManager,
@@ -50,12 +52,29 @@ class NotesContainer(context: Context) {
     }
 
     init {
-        // Keeps NotesWidget's home-screen snapshot fresh — reacts to both lock-state transitions
-        // (uiState) and data changes (notesWithCategory), since the widget reads both independently
-        // of any in-app filter (see NotesWidget.kt's provideGlance doc comment).
+        // Keeps NotesWidget's home-screen snapshot fresh — reacts to lock-state transitions
+        // (uiState), data changes (notesWithCategory, read independently of any in-app filter, see
+        // NotesWidget.kt's provideGlance doc comment), AND settings (settingsFlow — border color/
+        // thickness etc. are read fresh into the widget's content but nothing about changing them
+        // touches notes or uiState, so without watching settingsFlow too, a settings-only change
+        // would sit un-reflected until the next unrelated data change or the OS's 30-min update floor).
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
-            combine(notesStateManager.uiState, notesRepository.notesWithCategory) { _, _ -> }
-                .collect { NotesWidget().updateAll(appContext) }
+            combine(
+                notesStateManager.uiState,
+                notesRepository.notesWithCategory,
+                settingsRepository.settingsFlow,
+                // Notes themselves don't change when an attachment is added/removed on one of them,
+                // so the widget's paperclip indicator would otherwise only catch up on the next
+                // unrelated refresh instead of promptly.
+                attachmentDao.observeRecordIdsWithAttachments(NotesAttachments.RECORD_TYPE)
+            // conflate(): each emission drives a Glance updateAll() — an IPC round-trip to the
+            // launcher — and a bulk import or a P2P sync merge emits once per record, so the
+            // widget would be redrawn N times to show one final state. Conflating drops the
+            // intermediate values while an update is still in flight, keeping the newest, so the
+            // refresh rate is bounded by how fast updateAll() completes rather than by how fast
+            // rows are written. No debounce: nothing here is latency-sensitive enough to justify
+            // delaying the common single-change case.
+            ) { _, _, _, _ -> }.conflate().collect { NotesWidget().updateAll(appContext) }
         }
     }
 }

@@ -2,6 +2,7 @@ package com.voxapps.expenses.domain.llm
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.logging.Logger
@@ -9,30 +10,58 @@ import com.voxapps.logging.Logger
 private const val TAG = "ExpenseScanRequestSender"
 
 /**
- * Launches Vision's activity directly to fulfil a scan request (see [com.voxapps.ipc.VoxOcrRequest])
- * — the "Scan receipt" entry point (mirrors vox-notes' ScanRequestSender), called both from Expenses'
- * own foreground UI and from [com.voxapps.expenses.ui.widget.ExpensesWidgetScanAction] (a Glance
- * `ActionCallback`, which runs with a non-Activity context) — hence [Intent.FLAG_ACTIVITY_NEW_TASK]
- * unconditionally: starting an Activity from a non-Activity context throws without it, and it's a
- * harmless no-op when the caller already is an Activity. Vision replies asynchronously via
- * [com.voxapps.expenses.receiver.OcrResultReceiver] with the raw recognized text; Expenses takes it
- * from there (LLM cleanup, then save) — no vox-vision changes needed, its pending-request path is
- * already domain-agnostic.
+ * Headless (existing-image, no camera UI) Vision requests for Expenses — rescans/retries of a photo
+ * already staged on disk, both triggered from Expenses' own foreground screen (the attachments
+ * section's rescan icon / "Retry cleanup" banner). Live-camera captures for a new scan or an
+ * attachment go through [com.voxapps.attachments.VisionAttachmentCapture]/
+ * `rememberVisionCaptureLauncher` instead (see [com.voxapps.expenses.ui.ExpensesScreen]/
+ * [com.voxapps.expenses.ui.ExpenseEditScreen]).
  */
 object ExpenseScanRequestSender {
-    /** [returnToCaller] should be true only when [context] is Expenses' own foreground Activity
-     *  (the user tapped "Scan receipt" while already in the app) — false (the default) for the
-     *  home-screen widget's non-Activity Glance context, where there's no foreground Expenses
-     *  screen to meaningfully return to. See [com.voxapps.ipc.VoxOcrRequest.returnToCallerOnComplete]. */
-    fun send(context: Context, returnToCaller: Boolean = false) {
+    /**
+     * For a photo already attached to an already-saved expense (see [LlmTasks.EXPENSE_LINEITEMS_RESCAN])
+     * — unlike [send], there's no fresh photo to take, so Vision runs OCR directly against [imageUri]
+     * instead of opening its live camera (see [com.voxapps.ipc.VoxOcrRequest.imageUri]). [imageUri]'s
+     * permission grant is the caller's job: it travels as a plain JSON string field, not Intent
+     * data/ClipData, so Android's own URI-grant propagation never sees it — mirrors why
+     * [MultimodalAttachmentResolver] explicitly grants Commander access before attaching a photo to an
+     * LLM call. Always called from Expenses' own foreground screen (the attachments section), hence
+     * `returnToCallerOnComplete = true` unconditionally, unlike [send]'s widget-aware default.
+     *
+     * [dirName]/[fileName] identify the exact attachment file [imageUri] resolves to — threaded through
+     * the task string so [com.voxapps.expenses.receiver.OcrResultReceiver] can write the OCR result's
+     * text as a same-named sibling right next to that existing file (no separate staged copy needed —
+     * the shared filename alone ties the two together, same convention a fresh scan's own receipt/.txt
+     * pair already uses).
+     */
+    fun sendHeadlessRescan(context: Context, expenseId: Long, dirName: String, fileName: String, imageUri: Uri) {
+        launchHeadlessOcr(context, imageUri, task = "${LlmTasks.EXPENSE_LINEITEMS_RESCAN}:$expenseId:$dirName:$fileName")
+    }
+
+    /**
+     * For [com.voxapps.expenses.ui.ExpenseEditScreen]'s "Retry cleanup" banner, when the user picks a
+     * manually-added photo instead of the original scan — that photo has never been through Vision's
+     * OCR either (same situation as [sendHeadlessRescan]), so this runs the identical headless-OCR
+     * step. The difference is entirely on the receiving end: [com.voxapps.expenses.receiver.OcrResultReceiver]
+     * routes this task family into the same direct-overwrite retry path [imageName]-based retry
+     * already uses (a stub has nothing reviewed yet to protect, unlike [sendHeadlessRescan]'s target),
+     * not a review suggestion.
+     */
+    fun sendHeadlessRetryOcr(context: Context, expenseId: Long, dirName: String, fileName: String, imageUri: Uri) {
+        launchHeadlessOcr(context, imageUri, task = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:retry:$expenseId:$dirName:$fileName")
+    }
+
+    private fun launchHeadlessOcr(context: Context, imageUri: Uri, task: String) {
+        context.grantUriPermission(VoxIpc.VISION_PACKAGE, imageUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         val payload = VoxOcrRequest(
             sourcePackage = context.packageName,
-            task = LlmTasks.EXPENSE_SCAN_CLEANUP,
-            hint = "Scanning for Expenses",
-            returnToCallerOnComplete = returnToCaller
+            task = task,
+            hint = "Rescanning attached photo",
+            returnToCallerOnComplete = true,
+            imageUri = imageUri.toString()
         ).toJson()
 
-        Logger.d(TAG, "Launching Vision directly for a scan")
+        Logger.d(TAG, "Launching Vision for a headless OCR request (task=$task)")
         context.startActivity(
             Intent().apply {
                 setClassName(VoxIpc.VISION_PACKAGE, VoxIpc.VISION_ACTIVITY_CLASS)

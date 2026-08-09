@@ -22,31 +22,47 @@ class OpenWakeWordEngine(
     private val context: Context,
     private val appStateManager: AppStateManager,
     private val onWakeWordDetected: () -> Unit
-) : IWakeWordEngine {
+) : com.voxapps.commander.domain.engine.BaseVoxEngine(), IWakeWordEngine {
 
-    private val TAG = "OpenWakeWordEngine"
+    override val engineKey: String = ENGINE_KEY
+
+
     private var engine: WakeWordEngine? = null
     private var detectionJob: Job? = null
-    private var isListening = false
+    /** Read from the caller thread and written from engineScope coroutines. Its siblings in the
+     *  other two wake-word engines are volatile; this one was not, so a stop could go unseen by an
+     *  in-flight detection loop. */
+    @Volatile private var isListening = false
     private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // Priming window after each start(): OpenWakeWord's mel/embedding feature buffers aren't
-    // filled yet, so the first inferences emit spurious high scores. Ignoring detections during
-    // this window prevents a self-triggering loop (detect → command → re-arm → instant re-detect).
-    private val WARMUP_MS = 1000L // Reduced from 1500ms to catch early valid detections
     @Volatile private var listenStartMs = 0L
 
-    // Music/media playback leaks a broadband AEC residual through far more than TTS's own voice does
-    // (platform AEC is speech-band tuned) — require a much higher confidence score before accepting a
-    // detection while any app has the music stream active, to cut ghost triggers without lowering
-    // sensitivity for genuine speech the rest of the time. User-toggleable (wakeWordMusicDuckEnabled).
-    private val MUSIC_PLAYBACK_MIN_SCORE = 0.85f
-
     companion object {
+        private const val TAG = "OpenWakeWordEngine"
+
+        // Priming window after each start(): OpenWakeWord's mel/embedding feature buffers aren't
+        // filled yet, so the first inferences emit spurious high scores. Ignoring detections during
+        // this window prevents a self-triggering loop (detect → command → re-arm → instant re-detect).
+        private const val WARMUP_MS = 1000L // Reduced from 1500ms to catch early valid detections
+
+        // Music/media playback leaks a broadband AEC residual through far more than TTS's own voice
+        // does (platform AEC is speech-band tuned) — require a much higher confidence score before
+        // accepting a detection while any app has the music stream active, to cut ghost triggers
+        // without lowering sensitivity for genuine speech the rest of the time. User-toggleable
+        // (wakeWordMusicDuckEnabled).
+        private const val MUSIC_PLAYBACK_MIN_SCORE = 0.85f
+
         const val ENGINE_KEY = "wake_openwakeword"
     }
 
-    override suspend fun initialize(modelPath: String, wakeWord: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun onLoad(spec: com.voxapps.commander.domain.engine.ModelSpec): Boolean = withContext(Dispatchers.IO) {
+        val wake = spec as? com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel ?: run {
+            Logger.log("Wake word engines need a WakeWordModel spec", TAG)
+            return@withContext false
+        }
+        val modelPath = wake.entryPoint?.absolutePath ?: wake.modelId.orEmpty()
+        val wakeWord = wake.keyword
+
         try {
             engine?.release()
             engine = null
@@ -192,7 +208,7 @@ class OpenWakeWordEngine(
         appStateManager.setVoiceState(VoiceState.IDLE)
     }
 
-    override fun release() {
+    override fun onRelease() {
         stopService()
         try {
             engine?.release()
@@ -202,7 +218,11 @@ class OpenWakeWordEngine(
         engine = null
     }
 
-    override fun releaseForMemoryPressure() {
-        // OpenWakeWord ONNX models are small (~10MB), no need to release on memory pressure
+    /** ~10MB of ONNX — reloading it would cost more than releasing it frees. */
+    override fun releasesUnderMemoryPressure(): Boolean = false
+
+    override fun onUnload() {
+        try { engine?.release() } catch (e: Exception) { Logger.log("OpenWakeWord release error: ${e.message}", TAG) }
+        engine = null
     }
 }

@@ -8,6 +8,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
+import com.voxapps.design.color.VoxColorPalette
 
 @Dao
 interface ExpenseDao {
@@ -23,6 +24,11 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses ORDER BY dateTime DESC")
     fun observeAll(): Flow<List<Expense>>
 
+    /** One-shot read for the write/export paths — `observeAll().first()` would spin up an
+     *  InvalidationTracker observer, run the query, then tear it all down again. */
+    @Query("SELECT * FROM expenses ORDER BY dateTime DESC")
+    suspend fun getAll(): List<Expense>
+
     @Transaction
     @Query("SELECT * FROM expenses WHERE id = :id")
     suspend fun getWithDetailsById(id: Long): ExpenseWithDetails?
@@ -34,7 +40,7 @@ interface ExpenseDao {
     suspend fun getForDateRange(from: Long, to: Long): List<Expense>
 
     /** Cheap "what color is the top-of-list expense's category" lookup for
-     *  [CategoryPalette.unusedOrRandomColor]'s `precedingColor` param — a single indexed-order
+     *  [VoxColorPalette.unusedOrRandomColor]'s `precedingColor` param — a single indexed-order
      *  `LIMIT 1` row, not a full fetch+sort of the table. */
     @Query(
         """
@@ -66,16 +72,6 @@ interface ExpenseDao {
 
     @Query("DELETE FROM expenses WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<Long>)
-
-    /** Read the receipt filename before a delete-by-id, since the row won't exist to query afterwards. */
-    @Query("SELECT receiptImageName FROM expenses WHERE id = :id AND receiptImageName IS NOT NULL")
-    suspend fun getReceiptImageName(id: Long): String?
-
-    @Query("SELECT receiptImageName FROM expenses WHERE id IN (:ids) AND receiptImageName IS NOT NULL")
-    suspend fun getReceiptImageNames(ids: List<Long>): List<String>
-
-    @Query("SELECT receiptImageName FROM expenses WHERE receiptImageName IS NOT NULL")
-    suspend fun getAllReceiptImageNames(): List<String>
 
     /** Read tombstone-worthy uids before a delete-by-ids, since the rows won't exist to query afterwards. */
     @Query("SELECT uid FROM expenses WHERE id IN (:ids)")

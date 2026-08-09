@@ -18,7 +18,6 @@ object Strings {
         const val GEMINI_NANO_INTERPRETER = "GeminiNanoInterpreter"
         const val OPENAI_INTERPRETER = "OpenAiInterpreter"
         const val LOCAL_LLM_INTERPRETER = "LocalLlmInterpreter"
-        const val FILE_HELPER = "FileHelper"
         const val TTS_MANAGER = "TtsManager"
         const val ANDROID_TTS_ENGINE = "AndroidTtsEngine"
     }
@@ -28,7 +27,6 @@ object Strings {
         const val WHISPER_VULKAN = "WHISPER_VULKAN"
         const val GOOGLE = "GOOGLE"
         const val WHISPER_API = "WHISPER_API"
-        const val WHISPER_CLOUD = "WHISPER_CLOUD"
     }
 
     object AiProcessors {
@@ -37,26 +35,14 @@ object Strings {
         const val GEMINI_NATIVE = "GEMINI_NATIVE"
         const val GEMINI_CLOUD = "GEMINI_CLOUD"
 
-        /**
-         * Cloud processors that accept image input today. [GEMINI_NATIVE] ("Gemini Nano") is
-         * deliberately excluded — it's on-device, not cloud, and [LlmHookEngineSelector] already
-         * special-cases it as unimplemented for even plain text raw prompts, so it can't be multimodal
-         * yet either. [OPENAI]/[GEMINI_CLOUD] each have exactly one fixed model id (GPT-4o-mini,
-         * Gemini 1.5 Flash — see [Models]), so this is a flat set, not a per-model lookup; there's no
-         * variance to model here yet. Neither is in `models.json` (see the class comment above), so
-         * unlike local engines' `capabilities` list, this has to be a hardcoded set — kept here
-         * alongside the processor ids it describes, mirroring how
-         * [com.voxapps.commander.data.remote.RemoteModelRegistry.isMultimodal] checks this set first,
-         * then falls back to `models.json` for JSON-defined local engines.
-         */
-        val MULTIMODAL_CAPABLE = setOf(OPENAI, GEMINI_CLOUD)
 
         /**
-         * Processors whose inference happens off-device. Everything else — [GEMINI_NATIVE] and every
-         * `models.json`-defined key — runs locally, see
-         * [com.voxapps.commander.data.remote.RemoteModelRegistry.isLocalEngine]. Kept as its own set
-         * (even though it happens to equal [MULTIMODAL_CAPABLE] today) since "leaves the device" and
-         * "accepts image input" are different questions that could diverge for a future engine.
+         * Processors whose inference happens off-device.
+         *
+         * Only a fallback now: these engines declare `runtime: "cloud"` in `virtual_models.json`, so
+         * [com.voxapps.commander.data.remote.RemoteModelRegistry.runtimeOf] answers from the schema
+         * and consults this set only when the schema does not describe the key — an older remote
+         * copy, or a value from a backup naming an engine that no longer exists.
          */
         val CLOUD_PROCESSORS = setOf(OPENAI, GEMINI_CLOUD)
     }

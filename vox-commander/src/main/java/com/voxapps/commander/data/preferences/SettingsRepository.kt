@@ -19,7 +19,7 @@ interface SettingsRepository {
 
     /**
      * Bulk-applies every field of [imported] EXCEPT raw local paths (wakeWordModelPath/
-     * customModelPaths) and pure caches/probe results (modelsJsonCache/appCacheJson/
+     * customModelPaths) and pure caches/probe results (appCacheJson/
      * downloadedModelIds/the vulkan flags/geminiIncompatible/wakeWordProfileJson) — those are always
      * left alone since they were never present in an exported snapshot to begin with. Secrets
      * (apiKey/geminiApiKey/picovoiceAccessKey/searchProviderApiKeys) are applied only where
@@ -32,15 +32,29 @@ interface SettingsRepository {
 
     // --- SYNCHRONOUS READS (for non-coroutine consumers during migration) ---
     fun getSettingsSnapshot(): AppSettings
-    fun getApiKeySync(): String?
-    fun getGeminiApiKeySync(): String?
+
+    /**
+     * The encrypted store, managed like the DataStore one: [credentialsFlow] to observe,
+     * [getCredentialsSnapshot] to read, [setEngineApiKey] to write.
+     *
+     * This replaces `getApiKeySync()`/`getGeminiApiKeySync()` *and* the copies that used to ride
+     * along inside [AppSettings]. Two routes to one value is one route too many: they disagreed,
+     * and which caller got the stale one was decided by which line of code it happened to call.
+     */
+    val credentialsFlow: Flow<Credentials>
+    fun getCredentialsSnapshot(): Credentials
 
     // --- SYNCHRONOUS WRITE (crash cookie: must survive process death immediately) ---
     fun setVulkanRuntimeAttemptSync(active: Boolean)
 
-    // --- API / CLOUD ---
-    suspend fun setApiKey(key: String?)
-    suspend fun setGeminiApiKey(key: String?)
+    /**
+     * Stores (or clears, when [key] is null or blank) the credential for [engineKey].
+     *
+     * One per engine, addressed by the same key the schema uses. There is no per-service setter to
+     * add when an engine is added: an engine declaring `requires_api_key` is already asking for a
+     * slot, and this provides it.
+     */
+    suspend fun setEngineApiKey(engineKey: String, key: String?)
 
     // --- LANGUAGE ---
     suspend fun setLanguage(lang: String)
@@ -51,6 +65,7 @@ interface SettingsRepository {
     // --- VOICE ENGINE ---
     suspend fun setVoiceProcessor(processor: String)
     suspend fun setActiveVoiceModelId(modelId: String?)
+    suspend fun setActiveWakeModelId(modelId: String?)
 
     // --- INTENT ENGINE ---
     suspend fun setAiProcessor(processor: String)
@@ -68,8 +83,6 @@ interface SettingsRepository {
     suspend fun setWakeWordProfile(profileJson: String?)
     fun getWakeWordProfileJson(): String?
     suspend fun setWakeWordEngineType(engineType: String)
-    fun getPicovoiceAccessKeySync(): String?
-    suspend fun setPicovoiceAccessKey(key: String?)
     suspend fun setWakeWordSensitivity(sensitivity: String)
     suspend fun setWakeWordAecEnabled(enabled: Boolean)
     suspend fun setWakeWordMusicDuckEnabled(enabled: Boolean)
@@ -105,12 +118,23 @@ interface SettingsRepository {
 
     // --- REMOTE REPOSITORY ---
     suspend fun setModelRepoBaseUrl(url: String)
-    suspend fun saveModelsJsonCache(json: String)
-    suspend fun clearModelsJsonCache()
+    suspend fun setUseRemoteSchemas(enabled: Boolean)
+    suspend fun setSchemaStoreMigrated(done: Boolean)
+
+    /** See [AppSettings.importSelectionMigrated]. */
+    suspend fun setImportSelectionMigrated(done: Boolean)
+
+    /**
+     * Empties the settings store, leaving every setting at its default.
+     *
+     * Deliberately narrow: the DataStore only. Credentials live in the encrypted store and models on
+     * disk, and someone resetting *settings* is not asking to re-enter their API keys or re-download
+     * two gigabytes — a reset that takes those with it is one nobody dares press.
+     */
+    suspend fun clearAllSettings()
 
     // --- MODEL DOWNLOAD STATE ---
     suspend fun setModelDownloaded(modelId: String, isDownloaded: Boolean)
-    suspend fun clearUnusedModelFlags(protectedIds: Set<String>)
 
     // --- CUSTOM MODEL PATHS ---
     suspend fun setCustomModelPath(engineKey: String, path: String, langCode: String? = null)
@@ -139,6 +163,9 @@ interface SettingsRepository {
     suspend fun setExternalTriggerEnabled(enabled: Boolean)
 
     // --- SEARCH PROVIDER API KEYS ---
+    /** Per-category provider choice — the same shape as the per-engine model selection above. */
+    suspend fun setSearchProviderSelection(category: String, providerName: String)
+
     fun getSearchProviderApiKeySync(providerName: String): String?
     suspend fun setSearchProviderApiKey(providerName: String, key: String?)
     fun getAllSearchProviderApiKeys(): Map<String, String>
@@ -151,6 +178,16 @@ interface SettingsRepository {
     fun getServiceRefreshTokenSync(serviceId: String): String?
     fun getServiceTokenExpirySync(serviceId: String): Long
     suspend fun setServiceTokens(serviceId: String, accessToken: String?, refreshToken: String?, expiry: Long)
+
+    /**
+     * The client id a service's OAuth flow needs, keyed by service id.
+     *
+     * Spotify's lived in its own DataStore key and its own getter, which is why the integrations
+     * screen could only ever configure Spotify. Declared integrations each get a slot, and Spotify's
+     * existing value is migrated into it.
+     */
+    fun getServiceClientIdSync(serviceId: String): String?
+    suspend fun setServiceClientId(serviceId: String, clientId: String?)
 
     // --- DECLARATIVE API INTEGRATION DEVICE ID (keyed by service id) ---
     fun getServiceDeviceIdSync(serviceId: String): String?
@@ -168,10 +205,24 @@ interface SettingsRepository {
     // --- APP ALIASES ---
     suspend fun setAppAliasRules(rules: List<AppAliasRule>)
 
-    // --- MANUAL LOCATION ---
-    fun getManualLocationLatSync(): Double?
-    fun getManualLocationLonSync(): Double?
-    suspend fun setManualLocation(lat: Double?, lon: Double?)
+    // --- LOCATION (Home Town / cache TTL / always-use, shared :core:location module) ---
+    fun getLocationHomeTownLatSync(): Double?
+    fun getLocationHomeTownLonSync(): Double?
+    suspend fun setLocationHomeTown(lat: Double?, lon: Double?)
+    fun getLocationCacheTtlSync(): String
+    suspend fun setLocationCacheTtl(ttl: String)
+    fun getLocationAlwaysUseHomeTownSync(): Boolean
+    suspend fun setLocationAlwaysUseHomeTown(enabled: Boolean)
+
+    // --- BACKUP & RESTORE (local) ---
+    fun getBackupIncludeSettingsSync(): Boolean
+    suspend fun setBackupIncludeSettings(enabled: Boolean)
+    fun getBackupIncludeDataSync(): Boolean
+    suspend fun setBackupIncludeData(enabled: Boolean)
+    fun getBackupIncludeApiKeysSync(): Boolean
+    suspend fun setBackupIncludeApiKeys(enabled: Boolean)
+    fun getBackupImportModeSync(): String
+    suspend fun setBackupImportMode(mode: String)
 
     // --- FIRST LAUNCH / TUTORIAL ---
     fun getFirstLaunchCompletedSync(): Boolean

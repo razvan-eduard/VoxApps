@@ -6,18 +6,21 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.os.Environment
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.DownloadCompleteReceiver
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.services.SchemaCatalog
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
+import com.voxapps.commander.domain.model.ImportedModelId
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.utils.FileHelper
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.CoroutineDispatcher
@@ -99,6 +102,88 @@ class ModelManagementViewModel(
     // drop, server error) looked identical to the user as one that just silently never finished:
     // the progress bar vanished with zero explanation. Confirmed on-device against a real failure
     // (HuggingFace's Xet CDN backend 403ing every Whisper model file).
+    /**
+     * The outcome of the last custom import, for the dialog that reports it.
+     *
+     * Both outcomes are worth saying out loud: an accepted import changes what the engine will load,
+     * and a rejected one leaves the user looking at a list that did not change with no idea why. It
+     * used to be a toast reading "download failed" for a file they had picked themselves.
+     */
+    data class ImportResult(
+        val accepted: Boolean,
+        val modelName: String,
+        val detail: String?,
+        /** The engine it was imported for, and the languages that engine declares models in — empty
+         *  for an engine whose models serve every language. Non-empty means the user is asked which
+         *  language this model is, rather than it being taken from whatever filter was set. */
+        val engineKey: String = "",
+        val languages: List<String> = emptyList(),
+        val language: String? = null,
+        /**
+         * The archive the model was unpacked from, when it came from one and the provider will let
+         * us delete it. Offered rather than deleted: it is the user's file, sitting where they put
+         * it, and a copy now lives inside the app — but it is theirs to keep.
+         */
+        val sourceArchive: Uri? = null
+    )
+
+    private val _importResult = MutableStateFlow<ImportResult?>(null)
+    val importResult: StateFlow<ImportResult?> = _importResult.asStateFlow()
+
+    fun clearImportResult() { _importResult.value = null }
+
+    /**
+     * Files an accepted import under the language the user says it is.
+     *
+     * The language used to be whichever filter happened to be set when the picker opened — so a
+     * Romanian model imported while the list showed English became the English one, offered and
+     * loaded for the wrong language, with nothing on screen disagreeing. The file itself cannot say;
+     * the person who chose it can.
+     *
+     * The copy is renamed rather than re-imported: the language is part of where it lives.
+     */
+    fun setImportLanguage(engineKey: String, from: String?, to: String) {
+        if (from == to) return
+        viewModelScope.launch {
+            val settings = settingsRepo.getSettingsSnapshot()
+            val currentPath = settings.getCustomModelPath(engineKey, from) ?: return@launch
+            val renamed = modelDownloader.renameCustomModel(currentPath, engineKey, to)
+            if (renamed == null) {
+                Logger.log("Could not re-file the import under $to", TAG)
+                return@launch
+            }
+
+            settingsRepo.setCustomModelPath(engineKey, "", from)
+            settingsRepo.setCustomModelPath(engineKey, renamed, to)
+
+            val importedId = ImportedModelId.of(engineKey, to)
+            settingsRepo.setEngineModelSelection(engineKey, importedId)
+            settingsRepo.setActiveVoiceModelId(importedId)
+            // The list is filtered by language, so a model filed under one the screen is not showing
+            // would vanish the moment it was accepted.
+            settingsRepo.setModelFilterLang(to)
+            appStateManager.refreshAll()
+        }
+    }
+
+    /**
+     * Deletes the archive an accepted model was unpacked from, at the user's word.
+     *
+     * A picked document is read-only unless the provider says otherwise, so this can legitimately
+     * fail — reported rather than swallowed, since a user who agreed to free the space should not
+     * be left believing it was freed.
+     */
+    fun deleteImportSource(uri: Uri) {
+        val deleted = runCatching {
+            DocumentsContract.deleteDocument(context.contentResolver, uri)
+        }.getOrDefault(false)
+        if (!deleted) {
+            Logger.log("Could not delete the imported archive: $uri", TAG)
+            _downloadError.value = languageManager.getString("import_source_delete_failed")
+        }
+        _importResult.value = null
+    }
+
     private val _downloadError = MutableStateFlow<String?>(null)
     val downloadError: StateFlow<String?> = _downloadError.asStateFlow()
 
@@ -150,19 +235,25 @@ class ModelManagementViewModel(
     private fun rebuildUiLists() {
         // Dynamically resolve all engine keys from models.json
         val voiceKeys = RemoteModelRegistry.getEngineKeysByType("voice")
-        val llmKeys = RemoteModelRegistry.getEngineKeysByType("llm")
+        val llmKeys = RemoteModelRegistry.getLlmEngineKeys()
 
-        // Whisper models = voice engines with .bin extension
-        val whisperKey = voiceKeys.firstOrNull { !RemoteModelRegistry.isZipEngine(it) }
+        // These two lists drive different import flows — a single-file picker versus a directory
+        // picker — so the split is by packaging, not by engine name. Both are restricted to
+        // downloadable engines: a cloud voice engine has no packaging at all and would otherwise win
+        // the "not an archive" test purely on map order once virtual engines join the registry.
+        val downloadableVoiceKeys = voiceKeys.filter {
+            RemoteModelRegistry.runtimeOf(it) == EngineRuntime.LOCAL_FILE
+        }
+
+        val whisperKey = downloadableVoiceKeys.firstOrNull { !RemoteModelRegistry.isArchiveEngine(it) }
         _whisperModels.value = whisperKey?.let { RemoteModelRegistry.getModels(it) } ?: emptyList()
 
-        // Vosk models = voice engines with .zip extension
-        val voskKey = voiceKeys.firstOrNull { RemoteModelRegistry.isZipEngine(it) }
+        val voskKey = downloadableVoiceKeys.firstOrNull { RemoteModelRegistry.isArchiveEngine(it) }
         _voskModels.value = voskKey?.let { RemoteModelRegistry.getModels(it) } ?: emptyList()
 
-        // NLU models = LLM engines
-        val nluKey = llmKeys.firstOrNull()
-        _nluModels.value = nluKey?.let { RemoteModelRegistry.getModels(it) } ?: emptyList()
+        // NLU models = every local-LLM-capable engine's models pooled together (there can be more
+        // than one — e.g. nlu_llm for .task models, nlu_llm_litertlm for .litertlm models).
+        _nluModels.value = llmKeys.flatMap { RemoteModelRegistry.getModels(it) }
 
         _isVoskOffline.value = _voskModels.value.isEmpty()
 
@@ -171,7 +262,9 @@ class ModelManagementViewModel(
 
     suspend fun loadModels(force: Boolean = false) {
         _isVoskLoading.value = true
-        RemoteModelRegistry.fetchJson(settingsRepo, force)
+        // Whatever schema is in force is already loaded; asking the repository for a newer one is a
+        // deliberate act with its own button, not something a list rebuild does on the way past.
+        if (force) SchemaCatalog.refreshAll(settingsRepo.getSettingsSnapshot().modelRepoBaseUrl)
         rebuildUiLists()
         _isVoskLoading.value = false
     }
@@ -197,15 +290,17 @@ class ModelManagementViewModel(
         if (localFile?.exists() == true) {
             Logger.log("Model already exists, marking as downloaded: $modelId", TAG)
             viewModelScope.launch { settingsRepo.setModelDownloaded(modelId, true) }
-            when (engineType) {
-                RemoteModelRegistry.getEngineKeysByType("llm").firstOrNull() -> {
-                    appStateManager.setActiveIntentModelId(modelId)
-                    appStateManager.saveIntentModelSelection(engineType, modelId)
-                }
-                else -> {
-                    appStateManager.setActiveVoiceModelId(modelId)
-                    appStateManager.saveVoiceModelSelection(engineType, modelId)
-                }
+            // Any engine declaring the "local_llm" capability (there can be more than one — e.g.
+            // nlu_llm for .task models, nlu_llm_litertlm for .litertlm models) routes through the
+            // intent-model path; anything else is a voice engine. Was previously comparing against
+            // only the FIRST llm-typed engine key, silently misrouting every other one into the
+            // voice-model branch.
+            if (RemoteModelRegistry.isLlmEngine(engineType)) {
+                appStateManager.setActiveIntentModelId(modelId)
+                appStateManager.saveIntentModelSelection(engineType, modelId)
+            } else {
+                appStateManager.setActiveVoiceModelId(modelId)
+                appStateManager.saveVoiceModelSelection(engineType, modelId)
             }
             appStateManager.refreshAll()
             _downloadingItem.value = null
@@ -238,24 +333,94 @@ class ModelManagementViewModel(
         // refreshTrigger here churned the model dropdown's `groups` (a re-fire loop).
     }
 
-    fun selectCustomModel(uri: Uri, engineKey: String, langCode: String? = null) {
-        val extension = RemoteModelRegistry.getExtension(engineKey)
-        
-        if (extension.isBlank()) {
-            // Directory-based strategy (e.g. wake_vosk)
-            val path = uri.path ?: uri.toString()
-            viewModelScope.launch { settingsRepo.setCustomModelPath(engineKey, path, langCode) }
-            showSuccessMessage(languageManager.getString("success_custom_vosk"))
-        } else {
-            // File-based strategy (e.g. stt_whisper, nlu_llm)
-            val fileName = "$engineKey$extension"
-            FileHelper.copyUriToInternal(context, uri, fileName)?.let { internalPath ->
-                viewModelScope.launch { settingsRepo.setCustomModelPath(engineKey, internalPath) }
-                showSuccessMessage(languageManager.getString("success_custom_whisper"))
+    /**
+     * Stores a model the user picked themselves.
+     *
+     * One import for every engine, performed where models are kept. The two shapes differ only in
+     * what gets copied — a file, or a directory and everything in it — and ModelDownloader decides
+     * that from the engine's declared packaging, the same way it decides where a download lands.
+     *
+     * The directory case used to copy nothing at all: it stored `uri.path` of the picked *tree*,
+     * which is a document-id string rather than a filesystem path, so the import reported success
+     * and left behind a value nothing could open.
+     */
+    /**
+     * @param forWakeWord which domain's selection this import becomes. The same engine can serve
+     *        both — Vosk transcribes and listens for the wake word — so the screen decides.
+     */
+    fun selectCustomModel(
+        uri: Uri,
+        engineKey: String,
+        langCode: String? = null,
+        forWakeWord: Boolean = false
+    ) {
+        when (val outcome = modelDownloader.importCustomModel(uri, engineKey, langCode)) {
+            is ModelDownloader.ImportOutcome.Accepted -> {
+                // Selecting it is what loads it now, so an import that did not select itself would
+                // sit in the list doing nothing — the user picked this file; that is the choice.
+                val importedId = ImportedModelId.of(engineKey, langCode)
+                viewModelScope.launch {
+                    settingsRepo.setCustomModelPath(engineKey, outcome.file.absolutePath, langCode)
+                    settingsRepo.setEngineModelSelection(engineKey, importedId)
+                    // Which selection to write cannot be read off the engine: wake_vosk is a voice
+                    // engine and a wake-word engine at once. The screen that opened the picker knows.
+                    if (forWakeWord) settingsRepo.setActiveWakeModelId(importedId)
+                    else settingsRepo.setActiveVoiceModelId(importedId)
+                }
+                _importResult.value = ImportResult(
+                    accepted = true,
+                    modelName = outcome.file.name,
+                    detail = null,
+                    engineKey = engineKey,
+                    languages = RemoteModelRegistry.getLanguages(engineKey),
+                    language = langCode,
+                    sourceArchive = uri.takeIf { outcome.fromArchive }
+                )
+            }
+
+            is ModelDownloader.ImportOutcome.WrongKind -> {
+                _importResult.value = ImportResult(
+                    accepted = false,
+                    modelName = outcome.picked ?: languageManager.getString("import_unnamed_file"),
+                    detail = String.format(
+                        languageManager.getString("import_rejected_wrong_kind"),
+                        outcome.expected
+                    )
+                )
+            }
+
+            is ModelDownloader.ImportOutcome.Empty -> {
+                _importResult.value = ImportResult(
+                    accepted = false,
+                    modelName = languageManager.getString("import_unnamed_file"),
+                    detail = languageManager.getString("import_rejected_empty")
+                )
+            }
+
+            is ModelDownloader.ImportOutcome.Failed -> {
+                Logger.log("Custom model import failed for $engineKey: ${outcome.message}", TAG)
+                _importResult.value = ImportResult(
+                    accepted = false,
+                    modelName = languageManager.getString("import_unnamed_file"),
+                    detail = outcome.message ?: languageManager.getString("import_rejected_unreadable")
+                )
             }
         }
         appStateManager.refreshAll()
     }
+
+    /**
+     * Whether a custom import for [engineKey] is one file to copy, as opposed to a directory to
+     * reference where it lies.
+     *
+     * Both halves matter. An archive engine has an extension but loads from a directory, so testing
+     * the extension alone sent it down the file path — which is why importing a custom Vosk model
+     * did nothing. An engine with no extension has no single file to copy either, so it belongs on
+     * the directory path as well.
+     */
+    private fun isSingleFileEngine(engineKey: String): Boolean =
+        !RemoteModelRegistry.isArchiveEngine(engineKey) &&
+            RemoteModelRegistry.getExtension(engineKey).isNotBlank()
 
     fun cancelDownload() {
         currentDownloadId?.let { id ->
@@ -278,13 +443,6 @@ class ModelManagementViewModel(
 
     fun clearDefaultOfflineFallback() { viewModelScope.launch { settingsRepo.clearDefaultOfflineFallback() }; appStateManager.refreshAll() }
 
-    fun clearCustomModel(engineKey: String, langCode: String? = null) {
-        viewModelScope.launch {
-            settingsRepo.setCustomModelPath(engineKey, "", langCode)
-            appStateManager.refreshAll()
-        }
-    }
-
     fun deleteUnusedModels() {
         val snapshot = settingsRepo.getSettingsSnapshot()
         val activeVoiceModelId = snapshot.activeVoiceModelId
@@ -299,26 +457,32 @@ class ModelManagementViewModel(
     }
 
     fun deleteModel(modelId: String, engineKey: String) {
-        modelDownloader.deleteModelFile(modelId, engineKey)
+        if (ImportedModelId.isImported(modelId)) {
+            // Removed the same way as any other model, from the same trash icon. What differs is
+            // only where the file is: this one was copied in rather than downloaded, so nothing
+            // could resolve it from the registry.
+            val langCode = ImportedModelId.langOf(modelId)
+            val path = settingsRepo.getSettingsSnapshot().getCustomModelPath(engineKey, langCode)
+            viewModelScope.launch {
+                settingsRepo.setCustomModelPath(engineKey, "", langCode)
+                path?.let { modelDownloader.deleteCustomModel(it) }
+            }
+        } else {
+            modelDownloader.deleteModelFile(modelId, engineKey)
+        }
         viewModelScope.launch { settingsRepo.setModelDownloaded(modelId, false) }
 
-        // Reassign fallback to active model if the deleted model was the fallback
+        // Deleting a model the user had chosen as a fallback used to move the checkbox onto the
+        // active model — writing the *primary's* processor as the fallback processor, a value the
+        // cascade skips (it requires fallback != primary) and the voice path never reads at all. The
+        // choice was silently replaced by an inert one. Clearing it is the honest outcome: the
+        // fallback is gone, and the settings screen shows that.
         val snapshot = settingsRepo.getSettingsSnapshot()
         if (snapshot.defaultVoiceFallbackModel == modelId) {
-            val activeVoice = snapshot.activeVoiceModelId
-            if (activeVoice != null && activeVoice != modelId && snapshot.isModelDownloaded(activeVoice)) {
-                viewModelScope.launch { settingsRepo.setDefaultVoiceFallback(snapshot.voiceProcessor, activeVoice) }
-            } else {
-                viewModelScope.launch { settingsRepo.clearDefaultVoiceFallback() }
-            }
+            viewModelScope.launch { settingsRepo.clearDefaultVoiceFallback() }
         }
         if (snapshot.defaultIntentFallbackModel == modelId) {
-            val activeIntent = snapshot.activeIntentModelId
-            if (activeIntent != null && activeIntent != modelId && snapshot.isModelDownloaded(activeIntent)) {
-                viewModelScope.launch { settingsRepo.setDefaultIntentFallback(snapshot.aiProcessor, activeIntent) }
-            } else {
-                viewModelScope.launch { settingsRepo.clearDefaultIntentFallback() }
-            }
+            viewModelScope.launch { settingsRepo.clearDefaultIntentFallback() }
         }
 
         appStateManager.refreshAll()

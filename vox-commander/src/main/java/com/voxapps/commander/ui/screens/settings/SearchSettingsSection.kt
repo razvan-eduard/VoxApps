@@ -1,6 +1,12 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.location.VoxNominatimGeocoder
+import com.voxapps.location.CachedCoordinate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.commander.ui.LocalLanguageManager
+import com.voxapps.commander.utils.Strings
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -15,21 +21,27 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.domain.localization.LanguageManager
+import com.voxapps.commander.domain.location.CommanderLocationStore
 import com.voxapps.commander.domain.search.SearchProviderRegistry
 import com.voxapps.commander.domain.search.SearchProviderRouter
-import com.voxapps.commander.ui.components.ConnectionTestAuto
+import com.voxapps.commander.domain.engine.CloudDeadline
+import com.voxapps.design.picklist.ConnectionTestCard
+import com.voxapps.design.picklist.CredentialField
+import com.voxapps.design.picklist.ServicePicklist
+import com.voxapps.location.LocationSource
+import com.voxapps.location.ResolvedLocation
+import com.voxapps.location.VoxLocationResolver
+import com.voxapps.location.ui.VoxLocationSettingsCard
+import com.voxapps.location.ui.VoxLocationUiState
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchSettingsSection(
+    appStateManager: com.voxapps.commander.state.AppStateManager,
 
     settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository
 ) {
@@ -42,16 +54,17 @@ fun SearchSettingsSection(
     Text(text = languageManager.getString("search_section"), style = MaterialTheme.typography.titleMedium)
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Manual location fallback
-        ManualLocationSetting(
+        CommanderLocationSettingsSection(
             settingsRepo = settingsRepo,
-            scope = scope
+            scope = scope,
+            context = context
         )
 
         categories.forEach { category ->
             CategoryNode(
                 categoryName = category,
 
+                appStateManager = appStateManager,
                 settingsRepo = settingsRepo,
                 scope = scope,
                 context = context
@@ -61,106 +74,112 @@ fun SearchSettingsSection(
 }
 
 @Composable
-private fun ManualLocationSetting(
+private fun CommanderLocationSettingsSection(
     settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository,
-    scope: kotlinx.coroutines.CoroutineScope
+    scope: kotlinx.coroutines.CoroutineScope,
+    context: android.content.Context
 ) {
-    var latText by remember {
-        mutableStateOf(settingsRepo.getManualLocationLatSync()?.toString() ?: "")
+    val store = remember(settingsRepo) { CommanderLocationStore(context, settingsRepo) }
+    // needsReverseGeocode = true: Commander gains Nominatim place names for the "last known
+    // location" display, matching what vox-expenses already resolves for its city field.
+    val resolver = remember(store) { VoxLocationResolver.create(context, store, needsReverseGeocode = true) }
+
+    var homeTown by remember { mutableStateOf(store.getHomeTownSync()) }
+    var cacheTtl by remember { mutableStateOf(store.getCacheTtlSync()) }
+    var alwaysUse by remember { mutableStateOf(store.getAlwaysUseHomeTownSync()) }
+    var lastLocation by remember {
+        mutableStateOf(
+            store.getCachedLocationSync()?.let { ResolvedLocation(it.lat, it.lon, LocationSource.CACHE, it.resolvedName) }
+        )
     }
-    var lonText by remember {
-        mutableStateOf(settingsRepo.getManualLocationLonSync()?.toString() ?: "")
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    /*
+     * The screen always shows a town for the fix it is showing.
+     *
+     * The town is wanted here and nowhere else, so it is resolved here — the search paths cache
+     * coordinates without one on purpose, to keep a Nominatim round trip out of a spoken query.
+     * This fills the gap, and writes the answer back so the next visit costs nothing.
+     *
+     * Resolved once and never re-resolved: a place name describes the coordinates it was fetched
+     * for, so it cannot go stale while they do not change. What expires is the *fix* — and when the
+     * cache lets it expire, the next resolve replaces the coordinates and the name together. Asking
+     * Nominatim again for a name we already hold would spend their usage policy on redrawing a
+     * screen.
+     */
+    LaunchedEffect(lastLocation?.lat, lastLocation?.lon, lastLocation?.displayName) {
+        val current = lastLocation ?: return@LaunchedEffect
+        if (current.displayName != null) return@LaunchedEffect
+
+        val name = withContext(Dispatchers.IO) {
+            runCatching { VoxNominatimGeocoder().reverseGeocode(current.lat, current.lon) }.getOrNull()
+        } ?: return@LaunchedEffect
+
+        lastLocation = current.copy(displayName = name)
+        val cached = store.getCachedLocationSync()
+        store.setCachedLocation(
+            CachedCoordinate(
+                lat = current.lat,
+                lon = current.lon,
+                // The fix's own age is preserved: naming it is not re-taking it, and pretending
+                // otherwise would keep an old fix alive past the cache life the user chose.
+                timestampMillis = cached?.timestampMillis ?: System.currentTimeMillis(),
+                resolvedName = name
+            )
+        )
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "Manual Location (Fallback)",
-                style = MaterialTheme.typography.titleSmall
-            )
-            Text(
-                text = "Used when GPS is unavailable and no cached location exists. Useful for weather search.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = latText,
-                    onValueChange = { latText = it },
-                    label = { Text("Latitude") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = lonText,
-                    onValueChange = { lonText = it },
-                    label = { Text("Longitude") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        val lat = latText.toDoubleOrNull()
-                        val lon = lonText.toDoubleOrNull()
-                        scope.launch { settingsRepo.setManualLocation(lat, lon) }
-                    },
-                    enabled = latText.isNotBlank() && lonText.isNotBlank()
-                ) {
-                    Text("Save")
-                }
-                if (settingsRepo.getManualLocationLatSync() != null) {
-                    TextButton(
-                        onClick = {
-                            latText = ""
-                            lonText = ""
-                            scope.launch { settingsRepo.setManualLocation(null, null) }
-                        }
-                    ) {
-                        Text("Clear")
-                    }
-                }
+    VoxLocationSettingsCard(
+        state = VoxLocationUiState(
+            lastKnownLocation = lastLocation,
+            homeTown = homeTown,
+            cacheTtl = cacheTtl,
+            alwaysUseHomeTown = alwaysUse,
+            isRefreshing = isRefreshing
+        ),
+        onHomeTownChange = { newHomeTown ->
+            homeTown = newHomeTown
+            scope.launch { store.setHomeTown(newHomeTown) }
+        },
+        onCacheTtlChange = { ttl ->
+            cacheTtl = ttl
+            scope.launch { store.setCacheTtl(ttl) }
+        },
+        onAlwaysUseHomeTownChange = { enabled ->
+            alwaysUse = enabled
+            scope.launch { VoxLocationResolver.setAlwaysUseHomeTown(store, enabled) }
+        },
+        onRefreshClick = {
+            isRefreshing = true
+            scope.launch {
+                lastLocation = resolver.resolveLocation()
+                isRefreshing = false
             }
         }
-    }
+    )
 }
 
 @Composable
 private fun CategoryNode(
     categoryName: String,
 
+    appStateManager: com.voxapps.commander.state.AppStateManager,
     settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context
 ) {
-        val languageManager = LocalLanguageManager.current
-    var apiKeyRefreshKey by remember { mutableStateOf(0) }
-    val providerNames = remember(categoryName, apiKeyRefreshKey) {
-        SearchProviderRegistry.getAvailableProviderNames(categoryName, settingsRepo)
+    val languageManager = LocalLanguageManager.current
+    val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
+
+    val providerNames = remember(categoryName) {
+        SearchProviderRegistry.getProviderNames(categoryName)
     }
-    val defaultProvider = remember(categoryName) {
-        SearchProviderRegistry.getProvider(categoryName)
+    // What answers this category: the stored choice, or the schema's default until one is made.
+    val defaultProviderName = remember(categoryName, providerNames) {
+        SearchProviderRegistry.getProvider(categoryName)?.name.orEmpty()
     }
+    val selectedProvider = uiState.searchProviderSelections[categoryName] ?: defaultProviderName
     var expanded by remember { mutableStateOf(false) }
-    var selectedProvider by remember(categoryName, apiKeyRefreshKey) {
-        mutableStateOf(defaultProvider?.name ?: providerNames.firstOrNull() ?: "")
-    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -225,61 +244,54 @@ private fun CategoryNode(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Provider selection
+                    /*
+                     * One dropdown per category, exactly like the engine screens.
+                     *
+                     * Every declared provider is listed and every one can be chosen, including those
+                     * still missing a key — the key field appears directly beneath the selection, so
+                     * choosing one is how you get to configure it. The old screen split them into a
+                     * usable list and a locked "Requires API Key" list, which put the fix for being
+                     * locked in a second place and made the two lists look like different kinds of
+                     * thing.
+                     */
                     if (providerNames.isNotEmpty()) {
-                        Text(
-                            text = "Providers",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        providerNames.forEach { providerName ->
-                            ProviderRow(
-                                providerName = providerName,
-                                isSelected = providerName == selectedProvider,
-                                categoryName = categoryName,
-                                settingsRepo = settingsRepo,
-                                scope = scope,
-                                context = context,
-                                onSelect = { selectedProvider = it },
-                                onApiKeyChanged = { apiKeyRefreshKey++ }
-                            )
-                        }
-                    }
-
-                    // Locked providers (require API key)
-                    val lockedProviders = remember(categoryName, apiKeyRefreshKey) {
-                        val all = SearchProviderRegistry.getProviderNames(categoryName)
-                        all.filter { name ->
-                            val provider = SearchProviderRegistry.getProvider(categoryName, name)
-                            when {
-                                // Shared-key providers (e.g. OpenAI) are locked based on the shared
-                                // key actually applied, not the per-provider key store.
-                                provider?.usesSharedApiKey == true -> !provider.hasApiKey()
-                                provider?.requiresApiKey == true ->
-                                    settingsRepo.getSearchProviderApiKeySync(name).isNullOrBlank()
-                                else -> false
+                        val entries = remember(providerNames, categoryName, uiState.language) {
+                            providerNames.mapNotNull { name ->
+                                SearchProviderRegistry.getProvider(categoryName, name)
+                                    ?.serviceEntry(uiState.language)
                             }
                         }
-                    }
-                    if (lockedProviders.isNotEmpty()) {
-                        Text(
-                            text = "Requires API Key",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp)
+                        val selectedEntry = entries.firstOrNull { it.id == selectedProvider }
+
+                        ServicePicklist(
+                            items = entries,
+                            selected = selectedEntry,
+                            itemLabel = { it.id },
+                            onSelect = { appStateManager.setSearchProvider(categoryName, it.id) },
+                            // A borrowed key belongs to the engine, not to the provider, and the
+                            // entry says which. Entering it here and on that engine's own screen is
+                            // entering it once.
+                            credentialFor = { entry ->
+                                if (entry.credentialOwnerId != entry.id)
+                                    uiState.credentials.forEngine(entry.credentialOwnerId)
+                                else uiState.credentials.forSearchProvider(entry.id)
+                            },
+                            onCredentialCommit = { entry, key ->
+                                if (entry.credentialOwnerId != entry.id)
+                                    appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+                                else appStateManager.setSearchProviderApiKey(entry.id, key)
+                            },
+                            credentialLabel = languageManager.getString("engine_api_key"),
+                            itemNote = { entry ->
+                                if (needsCredential(categoryName, entry.id, uiState)) " — needs an API key" else ""
+                            },
+                            helpTextFor = { entry ->
+                                entry.helpTextKey?.let { languageManager.getString(it) }
+                                    ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+                            },
+                            timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) },
+                            notes = { SelectedProviderNotes(categoryName, selectedProvider) }
                         )
-                        lockedProviders.forEach { providerName ->
-                            ProviderRow(
-                                providerName = providerName,
-                                isSelected = false,
-                                categoryName = categoryName,
-                                settingsRepo = settingsRepo,
-                                scope = scope,
-                                context = context,
-                                onSelect = { selectedProvider = it },
-                                onApiKeyChanged = { apiKeyRefreshKey++ }
-                            )
-                        }
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -288,7 +300,7 @@ private fun CategoryNode(
                     ManualQueryTest(
                         categoryName = categoryName,
                         providerName = selectedProvider,
-
+                        settingsRepo = settingsRepo,
                         scope = scope,
                         context = context
                     )
@@ -298,96 +310,47 @@ private fun CategoryNode(
     }
 }
 
-@Composable
-private fun ProviderRow(
-    providerName: String,
-    isSelected: Boolean,
+/** True when a provider says it needs a key and the store has none for it. */
+private fun needsCredential(
     categoryName: String,
-    settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository,
-    scope: kotlinx.coroutines.CoroutineScope,
-    context: android.content.Context,
-    onSelect: (String) -> Unit,
-    onApiKeyChanged: () -> Unit = {}
-) {
+    providerName: String,
+    uiState: com.voxapps.commander.state.AppState
+): Boolean {
+    val provider = SearchProviderRegistry.getProvider(categoryName, providerName) ?: return false
+    if (!provider.requiresApiKey) return false
+    return provider.borrowsFromEngine?.let { !uiState.credentials.has(it) }
+        ?: (uiState.credentials.forSearchProvider(providerName) == null)
+}
+
+/**
+ * The two things about a provider that no declaration covers: that it needs a location before it can
+ * answer, and that its key is really the engine's.
+ *
+ * Everything else the chosen provider has to say — the field, the link, the reachability test — is
+ * the same for every declared service and is drawn by ServicePicklist from the entry.
+ */
+@Composable
+private fun SelectedProviderNotes(categoryName: String, providerName: String) {
+    val languageManager = LocalLanguageManager.current
     val provider = remember(categoryName, providerName) {
         SearchProviderRegistry.getProvider(categoryName, providerName)
+    } ?: return
+
+    if (provider.requiresLocation) {
+        Text(
+            text = "requires location",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
-    var apiKey by remember(providerName) {
-        mutableStateOf(settingsRepo.getSearchProviderApiKeySync(providerName) ?: "")
-    }
-    var isApiKeyFocused by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Radio button for selection
-            RadioButton(
-                selected = isSelected,
-                onClick = { onSelect(providerName) }
-            )
-
-            // Provider name + info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = providerName,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                if (provider?.requiresLocation == true) {
-                    Text(
-                        text = "requires location",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                // Auto connection test — same component as Piped
-                ConnectionTestAuto(
-                    testKey = if (isSelected) providerName else "",
-                    testFn = { provider?.testConnection() ?: false }
-                )
-            }
-        }
-
-        // Shared-key providers (e.g. OpenAI) reuse the key already entered in Settings → Models —
-        // no separate field to fill in, just a note explaining where the key comes from.
-        if (provider?.usesSharedApiKey == true) {
-            val languageManager = LocalLanguageManager.current
-            Text(
-                text = languageManager.getString("search_provider_uses_shared_key")
-                    ?: "Uses the API key from Settings → Models",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 48.dp)
-            )
-        }
-
-        // API key field for providers that require their own key
-        if (provider?.requiresApiKey == true && provider?.usesSharedApiKey != true) {
-            TextField(
-                value = apiKey,
-                onValueChange = {
-                    apiKey = it
-                    scope.launch {
-                    settingsRepo.setSearchProviderApiKey(providerName, it.ifBlank { null })
-                    provider.setApiKey(it.ifBlank { null })
-                    onApiKeyChanged()
-                }
-                },
-                label = { Text("API Key") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { isApiKeyFocused = it.isFocused },
-                visualTransformation = if (isApiKeyFocused) VisualTransformation.None else PasswordVisualTransformation(),
-                singleLine = !isApiKeyFocused,
-                maxLines = if (isApiKeyFocused) 5 else 1,
-                colors = if (!isApiKeyFocused) TextFieldDefaults.colors(
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    unfocusedIndicatorColor = Color.Transparent
-                ) else TextFieldDefaults.colors()
-            )
-        }
+    if (provider.borrowsFromEngine != null) {
+        Text(
+            text = languageManager.getString("search_provider_uses_shared_key")
+                ?: "Shares the engine's API key",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -395,7 +358,7 @@ private fun ProviderRow(
 private fun ManualQueryTest(
     categoryName: String,
     providerName: String,
-
+    settingsRepo: com.voxapps.commander.data.preferences.SettingsRepository,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context
 ) {
@@ -436,10 +399,10 @@ private fun ManualQueryTest(
                     else SearchProviderRegistry.getProvider(categoryName)
 
                     if (activeProvider?.requiresLocation == true) {
-                        val loc = com.voxapps.commander.domain.search.LocationHelper.getLocation(context)
+                        val loc = VoxLocationResolver.create(context, CommanderLocationStore(context, settingsRepo)).resolveLocation()
                         if (loc != null) {
-                            lat = loc.latitude
-                            lon = loc.longitude
+                            lat = loc.lat
+                            lon = loc.lon
                         } else {
                             testResults = "Location unavailable. Grant location permission."
                             isSearching = false

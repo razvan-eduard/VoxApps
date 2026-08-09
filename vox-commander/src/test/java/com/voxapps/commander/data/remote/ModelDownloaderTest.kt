@@ -89,6 +89,70 @@ class ModelDownloaderTest {
     }
 
     @Test
+    fun `a file whose name does not match the engine's extension is refused`() {
+        // The destination is named after the engine, so a copied-anyway file would arrive looking
+        // exactly like a valid one: pick a .txt for Whisper and it lands as stt_whisper.bin.
+        every { RemoteModelRegistry.isArchiveEngine("stt_whisper") } returns false
+        val uri = mockk<android.net.Uri>(relaxed = true)
+        val cursor = mockk<android.database.Cursor>(relaxed = true)
+        every { cursor.moveToFirst() } returns true
+        every { cursor.getString(0) } returns "shopping-list.txt"
+        every { context.contentResolver.query(uri, any(), any(), any(), any()) } returns cursor
+
+        val outcome = downloader.importCustomModel(uri, "stt_whisper")
+
+        assertTrue(outcome is ModelDownloader.ImportOutcome.WrongKind)
+        assertEquals(".bin", (outcome as ModelDownloader.ImportOutcome.WrongKind).expected)
+        assertFalse(File(tempDir, "stt_whisper.bin").exists())
+    }
+
+    @Test
+    fun `a file with the engine's extension is accepted`() {
+        every { RemoteModelRegistry.isArchiveEngine("stt_whisper") } returns false
+        val uri = mockk<android.net.Uri>(relaxed = true)
+        val cursor = mockk<android.database.Cursor>(relaxed = true)
+        every { cursor.moveToFirst() } returns true
+        every { cursor.getString(0) } returns "ggml-tiny.bin"
+        every { context.contentResolver.query(uri, any(), any(), any(), any()) } returns cursor
+        every { context.contentResolver.openInputStream(uri) } returns "model".byteInputStream()
+
+        val outcome = downloader.importCustomModel(uri, "stt_whisper")
+
+        assertTrue(outcome is ModelDownloader.ImportOutcome.Accepted)
+        val imported = (outcome as ModelDownloader.ImportOutcome.Accepted).file
+        assertEquals(File(tempDir, "stt_whisper.bin"), imported)
+        assertTrue(imported.exists())
+    }
+
+    @Test
+    fun `an archive cannot write outside the model directory`() {
+        // The entry name comes from inside the archive, and archives arrive from a
+        // user-configurable repository or from a file the user picked. "../" in a name is the
+        // oldest trick there is, and it lands wherever this app's uid can write.
+        every { RemoteModelRegistry.isArchiveEngine("wake_vosk") } returns true
+        val outside = File(tempDir, "victim.txt")
+        outside.writeText("original")
+
+        // Where unzipModel looks: getExternalFilesDir(DIRECTORY_DOWNLOADS)/<modelId><extension>,
+        // which this harness maps to tempDir. Put it anywhere else and the test proves nothing.
+        val archive = File(tempDir, "vosk-evil.zip")
+        java.util.zip.ZipOutputStream(archive.outputStream()).use { zos ->
+            zos.putNextEntry(java.util.zip.ZipEntry("../victim.txt"))
+            zos.write("owned".toByteArray())
+            zos.closeEntry()
+            zos.putNextEntry(java.util.zip.ZipEntry("am/final.mdl"))
+            zos.write(ByteArray(16))
+            zos.closeEntry()
+        }
+
+        var completed = false
+        downloader.unzipModel("vosk-evil", "wake_vosk") { completed = true }
+
+        assertTrue("extraction should still finish", completed)
+        assertEquals("original", outside.readText())
+    }
+
+    @Test
     fun `deleteModelFile deletes existing file-based model`() {
         val resolved = downloader.resolveLocalFile("base", "stt_whisper")
         val modelFile = resolved ?: File(tempDir, "base.bin")
@@ -150,6 +214,37 @@ class ModelDownloaderTest {
         assertFalse(unusedModel.exists())
         // Verify settings sync happened for deleted model
         coVerify { settingsRepo.setModelDownloaded("tiny", false) }
+    }
+
+    /**
+     * A model the user imported themselves is the one file here that cannot be fetched again — it
+     * may be their only copy. The single-file import writes it into this very directory under a
+     * name derived from the engine, and the active model id is a registry id rather than that file,
+     * so nothing the cleanup protects ever resolved to it: selecting a custom model and then running
+     * cleanup deleted it, leaving the selection pointing at nothing.
+     */
+    @Test
+    fun `deleteUnusedModels keeps a model the user imported`() = runBlocking {
+        every { RemoteModelRegistry.getExtension(Strings.Processors.WHISPER_VULKAN) } returns ".bin"
+
+        val custom = File(tempDir, "stt_whisper.bin")
+        custom.writeText("the user's own model")
+        val unused = downloader.resolveLocalFile("tiny", Strings.Processors.WHISPER_VULKAN)!!
+        unused.writeText("unused")
+
+        val settings = TestDataFactory.createAppSettings(
+            voiceProcessor = Strings.Processors.WHISPER_VULKAN,
+            activeVoiceModelId = "base",
+            downloadedModelIds = setOf("tiny"),
+            customModelPaths = mapOf("stt_whisper" to custom.absolutePath)
+        )
+        val settingsRepo = mockk<SettingsRepository>(relaxed = true)
+        every { settingsRepo.getSettingsSnapshot() } returns settings
+
+        downloader.deleteUnusedModels(settingsRepo, "base", null, null, null)
+
+        assertTrue("the imported model was deleted", custom.exists())
+        assertFalse(unused.exists())
     }
 
     @Test

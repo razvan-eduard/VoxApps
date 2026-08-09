@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -38,13 +39,16 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
 import com.voxapps.notes.NotesActivity
 import com.voxapps.notes.NotesApplication
 import com.voxapps.notes.R
 import com.voxapps.notes.data.NoteWithCategory
+import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.design.showRequirementToast
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.notes.domain.llm.ScanRequestSender
 import com.voxapps.notes.domain.localization.LanguageManager
 import com.voxapps.notes.state.NotesUiState
@@ -56,6 +60,9 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import com.voxapps.widget.WidgetDayFormats
+import com.voxapps.widget.DaySeparatorStyle
+import com.voxapps.widget.DaySeparatorLabel
 
 /**
  * Home-screen widget: a snapshot of recent notes plus quick "Add"/"Scan" actions — lives entirely
@@ -81,12 +88,18 @@ class NotesWidget : GlanceAppWidget() {
         } else {
             emptyList()
         }
+        val attachedNoteIds = container.attachmentDao
+            .getRecordIdsWithAttachments(NotesAttachments.RECORD_TYPE).toSet()
 
         val addIntent = Intent(context, NotesActivity::class.java).apply {
             putExtra(NotesActivity.EXTRA_QUICK_ADD, true)
         }
         val openAppIntent = Intent(context, NotesActivity::class.java)
-        val locale = Locale.forLanguageTag(container.settingsRepository.getSnapshot().language)
+        // Read the live flow, not getSnapshot() — that cached value is updated by its own
+        // independent collector, racing against the collector that triggers this very redraw
+        // (NotesContainer's combine()). A direct flow read has no such race (see CalendarWidget's
+        // identical fix for the full reasoning).
+        val locale = Locale.forLanguageTag(container.settingsRepository.settingsFlow.first().language)
         val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
             VoxAppsDiscovery.isCommanderInstalled(context)
 
@@ -95,6 +108,7 @@ class NotesWidget : GlanceAppWidget() {
                 NotesWidgetContent(
                     locked = uiState is NotesUiState.Locked,
                     notes = recentNotes,
+                    attachedNoteIds = attachedNoteIds,
                     languageManager = container.languageManager,
                     addIntent = addIntent,
                     openAppIntent = openAppIntent,
@@ -106,24 +120,41 @@ class NotesWidget : GlanceAppWidget() {
     }
 }
 
-class NotesWidgetScanAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val container = (context.applicationContext as NotesApplication).container
-        val languageManager = container.languageManager
-        when {
-            !VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) ->
-                showRequirementToast(context, languageManager.getString("vision_required_message"))
-            !VoxAppsDiscovery.isCommanderInstalled(context) ->
-                showRequirementToast(context, languageManager.getString("commander_required_message"))
-            else -> ScanRequestSender.send(context)
-        }
+// Glance/RemoteViews has no expand-in-place speed dial like a real Compose FAB can render — the
+// widget instead shows 3 small static icons (single/stitch/batch), each its own ActionCallback
+// sharing this one gated launch helper.
+private suspend fun runWidgetScan(context: Context, captureMode: String) {
+    val container = (context.applicationContext as NotesApplication).container
+    val languageManager = container.languageManager
+    when {
+        !VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) ->
+            showRequirementToast(context, languageManager.getString("vision_required_message"))
+        !VoxAppsDiscovery.isCommanderInstalled(context) ->
+            showRequirementToast(context, languageManager.getString("commander_required_message"))
+        else -> ScanRequestSender.send(context, captureMode)
     }
+}
+
+class NotesWidgetScanSingleAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_SINGLE)
+}
+
+class NotesWidgetScanStitchAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_STITCH)
+}
+
+class NotesWidgetScanBatchAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_BATCH)
 }
 
 @Composable
 private fun NotesWidgetContent(
     locked: Boolean,
     notes: List<NoteWithCategory>,
+    attachedNoteIds: Set<Long>,
     languageManager: LanguageManager,
     addIntent: Intent,
     openAppIntent: Intent,
@@ -147,13 +178,29 @@ private fun NotesWidgetContent(
                 style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = GlanceTheme.colors.onSurface)
             )
             Spacer(modifier = GlanceModifier.defaultWeight())
+            val disabledTint = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant)
+            val singleTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFE53935))) else disabledTint
+            val stitchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFFBC02D))) else disabledTint
+            val batchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFF43A047))) else disabledTint
             Image(
                 provider = ImageProvider(R.drawable.ic_scan),
-                contentDescription = languageManager.getString("scan_note"),
-                colorFilter = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant),
-                modifier = GlanceModifier
-                    .size(18.dp)
-                    .clickable(actionRunCallback<NotesWidgetScanAction>())
+                contentDescription = languageManager.getString("capture_mode_single"),
+                colorFilter = singleTint,
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanSingleAction>())
+            )
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Image(
+                provider = ImageProvider(R.drawable.ic_stitch),
+                contentDescription = languageManager.getString("capture_mode_stitch"),
+                colorFilter = stitchTint,
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanStitchAction>())
+            )
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Image(
+                provider = ImageProvider(R.drawable.ic_batch),
+                contentDescription = languageManager.getString("capture_mode_batch"),
+                colorFilter = batchTint,
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanBatchAction>())
             )
         }
 
@@ -166,7 +213,7 @@ private fun NotesWidgetContent(
                     style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant)
                 )
             } else {
-                RecentNotesList(notes, languageManager, locale)
+                RecentNotesList(notes, attachedNoteIds, languageManager, locale)
             }
         }
 
@@ -208,7 +255,7 @@ private fun WidgetAddButton(text: String, addIntent: Intent) {
 }
 
 @Composable
-private fun RecentNotesList(notes: List<NoteWithCategory>, languageManager: LanguageManager, locale: Locale) {
+private fun RecentNotesList(notes: List<NoteWithCategory>, attachedNoteIds: Set<Long>, languageManager: LanguageManager, locale: Locale) {
     val zoneId = ZoneId.systemDefault()
     val today = LocalDate.now(zoneId)
     val recent = notes
@@ -228,67 +275,107 @@ private fun RecentNotesList(notes: List<NoteWithCategory>, languageManager: Lang
     val grouped = recent.groupBy { Instant.ofEpochMilli(it.note.createdAt).atZone(zoneId).toLocalDate() }
     val context = LocalContext.current
 
-    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-        items(grouped.entries.toList(), itemId = { it.key.toEpochDay() }) { (date, items) ->
-            val isToday = date == today
-            Column {
-                DaySeparatorLabel(date, today, languageManager, locale)
-                Box(
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .height(if (isToday) 2.dp else 1.dp)
-                        .background(if (isToday) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
-                ) {}
+    // Flattened so every day-header and every note is its own LazyColumn item — confirmed on-device
+    // (screenshot + a temporary item-count log): nesting a whole day's notes inside a single lazy item
+    // (one Column with a variable-length .forEach of note Rows) silently truncates that item's content
+    // once a day has "enough" notes (a 4-note day rendered fully, a 13-note day rendered only 2) — this
+    // is Glance/RemoteViews capping how much a single non-lazy composable subtree can contain, not a
+    // scroll or data problem. Each row needs to be its own lazy item for Glance to actually virtualize
+    // it instead of flattening a whole day into one oversized static subtree.
+    val rows = buildList {
+        for ((date, items) in grouped) {
+            add(WidgetRow.DayHeader(date))
+            items.forEach { add(WidgetRow.NoteRow(it)) }
+        }
+    }
 
-                items.forEach { item ->
+    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
+        items(rows, itemId = { it.itemId }) { row ->
+            when (row) {
+                is WidgetRow.DayHeader -> {
+                    val isToday = row.date == today
+                    Column {
+                        DaySeparatorLabel(row.date, today, languageManager, locale)
+                        Box(
+                            modifier = GlanceModifier
+                                .fillMaxWidth()
+                                .height(if (isToday) 2.dp else 1.dp)
+                                .background(if (isToday) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
+                        ) {}
+                    }
+                }
+                is WidgetRow.NoteRow -> {
+                    val item = row.item
                     val editIntent = Intent(context, NotesActivity::class.java).apply {
                         putExtra(NotesActivity.EXTRA_EDIT_NOTE_ID, item.note.id)
                     }
                     val hasTitle = !item.note.title.isNullOrBlank()
                     val categoryColor = item.category?.let { CategoryColors.fromStored(it.colorArgb) }
-                    Row(
-                        modifier = GlanceModifier
-                            .fillMaxWidth()
-                            .cornerRadius(6.dp)
-                            .let { m -> if (categoryColor != null) m.background(categoryColor.copy(alpha = ROW_TINT_ALPHA)) else m }
-                            .padding(horizontal = 6.dp, vertical = 4.dp)
-                            .clickable(actionStartActivity(editIntent)),
-                        verticalAlignment = Alignment.Vertical.CenterVertically
-                    ) {
-                        if (hasTitle) {
-                            Text(
-                                text = item.note.title.orEmpty(),
-                                maxLines = 1,
-                                style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                                modifier = GlanceModifier.defaultWeight()
-                            )
-                            if (item.note.text.isNotBlank()) {
-                                Spacer(modifier = GlanceModifier.width(8.dp))
+                    Column {
+                        Row(
+                            modifier = GlanceModifier
+                                .fillMaxWidth()
+                                .cornerRadius(6.dp)
+                                .let { m -> if (categoryColor != null) m.background(categoryColor.copy(alpha = ROW_TINT_ALPHA)) else m }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .clickable(actionStartActivity(editIntent)),
+                            verticalAlignment = Alignment.Vertical.CenterVertically
+                        ) {
+                            if (hasTitle) {
+                                Row(modifier = GlanceModifier.defaultWeight(), verticalAlignment = Alignment.Vertical.CenterVertically) {
+                                    Text(
+                                        text = item.note.title.orEmpty(),
+                                        maxLines = 1,
+                                        style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
+                                        modifier = GlanceModifier.defaultWeight()
+                                    )
+                                    if (item.note.id in attachedNoteIds) {
+                                        Spacer(modifier = GlanceModifier.width(4.dp))
+                                        Image(
+                                            provider = ImageProvider(R.drawable.ic_attachment),
+                                            contentDescription = null,
+                                            colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant),
+                                            modifier = GlanceModifier.size(12.dp)
+                                        )
+                                    }
+                                }
+                                if (item.note.text.isNotBlank()) {
+                                    Spacer(modifier = GlanceModifier.width(8.dp))
+                                    Text(
+                                        text = item.note.text,
+                                        maxLines = 2,
+                                        style = TextStyle(
+                                            fontSize = 12.sp,
+                                            color = GlanceTheme.colors.outline,
+                                            textAlign = TextAlign.End
+                                        ),
+                                        modifier = GlanceModifier.defaultWeight()
+                                    )
+                                }
+                            } else {
                                 Text(
                                     text = item.note.text,
                                     maxLines = 2,
-                                    style = TextStyle(
-                                        fontSize = 12.sp,
-                                        color = GlanceTheme.colors.outline,
-                                        textAlign = TextAlign.End
-                                    ),
+                                    style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
                                     modifier = GlanceModifier.defaultWeight()
                                 )
                             }
-                        } else {
-                            Text(
-                                text = item.note.text,
-                                maxLines = 2,
-                                style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                                modifier = GlanceModifier.defaultWeight()
-                            )
                         }
+                        Spacer(modifier = GlanceModifier.height(2.dp))
                     }
-                    Spacer(modifier = GlanceModifier.height(2.dp))
                 }
             }
         }
     }
+}
+
+/** One flattened row in the widget's note list — see [RecentNotesList]'s doc comment for why this
+ *  flattening exists. [itemId] must be stable and unique across both variants: day epoch-days are
+ *  always >= 0, so headers are encoded negative to guarantee no collision with note row ids (which are
+ *  Room auto-increment ids, always positive). */
+private sealed class WidgetRow(val itemId: Long) {
+    class DayHeader(val date: LocalDate) : WidgetRow(-(date.toEpochDay()) - 1)
+    class NoteRow(val item: NoteWithCategory) : WidgetRow(item.note.id)
 }
 
 private const val ROW_TINT_ALPHA = 0.18f
@@ -297,28 +384,15 @@ private fun dayLabel(date: LocalDate, today: LocalDate, languageManager: Languag
     if (date == today) {
         languageManager.getString("today")
     } else {
-        date.format(DateTimeFormatter.ofPattern("EEE, d MMM", locale))
+        WidgetDayFormats.weekday(date, locale)
     }
 
-/** Centered day-group separator — plain text for every day, "Today" only distinguished by a
- * bolder/larger label and a thicker divider line underneath it (see the caller), not a background
- * badge (reads too much like a button). */
+/** The day heading for this widget: its own wording, the shared presentation. */
 @Composable
 private fun DaySeparatorLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale) {
-    val isToday = date == today
-    Box(
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            .padding(top = 6.dp, bottom = 2.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = dayLabel(date, today, languageManager, locale),
-            style = TextStyle(
-                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                fontSize = if (isToday) 13.sp else 12.sp,
-                color = GlanceTheme.colors.primary
-            )
-        )
-    }
+    DaySeparatorLabel(
+        text = dayLabel(date, today, languageManager, locale),
+        isToday = date == today,
+        style = DaySeparatorStyle.Plain
+    )
 }

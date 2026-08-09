@@ -10,11 +10,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.picklist.GroupedPicklist
+import com.voxapps.design.picklist.GroupedPicklistSheet
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.ui.LocalLanguageManager
 import com.voxapps.commander.domain.model.AppModel
+import com.voxapps.commander.domain.model.ImportedModel
 import com.voxapps.commander.state.AppStateManager
+import com.voxapps.commander.data.remote.EngineRuntime
+import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.launch
 
@@ -28,7 +33,10 @@ fun <T> EngineModelSection(
     title: String,
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
-    groups: List<DropdownGroup<T>>,
+    /** The caption above the rows, and the rows. There was a list of sections here and every caller
+     *  passed exactly one, so the grouping was a shape nothing used. */
+    header: String?,
+    items: List<T>,
     selectedItem: T?,
     itemLabel: (T) -> String,
     modelIdProvider: (T) -> String,
@@ -52,8 +60,13 @@ fun <T> EngineModelSection(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Preselection priority: stored id -> first on-device model -> first item.
-    val allItems = groups.flatMap { it.items }
-    val isOnDevice: (T) -> Boolean = { (it as? AppModel)?.isBuiltIn == true || uiState.isModelDownloaded(modelIdProvider(it)) }
+    val allItems = items
+    // An import is on the device by definition — it was copied there. It is in no downloaded-ids
+    // set, so asking that alone offered a download arrow for a file already on disk and no way to
+    // delete it.
+    val isOnDevice: (T) -> Boolean = {
+        it is ImportedModel || (it as? AppModel)?.isBuiltIn == true || uiState.isModelDownloaded(modelIdProvider(it))
+    }
     val firstOnDevice = allItems.firstOrNull(isOnDevice)
     val effectiveSelectedItem = selectedItem ?: firstOnDevice ?: allItems.firstOrNull()
 
@@ -62,7 +75,7 @@ fun <T> EngineModelSection(
     // tabs; the STT reload happens reactively). One-shot & convergent: after persist,
     // selectedItem becomes non-null so this won't re-fire. Never auto-persists a not-downloaded
     // item. isDownloaded=true (it's on-device) so no download is triggered.
-    LaunchedEffect(selectedItem, groups) {
+    LaunchedEffect(selectedItem, items) {
         if (selectedItem == null && firstOnDevice != null) {
             onItemSelected(firstOnDevice, true)
         }
@@ -82,7 +95,7 @@ fun <T> EngineModelSection(
         }
     }
 
-    if (groups.isEmpty()) {
+    if (items.isEmpty()) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f))
@@ -98,11 +111,10 @@ fun <T> EngineModelSection(
     }
 
     // 2. Main Dropdown
-    GroupedDropdownMenu(
+    GroupedPicklist(
         selectedItem = effectiveSelectedItem,
-        groups = groups,
         itemLabel = itemLabel,
-        isDownloaded = { item -> uiState.isModelDownloaded(modelIdProvider(item)) },
+        isDownloaded = { item -> item is ImportedModel || uiState.isModelDownloaded(modelIdProvider(item)) },
         isDefault = { item ->
             item == effectiveSelectedItem
         },
@@ -135,11 +147,12 @@ fun <T> EngineModelSection(
             sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface
         ) {
-            GroupedDropdownContent(
+            GroupedPicklistSheet(
                 title = title,
-                groups = groups,
-                itemLabel = itemLabel,
-                isDownloaded = { item -> uiState.isModelDownloaded(modelIdProvider(item)) },
+                header = header,
+                items = items,
+                        itemLabel = itemLabel,
+                isDownloaded = { item -> item is ImportedModel || uiState.isModelDownloaded(modelIdProvider(item)) },
                 isDefault = { item ->
                     item == effectiveSelectedItem
                 },
@@ -169,7 +182,18 @@ fun <T> EngineModelSection(
     }
 
     // 4. Categorized Fallback Logic
-    if (showFallback && effectiveSelectedItem != null) {
+    //
+    // A fallback is what answers when the primary could not, and the commonest reason it could not
+    // is that the network was the problem — so an engine that needs the network is not offered as
+    // one. Only a *declared* cloud runtime is excluded: an engine the schema does not describe is
+    // left exactly as it is rather than quietly losing its checkbox. The enablement below is
+    // `isBuiltIn || isModelDownloaded`, and a virtual model is built-in by definition, so without
+    // this every cloud service would offer itself as the offline fallback the moment virtual
+    // engines join the registry.
+    val servesWithoutNetwork =
+        RemoteModelRegistry.runtimeOf(currentProcessor) != EngineRuntime.CLOUD
+
+    if (showFallback && servesWithoutNetwork && effectiveSelectedItem != null) {
         val modelId = modelIdProvider(effectiveSelectedItem)
         val isBuiltIn = (effectiveSelectedItem as? AppModel)?.isBuiltIn == true
         val isDownloaded = isBuiltIn || uiState.isModelDownloaded(modelId)

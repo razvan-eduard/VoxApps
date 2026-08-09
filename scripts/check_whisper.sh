@@ -63,7 +63,11 @@ perform_rollback() {
 # --- 1. PRE-CHECK & SOURCE SNAPSHOT ---
 if [ ! -f "$WHISPER_DIR/CMakeLists.txt" ]; then
     log_blue "🔄 Missing Whisper sources. Initializing submodule..."
-    git submodule update --init --recursive "vox-commander/src/main/cpp/whisper.cpp"
+    # -C "$PROJECT_ROOT": the pathspec is relative to the repo root, and Gradle runs this script
+    # from the module directory — so an unqualified call looked for vox-commander/vox-commander/…
+    # and died on "pathspec did not match any file(s)". It never showed until a machine without the
+    # submodule ran it, because everywhere else already had the sources.
+    git -C "$PROJECT_ROOT" submodule update --init --recursive "vox-commander/src/main/cpp/whisper.cpp"
 fi
 
 cd "$WHISPER_DIR"

@@ -1,0 +1,29 @@
+{
+  "schema_version": 4,
+  "services": [
+    {
+      "id": "exchangerate_api",
+      "name": "ExchangeRate-API",
+      "category": "currency_exchange",
+      "endpoint": "https://v6.exchangerate-api.com/v6",
+      "probe_url": "{key}/latest/USD",
+      "rates_url": "{key}/latest/{base}",
+      "rates_path": "conversion_rates",
+      "success_field": "result",
+      "success_value": "success",
+      "requires_api_key": true,
+      "api_key_url": "https://www.exchangerate-api.com/docs/free"
+    },
+    {
+      "id": "frankfurter",
+      "name": "Frankfurter",
+      "category": "currency_exchange",
+      "endpoint": "https://api.frankfurter.dev/v1",
+      "probe_url": "latest?base=USD",
+      "rates_url": "latest?base={base}",
+      "rates_path": "rates",
+      "requires_api_key": false,
+      "api_key_url": "https://www.frankfurter.app/docs/"
+    }
+  ]
+}

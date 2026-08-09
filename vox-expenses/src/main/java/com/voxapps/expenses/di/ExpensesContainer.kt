@@ -3,6 +3,7 @@ package com.voxapps.expenses.di
 import android.content.Context
 import androidx.glance.appwidget.updateAll
 import com.voxapps.expenses.data.ExchangeRateRepository
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.ExpensesDatabase
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
@@ -21,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 
 /**
@@ -43,7 +45,8 @@ class ExpensesContainer(context: Context) {
         database.merchantCategoryMemoryDao(),
         appContext,
         attachmentDao,
-        duplicateRuleDao
+        duplicateRuleDao,
+        database.pendingFieldSuggestionDao()
     )
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
@@ -56,7 +59,7 @@ class ExpensesContainer(context: Context) {
 
     val sessionManager = SessionManager()
 
-    val expensesStateManager = ExpensesStateManager.getInstance(
+    val expensesStateManager = ExpensesStateManager(
         settingsRepository,
         expensesRepository,
         sessionManager,
@@ -66,7 +69,8 @@ class ExpensesContainer(context: Context) {
         spendingLimitAlertRepository,
         pendingLlmRequestQueue,
         attachmentDao,
-        duplicateRuleDao
+        duplicateRuleDao,
+        appContext
     )
 
     val languageManager = LanguageManager(appContext).also {
@@ -74,12 +78,30 @@ class ExpensesContainer(context: Context) {
     }
 
     init {
-        // Keeps ExpensesWidget's home-screen snapshot fresh — reacts to both lock-state transitions
-        // (uiState) and data changes (expensesWithDetails), since the widget reads both independently
-        // of any in-app filter (see ExpensesWidget.kt's provideGlance doc comment).
+        // Keeps ExpensesWidget's home-screen snapshot fresh — reacts to lock-state transitions
+        // (uiState), data changes (expensesWithDetails, read independently of any in-app filter, see
+        // ExpensesWidget.kt's provideGlance doc comment), AND settings (settingsFlow — border/
+        // today-effect color, style, thickness etc. are all read fresh into the widget's content but
+        // nothing about changing them touches expenses or uiState, so without watching settingsFlow
+        // too, a settings-only change would sit un-reflected until the next unrelated data change,
+        // the midnight worker, or the OS's 30-min update floor).
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
-            combine(expensesStateManager.uiState, expensesRepository.expensesWithDetails) { _, _ -> }
-                .collect { ExpensesWidget().updateAll(appContext) }
+            combine(
+                expensesStateManager.uiState,
+                expensesRepository.expensesWithDetails,
+                settingsRepository.settingsFlow,
+                // Expenses themselves don't change when an attachment is added/removed on one of
+                // them, so the widget's paperclip indicator would otherwise only catch up on the
+                // next unrelated refresh instead of promptly.
+                attachmentDao.observeRecordIdsWithAttachments(ExpensesAttachments.RECORD_TYPE)
+            // conflate(): each emission drives a Glance updateAll() — an IPC round-trip to the
+            // launcher — and a bulk import or a P2P sync merge emits once per record, so the
+            // widget would be redrawn N times to show one final state. Conflating drops the
+            // intermediate values while an update is still in flight, keeping the newest, so the
+            // refresh rate is bounded by how fast updateAll() completes rather than by how fast
+            // rows are written. No debounce: nothing here is latency-sensitive enough to justify
+            // delaying the common single-change case.
+            ) { _, _, _, _ -> }.conflate().collect { ExpensesWidget().updateAll(appContext) }
         }
 
         // Warm the launcher-apps cache before any UI composes (mirrors vox-commander's AppContainer

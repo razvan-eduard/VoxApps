@@ -16,8 +16,8 @@ android {
         applicationId = "com.voxapps.commander"
         minSdk = 29
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.8-beta"
+        versionCode = 17
+        versionName = "0.16-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -49,12 +49,13 @@ android {
 
     buildTypes {
         debug {
-            // core:wakeword and vox-commander both declare onnxruntime-android directly, so their
-            // native libs collide as two sources for the same path — pickFirst avoids a build
-            // failure. Scoped to debug only: release excludes libonnxruntime.so entirely (DLC'd
-            // instead), and a pickFirst for a path that's also excluded silently wins over the
-            // exclude, which was quietly keeping the 28MB lib bundled in "release" despite the
-            // exclude rule below appearing to remove it.
+            // core:wakeword's onnxruntime-android dependency and sherpa-onnx's own AAR (which
+            // bundles its own separate, independently-built libonnxruntime.so — not resolved via
+            // the onnxruntime-android Maven coordinate at all) collide as two sources for the same
+            // path — pickFirst avoids a build failure. Scoped to debug only: release excludes
+            // libonnxruntime.so entirely (DLC'd instead), and a pickFirst for a path that's also
+            // excluded silently wins over the exclude, which was quietly keeping the 28MB lib
+            // bundled in "release" despite the exclude rule below appearing to remove it.
             packaging {
                 jniLibs {
                     pickFirsts += setOf(
@@ -76,7 +77,7 @@ android {
             // Exclude Whisper native libs from release APK — they're downloaded on demand as DLC.
             // This reduces the APK from ~166MB to ~40MB. Debug builds keep them for normal dev workflow.
             //
-            // Other large DLC'd libs (onnxruntime, Vosk, mediapipe-genai, sherpa-onnx) are
+            // Other large DLC'd libs (onnxruntime, Vosk, litertlm-android, sherpa-onnx) are
             // deliberately NOT excluded here via packaging.jniLibs.excludes, even though they're
             // real and sizable: AGP 9.0.0–9.2.1 (every currently published 9.x release) has
             // confirmed-unreliable arm64-v8a native-lib packaging behavior for this project's
@@ -110,6 +111,9 @@ android {
     }
     buildFeatures {
         compose = true
+        // NativeLibManager builds its DLC download URL from BuildConfig.VERSION_NAME — a
+        // compile-time constant that can't disagree with the running build (see its doc comment).
+        buildConfig = true
     }
     
     packaging {
@@ -129,8 +133,12 @@ android {
 dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:apppicker"))
+    implementation(project(":core:location"))
+    implementation(project(":core:backup"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
+    implementation(project(":core:services"))
+    implementation(project(":core:preferences"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -163,7 +171,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.vosk.android)
     implementation(libs.jsoup)
-    implementation(libs.mediapipe.genai)
+    implementation(libs.litertlm.android)
     implementation(libs.androidx.media)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.reorderable)
@@ -178,12 +186,15 @@ dependencies {
     // OpenWakeWord (fully open-source, ONNX-based wake word detection) — local fork with an RMS
     // silence gate patch (see core/wakeword/NOTICE); pristine upstream kept at
     // vendor/openwakeword-android-kt for sync (scripts/check_openwakeword_version.sh).
-    // core:wakeword already declares onnxruntime-android 1.27.0 (16KB-page-size-aligned, required
-    // for Android 15+) — vox-commander's own source never imports ai.onnxruntime.* directly, so a
-    // second direct declaration here was a redundant duplicate dependency, not a real requirement.
-    // Two sources contributing the same native libs is exactly the kind of ambiguity that made
-    // libonnxruntime.so's arm64-v8a packaging/exclude behavior unreliable (see release excludes
-    // above) — removing the duplicate leaves a single, unambiguous source.
+    // core:wakeword already declares onnxruntime-android directly (pinned there, independent of
+    // vox-vision's own gradle/libs.versions.toml pin — see core/wakeword/build.gradle.kts for why
+    // it must match sherpa-onnx's bundled copy instead) — vox-commander's own source never imports
+    // ai.onnxruntime.* directly, so a second direct declaration here was a redundant duplicate
+    // dependency, not a real requirement. Two sources contributing the same native libs is exactly
+    // the kind of ambiguity that made libonnxruntime.so's arm64-v8a packaging/exclude behavior
+    // unreliable (see release excludes above) — removing the duplicate leaves a single Maven-
+    // resolved source (sherpa-onnx's AAR still separately bundles its own copy of the same path,
+    // and currently wins the merge — see the pickFirst comment above).
     implementation(project(":core:wakeword"))
     implementation(project(":core:audio"))
     // Piper TTS via sherpa-onnx (on-device neural TTS)
@@ -202,6 +213,7 @@ dependencies {
     implementation(libs.androidx.glance.appwidget)
     // STT Engines (Whisper.cpp integration)
 
+    testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -209,7 +221,7 @@ dependencies {
     testImplementation("androidx.test:core:1.7.0")
     // Real org.json for JVM unit tests — the android.jar stub throws "Stub!",
     // which blocks testing code that parses JSON via org.json (e.g. TextNormalizer, WakeWordProfile).
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260719")
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -256,60 +268,36 @@ val autoCheckOpenWakeWord = tasks.register<Exec>("autoCheckOpenWakeWord") {
     commandLine("bash", "${project.rootDir}/scripts/check_openwakeword_version.sh")
 }
 
-// Copy models.json from repo root into assets (single source of truth in root)
-val copyModelsJson = tasks.register<Copy>("copyModelsJson") {
+// Every schema the family ships lives in one folder at the repo root, and the whole folder is
+// copied into assets at build time. A list of file names used to live here, and adding a schema
+// meant remembering to add it — the folder is the list now.
+val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
     group = "build"
-    description = "Copies models.json from repo root into app/src/main/assets/"
-    from("${project.rootDir}/models.json")
-    into("${projectDir}/src/main/assets")
+    description = "Copies this app's schemas (and any shared ones) into src/main/assets/schemas/"
+    from("${project.rootDir}/remote-schemas/commander") { include("*.json") }
+    from("${project.rootDir}/remote-schemas/shared") { include("*.json") }
+    into("${projectDir}/src/main/assets/schemas")
 }
 
-// Copy search_definitions.json from repo root into assets (single source of truth in root)
-val copySearchDefinitions = tasks.register<Copy>("copySearchDefinitions") {
-    group = "build"
-    description = "Copies search_definitions.json from repo root into app/src/main/assets/"
-    from("${project.rootDir}/search_definitions.json")
-    into("${projectDir}/src/main/assets")
-}
-
-// Copy intents.json from repo root into assets (single source of truth in root)
-val copyIntentsJson = tasks.register<Copy>("copyIntentsJson") {
-    group = "build"
-    description = "Copies intents.json from repo root into app/src/main/assets/"
-    from("${project.rootDir}/intents.json")
-    into("${projectDir}/src/main/assets")
-}
-
-// Copy external_services.json from repo root into assets (single source of truth in root) — listed
-// here for visibility/consistency with Commander's other JSON config files even though the actual
-// exchange-rate lookup happens in vox-expenses, which consumes its own copy of the same file.
-val copyExternalServicesJson = tasks.register<Copy>("copyExternalServicesJson") {
-    group = "build"
-    description = "Copies external_services.json from repo root into app/src/main/assets/"
-    from("${project.rootDir}/external_services.json")
-    into("${projectDir}/src/main/assets")
-}
-
-// Copy api_integrations.json from repo root into assets (single source of truth in root) — the
-// declarative per-service API definitions consumed by ApiIntegrationRegistry/DeclarativeApiExecutor.
-val copyApiIntegrationsJson = tasks.register<Copy>("copyApiIntegrationsJson") {
-    group = "build"
-    description = "Copies api_integrations.json from repo root into app/src/main/assets/"
-    from("${project.rootDir}/api_integrations.json")
-    into("${projectDir}/src/main/assets")
-}
+// The four scripts above prepare and police *upstream* sources: they compile whisper.cpp from a
+// submodule and ask JitPack whether Vosk, NewPipeExtractor or OpenWakeWord have moved. That is what
+// a developer machine and a release runner want, and precisely what a verification build does not:
+// it needs the submodules, the NDK, shaderc and an SDK symlink to get to the same Kotlin compile,
+// and reaches the network to answer a question no commit is asking. `-PvoxSkipNativePrep` drops
+// them; everything after preBuild — compiling every module, running every test — is unchanged.
+val skipNativePrep = providers.gradleProperty("voxSkipNativePrep").isPresent
 
 // Forțează procesul de build al aplicației să ruleze aceste scripturi chiar la început
 tasks.named("preBuild") {
-    dependsOn(autoCompileWhisper)
-    dependsOn(autoCheckVosk)
-    dependsOn(autoCheckNewPipeExtractor)
-    dependsOn(autoCheckOpenWakeWord)
-    dependsOn(copyModelsJson)
-    dependsOn(copySearchDefinitions)
-    dependsOn(copyIntentsJson)
-    dependsOn(copyExternalServicesJson)
-    dependsOn(copyApiIntegrationsJson)
+    if (!skipNativePrep) {
+        dependsOn(autoCompileWhisper)
+        dependsOn(autoCheckVosk)
+        dependsOn(autoCheckNewPipeExtractor)
+        dependsOn(autoCheckOpenWakeWord)
+    }
+    // Not optional anywhere: the shipped schemas are generated into assets, and the tests that
+    // check code against them read the generated copy.
+    dependsOn(copyShippedSchemas)
 }
 
 // A handful of ViewModel tests use viewModelScope.launch{} (not tied to the test's own TestScope),
@@ -321,3 +309,11 @@ tasks.withType<Test> {
     forkEvery = 1
 }
 
+// Some tests read files the compiler never sees, so nothing else would make Gradle re-run them when
+// those files change. The schemas are named at their source rather than in assets: assets/schemas is
+// this build's own output, and a task cannot sensibly treat another task's output as its input.
+tasks.withType<Test>().configureEach {
+    inputs.file("proguard-rules.pro").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir("${project.rootDir}/remote-schemas").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir("src/main/assets/translations").withPathSensitivity(PathSensitivity.RELATIVE)
+}

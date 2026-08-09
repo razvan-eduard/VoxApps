@@ -2,6 +2,8 @@ package com.voxapps.calendarapp.data.preferences
 
 import androidx.compose.runtime.Immutable
 import com.voxapps.design.color.VoxColorPalette
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 
 /**
  * Immutable snapshot of persisted Vox Calendar settings (mirrors vox-expenses' ExpensesSettings).
@@ -27,6 +29,16 @@ import com.voxapps.design.color.VoxColorPalette
  *   home-screen widget's day-cards draw an outline border, and its thickness/color if so. Border
  *   on by default (matches prior hardcoded behavior); color defaults to the first shared preset
  *   in [VoxColorPalette] rather than a hardcoded hex so it stays in sync with that palette.
+ * - [todayEffect]/[todayEffectColor]/[todayEffectColor2]: which highlight effect (if any) draws
+ *   around the in-app "today" card, and its color(s) — [todayEffectColor2] is only set when the
+ *   user turns on the gradient option, `null` otherwise. The effect itself is not yet implemented
+ *   (see `com.voxapps.design.effects.ApplyTodayEffect`); these fields exist so the settings UI and
+ *   call-site wiring are ready ahead of it.
+ * - [todoBleedToCalendar]: whether a to-do item's due date/time makes it show up on the standard
+ *   Month/Week/Day/Year grid. The underlying `CalendarEntry` row is always created/kept (so its
+ *   reminder keeps firing regardless) — this setting only filters it out of grid rendering when off.
+ * - [animationsEnabled]: gates decorative transition animations (e.g. the Calendar-to-To-do-lists
+ *   screen flip) — off disables them for users who find them distracting or slow.
  */
 @Immutable
 data class CalendarSettings(
@@ -41,10 +53,34 @@ data class CalendarSettings(
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,
     val onboardingCompleted: Boolean = false,
+    // --- BACKUP & RESTORE (local, shared :core:backup module's VoxBackupSettingsCard) — mirrors
+    // vox-hub's AppBackupConfig shape/names, persisted here for this app's own local backup button,
+    // independent of any Hub-triggered IPC export. ---
+    val backupIncludeSettings: Boolean = true,
+    val backupIncludeData: Boolean = true,
+    val backupIncludeAttachments: Boolean = false,
+    /** Wire-format string per [com.voxapps.ipc.VoxIpc.IMPORT_MODE_MERGE] etc., parsed via
+     *  [com.voxapps.backup.VoxImportMode.fromWireValue]. */
+    val backupImportMode: String = "merge",
+    val isGridView: Boolean = false,
     val showEventDetailsInWidget: Boolean = true,
     val widgetBorderEnabled: Boolean = true,
     val widgetBorderThicknessDp: Int = THICKNESS_MEDIUM,
-    val widgetBorderColorArgb: Long = VoxColorPalette.presets.first()
+    val widgetBorderColorArgb: Long = VoxColorPalette.presets.first(),
+    val todayEffect: String = TodayEffect.NONE.name,
+    val todayEffectStyle: String = TodayEffectStyle.RING.name,
+    val todayEffectColor: Long = TODAY_EFFECT_DEFAULT_COLOR,
+    val todayEffectColor2: Long? = null,
+    val todayEffectSpeed: Float = 1f,
+    val todayEffectShowInWidget: Boolean = true,
+    val notificationsSystemDefault: Boolean = true,
+    val notificationsVibrationEnabled: Boolean = true,
+    val notificationsSoundUri: String? = null,
+    val notificationsVolume: Int = 100,
+    val notificationsLength: String = LENGTH_SHORT,
+    val notificationsChannelVersion: Int = 1,
+    val todoBleedToCalendar: Boolean = true,
+    val animationsEnabled: Boolean = true
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -60,5 +96,12 @@ data class CalendarSettings(
         const val THICKNESS_THIN = 1
         const val THICKNESS_MEDIUM = 2
         const val THICKNESS_THICK = 4
+
+        /** A warm orange — a reasonable default for an as-yet-unimplemented fire/glow effect. */
+        const val TODAY_EFFECT_DEFAULT_COLOR = 0xFFFF6D00L
+
+        const val LENGTH_SHORT = "SHORT"
+        const val LENGTH_MEDIUM = "MEDIUM"
+        const val LENGTH_LONG = "LONG"
     }
 }

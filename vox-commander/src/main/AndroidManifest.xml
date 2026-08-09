@@ -15,6 +15,15 @@
         tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Needed for SystemIntentHandler's Do Not Disturb / silent-mode toggles (normal permission;
+         the user still has to separately grant "notification policy access" via the system
+         settings screen this app opens on first use — NotificationManager.isNotificationPolicyAccessGranted). -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <!-- Needed for SystemIntentHandler's auto-rotate toggle (Settings.System.putInt). This is a
+         special/"Modify system settings" permission — declaring it here is required, but it's only
+         actually granted via the ACTION_MANAGE_WRITE_SETTINGS screen this app opens on first use. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
     <!-- Lets the onboarding/General settings screen show the system's "Ignore battery
          optimizations?" dialog directly (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) — without
          this, some OEMs' aggressive background-process killers unbind WakeWordService while
@@ -57,7 +66,7 @@
             android:icon="@mipmap/ic_launcher"
             android:roundIcon="@mipmap/ic_launcher"
             android:label="@string/app_name"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.VoxCommander.Splash"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -173,7 +182,7 @@
                 <action android:name="com.voxapps.action.VOX_COMMAND" />
             </intent-filter>
             <meta-data android:name="com.voxapps.vox.domain" android:value="commander" />
-            <meta-data android:name="com.voxapps.vox.actions" android:value="ping,export,import" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="ping,export,import,media_control" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Vox Commander" />
         </receiver>
 

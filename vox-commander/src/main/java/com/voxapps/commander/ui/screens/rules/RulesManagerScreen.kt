@@ -1,7 +1,11 @@
 package com.voxapps.commander.ui.screens.rules
 
+import com.voxapps.design.picklist.Picklist
+import com.voxapps.design.picklist.PicklistFieldAnchor
 import com.voxapps.commander.ui.LocalLanguageManager
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +20,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PauseCircle
@@ -37,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.domain.intent.model.FastMapRule
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.receiver.CommanderExportHandler
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.state.AppStateManager
@@ -50,6 +57,26 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlinx.coroutines.launch
 import java.io.File
 
+/** Captures exactly the form fields the user directly edits via the trigger/query token
+ *  selectors and the mode chips, for dirty-checking against a baseline (see [RulesManagerContent]'s
+ *  hasUnsavedRuleChanges). Deliberately excludes the app/intent-picker fields (targetPackage,
+ *  selectedIntentIndex) — those are driven partly by an async probe (LaunchedEffect keyed on
+ *  selectedTargetPackage) that can race with the synchronous state set when loading an existing
+ *  rule for edit, which would make a naive comparison spuriously report "changed" before the
+ *  probe even settles. System-command rules (the ones this was reported against) never touch
+ *  those fields at all, so excluding them costs nothing for that case. */
+private data class RuleFormSnapshot(
+    val triggerWords: List<String>,
+    val triggerGroups: List<List<String>>,
+    val queryWords: List<String>,
+    val lazyQuery: Boolean,
+    val anyOrder: Boolean,
+    val isSystemCommand: Boolean,
+    val selectedDomain: String,
+    val selectedAction: String,
+    val mediaControlType: String
+)
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun RulesManagerContent(
@@ -57,8 +84,9 @@ fun RulesManagerContent(
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     fastMapDao: FastMapDao,
-    onSaveAndClose: () -> Unit,
-    onChangesDetected: (Boolean) -> Unit = {}
+    onChangesDetected: (Boolean) -> Unit = {},
+    onSaveAvailabilityChanged: (Boolean) -> Unit = {},
+    onSaveRequested: (suspend () -> Unit) -> Unit = {}
 ) {
         val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
@@ -101,6 +129,7 @@ fun RulesManagerContent(
     var selectedIntentIndex by remember { mutableStateOf(-1) }
     var availableIntents by remember { mutableStateOf<List<AppRegistry.KnownIntents.IntentOption>>(emptyList()) }
     var lazyQuery by remember { mutableStateOf(false) }
+    var anyOrder by remember { mutableStateOf(false) }
 
     // Edit state
     var editingRuleId by remember { mutableStateOf<Long?>(null) }
@@ -116,9 +145,75 @@ fun RulesManagerContent(
     // Form collapse state — collapsed by default
     var isFormExpanded by remember { mutableStateOf(false) }
 
+    fun currentFormSnapshot() = RuleFormSnapshot(
+        triggerWords = triggerSelectedIndices.sorted().map { allTokens[it] },
+        triggerGroups = triggerGroupIndicesList.map { group -> group.sorted().map { allTokens[it] } }.filter { it.isNotEmpty() },
+        queryWords = querySelectedIndices.sorted().map { allTokens[it] },
+        lazyQuery = lazyQuery,
+        anyOrder = anyOrder,
+        isSystemCommand = isSystemCommand,
+        selectedDomain = selectedDomain,
+        selectedAction = selectedAction,
+        mediaControlType = mediaControlType
+    )
+
+    // The snapshot the form started from — either a fresh/empty rule, or (when editing) the
+    // rule as it was loaded — updated in resetForm() and in the "load rule for edit" handler
+    // below. Comparing against this, rather than just checking "is anything selected," is what
+    // avoids reporting unsaved changes for a rule you merely opened without touching.
+    var baselineSnapshot by remember { mutableStateOf(currentFormSnapshot()) }
+
+    // Reports whether there's an in-progress rule draft worth warning about before the host
+    // dismisses this screen (e.g. on swipe-to-dismiss) — gated on isFormExpanded since a
+    // collapsed form has nothing visible/in-progress for the user to lose.
+    val hasUnsavedRuleChanges = isFormExpanded && currentFormSnapshot() != baselineSnapshot
+    LaunchedEffect(hasUnsavedRuleChanges) {
+        onChangesDetected(hasUnsavedRuleChanges)
+    }
+
+    // Same validity gate as the in-form Save button below — reported up so the host's discard
+    // dialog can offer (and correctly enable/disable) a "Save & Close" option instead of forcing
+    // a choice between losing the draft and manually finding this screen's own save button.
+    val canSaveRule = (triggerSelectedIndices.isNotEmpty() || triggerGroupIndicesList.any { it.isNotEmpty() } || querySelectedIndices.isNotEmpty() || lazyQuery) &&
+        (isSystemCommand || selectedTargetPackage != null)
+    LaunchedEffect(canSaveRule) {
+        onSaveAvailabilityChanged(canSaveRule)
+    }
+
     // Confirmation dialog state
     var ruleToDelete by remember { mutableStateOf<FastMapRule?>(null) }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
+
+    // Import/Export Rules JSON — the standalone, PC-authored-file path (separate from Hub's own
+    // whole-device backup/restore, which goes through CommanderExportHandler/VoxCommandReceiver
+    // directly and never touches this UI). Reuses the same buildFastMapRulesJson/parseFastMapRules
+    // functions so both paths share one schema.
+    var pendingImportRules by remember { mutableStateOf<List<FastMapRule>?>(null) }
+    var importErrorVisible by remember { mutableStateOf(false) }
+
+    val exportRulesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val json = CommanderExportHandler.buildFastMapRulesJson(fastMapDao.getAllRulesOnce())
+                context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+            }
+        }
+    }
+    val importRulesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            val parsed = text?.let { CommanderExportHandler.parseFastMapRules(it) }
+            if (parsed != null) {
+                pendingImportRules = parsed
+            } else {
+                importErrorVisible = true
+            }
+        }
+    }
 
     // Filter state
     var searchQuery by remember { mutableStateOf("") }
@@ -139,30 +234,11 @@ fun RulesManagerContent(
     val modelFilterLang = uiState.modelFilterLang
     val voiceProcessor = uiState.voiceProcessor
 
-    val isDefaultModelOnDevice = remember(voiceProcessor, modelFilterLang) {
-        when (voiceProcessor) {
-            Strings.Processors.WHISPER_VULKAN -> {
-                val modelId = uiState.activeVoiceModelId
-                modelId != null && uiState.isModelDownloaded(modelId)
-            }
-            Strings.Processors.GOOGLE, Strings.Processors.WHISPER_API -> true
-            else -> {
-                if (com.voxapps.commander.data.remote.RemoteModelRegistry.isZipEngine(voiceProcessor)) {
-                    val customPath = uiState.customVoskModelPaths[modelFilterLang]
-                    if (!customPath.isNullOrBlank()) {
-                        File(customPath).exists()
-                    } else {
-                        val rootDir = context.getExternalFilesDir(null)
-                        val modelDir = rootDir?.listFiles()?.find { it.isDirectory && it.name.startsWith("vosk-model-") && it.name.contains(modelFilterLang, ignoreCase = true) }
-                        modelDir != null && modelDir.exists()
-                    }
-                } else {
-                    val modelId = uiState.activeVoiceModelId
-                    modelId != null && uiState.isModelDownloaded(modelId)
-                }
-            }
-        }
-    }
+    // The same question the rest of the app asks, answered in the one place that computes it.
+    // This was a third copy, and the only one that looked for a directory whose *name* began with
+    // "vosk-model-" — a convention the entry-point resolver replaced, so an imported model stored
+    // under any other name read as missing here while every other screen saw it.
+    val isDefaultModelOnDevice = uiState.voiceModelReady
 
     // Update available intents when app changes
     LaunchedEffect(selectedTargetPackage) {
@@ -186,12 +262,52 @@ fun RulesManagerContent(
         selectedIntentIndex = -1
         availableIntents = emptyList()
         lazyQuery = false
+        anyOrder = false
         editingRuleId = null
         isSystemCommand = false
         selectedDomain = IntentTaxonomy.Domains.SETTINGS
         selectedAction = IntentTaxonomy.Actions.VOLUME_UP
         mediaControlType = "active_session"
         isFormExpanded = false
+        baselineSnapshot = currentFormSnapshot()
+    }
+
+    // Extracted so the host (TopHeaderContainer's discard-confirmation dialog) can also trigger
+    // a save via onSaveRequested, instead of only being able to offer "discard" or "keep editing"
+    // for an in-progress rule the user forgot to explicitly save before dismissing.
+    suspend fun saveCurrentRule() {
+        if (!canSaveRule) return
+        val triggerWords = triggerSelectedIndices.sorted().map { allTokens[it] }
+        val triggerGroups = triggerGroupIndicesList.map { group ->
+            group.sorted().map { idx -> allTokens[idx] }
+        }.filter { it.isNotEmpty() }
+        val queryWords = querySelectedIndices.sorted().map { allTokens[it] }
+        val selectedOption = availableIntents.getOrNull(selectedIntentIndex)
+        val existingRule = rules.find { it.id == editingRuleId }
+        val existingSortOrder = existingRule?.sortOrder
+        val rule = FastMapRule(
+            id = editingRuleId ?: 0,
+            allWords = allTokens,
+            triggerWords = triggerWords,
+            triggerGroups = triggerGroups,
+            queryWords = queryWords,
+            targetPackage = if (isSystemCommand) "" else (selectedTargetPackage ?: ""),
+            intentAction = if (isSystemCommand) "" else (selectedOption?.action ?: ""),
+            uriTemplate = if (isSystemCommand) null else selectedOption?.variant?.uriTemplate,
+            lazyQuery = lazyQuery,
+            anyOrder = anyOrder,
+            sortOrder = existingSortOrder ?: rules.size,
+            isActive = existingRule?.isActive ?: true,
+            domain = if (isSystemCommand) selectedDomain else "custom",
+            action = if (isSystemCommand) selectedAction else "launch",
+            mediaControlType = mediaControlType
+        )
+        fastMapDao.insertRule(rule)
+        resetForm()
+    }
+
+    LaunchedEffect(Unit) {
+        onSaveRequested { saveCurrentRule() }
     }
 
     Column(
@@ -423,30 +539,61 @@ fun RulesManagerContent(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Lazy query toggle
+                            // Rule mode selector — manual query / auto-extracted query / any-order
+                            // trigger matching are mutually exclusive (a rule can only be one of these
+                            // three at a time), so this is a 3-way segmented choice rather than two
+                            // independent checkboxes — the invalid "auto-extract + any-order" combination
+                            // simply isn't representable. See FastMapRule.anyOrder's doc comment for why:
+                            // an any-order trigger pattern is built from zero-width lookaheads, and
+                            // lazyQuery relies on `.replace()`-ing the matched trigger text out of the
+                            // spoken sentence, which only works for a consuming (ordered) pattern.
+                            Text(
+                                text = languageManager.getString("rule_mode_section_title"),
+                                style = MaterialTheme.typography.labelMedium
+                            )
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        lazyQuery = !lazyQuery
-                                        if (!lazyQuery) querySelectedIndices.clear()
-                                    },
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Checkbox(
-                                    checked = lazyQuery,
-                                    onCheckedChange = {
-                                        lazyQuery = it
-                                        if (it) querySelectedIndices.clear()
-                                    }
+                                FilterChip(
+                                    selected = !lazyQuery && !anyOrder,
+                                    onClick = {
+                                        lazyQuery = false
+                                        anyOrder = false
+                                    },
+                                    label = { Text(languageManager.getString("rule_mode_manual"), style = MaterialTheme.typography.labelSmall) }
                                 )
-                                Text(
-                                    text = languageManager.getString("lazy_processing_label"),
-                                    style = MaterialTheme.typography.bodySmall
+                                FilterChip(
+                                    selected = lazyQuery,
+                                    onClick = {
+                                        lazyQuery = true
+                                        anyOrder = false
+                                        querySelectedIndices.clear()
+                                    },
+                                    label = { Text(languageManager.getString("rule_mode_lazy"), style = MaterialTheme.typography.labelSmall) }
+                                )
+                                FilterChip(
+                                    selected = anyOrder,
+                                    onClick = {
+                                        anyOrder = true
+                                        lazyQuery = false
+                                    },
+                                    label = { Text(languageManager.getString("rule_mode_any_order"), style = MaterialTheme.typography.labelSmall) }
                                 )
                             }
+                            Text(
+                                text = when {
+                                    anyOrder -> languageManager.getString("rule_mode_any_order_hint")
+                                    lazyQuery -> languageManager.getString("rule_mode_lazy_hint")
+                                    else -> languageManager.getString("rule_mode_manual_hint")
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
 
-                            // Query tokens (disabled when lazy)
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Query tokens (disabled when auto-extracting)
                             TokenSelectorSection(
                                 title = if (lazyQuery) languageManager.getString("query_auto_title") else languageManager.getString("query_manual_title"),
                                 tokens = allTokens,
@@ -486,60 +633,28 @@ fun RulesManagerContent(
                             val systemDomains = IntentTaxonomy.Domains.ALL.filter { it != "custom" }
                             val domainActions = IntentTaxonomy.getActionsForDomain(selectedDomain)
 
-                            var domainExpanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(
-                                expanded = domainExpanded,
-                                onExpandedChange = { domainExpanded = !domainExpanded },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = selectedDomain.replaceFirstChar { it.uppercase() },
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("Domain") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = domainExpanded) },
-                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
-                                )
-                                ExposedDropdownMenu(expanded = domainExpanded, onDismissRequest = { domainExpanded = false }) {
-                                    systemDomains.forEach { domain ->
-                                        DropdownMenuItem(
-                                            text = { Text(domain.replaceFirstChar { it.uppercase() }) },
-                                            onClick = {
-                                                selectedDomain = domain
-                                                selectedAction = IntentTaxonomy.getActionsForDomain(domain).firstOrNull() ?: ""
-                                                domainExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                            Picklist(
+                                items = systemDomains,
+                                selected = selectedDomain,
+                                itemLabel = { it.replaceFirstChar { c -> c.uppercase() } },
+                                // The action list is the domain's, so a domain change that left the
+                                // old action standing would name a pair the taxonomy does not have.
+                                onSelect = { domain ->
+                                    selectedDomain = domain
+                                    selectedAction = IntentTaxonomy.getActionsForDomain(domain).firstOrNull() ?: ""
+                                },
+                                anchor = { value, onClick -> PicklistFieldAnchor("Domain", value, onClick) }
+                            )
 
-                            var actionExpanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(
-                                expanded = actionExpanded,
-                                onExpandedChange = { actionExpanded = !actionExpanded },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = selectedAction.replaceFirstChar { it.uppercase() }.replace("_", " "),
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("Action") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = actionExpanded) },
-                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
-                                )
-                                ExposedDropdownMenu(expanded = actionExpanded, onDismissRequest = { actionExpanded = false }) {
-                                    domainActions.forEach { act ->
-                                        DropdownMenuItem(
-                                            text = { Text(act.replaceFirstChar { it.uppercase() }.replace("_", " ")) },
-                                            onClick = {
-                                                selectedAction = act
-                                                actionExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                            val actionLabel: (String) -> String =
+                                { it.replaceFirstChar { c -> c.uppercase() }.replace("_", " ") }
+                            Picklist(
+                                items = domainActions,
+                                selected = selectedAction,
+                                itemLabel = actionLabel,
+                                onSelect = { selectedAction = it },
+                                anchor = { value, onClick -> PicklistFieldAnchor("Action", value, onClick) }
+                            )
 
                             // --- MEDIA CONTROL TYPE SELECTOR ---
                             // Show only for audio domain transport controls (play/pause/next/prev)
@@ -592,75 +707,24 @@ fun RulesManagerContent(
 
                         // --- INTENT DROPDOWN ---
                         if (availableIntents.isNotEmpty()) {
-                            var intentExpanded by remember { mutableStateOf(false) }
                             val selectedOption = availableIntents.getOrNull(selectedIntentIndex) ?: availableIntents.first()
-                            val selectedIntentLabel = selectedOption.variant.label
+                            val intentCaption = languageManager.getString("intent_action_label")
 
-                            ExposedDropdownMenuBox(
-                                expanded = intentExpanded,
-                                onExpandedChange = { intentExpanded = !intentExpanded },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = selectedIntentLabel,
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text(languageManager.getString("intent_action_label")) },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = intentExpanded) },
-                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
-                                )
-                                ExposedDropdownMenu(expanded = intentExpanded, onDismissRequest = { intentExpanded = false }) {
-                                    availableIntents.forEachIndexed { idx, option ->
-                                        DropdownMenuItem(
-                                            text = { Text(option.variant.label) },
-                                            onClick = {
-                                                selectedIntentIndex = idx
-                                                intentExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                            Picklist(
+                                items = availableIntents,
+                                selected = selectedOption,
+                                itemLabel = { it.variant.label },
+                                onSelect = { option -> selectedIntentIndex = availableIntents.indexOf(option) },
+                                anchor = { value, onClick -> PicklistFieldAnchor(intentCaption, value, onClick) }
+                            )
                         }
                         }
 
                         // --- SAVE BUTTON ---
-                        val canSave = (triggerSelectedIndices.isNotEmpty() || triggerGroupIndicesList.any { it.isNotEmpty() } || querySelectedIndices.isNotEmpty() || lazyQuery) &&
-                                      (isSystemCommand || selectedTargetPackage != null)
-
                         Button(
-                            onClick = {
-                                scope.launch {
-                                    val triggerWords = triggerSelectedIndices.sorted().map { allTokens[it] }
-                                    val triggerGroups = triggerGroupIndicesList.map { group ->
-                                        group.sorted().map { idx -> allTokens[idx] }
-                                    }.filter { it.isNotEmpty() }
-                                    val queryWords = querySelectedIndices.sorted().map { allTokens[it] }
-                                    val selectedOption = availableIntents.getOrNull(selectedIntentIndex)
-                                    val existingRule = rules.find { it.id == editingRuleId }
-                                    val existingSortOrder = existingRule?.sortOrder
-                                    val rule = FastMapRule(
-                                        id = editingRuleId ?: 0,
-                                        allWords = allTokens,
-                                        triggerWords = triggerWords,
-                                        triggerGroups = triggerGroups,
-                                        queryWords = queryWords,
-                                        targetPackage = if (isSystemCommand) "" else (selectedTargetPackage ?: ""),
-                                        intentAction = if (isSystemCommand) "" else (selectedOption?.action ?: ""),
-                                        uriTemplate = if (isSystemCommand) null else selectedOption?.variant?.uriTemplate,
-                                        lazyQuery = lazyQuery,
-                                        sortOrder = existingSortOrder ?: rules.size,
-                                        isActive = existingRule?.isActive ?: true,
-                                        domain = if (isSystemCommand) selectedDomain else "custom",
-                                        action = if (isSystemCommand) selectedAction else "launch",
-                                        mediaControlType = mediaControlType
-                                    )
-                                    fastMapDao.insertRule(rule)
-                                    resetForm()
-                                }
-                            },
+                            onClick = { scope.launch { saveCurrentRule() } },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = canSave
+                            enabled = canSaveRule
                         ) {
                             Text(if (editingRuleId == null) languageManager.getString("add_rule_button") else languageManager.getString("update_rule"))
                         }
@@ -768,6 +832,20 @@ fun RulesManagerContent(
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Row {
+                                IconButton(onClick = { exportRulesLauncher.launch("fastmap_rules.json") }) {
+                                    Icon(
+                                        Icons.Filled.FileUpload,
+                                        contentDescription = "Export rules to JSON",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                IconButton(onClick = { importRulesLauncher.launch(arrayOf("application/json")) }) {
+                                    Icon(
+                                        Icons.Filled.FileDownload,
+                                        contentDescription = "Import rules from JSON",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                                 val anyActive = localRules.any { it.isActive }
                                 IconButton(onClick = {
                                     scope.launch {
@@ -866,6 +944,7 @@ fun RulesManagerContent(
                             mediaControlType = rule.mediaControlType.ifBlank { "active_session" }
                             isFormExpanded = true
                             lazyQuery = rule.lazyQuery
+                            anyOrder = rule.anyOrder
                             // Re-probe to get available intents, then find matching index
                             if (!isSystemCommand && !rule.targetPackage.isNullOrBlank()) {
                                 availableIntents = AppRegistry.KnownIntents.probeSupported(context, rule.targetPackage)
@@ -877,6 +956,7 @@ fun RulesManagerContent(
                                 selectedIntentIndex = -1
                             }
                             voiceInputText = rule.allWords.joinToString(" ")
+                            baselineSnapshot = currentFormSnapshot()
                         },
                         onDelete = {
                             ruleToDelete = rule
@@ -913,13 +993,6 @@ fun RulesManagerContent(
             }
         }
 
-        // CLOSE BUTTON
-        TextButton(
-            onClick = onSaveAndClose,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            Text(languageManager.getString("ok_button"))
-        }
     }
 
     // --- CONFIRMATION DIALOGS ---
@@ -959,6 +1032,45 @@ fun RulesManagerContent(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteAllDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    pendingImportRules?.let { imported ->
+        AlertDialog(
+            onDismissRequest = { pendingImportRules = null },
+            title = { Text("Import ${imported.size} Rules") },
+            text = { Text("Add these rules to your existing ${rules.size}, or replace your entire rule set with this file?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        imported.forEach { fastMapDao.insertRule(it.copy(id = 0)) }
+                    }
+                    pendingImportRules = null
+                }) { Text("Add") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { pendingImportRules = null }) { Text("Cancel") }
+                    TextButton(onClick = {
+                        scope.launch {
+                            fastMapDao.deleteAllRules()
+                            imported.forEach { fastMapDao.insertRule(it.copy(id = 0)) }
+                        }
+                        pendingImportRules = null
+                    }) { Text("Replace All", color = Color.Red) }
+                }
+            }
+        )
+    }
+
+    if (importErrorVisible) {
+        AlertDialog(
+            onDismissRequest = { importErrorVisible = false },
+            title = { Text("Import Failed") },
+            text = { Text("That file isn't a valid FastMap rules export.") },
+            confirmButton = {
+                TextButton(onClick = { importErrorVisible = false }) { Text("OK") }
             }
         )
     }

@@ -136,10 +136,38 @@ object VoxIpc {
     const val OP_SYNC_EXPORT = "sync_export"
     const val OP_SYNC_MERGE = "sync_merge"
 
+    /**
+     * VoxConnect Bridge's dynamic form-schema fetch — a satellite replies with a JSON description of
+     * its record type's editable fields (key/label/type/required, and live category/layer name
+     * options for `category`-typed fields), so the desktop client can render a generic edit form
+     * instead of a hand-coded one per domain. Same request-response channel as [OP_PING]/
+     * [OP_GET_SCHEMA]; deliberately a separate op from [OP_GET_SCHEMA] — that one describes NLU
+     * prompt behavior, this one describes form fields, and the two payload shapes are unrelated.
+     */
+    const val OP_GET_FIELD_SCHEMA = "get_field_schema"
+
+    /**
+     * VoxConnect Bridge's media-control relay (Hub → Commander, over this same request-response
+     * channel) — Commander is the only app holding the notification-listener permission grant that
+     * media-session access requires (see `MediaSessionListenerService`), so a network client never
+     * touches media sessions directly; it always goes through Commander via this op.
+     * [VoxCommand.mediaAction] selects the action: "status" (returns now-playing metadata as JSON in
+     * [VoxResult.text]), "play", "pause", "next", "prev".
+     */
+    const val OP_MEDIA_CONTROL = "media_control"
+
     /** [VoxCommand.exportScope] values — which slice of an app's export payload to include. */
     const val EXPORT_SCOPE_SETTINGS = "settings"
     const val EXPORT_SCOPE_DATA = "data"
     const val EXPORT_SCOPE_BOTH = "both"
+
+    /** [VoxCommand.importMode] values — see [com.voxapps.backup.VoxImportMode] (in `:core:backup`)
+     *  for the exact reconciliation semantics of each. Kept as plain strings here (not the enum
+     *  itself) since `:core:ipc` has no dependency on `:core:backup` and shouldn't gain one just for
+     *  this — every satellite already depends on both modules and maps between them at the edge. */
+    const val IMPORT_MODE_FULL_OVERRIDE = "full_override"
+    const val IMPORT_MODE_MERGE = "merge"
+    const val IMPORT_MODE_ADDITIVE = "additive"
 
     // --- Domains ---
     const val DOMAIN_NOTES = "notes"
@@ -208,4 +236,17 @@ object VoxIpc {
      * [VISION_PACKAGE]'s role as the other hardcoded well-known-package constant in this file.
      */
     const val HUB_PACKAGE = "com.voxapps.hub"
+
+    /**
+     * The remaining well-known satellite packages, for cross-app features that address a specific
+     * satellite by name — currently Calendar's day-link/day-summary (see its `domain/daylink/`),
+     * which asks Notes and Expenses for that day's records. Declared here beside [VISION_PACKAGE]
+     * and [HUB_PACKAGE] for the same reason: a package name is part of the cross-app contract, and
+     * a copy of it living in each caller is a typo away from a silently-unreachable satellite that
+     * nothing catches at compile time. [com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE] is the
+     * fifth, kept next to the discovery helpers that use it.
+     */
+    const val NOTES_PACKAGE = "com.voxapps.notes"
+    const val EXPENSES_PACKAGE = "com.voxapps.expenses"
+    const val CALENDAR_PACKAGE = "com.voxapps.calendar"
 }

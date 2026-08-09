@@ -14,17 +14,24 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallReceived
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Icon
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.expenses.ExpensesApplication
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
@@ -42,6 +49,12 @@ fun ExpenseCard(expenseWithDetails: ExpenseWithDetails, onClick: () -> Unit) {
     val expense = expenseWithDetails.expense
     val category = expenseWithDetails.category
 
+    val context = LocalContext.current
+    val attachmentDao = remember { (context.applicationContext as ExpensesApplication).container.attachmentDao }
+    val hasAttachments by remember(expense.id) {
+        attachmentDao.observeFor(ExpensesAttachments.RECORD_TYPE, expense.id)
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
+
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -56,10 +69,20 @@ fun ExpenseCard(expenseWithDetails: ExpenseWithDetails, onClick: () -> Unit) {
                 )
             }
             Column(modifier = Modifier.weight(1f).padding(start = if (category != null) 10.dp else 0.dp)) {
-                Text(
-                    text = expense.title?.takeIf { it.isNotBlank() } ?: expense.vendor ?: "—",
-                    style = MaterialTheme.typography.bodyLarge
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = expense.title?.takeIf { it.isNotBlank() } ?: expense.vendor ?: "—",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    if (hasAttachments.isNotEmpty()) {
+                        Icon(
+                            Icons.Filled.AttachFile,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp).padding(start = 4.dp)
+                        )
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (!expense.receiptImageName.isNullOrBlank()) {
                         Icon(

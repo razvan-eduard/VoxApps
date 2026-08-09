@@ -1,6 +1,8 @@
 package com.voxapps.commander.state
 
 import android.content.Context
+import com.voxapps.commander.data.preferences.Credentials
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.testutil.TestDataFactory
 import com.voxapps.commander.utils.PermissionUtils
@@ -30,18 +32,20 @@ class AppStateTest {
         every { com.voxapps.logging.Logger.log(any(), any()) } returns Unit
 
         mockkObject(RemoteModelRegistry)
-        every { RemoteModelRegistry.getEngineKeyByExtension(".bin") } returns "stt_whisper"
-        every { RemoteModelRegistry.getEngineKeyByExtension(".zip") } returns "wake_vosk"
         every { RemoteModelRegistry.isZipEngine(any()) } returns false
         every { RemoteModelRegistry.isLlmEngine(any()) } returns false
+        // The engine's own declaration is what readiness now asks about — a cloud or OS-supplied
+        // engine has nothing to have on disk, a local one needs a model or an import.
+        every { RemoteModelRegistry.runtimeOf(any()) } returns EngineRuntime.LOCAL_FILE
+        every { RemoteModelRegistry.runtimeOf(Strings.Processors.GOOGLE) } returns EngineRuntime.ANDROID_LOCAL
+        every { RemoteModelRegistry.runtimeOf(Strings.Processors.WHISPER_API) } returns EngineRuntime.CLOUD
+        every { RemoteModelRegistry.isArchiveEngine(any()) } returns false
 
         mockkObject(PermissionUtils)
         every { PermissionUtils.canDrawOverlays(any()) } returns false
         every { PermissionUtils.hasMicrophonePermission(any()) } returns false
         every { PermissionUtils.hasNotificationPermission(any()) } returns false
-
-        mockkObject(com.voxapps.commander.domain.search.LocationHelper)
-        every { com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(any()) } returns false
+        every { PermissionUtils.hasLocationPermission(any()) } returns false
 
         context = mockk(relaxed = true)
     }
@@ -51,7 +55,7 @@ class AppStateTest {
         val settings = TestDataFactory.createAppSettings(
             voiceProcessor = Strings.Processors.GOOGLE
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
     }
 
@@ -60,7 +64,7 @@ class AppStateTest {
         val settings = TestDataFactory.createAppSettings(
             voiceProcessor = Strings.Processors.WHISPER_API
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
     }
 
@@ -70,7 +74,7 @@ class AppStateTest {
             activeVoiceModelId = "base",
             downloadedModelIds = setOf("base")
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
     }
 
@@ -80,43 +84,62 @@ class AppStateTest {
             activeVoiceModelId = "base",
             downloadedModelIds = emptySet()
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertFalse(state.voiceModelReady)
     }
 
     @Test
-    fun `voiceModelReady is true for Whisper Vulkan when custom path is set`() {
+    fun `voiceModelReady is true for Whisper Vulkan when the imported model is on disk`() {
+        // A path is not a model. The directory-packaged engine always checked the file was still
+        // there; the single-file one only checked the string was non-empty, so a model deleted from
+        // outside the app kept reporting ready until something tried to load it.
+        val imported = java.io.File.createTempFile("custom-whisper", ".bin").apply { deleteOnExit() }
         val settings = TestDataFactory.createSettingsWithWhisperVulkan(
             activeVoiceModelId = null,
             downloadedModelIds = emptySet()
         ).copy(
-            customModelPaths = mapOf("stt_whisper" to "/sdcard/model.bin")
+            // Stored under the engine that backs the selection: Vulkan is whisper on the GPU.
+            customModelPaths = mapOf("stt_whisper" to imported.absolutePath)
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
+    }
+
+    @Test
+    fun `voiceModelReady is false when the imported model has been deleted`() {
+        val settings = TestDataFactory.createSettingsWithWhisperVulkan(
+            activeVoiceModelId = null,
+            downloadedModelIds = emptySet()
+        ).copy(
+            customModelPaths = mapOf("stt_whisper" to "/sdcard/gone.bin")
+        )
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
+        assertFalse(state.voiceModelReady)
     }
 
     @Test
     fun `voiceModelReady is true for Vosk when model downloaded`() {
         every { RemoteModelRegistry.isZipEngine("wake_vosk") } returns true
+        every { RemoteModelRegistry.isArchiveEngine("wake_vosk") } returns true
         val settings = TestDataFactory.createAppSettings(
             voiceProcessor = "wake_vosk",
             activeVoiceModelId = "vosk-small",
             downloadedModelIds = setOf("vosk-small")
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.voiceModelReady)
     }
 
     @Test
     fun `voiceModelReady is false for Vosk when model not downloaded and no custom path`() {
         every { RemoteModelRegistry.isZipEngine("wake_vosk") } returns true
+        every { RemoteModelRegistry.isArchiveEngine("wake_vosk") } returns true
         val settings = TestDataFactory.createAppSettings(
             voiceProcessor = "wake_vosk",
             activeVoiceModelId = "vosk-small",
             downloadedModelIds = emptySet()
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertFalse(state.voiceModelReady)
     }
 
@@ -125,7 +148,7 @@ class AppStateTest {
         val settings = TestDataFactory.createAppSettings(
             aiProcessor = Strings.AiProcessors.OPENAI
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.intentModelReady)
     }
 
@@ -134,7 +157,7 @@ class AppStateTest {
         val settings = TestDataFactory.createSettingsWithGeminiNative(
             geminiIncompatible = false
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.intentModelReady)
     }
 
@@ -143,25 +166,25 @@ class AppStateTest {
         val settings = TestDataFactory.createSettingsWithGeminiNative(
             geminiIncompatible = true
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertFalse(state.intentModelReady)
     }
 
     @Test
     fun `intentModelReady is true for GeminiCloud when API key is set`() {
-        val settings = TestDataFactory.createSettingsWithGeminiCloud(
-            geminiApiKey = "test-key"
+        val settings = TestDataFactory.createSettingsWithGeminiCloud()
+        val state = AppState.fromAppSettings(
+            settings, Credentials(mapOf(Strings.AiProcessors.GEMINI_CLOUD to "test-key")), context, emptyMap()
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
         assertTrue(state.intentModelReady)
     }
 
     @Test
     fun `intentModelReady is false for GeminiCloud when API key is null`() {
-        val settings = TestDataFactory.createSettingsWithGeminiCloud(
-            geminiApiKey = null
+        val settings = TestDataFactory.createSettingsWithGeminiCloud()
+        val state = AppState.fromAppSettings(
+            settings, Credentials(), context, emptyMap()
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
         assertFalse(state.intentModelReady)
     }
 
@@ -172,7 +195,7 @@ class AppStateTest {
             activeIntentModelId = "qwen2.5-1.5b-q8",
             downloadedModelIds = setOf("qwen2.5-1.5b-q8")
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertTrue(state.intentModelReady)
     }
 
@@ -183,7 +206,7 @@ class AppStateTest {
             activeIntentModelId = "qwen2.5-1.5b-q8",
             downloadedModelIds = emptySet()
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertFalse(state.intentModelReady)
     }
 
@@ -192,7 +215,7 @@ class AppStateTest {
         val settings = TestDataFactory.createAppSettings(
             aiProcessor = "unknown_processor"
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertFalse(state.intentModelReady)
     }
 
@@ -202,7 +225,7 @@ class AppStateTest {
             voiceProcessor = Strings.Processors.WHISPER_VULKAN,
             voiceLanguage = "ro"
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertEquals(Strings.Processors.WHISPER_VULKAN, state.voiceProcessor)
         assertEquals("ro", state.voiceLanguage)
     }
@@ -213,7 +236,7 @@ class AppStateTest {
             aiProcessor = Strings.AiProcessors.GEMINI_CLOUD,
             cloudIntelligenceEnabled = false
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertEquals(Strings.AiProcessors.GEMINI_CLOUD, state.aiProcessor)
         assertFalse(state.cloudIntelligenceEnabled)
     }
@@ -223,7 +246,7 @@ class AppStateTest {
         val settings = TestDataFactory.createAppSettings(
             downloadedModelIds = setOf("base", "tiny", "qwen")
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertEquals(setOf("base", "tiny", "qwen"), state.downloadedModelIds)
         assertTrue(state.isModelDownloaded("base"))
         assertFalse(state.isModelDownloaded("nonexistent"))
@@ -238,7 +261,7 @@ class AppStateTest {
             )
         )
         val settings = TestDataFactory.createAppSettings()
-        val state = AppState.fromAppSettings(settings, context, models)
+        val state = AppState.fromAppSettings(settings, Credentials(), context, models)
         assertEquals(2, state.availableModels["stt_whisper"]?.size)
     }
 
@@ -250,7 +273,7 @@ class AppStateTest {
             defaultIntentFallbackProcessor = "nlu_llm",
             defaultIntentFallbackModel = "qwen"
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertEquals("stt_whisper", state.defaultVoiceFallbackProcessor)
         assertEquals("tiny", state.defaultVoiceFallbackModel)
         assertEquals("nlu_llm", state.defaultIntentFallbackProcessor)
@@ -266,7 +289,7 @@ class AppStateTest {
             wakeWord = "hi vox",
             wakeWordEnabled = true
         )
-        val state = AppState.fromAppSettings(settings, context, emptyMap())
+        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
         assertEquals("hi vox", state.wakeWord)
         assertTrue(state.wakeWordEnabled)
         assertEquals("/path/to/model", state.wakeWordModelPath)

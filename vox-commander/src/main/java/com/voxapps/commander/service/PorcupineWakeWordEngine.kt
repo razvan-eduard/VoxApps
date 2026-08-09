@@ -28,7 +28,10 @@ class PorcupineWakeWordEngine(
     private val settingsRepo: SettingsRepository,
     private val appStateManager: AppStateManager,
     private val onWakeWordDetected: () -> Unit
-) : IWakeWordEngine {
+) : com.voxapps.commander.domain.engine.BaseVoxEngine(), IWakeWordEngine {
+
+    override val engineKey: String = ENGINE_KEY
+
 
     private val TAG = "PorcupineWWEngine"
     private var porcupine: Porcupine? = null
@@ -54,29 +57,41 @@ class PorcupineWakeWordEngine(
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
 
     companion object {
-        val BUILT_IN_KEYWORDS = mapOf(
-            "alexa" to Porcupine.BuiltInKeyword.ALEXA,
-            "americano" to Porcupine.BuiltInKeyword.AMERICANO,
-            "blueberry" to Porcupine.BuiltInKeyword.BLUEBERRY,
-            "bumblebee" to Porcupine.BuiltInKeyword.BUMBLEBEE,
-            "computer" to Porcupine.BuiltInKeyword.COMPUTER,
-            "grapefruit" to Porcupine.BuiltInKeyword.GRAPEFRUIT,
-            "grasshopper" to Porcupine.BuiltInKeyword.GRASSHOPPER,
-            "hey google" to Porcupine.BuiltInKeyword.HEY_GOOGLE,
-            "hey siri" to Porcupine.BuiltInKeyword.HEY_SIRI,
-            "jarvis" to Porcupine.BuiltInKeyword.JARVIS,
-            "picovoice" to Porcupine.BuiltInKeyword.PICOVOICE,
-            "porcupine" to Porcupine.BuiltInKeyword.PORCUPINE,
-            "terminator" to Porcupine.BuiltInKeyword.TERMINATOR
-        )
+        const val ENGINE_KEY = "wake_porcupine"
+        /**
+         * The SDK's own keyword list, asked rather than restated.
+         *
+         * This was thirteen hand-written lines mapping a spoken phrase to
+         * [Porcupine.BuiltInKeyword] — the same thirteen `models.json` lists as this engine's
+         * models, and the same thirteen the enum already declares. Three copies of one list, and
+         * the enum is the only one that cannot drift from what the library actually supports.
+         *
+         * The enum spells a phrase `HEY_GOOGLE`; a wake word is written "hey google".
+         */
+        fun builtInKeyword(wakeWord: String): Porcupine.BuiltInKeyword? {
+            val wanted = wakeWord.trim().uppercase().replace(' ', '_')
+            return Porcupine.BuiltInKeyword.entries.find { it.name == wanted }
+        }
+
+        /** For a message that tells the user what they could have typed instead. */
+        fun builtInKeywords(): List<String> =
+            Porcupine.BuiltInKeyword.entries.map { it.name.lowercase().replace('_', ' ') }
     }
 
-    override suspend fun initialize(modelPath: String, wakeWord: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun onLoad(spec: com.voxapps.commander.domain.engine.ModelSpec): Boolean = withContext(Dispatchers.IO) {
+        val wake = spec as? com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel ?: run {
+            Logger.log("Wake word engines need a WakeWordModel spec", TAG)
+            return@withContext false
+        }
+        // No path is read: Porcupine's keywords are compiled into the library, which is why the
+        // engine declares runtime `device_builtin` and its spec carries no entry point.
+        val wakeWord = wake.keyword
+
         try {
             porcupine?.delete()
             porcupine = null
 
-            val accessKey = settingsRepo.getPicovoiceAccessKeySync()
+            val accessKey = settingsRepo.getCredentialsSnapshot().forEngine(ENGINE_KEY)
             if (accessKey.isNullOrBlank()) {
                 Logger.log("No Picovoice AccessKey configured", TAG)
                 return@withContext false
@@ -86,33 +101,21 @@ class PorcupineWakeWordEngine(
             val builder = Porcupine.Builder()
                 .setAccessKey(accessKey)
 
-            // Try built-in keyword first
-            val builtInKeyword = BUILT_IN_KEYWORDS[wakeWordClean]
-            if (builtInKeyword != null) {
-                builder.setKeywords(arrayOf(builtInKeyword))
-                Logger.log("Using Porcupine built-in keyword: $wakeWordClean", TAG)
-            } else {
-                // Try custom .ppn file in assets
-                val ppnFileName = "$wakeWordClean.ppn"
-                val ppnPath = wakeWordClean.replace(" ", "_") + ".ppn"
-                val assetManager = context.assets
-                val hasCustomPpn = try {
-                    assetManager.list("")?.any { it.equals(ppnFileName, ignoreCase = true) || it.equals(ppnPath, ignoreCase = true) } == true
-                } catch (e: Exception) {
-                    false
-                }
-
-                if (hasCustomPpn) {
-                    val actualPpnName = assetManager.list("")?.find {
-                        it.equals(ppnFileName, ignoreCase = true) || it.equals(ppnPath, ignoreCase = true)
-                    } ?: ppnFileName
-                    builder.setKeywordPaths(arrayOf(actualPpnName))
-                    Logger.log("Using Porcupine custom keyword file: $actualPpnName", TAG)
-                } else {
-                    Logger.log("Wake word '$wakeWordClean' not found as built-in or custom .ppn. Available built-ins: ${BUILT_IN_KEYWORDS.keys}", TAG)
-                    return@withContext false
-                }
+            // Porcupine detects a keyword compiled into the library. The engine used to fall
+            // back to a custom `.ppn` file in assets, scanning for one on every load — but none is
+            // bundled, nothing writes one, and a `.ppn` is licence-locked to the account that
+            // generated it, so that branch could never run. It is gone rather than kept as a
+            // promise the app cannot keep.
+            val builtInKeyword = builtInKeyword(wakeWord)
+            if (builtInKeyword == null) {
+                Logger.log(
+                    "'$wakeWordClean' is not one of Porcupine's keywords. Available: ${builtInKeywords()}",
+                    TAG
+                )
+                return@withContext false
             }
+            builder.setKeywords(arrayOf(builtInKeyword))
+            Logger.log("Using Porcupine built-in keyword: $wakeWordClean", TAG)
 
             // Map the user's Wake Word Sensitivity setting to Porcupine's sensitivity param
             // (higher = more sensitive — inverse of the distance-threshold engines). One value
@@ -274,7 +277,7 @@ class PorcupineWakeWordEngine(
         appStateManager.setVoiceState(VoiceState.IDLE)
     }
 
-    override fun release() {
+    override fun onRelease() {
         stopService()
         engineJob.cancel()
         try {
@@ -285,7 +288,11 @@ class PorcupineWakeWordEngine(
         porcupine = null
     }
 
-    override fun releaseForMemoryPressure() {
-        // Porcupine model is small (~2MB), no need to release on memory pressure
+    /** ~2MB — reloading it would cost more than releasing it frees. */
+    override fun releasesUnderMemoryPressure(): Boolean = false
+
+    override fun onUnload() {
+        try { porcupine?.delete() } catch (e: Exception) { Logger.log("Porcupine delete error: ${e.message}", TAG) }
+        porcupine = null
     }
 }

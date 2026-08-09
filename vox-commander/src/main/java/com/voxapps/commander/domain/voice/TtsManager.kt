@@ -4,10 +4,12 @@ import android.content.Context
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.engine.AndroidTtsEngine
+import com.voxapps.commander.domain.engine.EngineSpecs
+import com.voxapps.commander.domain.engine.EngineState
 import com.voxapps.commander.domain.engine.ITtsEngine
-import com.voxapps.commander.domain.engine.PiperTtsEngine
-import com.voxapps.commander.domain.engine.TtsEngineType
+import com.voxapps.commander.domain.engine.TtsEngines
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
@@ -32,29 +34,48 @@ object TtsManager {
 
     private const val TAG = Strings.Tags.TTS_MANAGER
 
-    private var engine: ITtsEngine? = null
+    /** Swapped on Main (init/settings observation), but read from Dispatchers.IO in speak() and
+     *  from the TTS binder thread in the onDone callback's resetRuntimeSpeechRate(). */
+    @Volatile private var engine: ITtsEngine? = null
     private var context: Context? = null
-    private var settingsRepo: SettingsRepository? = null
     private var appStateManager: AppStateManager? = null
     private var initialized = false
+    private var settingsRepo: SettingsRepository? = null
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var settingsObservationJob: kotlinx.coroutines.Job? = null
 
-    private var ttsEnabled = true
+    /** Written on Main by the settings observation, read on Dispatchers.IO at the top of speak(). */
+    @Volatile private var ttsEnabled = true
     private var ttsEngineType: String = "android"
-    private var speechRate: Float = 1.0f
+    /** Written on Main, read from the TTS binder thread via resetRuntimeSpeechRate() in onDone. */
+    @Volatile private var speechRate: Float = 1.0f
     private var pitch: Float = 1.0f
-    private var currentTtsLanguage: String = ""
-    private var audioFocusMode: String = "duck"
+    /** Written on Main by ensureEngine, read on Dispatchers.IO in speak()'s text normalization. */
+    @Volatile private var currentTtsLanguage: String = ""
+    /** Written on Main, read on Dispatchers.IO (requestAudioFocus) and on the binder thread
+     *  (abandonAudioFocus). */
+    @Volatile private var audioFocusMode: String = "duck"
     private var piperVoiceModelId: String? = null
     /** The Piper voice id the *currently live* engine instance was actually built with — distinct
      *  from [piperVoiceModelId] (the latest desired setting) so [ensureEngine] can tell a pure
      *  voice-only change apart from "nothing relevant changed" and rebuild only when needed. */
     private var currentPiperVoiceModelId: String? = null
 
-    private var audioManager: AudioManager? = null
+    /** Assigned once on Main in init(), read from Dispatchers.IO and the TTS binder thread. */
+    @Volatile private var audioManager: AudioManager? = null
+    /**
+     * Unlike its neighbours this can't be fixed with @Volatile: [abandonAudioFocus] reads it, hands
+     * it to AudioFocusHelper, then nulls it — a read-modify-write — and the three writers really do
+     * run on three different threads (requestAudioFocus from speak() on Dispatchers.IO,
+     * abandonAudioFocus from the engine's onDone on a TTS binder thread or Piper's IO job, and both
+     * again from stop()/release() on Main). @Volatile would publish the value without making the
+     * pair atomic, so two overlapping utterances could abandon the same request twice or drop one.
+     * Guarded by [audioFocusLock] instead; the critical sections are two AudioManager calls.
+     */
     private var audioFocusRequest: AudioFocusRequest? = null
+
+    private val audioFocusLock = Any()
 
     // --- REACTIVE SPEAKING STATE (for overlay UI) ---
     private val _isSpeakingFlow = MutableStateFlow(false)
@@ -80,8 +101,8 @@ object TtsManager {
         }
 
         this.context = context.applicationContext
-        this.settingsRepo = settingsRepo
         this.appStateManager = appStateManager
+        this.settingsRepo = settingsRepo
         this.initialized = true
 
         Logger.log("TtsManager initialized", TAG)
@@ -98,7 +119,7 @@ object TtsManager {
         piperVoiceModelId = snapshot.piperVoiceModelId
         audioManager = context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
-        ensureEngine(snapshot.voiceLanguage)
+        scope.launch { ensureEngine(snapshot.voiceLanguage) }
 
         startSettingsObservation()
     }
@@ -129,66 +150,79 @@ object TtsManager {
                     }
 
                     // Re-initialize engine if language, engine type, or the selected Piper voice changed
-                    if (language != currentTtsLanguage || engineChanged || (voiceChanged && ttsEngineType == TtsEngineType.PIPER.key)) {
+                    if (language != currentTtsLanguage || engineChanged || voiceChanged) {
                         ensureEngine(language)
                     }
                 }
         }
     }
 
-    private fun ensureEngine(language: String) {
+    /**
+     * Brings the engine in line with the current selection, whatever changed.
+     *
+     * One path, not two. This used to be an `engine == null` branch and an "did anything change"
+     * branch with the same body written twice — and the change detection compared engine *types*,
+     * which is how selecting Piper stayed a no-op: the key never matched, so the desired type came
+     * out as Android, which the engine already was. Now the engine decides: loading the same spec is
+     * a no-op inside [com.voxapps.commander.domain.engine.BaseVoxEngine], so this can always ask.
+     */
+    private suspend fun ensureEngine(language: String) {
         val ctx = context ?: return
-        val desiredType = TtsEngineType.fromKey(ttsEngineType) ?: TtsEngineType.ANDROID
+        val desiredKey = ttsEngineType
 
-        if (engine == null) {
-            engine = createEngine(desiredType)
-            (engine as? PiperTtsEngine)?.preferredVoiceId = piperVoiceModelId
-            val ok = engine?.initialize(ctx, language) ?: false
-            if (!ok && desiredType == TtsEngineType.PIPER) {
-                Logger.log("Piper TTS init failed, falling back to Android TTS", TAG)
-                engine?.release()
-                engine = AndroidTtsEngine()
-                engine?.initialize(ctx, language)
-            }
-            engine?.setSpeechRate(speechRate)
-            engine?.setPitch(pitch)
-            currentTtsLanguage = language
-            currentPiperVoiceModelId = piperVoiceModelId
-            Logger.log("TTS engine created (${desiredType.key}) for language '$language'", TAG)
-        } else if (language != currentTtsLanguage || !isCurrentEngineType(desiredType) ||
-            (desiredType == TtsEngineType.PIPER && piperVoiceModelId != currentPiperVoiceModelId)
-        ) {
-            Logger.log("TTS re-init: lang '$currentTtsLanguage'->'$language', engine ${if (!isCurrentEngineType(desiredType)) "changed " else ""}to ${desiredType.key}", TAG)
+        if (engine?.engineKey != desiredKey) {
             engine?.stop()
             engine?.release()
-            engine = createEngine(desiredType)
-            (engine as? PiperTtsEngine)?.preferredVoiceId = piperVoiceModelId
-            val ok = engine?.initialize(ctx, language) ?: false
-            if (!ok && desiredType == TtsEngineType.PIPER) {
-                Logger.log("Piper TTS init failed, falling back to Android TTS", TAG)
-                engine?.release()
-                engine = AndroidTtsEngine()
-                engine?.initialize(ctx, language)
-            }
-            engine?.setSpeechRate(speechRate)
-            engine?.setPitch(pitch)
-            currentTtsLanguage = language
-            currentPiperVoiceModelId = piperVoiceModelId
+            engine = TtsEngines.create(desiredKey, ctx)
+            Logger.log("TTS engine created ($desiredKey)", TAG)
         }
+
+        val loaded = loadOrNull(ctx, desiredKey, language)
+        if (!loaded && desiredKey != AndroidTtsEngine.ENGINE_KEY) {
+            Logger.log("'$desiredKey' could not load, falling back to Android TTS", TAG)
+            engine?.release()
+            engine = TtsEngines.create(AndroidTtsEngine.ENGINE_KEY, ctx)
+            loadOrNull(ctx, AndroidTtsEngine.ENGINE_KEY, language)
+        }
+
+        engine?.setSpeechRate(speechRate)
+        engine?.setPitch(pitch)
+        currentTtsLanguage = language
+        currentPiperVoiceModelId = piperVoiceModelId
     }
 
-    private fun createEngine(type: TtsEngineType): ITtsEngine = when (type) {
-        TtsEngineType.ANDROID -> AndroidTtsEngine()
-        TtsEngineType.PIPER -> PiperTtsEngine()
-    }
-
-    private fun isCurrentEngineType(type: TtsEngineType): Boolean {
+    private suspend fun loadOrNull(ctx: Context, engineKey: String, language: String): Boolean {
         val eng = engine ?: return false
-        return when (type) {
-            TtsEngineType.ANDROID -> eng is AndroidTtsEngine
-            TtsEngineType.PIPER -> eng is PiperTtsEngine
-        }
+        val repo = settingsRepo ?: return false
+        val spec = EngineSpecs.build(ctx, repo, engineKey, selectedModelFor(engineKey), language) ?: return false
+        return eng.load(spec)
     }
+
+    /**
+     * The model the user picked for [engineKey], falling back to any downloaded one.
+     *
+     * The fallback preserves the old behaviour for someone who downloaded a voice but never
+     * explicitly selected it — the engine used to find it by scanning for `vits-piper-*` directory
+     * names and guessing by quality suffix. This asks the registry and the downloaded set instead,
+     * so it holds for any engine rather than for one naming convention.
+     */
+    private fun selectedModelFor(engineKey: String): String? {
+        // Stored under an engine-specific key for historical reasons; it is the TTS model id.
+        piperVoiceModelId?.takeIf { it.isNotBlank() }?.let { return it }
+
+        val downloaded = settingsRepo?.getSettingsSnapshot()?.downloadedModelIds ?: return null
+        return RemoteModelRegistry.getModels(engineKey).firstOrNull { it.id in downloaded }?.id
+    }
+
+    /**
+     * Brings the engine in line with the current selection, whatever changed.
+     *
+     * One path, not two. This used to be an `engine == null` branch and an "did anything change"
+     * branch with the same body written twice — and the change detection compared engine *types*,
+     * which is how selecting Piper stayed a no-op: the key never matched, so the desired type came
+     * out as Android, which the engine already was. Now the engine decides: loading the same spec is
+     * a no-op inside [com.voxapps.commander.domain.engine.BaseVoxEngine], so this can always ask.
+     */
 
     /**
      * Speaks the given text. If TTS is disabled, this is a no-op.
@@ -214,13 +248,33 @@ object TtsManager {
         _isSpeakingFlow.value = true
         _currentTextFlow.value = normalizedText
         requestAudioFocus()
-        eng.speak(normalizedText, onDone = {
+
+        val onDone: () -> Unit = {
             abandonAudioFocus()
             _isSpeakingFlow.value = false
             _currentTextFlow.value = ""
             resetRuntimeSpeechRate()
             onComplete?.invoke()
-        })
+        }
+
+        if (eng.state.value is EngineState.Ready) {
+            eng.speak(normalizedText, onDone = onDone)
+            return
+        }
+
+        // The model was released under memory pressure, or has not been loaded yet. Reloading is
+        // this manager's job now: the engine used to do it inside speak(), which meant a blocking
+        // model load on whatever thread happened to ask for speech.
+        scope.launch {
+            ensureEngine(currentTtsLanguage)
+            val ready = engine
+            if (ready == null || ready.state.value !is EngineState.Ready) {
+                Logger.log("TTS could not be made ready, dropping utterance", TAG)
+                onDone()
+            } else {
+                ready.speak(normalizedText, onDone = onDone)
+            }
+        }
     }
 
     /**
@@ -290,7 +344,7 @@ object TtsManager {
 
     // --- AUDIO FOCUS ---
 
-    private fun requestAudioFocus() {
+    private fun requestAudioFocus() = synchronized(audioFocusLock) {
         val am = audioManager ?: return
         if (audioFocusMode == "none") return
 
@@ -308,7 +362,7 @@ object TtsManager {
         Logger.log("Audio focus requested (mode=$audioFocusMode)", TAG)
     }
 
-    private fun abandonAudioFocus() {
+    private fun abandonAudioFocus() = synchronized(audioFocusLock) {
         val am = audioManager ?: return
         if (audioFocusMode == "none") return
 

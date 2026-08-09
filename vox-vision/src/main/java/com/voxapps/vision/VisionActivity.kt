@@ -3,6 +3,7 @@ package com.voxapps.vision
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import com.voxapps.design.toEnumOr
 import com.voxapps.logging.Logger
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,8 +13,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
+import com.voxapps.vision.data.preferences.VisionSettingsRepository
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.vision.ui.LocalLanguageManager
@@ -43,8 +46,16 @@ class VisionActivity : ComponentActivity() {
         Logger.d("VisionActivity", "onCreate: pendingState=$pendingState")
 
         setContent {
+            val themeDarkMode by container.settingsRepository.themeDarkModeFlow.collectAsStateWithLifecycle(
+                initialValue = VisionSettingsRepository.THEME_SYSTEM
+            )
+            val themeColored by container.settingsRepository.themeColoredFlow.collectAsStateWithLifecycle(initialValue = true)
+
             CompositionLocalProvider(LocalLanguageManager provides container.languageManager) {
-                VoxTheme(darkMode = VoxDarkMode.SYSTEM, colored = true) {
+                VoxTheme(
+                    darkMode = themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
+                    colored = themeColored
+                ) {
                     VisionRoot(
                         container = container,
                         pendingRequest = pendingState,
@@ -73,7 +84,10 @@ class VisionActivity : ComponentActivity() {
                 sourcePackage = request.sourcePackage,
                 task = request.task,
                 hint = request.hint,
-                returnToCallerOnComplete = request.returnToCallerOnComplete
+                returnToCallerOnComplete = request.returnToCallerOnComplete,
+                imageUri = request.imageUri,
+                produceOCR = request.produceOCR,
+                captureMode = request.captureMode
             )
         }
 

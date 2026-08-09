@@ -28,7 +28,8 @@ class SpendingLimitCheckWorker(
 
         val expenses = container.expensesRepository.expenses.first()
         val categories = container.expensesRepository.categories.first()
-        val homeCurrency = container.settingsRepository.getSnapshot().homeCurrency
+        val settings = container.settingsRepository.getSnapshot()
+        val homeCurrency = settings.homeCurrency
 
         val exceeded = SpendingLimitChecker.findExceeded(
             expenses = expenses,
@@ -52,7 +53,8 @@ class SpendingLimitCheckWorker(
                 categoryLabel = categoryLabel,
                 spent = result.spent,
                 limit = result.limit.amountHomeCurrency,
-                homeCurrency = homeCurrency
+                homeCurrency = homeCurrency,
+                settings = settings
             )
             alertRepo.markAlerted(result.limit.id, result.periodKey)
         }

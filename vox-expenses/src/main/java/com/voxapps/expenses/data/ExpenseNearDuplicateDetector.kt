@@ -2,6 +2,7 @@ package com.voxapps.expenses.data
 
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.datahygiene.RuleCombinator
+import com.voxapps.design.toEnumOr
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import java.util.concurrent.TimeUnit
 
@@ -19,7 +20,7 @@ data class NearDuplicateConfig(
 
 fun ExpensesSettings.toNearDuplicateConfig(): NearDuplicateConfig = NearDuplicateConfig(
     timeWindowMillis = TimeUnit.MINUTES.toMillis(nearDuplicateTimeWindowMinutes.toLong()),
-    globalCombinator = runCatching { RuleCombinator.valueOf(duplicateRuleSetGlobalCombinator) }.getOrDefault(RuleCombinator.OR)
+    globalCombinator = duplicateRuleSetGlobalCombinator.toEnumOr(RuleCombinator.OR)
 )
 
 /**

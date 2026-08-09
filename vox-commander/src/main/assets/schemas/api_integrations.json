@@ -1,0 +1,283 @@
+{
+  "schema_version": 4,
+  "integrations": [
+    {
+      "id": "spotify",
+      "label": "Spotify",
+      "package_name": "com.spotify.music",
+      "auth": {
+        "style": "oauth2",
+        "flow": "pkce",
+        "authorize_url": "https://accounts.spotify.com/authorize",
+        "token_url": "https://accounts.spotify.com/api/token",
+        "redirect_uri": "voxcommander://spotify/callback",
+        "scopes": "user-read-playback-state user-modify-playback-state user-read-currently-playing streaming app-remote-control",
+        "requires_client_id": true,
+        "client_id_url": "https://developer.spotify.com/dashboard",
+        "setup_help_keys": [
+          "spotify_setup_step1",
+          "spotify_setup_step2",
+          "spotify_setup_step3",
+          "{redirect_uri}",
+          "spotify_setup_step4",
+          "spotify_setup_step_apis",
+          "spotify_setup_step_user_mgmt",
+          "spotify_setup_step_fingerprint",
+          "spotify_setup_step_package_name",
+          "{package_name}",
+          "spotify_setup_step_fingerprint_sha1",
+          "{signing_sha1}"
+        ]
+      },
+      "endpoint": "https://api.spotify.com/v1",
+      "probe_url": "me",
+      "icon": "music",
+      "accent_color": "#1DB954",
+      "capabilities": {
+        "search_track": {
+          "type": "api_call",
+          "method": "GET",
+          "path": "/search?q={query}&type=track&limit=1",
+          "response_path": "tracks.items[0].uri",
+          "extract": {
+            "artist_id": "tracks.items[0].artists[0].id"
+          }
+        },
+        "search_album": {
+          "type": "api_call",
+          "method": "GET",
+          "path": "/search?q={query}&type=album&limit=1",
+          "response_path": "albums.items[0].uri"
+        },
+        "search_artist": {
+          "type": "api_call",
+          "method": "GET",
+          "path": "/search?q={query}&type=artist&limit=1",
+          "response_path": "artists.items[0].uri"
+        },
+        "play_track": {
+          "type": "api_sequence",
+          "steps": [
+            {
+              "capability": "search_track"
+            },
+            {
+              "type": "api_call",
+              "method": "GET",
+              "path": "/me/player/devices",
+              "response_path": "devices",
+              "as": "devices",
+              "optional": true
+            },
+            {
+              "type": "device_select",
+              "from": "devices",
+              "prefer": [
+                {
+                  "field": "type",
+                  "equals": "Smartphone"
+                },
+                {
+                  "field": "is_active",
+                  "equals": true
+                },
+                {
+                  "field": "type",
+                  "equals": "Computer"
+                }
+              ],
+              "id_field": "id",
+              "as": "device_id",
+              "optional": true
+            },
+            {
+              "type": "api_call",
+              "method": "PUT",
+              "path": "/me/player",
+              "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}",
+              "optional": true
+            },
+            {
+              "type": "api_call",
+              "group": "play",
+              "method": "PUT",
+              "path": "/me/player/play?device_id={device_id}",
+              "body": "{\"uris\":[\"{search_track.result}\"]}",
+              "delay_before_ms": 500,
+              "retry": {
+                "times": 1,
+                "delay_ms": 2000
+              }
+            },
+            {
+              "type": "api_call",
+              "group": "play",
+              "method": "PUT",
+              "path": "/me/player/play",
+              "body": "{\"uris\":[\"{search_track.result}\"]}"
+            },
+            {
+              "type": "api_call",
+              "method": "GET",
+              "path": "/artists/{search_track.artist_id}/top-tracks",
+              "response_path": "tracks",
+              "as": "top_tracks",
+              "optional": true
+            },
+            {
+              "type": "queue_array",
+              "from": "top_tracks",
+              "uri_field": "uri",
+              "limit": 4,
+              "skip": "{search_track.result}",
+              "queue_path": "/me/player/queue?uri={item}",
+              "method": "POST",
+              "optional": true
+            }
+          ]
+        },
+        "play_album": {
+          "type": "api_sequence",
+          "steps": [
+            {
+              "capability": "search_album"
+            },
+            {
+              "type": "api_call",
+              "method": "GET",
+              "path": "/me/player/devices",
+              "response_path": "devices",
+              "as": "devices",
+              "optional": true
+            },
+            {
+              "type": "device_select",
+              "from": "devices",
+              "prefer": [
+                {
+                  "field": "type",
+                  "equals": "Smartphone"
+                },
+                {
+                  "field": "is_active",
+                  "equals": true
+                },
+                {
+                  "field": "type",
+                  "equals": "Computer"
+                }
+              ],
+              "id_field": "id",
+              "as": "device_id",
+              "optional": true
+            },
+            {
+              "type": "api_call",
+              "method": "PUT",
+              "path": "/me/player",
+              "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}",
+              "optional": true
+            },
+            {
+              "type": "api_call",
+              "group": "play",
+              "method": "PUT",
+              "path": "/me/player/play?device_id={device_id}",
+              "body": "{\"context_uri\":\"{search_album.result}\"}",
+              "delay_before_ms": 500,
+              "retry": {
+                "times": 1,
+                "delay_ms": 2000
+              }
+            },
+            {
+              "type": "api_call",
+              "group": "play",
+              "method": "PUT",
+              "path": "/me/player/play",
+              "body": "{\"context_uri\":\"{search_album.result}\"}"
+            }
+          ]
+        },
+        "play_artist": {
+          "type": "api_sequence",
+          "steps": [
+            {
+              "capability": "search_artist"
+            },
+            {
+              "type": "api_call",
+              "method": "GET",
+              "path": "/me/player/devices",
+              "response_path": "devices",
+              "as": "devices",
+              "optional": true
+            },
+            {
+              "type": "device_select",
+              "from": "devices",
+              "prefer": [
+                {
+                  "field": "type",
+                  "equals": "Smartphone"
+                },
+                {
+                  "field": "is_active",
+                  "equals": true
+                },
+                {
+                  "field": "type",
+                  "equals": "Computer"
+                }
+              ],
+              "id_field": "id",
+              "as": "device_id",
+              "optional": true
+            },
+            {
+              "type": "api_call",
+              "method": "PUT",
+              "path": "/me/player",
+              "body": "{\"device_ids\":[\"{device_id}\"],\"play\":false}",
+              "optional": true
+            },
+            {
+              "type": "api_call",
+              "group": "play",
+              "method": "PUT",
+              "path": "/me/player/play?device_id={device_id}",
+              "body": "{\"context_uri\":\"{search_artist.result}\"}",
+              "delay_before_ms": 500,
+              "retry": {
+                "times": 1,
+                "delay_ms": 2000
+              }
+            },
+            {
+              "type": "api_call",
+              "group": "play",
+              "method": "PUT",
+              "path": "/me/player/play",
+              "body": "{\"context_uri\":\"{search_artist.result}\"}"
+            }
+          ]
+        },
+        "pause": {
+          "type": "api_call",
+          "method": "PUT",
+          "path": "/me/player/pause"
+        },
+        "next": {
+          "type": "api_call",
+          "method": "POST",
+          "path": "/me/player/next"
+        },
+        "prev": {
+          "type": "api_call",
+          "method": "POST",
+          "path": "/me/player/previous"
+        }
+      }
+    }
+  ]
+}

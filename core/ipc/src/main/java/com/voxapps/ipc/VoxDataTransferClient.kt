@@ -35,8 +35,13 @@ object VoxDataTransferClient {
         context: Context,
         packageName: String,
         payloadJson: String,
+        importMode: String = VoxIpc.IMPORT_MODE_MERGE,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
-    ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_IMPORT, text = payloadJson), timeoutMs)
+    ): VoxResult? = send(
+        context, packageName,
+        VoxCommand(op = VoxIpc.OP_IMPORT, text = payloadJson, importMode = importMode),
+        timeoutMs
+    )
 
     /**
      * Peer-to-peer sync, export side: asks a satellite for everything that's changed since [since]
@@ -96,6 +101,20 @@ object VoxDataTransferClient {
         dateTo: Long,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
     ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_READ, dateFrom = dateFrom, dateTo = dateTo), timeoutMs)
+
+    /**
+     * Generic escape hatch: sends an arbitrary [VoxCommand] as-is and returns the raw [VoxResult] —
+     * used by callers (the VoxConnect Bridge) that need to forward a command built elsewhere rather
+     * than construct one of the named shapes above. Every named function in this object could be
+     * written in terms of this one; they aren't, purely so each call site keeps its specific
+     * field-by-field signature instead of a raw [VoxCommand].
+     */
+    suspend fun sendCommand(
+        context: Context,
+        packageName: String,
+        command: VoxCommand,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    ): VoxResult? = send(context, packageName, command, timeoutMs)
 
     /**
      * Fire-and-forget push: a satellite calls this the instant its own dynamic context (categories,

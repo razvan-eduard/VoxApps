@@ -1,0 +1,102 @@
+{
+  "schema_version": 12,
+  "engines": {
+    "GOOGLE": {
+      "engine_label": "Google Speech Recognition",
+      "label_key": "engine_label_google",
+      "is_multilingual": true,
+      "extension": "",
+      "runtime": "android_local",
+      "type": [
+        "voice"
+      ],
+      "models": []
+    },
+    "WHISPER_API": {
+      "engine_label": "OpenAI Whisper API",
+      "label_key": "engine_label_whisper_api",
+      "api_key_url": "https://platform.openai.com/api-keys",
+      "endpoint": "https://api.openai.com/v1",
+      "probe_url": "models",
+      "auth": {
+        "style": "bearer"
+      },
+      "is_multilingual": true,
+      "extension": "",
+      "runtime": "cloud",
+      "timeout_seconds": 60,
+      "capabilities": [
+        "requires_api_key"
+      ],
+      "type": [
+        "voice"
+      ],
+      "models": []
+    },
+    "OPENAI": {
+      "engine_label": "OpenAI GPT (Cloud)",
+      "label_key": "engine_label_openai_gpt",
+      "api_key_url": "https://platform.openai.com/api-keys",
+      "endpoint": "https://api.openai.com/v1",
+      "probe_url": "models",
+      "auth": {
+        "style": "bearer"
+      },
+      "is_multilingual": true,
+      "extension": "",
+      "runtime": "cloud",
+      "capabilities": [
+        "requires_api_key",
+        "multimodal"
+      ],
+      "type": [
+        "llm"
+      ],
+      "models": []
+    },
+    "GEMINI_CLOUD": {
+      "engine_label": "Gemini Cloud (API)",
+      "label_key": "engine_label_gemini_cloud",
+      "api_key_url": "https://aistudio.google.com/apikey",
+      "endpoint": "https://generativelanguage.googleapis.com/v1beta",
+      "probe_url": "models",
+      "auth": {
+        "style": "query",
+        "param": "key"
+      },
+      "is_multilingual": true,
+      "extension": "",
+      "runtime": "cloud",
+      "capabilities": [
+        "requires_api_key",
+        "multimodal"
+      ],
+      "type": [
+        "llm"
+      ],
+      "models": []
+    },
+    "GEMINI_NATIVE": {
+      "engine_label": "Gemini Nano (System)",
+      "label_key": "engine_label_gemini_nano",
+      "is_multilingual": true,
+      "extension": "",
+      "runtime": "android_local",
+      "type": [
+        "llm"
+      ],
+      "models": []
+    },
+    "android": {
+      "engine_label": "Android (system default)",
+      "label_key": "tts_engine_android",
+      "is_multilingual": true,
+      "extension": "",
+      "runtime": "android_local",
+      "type": [
+        "tts"
+      ],
+      "models": []
+    }
+  }
+}

@@ -17,7 +17,8 @@ class RecurrenceExpanderTest {
     private fun entry(
         start: LocalDate,
         frequency: RecurrenceFrequency = RecurrenceFrequency.NONE,
-        untilMillis: Long? = null
+        untilMillis: Long? = null,
+        interval: Int = 1
     ) = CalendarEntry(
         id = 1,
         uid = "uid",
@@ -26,6 +27,7 @@ class RecurrenceExpanderTest {
         startMillis = millis(start),
         layerId = 1,
         recurrenceFrequency = frequency,
+        recurrenceInterval = interval,
         recurrenceUntilMillis = untilMillis,
         createdAt = 0L,
         updatedAt = 0L
@@ -113,6 +115,63 @@ class RecurrenceExpanderTest {
         assertEquals(
             listOf(LocalDate.of(2025, 7, 4), LocalDate.of(2026, 7, 4), LocalDate.of(2027, 7, 4)),
             dates
+        )
+    }
+
+    @Test
+    fun `every-2-weeks recurrence skips the off weeks`() {
+        val start = LocalDate.of(2026, 3, 2) // a Monday
+        val e = entry(start, RecurrenceFrequency.WEEKLY, interval = 2)
+        val occurrences = RecurrenceExpander.expand(
+            e, millis(LocalDate.of(2026, 3, 1)), millis(LocalDate.of(2026, 4, 30)), zone
+        )
+        val dates = occurrences.map { java.time.Instant.ofEpochMilli(it.startMillis).atZone(zone).toLocalDate() }
+        assertEquals(
+            listOf(
+                LocalDate.of(2026, 3, 2), LocalDate.of(2026, 3, 16),
+                LocalDate.of(2026, 3, 30), LocalDate.of(2026, 4, 13), LocalDate.of(2026, 4, 27)
+            ),
+            dates
+        )
+    }
+
+    @Test
+    fun `every-3-months recurrence spaces occurrences 3 months apart`() {
+        val e = entry(LocalDate.of(2026, 1, 20), RecurrenceFrequency.MONTHLY, interval = 3)
+        val occurrences = RecurrenceExpander.expand(
+            e, millis(LocalDate.of(2026, 1, 1)), millis(LocalDate.of(2026, 12, 31)), zone
+        )
+        val dates = occurrences.map { java.time.Instant.ofEpochMilli(it.startMillis).atZone(zone).toLocalDate() }
+        assertEquals(
+            listOf(LocalDate.of(2026, 1, 20), LocalDate.of(2026, 4, 20), LocalDate.of(2026, 7, 20), LocalDate.of(2026, 10, 20)),
+            dates
+        )
+    }
+
+    @Test
+    fun `nextOccurrenceOnOrAfter finds the first occurrence at or past fromMillis`() {
+        val e = entry(LocalDate.of(2026, 1, 20), RecurrenceFrequency.MONTHLY)
+        val next = RecurrenceExpander.nextOccurrenceOnOrAfter(e, millis(LocalDate.of(2026, 3, 1)), zone)
+        assertEquals(millis(LocalDate.of(2026, 3, 20)), next?.startMillis)
+    }
+
+    @Test
+    fun `nextOccurrenceOnOrAfter returns null once recurrenceUntilMillis is exhausted`() {
+        val e = entry(
+            LocalDate.of(2026, 1, 20), RecurrenceFrequency.MONTHLY,
+            untilMillis = millis(LocalDate.of(2026, 2, 1))
+        )
+        val next = RecurrenceExpander.nextOccurrenceOnOrAfter(e, millis(LocalDate.of(2026, 3, 1)), zone)
+        assertEquals(null, next)
+    }
+
+    @Test
+    fun `nextOccurrenceOnOrAfter for a non-recurring entry returns null once it has passed`() {
+        val e = entry(LocalDate.of(2026, 1, 20))
+        assertEquals(null, RecurrenceExpander.nextOccurrenceOnOrAfter(e, millis(LocalDate.of(2026, 2, 1)), zone))
+        assertEquals(
+            e.startMillis,
+            RecurrenceExpander.nextOccurrenceOnOrAfter(e, millis(LocalDate.of(2026, 1, 1)), zone)?.startMillis
         )
     }
 }

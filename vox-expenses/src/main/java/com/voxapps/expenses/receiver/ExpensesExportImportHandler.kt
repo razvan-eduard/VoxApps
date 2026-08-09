@@ -1,13 +1,22 @@
 package com.voxapps.expenses.receiver
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
-import androidx.core.content.FileProvider
 import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.restoreFromBackup
+import com.voxapps.attachments.toBackupJson
 import com.voxapps.attachments.AttachmentEntity
-import com.voxapps.attachments.AttachmentSource
+import com.voxapps.backup.VoxAttachmentZipUtil
+import com.voxapps.backup.VoxBiometricGate
+import com.voxapps.backup.mergeByName
+import com.voxapps.backup.optStringOrNull
+import com.voxapps.backup.VoxImportMode
+import com.voxapps.backup.VoxSettingsRoundTrip
+import com.voxapps.backup.VoxSnapshotReplaceImporter
+import com.voxapps.design.toEnumOrNull
 import com.voxapps.expenses.data.Category
+import com.voxapps.expenses.data.DuplicateRuleDao
+import com.voxapps.expenses.data.DuplicateRuleEntity
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExchangeRateApiKeyStore
@@ -27,12 +36,6 @@ import com.voxapps.logging.Logger
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
-import java.util.UUID
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 private const val TAG = "ExpensesExportImportHandler"
 
@@ -41,13 +44,20 @@ private const val TAG = "ExpensesExportImportHandler"
  * without Android (mirrors [ExpensesReadResponder] / vox-notes' NotesExportImportHandler). Respects
  * the same biometric-lock gate as reads — an export/import request while the app is locked never
  * touches the DB.
+ *
+ * [duplicateRuleDao] is injected directly (same convention as [attachmentDao]) rather than routed
+ * through [ExpensesRepository] — that repository already keeps its own `duplicateRuleDao` reference
+ * private (used only internally for the auto-check pass), and `DuplicateRuleDao` is already injected
+ * directly into `ExpensesStateManager` elsewhere in this codebase for the same reason, so direct
+ * injection here isn't a new pattern.
  */
 class ExpensesExportImportHandler(
     private val context: Context,
     private val settingsRepo: ExpensesSettingsRepository,
     private val sessionManager: SessionManager,
     private val expensesRepo: ExpensesRepository,
-    private val attachmentDao: AttachmentDao
+    private val attachmentDao: AttachmentDao,
+    private val duplicateRuleDao: DuplicateRuleDao
 ) {
     suspend fun export(
         scope: String = VoxIpc.EXPORT_SCOPE_BOTH,
@@ -55,8 +65,7 @@ class ExpensesExportImportHandler(
         includePhotos: Boolean = false
     ): VoxResult {
         val settings = settingsRepo.getSnapshot()
-        val locked = settings.isBiometricRequired &&
-            !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
+        val locked = VoxBiometricGate.isLocked(settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid)
         if (locked) return VoxResult(ok = false, text = ExpensesReadResponder.LOCKED_MESSAGE)
 
         val json = JSONObject()
@@ -90,6 +99,8 @@ class ExpensesExportImportHandler(
                 )
             )
             json.put("merchantCategoryMemory", JSONArray(merchantCategoryMemory.map { it.toJson() }))
+            val duplicateRules = duplicateRuleDao.getAll()
+            json.put("duplicateRules", JSONArray(duplicateRules.map { it.toJson() }))
 
             if (includePhotos) {
                 val names = expensesWithDetails.mapNotNull { it.expense.receiptImageName?.takeIf { n -> n.isNotBlank() } }
@@ -106,56 +117,18 @@ class ExpensesExportImportHandler(
 
     /** Zips manually-added attachment files (see :core:attachments) into a fresh file under
      *  cacheDir and grants Hub read access — same shape as [buildReceiptsZip], kept separate since
-     *  it covers a different directory (filesDir/attachments/, not filesDir/receipts/). */
-    private fun buildAttachmentsZip(fileNames: List<String>): Uri? {
-        if (fileNames.isEmpty()) return null
-        val attachmentsDir = File(context.filesDir, ExpensesAttachments.DIR)
-        return try {
-            val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val zipFile = File(exportsDir, "export_attachments_${UUID.randomUUID()}.zip")
-            var wroteAny = false
-            ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-                for (name in fileNames) {
-                    val file = File(attachmentsDir, name)
-                    if (file.exists()) {
-                        zos.putNextEntry(ZipEntry(name))
-                        file.inputStream().use { it.copyTo(zos) }
-                        zos.closeEntry()
-                        wroteAny = true
-                    }
-                }
-            }
-            if (!wroteAny) {
-                zipFile.delete()
-                return null
-            }
-            val uri = FileProvider.getUriForFile(context, "com.voxapps.expenses.fileprovider", zipFile)
-            context.grantUriPermission(VoxIpc.HUB_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            uri
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to build attachments export zip", e)
-            null
-        }
-    }
+     *  it covers a different directory (filesDir/attachments/, not filesDir/receipts/). Also bundles
+     *  each attachment's sibling raw-OCR-text file, if present (see
+     *  [OcrResultReceiver.writeOcrTextSibling]) — those exist for the same
+     *  retry-without-rescanning reason [buildReceiptsZip] already bundles its own. */
+    private fun buildAttachmentsZip(fileNames: List<String>): Uri? =
+        VoxAttachmentZipUtil.build(
+            context, ExpensesAttachments.DIR, fileNames, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, sidecarSuffix = ".txt"
+        )
 
     /** Same shape as [extractReceiptsZip], kept separate since it targets a different directory. */
-    private fun extractAttachmentsZip(uri: Uri) {
-        val attachmentsDir = File(context.filesDir, ExpensesAttachments.DIR).apply { mkdirs() }
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            ZipInputStream(input).use { zis ->
-                var entry = zis.nextEntry
-                while (entry != null) {
-                    if (!entry.isDirectory) {
-                        val safeName = File(entry.name).name
-                        if (safeName.isNotBlank()) {
-                            FileOutputStream(File(attachmentsDir, safeName)).use { fos -> zis.copyTo(fos) }
-                        }
-                    }
-                    entry = zis.nextEntry
-                }
-            }
-        }
-    }
+    private fun extractAttachmentsZip(uri: Uri) =
+        VoxAttachmentZipUtil.extract(context, ExpensesAttachments.DIR, uri)
 
     /**
      * Zips just the receipt-image files (plus their sibling raw-OCR-text files, if present — those
@@ -165,47 +138,18 @@ class ExpensesExportImportHandler(
      * nothing to bundle or on any I/O failure — photo bundling is always best-effort, never blocks
      * the JSON export itself.
      */
-    private fun buildReceiptsZip(names: List<String>): Uri? {
-        if (names.isEmpty()) return null
-        val receiptsDir = File(context.filesDir, "receipts")
-        return try {
-            val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val zipFile = File(exportsDir, "export_receipts_${UUID.randomUUID()}.zip")
-            var wroteAny = false
-            ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-                for (name in names) {
-                    val img = File(receiptsDir, name)
-                    if (img.exists()) {
-                        zos.putNextEntry(ZipEntry(name))
-                        img.inputStream().use { it.copyTo(zos) }
-                        zos.closeEntry()
-                        wroteAny = true
-                    }
-                    val txt = File(receiptsDir, name.substringBeforeLast('.') + ".txt")
-                    if (txt.exists()) {
-                        zos.putNextEntry(ZipEntry(txt.name))
-                        txt.inputStream().use { it.copyTo(zos) }
-                        zos.closeEntry()
-                    }
-                }
-            }
-            if (!wroteAny) {
-                zipFile.delete()
-                return null
-            }
-            val uri = FileProvider.getUriForFile(context, "com.voxapps.expenses.fileprovider", zipFile)
-            context.grantUriPermission(VoxIpc.HUB_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            uri
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to build receipts export zip", e)
-            null
-        }
-    }
+    private fun buildReceiptsZip(names: List<String>): Uri? =
+        VoxAttachmentZipUtil.build(
+            context, "receipts", names, ExpensesAttachments.FILE_PROVIDER_AUTHORITY,
+            sidecarSuffix = ".txt", zipFilePrefix = "export_receipts"
+        )
 
-    suspend fun import(payloadJson: String): VoxResult {
+    private fun extractReceiptsZip(uri: Uri) =
+        VoxAttachmentZipUtil.extract(context, "receipts", uri)
+
+    suspend fun import(payloadJson: String, importMode: VoxImportMode = VoxImportMode.MERGE): VoxResult {
         val settings = settingsRepo.getSnapshot()
-        val locked = settings.isBiometricRequired &&
-            !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
+        val locked = VoxBiometricGate.isLocked(settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid)
         if (locked) return VoxResult(ok = false, text = ExpensesReadResponder.LOCKED_MESSAGE)
 
         val root = try {
@@ -244,31 +188,24 @@ class ExpensesExportImportHandler(
             }
         }
 
-        val existingCategories = expensesRepo.categories.first()
-        val nameToId = existingCategories.associate { it.name.lowercase() to it.id }.toMutableMap()
-        val importedIdToLocalId = mutableMapOf<Long, Long?>()
         val importedCategories = root.optJSONArray("categories") ?: JSONArray()
-        var categoriesCreated = 0
-        for (i in 0 until importedCategories.length()) {
-            val c = importedCategories.getJSONObject(i)
-            val name = c.optString("name").trim()
-            if (name.isEmpty()) continue
-            val importedId = c.optLong("id")
-            val localId = nameToId[name.lowercase()] ?: run {
-                val newId = expensesRepo.addCategory(
+        val categoryMerge = mergeByName(
+            imported = importedCategories,
+            existing = expensesRepo.categories.first(),
+            nameOf = { it.name },
+            idOf = { it.id },
+            importedNameOf = { it.optString("name") },
+            create = { c, name ->
+                expensesRepo.addCategory(
                     name,
                     c.optLong("colorArgb"),
                     c.optInt("position"),
                     c.optLong("createdAt", System.currentTimeMillis())
                 )
-                if (newId > 0) {
-                    categoriesCreated++
-                    nameToId[name.lowercase()] = newId
-                }
-                newId.takeIf { it > 0 }
             }
-            importedIdToLocalId[importedId] = localId
-        }
+        )
+        val importedIdToLocalId = categoryMerge.idMap
+        val categoriesCreated = categoryMerge.created
 
         // Upserted by vendorKey, not replace-by-snapshot like spendingLimits/expenses below — wiping
         // locally learned mappings on every restore would un-learn correction streaks built up on
@@ -283,193 +220,173 @@ class ExpensesExportImportHandler(
             )
         }
 
-        // Replace, not merge (mirrors vox-notes' NotesExportImportHandler): importing a data
-        // payload restores that snapshot rather than merging with what's already on this device.
-        // Snapshot pre-existing spending limits/expenses, insert every imported one, then delete
-        // exactly what existed before. Categories are untouched here — merged by name above.
+        // Merged by name (mirrors categories above), not replace-by-snapshot — the two rules
+        // seeded on every fresh install would otherwise duplicate on each restore cycle, and a
+        // rule only ever added on this specific device shouldn't be wiped by a backup taken
+        // elsewhere.
+        val existingRules = duplicateRuleDao.getAll()
+        val ruleNameToRule = existingRules.associateBy { it.name.lowercase() }
+        val importedRules = root.optJSONArray("duplicateRules") ?: JSONArray()
+        var rulesCreated = 0
+        for (i in 0 until importedRules.length()) {
+            val r = importedRules.getJSONObject(i)
+            val name = r.optString("name").trim()
+            if (name.isEmpty()) continue
+            val fieldIdsArray = r.optJSONArray("fieldIds") ?: JSONArray()
+            val fieldIds = (0 until fieldIdsArray.length()).map { fieldIdsArray.optString(it) }
+            val existing = ruleNameToRule[name.lowercase()]
+            if (existing != null) {
+                duplicateRuleDao.update(
+                    existing.copy(
+                        fieldIds = fieldIds,
+                        combinator = r.optString("combinator", existing.combinator),
+                        enabled = r.optBoolean("enabled", existing.enabled),
+                        sortOrder = r.optInt("sortOrder", existing.sortOrder),
+                        appliesAutomatically = r.optBoolean("appliesAutomatically", existing.appliesAutomatically),
+                        fuzzyMatchEnabled = r.optBoolean("fuzzyMatchEnabled", existing.fuzzyMatchEnabled)
+                    )
+                )
+            } else {
+                duplicateRuleDao.upsert(
+                    DuplicateRuleEntity(
+                        name = name,
+                        fieldIds = fieldIds,
+                        combinator = r.optString("combinator", "AND"),
+                        enabled = r.optBoolean("enabled", true),
+                        sortOrder = r.optInt("sortOrder", 0),
+                        appliesAutomatically = r.optBoolean("appliesAutomatically", true),
+                        fuzzyMatchEnabled = r.optBoolean("fuzzyMatchEnabled", true)
+                    )
+                )
+                rulesCreated++
+            }
+        }
+
+        // Snapshot pre-existing spending limits/expenses, insert every imported one, then reconcile
+        // pre-existing rows per the user's chosen import mode (see VoxSnapshotReplaceImporter).
+        // Categories are untouched here — merged by name above.
         if (root.has("spendingLimits")) {
             val preExistingLimits = expensesRepo.spendingLimits.first()
-
             val importedLimits = root.optJSONArray("spendingLimits") ?: JSONArray()
-            for (i in 0 until importedLimits.length()) {
-                val l = importedLimits.getJSONObject(i)
-                val importedCategoryId = if (l.has("categoryId") && !l.isNull("categoryId")) l.optLong("categoryId") else null
-                val categoryId = importedCategoryId?.let { importedIdToLocalId[it] }
-                expensesRepo.addSpendingLimit(
-                    categoryId, l.optDouble("amountHomeCurrency"), l.optString("period"),
-                    createdAt = l.optLong("createdAt", System.currentTimeMillis())
-                )
-            }
 
-            // Only delete rows that plausibly existed when the export was taken (createdAt <=
-            // exportedAt) — anything created on this device after the backup, but before this
-            // import ran, is presumed unrelated to the restore and must survive.
-            preExistingLimits.filter { it.createdAt <= exportedAt }.forEach { expensesRepo.deleteSpendingLimit(it) }
+            VoxSnapshotReplaceImporter.restore(
+                mode = importMode,
+                imported = (0 until importedLimits.length()).map { importedLimits.getJSONObject(it) },
+                preExisting = preExistingLimits,
+                exportedAt = exportedAt,
+                createdAtOf = { it.createdAt },
+                insert = { l ->
+                    val importedCategoryId = if (l.has("categoryId") && !l.isNull("categoryId")) l.optLong("categoryId") else null
+                    val categoryId = importedCategoryId?.let { importedIdToLocalId[it] }
+                    expensesRepo.addSpendingLimit(
+                        categoryId, l.optDouble("amountHomeCurrency"), l.optString("period"),
+                        createdAt = l.optLong("createdAt", System.currentTimeMillis())
+                    )
+                },
+                delete = { expensesRepo.deleteSpendingLimit(it) }
+            )
         }
 
         var expensesCreated = 0
         if (root.has("expenses")) {
             val preExistingExpenses = expensesRepo.expensesSnapshot()
-
             val importedExpenses = root.optJSONArray("expenses") ?: JSONArray()
-            for (i in 0 until importedExpenses.length()) {
-                val e = importedExpenses.getJSONObject(i)
-                val importedCategoryId = if (e.has("categoryId") && !e.isNull("categoryId")) e.optLong("categoryId") else null
-                val categoryId = importedCategoryId?.let { importedIdToLocalId[it] }
-                val items = (e.optJSONArray("items") ?: JSONArray()).let { arr ->
-                    (0 until arr.length()).map { idx ->
-                        val it = arr.getJSONObject(idx)
-                        ExpenseLineItem(
-                            expenseId = 0,
-                            name = it.optString("name"),
-                            quantity = it.optDouble("quantity", 1.0),
-                            unitPrice = it.optDouble("unitPrice", 0.0),
-                            position = it.optInt("position", idx),
-                            netAmount = it.optDoubleOrNull("netAmount"),
-                            vatAmount = it.optDoubleOrNull("vatAmount"),
-                            grossAmount = it.optDoubleOrNull("grossAmount")
-                        )
-                    }
-                }
-                val newExpenseId = expensesRepo.addExpense(
-                    title = e.optStringOrNull("title"),
-                    totalAmount = e.optDouble("totalAmount"),
-                    currencyCode = e.optString("currencyCode"),
-                    vendor = e.optStringOrNull("vendor"),
-                    bank = e.optStringOrNull("bank"),
-                    location = e.optStringOrNull("location"),
-                    dateTime = e.optLong("dateTime", System.currentTimeMillis()),
-                    comments = e.optStringOrNull("comments"),
-                    categoryId = categoryId,
-                    direction = e.optTransactionDirection(),
-                    items = items,
-                    imageName = e.optStringOrNull("receiptImageName"),
-                    // Preserved from the source device, never re-stamped to "now" — re-stamping
-                    // would make a later re-sync from the same backup see this row as freshly
-                    // created and permanently immune to being correctly replaced, silently
-                    // reintroducing the bug this createdAt filter exists to fix.
-                    createdAt = e.optLong("createdAt", System.currentTimeMillis()),
-                    // Old pre-existing rows are deleted AFTER this insert loop (below), so they're
-                    // still present here and would otherwise get misdetected as duplicates of the
-                    // very rows they're about to be replaced by — import must never be blocked by
-                    // this check (RecordSource.HUB_IMPORT: another install's already-validated data).
-                    checkForDuplicate = false,
-                    source = e.optExpenseSource(),
-                    manuallyEdited = e.optBoolean("manuallyEdited", false)
-                )
-                expensesCreated++
 
-                if (newExpenseId > 0) {
-                    val importedAttachments = e.optJSONArray("attachments") ?: JSONArray()
-                    for (j in 0 until importedAttachments.length()) {
-                        val a = importedAttachments.getJSONObject(j)
-                        val fileName = a.optString("fileName").takeIf { it.isNotBlank() } ?: continue
-                        attachmentDao.insert(
-                            AttachmentEntity(
-                                recordType = ExpensesAttachments.RECORD_TYPE,
-                                recordId = newExpenseId,
-                                fileName = fileName,
-                                source = a.optString("source", AttachmentSource.MANUAL),
-                                createdAt = a.optLong("createdAt", System.currentTimeMillis())
+            expensesCreated = VoxSnapshotReplaceImporter.restore(
+                mode = importMode,
+                imported = (0 until importedExpenses.length()).map { importedExpenses.getJSONObject(it) },
+                preExisting = preExistingExpenses,
+                exportedAt = exportedAt,
+                createdAtOf = { it.createdAt },
+                insert = { e ->
+                    val importedCategoryId = if (e.has("categoryId") && !e.isNull("categoryId")) e.optLong("categoryId") else null
+                    val categoryId = importedCategoryId?.let { importedIdToLocalId[it] }
+                    val items = (e.optJSONArray("items") ?: JSONArray()).let { arr ->
+                        (0 until arr.length()).map { idx ->
+                            val it = arr.getJSONObject(idx)
+                            ExpenseLineItem(
+                                expenseId = 0,
+                                name = it.optString("name"),
+                                quantity = it.optDouble("quantity", 1.0),
+                                unitPrice = it.optDouble("unitPrice", 0.0),
+                                position = it.optInt("position", idx),
+                                netAmount = it.optDoubleOrNull("netAmount"),
+                                vatAmount = it.optDoubleOrNull("vatAmount"),
+                                grossAmount = it.optDoubleOrNull("grossAmount")
                             )
+                        }
+                    }
+                    val newExpenseId = expensesRepo.addExpense(
+                        title = e.optStringOrNull("title"),
+                        totalAmount = e.optDouble("totalAmount"),
+                        currencyCode = e.optString("currencyCode"),
+                        vendor = e.optStringOrNull("vendor"),
+                        bank = e.optStringOrNull("bank"),
+                        location = e.optStringOrNull("location"),
+                        dateTime = e.optLong("dateTime", System.currentTimeMillis()),
+                        comments = e.optStringOrNull("comments"),
+                        categoryId = categoryId,
+                        direction = e.optTransactionDirection(),
+                        items = items,
+                        imageName = e.optStringOrNull("receiptImageName"),
+                        // Preserved from the source device, never re-stamped to "now" — re-stamping
+                        // would make a later re-sync from the same backup see this row as freshly
+                        // created and permanently immune to being correctly replaced, silently
+                        // reintroducing the bug this createdAt filter exists to fix.
+                        createdAt = e.optLong("createdAt", System.currentTimeMillis()),
+                        // Old pre-existing rows are deleted AFTER every insert (VoxSnapshotReplaceImporter's
+                        // own order), so they're still present here and would otherwise get misdetected as
+                        // duplicates of the very rows they're about to be replaced by — import must never be
+                        // blocked by this check (RecordSource.HUB_IMPORT: another install's already-validated data).
+                        checkForDuplicate = false,
+                        source = e.optExpenseSource(),
+                        manuallyEdited = e.optBoolean("manuallyEdited", false)
+                    )
+                    if (newExpenseId > 0) {
+                        attachmentDao.restoreFromBackup(
+                            ExpensesAttachments.RECORD_TYPE, newExpenseId, e.optJSONArray("attachments") ?: JSONArray()
                         )
                     }
-                }
-            }
-
-            preExistingExpenses.filter { it.createdAt <= exportedAt }.forEach { expensesRepo.deleteExpenseById(it.id) }
+                    newExpenseId
+                },
+                delete = { expensesRepo.deleteExpenseById(it.id) }
+            )
         }
 
         return VoxResult(
             ok = true,
             text = "$expensesCreated expenses imported, $categoriesCreated new categories " +
-                "(${importedCategories.length() - categoriesCreated} matched existing)"
+                "(${importedCategories.length() - categoriesCreated} matched existing), " +
+                "$rulesCreated new duplicate rules (${importedRules.length() - rulesCreated} matched existing)"
         )
     }
 
-    /** Same extraction shape as vox-commander's ModelDownloader.unzipModel() (ZipInputStream/
-     *  nextEntry iteration), written fresh here since that module isn't a dependency of this one.
-     *  Every entry name is flattened to its bare filename (zip-slip defense) — every entry in a
-     *  receipts zip is expected to be a bare filename anyway, never a nested path. */
-    private fun extractReceiptsZip(uri: Uri) {
-        val receiptsDir = File(context.filesDir, "receipts").apply { mkdirs() }
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            ZipInputStream(input).use { zis ->
-                var entry = zis.nextEntry
-                while (entry != null) {
-                    if (!entry.isDirectory) {
-                        val safeName = File(entry.name).name
-                        if (safeName.isNotBlank()) {
-                            FileOutputStream(File(receiptsDir, safeName)).use { fos -> zis.copyTo(fos) }
-                        }
-                    }
-                    entry = zis.nextEntry
-                }
-            }
-        }
-    }
 }
 
-private fun ExpensesSettings.toJson(): JSONObject = JSONObject().apply {
-    put("isBiometricRequired", isBiometricRequired)
-    put("sessionTimeoutMinutes", sessionTimeoutMinutes)
-    put("language", language)
-    put("defaultCurrency", defaultCurrency)
-    put("defaultVoiceCategoryId", defaultVoiceCategoryId)
-    put("voiceSaveToastEnabled", voiceSaveToastEnabled)
-    put("autoCreateVoiceCategory", autoCreateVoiceCategory)
-    put("scheduledMergeInterval", scheduledMergeInterval)
-    put("scheduledExpenseDedupInterval", scheduledExpenseDedupInterval)
-    put("homeCurrency", homeCurrency)
-    put("paymentSourcePackages", JSONArray(paymentSourcePackages.toList()))
-    put("bankingSourcePackages", JSONArray(bankingSourcePackages.toList()))
-    put("debugLoggingEnabled", debugLoggingEnabled)
-    put("vatDisplayEnabled", vatDisplayEnabled)
-    put("decimalSeparator", decimalSeparator)
-    put("calendarViewEnabled", calendarViewEnabled)
-    put("themeDarkMode", themeDarkMode)
-    put("themeColored", themeColored)
-    put("merchantCategoryMemoryEnabled", merchantCategoryMemoryEnabled)
-    put("merchantCategoryMemoryThreshold", merchantCategoryMemoryThreshold)
-    // appCacheJson intentionally excluded — internal cache, not user data.
-}
+// Gson reflection over the whole data class, not a hand-maintained field list — a manual allowlist
+// silently falls behind every time a new setting is added (this one was 20 of ~50 fields before this
+// fix, including the very duplicateCheckMode*/duplicateRuleSetGlobalCombinator settings that govern
+// [DuplicateRuleEntity] above). appCacheJson/onboardingCompleted are the two deliberate exclusions
+// (device-local cache/UI state, not portable user data — see their own doc comments); reset rather
+// than omitted so import's Gson.fromJson always has every field present. Mirrors vox-commander's
+// CommanderExportHandler, the only handler in this codebase that didn't suffer this drift.
+private fun ExpensesSettings.toJson(): JSONObject =
+    JSONObject(VoxSettingsRoundTrip.toJson(copy(appCacheJson = null, onboardingCompleted = false)))
 
-private fun JSONObject.toExpensesSettings(): ExpensesSettings {
-    val packagesArray = optJSONArray("paymentSourcePackages")
-    val packages = if (packagesArray != null) {
-        (0 until packagesArray.length()).map { packagesArray.optString(it) }.toSet()
-    } else {
-        emptySet()
+/** Returns Room/DataStore defaults for [ExpensesSettings] if [this] isn't valid JSON for it (e.g. a
+ *  corrupt/foreign import file). [paymentSourcePackages]/[bankingSourcePackages]/[locationCacheTtl]
+ *  get an extra null-coalesce afterward — Gson leaves these genuinely null (not their data class
+ *  defaults) when an old/foreign payload is missing that key entirely, the same failure mode
+ *  [com.voxapps.commander.receiver.CommanderExportHandler.parsePortableSettings] already guards
+ *  against for its own fields. */
+private fun JSONObject.toExpensesSettings(): ExpensesSettings =
+    VoxSettingsRoundTrip.parseOrDefault(toString(), ExpensesSettings::class.java, ExpensesSettings()) { parsed ->
+        parsed.copy(
+            paymentSourcePackages = parsed.paymentSourcePackages ?: emptySet(),
+            bankingSourcePackages = parsed.bankingSourcePackages ?: emptySet(),
+            locationCacheTtl = parsed.locationCacheTtl ?: "ONE_DAY"
+        )
     }
-    val bankingArray = optJSONArray("bankingSourcePackages")
-    val bankingPackages = if (bankingArray != null) {
-        (0 until bankingArray.length()).map { bankingArray.optString(it) }.toSet()
-    } else {
-        emptySet()
-    }
-    return ExpensesSettings(
-        isBiometricRequired = optBoolean("isBiometricRequired", false),
-        sessionTimeoutMinutes = optInt("sessionTimeoutMinutes", ExpensesSettings.TIMEOUT_30M),
-        language = optString("language", ExpensesSettings.DEFAULT_LANGUAGE),
-        defaultCurrency = optString("defaultCurrency", ExpensesSettings.DEFAULT_CURRENCY),
-        defaultVoiceCategoryId = if (has("defaultVoiceCategoryId") && !isNull("defaultVoiceCategoryId")) optLong("defaultVoiceCategoryId") else null,
-        voiceSaveToastEnabled = optBoolean("voiceSaveToastEnabled", false),
-        autoCreateVoiceCategory = optBoolean("autoCreateVoiceCategory", false),
-        scheduledMergeInterval = optString("scheduledMergeInterval", ExpensesSettings.INTERVAL_OFF),
-        scheduledExpenseDedupInterval = optString("scheduledExpenseDedupInterval", ExpensesSettings.INTERVAL_OFF),
-        homeCurrency = optString("homeCurrency", ExpensesSettings.DEFAULT_CURRENCY),
-        paymentSourcePackages = packages,
-        bankingSourcePackages = bankingPackages,
-        debugLoggingEnabled = optBoolean("debugLoggingEnabled", false),
-        vatDisplayEnabled = optBoolean("vatDisplayEnabled", false),
-        decimalSeparator = optString("decimalSeparator", ExpensesSettings.DECIMAL_PERIOD),
-        calendarViewEnabled = optBoolean("calendarViewEnabled", false),
-        themeDarkMode = optString("themeDarkMode", ExpensesSettings.THEME_SYSTEM),
-        themeColored = optBoolean("themeColored", true),
-        merchantCategoryMemoryEnabled = optBoolean("merchantCategoryMemoryEnabled", false),
-        merchantCategoryMemoryThreshold = optInt("merchantCategoryMemoryThreshold", ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD)
-    )
-}
 
 private fun Category.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
@@ -484,6 +401,16 @@ private fun SpendingLimit.toJson(): JSONObject = JSONObject().apply {
     put("amountHomeCurrency", amountHomeCurrency)
     put("period", period)
     put("createdAt", createdAt)
+}
+
+private fun DuplicateRuleEntity.toJson(): JSONObject = JSONObject().apply {
+    put("name", name)
+    put("fieldIds", JSONArray(fieldIds))
+    put("combinator", combinator)
+    put("enabled", enabled)
+    put("sortOrder", sortOrder)
+    put("appliesAutomatically", appliesAutomatically)
+    put("fuzzyMatchEnabled", fuzzyMatchEnabled)
 }
 
 private fun MerchantCategoryMemory.toJson(): JSONObject = JSONObject().apply {
@@ -510,13 +437,7 @@ private fun Expense.toJson(items: List<ExpenseLineItem>, attachments: List<Attac
     put("source", source.name)
     put("manuallyEdited", manuallyEdited)
     put("items", JSONArray(items.map { it.toJson() }))
-    put("attachments", JSONArray(attachments.map { it.toJson() }))
-}
-
-private fun AttachmentEntity.toJson(): JSONObject = JSONObject().apply {
-    put("fileName", fileName)
-    put("source", source)
-    put("createdAt", createdAt)
+    put("attachments", JSONArray(attachments.map { it.toBackupJson() }))
 }
 
 private fun ExpenseLineItem.toJson(): JSONObject = JSONObject().apply {
@@ -529,13 +450,11 @@ private fun ExpenseLineItem.toJson(): JSONObject = JSONObject().apply {
     put("grossAmount", grossAmount)
 }
 
-private fun JSONObject.optStringOrNull(key: String): String? =
-    if (has(key) && !isNull(key)) optString(key) else null
 
 /** Lenient parse for a field that didn't exist before this export/import round-trip supported it —
  *  older backups (and any unrecognized/corrupt value) fall back to [ExpenseSource.MANUAL]. */
 private fun JSONObject.optExpenseSource(key: String = "source"): ExpenseSource =
-    optStringOrNull(key)?.let { runCatching { ExpenseSource.valueOf(it) }.getOrNull() } ?: ExpenseSource.MANUAL
+    optStringOrNull(key).toEnumOrNull<ExpenseSource>() ?: ExpenseSource.MANUAL
 
 private fun JSONObject.optDoubleOrNull(key: String): Double? =
     if (has(key) && !isNull(key)) optDouble(key) else null

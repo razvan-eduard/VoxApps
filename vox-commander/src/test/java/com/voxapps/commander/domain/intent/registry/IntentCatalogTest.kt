@@ -25,10 +25,10 @@ class IntentCatalogTest {
         // Gradle runs unit tests with the module dir (app/) as CWD; the source of
         // truth lives at the repo root and is copied into assets by copyIntentsJson.
         val candidates = listOf(
-            File("../intents.json"),
-            File("intents.json"),
-            File("src/main/assets/intents.json"),
-            File("app/src/main/assets/intents.json")
+            File("../remote-schemas/commander/intents.json"),
+            File("remote-schemas/commander/intents.json"),
+            File("src/main/assets/schemas/intents.json"),
+            File("app/src/main/assets/schemas/intents.json")
         )
         val file = candidates.firstOrNull { it.exists() }
             ?: error("intents.json not found. Looked in: ${candidates.map { it.absolutePath }}")
@@ -68,7 +68,16 @@ class IntentCatalogTest {
 
         // Per-domain actions must match for the handler domains (can't silently drift).
         assertEquals(listOf("play", "pause", "stop", "next", "prev"), tax.actionsByDomain["audio"])
-        assertEquals(listOf("volume_up", "volume_down", "wifi_toggle", "bluetooth_toggle", "gps_toggle"), tax.actionsByDomain["settings"])
+        assertEquals(
+            listOf(
+                "volume_up", "volume_down", "wifi_toggle", "bluetooth_toggle", "gps_toggle",
+                "flashlight_on", "flashlight_off", "flashlight_toggle", "airplane_mode_toggle",
+                "dnd_on", "dnd_off", "dnd_toggle", "nfc_toggle",
+                "auto_rotate_on", "auto_rotate_off", "auto_rotate_toggle",
+                "silent_mode_on", "silent_mode_off", "silent_mode_toggle"
+            ),
+            tax.actionsByDomain["settings"]
+        )
         assertEquals(listOf("navigate"), tax.actionsByDomain["maps"])
         assertEquals(listOf("send"), tax.actionsByDomain["messaging"])
         assertEquals(listOf("query"), tax.actionsByDomain["search"])

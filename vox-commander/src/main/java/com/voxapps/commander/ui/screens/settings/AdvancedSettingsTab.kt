@@ -47,8 +47,8 @@ fun AdvancedSettingsTab(
     val scope = rememberCoroutineScope()
 
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
+    var showResetSettings by remember { mutableStateOf(false) }
     val benchmarkResults by appStateManager.benchmarkResults.collectAsStateWithLifecycle()
-    val nativeLibsStatus by appStateManager.nativeLibsStatus.collectAsStateWithLifecycle()
     val systemInfo by appStateManager.systemInfo.collectAsStateWithLifecycle()
     val logs by Logger.verboseLogs.collectAsStateWithLifecycle()
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())
@@ -60,6 +60,7 @@ fun AdvancedSettingsTab(
             appContainer.settingsRepository,
             appStateManager,
             appContainer.modelDownloader,
+            appContainer.fastMapDao,
             appContainer.localLlmInterpreter,
             appContainer.geminiNanoInterpreter,
             appContainer.geminiCloudInterpreter
@@ -351,6 +352,33 @@ fun AdvancedSettingsTab(
         // --- TUTORIAL SECTION ---
         item {
             Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = languageManager.getString("system_maintenance_section"),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // No "reset schemas" here: turning off *Use schemas from the repository* in
+                    // General is that reset, and one way to undo something is enough.
+                    OutlinedButton(
+                        onClick = { showResetSettings = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(languageManager.getString("reset_settings_button"))
+                    }
+                    Text(
+                        text = languageManager.getString("reset_settings_description"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
             Text(text = languageManager.getString("tutorial_section"), style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(12.dp))
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -373,6 +401,7 @@ fun AdvancedSettingsTab(
                 }
             }
         }
+
     }
 
     // --- RESTART DIALOG ---
@@ -458,6 +487,27 @@ fun AdvancedSettingsTab(
             confirmButton = {
                 TextButton(onClick = { showWifiOnlyBlocked = false }) {
                     Text(languageManager.getString("ok_button"))
+                }
+            }
+        )
+    }
+    if (showResetSettings) {
+        AlertDialog(
+            onDismissRequest = { showResetSettings = false },
+            title = { Text(languageManager.getString("reset_settings_button")) },
+            text = { Text(languageManager.getString("reset_settings_confirm")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        settingsRepo.clearAllSettings()
+                        showResetSettings = false
+                        restartApp(context)
+                    }
+                }) { Text(languageManager.getString("ok_button"), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetSettings = false }) {
+                    Text(languageManager.getString("cancel_button"))
                 }
             }
         )

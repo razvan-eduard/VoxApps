@@ -8,29 +8,37 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.voxapps.design.color.VoxColorSwatchPicker
+import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
+import com.voxapps.expenses.domain.location.ExpensesLocationStore
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
+import com.voxapps.location.LocationSource
+import com.voxapps.location.ResolvedLocation
+import com.voxapps.location.VoxLocationResolver
+import com.voxapps.location.ui.VoxLocationSettingsCard
+import com.voxapps.location.ui.VoxLocationUiState
+import kotlinx.coroutines.launch
+import com.voxapps.design.settings.SchemaUpdatesStrings
+import com.voxapps.design.settings.SchemaUpdatesSection
 
 /** Fixed, common-currency list for the "Default currency" picker — not the full ISO 4217 set. */
 private val COMMON_CURRENCIES = listOf(
@@ -43,6 +51,7 @@ private val COMMON_CURRENCIES = listOf(
 fun GeneralSettingsTab(
     settings: ExpensesSettings,
     stateManager: ExpensesStateManager,
+    settingsRepo: ExpensesSettingsRepository,
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
@@ -52,33 +61,29 @@ fun GeneralSettingsTab(
     ) {
         Text(text = languageManager.getString("general"), style = MaterialTheme.typography.titleMedium)
 
-        // --- Theme (mirrors vox-commander's General settings) ---
-        Text(languageManager.getString("theme_section"), style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val themeModes = listOf(
-                ExpensesSettings.THEME_SYSTEM to "theme_system",
-                ExpensesSettings.THEME_LIGHT to "theme_light",
-                ExpensesSettings.THEME_DARK to "theme_dark"
-            )
-            themeModes.forEach { (mode, labelKey) ->
-                FilterChip(
-                    selected = settings.themeDarkMode == mode,
-                    onClick = { stateManager.setThemeDarkMode(mode) },
-                    label = { Text(languageManager.getString(labelKey)) }
-                )
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("theme_colored"), style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    languageManager.getString("theme_colored_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(checked = settings.themeColored, onCheckedChange = { stateManager.setThemeColored(it) })
-        }
+        // The same section Commander shows, from :core:design — this app reads a schema of its own
+        // (the currency services) and can follow a fork just as well.
+        val scope = rememberCoroutineScope()
+        SchemaUpdatesSection(
+            strings = SchemaUpdatesStrings(
+                sectionLabel = languageManager.getString("schema_updates_section"),
+                description = languageManager.getString("schema_updates_desc"),
+                useRemoteLabel = languageManager.getString("schema_use_remote_label"),
+                useRemoteDescription = languageManager.getString("schema_use_remote_desc"),
+                repositoryUrlLabel = languageManager.getString("schema_repository_url"),
+                checkNow = languageManager.getString("schema_sync_now"),
+                followingFormat = languageManager.getString("schema_following"),
+                inStep = languageManager.getString("schema_in_step"),
+                servingFormat = languageManager.getString("schema_serving"),
+                unreachableFormat = languageManager.getString("schema_unreachable"),
+                notCheckedYet = languageManager.getString("schema_not_checked"),
+                usingBundled = languageManager.getString("schema_using_bundled")
+            ),
+            repositoryUrl = settings.schemaRepoBaseUrl,
+            useRemote = settings.useRemoteSchemas,
+            onRepositoryUrlChange = { scope.launch { settingsRepo.setSchemaRepoBaseUrl(it) } },
+            onUseRemoteChange = { scope.launch { settingsRepo.setUseRemoteSchemas(it) } }
+        )
 
         HorizontalDivider()
 
@@ -127,23 +132,12 @@ fun GeneralSettingsTab(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        var currencyMenuExpanded by remember { mutableStateOf(false) }
-        Column {
-            OutlinedButton(onClick = { currencyMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(settings.defaultCurrency)
-            }
-            DropdownMenu(expanded = currencyMenuExpanded, onDismissRequest = { currencyMenuExpanded = false }) {
-                COMMON_CURRENCIES.forEach { code ->
-                    DropdownMenuItem(
-                        text = { Text(code) },
-                        onClick = {
-                            stateManager.setDefaultCurrency(code)
-                            currencyMenuExpanded = false
-                        }
-                    )
-                }
-            }
-        }
+        Picklist(
+            items = COMMON_CURRENCIES,
+            selected = settings.defaultCurrency,
+            itemLabel = { it },
+            onSelect = { stateManager.setDefaultCurrency(it) }
+        )
 
         HorizontalDivider()
 
@@ -274,6 +268,26 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
+        // --- Auto-trigger a line-items rescan the moment an expense gets its FIRST photo attached
+        // after being saved (see ExpensesSettings.autoRescanOnFirstAttachment's doc comment for the
+        // zero-to-one eligibility rule). ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("auto_rescan_on_first_attachment"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("auto_rescan_on_first_attachment_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.autoRescanOnFirstAttachment,
+                onCheckedChange = { stateManager.setAutoRescanOnFirstAttachment(it) }
+            )
+        }
+
+        HorizontalDivider()
+
         // --- Auto-open a scanned receipt's expense once it's actually created (LLM cleanup is
         // async, so this can't happen at scan time itself — see LlmResultReceiver). ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -313,6 +327,10 @@ fun GeneralSettingsTab(
             )
         }
 
+        if (settings.locationPrefillEnabled) {
+            ExpensesLocationSettingsSection(settingsRepo = settingsRepo)
+        }
+
         HorizontalDivider()
 
         // --- Danger Zone: Delete All ---
@@ -335,7 +353,7 @@ fun GeneralSettingsTab(
         }
 
         if (showDeleteAllConfirm) {
-            AlertDialog(
+            androidx.compose.material3.AlertDialog(
                 onDismissRequest = { showDeleteAllConfirm = false },
                 title = { Text(languageManager.getString("delete_all_confirm_title")) },
                 text = { Text(languageManager.getString("delete_all_confirm_message")) },
@@ -368,4 +386,54 @@ fun GeneralSettingsTab(
             }
         }
     }
+}
+
+@Composable
+private fun ExpensesLocationSettingsSection(settingsRepo: ExpensesSettingsRepository) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val store = remember(settingsRepo) { ExpensesLocationStore(context, settingsRepo) }
+    // needsReverseGeocode = true: matches resolveCurrentCityName's existing behavior for the
+    // location prefill feature — the same Nominatim resolution is now also shown here.
+    val resolver = remember(store) { VoxLocationResolver.create(context, store, needsReverseGeocode = true) }
+
+    var homeTown by remember { mutableStateOf(store.getHomeTownSync()) }
+    var cacheTtl by remember { mutableStateOf(store.getCacheTtlSync()) }
+    var alwaysUse by remember { mutableStateOf(store.getAlwaysUseHomeTownSync()) }
+    var lastLocation by remember {
+        mutableStateOf(
+            store.getCachedLocationSync()?.let { ResolvedLocation(it.lat, it.lon, LocationSource.CACHE, it.resolvedName) }
+        )
+    }
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    VoxLocationSettingsCard(
+        state = VoxLocationUiState(
+            lastKnownLocation = lastLocation,
+            homeTown = homeTown,
+            cacheTtl = cacheTtl,
+            alwaysUseHomeTown = alwaysUse,
+            isRefreshing = isRefreshing
+        ),
+        onHomeTownChange = { newHomeTown ->
+            homeTown = newHomeTown
+            scope.launch { store.setHomeTown(newHomeTown) }
+        },
+        onCacheTtlChange = { ttl ->
+            cacheTtl = ttl
+            scope.launch { store.setCacheTtl(ttl) }
+        },
+        onAlwaysUseHomeTownChange = { enabled ->
+            alwaysUse = enabled
+            scope.launch { VoxLocationResolver.setAlwaysUseHomeTown(store, enabled) }
+        },
+        onRefreshClick = {
+            isRefreshing = true
+            scope.launch {
+                lastLocation = resolver.resolveLocation()
+                isRefreshing = false
+            }
+        }
+    )
 }

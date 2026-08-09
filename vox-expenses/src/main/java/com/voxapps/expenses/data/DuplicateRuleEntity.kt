@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.voxapps.datahygiene.DuplicateRule
 import com.voxapps.datahygiene.RuleCombinator
+import com.voxapps.design.toEnumOr
 
 /**
  * A user-defined duplicate-detection rule (see [com.voxapps.datahygiene.RuleBasedDuplicateChecker]) —
@@ -35,6 +36,6 @@ data class DuplicateRuleEntity(
 ) {
     fun toDuplicateRule(): DuplicateRule = DuplicateRule(
         fieldIds = fieldIds,
-        combinator = runCatching { RuleCombinator.valueOf(combinator) }.getOrDefault(RuleCombinator.AND)
+        combinator = combinator.toEnumOr(RuleCombinator.AND)
     )
 }

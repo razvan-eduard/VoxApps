@@ -17,14 +17,20 @@ import java.util.concurrent.TimeUnit
 object ExpenseDeduplicationScheduler {
     private const val UNIQUE_WORK_NAME = "expense_deduplication"
 
+    /** Maps a `scheduledExpenseDedupInterval` setting value to its WorkManager period, or `null`
+     *  for "off" (any unrecognized value, e.g. [ExpensesSettings.INTERVAL_OFF]) — pulled out as a
+     *  pure function so it's unit-testable without a real WorkManager/Context. */
+    internal fun periodMillisFor(interval: String): Long? = when (interval) {
+        ExpensesSettings.INTERVAL_HOURLY -> TimeUnit.HOURS.toMillis(1)
+        ExpensesSettings.INTERVAL_DAILY -> TimeUnit.DAYS.toMillis(1)
+        ExpensesSettings.INTERVAL_WEEKLY -> TimeUnit.DAYS.toMillis(7)
+        ExpensesSettings.INTERVAL_MONTHLY -> TimeUnit.DAYS.toMillis(30)
+        else -> null
+    }
+
     fun reschedule(context: Context, interval: String) {
         val workManager = WorkManager.getInstance(context)
-        val periodMillis = when (interval) {
-            ExpensesSettings.INTERVAL_DAILY -> TimeUnit.DAYS.toMillis(1)
-            ExpensesSettings.INTERVAL_WEEKLY -> TimeUnit.DAYS.toMillis(7)
-            ExpensesSettings.INTERVAL_MONTHLY -> TimeUnit.DAYS.toMillis(30)
-            else -> null
-        }
+        val periodMillis = periodMillisFor(interval)
         if (periodMillis == null) {
             workManager.cancelUniqueWork(UNIQUE_WORK_NAME)
             return

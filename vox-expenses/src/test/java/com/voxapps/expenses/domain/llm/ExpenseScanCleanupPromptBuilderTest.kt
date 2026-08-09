@@ -89,4 +89,17 @@ class ExpenseScanCleanupPromptBuilderTest {
         assertTrue(prompt.contains("\"totalAmount\""))
         assertTrue(prompt.contains("\"items\""))
     }
+
+    @Test
+    fun `always includes the OCR framing and text block`() {
+        val prompt = ExpenseScanCleanupPromptBuilder.build(
+            rawText = "TOTAL 12.50",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en"
+        )
+
+        assertTrue(prompt.contains("extracted via OCR from a receipt"))
+        assertTrue(prompt.contains("OCR text: TOTAL 12.50"))
+    }
 }

@@ -12,8 +12,8 @@ android {
         applicationId = "com.voxapps.expenses"
         minSdk = 29
         targetSdk = 36
-        versionCode = 15
-        versionName = "0.15"
+        versionCode = 31
+        versionName = "0.31"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -64,12 +64,18 @@ android {
 }
 
 dependencies {
+    implementation(libs.gson)
     implementation(project(":core:design"))
     implementation(project(":core:calendar"))
     implementation(project(":core:apppicker"))
+    implementation(project(":core:location"))
+    implementation(project(":core:backup"))
     implementation(project(":core:ipc"))
     implementation(project(":core:attachments"))
     implementation(project(":core:logging"))
+    implementation(project(":core:widget"))
+    implementation(project(":core:services"))
+    implementation(project(":core:preferences"))
     implementation(project(":core:datahygiene"))
     implementation(project(":core:schema-annotations"))
     ksp(project(":core:schema-processor"))
@@ -117,24 +123,32 @@ dependencies {
     implementation(libs.androidx.glance.appwidget)
 
     // --- Unit tests (JVM, mirror vox-notes) ---
+    testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("app.cash.turbine:turbine:1.2.1")
     testImplementation("androidx.test:core:1.7.0")
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260719")
 }
 
-// Copy external_services.json from repo root into assets (single source of truth in root, mirrors
-// vox-commander's models.json/search_definitions.json/intents.json convention) — Expenses reads this
-// for the exchange-rate API's endpoint shape; the API key itself is stored separately (Settings).
-val copyExternalServicesJson = tasks.register<Copy>("copyExternalServicesJson") {
+// The same folder of shipped schemas the other apps copy. Whole folder rather than the one file
+// this app reads today: which schemas an app understands is decided by the code that loads them,
+// not by a list in a build script.
+val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
     group = "build"
-    description = "Copies external_services.json from repo root into src/main/assets/"
-    from("${project.rootDir}/external_services.json")
-    into("${projectDir}/src/main/assets")
+    description = "Copies this app's schemas (and any shared ones) into src/main/assets/schemas/"
+    from("${project.rootDir}/remote-schemas/expenses") { include("*.json") }
+    from("${project.rootDir}/remote-schemas/shared") { include("*.json") }
+    into("${projectDir}/src/main/assets/schemas")
 }
 
 tasks.named("preBuild") {
-    dependsOn(copyExternalServicesJson)
+    dependsOn(copyShippedSchemas)
+}
+
+// SchemaKeepRulesTest reads proguard-rules.pro, so a change there has to invalidate the test task —
+// otherwise Gradle calls it up to date and the check silently stops running (which it did).
+tasks.withType<Test>().configureEach {
+    inputs.file("proguard-rules.pro").withPathSensitivity(PathSensitivity.RELATIVE)
 }

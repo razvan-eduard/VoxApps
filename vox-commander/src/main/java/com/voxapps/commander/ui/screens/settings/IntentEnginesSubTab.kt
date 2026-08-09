@@ -12,12 +12,16 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.data.remote.EngineRuntime
+import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.intent.interpreter.LlmModelInfo
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.ui.components.DropdownGroup
+import com.voxapps.services.ServiceProbe
+import com.voxapps.design.picklist.ConnectionTestCard
+import com.voxapps.design.picklist.ServicePicklist
 import com.voxapps.commander.ui.components.EngineModelSection
 import com.voxapps.commander.utils.Strings
 
@@ -90,56 +94,51 @@ fun IntentEnginesSubTab(
                     
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    // Every engine that interprets, on-device or not. The cloud services used to be
+                    // appended here by hand — three lines that had to be kept in step with a label
+                    // table and an availability check elsewhere; they are declared engines now.
                     val aiOptions = remember(uiState.availableModels) {
-                        val list = RemoteModelRegistry.getEngineKeysByType("llm").toMutableList()
-                        
-                        // Inject Virtual Services
-                        if (!list.contains(Strings.AiProcessors.OPENAI)) list.add(Strings.AiProcessors.OPENAI)
-                        if (!list.contains(Strings.AiProcessors.GEMINI_NATIVE)) list.add(Strings.AiProcessors.GEMINI_NATIVE)
-                        if (!list.contains(Strings.AiProcessors.GEMINI_CLOUD)) list.add(Strings.AiProcessors.GEMINI_CLOUD)
-                        list
+                        RemoteModelRegistry.serviceEntries("llm")
                     }
 
-                    var expanded by remember { mutableStateOf(false) }
-                    
-                    Box {
-                        OutlinedButton(
-                            onClick = { expanded = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(RemoteModelRegistry.getEngineLabel(uiState.aiProcessor, languageManager))
-                        }
-                        
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            aiOptions.forEach { id ->
-                                val isEnabled = when (id) {
-                                    Strings.AiProcessors.GEMINI_NATIVE -> !settingsRepo.getSettingsSnapshot().geminiIncompatible
-                                    Strings.AiProcessors.GEMINI_CLOUD -> !settingsRepo.getSettingsSnapshot().geminiApiKey.isNullOrBlank()
-                                    else -> true
-                                }
-                                
-                                DropdownMenuItem(
-                                    text = { 
-                                        Text(
-                                            text = RemoteModelRegistry.getEngineLabel(id, languageManager) + if (isEnabled) "" else " (Incompatible)",
-                                            color = if (isEnabled) LocalContentColor.current else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                        ) 
-                                    },
-                                    onClick = {
-                                        if (isEnabled) {
-                                            appStateManager.setAiProcessor(id)
-                                            expanded = false
-                                        }
-                                    },
-                                    enabled = isEnabled
-                                )
-                            }
-                        }
-                    }
+                    // One component decides what belongs under the selection, from what the engine
+                    // declares: the key field for a cloud service, the reachability test for
+                    // anything with an endpoint, neither for an on-device one. This screen used to
+                    // draw the test inside the picklist and the key field after it, which is the
+                    // opposite order from the search providers doing the same job.
+                    ServicePicklist(
+                        items = aiOptions,
+                        selected = aiOptions.firstOrNull { it.id == uiState.aiProcessor },
+                        itemLabel = { RemoteModelRegistry.getEngineLabel(it.id, languageManager) },
+                        onSelect = { appStateManager.setAiProcessor(it.id) },
+                        credentialFor = { uiState.credentials.forEngine(it.credentialOwnerId) },
+                        onCredentialCommit = { entry, key ->
+                            appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+                        },
+                        credentialLabel = languageManager.getString("engine_api_key"),
+                        disabledSuffix = " (Incompatible)",
+                        itemEnabled = { entry ->
+                            // Only what this device cannot run is disabled — whether it carries
+                            // Gemini Nano is a probe result no declaration can supply. A missing
+                            // credential is not a reason to disable: the field that fixes it sits
+                            // under the selection, so greying the engine out made its own key
+                            // unreachable.
+                            entry.id != Strings.AiProcessors.GEMINI_NATIVE ||
+                                !settingsRepo.getSettingsSnapshot().geminiIncompatible
+                        },
+                        itemNote = { entry ->
+                            // Credentials come from uiState rather than a snapshot read: this is
+                            // composition, so a value fetched here would be fixed until something
+                            // else recomposed the menu.
+                            if (entry.requiresCredential && !uiState.credentials.has(entry.id))
+                                " — needs an API key" else ""
+                        },
+                        helpTextFor = { entry ->
+                            entry.helpTextKey?.let { languageManager.getString(it) }
+                                ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+                        },
+                        timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) }
+                    )
                 }
             }
         }
@@ -153,16 +152,17 @@ fun IntentEnginesSubTab(
                 nluModels.find { it.id == uiState.activeIntentModelId }
             }
 
-            val nluGroups = remember(nluModels) {
-                listOf(DropdownGroup(languageManager.getString("available_models_header"), nluModels))
-            }
-
             EngineModelSection(
                 title = languageManager.getString("nlu_model_selection_title"),
+                // Only a downloadable engine can be an offline fallback. Left at its default, the
+                // checkbox would also appear for a cloud engine — whose models report isBuiltIn,
+                // which this section reads as "already downloaded" and therefore selectable.
+                showFallback = RemoteModelRegistry.runtimeOf(engineKey) == EngineRuntime.LOCAL_FILE,
 
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,
-                groups = remember(nluGroups, uiState, refreshTrigger) { nluGroups },
+                header = languageManager.getString("available_models_header"),
+                items = nluModels,
                 selectedItem = selectedModel,
                 itemLabel = { "${it.label} (${it.sizeDescription})" },
                 modelIdProvider = { it.id },

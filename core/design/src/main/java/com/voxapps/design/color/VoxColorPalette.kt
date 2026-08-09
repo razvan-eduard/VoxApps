@@ -1,5 +1,7 @@
 package com.voxapps.design.color
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import kotlin.random.Random
 
 /**
@@ -119,4 +121,21 @@ object VoxColorPalette {
         val b = ((bP + m) * 255).toInt().coerceIn(0, 255)
         return (0xFFL shl 24) or (r.toLong() shl 16) or (g.toLong() shl 8) or b.toLong()
     }
+
+    /** The palette as Compose colours, for a screen that draws them rather than stores them. */
+    val paletteColors: List<Color> get() = presets.map { Color(it.toInt()) }
+
+    /**
+     * A packed ARGB int widened to Long for storage.
+     *
+     * Masked to the low 32 bits rather than a plain `Int.toLong()` widening, which sign-extends the
+     * alpha byte into a large negative Long — numerically different from the positive literals in
+     * [presets] for the very same colour, so a stored colour would stop matching the preset it came
+     * from and no swatch would show as selected. Every app repeated this pair with the same comment;
+     * it belongs beside the palette whose encoding it is.
+     */
+    fun toStored(color: Color): Long = color.toArgb().toLong() and 0xFFFFFFFFL
+
+    /** Reads back a stored ARGB value. */
+    fun fromStored(argb: Long): Color = Color(argb.toInt())
 }

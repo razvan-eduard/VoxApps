@@ -29,7 +29,16 @@ dependencies {
     implementation(project(":core:audio"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
-    // Matches the version vox-commander itself depends on (Piper/sherpa-onnx) — same artifact,
-    // one resolved version, no duplicate-class risk.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
+    // Deliberately NOT the shared gradle/libs.versions.toml catalog alias (unlike vox-vision's own
+    // onnxruntime-android usage) — this module compiles into vox-commander, where sherpa-onnx's own
+    // AAR (Piper TTS) bundles its own separate, independently-built libonnxruntime.so at the same
+    // packaged path, which wins Commander's native-lib merge over this dependency's copy (confirmed
+    // via merged_native_libs output — see vox-commander/build.gradle.kts's pickFirst comment). This
+    // version must match whatever OrtGetApiBase version *that* winning binary actually exports
+    // (currently VERS_1.27.0, confirmed via readelf against sherpa-onnx v1.13.4's bundled copy), not
+    // vox-vision's own onnxruntime-android pin — those are two independent constraints that happen
+    // to currently disagree (vox-vision is pinned to 1.21.1 because upstream's own 1.27.0/1.28.0
+    // builds are broken; sherpa-onnx bundles its own separately-built 1.27.0-tagged binary that is
+    // not the same artifact).
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
 }

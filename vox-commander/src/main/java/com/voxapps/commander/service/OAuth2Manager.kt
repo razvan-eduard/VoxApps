@@ -16,7 +16,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 
 /**
- * Per-service OAuth2 config, parsed from an [com.voxapps.commander.domain.intent.registry.AuthDef].
+ * Per-service OAuth2 config, parsed from an [com.voxapps.services.AuthDeclaration].
  * `usePkce` selects Authorization-Code-with-PKCE (no client_secret, e.g. Spotify) vs plain
  * Authorization-Code (wants a client_secret, e.g. Deezer's confidential-client flow).
  */
@@ -278,11 +278,23 @@ object OAuth2Manager {
                 Logger.log("OAuth2Manager[${config.serviceId}]: token refreshed successfully", TAG)
                 true
             } else {
-                Logger.log("OAuth2Manager[${config.serviceId}]: token refresh failed: ${conn.responseCode}", TAG)
+                // The body is where the reason lives: `invalid_grant` means the user revoked access
+                // and must re-authorise, `invalid_client` means the client id is wrong. Reporting
+                // only the status code makes those two look identical, and they need opposite fixes.
+                val body = runCatching { conn.errorStream?.bufferedReader()?.use { it.readText() } }.getOrNull()
+                Logger.log(
+                    "OAuth2Manager[${config.serviceId}]: token refresh failed: HTTP ${conn.responseCode} ${body.orEmpty()}",
+                    TAG
+                )
                 false
             }
         } catch (e: Exception) {
-            Logger.log("OAuth2Manager[${config.serviceId}]: token refresh exception: ${e.message}", TAG)
+            // The class, not just the message: the message is null for exactly the failures that are
+            // hardest to guess at — NetworkOnMainThreadException among them.
+            Logger.log(
+                "OAuth2Manager[${config.serviceId}]: token refresh threw ${e.javaClass.simpleName}: ${e.message}",
+                TAG
+            )
             false
         }
     }

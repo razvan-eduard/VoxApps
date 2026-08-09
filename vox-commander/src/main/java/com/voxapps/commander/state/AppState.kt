@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 import android.content.Context
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.domain.model.AppModel
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.utils.Strings
 
 /**
@@ -23,8 +24,11 @@ data class AppState(
     val voiceLanguageAutoDetect: Boolean,
     val modelFilterLang: String,
     val activeVoiceModelId: String?,
-    val customWhisperModelPath: String?,
-    val customVoskModelPaths: Map<String, String>,
+    val activeWakeModelId: String?,
+    /** The custom model the current voice selection would load, if one was imported for it. Was
+     *  two fields, each named after an engine that happened to accept imports — so a third such
+     *  engine had nowhere to put its path, and readers picked between them by file extension. */
+    val customVoiceModelPath: String?,
 
     // --- INTENT SETTINGS ---
     val aiProcessor: String,
@@ -38,7 +42,6 @@ data class AppState(
     val commandQueueEnabled: Boolean,
     val wakeWordProfileJson: String?,
     val wakeWordEngineType: String,
-    val picovoiceAccessKey: String?,
     val wakeWordSensitivity: String,
     val wakeWordAecEnabled: Boolean,
     val wakeWordMusicDuckEnabled: Boolean,
@@ -62,8 +65,10 @@ data class AppState(
     val appAliasRules: List<com.voxapps.commander.data.preferences.AppAliasRule> = emptyList(),
     
     // --- API SETTINGS ---
-    val apiKey: String?,
-    val geminiApiKey: String?,
+    /** The encrypted store's contents, carried whole rather than unpacked into loose fields:
+     *  the UI reads credentials the same way it reads every other piece of state, through
+     *  [AppStateManager], and there is one thing to pass on when it needs them all. */
+    val credentials: com.voxapps.commander.data.preferences.Credentials,
     
     // --- RUNTIME STATE ---
     val voiceState: VoiceState,
@@ -73,6 +78,13 @@ data class AppState(
     val defaultVoiceFallbackModel: String?,
     val defaultIntentFallbackProcessor: String?,
     val defaultIntentFallbackModel: String?,
+
+    /** Whether the app asks the repository for newer schemas at startup. */
+    val useRemoteSchemas: Boolean = true,
+
+    // --- SEARCH SETTINGS ---
+    /** Category -> chosen search provider, empty for a category left on its declared default. */
+    val searchProviderSelections: Map<String, String> = emptyMap(),
 
     // --- DYNAMIC MODEL REGISTRY (Reconstructed from JSON Cache) ---
     val availableModels: Map<String, List<AppModel>> = emptyMap(),
@@ -98,6 +110,7 @@ data class AppState(
          */
         fun fromAppSettings(
             settings: AppSettings,
+            credentials: com.voxapps.commander.data.preferences.Credentials,
             context: Context,
             availableModels: Map<String, List<AppModel>>,
             voiceState: VoiceState = VoiceState.IDLE,
@@ -107,34 +120,40 @@ data class AppState(
             val voiceProcessor = settings.voiceProcessor
             val modelFilterLang = settings.modelFilterLang
             val activeVoiceModelId = settings.activeVoiceModelId
-            val whisperKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".bin")
-            val voskKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".zip")
-            val customWhisperModelPath = whisperKey?.let { settings.getCustomModelPath(it) }
+            // Whose declaration answers for this selection. See SttEngines.backingEngineKey — every
+            // processor is its own engine key except the one that is a mode of another engine.
+            val voiceEngineKey =
+                com.voxapps.commander.domain.engine.SttEngines.backingEngineKey(voiceProcessor)
 
-            // Calculate voiceModelReady
-            val voiceModelReady = when (voiceProcessor) {
-                Strings.Processors.GOOGLE,
-                Strings.Processors.WHISPER_API -> true
-                Strings.Processors.WHISPER_VULKAN -> {
-                    val isDownloaded = activeVoiceModelId != null && settings.isModelDownloaded(activeVoiceModelId)
-                    isDownloaded || !customWhisperModelPath.isNullOrBlank()
+            // A directory-packaged engine keeps one custom model per language; a single-file engine
+            // keeps one. Both live under the engine's own key, so the selection resolves its own.
+            val customVoiceModelPath = settings.getCustomModelPath(
+                voiceEngineKey,
+                modelFilterLang.takeIf {
+                    com.voxapps.commander.data.remote.RemoteModelRegistry.isPerLanguage(voiceEngineKey)
                 }
-                else -> {
-                    // JSON-defined voice engines — check by type
-                    if (!com.voxapps.commander.data.remote.RemoteModelRegistry.isZipEngine(voiceProcessor)) {
-                        // Whisper-like (.bin) engine
-                        val isDownloaded = activeVoiceModelId != null && settings.isModelDownloaded(activeVoiceModelId)
-                        isDownloaded || !customWhisperModelPath.isNullOrBlank()
-                    } else {
-                        // Vosk-like (.zip) engine
-                        val customPath = voskKey?.let { settings.getCustomModelPath(it, modelFilterLang) }
-                        if (!customPath.isNullOrBlank()) {
-                            java.io.File(customPath).exists()
-                        } else {
-                            !activeVoiceModelId.isNullOrBlank() && settings.isModelDownloaded(activeVoiceModelId)
-                        }
-                    }
-                }
+            )
+
+            /*
+             * Ready means "this engine has something to run with", and what that takes is declared.
+             *
+             * It used to be asked as a chain of names: Google and the Whisper API answered true by
+             * being listed, Vulkan by being listed again, and everything else was sorted into
+             * "whisper-like" or "vosk-like" by file extension — which read the *whisper* custom path
+             * for any engine that was not zip-packaged, so a third local engine would have been
+             * judged by a model it does not own.
+             */
+            val voiceModelReady = when (
+                com.voxapps.commander.data.remote.RemoteModelRegistry.runtimeOf(voiceEngineKey)
+            ) {
+                // Nothing to have on disk: the OS supplies it, or an endpoint does.
+                EngineRuntime.CLOUD,
+                EngineRuntime.ANDROID_LOCAL,
+                EngineRuntime.DEVICE_BUILTIN -> true
+
+                else ->
+                    if (!customVoiceModelPath.isNullOrBlank()) java.io.File(customVoiceModelPath).exists()
+                    else !activeVoiceModelId.isNullOrBlank() && settings.isModelDownloaded(activeVoiceModelId)
             }
 
             // Calculate intentModelReady
@@ -142,26 +161,13 @@ data class AppState(
                 Strings.AiProcessors.GEMINI_NATIVE -> {
                     !settings.geminiIncompatible
                 }
-                Strings.AiProcessors.GEMINI_CLOUD -> {
-                    !settings.geminiApiKey.isNullOrBlank()
-                }
+                Strings.AiProcessors.GEMINI_CLOUD -> credentials.has(Strings.AiProcessors.GEMINI_CLOUD)
                 Strings.AiProcessors.OPENAI -> true
                 else -> {
                     // JSON-defined LLM engines
                     if (com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine(settings.aiProcessor)) {
                         settings.activeIntentModelId != null && settings.isModelDownloaded(settings.activeIntentModelId)
                     } else false
-                }
-            }
-
-            // Load custom Vosk paths
-            val customVoskModelPaths = mutableMapOf<String, String>()
-            val languages = listOf("en", "ro", "de", "fr")
-            languages.forEach { lang ->
-                voskKey?.let { key ->
-                    settings.getCustomModelPath(key, lang)?.let { path ->
-                        customVoskModelPaths[lang] = path
-                    }
                 }
             }
 
@@ -172,8 +178,8 @@ data class AppState(
                 voiceLanguageAutoDetect = settings.voiceLanguageAutoDetect,
                 modelFilterLang = modelFilterLang,
                 activeVoiceModelId = activeVoiceModelId,
-                customWhisperModelPath = customWhisperModelPath,
-                customVoskModelPaths = customVoskModelPaths,
+                activeWakeModelId = settings.activeWakeModelId,
+                customVoiceModelPath = customVoiceModelPath,
                 aiProcessor = settings.aiProcessor,
                 activeIntentModelId = settings.activeIntentModelId,
                 cloudIntelligenceEnabled = settings.cloudIntelligenceEnabled,
@@ -183,7 +189,6 @@ data class AppState(
                 commandQueueEnabled = settings.commandQueueEnabled,
                 wakeWordProfileJson = settings.wakeWordProfileJson,
                 wakeWordEngineType = settings.wakeWordEngineType,
-                picovoiceAccessKey = settings.picovoiceAccessKey,
                 wakeWordSensitivity = settings.wakeWordSensitivity,
                 wakeWordAecEnabled = settings.wakeWordAecEnabled,
                 wakeWordMusicDuckEnabled = settings.wakeWordMusicDuckEnabled,
@@ -203,8 +208,9 @@ data class AppState(
                 overlayTextSize = settings.overlayTextSize,
                 piperVoiceModelId = settings.piperVoiceModelId,
                 appAliasRules = settings.appAliasRules,
-                apiKey = settings.apiKey,
-                geminiApiKey = settings.geminiApiKey,
+                credentials = credentials,
+                useRemoteSchemas = settings.useRemoteSchemas,
+                searchProviderSelections = settings.searchProviderSelections,
                 voiceState = voiceState,
                 defaultVoiceFallbackProcessor = settings.defaultVoiceFallbackProcessor,
                 defaultVoiceFallbackModel = settings.defaultVoiceFallbackModel,
@@ -216,7 +222,7 @@ data class AppState(
                 canDrawOverlays = com.voxapps.commander.utils.PermissionUtils.canDrawOverlays(context),
                 hasMicrophonePermission = com.voxapps.commander.utils.PermissionUtils.hasMicrophonePermission(context),
                 hasNotificationPermission = com.voxapps.commander.utils.PermissionUtils.hasNotificationPermission(context),
-                hasLocationPermission = com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(context),
+                hasLocationPermission = com.voxapps.commander.utils.PermissionUtils.hasLocationPermission(context),
                 isIgnoringBatteryOptimizations = com.voxapps.commander.utils.PermissionUtils.isIgnoringBatteryOptimizations(context),
                 voiceModelReady = voiceModelReady,
                 intentModelReady = intentModelReady
@@ -230,8 +236,8 @@ data class AppState(
             voiceLanguageAutoDetect = false,
             modelFilterLang = Strings.Preferences.DEFAULT_LANGUAGE,
             activeVoiceModelId = null,
-            customWhisperModelPath = null,
-            customVoskModelPaths = emptyMap(),
+            activeWakeModelId = null,
+            customVoiceModelPath = null,
             aiProcessor = "",
             activeIntentModelId = null,
             cloudIntelligenceEnabled = false,
@@ -241,7 +247,6 @@ data class AppState(
             commandQueueEnabled = true,
             wakeWordProfileJson = null,
             wakeWordEngineType = "wake_vosk",
-            picovoiceAccessKey = null,
             wakeWordSensitivity = "medium",
             wakeWordAecEnabled = false,
             wakeWordMusicDuckEnabled = true,
@@ -261,8 +266,9 @@ data class AppState(
             overlayTextSize = 1.0f,
             piperVoiceModelId = null,
             appAliasRules = emptyList(),
-            apiKey = null,
-            geminiApiKey = null,
+            credentials = com.voxapps.commander.data.preferences.Credentials(),
+            useRemoteSchemas = true,
+            searchProviderSelections = emptyMap(),
             voiceState = VoiceState.IDLE,
             defaultVoiceFallbackProcessor = null,
             defaultVoiceFallbackModel = null,

@@ -162,11 +162,9 @@ class WhisperEngineManager(
                 }
             }
             // Clear custom model path and active model ID
-            val whisperKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".bin")
-            whisperKey?.let {
-                settingsRepo.setCustomModelPath(it, "")
-            }
-            settingsRepo.setEngineModelSelection(whisperKey ?: "", "")
+            val whisperKey = com.voxapps.commander.domain.engine.whisper.WhisperCppSttEngine.ENGINE_KEY
+            settingsRepo.setCustomModelPath(whisperKey, "")
+            settingsRepo.setEngineModelSelection(whisperKey, "")
             settingsRepo.setActiveVoiceModelId(null)
         }
         Logger.log("Whisper engine disabled (libs deleted=$deleteLibs, models deleted=$deleteModels)", TAG)

@@ -1,9 +1,9 @@
 package com.voxapps.commander.domain.intent.registry
 
 import android.content.Context
-import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
-import com.voxapps.logging.Logger
+import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.services.RemoteSchema
 
 /**
  * Declarative external-app-API integration schema. One entry replaces what used to require three
@@ -25,18 +25,26 @@ data class ApiIntegration(
     val id: String = "",
     val label: String = "",
     @SerializedName("package_name") val packageName: String = "",
-    val auth: AuthDef? = null,
-    @SerializedName("base_url") val baseUrl: String = "",
-    val capabilities: Map<String, CapabilitySlot> = emptyMap()
-)
+    val auth: com.voxapps.services.AuthDeclaration? = null,
+    /** Where the service lives. `base_url` is the older spelling and is still read, since a copy of
+     *  this file may predate the shared vocabulary. */
+    val endpoint: String? = null,
+    @SerializedName("base_url") val legacyBaseUrl: String? = null,
+    /** Path that proves the credential still works — `/me` for Spotify. Relative to [endpoint]. */
+    @SerializedName("probe_url") val probeUrl: String? = null,
 
-data class AuthDef(
-    val type: String = "", // oauth2_pkce | oauth2_authorization_code
-    @SerializedName("authorize_url") val authorizeUrl: String = "",
-    @SerializedName("token_url") val tokenUrl: String = "",
-    @SerializedName("redirect_uri") val redirectUri: String = "",
-    val scopes: String = ""
-)
+    /** Which of the icons the app carries represents this service, and the colour it is known by.
+     *  A closed set, chosen the same way an auth style is: a declaration selects among what the app
+     *  has compiled, it does not ship an image. Without them a card is a generic link on a themed
+     *  circle, which is what every integration looked like after the screen stopped being written
+     *  by hand for one service. */
+    val icon: String? = null,
+    @SerializedName("accent_color") val accentColor: String? = null,
+    val capabilities: Map<String, CapabilitySlot> = emptyMap()
+) {
+    /** The endpoint under either spelling. */
+    val serviceUrl: String get() = (endpoint ?: legacyBaseUrl).orEmpty()
+}
 
 data class CapabilitySlot(
     val type: String = "", // api_call | api_sequence | deep_link
@@ -105,24 +113,37 @@ data class PreferRule(val field: String = "", val equals: Any? = null)
 object ApiIntegrationRegistry {
 
     private const val TAG = "ApiIntegrationRegistry"
-    private const val ASSET_FILE_NAME = "api_integrations.json"
 
-    private val gson = Gson()
-    private var cached: List<ApiIntegration> = emptyList()
+    /**
+     * The last schema that was read from assets and nowhere else.
+     *
+     * It is also the one whose contents change without the app changing: an authorize URL moves, a
+     * scope is added, a service starts requiring a client id. Those were app releases, while the
+     * engines, the search providers and the media backends could all be corrected from the
+     * repository — for no reason other than which loader this file happened to be written against.
+     */
+    private val schema = RemoteSchema(
+        fileName = "api_integrations.json",
+        type = ApiIntegrationsSchema::class.java,
+        usable = { it.integrations.isNotEmpty() },
+        tag = TAG
+    )
 
-    fun init(context: Context) {
-        cached = try {
-            context.assets.open(ASSET_FILE_NAME).use { input ->
-                val text = input.readBytes().decodeToString()
-                val schema = gson.fromJson(text, ApiIntegrationsSchema::class.java)
-                Logger.log("Loaded api_integrations.json: ${schema?.integrations?.size ?: 0} integrations", TAG)
-                schema?.integrations ?: emptyList()
-            }
-        } catch (e: Exception) {
-            Logger.log("Failed to load api_integrations.json: ${e.message}", TAG)
-            emptyList()
-        }
-    }
+    fun init(context: Context) = schema.init(context)
+
+
+    private val cached: List<ApiIntegration> get() = schema.value?.integrations ?: emptyList()
 
     fun forPackage(packageName: String): ApiIntegration? = cached.firstOrNull { it.packageName == packageName }
+
+    /**
+     * Every declared integration.
+     *
+     * Its absence is why the integrations screen could only ever show Spotify: the screen asked for
+     * one integration by package name and drew a card written for it by hand, so a second entry in
+     * `api_integrations.json` rendered nowhere.
+     */
+    fun all(): List<ApiIntegration> = cached
+
+    fun byId(serviceId: String): ApiIntegration? = cached.firstOrNull { it.id == serviceId }
 }

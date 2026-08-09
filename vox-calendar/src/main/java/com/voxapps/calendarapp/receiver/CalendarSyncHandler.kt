@@ -2,17 +2,19 @@ package com.voxapps.calendarapp.receiver
 
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntryType
-import com.voxapps.calendarapp.data.CalendarLayerPalette
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.data.RecurrenceFrequency
 import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepository
 import com.voxapps.calendarapp.state.SessionManager
+import com.voxapps.datahygiene.SyncDeltaKeys
 import com.voxapps.datahygiene.SyncIdentity
 import com.voxapps.datahygiene.planMerge
+import com.voxapps.design.toEnumOrNull
 import com.voxapps.ipc.VoxResult
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
+import com.voxapps.design.color.VoxColorPalette
 
 /**
  * Vox Hub's peer-to-peer sync for this app (see [VoxIpc.OP_SYNC_EXPORT]/[VoxIpc.OP_SYNC_MERGE]) —
@@ -49,10 +51,10 @@ class CalendarSyncHandler(
 
         val json = JSONObject()
         json.put(
-            "entries",
+            SyncDeltaKeys.ENTRIES,
             JSONArray(changed.map { it.entry.toSyncJson(layerNameById[it.entry.layerId], it.tagNames) })
         )
-        json.put("tombstones", JSONArray(tombstones.map { JSONObject().put("uid", it.uid).put("deletedAt", it.deletedAt) }))
+        json.put(SyncDeltaKeys.TOMBSTONES, JSONArray(tombstones.map { JSONObject().put(SyncDeltaKeys.UID, it.uid).put(SyncDeltaKeys.DELETED_AT, it.deletedAt) }))
         return VoxResult(ok = true, text = json.toString())
     }
 
@@ -72,7 +74,7 @@ class CalendarSyncHandler(
         val nameToId = existingLayers.associate { it.name.lowercase() to it.id }.toMutableMap()
         val defaultLayerId = existingLayers.firstOrNull { it.isDefault }?.id ?: existingLayers.firstOrNull()?.id
 
-        val entriesJson = root.optJSONArray("entries") ?: JSONArray()
+        val entriesJson = root.optJSONArray(SyncDeltaKeys.ENTRIES) ?: JSONArray()
         val remoteTagsByUid = mutableMapOf<String, List<String>>()
         val remoteEntries = (0 until entriesJson.length()).map { i ->
             val e = entriesJson.getJSONObject(i)
@@ -81,7 +83,7 @@ class CalendarSyncHandler(
                 nameToId[name.lowercase()] ?: run {
                     val newId = calendarRepo.addLayer(
                         name,
-                        CalendarLayerPalette.unusedOrRandomColor(existingLayers.map { it.colorArgb }),
+                        VoxColorPalette.unusedOrRandomColor(existingLayers.map { it.colorArgb }),
                         existingLayers.size
                     )
                     if (newId > 0) nameToId[name.lowercase()] = newId
@@ -94,9 +96,9 @@ class CalendarSyncHandler(
             remoteTagsByUid[entry.uid] = tags
             entry
         }
-        val tombstonesJson = root.optJSONArray("tombstones") ?: JSONArray()
+        val tombstonesJson = root.optJSONArray(SyncDeltaKeys.TOMBSTONES) ?: JSONArray()
         val remoteTombstoneUids = (0 until tombstonesJson.length())
-            .map { tombstonesJson.getJSONObject(it).optString("uid") }
+            .map { tombstonesJson.getJSONObject(it).optString(SyncDeltaKeys.UID) }
             .toSet()
 
         val local = calendarRepo.entriesSnapshot().map { it.entry }
@@ -122,7 +124,7 @@ private object CalendarEntrySyncIdentity : SyncIdentity<CalendarEntry> {
 }
 
 private fun CalendarEntry.toSyncJson(layerName: String?, tags: List<String>): JSONObject = JSONObject().apply {
-    put("uid", uid)
+    put(SyncDeltaKeys.UID, uid)
     put("type", type.name)
     put("title", title)
     put("description", description)
@@ -132,16 +134,17 @@ private fun CalendarEntry.toSyncJson(layerName: String?, tags: List<String>): JS
     put("allDay", allDay)
     put("completed", completed)
     put("recurrenceFrequency", recurrenceFrequency.name)
+    put("recurrenceInterval", recurrenceInterval)
     put("recurrenceUntilMillis", recurrenceUntilMillis)
     put("layerName", layerName)
     put("tags", JSONArray(tags))
     put("createdAt", createdAt)
-    put("updatedAt", updatedAt)
+    put(SyncDeltaKeys.UPDATED_AT, updatedAt)
 }
 
 private fun JSONObject.toCalendarEntry(layerId: Long): CalendarEntry = CalendarEntry(
-    uid = optString("uid"),
-    type = optNullableString("type")?.let { runCatching { CalendarEntryType.valueOf(it) }.getOrNull() }
+    uid = optString(SyncDeltaKeys.UID),
+    type = optNullableString("type").toEnumOrNull<CalendarEntryType>()
         ?: CalendarEntryType.EVENT,
     title = optString("title"),
     description = optNullableString("description"),
@@ -151,8 +154,9 @@ private fun JSONObject.toCalendarEntry(layerId: Long): CalendarEntry = CalendarE
     allDay = optBoolean("allDay", false),
     completed = optBoolean("completed", false),
     recurrenceFrequency = optNullableString("recurrenceFrequency")
-        ?.let { runCatching { RecurrenceFrequency.valueOf(it) }.getOrNull() }
+        .toEnumOrNull<RecurrenceFrequency>()
         ?: RecurrenceFrequency.NONE,
+    recurrenceInterval = if (has("recurrenceInterval")) optInt("recurrenceInterval", 1) else 1,
     recurrenceUntilMillis = if (has("recurrenceUntilMillis") && !isNull("recurrenceUntilMillis")) {
         optLong("recurrenceUntilMillis")
     } else {
@@ -160,7 +164,7 @@ private fun JSONObject.toCalendarEntry(layerId: Long): CalendarEntry = CalendarE
     },
     layerId = layerId,
     createdAt = optLong("createdAt"),
-    updatedAt = optLong("updatedAt")
+    updatedAt = optLong(SyncDeltaKeys.UPDATED_AT)
 )
 
 private fun JSONObject.optNullableString(key: String): String? =

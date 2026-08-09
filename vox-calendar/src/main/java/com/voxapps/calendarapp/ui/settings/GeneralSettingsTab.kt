@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.state.CalendarStateManager
 import com.voxapps.calendarapp.ui.LocalLanguageManager
-import com.voxapps.design.color.VoxColorSwatchPicker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,36 +34,6 @@ fun GeneralSettingsTab(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(text = languageManager.getString("general"), style = MaterialTheme.typography.titleMedium)
-
-        // --- Theme (mirrors vox-commander's General settings) ---
-        Text(languageManager.getString("theme_section"), style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val themeModes = listOf(
-                CalendarSettings.THEME_SYSTEM to "theme_system",
-                CalendarSettings.THEME_LIGHT to "theme_light",
-                CalendarSettings.THEME_DARK to "theme_dark"
-            )
-            themeModes.forEach { (mode, labelKey) ->
-                FilterChip(
-                    selected = settings.themeDarkMode == mode,
-                    onClick = { stateManager.setThemeDarkMode(mode) },
-                    label = { Text(languageManager.getString(labelKey)) }
-                )
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("theme_colored"), style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    languageManager.getString("theme_colored_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(checked = settings.themeColored, onCheckedChange = { stateManager.setThemeColored(it) })
-        }
-
-        HorizontalDivider()
 
         // --- Require fingerprint ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -141,49 +110,22 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
-        // --- Widget day-card border (on/off, thickness, color) ---
-        Text(languageManager.getString("widget_border_section"), style = MaterialTheme.typography.labelLarge)
+        // --- Whether a to-do item's due date makes it show up on the standard calendar grid. The
+        // underlying CalendarEntry row (and its reminder) always exists either way — this only
+        // filters it out of Month/Week/Day/Year rendering when off. ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("widget_border_enabled"), style = MaterialTheme.typography.bodyLarge)
+                Text(languageManager.getString("todo_bleed_to_calendar"), style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    languageManager.getString("widget_border_enabled_desc"),
+                    languageManager.getString("todo_bleed_to_calendar_desc"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Switch(
-                checked = settings.widgetBorderEnabled,
-                onCheckedChange = { stateManager.setWidgetBorderEnabled(it) }
+                checked = settings.todoBleedToCalendar,
+                onCheckedChange = { stateManager.setTodoBleedToCalendar(it) }
             )
         }
-        Text(languageManager.getString("widget_border_thickness"), style = MaterialTheme.typography.bodyMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            val thicknessOptions = listOf(
-                CalendarSettings.THICKNESS_THIN to "widget_border_thickness_thin",
-                CalendarSettings.THICKNESS_MEDIUM to "widget_border_thickness_medium",
-                CalendarSettings.THICKNESS_THICK to "widget_border_thickness_thick"
-            )
-            thicknessOptions.forEach { (thicknessDp, labelKey) ->
-                FilterChip(
-                    enabled = settings.widgetBorderEnabled,
-                    selected = settings.widgetBorderThicknessDp == thicknessDp,
-                    onClick = { stateManager.setWidgetBorderThicknessDp(thicknessDp) },
-                    label = { Text(languageManager.getString(labelKey)) }
-                )
-            }
-        }
-        Text(languageManager.getString("widget_border_color"), style = MaterialTheme.typography.bodyMedium)
-        VoxColorSwatchPicker(
-            selectedColor = settings.widgetBorderColorArgb,
-            onColorSelected = { stateManager.setWidgetBorderColorArgb(it) },
-            modifier = Modifier.padding(top = 4.dp),
-            customColorDialogTitle = languageManager.getString("custom_color_title"),
-            customColorUseLabel = languageManager.getString("use_color_button"),
-            customColorCancelLabel = languageManager.getString("cancel"),
-            customColorHueLabel = languageManager.getString("hue_label"),
-            customColorSaturationLabel = languageManager.getString("saturation_label"),
-            customColorBrightnessLabel = languageManager.getString("brightness_label")
-        )
     }
 }

@@ -5,7 +5,8 @@ import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
-import com.voxapps.commander.domain.search.LocationHelper
+import com.voxapps.commander.domain.location.CommanderLocationStore
+import com.voxapps.location.VoxLocationResolver
 import com.voxapps.commander.domain.search.SearchProviderRouter
 import com.voxapps.commander.domain.conversation.ConversationHandler
 import com.voxapps.logging.Logger
@@ -48,12 +49,24 @@ class SearchIntentHandler(
             var lon: Double? = null
             val provider = com.voxapps.commander.domain.search.SearchProviderRegistry.getProvider(category)
             if (provider?.requiresLocation == true) {
-                val location = LocationHelper.getLocation(context)
+                val repo = settingsRepository
+                val location = if (repo != null) {
+                    VoxLocationResolver.create(context, CommanderLocationStore(context, repo)).resolveLocation()
+                } else null
                 if (location != null) {
-                    lat = location.latitude
-                    lon = location.longitude
+                    lat = location.lat
+                    lon = location.lon
                 } else {
+                    // Say what actually went wrong. Running the search anyway returns nothing, and
+                    // the caller then reports "no results found" — which reads as a broken provider
+                    // or a bad API key and sends the user to check both, when the provider is fine
+                    // and simply has no location to search from.
                     Logger.log("Search requires location but none available", TAG)
+                    val message = "I need your location for $category searches. " +
+                        "Allow location access, or set a home town in settings."
+                    com.voxapps.commander.domain.search.SearchResultsHolder.setResults(message)
+                    ConversationHandler.speakResponse(message)
+                    return@launch
                 }
             }
 

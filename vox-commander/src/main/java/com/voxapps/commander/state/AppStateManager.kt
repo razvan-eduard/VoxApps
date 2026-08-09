@@ -5,6 +5,9 @@ import androidx.compose.runtime.Immutable
 import android.content.Context
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.engine.SttEngines
+import com.voxapps.commander.domain.engine.whisper.WhisperCppSttEngine
+import com.voxapps.commander.domain.engine.vosk.VoskSttEngine
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.Strings
@@ -42,7 +45,11 @@ data class NativeLibStatus(
     val exists: Boolean,
     val isActive: Boolean,
     val description: String,
-    val isIncompatible: Boolean = false
+    val isIncompatible: Boolean = false,
+    /** The engine key this library belongs to, or blank for one that serves no single engine.
+     *  An engine key rather than a name invented here: the diagnostics screen then groups and
+     *  labels these the way every other screen names an engine. */
+    val category: String = ""
 )
 
 enum class VulkanTestState {
@@ -61,7 +68,7 @@ data class ServiceLoadingState(
 )
 
 sealed class AppScanState {
-    object Idle : AppScanState()
+    data object Idle : AppScanState()
     data class Scanning(val current: Int, val total: Int, val appName: String) : AppScanState()
     data class Done(val totalApps: Int, val durationMs: Long) : AppScanState()
 }
@@ -92,7 +99,7 @@ class AppStateManager private constructor(
         canDrawOverlays = com.voxapps.commander.utils.PermissionUtils.canDrawOverlays(context),
         hasMicrophonePermission = com.voxapps.commander.utils.PermissionUtils.hasMicrophonePermission(context),
         hasNotificationPermission = com.voxapps.commander.utils.PermissionUtils.hasNotificationPermission(context),
-        hasLocationPermission = com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(context),
+        hasLocationPermission = com.voxapps.commander.utils.PermissionUtils.hasLocationPermission(context),
         isIgnoringBatteryOptimizations = com.voxapps.commander.utils.PermissionUtils.isIgnoringBatteryOptimizations(context)
     ))
 
@@ -122,16 +129,50 @@ class AppStateManager private constructor(
     val appScanState: StateFlow<AppScanState> = _appScanState.asStateFlow()
 
     // --- SERVICE LOADING STATE ---
-    private val _serviceLoadingState = MutableStateFlow(ServiceLoadingState())
-    val serviceLoadingState: StateFlow<ServiceLoadingState> = _serviceLoadingState.asStateFlow()
+    /**
+     * Set while the wake-word service is deliberately shutting down. This is the only part of the
+     * loading dialog that cannot be derived: an engine that has gone Idle looks identical whether it
+     * is stopping or was never started.
+     */
+    private val _wakeServiceStopping = MutableStateFlow(false)
 
-    fun setServiceLoading(state: ServiceLoadingState) {
-        _serviceLoadingState.value = state
+    fun setWakeServiceStopping(stopping: Boolean) {
+        _wakeServiceStopping.value = stopping
     }
 
-    fun clearServiceLoading() {
-        _serviceLoadingState.value = ServiceLoadingState()
-    }
+    /**
+     * What the loading dialog shows, derived from the wake-word engine rather than pushed to it.
+     *
+     * The service used to publish this itself: two calls set it and **nine** cleared it, one on each
+     * way out of startWakeWordDetection. A tenth exit path that forgot would have left the dialog on
+     * screen forever, and nothing about the shape made that visible. Clearing is now implicit —
+     * anything other than Loading is not loading — so there is no path to forget.
+     *
+     * The engine's own state supplies the model name, which is why [EngineState.Loading] carries the
+     * spec instead of just a flag.
+     */
+    val serviceLoadingState: StateFlow<ServiceLoadingState> =
+        combine(
+            com.voxapps.commander.domain.engine.EngineRegistry.observe(
+                com.voxapps.commander.domain.engine.EngineRegistry.Domain.WAKE
+            ),
+            _wakeServiceStopping
+        ) { engineState, stopping ->
+            val loading = engineState as? com.voxapps.commander.domain.engine.EngineState.Loading
+            if (loading == null && !stopping) {
+                ServiceLoadingState()
+            } else {
+                val spec = loading?.spec as? com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel
+                ServiceLoadingState(
+                    isActive = true,
+                    serviceName = "Wake Word",
+                    engineName = com.voxapps.commander.data.remote.RemoteModelRegistry
+                        .declaredEngineLabel(repo.getSettingsSnapshot().wakeWordEngineType),
+                    modelName = spec?.modelId ?: spec?.keyword.orEmpty(),
+                    isStopping = stopping
+                )
+            }
+        }.stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, ServiceLoadingState())
 
     private val _systemInfo = MutableStateFlow<String>("")
     val systemInfo: StateFlow<String> = _systemInfo.asStateFlow()
@@ -140,11 +181,13 @@ class AppStateManager private constructor(
         // Reactive combine: settings + modelMap + runtime -> AppState
         combine(
             repo.settingsFlow,
+            repo.credentialsFlow,
             RemoteModelRegistry.modelMap,
             _runtimeState
-        ) { settings, modelMap, runtime ->
+        ) { settings, credentials, modelMap, runtime ->
             AppState.fromAppSettings(
                 settings = settings,
+                credentials = credentials,
                 context = context,
                 availableModels = modelMap,
                 voiceState = runtime.voiceState,
@@ -175,7 +218,7 @@ class AppStateManager private constructor(
                 canDrawOverlays = com.voxapps.commander.utils.PermissionUtils.canDrawOverlays(context),
                 hasMicrophonePermission = com.voxapps.commander.utils.PermissionUtils.hasMicrophonePermission(context),
                 hasNotificationPermission = com.voxapps.commander.utils.PermissionUtils.hasNotificationPermission(context),
-                hasLocationPermission = com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(context),
+                hasLocationPermission = com.voxapps.commander.utils.PermissionUtils.hasLocationPermission(context),
                 isIgnoringBatteryOptimizations = com.voxapps.commander.utils.PermissionUtils.isIgnoringBatteryOptimizations(context)
             )
         }
@@ -241,30 +284,27 @@ class AppStateManager private constructor(
         scope.launch { repo.setActiveVoiceModelId(modelId) }
     }
 
+    fun setActiveWakeModelId(modelId: String?) {
+        scope.launch { repo.setActiveWakeModelId(modelId) }
+    }
+
     fun saveVoiceModelSelection(engineKey: String, modelId: String) {
         scope.launch { repo.setEngineModelSelection(engineKey, modelId) }
     }
 
-    fun setCustomWhisperModelPath(path: String?) {
-        if (path != null) {
-            val whisperKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".bin")
-            whisperKey?.let { scope.launch { repo.setCustomModelPath(it, path) } }
-        }
+    /** One writer for every engine credential — see [SettingsRepository.setEngineApiKey]. */
+    fun setEngineApiKey(engineKey: String, key: String?) {
+        scope.launch { repo.setEngineApiKey(engineKey, key) }
     }
 
-    fun setCustomVoskModelPath(language: String, path: String?) {
-        if (path != null) {
-            val voskKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".zip")
-            voskKey?.let { scope.launch { repo.setCustomModelPath(it, path, language) } }
-        }
+    /** The same, for a search provider that owns its key. */
+    fun setSearchProviderApiKey(providerName: String, key: String?) {
+        scope.launch { repo.setSearchProviderApiKey(providerName, key) }
     }
 
-    fun setApiKey(key: String?) {
-        scope.launch { repo.setApiKey(key) }
-    }
-
-    fun setGeminiApiKey(key: String?) {
-        scope.launch { repo.setGeminiApiKey(key) }
+    /** Whether the repository is asked for newer schemas at startup — see [AppSettings.useRemoteSchemas]. */
+    fun setUseRemoteSchemas(enabled: Boolean) {
+        scope.launch { repo.setUseRemoteSchemas(enabled) }
     }
 
     fun setAppLanguage(lang: String) {
@@ -328,10 +368,6 @@ class AppStateManager private constructor(
 
     fun setTtsEngineType(engineType: String) {
         scope.launch { repo.setTtsEngineType(engineType) }
-    }
-
-    fun setPicovoiceAccessKey(key: String?) {
-        scope.launch { repo.setPicovoiceAccessKey(key) }
     }
 
     fun setWakeWordSensitivity(sensitivity: String) {
@@ -438,6 +474,12 @@ class AppStateManager private constructor(
         scope.launch { repo.setEngineModelSelection(engineKey, modelId) }
     }
 
+    /** Which provider answers a search in [category] — for spoken queries, not only for the
+     *  screen's own test box, which is all the choice used to affect. */
+    fun setSearchProvider(category: String, providerName: String) {
+        scope.launch { repo.setSearchProviderSelection(category, providerName) }
+    }
+
     // Diagnostic Helpers
     fun refreshNativeLibsStatus() {
         val currentState = _uiState.value
@@ -447,17 +489,21 @@ class AppStateManager private constructor(
         val geminiIncompatible = aiProcessor == Strings.AiProcessors.GEMINI_NATIVE && !currentState.intentModelReady
         val vulkanIncompatible = voiceProcessor == Strings.Processors.WHISPER_VULKAN && !currentState.voiceModelReady
         
-        // (libName, description, engineCategory) — engineCategory: "whisper", "vosk", "llm", "gemini"
+        // (libName, description, engineKey). The third column used to be a naming of its own —
+        // "whisper", "vosk", "llm", "gemini" — a fourth way to say which engine something belongs
+        // to, matching neither the schema's keys nor the stored processor values nor anything else.
+        // These are engine keys, so the screen can name each group from the registry.
+        val litertLmEngine = "nlu_llm_litertlm" // schema key; no compiled class owns it
         val soFiles = listOf(
-            Triple("libwhisper.so", "Core Whisper STT Engine", "whisper"),
-            Triple("libggml.so", "GGML Tensor Library", "whisper"),
-            Triple("libggml-cpu.so", "GGML CPU Operations", "whisper"),
-            Triple("libggml-base.so", "GGML Base Library", "whisper"),
-            Triple("libggml-vulkan.so", "Vulkan GPU Acceleration", "whisper"),
-            Triple("libomp.so", "OpenMP Multi-threading", "whisper"),
-            Triple("libvosk.so", "Vosk Voice Engine", "vosk"),
-            Triple("libllm_inference_engine_jni.so", "MediaPipe Llama Engine", "llm"),
-            Triple("Google AICore", "Gemini Nano System Service", "gemini")
+            Triple("libwhisper.so", "Core Whisper STT Engine", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libggml.so", "GGML Tensor Library", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libggml-cpu.so", "GGML CPU Operations", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libggml-base.so", "GGML Base Library", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libggml-vulkan.so", "Vulkan GPU Acceleration", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libomp.so", "OpenMP Multi-threading", WhisperCppSttEngine.ENGINE_KEY),
+            Triple("libvosk.so", "Vosk Voice Engine", VoskSttEngine.ENGINE_KEY),
+            Triple("liblitertlm_jni.so", "LiteRT-LM Engine", litertLmEngine),
+            Triple("Google AICore", "Gemini Nano System Service", Strings.AiProcessors.GEMINI_NATIVE)
         )
 
         val statusList = soFiles.map { (name, desc, category) ->
@@ -482,18 +528,20 @@ class AppStateManager private constructor(
                 isActive = false
                 adjustedDesc = "$desc (Incompatible)"
             } else {
-                val voiceExt = com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(voiceProcessor)
-                val active = when (category) {
-                    "whisper" -> voiceExt == ".bin" || voiceProcessor == Strings.Processors.WHISPER_VULKAN
-                    "vosk" -> voiceExt == ".zip"
-                    "llm" -> com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine(aiProcessor)
-                    "gemini" -> aiProcessor == Strings.AiProcessors.GEMINI_NATIVE
-                    else -> false
-                }
-                isActive = active
+                // A library is in use when its engine is the one selected — asked by comparing
+                // engine keys, in place of a `when` that restated the same four invented names and
+                // answered each with a differently-shaped question (an extension for one, a
+                // capability for another, an equality for the third).
+                //
+                // Whisper on the GPU is the same engine asked to run differently, and the only
+                // selection whose stored value is not an engine key of its own.
+                val selectedVoiceEngine = SttEngines.backingEngineKey(voiceProcessor)
+                isActive = category == selectedVoiceEngine ||
+                    category == aiProcessor ||
+                    category == currentState.wakeWordEngineType
                 adjustedDesc = desc
             }
-            NativeLibStatus(name, exists, isActive, adjustedDesc, isIncompatible)
+            NativeLibStatus(name, exists, isActive, adjustedDesc, isIncompatible, category)
         }
         _nativeLibsStatus.value = statusList
     }
@@ -541,8 +589,11 @@ class AppStateManager private constructor(
         _vulkanTestPassed.value = null
 
         val modelId = _uiState.value.activeVoiceModelId
-        val whisperKey = com.voxapps.commander.data.remote.RemoteModelRegistry.getEngineKeyByExtension(".bin")
-        val extension = whisperKey?.let { com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(it) } ?: ""
+        // The GPU probe runs the whisper engine's own model — WHISPER_VULKAN is that engine asked
+        // to run on the GPU, not an engine of its own, so it is that engine's key that resolves the
+        // file. Asked by extension, this would answer "whichever engine ships .bin files first".
+        val whisperKey = SttEngines.backingEngineKey(Strings.Processors.WHISPER_VULKAN)
+        val extension = com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(whisperKey)
         val modelPath = java.io.File(context.getExternalFilesDir(null), "$modelId$extension").absolutePath
 
         Logger.log("Starting Vulkan compatibility test with model: $modelPath", "VulkanTest")
@@ -604,6 +655,14 @@ class AppStateManager private constructor(
         @Volatile
         private var instance: AppStateManager? = null
 
+        /**
+         * Kept, unlike the satellites' state managers, which are now plain constructor calls from
+         * their containers. This one has entry points the container can't reach: [WakeWordService]
+         * and [VoiceTriggerReceiver] are instantiated by the OS with no reference to
+         * [com.voxapps.commander.di.AppContainer], and SpeakingOverlay reaches it from a composable
+         * via [get]. Until those are given a container handle, the process-wide instance is what
+         * makes them observe the same state as the UI rather than a second, divergent copy.
+         */
         fun getInstance(repo: SettingsRepository, context: Context): AppStateManager {
             return instance ?: synchronized(this) {
                 instance ?: AppStateManager(repo, context).also { instance = it }

@@ -5,6 +5,7 @@ import android.util.Log
 import app.cash.turbine.test
 import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.utils.PermissionUtils
 import com.voxapps.commander.utils.Strings
@@ -28,6 +29,7 @@ class AppStateManagerTest {
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var stateManager: AppStateManager
     private lateinit var settingsFlow: MutableStateFlow<AppSettings>
+    private lateinit var credentialsFlow: MutableStateFlow<com.voxapps.commander.data.preferences.Credentials>
 
     @After
     fun tearDown() {
@@ -47,15 +49,17 @@ class AppStateManagerTest {
         every { PermissionUtils.canDrawOverlays(any()) } returns false
         every { PermissionUtils.hasMicrophonePermission(any()) } returns true
         every { PermissionUtils.hasNotificationPermission(any()) } returns true
-
-        mockkObject(com.voxapps.commander.domain.search.LocationHelper)
-        every { com.voxapps.commander.domain.search.LocationHelper.hasLocationPermission(any()) } returns false
+        every { PermissionUtils.hasLocationPermission(any()) } returns false
 
         mockkObject(RemoteModelRegistry)
-        every { RemoteModelRegistry.getEngineKeyByExtension(".bin") } returns "stt_whisper"
-        every { RemoteModelRegistry.getEngineKeyByExtension(".zip") } returns "wake_vosk"
         every { RemoteModelRegistry.isZipEngine(any()) } returns false
         every { RemoteModelRegistry.isLlmEngine(any()) } returns false
+        // The engine's own declaration is what readiness now asks about — a cloud or OS-supplied
+        // engine has nothing to have on disk, a local one needs a model or an import.
+        every { RemoteModelRegistry.runtimeOf(any()) } returns EngineRuntime.LOCAL_FILE
+        every { RemoteModelRegistry.runtimeOf(Strings.Processors.GOOGLE) } returns EngineRuntime.ANDROID_LOCAL
+        every { RemoteModelRegistry.runtimeOf(Strings.Processors.WHISPER_API) } returns EngineRuntime.CLOUD
+        every { RemoteModelRegistry.isArchiveEngine(any()) } returns false
         every { RemoteModelRegistry.getModels(any()) } returns emptyList()
         every { RemoteModelRegistry.modelMap } returns MutableStateFlow(emptyMap())
         every { RemoteModelRegistry.getExtension(any()) } returns ""
@@ -82,6 +86,10 @@ class AppStateManagerTest {
         )
         settingsFlow = MutableStateFlow(initialSettings)
         every { settingsRepo.settingsFlow } returns settingsFlow
+        // The encrypted store is a second source feeding uiState; without it the combine never
+        // emits and every assertion below would read the initial state.
+        credentialsFlow = MutableStateFlow(com.voxapps.commander.data.preferences.Credentials())
+        every { settingsRepo.credentialsFlow } returns credentialsFlow
         every { settingsRepo.getSettingsSnapshot() } returns initialSettings
 
         // Reset singleton
@@ -342,14 +350,14 @@ class AppStateManagerTest {
     }
 
     @Test
-    fun `setApiKey delegates to SettingsRepository`() = runTest {
+    fun `setEngineApiKey delegates to SettingsRepository, keyed by engine`() = runTest {
         stateManager.uiState.test {
             awaitItem()
 
-            stateManager.setApiKey("new-key")
+            stateManager.setEngineApiKey(Strings.AiProcessors.OPENAI, "new-key")
 
             testScheduler.advanceUntilIdle()
-            coVerify { settingsRepo.setApiKey("new-key") }
+            coVerify { settingsRepo.setEngineApiKey(Strings.AiProcessors.OPENAI, "new-key") }
         }
     }
 

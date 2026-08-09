@@ -19,6 +19,12 @@ import androidx.room.PrimaryKey
  * @param domain        Intent domain: "custom" (app launch), "settings", "audio", "maps", "messaging", etc.
  * @param action        Intent action: "launch", "volume_up", "volume_down", "wifi_toggle", "play", "navigate", etc.
  * @param mediaControlType  For audio transport controls: "active_session" (default), "default_app", "audio_button".
+ * @param anyOrder      Match trigger words in any order (lookahead-based), instead of the default
+ *                      left-to-right sequence. Mutually exclusive with [lazyQuery]: lazyQuery strips
+ *                      the trigger regex's match out of the spoken text via `.replace(...)` to compute
+ *                      the leftover query, which only works for a consuming (ordered) pattern — an
+ *                      any-order pattern is built from zero-width lookaheads, so `.replace()` on it
+ *                      wouldn't remove any characters and would corrupt the extracted query.
  */
 @Entity(tableName = "fast_map_rules")
 @Immutable
@@ -33,6 +39,7 @@ data class FastMapRule(
     val intentAction: String = "",
     val uriTemplate: String? = null,
     val lazyQuery: Boolean = false,
+    val anyOrder: Boolean = false,
     val sortOrder: Int = 0,
     val isActive: Boolean = true,
     val domain: String = "custom",

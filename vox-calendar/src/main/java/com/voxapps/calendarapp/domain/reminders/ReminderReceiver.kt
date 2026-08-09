@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.calendarapp.data.RecurrenceFrequency
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +47,19 @@ class ReminderReceiver : BroadcastReceiver() {
         if (reminderId < 0 || entryId < 0) return
 
         val entry = container.calendarRepository.getEntryById(entryId) ?: return
-        ReminderNotifier.notify(context, container.languageManager, reminderId, entry)
+        val settings = container.settingsRepository.getSnapshot()
+        ReminderNotifier.notify(context, container.languageManager, reminderId, entry, settings)
+
+        // AlarmManager has no monthly/interval-repeat primitive — for a recurring entry, re-arm the
+        // same reminder row against the NEXT occurrence right after this one fires. "Now" is
+        // approximately this occurrence's trigger time (start - offset) regardless of the offset's
+        // size, since the offset cancels out of the search math in triggerAtMillis — padding it a
+        // minute past "now" is enough to skip past the occurrence that just fired and land on the
+        // following one, for every supported frequency (DAILY being the shortest).
+        if (entry.recurrenceFrequency != RecurrenceFrequency.NONE) {
+            val reminder = container.calendarRepository.getReminderById(reminderId) ?: return
+            ReminderScheduler.schedule(context, reminder, entry, fromMillis = System.currentTimeMillis() + 60_000L)
+        }
     }
 
     private suspend fun rescheduleAll(context: Context) {

@@ -1,0 +1,236 @@
+{
+  "schema_version": 1,
+  "backends": [
+    {
+      "id": "piped",
+      "label": "Piped API",
+      "default": true,
+      "probe_url": "health",
+      "endpoints": [
+        "https://inv.thepixora.com",
+        "https://pipedapi.kavin.rocks",
+        "https://pipedapi.adminforge.de",
+        "https://api.piped.private.coffee"
+      ],
+      "regions": [
+        {
+          "code": "RO",
+          "label": "Romania"
+        },
+        {
+          "code": "US",
+          "label": "United States"
+        },
+        {
+          "code": "GB",
+          "label": "United Kingdom"
+        },
+        {
+          "code": "DE",
+          "label": "Germany"
+        },
+        {
+          "code": "FR",
+          "label": "France"
+        },
+        {
+          "code": "IT",
+          "label": "Italy"
+        },
+        {
+          "code": "ES",
+          "label": "Spain"
+        },
+        {
+          "code": "NL",
+          "label": "Netherlands"
+        },
+        {
+          "code": "CA",
+          "label": "Canada"
+        },
+        {
+          "code": "AU",
+          "label": "Australia"
+        },
+        {
+          "code": "JP",
+          "label": "Japan"
+        },
+        {
+          "code": "KR",
+          "label": "South Korea"
+        },
+        {
+          "code": "IN",
+          "label": "India"
+        },
+        {
+          "code": "BR",
+          "label": "Brazil"
+        },
+        {
+          "code": "MX",
+          "label": "Mexico"
+        },
+        {
+          "code": "RU",
+          "label": "Russia"
+        },
+        {
+          "code": "PL",
+          "label": "Poland"
+        },
+        {
+          "code": "SE",
+          "label": "Sweden"
+        },
+        {
+          "code": "NO",
+          "label": "Norway"
+        },
+        {
+          "code": "FI",
+          "label": "Finland"
+        },
+        {
+          "code": "DK",
+          "label": "Denmark"
+        },
+        {
+          "code": "AT",
+          "label": "Austria"
+        },
+        {
+          "code": "BE",
+          "label": "Belgium"
+        },
+        {
+          "code": "CH",
+          "label": "Switzerland"
+        },
+        {
+          "code": "CZ",
+          "label": "Czech Republic"
+        },
+        {
+          "code": "HU",
+          "label": "Hungary"
+        },
+        {
+          "code": "PT",
+          "label": "Portugal"
+        },
+        {
+          "code": "GR",
+          "label": "Greece"
+        },
+        {
+          "code": "TR",
+          "label": "Turkey"
+        },
+        {
+          "code": "UA",
+          "label": "Ukraine"
+        },
+        {
+          "code": "BG",
+          "label": "Bulgaria"
+        },
+        {
+          "code": "RS",
+          "label": "Serbia"
+        },
+        {
+          "code": "IL",
+          "label": "Israel"
+        },
+        {
+          "code": "AE",
+          "label": "UAE"
+        },
+        {
+          "code": "SA",
+          "label": "Saudi Arabia"
+        },
+        {
+          "code": "CN",
+          "label": "China"
+        },
+        {
+          "code": "HK",
+          "label": "Hong Kong"
+        },
+        {
+          "code": "TW",
+          "label": "Taiwan"
+        },
+        {
+          "code": "TH",
+          "label": "Thailand"
+        },
+        {
+          "code": "ID",
+          "label": "Indonesia"
+        },
+        {
+          "code": "MY",
+          "label": "Malaysia"
+        },
+        {
+          "code": "PH",
+          "label": "Philippines"
+        },
+        {
+          "code": "SG",
+          "label": "Singapore"
+        },
+        {
+          "code": "VN",
+          "label": "Vietnam"
+        },
+        {
+          "code": "AR",
+          "label": "Argentina"
+        },
+        {
+          "code": "CL",
+          "label": "Chile"
+        },
+        {
+          "code": "CO",
+          "label": "Colombia"
+        },
+        {
+          "code": "PE",
+          "label": "Peru"
+        },
+        {
+          "code": "ZA",
+          "label": "South Africa"
+        },
+        {
+          "code": "EG",
+          "label": "Egypt"
+        },
+        {
+          "code": "NG",
+          "label": "Nigeria"
+        },
+        {
+          "code": "KE",
+          "label": "Kenya"
+        },
+        {
+          "code": "MA",
+          "label": "Morocco"
+        }
+      ]
+    },
+    {
+      "id": "newpipe",
+      "label": "NewPipe Extractor",
+      "runtime": "device_builtin"
+    }
+  ]
+}

@@ -20,7 +20,9 @@ import com.voxapps.commander.domain.voice.VoiceManager
 import com.voxapps.commander.domain.voice.TtsManager
 import com.voxapps.commander.domain.conversation.ConversationHandler
 import com.voxapps.commander.state.AppStateManager
+import com.voxapps.commander.utils.AppScope
 import com.voxapps.logging.Logger
+import kotlinx.coroutines.launch
 import com.voxapps.commander.ui.viewmodels.MainViewModel
 import com.voxapps.commander.ui.viewmodels.ModelManagementViewModel
 import com.whispercpp.whisper.WhisperLib
@@ -35,7 +37,11 @@ class AppContainer(context: Context) {
     private val appContext = context.applicationContext
 
     // --- SETTINGS REPOSITORY (DataStore-backed, singleton) ---
-    val settingsRepository: SettingsRepository = SettingsRepositoryImpl(appContext)
+    /** Held at the concrete type because the one-time SharedPreferences migration below is an
+     *  implementation detail that deliberately isn't on [SettingsRepository] — every other consumer
+     *  gets the interface via [settingsRepository], which is the same object. */
+    private val settingsRepositoryImpl = SettingsRepositoryImpl(appContext)
+    val settingsRepository: SettingsRepository = settingsRepositoryImpl
 
     // --- SINGLETON MANAGERS ---
     val appStateManager = AppStateManager.getInstance(settingsRepository, appContext)
@@ -55,10 +61,10 @@ class AppContainer(context: Context) {
 
     // --- INTENT ENGINES ---
     private val l1Engine = FastMapEngine(fastMapDao)
-    private val l2Engine = OpenAiInterpreter(appContext, settingsRepository)
-    val localLlmInterpreter = LocalLlmInterpreter(appContext, settingsRepository, modelDownloader)
+    private val l2Engine = OpenAiInterpreter(appContext, settingsRepository, fastMapDao)
+    val localLlmInterpreter = LocalLlmInterpreter(appContext, settingsRepository, modelDownloader, fastMapDao)
     val geminiNanoInterpreter = GeminiNanoInterpreter(appContext, settingsRepository)
-    val geminiCloudInterpreter = GeminiCloudInterpreter(appContext, settingsRepository)
+    val geminiCloudInterpreter = GeminiCloudInterpreter(appContext, settingsRepository, fastMapDao)
     val masterIntentEngine = IntentDecisionMap(l1Engine, l2Engine, localLlmInterpreter, geminiNanoInterpreter, geminiCloudInterpreter, settingsRepository)
     val llmHookEngineSelector = com.voxapps.commander.domain.intent.LlmHookEngineSelector(
         openAiEngine = l2Engine,
@@ -70,6 +76,12 @@ class AppContainer(context: Context) {
     val intentRouter = IntentRouter(appContext, settingsRepository)
 
     // --- VIEW MODELS ---
+    // Named "ViewModel" but deliberately app-scoped, not Activity-scoped: neither class extends
+    // androidx.lifecycle.ViewModel, and MainViewModel is driven by WakeWordService (an OS-created
+    // Service that outlives every Activity — see its enqueueVoiceCommand/processVoiceCommand calls),
+    // so a voice command arriving with no Activity on screen still has to reach a live instance.
+    // Holding them here is what makes the service and the UI talk to the same object; scoping them
+    // to an Activity would give the service a second, dead one.
     val mainViewModel = MainViewModel(masterIntentEngine, intentRouter, appStateManager, languageManager)
     val modelManagementViewModel = ModelManagementViewModel(
         settingsRepository,
@@ -80,13 +92,24 @@ class AppContainer(context: Context) {
     )
 
     init {
+        // Deliberately still blocking, and kept as small as possible: the migration must finish
+        // before ANY settings read (otherwise pre-migration values are read and then overwritten),
+        // and AppRegistry's cache has to be in place before the splash screen decides whether it
+        // needs to run a full app scan. Both are ordering constraints, not just slow work.
         kotlinx.coroutines.runBlocking {
-            (settingsRepository as SettingsRepositoryImpl).migrateFromSharedPreferencesIfNeeded()
+            settingsRepositoryImpl.migrateFromSharedPreferencesIfNeeded()
             // Try loading from cache (fast path). If cache empty, splash screen will scan.
-            val cache = settingsRepository.getSettingsSnapshot().appCacheJson
-            AppRegistry.initFromCache(cache)
+            // One read, reused below — this used to call getSettingsSnapshot() twice in a row, and
+            // on a cold start (empty cache) each call is its own blocking DataStore round-trip.
+            val snapshot = settingsRepository.getSettingsSnapshot()
+            AppRegistry.initFromCache(snapshot.appCacheJson)
+        }
 
-            // Load media service settings
+        // Media-service config moved off the blocking path: these are plain setters whose values
+        // aren't read until the user actually triggers playback/search, so nothing downstream needs
+        // them to be set by the time this constructor returns. (NewPipe's warmUp() already dispatches
+        // to AppScope.io internally, so it was never the expensive part here.)
+        AppScope.io.launch {
             val snapshot = settingsRepository.getSettingsSnapshot()
             com.voxapps.commander.service.SpotifyRemoteManager.setClientId(snapshot.spotifyClientId)
             com.voxapps.commander.domain.intent.handler.PipedSearchHelper.setPipedApiUrl(snapshot.pipedApiUrl)
@@ -95,7 +118,6 @@ class AppContainer(context: Context) {
             if (snapshot.youtubeUrlEngine == "newpipe") {
                 com.voxapps.commander.domain.intent.handler.NewPipeExtractorHelper.warmUp()
             }
-            com.voxapps.commander.domain.search.LocationHelper.settingsRepo = settingsRepository
         }
         Logger.log("AppContainer init - starting compatibility checks", "AppContainer")
         checkVulkanCrashCookie()
@@ -145,22 +167,7 @@ class AppContainer(context: Context) {
 
     // --- VOICE MANAGER INITIALIZATION ---
     fun initVoiceManager(context: Context, voiceIntentLauncher: com.voxapps.commander.utils.VoiceIntentLauncher) {
-        VoiceManager.init(
-            context,
-            null, // Engines are now managed internally by VoiceManager via observation
-            null,
-            null,
-            null,
-            settingsRepository,
-            appStateManager
-        )
-
-        // Set offline fallback settings in VoiceManager
-        val snapshot = settingsRepository.getSettingsSnapshot()
-        VoiceManager.setOfflineFallbackSettings(
-            snapshot.offlineFallbackTimeout,
-            snapshot.defaultOfflineModel
-        )
+        VoiceManager.init(context, settingsRepository, appStateManager)
 
         // Initialize TTS manager
         TtsManager.init(context, settingsRepository, appStateManager)

@@ -106,6 +106,21 @@ object VoxAppsDiscovery {
         val intent = Intent(VoxIpc.ACTION_COMMAND).apply {
             setPackage(packageName)
             putExtra(VoxIpc.EXTRA_PAYLOAD, VoxCommand(op = VoxIpc.OP_PING).toJson())
+            // Without this flag a force-stopped or never-since-installed app is dropped before its
+            // receiver runs, no matter that setPackage() targets it — so it looks identical to an
+            // app that is simply slow, and the only recovery was to launch its activity (see
+            // BalGraceFlash) and ask again.
+            //
+            // Measured on a DNP-NX9 / Android 16 with Calendar and Notes force-stopped: with the
+            // flag, both answered this ping directly, started, and completed a full export — no
+            // flash sequence, no "open apps first" prompt. That matters most to
+            // com.voxapps.hub.domain.backup.BackupWorker, which cannot launch anything at all and
+            // was therefore skipping a force-stopped app from every scheduled run indefinitely.
+            //
+            // The flash fallback stays: this is one device, OEMs layer their own app-freeze
+            // behaviour on top, and a stopped app is only one of the ways a broadcast goes
+            // unanswered. It is now the exception rather than the normal path.
+            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
         }
         return withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine { cont ->
@@ -127,6 +142,31 @@ object VoxAppsDiscovery {
         } ?: run {
             Logger.d("VoxAppsDiscovery", "Ping to $packageName timed out")
             false
+        }
+    }
+
+    /**
+     * Like [ping], but for callers (namely [com.voxapps.hub.domain.backup.BackupWorker]'s scheduled
+     * run) that need to wait out a killed satellite's cold start rather than give up after one short
+     * attempt. A single [ping] already cold-starts the target (explicit broadcast to a manifest
+     * receiver survives background-broadcast limits), but a short timeout can fire before Hilt/Room/
+     * WorkManager init on the *satellite's* side finishes — especially when several satellites are
+     * cold-starting back-to-back in the same background run. Retries with a fresh ping each time
+     * (each is a brand-new explicit broadcast, cheap to resend) until one succeeds or [totalTimeoutMs]
+     * is exhausted, so a slow-but-eventually-successful wake-up is treated as reachable instead of
+     * being silently skipped.
+     */
+    suspend fun pingUntilReady(
+        context: Context,
+        packageName: String,
+        totalTimeoutMs: Long = 30_000L,
+        attemptTimeoutMs: Long = 5_000L
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + totalTimeoutMs
+        while (true) {
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining <= 0) return false
+            if (ping(context, packageName, timeoutMs = minOf(attemptTimeoutMs, remaining))) return true
         }
     }
 }

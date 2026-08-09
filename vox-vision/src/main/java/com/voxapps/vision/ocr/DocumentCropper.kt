@@ -1,9 +1,12 @@
 package com.voxapps.vision.ocr
 
+import android.content.Context
 import android.graphics.Bitmap
 import com.voxapps.logging.Logger
+import com.voxapps.vision.ml.docquad.DocQuadDetector
+import com.voxapps.vision.ml.docquad.DocQuadOrtRunner
 import org.opencv.android.Utils
-import org.opencv.core.CvType
+import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.MatOfPoint2f
@@ -12,8 +15,11 @@ import org.opencv.core.Rect
 import org.opencv.core.Size
 import org.opencv.geometry.Geometry
 import org.opencv.imgproc.Imgproc
+import kotlin.math.abs
+import kotlin.math.acos
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Standard "document scanner" technique: find the largest four-sided contour in the photo (the
@@ -60,10 +66,40 @@ object DocumentCropper {
         HIGH(0.03)
     }
 
+    private const val DOCQUAD_MODEL_ASSET_PATH = "docquad/docquadnet256_trained_opset17.ort"
+
+    @Volatile
+    private var docQuadRunner: DocQuadOrtRunner? = null
+
+    /** Loads the ML corner-detection model (see [DocQuadDetector]) — best-effort, called once
+     *  during Vision's engine pre-warm alongside the OCR engine itself. [crop] falls back to the
+     *  classical quad/blob detectors below unconditionally if this hasn't been called, or failed. */
+    /** Whether the ML corner detector finished loading — lets callers (the live analyzer) decide
+     *  whether it's worth paying for a color bitmap conversion on this tick at all. */
+    fun isMlDetectorLoaded(): Boolean = docQuadRunner != null
+
+    fun init(context: Context) {
+        if (docQuadRunner != null) return
+        try {
+            docQuadRunner = DocQuadOrtRunner.create(context, DOCQUAD_MODEL_ASSET_PATH)
+            Logger.d("DocumentCropper", "DocQuad ML model loaded")
+        } catch (t: Throwable) {
+            Logger.e("DocumentCropper", "DocQuad ML model failed to load, using classical detection only", t)
+        }
+    }
+
     fun crop(bitmap: Bitmap): Bitmap {
         val rgba = Mat()
         val gray = Mat()
         try {
+            docQuadRunner?.let { runner ->
+                DocQuadDetector.detect(runner, bitmap)?.let { quad ->
+                    Utils.bitmapToMat(bitmap, rgba)
+                    val result = warp(rgba, quad.toOpenCvPoints())
+                    Logger.d("DocumentCropper", "crop: ML quad warp -> ${result.width}x${result.height}")
+                    return result
+                }
+            }
             Utils.bitmapToMat(bitmap, rgba)
             Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
             findDocumentQuad(gray, MIN_AREA_FRACTION)?.let {
@@ -95,24 +131,58 @@ object DocumentCropper {
     data class LiveBounds(val left: Float, val top: Float, val right: Float, val bottom: Float)
 
     /**
-     * Finds a large-enough bright, paper-colored blob in [gray] (an already single-channel, *upright*
-     * frame — the caller is expected to have rotated it to match what's on-screen) — a lightweight
-     * framing check for live camera preview frames, used to auto-trigger capture once a
-     * document looks present (and to draw a bounding rectangle over it) instead of requiring a manual
-     * tap every time.
+     * Finds the best-matching document box for the live "found it" overlay rectangle and
+     * auto-capture-by-framing, in priority order: (1) the ML corner detector on [colorBitmapForMl]
+     * if the caller supplied one and the model is loaded — by far the most reliable, since it isn't
+     * fooled by cluttered/low-contrast backgrounds the way classical edge detection is (confirmed
+     * on-device: classical detection matched the *entire frame* as "the document" against a busy rug
+     * background); (2) the same corner-angle-scored classical quad detection [crop] uses on [gray]
+     * (an already single-channel, *upright* frame — the caller is expected to have rotated it to
+     * match what's on-screen); (3) the looser classical blob heuristic, for a document extending past
+     * the frame's edge (a long receipt, common when the camera is held close) that never closes into
+     * a 4-cornered contour no matter the detector.
      *
-     * Deliberately NOT the same edge/quad-contour detection [crop] uses: confirmed on-device, a
-     * document that extends past the frame's edge (a long receipt, common when the camera is held
-     * close) never closes into a 4-cornered contour no matter the area threshold — Canny+approxPolyDP
-     * needs the full boundary visible. A live framing check only needs a go/no-go signal and a rough
-     * box, not exact corners, so brightness thresholding (Otsu) + largest-blob-area is far more
-     * tolerant of a partially-framed or low-contrast-edged document than requiring a closed quad. The
-     * stricter quad-based [crop] is unchanged — it still needs real corners for the perspective warp.
+     * [colorBitmapForMl] is intentionally optional and caller-throttled (see VisionScreen's analyzer
+     * — ML inference is meaningfully heavier per-frame than the classical checks, so it's only worth
+     * building the color bitmap this needs every few ticks, not every single one) — pass `null` on
+     * ticks where the caller wants the cheap classical-only path instead.
      */
-    fun detectLiveBounds(gray: Mat, sensitivity: DetectionSensitivity): LiveBounds? {
-        val rect = findLargestBlobRect(gray, sensitivity.minAreaFraction) ?: return null
+    fun detectLiveBounds(gray: Mat, sensitivity: DetectionSensitivity, colorBitmapForMl: Bitmap? = null): LiveBounds? {
         val width = gray.cols().toFloat()
         val height = gray.rows().toFloat()
+
+        docQuadRunner?.let { runner ->
+            colorBitmapForMl?.let { bitmap ->
+                DocQuadDetector.detect(runner, bitmap)?.let { quad ->
+                    val quadMat = MatOfPoint(*quad.toOpenCvPoints())
+                    val rect = try {
+                        Geometry.boundingRect(quadMat)
+                    } finally {
+                        quadMat.release()
+                    }
+                    val bw = bitmap.width.toFloat()
+                    val bh = bitmap.height.toFloat()
+                    return LiveBounds(
+                        left = rect.x / bw,
+                        top = rect.y / bh,
+                        right = (rect.x + rect.width) / bw,
+                        bottom = (rect.y + rect.height) / bh
+                    )
+                }
+            }
+        }
+
+        val quad = findDocumentQuad(gray, sensitivity.minAreaFraction)
+        val rect = if (quad != null) {
+            val quadMat = MatOfPoint(*quad)
+            try {
+                Geometry.boundingRect(quadMat)
+            } finally {
+                quadMat.release()
+            }
+        } else {
+            findLargestBlobRect(gray, sensitivity.minAreaFraction) ?: return null
+        }
         return LiveBounds(
             left = rect.x / width,
             top = rect.y / height,
@@ -121,10 +191,41 @@ object DocumentCropper {
         )
     }
 
-    /** Pixel-space bounding rect of the largest bright, paper-colored blob in [gray], or `null` if
-     *  nothing covers at least [minAreaFraction] of the frame. Shared by [detectLiveBounds] (live
-     *  preview overlay, normalizes this to 0..1) and [crop]'s fallback (a plain bounding-rect crop
-     *  when the stricter quad detection below finds nothing). */
+    /** How much of its own bounding box a candidate blob's contour area must fill to be trusted as
+     *  "probably a rectangular object" (a book/document held flat, photographed close to
+     *  perpendicular) rather than an irregular patch of background (rug/floor texture, shadow edges).
+     *  1.0 would mean a perfect axis-aligned rectangle; real photos never hit that exactly (slight
+     *  tilt, curled corners, motion blur softening edges), so this is deliberately forgiving. */
+    private const val MIN_RECTANGULARITY = 0.55
+
+    /** Above this fraction of the frame, a blob is more likely to be a dominant background region
+     *  (wall, floor, out-of-focus clutter filling most of the shot) than a document a user is
+     *  deliberately framing — confirmed on-device: a photo of assorted cables/furniture with no
+     *  document in it produced a single near-full-frame "boxy enough" blob that passed the
+     *  rectangularity check, since a big enough contiguous same-brightness region is often roughly
+     *  rectangular in outline even when it isn't a document at all. */
+    private const val MAX_AREA_FRACTION = 0.85
+
+    /** A book/document photographed close to perpendicular has a bounded width:height ratio — never
+     *  this extreme in either direction. Rejects thin slivers (a shadow edge, a reflection streak)
+     *  that can still have high area *and* near-perfect rectangularity simply by being long and
+     *  narrow, which the area/rectangularity checks alone don't catch. */
+    private const val MAX_ASPECT_RATIO = 3.0
+
+    /** Pixel-space bounding rect of the best-matching document-like blob in [gray], or `null` if
+     *  nothing qualifies. Shared by [detectLiveBounds] (live preview overlay, normalizes this to 0..1)
+     *  and [crop]'s fallback (a plain bounding-rect crop when the stricter quad detection below finds
+     *  nothing).
+     *
+     *  Previously picked the single largest contour by area alone — confirmed on-device (screen
+     *  recordings + per-frame analysis of the drawn live-preview box, across two separate test passes)
+     *  that in a cluttered scene this regularly won on an irregular patch of background instead of the
+     *  actual document, and that adding a rectangularity check alone still wasn't enough (a large
+     *  enough contiguous clutter region can still look "boxy"). Candidates now have to clear an area
+     *  range (not too small, not suspiciously close to filling the whole frame), an aspect-ratio bound,
+     *  and the rectangularity bar — and among survivors, the one closest to frame *center* wins rather
+     *  than the largest, since a user actively framing something keeps it roughly centered and raw
+     *  size stops being a useful tiebreaker once every survivor already looks plausibly document-shaped. */
     private fun findLargestBlobRect(gray: Mat, minAreaFraction: Double): Rect? {
         val blurred = Mat()
         val thresholded = Mat()
@@ -135,59 +236,204 @@ object DocumentCropper {
             Imgproc.threshold(blurred, thresholded, 0.0, 255.0, Imgproc.THRESH_BINARY + Imgproc.THRESH_OTSU)
             Imgproc.findContours(thresholded, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
 
-            val imageArea = gray.rows().toDouble() * gray.cols().toDouble()
-            val largest = contours.maxByOrNull { Geometry.contourArea(it) } ?: return null
-            if (Geometry.contourArea(largest) / imageArea < minAreaFraction) return null
+            val imageWidth = gray.cols().toDouble()
+            val imageHeight = gray.rows().toDouble()
+            val imageArea = imageWidth * imageHeight
+            val centerX = imageWidth / 2.0
+            val centerY = imageHeight / 2.0
 
-            return Geometry.boundingRect(largest)
+            val candidates = contours.mapNotNull { contour ->
+                val area = Geometry.contourArea(contour)
+                val areaFraction = area / imageArea
+                if (areaFraction < minAreaFraction || areaFraction > MAX_AREA_FRACTION) return@mapNotNull null
+
+                val rect = Geometry.boundingRect(contour)
+                val rectArea = rect.width.toDouble() * rect.height.toDouble()
+                if (rectArea <= 0) return@mapNotNull null
+
+                val aspectRatio = max(rect.width.toDouble(), rect.height.toDouble()) /
+                    min(rect.width.toDouble(), rect.height.toDouble())
+                if (aspectRatio > MAX_ASPECT_RATIO) return@mapNotNull null
+
+                val rectangularity = area / rectArea
+                if (rectangularity < MIN_RECTANGULARITY) return@mapNotNull null
+
+                val rectCenterX = rect.x + rect.width / 2.0
+                val rectCenterY = rect.y + rect.height / 2.0
+                val centerDistance = hypot(rectCenterX - centerX, rectCenterY - centerY)
+                rect to centerDistance
+            }
+            val chosen = candidates.minByOrNull { (_, centerDistance) -> centerDistance } ?: return null
+            return chosen.first
         } finally {
             blurred.release(); thresholded.release(); hierarchy.release()
             contours.forEach { it.release() }
         }
     }
 
+    /** Corner-angle bounds for [rectScore] — a real document photographed close to perpendicular
+     *  never has a corner this acute or this obtuse; candidates outside this range are rejected
+     *  outright (score -1) rather than merely penalized, since a shape with e.g. a 40° corner isn't
+     *  "a slightly imperfect rectangle," it's a different shape entirely (a folded page, a shadow
+     *  wedge, an unrelated blob that happened to approximate to 4 points). */
+    private const val MIN_RECT_CORNER_ANGLE_DEG = 60.0
+    private const val MAX_RECT_CORNER_ANGLE_DEG = 120.0
+
+    /** A document's aspect ratio (long edge / short edge) is bounded for the same reason
+     *  [MAX_ASPECT_RATIO] exists for the blob fallback — rules out thin slivers that could otherwise
+     *  still pass the corner-angle check (a long, narrow, genuinely 4-cornered sliver is still not a
+     *  document). */
+    private const val MIN_QUAD_ASPECT_RATIO = 0.5
+    private const val MAX_QUAD_ASPECT_RATIO = 2.5
+
+    /**
+     * Finds the best-scoring 4-corner document-shaped contour in [gray], or `null` if nothing
+     * qualifies. Shared by [crop] (perspective warp needs exact corners) and [detectLiveBounds] (live
+     * preview overlay, only needs the bounding rect of the result).
+     *
+     * Adapted (Apache-2.0, GPLv3-compatible) from the corner-scoring approach in
+     * [MakeACopy](https://github.com/egdels/makeacopy)'s `OpenCVUtils.detectDocumentCornersWithOpenCV`.
+     * Earlier version here picked the first 4-corner match among the 5 largest raw contours by area
+     * alone — confirmed on-device (screen recordings across several test passes) that this let the
+     * live rectangle latch onto whatever technically-4-cornered shape happened to be biggest, not
+     * necessarily the most document-*shaped* one. This version instead: (1) uses adaptive Canny
+     * thresholds derived from the frame's own median brightness rather than fixed constants, so the
+     * edge map isn't tuned for one lighting condition; (2) morphologically closes the threshold mask
+     * first (kernel size scaled to image size) to bridge small gaps in the paper's outer edge before
+     * edge detection, instead of dilating the edge map after; (3) scores every valid 4-corner
+     * candidate by [rectScore] (how close each corner actually is to 90°, hard-rejecting anything
+     * outside [MIN_RECT_CORNER_ANGLE_DEG]..[MAX_RECT_CORNER_ANGLE_DEG]) combined with normalized area,
+     * and picks the single *best*-scoring candidate across all contours rather than the first match
+     * among the largest few.
+     */
     private fun findDocumentQuad(gray: Mat, minAreaFraction: Double): Array<Point>? {
         val blurred = Mat()
+        val thresholded = Mat()
+        val morph = Mat()
         val edges = Mat()
-        val dilated = Mat()
         val hierarchy = Mat()
         val contours = mutableListOf<MatOfPoint>()
         try {
             Imgproc.GaussianBlur(gray, blurred, Size(5.0, 5.0), 0.0)
-            Imgproc.Canny(blurred, edges, 75.0, 200.0)
-            Imgproc.dilate(edges, dilated, Mat.ones(3, 3, CvType.CV_8U))
-            Imgproc.findContours(dilated, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
+            Imgproc.threshold(blurred, thresholded, 0.0, 255.0, Imgproc.THRESH_BINARY + Imgproc.THRESH_OTSU)
+
+            val shortSide = min(gray.cols(), gray.rows())
+            var kernelSize = max(5, shortSide / 50)
+            if (kernelSize % 2 == 0) kernelSize++
+            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(kernelSize.toDouble(), kernelSize.toDouble()))
+            Imgproc.morphologyEx(thresholded, morph, Imgproc.MORPH_CLOSE, kernel)
+            kernel.release()
+
+            val median = Core.mean(gray).`val`[0]
+            val cannyLower = max(0.0, 0.66 * median)
+            val cannyUpper = min(255.0, 1.33 * median)
+            Imgproc.Canny(morph, edges, cannyLower, cannyUpper)
+            Imgproc.findContours(edges, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
 
             val imageArea = gray.rows().toDouble() * gray.cols().toDouble()
-            val topCandidates = contours.sortedByDescending { Geometry.contourArea(it) }.take(5)
-            Logger.d(
-                "DocumentCropper",
-                "size=${gray.cols()}x${gray.rows()} contours=${contours.size} " +
-                    "topAreaFraction=${topCandidates.firstOrNull()?.let { Geometry.contourArea(it) / imageArea }}"
-            )
-            return topCandidates.firstNotNullOfOrNull { contour -> quadCorners(contour, imageArea, minAreaFraction) }
+            var bestScore = -1.0
+            var bestQuad: Array<Point>? = null
+
+            for (contour in contours) {
+                val area = Geometry.contourArea(contour)
+                if (area < imageArea * minAreaFraction) continue
+
+                val curve = MatOfPoint2f(*contour.toArray())
+                val approx = MatOfPoint2f()
+                try {
+                    val perimeter = Geometry.arcLength(curve, true)
+                    Geometry.approxPolyDP(curve, approx, perimeter * 0.015, true)
+                    if (approx.total().toInt() != 4) continue
+
+                    if (!isConvexQuad(approx.toArray())) continue
+
+                    val quad = orderCorners(approx.toArray())
+                    val w1 = dist(quad[0], quad[1])
+                    val w2 = dist(quad[2], quad[3])
+                    val h1 = dist(quad[1], quad[2])
+                    val h2 = dist(quad[3], quad[0])
+                    val avgWidth = (w1 + w2) / 2.0
+                    val avgHeight = (h1 + h2) / 2.0
+                    val aspectRatio = avgHeight / (avgWidth + 1e-9)
+                    if (aspectRatio < MIN_QUAD_ASPECT_RATIO || aspectRatio > MAX_QUAD_ASPECT_RATIO) continue
+
+                    val rectRaw = rectScore(quad)
+                    if (rectRaw < 0.0) continue
+
+                    val areaNorm = area / imageArea
+                    val score = 0.6 * areaNorm + 0.4 * (rectRaw / 120.0)
+                    if (score > bestScore) {
+                        bestScore = score
+                        bestQuad = quad
+                    }
+                } finally {
+                    curve.release()
+                    approx.release()
+                }
+            }
+            return bestQuad
         } finally {
-            blurred.release(); edges.release(); dilated.release(); hierarchy.release()
+            blurred.release(); thresholded.release(); morph.release(); edges.release(); hierarchy.release()
             contours.forEach { it.release() }
         }
     }
 
-    /** Returns the 4 ordered corners of [contour] if it approximates a large-enough quadrilateral. */
-    private fun quadCorners(contour: MatOfPoint, imageArea: Double, minAreaFraction: Double): Array<Point>? {
-        if (Geometry.contourArea(contour) < imageArea * minAreaFraction) return null
-
-        val contour2f = MatOfPoint2f(*contour.toArray())
-        val approx2f = MatOfPoint2f()
-        try {
-            val perimeter = Geometry.arcLength(contour2f, true)
-            Geometry.approxPolyDP(contour2f, approx2f, 0.02 * perimeter, true)
-            val points = approx2f.toArray()
-            if (points.size != 4) return null
-            return orderCorners(points)
-        } finally {
-            contour2f.release()
-            approx2f.release()
+    /** True if the (not necessarily ordered) 4 points form a convex quadrilateral — the cross-product
+     *  z-component of consecutive edge vectors has the same sign all the way around. This vendored
+     *  OpenCV build doesn't expose `Imgproc.isContourConvex`, hence the manual check rather than
+     *  relying on the library. A non-convex ("dart"-shaped) quad would need a reflex interior angle at
+     *  its concave vertex, which [rectScore]'s 60°..120° bound also tends to catch, but checking
+     *  convexity directly is the correct, explicit test rather than leaning on that as a side effect. */
+    private fun isConvexQuad(points: Array<Point>): Boolean {
+        if (points.size != 4) return false
+        var sign = 0.0
+        for (i in 0 until 4) {
+            val a = points[i]
+            val b = points[(i + 1) % 4]
+            val c = points[(i + 2) % 4]
+            val cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+            if (cross == 0.0) continue // collinear edge, skip rather than fail on it
+            if (sign == 0.0) {
+                sign = cross
+            } else if ((sign > 0) != (cross > 0)) {
+                return false
+            }
         }
+        return true
+    }
+
+    /** Converts DocQuadDetector's OpenCV-agnostic (x, y) pairs into this module's [Point] type. */
+    private fun Array<DoubleArray>.toOpenCvPoints(): Array<Point> = Array(size) { i -> Point(this[i][0], this[i][1]) }
+
+    /** Angle in degrees at vertex [a], between rays a->[b] and a->[c]. */
+    private fun angleDeg(b: Point, a: Point, c: Point): Double {
+        val abx = b.x - a.x
+        val aby = b.y - a.y
+        val acx = c.x - a.x
+        val acy = c.y - a.y
+        val num = abx * acx + aby * acy
+        val den = hypot(abx, aby) * hypot(acx, acy) + 1e-9
+        return Math.toDegrees(acos((num / den).coerceIn(-1.0, 1.0)))
+    }
+
+    /** Scores an ordered 4-point quad by how close each corner is to a right angle — 30 points max
+     *  per corner (perfect 90°), summed across all 4 (max 120.0). Returns -1.0 if any corner falls
+     *  outside [MIN_RECT_CORNER_ANGLE_DEG]..[MAX_RECT_CORNER_ANGLE_DEG] — a hard rejection, not a
+     *  penalty, since such a corner means this isn't a document-shaped quad at all. */
+    private fun rectScore(q: Array<Point>): Double {
+        var score = 0.0
+        for (i in 0 until 4) {
+            val a = q[i]
+            val prev = q[(i + 3) % 4]
+            val next = q[(i + 1) % 4]
+            val ang = angleDeg(prev, a, next)
+            if (ang.isNaN() || ang.isInfinite()) return -1.0
+            if (ang < MIN_RECT_CORNER_ANGLE_DEG || ang > MAX_RECT_CORNER_ANGLE_DEG) return -1.0
+            val dev = abs(ang - 90.0)
+            val perCorner = 30.0 - dev
+            if (perCorner > 0) score += perCorner
+        }
+        return score
     }
 
     /** Orders 4 unordered corner points as [topLeft, topRight, bottomRight, bottomLeft]. */

@@ -20,10 +20,32 @@ import com.voxapps.hub.domain.backup.AppBackupConfig
  *   scheduled run, null until the first one completes. Surfaced as a dismissible banner in
  *   [com.voxapps.hub.ui.HubScreen] when a run failed — there's no other way to learn about it since
  *   the worker runs with no UI visible.
+ * - [lastBackupMissingApps]: labels of apps [com.voxapps.hub.domain.backup.BackupWorker] couldn't
+ *   reach (never woke up in time) or whose export failed on the most recent run that still produced
+ *   a zip for the apps that *did* respond. Distinct from [lastBackupSuccess] = false (no zip at all)
+ *   — a non-empty list here means the run "succeeded" but is missing data, which gets its own
+ *   warning banner in [com.voxapps.hub.ui.HubScreen] rather than being indistinguishable from a
+ *   clean run.
  * - [appBackupConfigs]: per-package [AppBackupConfig] (Settings/Data/API keys/Attachments), the single
  *   shared configuration driving both the manual Export button and scheduled [com.voxapps.hub.domain.backup.BackupWorker]
  *   runs — replaces the old global scope radio + secrets/photos checkboxes + app checklist. An app
  *   missing from this map falls back to [AppBackupConfig.DEFAULT] (see [com.voxapps.hub.domain.backup.configFor]).
+ * - [voxConnectEnabled]/[voxConnectPort]: whether the VoxConnect Bridge (an embedded HTTP+WebSocket
+ *   server, see `core:voxconnect`'s `VoxConnectServer`) is running, and which port it listens on.
+ *   Device-local runtime state, not portable user data.
+ * - [voxConnectMediaControlEnabled]: whether media-control requests are relayed to Commander at
+ *   all — off by default, since it's a capability distinct from "which apps are monitored" (media
+ *   control isn't a satellite domain, it goes through Commander's own OS notification-listener
+ *   grant — see [com.voxapps.ipc.VoxIpc.OP_MEDIA_CONTROL]).
+ * - [voxConnectMonitoredApps]: per-domain opt-in for what a paired VoxConnect device may read/command
+ *   via `GET /apps`/`POST /command` — mirrors [appBackupConfigs]' shape (a flattened JSON map), just
+ *   a single boolean per domain since this slice doesn't need Backup's finer Settings/Data granularity.
+ * - [importMode]: one global choice ([IMPORT_MODE_FULL_OVERRIDE]/[IMPORT_MODE_MERGE]/
+ *   [IMPORT_MODE_ADDITIVE]) for how every satellite reconciles imported data against what's already
+ *   on that device — not per-app, since it's a single question ("how aggressively should this
+ *   restore behave") rather than a per-domain concern. Still respects each app's own
+ *   [AppBackupConfig.includeData] toggle in [appBackupConfigs]: an app with Data off is skipped for
+ *   import entirely, same as today, regardless of this setting.
  */
 @Immutable
 data class HubSettings(
@@ -36,7 +58,13 @@ data class HubSettings(
     val lastBackupSuccess: Boolean? = null,
     val lastBackupTimestamp: Long? = null,
     val lastBackupError: String? = null,
-    val appBackupConfigs: Map<String, AppBackupConfig> = emptyMap()
+    val lastBackupMissingApps: List<String> = emptyList(),
+    val appBackupConfigs: Map<String, AppBackupConfig> = emptyMap(),
+    val voxConnectEnabled: Boolean = false,
+    val voxConnectPort: Int = VOXCONNECT_DEFAULT_PORT,
+    val voxConnectMediaControlEnabled: Boolean = false,
+    val voxConnectMonitoredApps: Map<String, Boolean> = emptyMap(),
+    val importMode: String = IMPORT_MODE_MERGE
 ) {
     companion object {
         const val THEME_SYSTEM = "SYSTEM"
@@ -53,5 +81,14 @@ data class HubSettings(
         const val RETENTION_5 = 5
         const val RETENTION_10 = 10
         const val RETENTION_UNLIMITED = -1
+
+        const val VOXCONNECT_DEFAULT_PORT = 8787
+
+        // Mirror com.voxapps.ipc.VoxIpc.IMPORT_MODE_* — kept as plain strings here rather than a
+        // dependency on :core:ipc from this settings snapshot class, same reasoning as VoxIpc's own
+        // doc comment for that constant.
+        const val IMPORT_MODE_FULL_OVERRIDE = "full_override"
+        const val IMPORT_MODE_MERGE = "merge"
+        const val IMPORT_MODE_ADDITIVE = "additive"
     }
 }

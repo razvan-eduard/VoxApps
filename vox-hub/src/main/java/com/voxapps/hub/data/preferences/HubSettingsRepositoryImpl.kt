@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.voxapps.hub.domain.backup.AppBackupConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 
 class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
 
@@ -32,7 +34,13 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
         val LAST_BACKUP_SUCCESS = booleanPreferencesKey("last_backup_success")
         val LAST_BACKUP_TIMESTAMP = longPreferencesKey("last_backup_timestamp")
         val LAST_BACKUP_ERROR = stringPreferencesKey("last_backup_error")
+        val LAST_BACKUP_MISSING_APPS = stringSetPreferencesKey("last_backup_missing_apps")
         val APP_BACKUP_CONFIG_JSON = stringPreferencesKey("app_backup_config_json")
+        val VOXCONNECT_ENABLED = booleanPreferencesKey("voxconnect_enabled")
+        val VOXCONNECT_PORT = intPreferencesKey("voxconnect_port")
+        val VOXCONNECT_MEDIA_CONTROL_ENABLED = booleanPreferencesKey("voxconnect_media_control_enabled")
+        val VOXCONNECT_MONITORED_APPS_JSON = stringPreferencesKey("voxconnect_monitored_apps_json")
+        val IMPORT_MODE = stringPreferencesKey("import_mode")
     }
 
     override val settingsFlow: Flow<HubSettings> = dataStore.data.map { prefs ->
@@ -46,7 +54,13 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
             lastBackupSuccess = prefs[Keys.LAST_BACKUP_SUCCESS],
             lastBackupTimestamp = prefs[Keys.LAST_BACKUP_TIMESTAMP],
             lastBackupError = prefs[Keys.LAST_BACKUP_ERROR],
-            appBackupConfigs = AppBackupConfig.decodeMap(prefs[Keys.APP_BACKUP_CONFIG_JSON] ?: "{}")
+            lastBackupMissingApps = (prefs[Keys.LAST_BACKUP_MISSING_APPS] ?: emptySet()).sorted(),
+            appBackupConfigs = AppBackupConfig.decodeMap(prefs[Keys.APP_BACKUP_CONFIG_JSON] ?: "{}"),
+            voxConnectEnabled = prefs[Keys.VOXCONNECT_ENABLED] ?: false,
+            voxConnectPort = prefs[Keys.VOXCONNECT_PORT] ?: HubSettings.VOXCONNECT_DEFAULT_PORT,
+            voxConnectMediaControlEnabled = prefs[Keys.VOXCONNECT_MEDIA_CONTROL_ENABLED] ?: false,
+            voxConnectMonitoredApps = decodeMonitoredApps(prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] ?: "{}"),
+            importMode = prefs[Keys.IMPORT_MODE] ?: HubSettings.IMPORT_MODE_MERGE
         )
     }
 
@@ -85,6 +99,10 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
         dataStore.edit { it[Keys.BACKUP_RETENTION_COUNT] = count }
     }
 
+    override suspend fun setImportMode(mode: String) {
+        dataStore.edit { it[Keys.IMPORT_MODE] = mode }
+    }
+
     override suspend fun setAppBackupConfig(packageName: String, config: AppBackupConfig) {
         dataStore.edit { prefs ->
             val current = AppBackupConfig.decodeMap(prefs[Keys.APP_BACKUP_CONFIG_JSON] ?: "{}")
@@ -92,11 +110,68 @@ class HubSettingsRepositoryImpl(appContext: Context) : HubSettingsRepository {
         }
     }
 
-    override suspend fun recordBackupResult(success: Boolean, timestampMillis: Long, error: String?) {
+    override suspend fun recordBackupResult(
+        success: Boolean,
+        timestampMillis: Long,
+        error: String?,
+        missingApps: List<String>
+    ) {
         dataStore.edit { prefs ->
             prefs[Keys.LAST_BACKUP_SUCCESS] = success
             prefs[Keys.LAST_BACKUP_TIMESTAMP] = timestampMillis
             if (error == null) prefs.remove(Keys.LAST_BACKUP_ERROR) else prefs[Keys.LAST_BACKUP_ERROR] = error
+            if (missingApps.isEmpty()) {
+                prefs.remove(Keys.LAST_BACKUP_MISSING_APPS)
+            } else {
+                prefs[Keys.LAST_BACKUP_MISSING_APPS] = missingApps.toSet()
+            }
         }
+    }
+
+    override suspend fun setVoxConnectEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.VOXCONNECT_ENABLED] = enabled }
+    }
+
+    override suspend fun setVoxConnectPort(port: Int) {
+        dataStore.edit { it[Keys.VOXCONNECT_PORT] = port }
+    }
+
+    override suspend fun setVoxConnectMediaControlEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.VOXCONNECT_MEDIA_CONTROL_ENABLED] = enabled }
+    }
+
+    override suspend fun setVoxConnectMonitoredApp(domain: String, monitored: Boolean) {
+        dataStore.edit { prefs ->
+            val current = decodeMonitoredApps(prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] ?: "{}")
+            prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] = encodeMonitoredApps(current + (domain to monitored))
+        }
+    }
+
+    override suspend fun restoreSettings(settings: HubSettings) {
+        dataStore.edit { prefs ->
+            prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
+            prefs[Keys.THEME_COLORED] = settings.themeColored
+            prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
+            prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
+            prefs[Keys.BACKUP_INTERVAL] = settings.backupInterval
+            prefs[Keys.BACKUP_RETENTION_COUNT] = settings.backupRetentionCount
+            prefs[Keys.APP_BACKUP_CONFIG_JSON] = AppBackupConfig.encodeMap(settings.appBackupConfigs)
+            prefs[Keys.VOXCONNECT_MEDIA_CONTROL_ENABLED] = settings.voxConnectMediaControlEnabled
+            prefs[Keys.VOXCONNECT_MONITORED_APPS_JSON] = encodeMonitoredApps(settings.voxConnectMonitoredApps)
+            prefs[Keys.IMPORT_MODE] = settings.importMode
+        }
+    }
+
+    private fun decodeMonitoredApps(json: String): Map<String, Boolean> = try {
+        val o = JSONObject(json)
+        o.keys().asSequence().associateWith { o.optBoolean(it, false) }
+    } catch (e: Exception) {
+        emptyMap()
+    }
+
+    private fun encodeMonitoredApps(map: Map<String, Boolean>): String {
+        val o = JSONObject()
+        map.forEach { (domain, monitored) -> o.put(domain, monitored) }
+        return o.toString()
     }
 }

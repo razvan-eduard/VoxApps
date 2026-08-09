@@ -59,10 +59,20 @@ class BackupWorker(
                 .filter { it.actions.contains("export") && configs.configFor(it.packageName).wantsExport() }
             val perDomainJson = mutableMapOf<String, String>()
             val attachmentZipEntries = mutableMapOf<String, String>()
+            // Every app that doesn't make it into perDomainJson (never woke up, or its export
+            // failed) is recorded here even though the run overall still succeeds — otherwise a
+            // partial backup is indistinguishable from a complete one (see recordBackupResult call
+            // below and HubSettings.lastBackupMissingApps' doc comment).
+            val missingLabels = mutableListOf<String>()
             for (app in apps) {
-                val reachable = VoxAppsDiscovery.ping(applicationContext, app.packageName, timeoutMs = 8_000L)
+                // Retries the ping until the app actually wakes up (up to 30s) rather than giving up
+                // after one short attempt — a killed satellite's cold start (Hilt/Room/WorkManager
+                // init) can outlast a single quick ping, especially when several satellites need to
+                // cold-start back-to-back in the same scheduled run. See pingUntilReady's doc comment.
+                val reachable = VoxAppsDiscovery.pingUntilReady(applicationContext, app.packageName)
                 if (!reachable) {
-                    Logger.w(TAG, "Skipping unreachable app for scheduled backup: ${app.packageName}")
+                    Logger.w(TAG, "Skipping unreachable app for scheduled backup (never woke up): ${app.packageName}")
+                    missingLabels += app.label
                     continue
                 }
                 val domain = app.domain ?: app.packageName
@@ -72,6 +82,7 @@ class BackupWorker(
                     attachmentZipEntries += zipEntriesFor(domain, result)
                 } else {
                     Logger.w(TAG, "Export failed for ${app.packageName}: ${result?.text}")
+                    missingLabels += app.label
                 }
             }
 
@@ -84,7 +95,10 @@ class BackupWorker(
             val outFile = File(backupsDir, fileName)
             try {
                 FileOutputStream(outFile).use { out ->
-                    BackupZipWriter.write(out, applicationContext.contentResolver, perDomainJson, attachmentZipEntries)
+                    BackupZipWriter.write(
+                        out, applicationContext.contentResolver, perDomainJson, attachmentZipEntries,
+                        missingApps = missingLabels
+                    )
                 }
             } catch (e: IOException) {
                 outFile.delete()
@@ -93,7 +107,12 @@ class BackupWorker(
             }
 
             pruneOldBackups(backupsDir, settingsRepo.getSnapshot().backupRetentionCount)
-            settingsRepo.recordBackupResult(success = true, timestampMillis = System.currentTimeMillis(), error = null)
+            settingsRepo.recordBackupResult(
+                success = true,
+                timestampMillis = System.currentTimeMillis(),
+                error = null,
+                missingApps = missingLabels
+            )
         } catch (e: Exception) {
             Logger.e(TAG, "Scheduled backup failed", e)
             recordFailure(settingsRepo, e.message ?: "unknown error")

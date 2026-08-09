@@ -13,6 +13,12 @@ interface DuplicateRuleDao {
     @Query("SELECT * FROM duplicate_rules ORDER BY sortOrder ASC, id ASC")
     fun observeAll(): Flow<List<DuplicateRuleEntity>>
 
+    /** One-shot read for the write paths — `observeAll().first()` would spin up an
+     *  InvalidationTracker observer, run the query, then tear it all down again just to read
+     *  the current rows once. */
+    @Query("SELECT * FROM duplicate_rules ORDER BY sortOrder ASC, id ASC")
+    suspend fun getAll(): List<DuplicateRuleEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(rule: DuplicateRuleEntity): Long
 

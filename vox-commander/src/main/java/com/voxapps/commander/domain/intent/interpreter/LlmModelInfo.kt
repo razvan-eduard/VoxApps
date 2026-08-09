@@ -11,7 +11,7 @@ data class LlmModelInfo(
     override val label: String,
     override val sizeDescription: String,
     override val url: String,
-    val engineTypeTag: String // e.g. "MEDIAPIPE_GENAI"
+    val engineTypeTag: String // e.g. "LITERTLM"
 ) : AppModel {
     override val engineType: String get() = "nlu_llm"
     override val langCode: String? get() = null

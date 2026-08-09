@@ -20,6 +20,7 @@ class ExpensesRepositoryLocalDuplicateTest {
 
     private fun stubAll(expenses: List<Expense>) {
         coEvery { expenseDao.observeAll() } returns flowOf(expenses)
+        coEvery { expenseDao.getAll() } returns expenses
     }
 
     private val titleAndAmountRule = DuplicateRuleEntity(
@@ -32,9 +33,11 @@ class ExpensesRepositoryLocalDuplicateTest {
         expenseDao = mockk(relaxed = true)
         duplicateRuleDao = mockk(relaxed = true)
         every { duplicateRuleDao.observeAll() } returns flowOf(listOf(titleAndAmountRule))
+        coEvery { duplicateRuleDao.getAll() } returns listOf(titleAndAmountRule)
         repository = ExpensesRepository(
             expenseDao, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
-            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), duplicateRuleDao
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), duplicateRuleDao,
+            mockk(relaxed = true)
         )
     }
 
@@ -102,6 +105,7 @@ class ExpensesRepositoryLocalDuplicateTest {
     @Test
     fun `findLocalDuplicateGroups finds nothing when there are no enabled rules`() = runTest {
         every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
+        coEvery { duplicateRuleDao.getAll() } returns emptyList()
         stubAll(
             listOf(
                 Expense(id = 1, title = "Coffee", totalAmount = 15.0, currencyCode = "RON", dateTime = 1_000L, createdAt = 1),

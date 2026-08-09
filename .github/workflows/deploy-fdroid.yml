@@ -13,6 +13,17 @@ on:
     types:
       - completed
 
+# Every run regenerates metadata for ALL apps and pushes to a separate repo (vox-fdroid-repo), so
+# two of these racing (e.g. two release builds finishing minutes apart) means the second one's plain
+# `git push` gets rejected as non-fast-forward. Since each run's output is idempotent, there's no
+# need to let them race at all — serialize with a shared group so a later trigger queues behind an
+# in-progress one instead of colliding with it. cancel-in-progress is left false (not true) so every
+# trigger still gets to run once its turn comes, rather than a fast-arriving new run wiping out one
+# still in flight.
+concurrency:
+  group: deploy-fdroid-metadata
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest

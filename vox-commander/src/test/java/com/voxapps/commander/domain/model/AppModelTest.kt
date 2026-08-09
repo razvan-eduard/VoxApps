@@ -64,7 +64,7 @@ class AppModelTest {
             label = "Qwen 2.5 1.5B",
             sizeDescription = "1.5 GB",
             url = "https://example.com/model.gguf",
-            engineTypeTag = "MEDIAPIPE_GENAI"
+            engineTypeTag = "LITERTLM"
         )
         assertFalse(item.isBuiltIn)
     }

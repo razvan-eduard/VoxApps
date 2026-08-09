@@ -44,6 +44,12 @@ object PermissionUtils {
     }
 
     /**
+     * Checks if fine or coarse location permission is granted.
+     */
+    fun hasLocationPermission(context: Context): Boolean =
+        com.voxapps.location.AndroidLiveLocationProvider.hasLocationPermission(context)
+
+    /**
      * Checks if the Notification permission is granted (Android 13+).
      */
     fun hasNotificationPermission(context: Context): Boolean {

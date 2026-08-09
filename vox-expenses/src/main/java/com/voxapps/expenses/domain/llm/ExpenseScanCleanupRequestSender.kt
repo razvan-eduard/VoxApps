@@ -2,11 +2,11 @@ package com.voxapps.expenses.domain.llm
 
 import android.content.Context
 import com.voxapps.expenses.di.ExpensesContainer
+import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.flow.first
 
 private const val TAG = "ExpenseScanCleanupRequestSender"
-private const val COMMANDER_PACKAGE = "com.voxapps.commander"
 
 /**
  * Builds and fires the generic-LLM-hook request that turns raw receipt OCR text into structured
@@ -54,6 +54,91 @@ object ExpenseScanCleanupRequestSender {
         )
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for scan cleanup (retryOfExpenseId=$retryOfExpenseId, multimodal=${attachmentUri != null})")
+        container.pendingLlmRequestQueue.enqueueAndSend(
+            context = context,
+            sourcePackage = context.packageName,
+            task = taskWithMeta,
+            promptText = promptText,
+            targetPackage = COMMANDER_PACKAGE,
+            attachmentUri = attachmentUri
+        )
+    }
+
+    /**
+     * A photo attached to an already-saved expense after the fact — see
+     * [LlmTasks.EXPENSE_LINEITEMS_RESCAN]. By this point Vision has already OCR'd that photo (see
+     * [com.voxapps.expenses.receiver.OcrResultReceiver]'s EXPENSE_LINEITEMS_RESCAN branch) exactly
+     * like a fresh scan or a stub retry — this is the same two-step "OCR text, then LLM cleanup"
+     * shape as [send], just tagged with a task family
+     * [com.voxapps.expenses.receiver.LlmResultReceiver] routes into a review-and-apply suggestion
+     * instead of overwriting the record directly (unlike retry, which only ever targets a
+     * never-reviewed stub). [attachmentUri] is optional and additive, same as everywhere else —
+     * gated by the caller on `attachPhotoOnRetry`, not required for this to do anything useful.
+     */
+    /** [sourceGroupId] is the attachment group (see `AttachmentEntity.groupId`) this rescan's photo(s)
+     *  belong to, if any — embedded in the task string so [com.voxapps.expenses.receiver.LlmResultReceiver]
+     *  can stamp it onto the resulting [com.voxapps.expenses.data.PendingFieldSuggestion], letting a
+     *  dismiss of that suggestion also remove the scan that produced it. */
+    suspend fun sendLineItemsRescan(context: Context, container: ExpensesContainer, expenseId: Long, rawText: String, attachmentUri: String? = null, sourceGroupId: String? = null) {
+        val existingCategories = container.expensesRepository.categories.first().map { it.name }
+        val settings = container.settingsRepository.getSnapshot()
+        val preParsed = DateTimeRegexParser.parse(rawText)
+
+        val promptText = ExpenseScanCleanupPromptBuilder.build(
+            rawText,
+            existingCategories,
+            settings.defaultCurrency,
+            settings.language,
+            preParsedDate = preParsed.date,
+            preParsedTime = preParsed.time
+        )
+
+        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for line-items rescan (expenseId=$expenseId)")
+        container.pendingLlmRequestQueue.enqueueAndSend(
+            context = context,
+            sourcePackage = context.packageName,
+            task = "${LlmTasks.EXPENSE_LINEITEMS_RESCAN}:$expenseId:${sourceGroupId.orEmpty()}",
+            promptText = promptText,
+            targetPackage = COMMANDER_PACKAGE,
+            attachmentUri = attachmentUri
+        )
+    }
+
+    /**
+     * Creates a NEW expense from a not-yet-saved multi-shot (or single-shot) "Scan" capture — see
+     * [com.voxapps.expenses.ui.ExpensesScreen]. Unlike [send], this never populates
+     * `Expense.receiptImageName`/`receipts/` staging: every scanned page is already staged as a plain
+     * file under [com.voxapps.expenses.data.ExpensesAttachments.DIR] (see
+     * [com.voxapps.expenses.receiver.OcrResultReceiver]'s pending-scan branches), and
+     * [com.voxapps.expenses.receiver.LlmResultReceiver] links them as ordinary (grouped, if [groupId]
+     * is non-null) AttachmentEntity rows once the new expense's id is known — win or lose (a failed
+     * parse still creates a stub holding the photo(s), same as the old imageName-based recovery flow
+     * did for a single photo).
+     */
+    suspend fun sendPendingCreate(
+        context: Context,
+        container: ExpensesContainer,
+        rawText: String,
+        fileNames: List<String>,
+        groupId: String?,
+        attachmentUri: String? = null
+    ) {
+        val existingCategories = container.expensesRepository.categories.first().map { it.name }
+        val settings = container.settingsRepository.getSnapshot()
+        val preParsed = DateTimeRegexParser.parse(rawText)
+
+        val promptText = ExpenseScanCleanupPromptBuilder.build(
+            rawText,
+            existingCategories,
+            settings.defaultCurrency,
+            settings.language,
+            preParsedDate = preParsed.date,
+            preParsedTime = preParsed.time
+        )
+
+        val taskWithMeta = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending:${groupId.orEmpty()}:${fileNames.joinToString(",")}"
+
+        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for pending scan create (pages=${fileNames.size})")
         container.pendingLlmRequestQueue.enqueueAndSend(
             context = context,
             sourcePackage = context.packageName,

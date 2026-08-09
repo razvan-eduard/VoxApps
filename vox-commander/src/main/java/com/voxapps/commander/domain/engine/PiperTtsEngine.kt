@@ -28,152 +28,107 @@ import java.io.File
  * Audio is generated offline as FloatArray samples and played via AudioTrack.
  * Sentence-by-sentence generation for responsive stop and dynamic speech rate.
  */
-class PiperTtsEngine : ITtsEngine {
+class PiperTtsEngine : BaseVoxEngine(), ITtsEngine {
 
-    companion object {
-        private const val TAG = "PiperTtsEngine"
-    }
+    override val engineKey: String = ENGINE_KEY
 
     private var tts: OfflineTts? = null
     private var audioTrack: AudioTrack? = null
-    private var ready = false
-    private var modelDir: String = ""
-    private var currentLanguage: String = "en"
     private var speechRate: Float = 1.0f
     private var pitch: Float = 1.0f
 
     private var speakJob: Job? = null
     private var stopped = false
 
-    /** The user's explicitly picked voice model directory name (e.g.
-     *  "vits-piper-en_US-lessac-medium"), set by [com.voxapps.commander.domain.voice.TtsManager]
-     *  before [initialize]. When set and present on disk, this wins over [findVoiceDir]'s
-     *  language-only heuristic — that heuristic is only a fallback for "no explicit pick yet". */
-    var preferredVoiceId: String? = null
-
-    // Retained for lazy reload after releaseForMemoryPressure()
-    private var storedContext: Context? = null
-    @Volatile private var isSpeakingNow = false
-
-    override fun initialize(context: Context, language: String): Boolean {
-        storedContext = context.applicationContext
-        currentLanguage = language
-        ready = false
-
-        // Release any existing instance
-        release()
-
-        // Resolve model directory for this language
-        val rootDir = context.getExternalFilesDir(null) ?: run {
-            Logger.log("No external files dir available", TAG)
+    /**
+     * Builds the sherpa-onnx model from an already-resolved entry point.
+     *
+     * The engine no longer looks for anything: it is handed the `.onnx` weights that
+     * `ModelDownloader.resolveEntryPoint` resolved from the engine's declared entry point in
+     * models.json, and reads its siblings from the same directory. It used to scan the app's files
+     * directory for `vits-piper-*` names and pick by quality suffix — a heuristic that had to agree
+     * with the download validator's own, separate idea of the layout, and did not.
+     */
+    override suspend fun onLoad(spec: ModelSpec): Boolean {
+        val local = spec as? ModelSpec.LocalModel ?: run {
+            Logger.log("Piper needs a local model, got ${spec::class.simpleName}", TAG)
             return false
         }
 
-        // Prefer the user's explicit pick if it's actually on disk — the language-based heuristic
-        // below is only a fallback for "nothing explicitly selected yet".
-        val preferredDir = preferredVoiceId?.let { File(rootDir, it) }?.takeIf { it.exists() }
-
-        // Piper voice directories are named like "vits-piper-en_US-amy-low"
-        val langKey = language.substringBefore("_").lowercase()
-        val voiceDir = preferredDir ?: findVoiceDir(rootDir, langKey)
-
-        if (voiceDir == null || !voiceDir.exists()) {
-            Logger.log("No Piper voice model found for language '$langKey' in $rootDir", TAG)
-            return false
-        }
-
-        modelDir = voiceDir.absolutePath
-
-        val modelFile = File(modelDir, "model.onnx")
-        val tokensFile = File(modelDir, "tokens.txt")
-        val espeakDir = File(modelDir, "espeak-ng-data")
-        val lexiconFile = File(modelDir, "lexicon.txt")
+        val modelFile = local.entryPoint
+        val voiceDir = modelFile.parentFile ?: return false
+        val tokensFile = File(voiceDir, "tokens.txt")
+        val espeakDir = File(voiceDir, "espeak-ng-data")
+        val lexiconFile = File(voiceDir, "lexicon.txt")
 
         if (!modelFile.exists() || !tokensFile.exists()) {
-            Logger.log("Missing model.onnx or tokens.txt in $modelDir", TAG)
+            Logger.log("Missing .onnx weights or tokens.txt in $voiceDir", TAG)
             return false
         }
-
-        val vitsConfig = OfflineTtsVitsModelConfig(
-            model = modelFile.absolutePath,
-            tokens = tokensFile.absolutePath,
-            dataDir = if (espeakDir.exists()) espeakDir.absolutePath else "",
-            lexicon = if (lexiconFile.exists()) lexiconFile.absolutePath else "",
-        )
 
         val config = OfflineTtsConfig(
             model = OfflineTtsModelConfig(
-                vits = vitsConfig,
+                vits = OfflineTtsVitsModelConfig(
+                    model = modelFile.absolutePath,
+                    tokens = tokensFile.absolutePath,
+                    dataDir = if (espeakDir.exists()) espeakDir.absolutePath else "",
+                    lexicon = if (lexiconFile.exists()) lexiconFile.absolutePath else "",
+                ),
                 numThreads = 2,
                 debug = false,
                 provider = "cpu",
             ),
         )
 
-        return try {
-            tts = OfflineTts(config = config)
-            ready = true
-            Logger.log("Piper TTS initialized: ${voiceDir.name}, sampleRate=${tts?.sampleRate()}, lang=$language", TAG)
-            true
-        } catch (e: Exception) {
-            Logger.log("Piper TTS init failed: ${e.message}", TAG)
-            false
-        }
+        tts = OfflineTts(config = config)
+        Logger.log("Piper TTS loaded: ${voiceDir.name}, sampleRate=${tts?.sampleRate()}, lang=${local.language}", TAG)
+        return true
+    }
+
+    override fun onUnload() {
+        try { tts?.release() } catch (_: Exception) {}
+        tts = null
+    }
+
+    override fun onRelease() {
+        stop()
     }
 
     override fun speak(text: String, utteranceId: String?, onDone: (() -> Unit)?) {
-        if (!ready) {
-            // Lazily reload if the model was released for memory pressure
-            val ctx = storedContext
-            if (ctx != null && !initialize(ctx, currentLanguage)) {
-                Logger.log("Piper TTS not ready, cannot speak", TAG)
-                onDone?.invoke()
-                return
-            } else if (ctx == null) {
-                Logger.log("Piper TTS not ready, cannot speak", TAG)
-                onDone?.invoke()
-                return
-            }
-        }
-
+        // Readiness is the caller's responsibility now — TtsManager loads before speaking. The
+        // engine used to reload itself here, which meant a blocking model load on whatever thread
+        // happened to ask for speech.
         val engine = tts ?: run {
+            Logger.log("Piper TTS has no model loaded, cannot speak", TAG)
             onDone?.invoke()
             return
         }
 
         stopped = false
-        isSpeakingNow = true
         speakJob = AppScope.io.launch {
             try {
-                val chunks = TextUtils.splitSentences(text)
+                // Pins the model for the duration: a concurrent unload (memory pressure) defers
+                // instead of releasing the native handle mid-generation.
+                withModel {
+                    for (chunk in TextUtils.splitSentences(text)) {
+                        if (stopped) {
+                            Logger.log("Piper TTS stopped mid-generation", TAG)
+                            break
+                        }
 
-                for (chunk in chunks) {
-                    if (stopped) {
-                        Logger.log("Piper TTS stopped mid-generation", TAG)
-                        break
+                        Logger.log("Generating audio for: ${chunk.take(60)}...", TAG)
+                        val audio = engine.generate(text = chunk, sid = 0, speed = speechRate)
+
+                        if (stopped) break
+
+                        playSamples(audio.samples, audio.sampleRate)
                     }
-
-                    Logger.log("Generating audio for: ${chunk.take(60)}...", TAG)
-                    val audio = engine.generate(
-                        text = chunk,
-                        sid = 0,
-                        speed = speechRate,
-                    )
-
-                    if (stopped) break
-
-                    playSamples(audio.samples, audio.sampleRate)
                 }
             } catch (e: Exception) {
                 Logger.log("Piper TTS generation error: ${e.message}", TAG)
             } finally {
                 stopAudioTrack()
-                isSpeakingNow = false
-                if (!stopped) {
-                    onDone?.invoke()
-                } else {
-                    onDone?.invoke()
-                }
+                onDone?.invoke()
             }
         }
     }
@@ -252,53 +207,8 @@ class PiperTtsEngine : ITtsEngine {
         this.pitch = pitch
     }
 
-    override fun release() {
-        stop()
-        try { tts?.release() } catch (_: Exception) {}
-        tts = null
-        ready = false
-        storedContext = null
-        Logger.log("Piper TTS released", TAG)
-    }
-
-    /**
-     * Releases the sherpa-onnx model on system memory pressure while keeping the
-     * engine usable — speak() will transparently reload it on the next call.
-     * Skipped if currently speaking.
-     */
-    override fun releaseForMemoryPressure() {
-        if (isSpeakingNow) {
-            Logger.log("Skipping Piper release — actively speaking", TAG)
-            return
-        }
-        if (tts == null) return
-        Logger.log("Releasing Piper TTS model for memory pressure", TAG)
-        try { tts?.release() } catch (_: Exception) {}
-        tts = null
-        ready = false
-    }
-
-    /**
-     * Finds a Piper voice directory matching the given language code.
-     * Directory naming convention: vits-piper-{lang}_{country}-{voice}-{quality}
-     */
-    private fun findVoiceDir(rootDir: File, langKey: String): File? {
-        val piperDirs = rootDir.listFiles { file ->
-            file.isDirectory && file.name.startsWith("vits-piper-") && file.name.contains("-$langKey-")
-        }?.toList() ?: emptyList()
-
-        // Also check for exact lang match like vits-piper-en_US-amy-low
-        val exactMatch = rootDir.listFiles { file ->
-            file.isDirectory && file.name.startsWith("vits-piper-${langKey}_") ||
-            (file.isDirectory && file.name.startsWith("vits-piper-") && file.name.contains("_${langKey}-"))
-        }?.toList() ?: emptyList()
-
-        val allMatches = (piperDirs + exactMatch).distinctBy { it.name }
-        if (allMatches.isEmpty()) return null
-
-        // Prefer "low" quality (smaller, faster) for on-device, then "medium", then whatever's left.
-        return allMatches.firstOrNull { it.name.contains("low") }
-            ?: allMatches.firstOrNull { it.name.contains("medium") }
-            ?: allMatches.first()
+    companion object {
+        const val ENGINE_KEY = "piper_tts"
+        private const val TAG = "PiperTtsEngine"
     }
 }

@@ -16,13 +16,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,8 +32,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Switch
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.design.picklist.Picklist
 import com.voxapps.notes.data.Category
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.domain.llm.SupportedLanguages
@@ -72,23 +71,52 @@ fun CategoriesSettingsTab(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        var languageExpanded by remember { mutableStateOf(false) }
-        Column {
-            OutlinedButton(onClick = { languageExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(settings.language.uppercase())
+        Picklist(
+            items = SupportedLanguages.ALL,
+            selected = settings.language,
+            itemLabel = { it.uppercase() },
+            onSelect = { code ->
+                stateManager.setLanguage(code)
+                languageManager.loadLanguage(code)
             }
-            DropdownMenu(expanded = languageExpanded, onDismissRequest = { languageExpanded = false }) {
-                SupportedLanguages.ALL.forEach { code ->
-                    DropdownMenuItem(
-                        text = { Text(code.uppercase()) },
-                        onClick = {
-                            stateManager.setLanguage(code)
-                            languageManager.loadLanguage(code)
-                            languageExpanded = false
-                        }
-                    )
-                }
+        )
+
+        HorizontalDivider()
+
+        // --- Voice notes: which category they land in ---
+        //
+        // These belong beside the categories they choose between rather than beside notifications,
+        // which is where they used to live and how they came to be dropped when that screen was
+        // replaced by the shared notification card.
+        Text(languageManager.getString("default_voice_category"), style = MaterialTheme.typography.labelLarge)
+        Text(
+            languageManager.getString("default_voice_category_desc"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Picklist(
+            items = categories,
+            selected = categories.firstOrNull { it.id == settings.defaultVoiceCategoryId },
+            itemLabel = { it.name },
+            onSelect = { stateManager.setDefaultVoiceCategoryId(it.id) },
+            noneLabel = languageManager.getString("none"),
+            onNoneSelected = { stateManager.setDefaultVoiceCategoryId(null) }
+        )
+
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("auto_create_voice_category"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("auto_create_voice_category_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
+            Switch(
+                checked = settings.autoCreateVoiceCategory,
+                onCheckedChange = { stateManager.setAutoCreateVoiceCategory(it) }
+            )
         }
 
         HorizontalDivider()

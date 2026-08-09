@@ -11,6 +11,8 @@ import com.voxapps.logging.Logger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,7 +38,7 @@ class WakeWordCalibrator(
     }
 
     sealed class CalibrationState {
-        object Idle : CalibrationState()
+        data object Idle : CalibrationState()
         data class MeasuringNoise(val instruction: String) : CalibrationState()
         data class Waiting(val round: Int, val total: Int, val instruction: String) : CalibrationState()
         data class Listening(val round: Int, val total: Int) : CalibrationState()
@@ -47,9 +49,17 @@ class WakeWordCalibrator(
 
     private data class RoundResult(val rms: Float, val audioSamples: ShortArray)
 
-    private val scope = CoroutineScope(Dispatchers.IO)
-    private var isRunning = false
-    private var isCancelled = false
+    // SupervisorJob so the scope stays usable if one calibration run fails, and so [release] has a
+    // job to cancel — without it a screen exit mid-calibration left the recording loop running with
+    // the mic still open.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // @Volatile on both: written from the UI thread ([startCalibration]/[stop]) and read from the
+    // recording loops on the IO dispatcher. Without the barrier the JIT is free to hoist these reads
+    // out of the tight `while (... && isRunning && !isCancelled)` loops, so a stop() could never be
+    // observed and the mic would keep recording until the round timed out on its own.
+    @Volatile private var isRunning = false
+    @Volatile private var isCancelled = false
 
     private val _state = MutableStateFlow<CalibrationState>(CalibrationState.Idle)
     val state = _state.asStateFlow()
@@ -205,6 +215,14 @@ class WakeWordCalibrator(
         isRunning = false
         isCancelled = true
         _state.value = CalibrationState.Idle
+    }
+
+    /** [stop] plus tearing down [scope] — call from the owning screen's `onDispose`. [stop] alone
+     *  only asks the loops to exit; this also cancels the coroutine so nothing survives the screen
+     *  that started it (this class is remembered per-composition, not an app-lifetime singleton). */
+    fun release() {
+        stop()
+        scope.cancel()
     }
 
     private val readySignals = mutableMapOf<Int, CompletableDeferred<Unit>>()

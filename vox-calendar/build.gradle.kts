@@ -15,8 +15,8 @@ android {
         applicationId = "com.voxapps.calendar"
         minSdk = 29
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.9"
+        versionCode = 20
+        versionName = "0.20"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -67,11 +67,15 @@ android {
 }
 
 dependencies {
+    implementation(libs.gson)
     implementation(project(":core:design"))
     implementation(project(":core:calendar"))
     implementation(project(":core:ipc"))
+    implementation(project(":core:backup"))
     implementation(project(":core:attachments"))
     implementation(project(":core:logging"))
+    implementation(project(":core:widget"))
+    implementation(project(":core:preferences"))
     implementation(project(":core:datahygiene"))
     implementation(project(":core:textmatch"))
     implementation(project(":core:schema-annotations"))
@@ -84,6 +88,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // Drag-to-reorder for the to-do list node timeline — same library/pattern as vox-commander's
+    // FastMap Rules Manager (RulesManagerScreen.kt).
+    implementation(libs.reorderable)
 
     // Home-screen widget (Jetpack Glance — current best practice over raw RemoteViews/AppWidgetProvider).
     // GlanceTheme itself lives in the base :glance artifact (a transitive dep of glance-appwidget),
@@ -117,11 +124,25 @@ dependencies {
     // ICS import/export (Phase 5) — pure-Java, few dependencies, Android-compatible.
     implementation("net.sf.biweekly:biweekly:0.6.8")
 
+    // Subscribed-calendar sync — fetching a user-supplied .ics URL (see domain/subscription/
+    // IcsUrlFetcher.kt). Already used elsewhere in the monorepo (e.g. vox-expenses'
+    // ExchangeRateRepository), not a new HTTP stack to the ecosystem.
+    implementation(libs.okhttp)
+
     // --- Unit tests (JVM, mirror vox-notes/vox-expenses) ---
+    testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("app.cash.turbine:turbine:1.2.1")
     testImplementation("androidx.test:core:1.7.0")
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260719")
+    // Pure-JVM SQLite (no Android/Robolectric) — lets the 9->10 migration test replay its real SQL
+    // against a genuine SQLite engine, same "avoid Android-framework test doubles" spirit as org.json above.
+    testImplementation("org.xerial:sqlite-jdbc:3.53.2.1")
+}
+
+// The Gson keep-rule test reads proguard-rules.pro, so a change there must invalidate the test task.
+tasks.withType<Test>().configureEach {
+    inputs.file("proguard-rules.pro").withPathSensitivity(PathSensitivity.RELATIVE)
 }

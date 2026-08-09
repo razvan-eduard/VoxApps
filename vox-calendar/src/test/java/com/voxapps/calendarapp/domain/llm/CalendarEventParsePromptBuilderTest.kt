@@ -11,6 +11,7 @@ class CalendarEventParsePromptBuilderTest {
         val prompt = CalendarEventParsePromptBuilder.build(
             rawText = "dentist in a week",
             existingLayers = emptyList(),
+            existingTodoLists = emptyList(),
             languageCode = "en",
             today = LocalDate.of(2026, 7, 12)
         )
@@ -23,6 +24,7 @@ class CalendarEventParsePromptBuilderTest {
         val prompt = CalendarEventParsePromptBuilder.build(
             rawText = "meeting tomorrow",
             existingLayers = listOf("Personal", "Work"),
+            existingTodoLists = emptyList(),
             languageCode = "en"
         )
         assertTrue(prompt.contains("Personal"))
@@ -32,10 +34,10 @@ class CalendarEventParsePromptBuilderTest {
 
     @Test
     fun `asks for JSON-only output with the expected shape`() {
-        val prompt = CalendarEventParsePromptBuilder.build("x", emptyList(), "en")
+        val prompt = CalendarEventParsePromptBuilder.build("x", emptyList(), emptyList(), "en")
         assertTrue(prompt.contains("JSON"))
         assertTrue(prompt.contains("no markdown"))
         assertTrue(prompt.contains("\"startDate\""))
-        assertTrue(prompt.contains("\"EVENT\"|\"TASK\""))
+        assertTrue(prompt.contains("\"EVENT\"|\"TASK\"|\"TODO\""))
     }
 }

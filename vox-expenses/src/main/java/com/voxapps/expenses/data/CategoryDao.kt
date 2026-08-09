@@ -12,6 +12,12 @@ interface CategoryDao {
     @Query("SELECT * FROM categories ORDER BY position ASC, createdAt ASC")
     fun observeAll(): Flow<List<Category>>
 
+    /** One-shot read for the write paths — `observeAll().first()` would spin up an
+     *  InvalidationTracker observer, run the query, then tear it all down again just to read
+     *  the current rows once. */
+    @Query("SELECT * FROM categories ORDER BY position ASC, createdAt ASC")
+    suspend fun getAll(): List<Category>
+
     @Insert
     suspend fun insert(category: Category): Long
 

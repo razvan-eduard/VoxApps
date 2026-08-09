@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -108,6 +109,12 @@ fun SyncScreen(
     var peerSyncStates by remember { mutableStateOf<Map<String, PeerSyncState>>(emptyMap()) }
     var pendingSyncPeer by remember { mutableStateOf<PairedPeer?>(null) }
     var editingScopeForPeer by remember { mutableStateOf<PairedPeer?>(null) }
+
+    // Without this, the system back gesture/button falls through to the Activity's default
+    // behavior (no back stack, single Activity) and closes the app instead of returning to the
+    // main Hub screen — the TopAppBar's back IconButton already calls onBack, but only the
+    // gesture/hardware-button path was missing it (same fix already applied to HubSettingsScreen).
+    BackHandler(onBack = onBack)
 
     fun refreshPeers() {
         peers = peerStore.getPeers()

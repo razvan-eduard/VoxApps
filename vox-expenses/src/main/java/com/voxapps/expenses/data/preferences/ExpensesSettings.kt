@@ -2,6 +2,8 @@ package com.voxapps.expenses.data.preferences
 
 import androidx.compose.runtime.Immutable
 import com.voxapps.design.color.VoxColorPalette
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 
 /**
  * Immutable snapshot of persisted Vox Expenses settings (mirrors vox-notes' NotesSettings). Fields are
@@ -59,6 +61,14 @@ import com.voxapps.design.color.VoxColorPalette
  */
 @Immutable
 data class ExpensesSettings(
+    /** Which repository serves this app's schemas. Its own setting rather than Commander's: an
+     *  install may follow a fork for one app and not the other. */
+    val schemaRepoBaseUrl: String = com.voxapps.services.SchemaRepo.DEFAULT_BASE_URL,
+    /** Whether that repository is asked at startup, or only when the user presses check. */
+    val useRemoteSchemas: Boolean = true,
+    /** Which declared currency service supplies rates. Empty means the first one declared. */
+    val exchangeRateServiceId: String = "",
+
     val isBiometricRequired: Boolean = false,
     val sessionTimeoutMinutes: Int = TIMEOUT_30M,
     val language: String = DEFAULT_LANGUAGE,
@@ -76,6 +86,7 @@ data class ExpensesSettings(
     val vatDisplayEnabled: Boolean = false,
     val decimalSeparator: String = DECIMAL_PERIOD,
     val calendarViewEnabled: Boolean = false,
+    val isGridView: Boolean = false,
     val debugToastsEnabled: Boolean = false,
     val appCacheJson: String? = null,
     val themeDarkMode: String = THEME_SYSTEM,
@@ -90,6 +101,13 @@ data class ExpensesSettings(
      *  failed parse) is a distinct, less frequent code path — a user might want the photo attached
      *  on a fresh scan but not want it re-sent every retry, or vice versa. */
     val attachPhotoOnRetry: Boolean = false,
+    /** Off by default. When on, attaching the FIRST photo to an already-saved expense that
+     *  currently has none at all (no original receipt scan, no manual attachment — see
+     *  ExpenseAttachmentsSection's eligibility check) automatically triggers the same line-items
+     *  rescan the manual chip does, no tap needed. Once the expense has at least one attachment,
+     *  adding more never auto-triggers, even with this on — only the transition from zero to one
+     *  does. Deleting attachments back down to zero makes it eligible again. */
+    val autoRescanOnFirstAttachment: Boolean = false,
     /** Off by default — new, forced-navigation behavior a user must opt into. When on, as soon as a
      *  scanned receipt's LLM cleanup successfully creates its expense (not a voice-created one — see
      *  [com.voxapps.expenses.receiver.LlmResultReceiver]'s scan-specific branch), Expenses navigates
@@ -97,10 +115,27 @@ data class ExpensesSettings(
     val autoOpenScannedExpense: Boolean = false,
     /** On by default (matches the behavior before this toggle existed) — one switch governing every
      *  place an expense's location field can get auto-filled from GPS (scan, voice, and manual
-     *  entry — see [com.voxapps.expenses.domain.location.ExpensesLocationHelper]'s callers).
+     *  entry — see [com.voxapps.expenses.domain.location.resolveCurrentCityName]'s callers).
      *  Independent of the OS location permission itself: granting that in onboarding only makes
      *  the feature *possible*, this is the separate "and do I actually want it" control. */
     val locationPrefillEnabled: Boolean = true,
+    /** "Home town" fallback, cache TTL, and "always use this location" — shared :core:location
+     *  module, same fields as vox-commander's AppSettings equivalents. */
+    val locationHomeTownLat: Double? = null,
+    val locationHomeTownLon: Double? = null,
+    /** [com.voxapps.location.LocationCacheTtl] enum name, e.g. "ONE_DAY". */
+    val locationCacheTtl: String = "ONE_DAY",
+    val locationAlwaysUseHomeTown: Boolean = false,
+    // --- BACKUP & RESTORE (local, shared :core:backup module's VoxBackupSettingsCard) — mirrors
+    // vox-hub's AppBackupConfig shape/names, persisted here for this app's own local backup button,
+    // independent of any Hub-triggered IPC export. ---
+    val backupIncludeSettings: Boolean = true,
+    val backupIncludeData: Boolean = true,
+    val backupIncludeApiKeys: Boolean = false,
+    val backupIncludeAttachments: Boolean = false,
+    /** Wire-format string per [com.voxapps.ipc.VoxIpc.IMPORT_MODE_MERGE] etc., parsed via
+     *  [com.voxapps.backup.VoxImportMode.fromWireValue]. */
+    val backupImportMode: String = "merge",
     /** Which engine(s) [com.voxapps.expenses.state.ExpensesStateManager.requestDuplicateCheck] (the
      *  manual "Check for duplicates now" button and its schedule) use: [MODE_LOCAL] (deterministic,
      *  instant, no Commander dependency), [MODE_LOCAL_AND_AI] (local pre-filters same-amount
@@ -158,7 +193,23 @@ data class ExpensesSettings(
      *  [VoxColorPalette] rather than a hardcoded hex so it stays in sync with that palette. */
     val widgetBorderEnabled: Boolean = true,
     val widgetBorderThicknessDp: Int = THICKNESS_MEDIUM,
-    val widgetBorderColorArgb: Long = VoxColorPalette.presets.first()
+    val widgetBorderColorArgb: Long = VoxColorPalette.presets.first(),
+    /** Which highlight effect (if any) draws around the in-app "today" card, and its color(s) —
+     *  mirrors vox-calendar's identical fields. Not yet implemented, see
+     *  `com.voxapps.design.effects.ApplyTodayEffect`. */
+    val todayEffect: String = TodayEffect.NONE.name,
+    val todayEffectStyle: String = TodayEffectStyle.RING.name,
+    val todayEffectColor: Long = TODAY_EFFECT_DEFAULT_COLOR,
+    val todayEffectColor2: Long? = null,
+    val todayEffectSpeed: Float = 1f,
+    val todayEffectShowInWidget: Boolean = true,
+    val batchCleanupManualReview: Boolean = true,
+    val notificationsSystemDefault: Boolean = true,
+    val notificationsVibrationEnabled: Boolean = true,
+    val notificationsSoundUri: String? = null,
+    val notificationsVolume: Int = 100,
+    val notificationsLength: String = LENGTH_SHORT,
+    val notificationsChannelVersion: Int = 1
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -169,6 +220,7 @@ data class ExpensesSettings(
         const val DEFAULT_CURRENCY = "RON"
 
         const val INTERVAL_OFF = "OFF"
+        const val INTERVAL_HOURLY = "HOURLY"
         const val INTERVAL_DAILY = "DAILY"
         const val INTERVAL_WEEKLY = "WEEKLY"
         const val INTERVAL_MONTHLY = "MONTHLY"
@@ -205,5 +257,12 @@ data class ExpensesSettings(
         const val THICKNESS_THIN = 1
         const val THICKNESS_MEDIUM = 2
         const val THICKNESS_THICK = 4
+
+        /** A warm orange — a reasonable default for an as-yet-unimplemented fire/glow effect. */
+        const val TODAY_EFFECT_DEFAULT_COLOR = 0xFFFF6D00L
+
+        const val LENGTH_SHORT = "SHORT"
+        const val LENGTH_MEDIUM = "MEDIUM"
+        const val LENGTH_LONG = "LONG"
     }
 }

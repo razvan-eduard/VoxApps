@@ -1,7 +1,9 @@
 package com.voxapps.calendarapp.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,16 +24,21 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.CalendarLayer
 import kotlinx.coroutines.delay
+import java.text.DateFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.text.style.TextAlign
+import com.voxapps.design.NowLine
 
 /** Shared hour-of-day grid mechanics used by both [WeekView] and [DayView] — one column per day, a
  *  shared hour axis on the left. Kept local to `:vox-calendar`: `core:calendar` only offers a
@@ -56,13 +63,20 @@ internal fun HourAxisLabels(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun DayColumn(
     date: LocalDate,
     items: List<EntryCalendarItem>,
     layerById: Map<Long, CalendarLayer>,
     onItemClick: (EntryCalendarItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedIds: Set<Long> = emptySet(),
+    onItemLongClick: (EntryCalendarItem) -> Unit = {},
+    // WeekView draws its own single now-line spanning all 7 columns instead (see WeekView.kt) —
+    // one continuous ruler reads far better across a full week than 7 copies each confined to a
+    // ~45dp-wide column. DayView keeps this per-column line (its only column, full width).
+    showNowLine: Boolean = true
 ) {
     val zoneId = ZoneId.systemDefault()
     // Separate timed events for the grid (industry standard: all-day handled in pinned header)
@@ -97,13 +111,24 @@ internal fun DayColumn(
             val top = HOUR_HEIGHT * startHour
             val entry = item.entryWithTags.entry
             val color = layerById[entry.layerId]?.let { Color(it.colorArgb.toInt()) } ?: MaterialTheme.colorScheme.primary
+            val isSelected = entry.id in selectedIds
             Box(
                 modifier = Modifier
                     .padding(top = top, start = 2.dp, end = 2.dp)
                     .height((HOUR_HEIGHT.value * durationHours).coerceAtLeast(24f).dp)
                     .fillMaxWidth()
                     .background(color.copy(alpha = 0.9f), RoundedCornerShape(4.dp))
-                    .clickable { onItemClick(item) }
+                    .let {
+                        if (isSelected) {
+                            it.border(2.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(4.dp))
+                        } else {
+                            it
+                        }
+                    }
+                    .combinedClickable(
+                        onClick = { onItemClick(item) },
+                        onLongClick = { onItemLongClick(item) }
+                    )
                     .padding(4.dp)
             ) {
                 Text(
@@ -118,34 +143,59 @@ internal fun DayColumn(
         if (date == LocalDate.now()) {
             val currentTimeFraction by rememberCurrentTimeFraction()
             val dotSize = 8.dp
-            Row(
-                modifier = Modifier
-                    .padding(top = (HOUR_HEIGHT * currentTimeFraction) - dotSize / 2)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(modifier = Modifier.size(dotSize).background(MaterialTheme.colorScheme.error, CircleShape))
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(2.dp)
-                        .background(MaterialTheme.colorScheme.error)
+            val nowColor = MaterialTheme.colorScheme.error
+            val nowTop = (HOUR_HEIGHT * currentTimeFraction) - dotSize / 2
+            if (showNowLine) {
+                NowLine(
+                    nowMillis = System.currentTimeMillis(),
+                    dotSize = dotSize,
+                    modifier = Modifier.padding(top = nowTop)
                 )
+                // Belongs to the now-line, so it is drawn with it. Outside this guard it also
+                // appeared in the week view — inside a ~45dp column, under no line at all, wrapping
+                // onto three lines. WeekView draws its own full-width line for the same reason.
+                val now = System.currentTimeMillis()
+                val hasMoreToday = timedItems.any {
+                    it.occurrenceStartMillis > now &&
+                        Instant.ofEpochMilli(it.occurrenceStartMillis).atZone(zoneId).toLocalDate() == date
+                }
+                if (!hasMoreToday) {
+                    val languageManager = LocalLanguageManager.current
+                    val (leading, trailing) = nothingElseTodayEmojis(LocalTime.now().hour)
+                    // Centred under the line, like the widget's copy and the to-do timeline's: a
+                    // remark about the day rather than an entry pinned to the grid's left gutter.
+                    Text(
+                        text = "$leading ${languageManager.getString("nothing_else_today")} $trailing",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = nowTop + dotSize + 4.dp)
+                    )
+                }
             }
         }
     }
 }
 
-/** Ticks once a minute so the current-time line drifts down the grid in real time without a full
- *  screen refresh. Only meaningful for today's column — callers gate rendering on that. */
+/** Ticks on the minute so the current-time line drifts down the grid in real time without a full
+ *  screen refresh. Only meaningful for today's column — callers gate rendering on that. Internal
+ *  (not private) so [WeekView] can position its own single full-width now-line at the same offset.
+ *
+ *  On the minute *boundary*, not every sixty seconds from whenever this started: the line and the
+ *  clock printed beside it are what the user compares against their status bar, and a fixed delay
+ *  lands wherever composition happened to begin — showing 00:36 for most of the minute the phone
+ *  already calls 00:37. */
 @Composable
-private fun rememberCurrentTimeFraction(): State<Float> =
+internal fun rememberCurrentTimeFraction(): State<Float> =
     produceState(initialValue = currentHourFraction()) {
         while (true) {
             value = currentHourFraction()
-            delay(60_000L)
+            val now = System.currentTimeMillis()
+            delay(MINUTE_MILLIS - (now % MINUTE_MILLIS))
         }
     }
+
+private const val MINUTE_MILLIS = 60_000L
 
 private fun currentHourFraction(): Float {
     val now = LocalTime.now()

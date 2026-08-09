@@ -14,11 +14,15 @@ class LanguageManager(private val context: Context) {
     fun loadLanguage(langCode: String) {
         try {
             val fileName = "${Strings.Translations.DIR}$langCode${Strings.Translations.JSON_EXTENSION}"
-            val inputStream = context.assets.open(fileName)
-            val reader = InputStreamReader(inputStream)
             val type = object : TypeToken<Map<String, String>>() {}.type
-            translations = gson.fromJson(reader, type)
-            reader.close()
+            // `use`, not close() after fromJson — malformed JSON throws out of fromJson and the old
+            // form never reached close(), leaking the reader. Worse here than usual because the
+            // catch below then opens a second one for the fallback language.
+            translations = context.assets.open(fileName).use { inputStream ->
+                InputStreamReader(inputStream).use { reader ->
+                    gson.fromJson(reader, type)
+                }
+            }
         } catch (e: Exception) {
             Logger.log("Language load failed for '$langCode': ${e.message}", "LanguageManager")
             // Fallback to default English if loading fails

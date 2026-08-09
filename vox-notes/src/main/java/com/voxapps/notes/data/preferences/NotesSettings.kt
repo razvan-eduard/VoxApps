@@ -1,6 +1,8 @@
 package com.voxapps.notes.data.preferences
 
 import androidx.compose.runtime.Immutable
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 
 /**
  * Immutable snapshot of persisted VoxNotes settings (mirrors vox-commander's AppSettings).
@@ -50,16 +52,40 @@ data class NotesSettings(
     val debugLoggingEnabled: Boolean = false,
     val debugToastsEnabled: Boolean = false,
     val calendarViewEnabled: Boolean = false,
+    val isGridView: Boolean = false,
     val themeDarkMode: String = THEME_SYSTEM,
     val themeColored: Boolean = true,
     val onboardingCompleted: Boolean = false,
+    // --- BACKUP & RESTORE (local, shared :core:backup module's VoxBackupSettingsCard) — mirrors
+    // vox-hub's AppBackupConfig shape/names, persisted here for this app's own local backup button,
+    // independent of any Hub-triggered IPC export. ---
+    val backupIncludeSettings: Boolean = true,
+    val backupIncludeData: Boolean = true,
+    val backupIncludeAttachments: Boolean = false,
+    /** Wire-format string per [com.voxapps.ipc.VoxIpc.IMPORT_MODE_MERGE] etc., parsed via
+     *  [com.voxapps.backup.VoxImportMode.fromWireValue]. */
+    val backupImportMode: String = "merge",
     /** Off by default — attaching a photo costs real LLM tokens on top of the free OCR text a scan
      *  already provides. Only takes effect when Vision's own "send photo to AI" setting also
      *  provided a downscaled copy — this is the per-satellite half of that decision, not a
      *  standalone override (mirrors vox-expenses' identical toggle; Notes has no retry mechanism so
      *  there's no separate on-retry variant here). */
     val attachPhotoOnScan: Boolean = false,
-    val scanImageRetention: String = RETENTION_ON_FAILURE
+    val scanImageRetention: String = RETENTION_ON_FAILURE,
+    /** Which highlight effect (if any) draws around the in-app "today" card, and its color(s) —
+     *  mirrors vox-calendar's identical fields. Not yet implemented, see
+     *  `com.voxapps.design.effects.ApplyTodayEffect`. */
+    val todayEffect: String = TodayEffect.NONE.name,
+    val todayEffectStyle: String = TodayEffectStyle.RING.name,
+    val todayEffectColor: Long = TODAY_EFFECT_DEFAULT_COLOR,
+    val todayEffectColor2: Long? = null,
+    val todayEffectSpeed: Float = 1f,
+    val notificationsSystemDefault: Boolean = true,
+    val notificationsVibrationEnabled: Boolean = true,
+    val notificationsSoundUri: String? = null,
+    val notificationsVolume: Int = 100,
+    val notificationsLength: String = LENGTH_SHORT,
+    val notificationsChannelVersion: Int = 1
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -80,5 +106,12 @@ data class NotesSettings(
         const val RETENTION_NEVER = "NEVER"
         const val RETENTION_ON_FAILURE = "ON_FAILURE"
         const val RETENTION_ALWAYS = "ALWAYS"
+
+        const val LENGTH_SHORT = "SHORT"
+        const val LENGTH_MEDIUM = "MEDIUM"
+        const val LENGTH_LONG = "LONG"
+
+        /** A warm orange — a reasonable default for an as-yet-unimplemented fire/glow effect. */
+        const val TODAY_EFFECT_DEFAULT_COLOR = 0xFFFF6D00L
     }
 }

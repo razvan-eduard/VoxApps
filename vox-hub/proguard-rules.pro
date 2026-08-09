@@ -11,3 +11,9 @@
 -dontwarn com.google.errorprone.annotations.RestrictedApi
 -dontwarn javax.annotation.Nullable
 -dontwarn javax.annotation.concurrent.GuardedBy
+
+# Ktor server (core:voxconnect's VoxConnectServer) optionally probes for an attached IntelliJ/JVM
+# debugger via java.lang.management — a desktop/server-JVM-only API that doesn't exist on Android.
+# The code path is dev-tooling-only and never actually reached at runtime here; safe to silence.
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean

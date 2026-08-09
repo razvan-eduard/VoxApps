@@ -30,38 +30,41 @@ class LlmHookEngineSelector(
      * expected to have already checked capability before setting this (e.g. via the
      * [com.voxapps.ipc.VoxCapabilityClient] query), not rely on this call to gate it.
      */
+    private val resolver = AiEngineResolver(
+        openAiEngine = openAiEngine,
+        geminiCloudEngine = geminiCloudEngine,
+        geminiNanoEngine = geminiNanoEngine,
+        localLlmEngine = localLlmEngine
+    )
+
     suspend fun run(promptText: String, imageUri: String? = null): RawPromptOutcome {
         val snapshot = settingsRepo.getSettingsSnapshot()
         val processor = snapshot.aiProcessor
-        val cloudOk = snapshot.cloudIntelligenceEnabled
 
-        return when (processor) {
-            Strings.AiProcessors.OPENAI -> {
-                if (!cloudOk) RawPromptOutcome.Error("Cloud intelligence disabled")
-                else openAiEngine.rawPrompt(promptText, imageUri)?.let { RawPromptOutcome.Success(it) }
-                    ?: RawPromptOutcome.Error(
-                        "OpenAI request failed: ${(openAiEngine as? OpenAiInterpreter)?.lastErrorReason ?: "unknown error"}"
-                    )
-            }
-            Strings.AiProcessors.GEMINI_CLOUD -> {
-                if (!cloudOk) RawPromptOutcome.Error("Cloud intelligence disabled")
-                else geminiCloudEngine.rawPrompt(promptText, imageUri)?.let { RawPromptOutcome.Success(it) }
-                    ?: RawPromptOutcome.Error("Gemini Cloud request failed (check API key)")
-            }
-            Strings.AiProcessors.GEMINI_NATIVE -> {
-                // Special-cased rather than relying on GeminiNanoInterpreter.rawPrompt()'s generic
-                // null — on-device inference isn't implemented yet, this gives the caller a clearer
-                // error than a bare "no engine" message.
-                RawPromptOutcome.Error("Gemini Nano on-device is not yet supported for generic LLM requests")
-            }
-            else -> {
-                if (RemoteModelRegistry.isLlmEngine(processor)) {
-                    localLlmEngine.rawPrompt(promptText, imageUri)?.let { RawPromptOutcome.Success(it) }
-                        ?: RawPromptOutcome.Error("Local model unavailable (not downloaded or failed to load)")
-                } else {
-                    RawPromptOutcome.Error("No LLM engine configured")
-                }
-            }
+        // Engine *selection* is shared with IntentDecisionMap via the resolver; only the mapping of
+        // a failure to a user-visible reason is this class's own, which is why it uses resolve()
+        // rather than engineFor() — it needs to tell "no engine configured" apart from "the engine
+        // is cloud and cloud is off".
+        val choice = resolver.resolve(processor)
+            ?: return RawPromptOutcome.Error("No LLM engine configured")
+        if (choice.requiresCloud && !snapshot.cloudIntelligenceEnabled) {
+            return RawPromptOutcome.Error("Cloud intelligence disabled")
         }
+        // Answered before dispatching rather than relying on GeminiNanoInterpreter.rawPrompt()'s
+        // generic null — on-device inference isn't implemented yet, and this gives the caller a
+        // clearer error than the "request failed" text below.
+        if (processor == Strings.AiProcessors.GEMINI_NATIVE) {
+            return RawPromptOutcome.Error("Gemini Nano on-device is not yet supported for generic LLM requests")
+        }
+
+        val text = choice.engine.rawPrompt(promptText, imageUri)
+        return if (text != null) RawPromptOutcome.Success(text) else RawPromptOutcome.Error(failureReason(processor))
+    }
+
+    private fun failureReason(processor: String): String = when (processor) {
+        Strings.AiProcessors.OPENAI ->
+            "OpenAI request failed: ${(openAiEngine as? OpenAiInterpreter)?.lastErrorReason ?: "unknown error"}"
+        Strings.AiProcessors.GEMINI_CLOUD -> "Gemini Cloud request failed (check API key)"
+        else -> "Local model unavailable (not downloaded or failed to load)"
     }
 }

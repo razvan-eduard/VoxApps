@@ -86,12 +86,16 @@ object BluetoothPeerResolver {
         }
         val targetName = advertisedNameFor(remotePeerId)
         val handler = Handler(Looper.getMainLooper())
-        var resolved = false
+        // AtomicBoolean rather than a captured `var`: finish() is reached from the discovery
+        // receiver, the timeout post, and the startDiscovery SecurityException path, and it must
+        // run its teardown (cancelDiscovery / unregisterReceiver / onResult) exactly once —
+        // unregistering twice throws. compareAndSet states that directly instead of relying on
+        // every caller happening to land on the main thread.
+        val resolved = java.util.concurrent.atomic.AtomicBoolean(false)
 
         lateinit var receiver: BroadcastReceiver
         fun finish(mac: String?) {
-            if (resolved) return
-            resolved = true
+            if (!resolved.compareAndSet(false, true)) return
             try {
                 adapter.cancelDiscovery()
             } catch (e: SecurityException) {

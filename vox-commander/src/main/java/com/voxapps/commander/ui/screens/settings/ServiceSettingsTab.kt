@@ -24,17 +24,21 @@ import androidx.compose.ui.text.withAnnotation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
+import androidx.core.net.toUri
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.engine.AndroidTtsEngine
+import com.voxapps.commander.domain.engine.PiperTtsEngine
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.domain.voice.VoiceManager
 import com.voxapps.commander.domain.voice.WakeWordCalibrator
 import com.voxapps.commander.domain.voice.WakeWordProfile
 import com.voxapps.commander.state.AppStateManager
-import com.voxapps.commander.ui.components.DropdownGroup
-import com.voxapps.commander.ui.components.GroupedDropdownContent
+import com.voxapps.commander.domain.engine.CloudDeadline
+import com.voxapps.design.picklist.ServicePicklist
+import com.voxapps.design.picklist.GroupedPicklistSheet
 import com.voxapps.commander.ui.components.EngineModelSection
-import com.voxapps.commander.ui.components.GroupedDropdownMenu
+import com.voxapps.design.picklist.GroupedPicklist
 import com.voxapps.commander.ui.components.ServiceLoadingDialog
 import com.voxapps.commander.ui.components.VoiceInputTextField
 import com.voxapps.commander.ui.screens.main.ListeningScreen
@@ -55,7 +59,10 @@ fun ServiceSettingsTab(
     onCancelDownload: () -> Unit,
     downloadProgress: Float?,
     downloadingItem: Any? = null,
-    onImportCustomModel: ((String?) -> Unit)? = null,
+    /** Hand the selected wake-word engine a model of the user's own, for the engines that declare
+     *  they accept one. Was declared and never called, so openWakeWord's custom import — which the
+     *  schema advertises and MainActivity is wired for — had no way in. */
+    onImportCustomModel: (() -> Unit)? = null,
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
@@ -199,33 +206,31 @@ fun ServiceSettingsTab(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         val wakeEngines = remember(uiState.availableModels) {
-            RemoteModelRegistry.getEngineKeysByType("wake_word")
+            RemoteModelRegistry.serviceEntries("wake_word")
         }
 
-        Box {
-            var engineExpanded by remember { mutableStateOf(false) }
-            OutlinedButton(
-                onClick = { engineExpanded = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(RemoteModelRegistry.getEngineLabel(currentEngineKey, languageManager))
+        // Porcupine declares that it needs a key; until this screen used the shared component there
+        // was nowhere on it to enter one, and nothing to say whether the engine could be reached.
+        ServicePicklist(
+            items = wakeEngines,
+            selected = wakeEngines.firstOrNull { it.id == currentEngineKey },
+            itemLabel = { RemoteModelRegistry.getEngineLabel(it.id, languageManager) },
+            onSelect = { selectEngine(it.id) },
+            credentialFor = { uiState.credentials.forEngine(it.credentialOwnerId) },
+            onCredentialCommit = { entry, key ->
+                appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+            },
+            credentialLabel = languageManager.getString("engine_api_key"),
+            helpTextFor = { entry ->
+                entry.helpTextKey?.let { languageManager.getString(it) }
+                    ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+            },
+            timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) },
+            itemNote = { entry ->
+                if (entry.requiresCredential && !uiState.credentials.has(entry.id))
+                    " — needs an API key" else ""
             }
-            DropdownMenu(
-                expanded = engineExpanded,
-                onDismissRequest = { engineExpanded = false },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                wakeEngines.forEach { engKey ->
-                    DropdownMenuItem(
-                        text = { Text(RemoteModelRegistry.getEngineLabel(engKey, languageManager)) },
-                        onClick = {
-                            selectEngine(engKey)
-                            engineExpanded = false
-                        }
-                    )
-                }
-            }
-        }
+        )
 
         // --- COMMON: Command Queue Toggle ---
         Row(
@@ -285,63 +290,6 @@ fun ServiceSettingsTab(
             )
         }
 
-        // Picovoice AccessKey input (only for engines that require it)
-        if (requiresApiKey) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = languageManager.getString("ww_porcupine_accesskey"),
-                style = MaterialTheme.typography.labelLarge
-            )
-            val uriHandler = LocalUriHandler.current
-            val descText = languageManager.getString("ww_porcupine_accesskey_desc")
-            val linkUrl = "https://console.picovoice.ai"
-            val annotatedDesc = remember(descText) {
-                buildAnnotatedString {
-                    val linkStart = descText.indexOf("console.picovoice.ai")
-                    if (linkStart >= 0) {
-                        append(descText.substring(0, linkStart))
-                        withStyle(
-                            SpanStyle(
-                                color = Color.Unspecified,
-                                textDecoration = TextDecoration.Underline
-                            )
-                        ) {
-                            withAnnotation(tag = "URL", annotation = linkUrl) {
-                                append("console.picovoice.ai")
-                            }
-                        }
-                        append(descText.substring(linkStart + "console.picovoice.ai".length))
-                    } else {
-                        append(descText)
-                    }
-                }
-            }
-            ClickableText(
-                text = annotatedDesc,
-                style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
-                onClick = { offset ->
-                    annotatedDesc.getStringAnnotations("URL", offset, offset)
-                        .firstOrNull()?.let { uriHandler.openUri(it.item) }
-                }
-            )
-            var localAccessKey by remember { mutableStateOf(uiState.picovoiceAccessKey ?: "") }
-            LaunchedEffect(uiState.picovoiceAccessKey) {
-                if ((uiState.picovoiceAccessKey ?: "") != localAccessKey) {
-                    localAccessKey = uiState.picovoiceAccessKey ?: ""
-                }
-            }
-            OutlinedTextField(
-                value = localAccessKey,
-                onValueChange = {
-                    localAccessKey = it
-                    appStateManager.setPicovoiceAccessKey(it.ifBlank { null })
-                },
-                label = { Text("AccessKey") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
         // --- ENGINE-SPECIFIC: Calibration ---
         if (supportsCalibration) {
             val hasProfile = uiState.wakeWordProfileJson != null
@@ -358,6 +306,12 @@ fun ServiceSettingsTab(
 
         val context = LocalContext.current
         val calibrator = remember { WakeWordCalibrator(context) { } }
+        // The calibrator owns its own coroutine scope and holds the mic open while running, but is
+        // remembered per-composition — without this, leaving the screen mid-calibration left the
+        // recording loop alive with the microphone still active.
+        DisposableEffect(calibrator) {
+            onDispose { calibrator.release() }
+        }
         val calibrationState by calibrator.state.collectAsStateWithLifecycle()
         var showCalibrationDialog by remember { mutableStateOf(false) }
 
@@ -403,26 +357,32 @@ fun ServiceSettingsTab(
 
         // Auto-save profile on completion
         LaunchedEffect(calibrationState) {
-            if (calibrationState is WakeWordCalibrator.CalibrationState.Complete) {
-                VoiceManager.setCalibrationListening(false)
-                val profile = (calibrationState as WakeWordCalibrator.CalibrationState.Complete).profile
-                pendingProfile = profile
-                showProfileNameDialog = true
-                delay(1500)
-                showCalibrationDialog = false
-                calibrator.stop()
-            } else if (calibrationState is WakeWordCalibrator.CalibrationState.Failed) {
-                VoiceManager.setCalibrationListening(false)
-                delay(3000)
-                calibrator.stop()
-            } else if (calibrationState is WakeWordCalibrator.CalibrationState.Listening) {
-                VoiceManager.setCalibrationListening(true)
-            } else if (calibrationState is WakeWordCalibrator.CalibrationState.Analyzing) {
-                VoiceManager.setCalibrationListening(false)
-            } else if (calibrationState is WakeWordCalibrator.CalibrationState.Waiting) {
-                VoiceManager.setCalibrationListening(false)
-            } else if (calibrationState is WakeWordCalibrator.CalibrationState.MeasuringNoise) {
-                VoiceManager.setCalibrationListening(false)
+            // `when (val state = ...)` over the sealed type: calibrationState is a delegated
+            // property, which Kotlin never smart-casts (its value could differ between reads), so
+            // the Complete branch previously had to restate the type with an unchecked cast to
+            // reach .profile. Binding it to a local once makes the cast unnecessary and gives the
+            // compiler a shot at flagging an unhandled subtype.
+            when (val state = calibrationState) {
+                is WakeWordCalibrator.CalibrationState.Complete -> {
+                    VoiceManager.setCalibrationListening(false)
+                    pendingProfile = state.profile
+                    showProfileNameDialog = true
+                    delay(1500)
+                    showCalibrationDialog = false
+                    calibrator.stop()
+                }
+                is WakeWordCalibrator.CalibrationState.Failed -> {
+                    VoiceManager.setCalibrationListening(false)
+                    delay(3000)
+                    calibrator.stop()
+                }
+                is WakeWordCalibrator.CalibrationState.Listening ->
+                    VoiceManager.setCalibrationListening(true)
+                is WakeWordCalibrator.CalibrationState.Analyzing,
+                is WakeWordCalibrator.CalibrationState.Waiting,
+                is WakeWordCalibrator.CalibrationState.MeasuringNoise ->
+                    VoiceManager.setCalibrationListening(false)
+                WakeWordCalibrator.CalibrationState.Idle -> Unit
             }
         }
 
@@ -632,14 +592,28 @@ fun ServiceSettingsTab(
             RemoteModelRegistry.getModels(currentEngineKey)
         }
 
-        val displayModels = remember(engineModels, uiState.modelFilterLang, supportsModelDownload) {
-            if (supportsModelDownload && !isVoskMultilingual) engineModels.filter { it.langCode == uiState.modelFilterLang }
+        val displayModels = remember(
+            engineModels, uiState.modelFilterLang, supportsModelDownload, refreshTrigger,
+            uiState.customVoiceModelPath
+        ) {
+            val declared = if (supportsModelDownload && !isVoskMultilingual)
+                engineModels.filter { it.langCode == uiState.modelFilterLang }
             else engineModels
+            // The user's own model, listed with the rest — chosen here and deleted here, which is
+            // also the only place this screen has ever had to remove one.
+            val imported = com.voxapps.commander.domain.engine.EngineSpecs.importedRow(
+                settingsRepo,
+                currentEngineKey,
+                uiState.modelFilterLang.takeIf { RemoteModelRegistry.isPerLanguage(currentEngineKey) }
+            )
+            listOfNotNull(imported) + declared
         }
 
-        val selectedModel = remember(displayModels, uiState.wakeWordModelPath) {
-            val path = uiState.wakeWordModelPath
-            if (path != null) displayModels.find { it.id == path } else null
+        // Keyed off the wake word's own model id, not the voice engine's selection. The two engines
+        // can be the same key (`wake_vosk` is both) but the choice is separate: a large model is
+        // reasonable for transcription and wasteful for something always resident.
+        val selectedModel = remember(displayModels, uiState.activeWakeModelId) {
+            uiState.activeWakeModelId?.let { id -> displayModels.find { it.id == id } }
         }
 
         if (displayModels.isNotEmpty()) {
@@ -648,13 +622,25 @@ fun ServiceSettingsTab(
 
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,
-                groups = remember(displayModels, refreshTrigger) {
-                    listOf(DropdownGroup(languageManager.getString("available_models_header") ?: "AVAILABLE MODELS", displayModels))
-                },
+                header = languageManager.getString("available_models_header") ?: "AVAILABLE MODELS",
+                items = displayModels,
                 selectedItem = selectedModel,
-                itemLabel = { if (supportsModelDownload) "${it.label} (${it.sizeDescription})" else it.label },
+                itemLabel = { model ->
+                    if (model is com.voxapps.commander.domain.model.ImportedModel) {
+                        val name = languageManager.getString("model_imported_name") +
+                            (model.langCode?.let { " (${it.uppercase()})" } ?: "")
+                        "$name (${model.sizeDescription})"
+                    } else if (supportsModelDownload) {
+                        "${model.label} (${model.sizeDescription})"
+                    } else {
+                        model.label
+                    }
+                },
                 modelIdProvider = { it.id },
                 onItemSelected = { model, _ ->
+                    appStateManager.setActiveWakeModelId(model.id)
+                    // Kept in step for now: other call sites still read the legacy key, and old
+                    // installs are migrated by reading it as a fallback rather than by a rewrite.
                     appStateManager.setWakeWordModelPath(model.id)
                     if (supportsBuiltinKeywords) {
                         appStateManager.setWakeWord(model.label)
@@ -669,6 +655,24 @@ fun ServiceSettingsTab(
                 fallbackCategory = Strings.FallbackCategories.VOICE,
                 refreshTrigger = refreshTrigger,
                 showFallback = false
+            )
+        }
+
+        // Only for an engine that says it takes one: Porcupine is local too, but its keywords are
+        // licence-locked to the account that generated them, so there is nothing a user could pick.
+        if (onImportCustomModel != null &&
+            RemoteModelRegistry.supportsCustomImport(currentEngineKey)
+        ) {
+            OutlinedButton(
+                onClick = { onImportCustomModel() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(languageManager.getString("import_custom_model"))
+            }
+            Text(
+                text = languageManager.getString("import_custom_model_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -736,7 +740,7 @@ fun ServiceSettingsTab(
 
         // Engines flagged `requires_api_key` (e.g. Porcupine → Picovoice AccessKey) can't start
         // without a key — block it here instead of failing at runtime.
-        val hasApiKey = !uiState.picovoiceAccessKey.isNullOrBlank()
+        val hasApiKey = uiState.credentials.has(currentEngineKey)
         val apiKeyOk = !requiresApiKey || hasApiKey
 
         Button(
@@ -805,52 +809,48 @@ fun ServiceSettingsTab(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             val ttsEngines = remember(uiState.availableModels) {
-                RemoteModelRegistry.getEngineKeysByType("tts")
+                RemoteModelRegistry.serviceEntries("tts")
             }
             val currentTtsEngineKey = uiState.ttsEngineType
 
-            Box {
-                var ttsEngineExpanded by remember { mutableStateOf(false) }
-                OutlinedButton(
-                    onClick = { ttsEngineExpanded = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        if (currentTtsEngineKey == "android") languageManager.getString("tts_engine_android") ?: "Android (system default)"
-                        else RemoteModelRegistry.getEngineLabel(currentTtsEngineKey, languageManager)
-                    )
+            // The platform engine used to be listed here by hand, ahead of whatever the registry
+            // knew about, and labelled by a second special case just above. It is a declared engine
+            // now and arrives with the others.
+            ServicePicklist(
+                items = ttsEngines,
+                selected = ttsEngines.firstOrNull { it.id == currentTtsEngineKey },
+                itemLabel = { RemoteModelRegistry.getEngineLabel(it.id, languageManager) },
+                onSelect = { appStateManager.setTtsEngineType(it.id) },
+                credentialFor = { uiState.credentials.forEngine(it.credentialOwnerId) },
+                onCredentialCommit = { entry, key ->
+                    appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+                },
+                credentialLabel = languageManager.getString("engine_api_key"),
+                helpTextFor = { entry ->
+                    entry.helpTextKey?.let { languageManager.getString(it) }
+                        ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+                },
+                timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) },
+                itemNote = { entry ->
+                    if (entry.requiresCredential && !uiState.credentials.has(entry.id))
+                        " — needs an API key" else ""
                 }
-                DropdownMenu(
-                    expanded = ttsEngineExpanded,
-                    onDismissRequest = { ttsEngineExpanded = false },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(languageManager.getString("tts_engine_android") ?: "Android (system default)") },
-                        onClick = { appStateManager.setTtsEngineType("android"); ttsEngineExpanded = false }
-                    )
-                    ttsEngines.forEach { engKey ->
-                        DropdownMenuItem(
-                            text = { Text(RemoteModelRegistry.getEngineLabel(engKey, languageManager)) },
-                            onClick = { appStateManager.setTtsEngineType(engKey); ttsEngineExpanded = false }
-                        )
-                    }
-                }
-            }
+            )
 
             // --- PIPER VOICE MODELS (only relevant once Piper is selected) ---
-            if (currentTtsEngineKey == "piper_tts") {
+            // The stored value is already normalised by SettingsRepositoryImpl, so comparing it to
+            // the engine's own key is enough — no second alias table on this side.
+            if (currentTtsEngineKey == PiperTtsEngine.ENGINE_KEY) {
                 val piperModels = remember(refreshTrigger) {
-                    RemoteModelRegistry.getModels("piper_tts")
+                    RemoteModelRegistry.getModels(PiperTtsEngine.ENGINE_KEY)
                 }
                 if (piperModels.isNotEmpty()) {
                     EngineModelSection(
                         title = languageManager.getString("tts_voice_models") ?: "Piper voice models",
                         settingsRepo = settingsRepo,
                         appStateManager = appStateManager,
-                        groups = remember(piperModels, refreshTrigger) {
-                            listOf(DropdownGroup(languageManager.getString("available_models_header") ?: "AVAILABLE MODELS", piperModels))
-                        },
+                        header = languageManager.getString("available_models_header") ?: "AVAILABLE MODELS",
+                items = piperModels,
                         selectedItem = remember(piperModels, uiState.piperVoiceModelId) {
                             piperModels.find { it.id == uiState.piperVoiceModelId }
                         },
@@ -862,7 +862,7 @@ fun ServiceSettingsTab(
                         onCancelDownload = onCancelDownload,
                         downloadProgress = downloadProgress,
                         downloadingItem = downloadingItem,
-                        currentProcessor = "piper_tts",
+                        currentProcessor = PiperTtsEngine.ENGINE_KEY,
                         // TTS isn't part of the STT/NLU fallback cascade (Strings.FallbackCategories
                         // only has "voice"/"intent") — no fallback concept applies here.
                         showFallback = false,

@@ -6,10 +6,13 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.voxapps.design.color.VoxColorPalette
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,6 +37,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val SCHEDULED_MERGE_INTERVAL = stringPreferencesKey("scheduled_merge_interval")
         val SCHEDULED_EXPENSE_DEDUP_INTERVAL = stringPreferencesKey("scheduled_expense_dedup_interval")
         val HOME_CURRENCY = stringPreferencesKey("home_currency")
+        val SCHEMA_REPO_BASE_URL = stringPreferencesKey("schema_repo_base_url")
+        val USE_REMOTE_SCHEMAS = booleanPreferencesKey("use_remote_schemas")
+        val EXCHANGE_RATE_SERVICE_ID = stringPreferencesKey("exchange_rate_service_id")
         val PAYMENT_SOURCE_PACKAGES = stringSetPreferencesKey("payment_source_packages")
         val BANKING_SOURCE_PACKAGES = stringSetPreferencesKey("banking_source_packages")
         val AUTO_ACCEPT_NOTIFICATION_EXPENSES = booleanPreferencesKey("auto_accept_notification_expenses")
@@ -41,6 +47,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val VAT_DISPLAY_ENABLED = booleanPreferencesKey("vat_display_enabled")
         val DECIMAL_SEPARATOR = stringPreferencesKey("decimal_separator")
         val CALENDAR_VIEW_ENABLED = booleanPreferencesKey("calendar_view_enabled")
+        val IS_GRID_VIEW = booleanPreferencesKey("is_grid_view")
         val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
         val APP_CACHE_JSON = stringPreferencesKey("app_cache_json")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
@@ -48,8 +55,21 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
         val ATTACH_PHOTO_ON_RETRY = booleanPreferencesKey("attach_photo_on_retry")
+        val AUTO_RESCAN_ON_FIRST_ATTACHMENT = booleanPreferencesKey("auto_rescan_on_first_attachment")
         val AUTO_OPEN_SCANNED_EXPENSE = booleanPreferencesKey("auto_open_scanned_expense")
         val LOCATION_PREFILL_ENABLED = booleanPreferencesKey("location_prefill_enabled")
+        // Home Town / cache TTL / always-use (stored as strings since DataStore has no doublePreferencesKey)
+        val LOCATION_HOME_TOWN_LAT = stringPreferencesKey("location_home_town_lat")
+        val LOCATION_HOME_TOWN_LON = stringPreferencesKey("location_home_town_lon")
+        val LOCATION_CACHE_TTL = stringPreferencesKey("location_cache_ttl")
+        val LOCATION_ALWAYS_USE_HOME_TOWN = booleanPreferencesKey("location_always_use_home_town")
+
+        // Backup & Restore (local)
+        val BACKUP_INCLUDE_SETTINGS = booleanPreferencesKey("backup_include_settings")
+        val BACKUP_INCLUDE_DATA = booleanPreferencesKey("backup_include_data")
+        val BACKUP_INCLUDE_API_KEYS = booleanPreferencesKey("backup_include_api_keys")
+        val BACKUP_INCLUDE_ATTACHMENTS = booleanPreferencesKey("backup_include_attachments")
+        val BACKUP_IMPORT_MODE = stringPreferencesKey("backup_import_mode")
         val DUPLICATE_CHECK_MODE_MANUAL = stringPreferencesKey("duplicate_check_mode_manual")
         val DUPLICATE_CHECK_MODE_AUTOMATIC = stringPreferencesKey("duplicate_check_mode_automatic")
         val AUTO_ACCEPT_DUPLICATE_MERGES = booleanPreferencesKey("auto_accept_duplicate_merges")
@@ -61,6 +81,19 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val WIDGET_BORDER_ENABLED = booleanPreferencesKey("widget_border_enabled")
         val WIDGET_BORDER_THICKNESS_DP = intPreferencesKey("widget_border_thickness_dp")
         val WIDGET_BORDER_COLOR_ARGB = longPreferencesKey("widget_border_color_argb")
+        val TODAY_EFFECT = stringPreferencesKey("today_effect")
+        val TODAY_EFFECT_STYLE = stringPreferencesKey("today_effect_style")
+        val TODAY_EFFECT_COLOR = longPreferencesKey("today_effect_color")
+        val TODAY_EFFECT_COLOR_2 = longPreferencesKey("today_effect_color_2")
+        val TODAY_EFFECT_SPEED = floatPreferencesKey("today_effect_speed")
+        val TODAY_EFFECT_SHOW_IN_WIDGET = booleanPreferencesKey("today_effect_show_in_widget")
+        val BATCH_CLEANUP_MANUAL_REVIEW = booleanPreferencesKey("batch_cleanup_manual_review")
+        val NOTIFICATIONS_SYSTEM_DEFAULT = booleanPreferencesKey("notifications_system_default")
+        val NOTIFICATIONS_VIBRATION_ENABLED = booleanPreferencesKey("notifications_vibration_enabled")
+        val NOTIFICATIONS_SOUND_URI = stringPreferencesKey("notifications_sound_uri")
+        val NOTIFICATIONS_VOLUME = intPreferencesKey("notifications_volume")
+        val NOTIFICATIONS_LENGTH = stringPreferencesKey("notifications_length")
+        val NOTIFICATIONS_CHANNEL_VERSION = intPreferencesKey("notifications_channel_version")
     }
 
     override val settingsFlow: Flow<ExpensesSettings> = dataStore.data.map { prefs ->
@@ -75,6 +108,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             scheduledMergeInterval = prefs[Keys.SCHEDULED_MERGE_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             scheduledExpenseDedupInterval = prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             homeCurrency = prefs[Keys.HOME_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
+            schemaRepoBaseUrl = prefs[Keys.SCHEMA_REPO_BASE_URL] ?: com.voxapps.services.SchemaRepo.DEFAULT_BASE_URL,
+            useRemoteSchemas = prefs[Keys.USE_REMOTE_SCHEMAS] ?: true,
+            exchangeRateServiceId = prefs[Keys.EXCHANGE_RATE_SERVICE_ID] ?: "",
             paymentSourcePackages = prefs[Keys.PAYMENT_SOURCE_PACKAGES] ?: emptySet(),
             bankingSourcePackages = prefs[Keys.BANKING_SOURCE_PACKAGES] ?: emptySet(),
             autoAcceptNotificationExpenses = prefs[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] ?: false,
@@ -82,6 +118,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             vatDisplayEnabled = prefs[Keys.VAT_DISPLAY_ENABLED] ?: false,
             decimalSeparator = prefs[Keys.DECIMAL_SEPARATOR] ?: ExpensesSettings.DECIMAL_PERIOD,
             calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
+            isGridView = prefs[Keys.IS_GRID_VIEW] ?: false,
             debugToastsEnabled = prefs[Keys.DEBUG_TOASTS_ENABLED] ?: false,
             appCacheJson = prefs[Keys.APP_CACHE_JSON],
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: ExpensesSettings.THEME_SYSTEM,
@@ -89,8 +126,18 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
             attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
             attachPhotoOnRetry = prefs[Keys.ATTACH_PHOTO_ON_RETRY] ?: false,
+            autoRescanOnFirstAttachment = prefs[Keys.AUTO_RESCAN_ON_FIRST_ATTACHMENT] ?: false,
             autoOpenScannedExpense = prefs[Keys.AUTO_OPEN_SCANNED_EXPENSE] ?: false,
             locationPrefillEnabled = prefs[Keys.LOCATION_PREFILL_ENABLED] ?: true,
+            locationHomeTownLat = prefs[Keys.LOCATION_HOME_TOWN_LAT]?.toDoubleOrNull(),
+            locationHomeTownLon = prefs[Keys.LOCATION_HOME_TOWN_LON]?.toDoubleOrNull(),
+            locationCacheTtl = prefs[Keys.LOCATION_CACHE_TTL] ?: "ONE_DAY",
+            locationAlwaysUseHomeTown = prefs[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] ?: false,
+            backupIncludeSettings = prefs[Keys.BACKUP_INCLUDE_SETTINGS] ?: true,
+            backupIncludeData = prefs[Keys.BACKUP_INCLUDE_DATA] ?: true,
+            backupIncludeApiKeys = prefs[Keys.BACKUP_INCLUDE_API_KEYS] ?: false,
+            backupIncludeAttachments = prefs[Keys.BACKUP_INCLUDE_ATTACHMENTS] ?: false,
+            backupImportMode = prefs[Keys.BACKUP_IMPORT_MODE] ?: "merge",
             duplicateCheckModeManual = prefs[Keys.DUPLICATE_CHECK_MODE_MANUAL] ?: ExpensesSettings.MODE_LOCAL,
             duplicateCheckModeAutomatic = prefs[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] ?: ExpensesSettings.MODE_LOCAL,
             autoAcceptDuplicateMerges = prefs[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] ?: false,
@@ -104,7 +151,20 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
                 ?: ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD,
             widgetBorderEnabled = prefs[Keys.WIDGET_BORDER_ENABLED] ?: true,
             widgetBorderThicknessDp = prefs[Keys.WIDGET_BORDER_THICKNESS_DP] ?: ExpensesSettings.THICKNESS_MEDIUM,
-            widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first()
+            widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first(),
+            todayEffect = prefs[Keys.TODAY_EFFECT] ?: TodayEffect.NONE.name,
+            todayEffectStyle = prefs[Keys.TODAY_EFFECT_STYLE] ?: TodayEffectStyle.RING.name,
+            todayEffectColor = prefs[Keys.TODAY_EFFECT_COLOR] ?: ExpensesSettings.TODAY_EFFECT_DEFAULT_COLOR,
+            todayEffectColor2 = prefs[Keys.TODAY_EFFECT_COLOR_2],
+            todayEffectSpeed = prefs[Keys.TODAY_EFFECT_SPEED] ?: 1f,
+            todayEffectShowInWidget = prefs[Keys.TODAY_EFFECT_SHOW_IN_WIDGET] ?: true,
+            batchCleanupManualReview = prefs[Keys.BATCH_CLEANUP_MANUAL_REVIEW] ?: true,
+            notificationsSystemDefault = prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] ?: true,
+            notificationsVibrationEnabled = prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] ?: true,
+            notificationsSoundUri = prefs[Keys.NOTIFICATIONS_SOUND_URI],
+            notificationsVolume = prefs[Keys.NOTIFICATIONS_VOLUME] ?: 100,
+            notificationsLength = prefs[Keys.NOTIFICATIONS_LENGTH] ?: ExpensesSettings.LENGTH_SHORT,
+            notificationsChannelVersion = prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] ?: 1
         )
     }
 
@@ -161,6 +221,18 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.HOME_CURRENCY] = code }
     }
 
+    override suspend fun setSchemaRepoBaseUrl(url: String) {
+        dataStore.edit { it[Keys.SCHEMA_REPO_BASE_URL] = url }
+    }
+
+    override suspend fun setExchangeRateServiceId(id: String) {
+        dataStore.edit { it[Keys.EXCHANGE_RATE_SERVICE_ID] = id }
+    }
+
+    override suspend fun setUseRemoteSchemas(enabled: Boolean) {
+        dataStore.edit { it[Keys.USE_REMOTE_SCHEMAS] = enabled }
+    }
+
     override suspend fun setPaymentSourcePackages(packages: Set<String>) {
         dataStore.edit {
             it[Keys.PAYMENT_SOURCE_PACKAGES] = packages
@@ -192,6 +264,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
 
     override suspend fun setCalendarViewEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.CALENDAR_VIEW_ENABLED] = enabled }
+    }
+
+    override suspend fun setIsGridView(enabled: Boolean) {
+        dataStore.edit { it[Keys.IS_GRID_VIEW] = enabled }
     }
 
     override suspend fun setDebugToastsEnabled(enabled: Boolean) {
@@ -226,12 +302,53 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.ATTACH_PHOTO_ON_RETRY] = enabled }
     }
 
+    override suspend fun setAutoRescanOnFirstAttachment(enabled: Boolean) {
+        dataStore.edit { it[Keys.AUTO_RESCAN_ON_FIRST_ATTACHMENT] = enabled }
+    }
+
     override suspend fun setAutoOpenScannedExpense(enabled: Boolean) {
         dataStore.edit { it[Keys.AUTO_OPEN_SCANNED_EXPENSE] = enabled }
     }
 
     override suspend fun setLocationPrefillEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.LOCATION_PREFILL_ENABLED] = enabled }
+    }
+
+    override suspend fun setLocationHomeTown(lat: Double?, lon: Double?) {
+        dataStore.edit { prefs ->
+            if (lat != null) prefs[Keys.LOCATION_HOME_TOWN_LAT] = lat.toString()
+            else prefs.remove(Keys.LOCATION_HOME_TOWN_LAT)
+            if (lon != null) prefs[Keys.LOCATION_HOME_TOWN_LON] = lon.toString()
+            else prefs.remove(Keys.LOCATION_HOME_TOWN_LON)
+        }
+    }
+
+    override suspend fun setLocationCacheTtl(ttl: String) {
+        dataStore.edit { it[Keys.LOCATION_CACHE_TTL] = ttl }
+    }
+
+    override suspend fun setLocationAlwaysUseHomeTown(enabled: Boolean) {
+        dataStore.edit { it[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] = enabled }
+    }
+
+    override suspend fun setBackupIncludeSettings(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_SETTINGS] = enabled }
+    }
+
+    override suspend fun setBackupIncludeData(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_DATA] = enabled }
+    }
+
+    override suspend fun setBackupIncludeApiKeys(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_API_KEYS] = enabled }
+    }
+
+    override suspend fun setBackupIncludeAttachments(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKUP_INCLUDE_ATTACHMENTS] = enabled }
+    }
+
+    override suspend fun setBackupImportMode(mode: String) {
+        dataStore.edit { it[Keys.BACKUP_IMPORT_MODE] = mode }
     }
 
     override suspend fun setDuplicateCheckModeManual(mode: String) {
@@ -278,6 +395,62 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.WIDGET_BORDER_COLOR_ARGB] = colorArgb }
     }
 
+    override suspend fun setTodayEffect(effect: String) {
+        dataStore.edit { it[Keys.TODAY_EFFECT] = effect }
+    }
+
+    override suspend fun setTodayEffectStyle(style: String) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_STYLE] = style }
+    }
+
+    override suspend fun setTodayEffectColor(colorArgb: Long) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_COLOR] = colorArgb }
+    }
+
+    override suspend fun setTodayEffectColor2(colorArgb: Long?) {
+        dataStore.edit {
+            if (colorArgb == null) it.remove(Keys.TODAY_EFFECT_COLOR_2) else it[Keys.TODAY_EFFECT_COLOR_2] = colorArgb
+        }
+    }
+
+    override suspend fun setTodayEffectSpeed(speed: Float) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_SPEED] = speed }
+    }
+
+    override suspend fun setTodayEffectShowInWidget(enabled: Boolean) {
+        dataStore.edit { it[Keys.TODAY_EFFECT_SHOW_IN_WIDGET] = enabled }
+    }
+
+    override suspend fun setBatchCleanupManualReview(enabled: Boolean) {
+        dataStore.edit { it[Keys.BATCH_CLEANUP_MANUAL_REVIEW] = enabled }
+    }
+
+    override suspend fun setNotificationsSystemDefault(enabled: Boolean) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = enabled }
+    }
+
+    override suspend fun setNotificationsVibrationEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_VIBRATION_ENABLED] = enabled }
+    }
+
+    override suspend fun setNotificationsSoundUri(uri: String?) {
+        dataStore.edit {
+            if (uri == null) it.remove(Keys.NOTIFICATIONS_SOUND_URI) else it[Keys.NOTIFICATIONS_SOUND_URI] = uri
+        }
+    }
+
+    override suspend fun setNotificationsVolume(volume: Int) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_VOLUME] = volume }
+    }
+
+    override suspend fun setNotificationsLength(length: String) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_LENGTH] = length }
+    }
+
+    override suspend fun setNotificationsChannelVersion(version: Int) {
+        dataStore.edit { it[Keys.NOTIFICATIONS_CHANNEL_VERSION] = version }
+    }
+
     override suspend fun restoreSettings(settings: ExpensesSettings) {
         dataStore.edit { prefs ->
             prefs[Keys.IS_BIOMETRIC_REQUIRED] = settings.isBiometricRequired
@@ -301,13 +474,26 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.VAT_DISPLAY_ENABLED] = settings.vatDisplayEnabled
             prefs[Keys.DECIMAL_SEPARATOR] = settings.decimalSeparator
             prefs[Keys.CALENDAR_VIEW_ENABLED] = settings.calendarViewEnabled
+            prefs[Keys.IS_GRID_VIEW] = settings.isGridView
             prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode
             prefs[Keys.THEME_COLORED] = settings.themeColored
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
             prefs[Keys.ATTACH_PHOTO_ON_RETRY] = settings.attachPhotoOnRetry
+            prefs[Keys.AUTO_RESCAN_ON_FIRST_ATTACHMENT] = settings.autoRescanOnFirstAttachment
             prefs[Keys.AUTO_OPEN_SCANNED_EXPENSE] = settings.autoOpenScannedExpense
             prefs[Keys.LOCATION_PREFILL_ENABLED] = settings.locationPrefillEnabled
+            settings.locationHomeTownLat?.let { prefs[Keys.LOCATION_HOME_TOWN_LAT] = it.toString() }
+                ?: prefs.remove(Keys.LOCATION_HOME_TOWN_LAT)
+            settings.locationHomeTownLon?.let { prefs[Keys.LOCATION_HOME_TOWN_LON] = it.toString() }
+                ?: prefs.remove(Keys.LOCATION_HOME_TOWN_LON)
+            prefs[Keys.LOCATION_CACHE_TTL] = settings.locationCacheTtl
+            prefs[Keys.LOCATION_ALWAYS_USE_HOME_TOWN] = settings.locationAlwaysUseHomeTown
+            prefs[Keys.BACKUP_INCLUDE_SETTINGS] = settings.backupIncludeSettings
+            prefs[Keys.BACKUP_INCLUDE_DATA] = settings.backupIncludeData
+            prefs[Keys.BACKUP_INCLUDE_API_KEYS] = settings.backupIncludeApiKeys
+            prefs[Keys.BACKUP_INCLUDE_ATTACHMENTS] = settings.backupIncludeAttachments
+            prefs[Keys.BACKUP_IMPORT_MODE] = settings.backupImportMode
             prefs[Keys.DUPLICATE_CHECK_MODE_MANUAL] = settings.duplicateCheckModeManual
             prefs[Keys.DUPLICATE_CHECK_MODE_AUTOMATIC] = settings.duplicateCheckModeAutomatic
             prefs[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] = settings.autoAcceptDuplicateMerges
@@ -319,6 +505,27 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.WIDGET_BORDER_ENABLED] = settings.widgetBorderEnabled
             prefs[Keys.WIDGET_BORDER_THICKNESS_DP] = settings.widgetBorderThicknessDp
             prefs[Keys.WIDGET_BORDER_COLOR_ARGB] = settings.widgetBorderColorArgb
+            prefs[Keys.TODAY_EFFECT] = settings.todayEffect
+            prefs[Keys.TODAY_EFFECT_STYLE] = settings.todayEffectStyle
+            prefs[Keys.TODAY_EFFECT_COLOR] = settings.todayEffectColor
+            if (settings.todayEffectColor2 == null) {
+                prefs.remove(Keys.TODAY_EFFECT_COLOR_2)
+            } else {
+                prefs[Keys.TODAY_EFFECT_COLOR_2] = settings.todayEffectColor2
+            }
+            prefs[Keys.TODAY_EFFECT_SPEED] = settings.todayEffectSpeed
+            prefs[Keys.TODAY_EFFECT_SHOW_IN_WIDGET] = settings.todayEffectShowInWidget
+            prefs[Keys.BATCH_CLEANUP_MANUAL_REVIEW] = settings.batchCleanupManualReview
+            prefs[Keys.NOTIFICATIONS_SYSTEM_DEFAULT] = settings.notificationsSystemDefault
+            prefs[Keys.NOTIFICATIONS_VIBRATION_ENABLED] = settings.notificationsVibrationEnabled
+            if (settings.notificationsSoundUri == null) {
+                prefs.remove(Keys.NOTIFICATIONS_SOUND_URI)
+            } else {
+                prefs[Keys.NOTIFICATIONS_SOUND_URI] = settings.notificationsSoundUri
+            }
+            prefs[Keys.NOTIFICATIONS_VOLUME] = settings.notificationsVolume
+            prefs[Keys.NOTIFICATIONS_LENGTH] = settings.notificationsLength
+            prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] = settings.notificationsChannelVersion
             // appCacheJson intentionally untouched — see interface doc comment.
         }
     }

@@ -1,0 +1,351 @@
+{
+  "schema_version": 8,
+  "categories": [
+    {
+      "category": "weather",
+      "defaultProvider": "WeatherAPI",
+      "providers": [
+        {
+          "name": "WeatherAPI",
+          "endpoint": "https://api.weatherapi.com/v1/forecast.json",
+          "probe_url": "?q=London&days=1",
+          "auth": {
+            "style": "query",
+            "param": "key"
+          },
+          "method": "GET",
+          "requiresLocation": true,
+          "requiresApiKey": true,
+          "queryTemplate": "?key={apiKey}&q={lat},{lon}&days=2&lang={lang}",
+          "responseType": "json",
+          "fieldMappings": [
+            {
+              "title": {
+                "en": "Current Weather",
+                "ro": "Vremea acum",
+                "de": "Aktuelles Wetter"
+              },
+              "content": {
+                "en": "{condition.text}, {temp_c}C (feels like {feelslike_c}C). Humidity: {humidity}%. Wind: {wind_kph} km/h.",
+                "ro": "{condition.text}, {temp_c}°C (se simte ca {feelslike_c}°C). Umiditate: {humidity}%. Vânt: {wind_kph} km/h.",
+                "de": "{condition.text}, {temp_c}°C (gefühlt wie {feelslike_c}°C). Luftfeuchtigkeit: {humidity}%. Wind: {wind_kph} km/h."
+              },
+              "source": "current"
+            },
+            {
+              "title": {
+                "en": "Today Forecast",
+                "ro": "Prognoza azi",
+                "de": "Vorhersage heute"
+              },
+              "content": {
+                "en": "{condition.text}. Max: {maxtemp_c}C, Min: {mintemp_c}C. Rain chance: {daily_chance_of_rain}%.",
+                "ro": "{condition.text}. Max: {maxtemp_c}°C, Min: {mintemp_c}°C. Șanse de ploaie: {daily_chance_of_rain}%.",
+                "de": "{condition.text}. Max: {maxtemp_c}°C, Min: {mintemp_c}°C. Regenwahrscheinlichkeit: {daily_chance_of_rain}%."
+              },
+              "source": "forecast.forecastday[0].day"
+            },
+            {
+              "title": {
+                "en": "Tomorrow Forecast",
+                "ro": "Prognoza mâine",
+                "de": "Vorhersage morgen"
+              },
+              "content": {
+                "en": "{condition.text}. Max: {maxtemp_c}C, Min: {mintemp_c}C. Rain chance: {daily_chance_of_rain}%.",
+                "ro": "{condition.text}. Max: {maxtemp_c}°C, Min: {mintemp_c}°C. Șanse de ploaie: {daily_chance_of_rain}%.",
+                "de": "{condition.text}. Max: {maxtemp_c}°C, Min: {mintemp_c}°C. Regenwahrscheinlichkeit: {daily_chance_of_rain}%."
+              },
+              "source": "forecast.forecastday[1].day"
+            }
+          ]
+        },
+        {
+          "name": "Open-Meteo",
+          "endpoint": "https://api.open-meteo.com/v1/forecast",
+          "probe_url": "?latitude=0&longitude=0&current=temperature_2m",
+          "method": "GET",
+          "requiresLocation": true,
+          "queryTemplate": "?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,apparent_temperature&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto&forecast_days=2",
+          "responseType": "json",
+          "resultPath": "current",
+          "fieldMappings": [
+            {
+              "title": {
+                "en": "Current Weather",
+                "ro": "Vremea acum",
+                "de": "Aktuelles Wetter"
+              },
+              "content": {
+                "en": "Currently: {weather_code_text}, {temperature_2m}C (feels like {apparent_temperature}C). Humidity: {relative_humidity_2m}%. Wind: {wind_speed_10m} km/h.",
+                "ro": "Acum: {weather_code_text}, {temperature_2m}°C (se simte ca {apparent_temperature}°C). Umiditate: {relative_humidity_2m}%. Vânt: {wind_speed_10m} km/h.",
+                "de": "Aktuell: {weather_code_text}, {temperature_2m}°C (gefühlt wie {apparent_temperature}°C). Luftfeuchtigkeit: {relative_humidity_2m}%. Wind: {wind_speed_10m} km/h."
+              },
+              "source": "current"
+            },
+            {
+              "title": {
+                "en": "Today Forecast",
+                "ro": "Prognoza azi",
+                "de": "Vorhersage heute"
+              },
+              "content": {
+                "en": "Today: {weather_code_text}. High: {temperature_2m_max}C, Low: {temperature_2m_min}C. Rain chance: {precipitation_probability_max}%.",
+                "ro": "Astăzi: {weather_code_text}. Max: {temperature_2m_max}°C, Min: {temperature_2m_min}°C. Șanse de ploaie: {precipitation_probability_max}%.",
+                "de": "Heute: {weather_code_text}. Max: {temperature_2m_max}°C, Min: {temperature_2m_min}°C. Regenwahrscheinlichkeit: {precipitation_probability_max}%."
+              },
+              "source": "daily",
+              "index": 0
+            },
+            {
+              "title": {
+                "en": "Tomorrow Forecast",
+                "ro": "Prognoza mâine",
+                "de": "Vorhersage morgen"
+              },
+              "content": {
+                "en": "Tomorrow: {weather_code_text}. High: {temperature_2m_max}C, Low: {temperature_2m_min}C. Rain chance: {precipitation_probability_max}%.",
+                "ro": "Mâine: {weather_code_text}. Max: {temperature_2m_max}°C, Min: {temperature_2m_min}°C. Șanse de ploaie: {precipitation_probability_max}%.",
+                "de": "Morgen: {weather_code_text}. Max: {temperature_2m_max}°C, Min: {temperature_2m_min}°C. Regenwahrscheinlichkeit: {precipitation_probability_max}%."
+              },
+              "source": "daily",
+              "index": 1
+            }
+          ],
+          "valueTransforms": {
+            "weather_code": "weather_code_text"
+          },
+          "weatherCodeMap": {
+            "en": {
+              "0": "Clear sky", "1": "Partly cloudy", "2": "Partly cloudy", "3": "Partly cloudy",
+              "45": "Foggy", "48": "Foggy",
+              "51": "Drizzle", "53": "Drizzle", "55": "Drizzle",
+              "56": "Freezing drizzle", "57": "Freezing drizzle",
+              "61": "Rain", "63": "Rain", "65": "Rain",
+              "66": "Freezing rain", "67": "Freezing rain",
+              "71": "Snow", "73": "Snow", "75": "Snow", "77": "Snow grains",
+              "80": "Rain showers", "81": "Rain showers", "82": "Rain showers",
+              "85": "Snow showers", "86": "Snow showers",
+              "95": "Thunderstorm", "96": "Thunderstorm with hail", "99": "Thunderstorm with hail"
+            },
+            "ro": {
+              "0": "Cer senin", "1": "Parțial noros", "2": "Parțial noros", "3": "Parțial noros",
+              "45": "Ceață", "48": "Ceață",
+              "51": "Burniță", "53": "Burniță", "55": "Burniță",
+              "56": "Burniță cu gheață", "57": "Burniță cu gheață",
+              "61": "Ploaie", "63": "Ploaie", "65": "Ploaie",
+              "66": "Ploaie cu gheață", "67": "Ploaie cu gheață",
+              "71": "Zăpadă", "73": "Zăpadă", "75": "Zăpadă", "77": "Grăunți de zăpadă",
+              "80": "Averse de ploaie", "81": "Averse de ploaie", "82": "Averse de ploaie",
+              "85": "Averse de zăpadă", "86": "Averse de zăpadă",
+              "95": "Furtună", "96": "Furtună cu grindină", "99": "Furtună cu grindină"
+            },
+            "de": {
+              "0": "Klarer Himmel", "1": "Teilweise bewölkt", "2": "Teilweise bewölkt", "3": "Teilweise bewölkt",
+              "45": "Nebelig", "48": "Nebelig",
+              "51": "Nieselregen", "53": "Nieselregen", "55": "Nieselregen",
+              "56": "Gefrierender Nieselregen", "57": "Gefrierender Nieselregen",
+              "61": "Regen", "63": "Regen", "65": "Regen",
+              "66": "Gefrierender Regen", "67": "Gefrierender Regen",
+              "71": "Schnee", "73": "Schnee", "75": "Schnee", "77": "Schneegriesel",
+              "80": "Regenschauer", "81": "Regenschauer", "82": "Regenschauer",
+              "85": "Schneeschauer", "86": "Schneeschauer",
+              "95": "Gewitter", "96": "Gewitter mit Hagel", "99": "Gewitter mit Hagel"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "category": "general",
+      "defaultProvider": "DuckDuckGo",
+      "providers": [
+        {
+          "name": "DuckDuckGo",
+          "endpoint": "https://api.duckduckgo.com/",
+          "probe_url": "?q=test&format=json&no_html=1",
+          "method": "GET",
+          "requiresLocation": false,
+          "queryTemplate": "?q={query}&format=json&no_html=1&skip_disambig=1&kl={lang}",
+          "langFormat": "region-lang",
+          "responseType": "json",
+          "resultPath": "RelatedTopics",
+          "jsonFields": {
+            "title": "Text",
+            "content": "Text",
+            "url": "FirstURL"
+          },
+          "maxResults": 5,
+          "stripHtml": true
+        },
+        {
+          "name": "Wikipedia",
+          "endpoint": "https://{lang}.wikipedia.org/w/api.php",
+          "probe_url": "?action=query&meta=siteinfo&format=json",
+          "method": "GET",
+          "requiresLocation": false,
+          "userAgent": "VoxCommander/1.0 (Android; contact@voxcommander.app)",
+          "queryTemplate": "?action=query&list=search&srsearch={query}&srprop=snippet&srlimit=3&format=json",
+          "responseType": "json",
+          "resultPath": "query.search",
+          "jsonFields": {
+            "title": "title",
+            "content": "snippet",
+            "url": "pageid"
+          },
+          "urlTemplate": "https://{lang}.wikipedia.org/?curid={url}",
+          "stripHtml": true,
+          "followUpExtract": true,
+          "extractEndpoint": "https://{lang}.wikipedia.org/w/api.php?action=query&titles={title}&prop=extracts&exintro=true&explaintext=true&format=json",
+          "extractPath": "query.pages",
+          "extractField": "extract",
+          "extractMaxChars": 10000
+        },
+        {
+          "name": "OpenAI",
+          "endpoint": "https://api.openai.com/v1/chat/completions",
+          "probe_url": "/v1/models",
+          "auth": {
+            "style": "bearer"
+          },
+          "method": "POST",
+          "requiresLocation": false,
+          "requiresApiKey": true,
+          "shared_key_engine": "OPENAI",
+          "providerType": "openai_chat",
+          "promptTemplate": "Answer the following question concisely and conversationally, suitable for a voice assistant to read aloud. If asked about real-time information such as current weather, sports scores, or breaking news, say you don't have live data instead of guessing: {query}"
+        }
+      ]
+    },
+    {
+      "category": "news",
+      "defaultProvider": "Google News",
+      "providers": [
+        {
+          "name": "Google News",
+          "endpoint": "https://news.google.com/rss/search",
+          "probe_url": "?q=test&hl=en-US&gl=US&ceid=US:en",
+          "method": "GET",
+          "requiresLocation": false,
+          "queryTemplate": "?q={query}&hl=en-US&gl=US&ceid=US:en",
+          "responseType": "xml",
+          "resultPattern": "<item>.*?<title>(.*?)</title>.*?<link>(.*?)</link>.*?<description>(.*?)</description>",
+          "titleGroup": 1,
+          "urlGroup": 2,
+          "contentGroup": 3,
+          "maxResults": 5,
+          "stripHtml": true
+        },
+        {
+          "name": "GNews",
+          "endpoint": "https://gnews.io/api/v4/search",
+          "probe_url": "?q=test&lang=en&max=1",
+          "auth": {
+            "style": "query",
+            "param": "apikey"
+          },
+          "method": "GET",
+          "requiresLocation": false,
+          "requiresApiKey": true,
+          "queryTemplate": "?q={query}&lang=en&max=5&apikey={apiKey}",
+          "responseType": "json",
+          "resultPath": "articles",
+          "jsonFields": {
+            "title": "title",
+            "content": "description",
+            "url": "url"
+          },
+          "maxResults": 5,
+          "stripHtml": true
+        },
+        {
+          "name": "Currents API",
+          "endpoint": "https://api.currentsapi.services/v1/search",
+          "probe_url": "?keywords=test&language=en",
+          "auth": {
+            "style": "query",
+            "param": "apiKey"
+          },
+          "method": "GET",
+          "requiresLocation": false,
+          "requiresApiKey": true,
+          "queryTemplate": "?keywords={query}&language=en&apiKey={apiKey}",
+          "responseType": "json",
+          "resultPath": "news",
+          "jsonFields": {
+            "title": "title",
+            "content": "description",
+            "url": "url"
+          },
+          "maxResults": 5,
+          "stripHtml": true
+        },
+        {
+          "name": "NewsAPI",
+          "endpoint": "https://newsapi.org/v2/everything",
+          "probe_url": "?q=test&language=en&pageSize=1",
+          "auth": {
+            "style": "query",
+            "param": "apiKey"
+          },
+          "method": "GET",
+          "requiresLocation": false,
+          "requiresApiKey": true,
+          "queryTemplate": "?q={query}&language=en&pageSize=5&sortBy=publishedAt&apiKey={apiKey}",
+          "responseType": "json",
+          "resultPath": "articles",
+          "jsonFields": {
+            "title": "title",
+            "content": "description",
+            "url": "url"
+          },
+          "maxResults": 5,
+          "stripHtml": true
+        }
+      ]
+    },
+    {
+      "category": "knowledge",
+      "defaultProvider": "Wikipedia",
+      "providers": [
+        {
+          "name": "Wikipedia",
+          "endpoint": "https://{lang}.wikipedia.org/w/api.php",
+          "probe_url": "?action=query&meta=siteinfo&format=json",
+          "method": "GET",
+          "requiresLocation": false,
+          "userAgent": "VoxCommander/1.0 (Android; contact@voxcommander.app)",
+          "queryTemplate": "?action=query&list=search&srsearch={query}&srprop=snippet&srlimit=3&format=json",
+          "responseType": "json",
+          "resultPath": "query.search",
+          "jsonFields": {
+            "title": "title",
+            "content": "snippet",
+            "url": "pageid"
+          },
+          "urlTemplate": "https://{lang}.wikipedia.org/?curid={url}",
+          "stripHtml": true,
+          "followUpExtract": true,
+          "extractEndpoint": "https://{lang}.wikipedia.org/w/api.php?action=query&titles={title}&prop=extracts&exintro=true&explaintext=true&format=json",
+          "extractPath": "query.pages",
+          "extractField": "extract",
+          "extractMaxChars": 10000
+        },
+        {
+          "name": "OpenAI",
+          "endpoint": "https://api.openai.com/v1/chat/completions",
+          "probe_url": "/v1/models",
+          "auth": {
+            "style": "bearer"
+          },
+          "method": "POST",
+          "requiresLocation": false,
+          "requiresApiKey": true,
+          "shared_key_engine": "OPENAI",
+          "providerType": "openai_chat",
+          "promptTemplate": "Answer the following question concisely and conversationally, suitable for a voice assistant to read aloud. If asked about real-time information such as current weather, sports scores, or breaking news, say you don't have live data instead of guessing: {query}"
+        }
+      ]
+    }
+  ]
+}

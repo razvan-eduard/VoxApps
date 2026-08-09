@@ -11,12 +11,13 @@ android {
         applicationId = "com.voxapps.vision"
         minSdk = 29
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.11"
+        versionCode = 14
+        versionName = "0.14"
         // Without this, onnxruntime-android ships all 4 ABIs (~73MB combined) even though OpenCV/
         // PaddleOCR are only ever built for arm64-v8a — mirrors the same restriction Notes/Expenses/
         // Calendar already apply.
         ndk { abiFilters += "arm64-v8a" }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // CI-only release signing: RELEASE_KEYSTORE_PATH is only set in the release-*.yml workflows
@@ -92,6 +93,9 @@ android {
 
     buildFeatures {
         compose = true
+        // NativeLibManager builds its DLC download URL from BuildConfig.VERSION_NAME — a
+        // compile-time constant that can't disagree with the running build (see its doc comment).
+        buildConfig = true
     }
 }
 
@@ -99,7 +103,13 @@ dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
+    implementation(project(":core:preferences"))
     implementation(project(":vendor:ppocr-sdk"))
+    // ML-based document corner detector (see vendor/docquad-sdk/NOTICE) — brings in
+    // ai.onnxruntime.* transitively; libonnxruntime.so itself is already excluded from packaging
+    // above and loaded via NativeLibManager's DLC download instead, same as ppocr-sdk's own use of
+    // this artifact.
+    implementation(project(":vendor:docquad-sdk"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -120,4 +130,13 @@ dependencies {
 
     // DLC native library downloading
     implementation(libs.okhttp)
+
+    testImplementation(libs.junit)
+
+    // Instrumented tests — real on-device runs, needed for NativeLibManagerInstrumentedTest to
+    // catch native-linking regressions (UnsatisfiedLinkError etc.) that a JVM-only unit test or a
+    // plain compile can never observe (see docs/BUILD_TIME_DEPENDENCIES.md's onnxruntime-android
+    // section).
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.kotlinx.coroutines.android)
 }

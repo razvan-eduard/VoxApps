@@ -4,13 +4,19 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSource
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.expenses.data.NearDuplicateConfig
+import com.voxapps.expenses.data.PendingFieldSuggestion
+import com.voxapps.expenses.data.PendingLineItemsJson
+import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.toNearDuplicateConfig
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.domain.llm.CategoryMergeMappingParser
@@ -19,16 +25,18 @@ import com.voxapps.expenses.domain.llm.ExpenseDeduplicationRequestSender
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationResultParser
 import com.voxapps.expenses.domain.llm.ExpenseSummary
 import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
-import com.voxapps.expenses.domain.location.ExpensesLocationHelper
+import com.voxapps.expenses.domain.location.resolveCurrentCityName
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
+import com.voxapps.expenses.ui.widget.ExpensesWidget
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.logging.Logger
+import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -60,22 +68,29 @@ class LlmResultReceiver : BroadcastReceiver() {
         val (task, requestId) = VoxLlmRequestQueue.splitRequestId(result.task)
 
         // Recover task and optional physical asset name (format "TASK:IMAGE_NAME" or, for a stub
-        // retry, "TASK:IMAGE_NAME:RETRY_OF_EXPENSE_ID").
+        // retry, "TASK:IMAGE_NAME:RETRY_OF_EXPENSE_ID") — or, for a pending Scan capture (see
+        // ExpenseScanCleanupRequestSender.sendPendingCreate), "TASK:pending:GROUP_ID:FILE_NAMES",
+        // a distinct shape carrying no imageName/retryOfExpenseId at all since neither concept
+        // applies (there's no legacy receipt field to set, and nothing to retry yet).
         val taskParts = task.split(":")
         val baseTask = taskParts[0]
-        val storedImageName = taskParts.getOrNull(1)
-        val retryOfExpenseId = taskParts.getOrNull(2)?.toLongOrNull()
+        val isPendingScanCreate = baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && taskParts.getOrNull(1) == "pending"
+        val storedImageName = if (isPendingScanCreate) null else taskParts.getOrNull(1)
+        val retryOfExpenseId = if (isPendingScanCreate) null else taskParts.getOrNull(2)?.toLongOrNull()
+        val pendingGroupId = if (isPendingScanCreate) taskParts.getOrNull(2)?.takeIf { it.isNotEmpty() } else null
+        val pendingFileNames = if (isPendingScanCreate) taskParts.getOrNull(3)?.split(",")?.filter { it.isNotBlank() } ?: emptyList() else emptyList()
 
-        android.util.Log.println(android.util.Log.ASSERT, TAG, "LLM result: status=${result.status} task=${result.task} baseTask=$baseTask imageName=$storedImageName")
-        if (result.rawJson != null) {
-            android.util.Log.println(android.util.Log.ASSERT, TAG, "LLM rawJson length: ${result.rawJson!!.length}")
+        Logger.d(TAG, "LLM result: status=${result.status} task=${result.task} baseTask=$baseTask imageName=$storedImageName")
+        val rawJson = result.rawJson
+        if (rawJson != null) {
+            Logger.d(TAG, "LLM rawJson length: ${rawJson.length}")
         }
 
         when (baseTask) {
             LlmTasks.EXPENSE_PARSE, LlmTasks.EXPENSE_SCAN_CLEANUP -> {
                 val rawJson = result.rawJson
                 val isSuccess = result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null
-                val parsed = if (isSuccess) ExpenseParseResultParser.parse(rawJson!!) else null
+                val parsed = if (isSuccess) ExpenseParseResultParser.parse(rawJson) else null
                 
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
@@ -88,6 +103,9 @@ class LlmResultReceiver : BroadcastReceiver() {
                             updateExpenseFromRetry(context.applicationContext, container, parsed, retryOfExpenseId)
                         } else if (parsed != null) {
                             val newId = createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName)
+                            if (isPendingScanCreate && newId > 0) {
+                                linkPendingScanAttachments(container, newId, pendingFileNames, pendingGroupId)
+                            }
                             // Scan-specific — a voice-created expense keeps today's behavior (an
                             // optional save toast, no forced navigation). Commander's cleanup is
                             // async, so this is the earliest point Expenses can actually know the
@@ -115,6 +133,20 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 Toast.makeText(context, "${container.languageManager.getString("manual_review_required")} ($errorMsg)", Toast.LENGTH_LONG).show()
                             }
                             launchExpensesForEdit(context.applicationContext, id)
+                        } else if (isPendingScanCreate && pendingFileNames.isNotEmpty()) {
+                            // Same recovery flow as the legacy imageName case above, generalized to
+                            // N pages: LLM failed but every page is already staged as a plain
+                            // attachment — create a stub so the user doesn't lose them, and link them
+                            // once the id is known (mirrors the success path's linking, just off the
+                            // failure branch instead).
+                            Logger.w(TAG, "LLM failed for pending scan, entering recovery mode for ${pendingFileNames.size} page(s). Error: ${result.error}")
+                            val id = createStubExpense(container, imageName = null)
+                            linkPendingScanAttachments(container, id, pendingFileNames, pendingGroupId)
+                            withContext(Dispatchers.Main) {
+                                val errorMsg = result.error ?: "Unknown parsing error"
+                                Toast.makeText(context, "${container.languageManager.getString("manual_review_required")} ($errorMsg)", Toast.LENGTH_LONG).show()
+                            }
+                            launchExpensesForEdit(context.applicationContext, id)
                         } else {
                             Logger.w(TAG, "${result.task} failed and no recovery possible. Error: ${result.error}")
                             withContext(Dispatchers.Main) {
@@ -122,6 +154,13 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                             }
                         }
+                        // Without this, the home-screen widget's refresh depends entirely on
+                        // ExpensesContainer's independent reactive collector noticing the DB write
+                        // and finishing its own async updateAll() — which isn't tied to this
+                        // receiver's goAsync() window at all, so the process is free to be reclaimed
+                        // the instant pending.finish() returns, racing ahead of that redraw. Awaiting
+                        // it here, inside the same wake window that made the write, closes that race.
+                        ExpensesWidget().updateAll(context.applicationContext)
                     } finally {
                         pending.finish()
                     }
@@ -161,10 +200,16 @@ class LlmResultReceiver : BroadcastReceiver() {
                             val expenses = container.expensesRepository.expenses.first()
                             val validated = validateDuplicateGroups(groups, expenses)
                             if (validated.isNotEmpty()) {
-                                val isInsertScoped = taskParts.getOrNull(1) == "INSERT_SCOPED"
+                                val taskSegments = task.split(":")
+                                val isInsertScoped = taskSegments.contains("INSERT_SCOPED")
+                                val isBatchAutoApply = taskSegments.contains("BATCH_AUTO_APPLY")
                                 val settings = container.settingsRepository.getSnapshot()
-                                if (isInsertScoped && settings.autoAcceptDuplicateMerges) {
+
+                                if ((isInsertScoped && settings.autoAcceptDuplicateMerges) || isBatchAutoApply) {
                                     container.expensesRepository.applyExpenseDeduplication(validated)
+                                    // See the EXPENSE_PARSE branch's comment above — same
+                                    // goAsync()/process-death race for the widget refresh.
+                                    ExpensesWidget().updateAll(context.applicationContext)
                                 } else {
                                     container.expenseDeduplicationRepository.mergePendingGroups(validated)
                                 }
@@ -261,6 +306,13 @@ class LlmResultReceiver : BroadcastReceiver() {
                             )
                             stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
                             maybeRequestScopedDuplicateCheck(context, container, settings.duplicateCheckModeAutomatic, newExpenseId, settings.toNearDuplicateConfig())
+                            // See the EXPENSE_PARSE branch's comment above — same
+                            // goAsync()/process-death race for the widget refresh. This is the path
+                            // a bank/card notification (e.g. Pluxee, a bank app) actually takes when
+                            // autoAcceptNotificationExpenses is on, so it's the one most exposed to
+                            // the race: nothing keeps this process (woken only for the broadcast, no
+                            // foreground UI) alive past pending.finish() otherwise.
+                            ExpensesWidget().updateAll(context.applicationContext)
                         } else {
                             container.pendingNotificationExpenseRepository.addPending(
                                 PendingNotificationExpense(
@@ -281,6 +333,67 @@ class LlmResultReceiver : BroadcastReceiver() {
                     }
                 }
             }
+
+            LlmTasks.EXPENSE_LINEITEMS_RESCAN -> {
+                // A photo attached to an already-saved expense after the fact — see
+                // ExpenseScanCleanupRequestSender.sendLineItemsRescan's doc comment. Nothing here is
+                // applied directly to the Expense/line-item tables — everything (including items) is
+                // staged as a PendingFieldSuggestion for ExpenseEditScreen to show as a tappable
+                // chip/banner. An earlier version wrote items straight to the DB; that made an
+                // already-open edit screen look like nothing happened, since its line-items list is a
+                // local snapshot that never observes the database (see PendingFieldSuggestion's doc
+                // comment) — routing through the same live-observed suggestion row every other field
+                // already uses fixes that, and also means items are reviewable like everything else.
+                val expenseId = taskParts.getOrNull(1)?.toLongOrNull()
+                val sourceGroupId = taskParts.getOrNull(2)?.takeIf { it.isNotEmpty() }
+                val rawJson = result.rawJson
+                // requireTotalAmount=false: a photo with no clearly printed total shouldn't discard
+                // genuinely-found line items (or other fields) along with it.
+                val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
+                    ExpenseParseResultParser.parse(rawJson, requireTotalAmount = false)
+                } else {
+                    Logger.w(TAG, "Line-items rescan failed: ${result.error}")
+                    null
+                }
+                if (parsed == null && rawJson != null) {
+                    Logger.w(TAG, "Line-items rescan: reply didn't parse as valid JSON: $rawJson")
+                } else if (rawJson != null) {
+                    // Full reply, not just the parsed item count — lets a mismatch between what the
+                    // model returned and what ended up in `parsed.items` be told apart from the model
+                    // itself only finding some of the receipt's items in the first place.
+                    Logger.d(TAG, "Line-items rescan raw reply: $rawJson")
+                }
+
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        val existing = expenseId?.let { container.expensesRepository.getExpenseById(it) }
+                        if (existing == null) {
+                            Logger.w(TAG, "Line-items rescan target expense $expenseId no longer exists")
+                        } else if (parsed != null) {
+                            Logger.d(TAG, "Line-items rescan for expense $expenseId: parsed ${parsed.items.size} item(s)")
+                            parsed.items.forEach {
+                                Logger.d(TAG, "  item: name=\"${it.name}\" qty=${it.quantity} unitPrice=${it.unitPrice} net=${it.netAmount} vat=${it.vatAmount} gross=${it.grossAmount}")
+                            }
+                        }
+                        var didSomething = false
+                        if (parsed != null && existing != null) {
+                            buildFieldSuggestion(parsed, existing)?.let {
+                                container.expensesRepository.setPendingFieldSuggestion(it.copy(sourceGroupId = sourceGroupId))
+                                didSomething = true
+                            }
+                        }
+                        val toastKey = if (didSomething) "toast_lineitems_rescanned" else "toast_lineitems_rescan_empty"
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, container.languageManager.getString(toastKey), Toast.LENGTH_SHORT).show()
+                        }
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
             else -> {
                 Logger.d(TAG, "Ignoring unknown LLM task: ${result.task}")
                 // Still a definitive reply even though this task type isn't recognized — clear its
@@ -333,7 +446,7 @@ class LlmResultReceiver : BroadcastReceiver() {
             null
         } else {
             parsed.location?.let { FieldCleaner.clean(it, "location", "Expense") }
-                ?: ExpensesLocationHelper.resolveCurrentCity(appContext)
+                ?: resolveCurrentCityName(appContext, container.settingsRepository)
         }
         // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard — this is the
         // only guard for fields not sourced from raw JSON.
@@ -435,7 +548,7 @@ class LlmResultReceiver : BroadcastReceiver() {
             location = if (!settings.locationPrefillEnabled) {
                 existing.expense.location
             } else {
-                parsed.location ?: ExpensesLocationHelper.resolveCurrentCity(appContext)
+                parsed.location ?: resolveCurrentCityName(appContext, container.settingsRepository)
             },
             dateTime = mergeDateTime(parsed.date, parsed.time),
             comments = null,
@@ -458,7 +571,7 @@ class LlmResultReceiver : BroadcastReceiver() {
 
     private suspend fun createStubExpense(
         container: ExpensesContainer,
-        imageName: String
+        imageName: String?
     ): Long {
         val settings = container.settingsRepository.getSnapshot()
         // Stub: 0.0 amount is valid but needs manual entry.
@@ -475,6 +588,79 @@ class LlmResultReceiver : BroadcastReceiver() {
             imageName = imageName,
             isStub = true,
             source = ExpenseSource.SCAN
+        )
+    }
+
+    /** Links a pending Scan capture's already-staged pages (see [com.voxapps.expenses.receiver.OcrResultReceiver]'s
+     *  pending-scan branches) as ordinary AttachmentEntity rows against [expenseId] now that its id is
+     *  known — win or lose (see both call sites above): a failed parse still gets its photo(s) linked
+     *  to the resulting stub, matching the legacy imageName-based recovery flow's own "never lose the
+     *  photo" behavior, just generalized from one field to N ordinary attachments. */
+    private suspend fun linkPendingScanAttachments(
+        container: ExpensesContainer,
+        expenseId: Long,
+        fileNames: List<String>,
+        groupId: String?
+    ) {
+        fileNames.forEachIndexed { index, fileName ->
+            container.attachmentDao.insert(
+                AttachmentEntity(
+                    recordType = ExpensesAttachments.RECORD_TYPE,
+                    recordId = expenseId,
+                    fileName = fileName,
+                    source = AttachmentSource.MANUAL,
+                    createdAt = System.currentTimeMillis(),
+                    groupId = groupId,
+                    groupOrder = index
+                )
+            )
+        }
+    }
+
+    /** Diffs [parsed] against [existing]'s current field values, returning a [PendingFieldSuggestion]
+     *  with only the fields that genuinely differ (or fill a current blank) set — never null,
+     *  never-blank, never-unchanged fields stay null so ExpenseEditScreen only renders a chip where
+     *  there's an actual difference to offer. Returns null (nothing to persist) if every field
+     *  already matches. Category is compared by name (the record's current category, if any) since
+     *  [ExpenseParseResultParser.Parsed.category] is a raw name, not an id. */
+    private fun buildFieldSuggestion(parsed: ExpenseParseResultParser.Parsed, existing: ExpenseWithDetails): PendingFieldSuggestion? {
+        val expense = existing.expense
+        fun String?.diffOrNull(current: String?): String? {
+            val clean = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            return clean.takeIf { !it.equals(current?.trim(), ignoreCase = false) }
+        }
+        val title = parsed.title.diffOrNull(expense.title)
+        val vendor = parsed.vendor.diffOrNull(expense.vendor)
+        val bank = parsed.bank.diffOrNull(expense.bank)
+        val location = parsed.location.diffOrNull(expense.location)
+        val currencyCode = parsed.currency?.uppercase()?.diffOrNull(expense.currencyCode)
+        val category = parsed.category.diffOrNull(existing.category?.name)
+        val totalAmount = if (!parsed.totalAmount.isNaN() && parsed.totalAmount != expense.totalAmount) {
+            parsed.totalAmount
+        } else null
+        val dateTime = if (parsed.date != null || parsed.time != null) {
+            mergeDateTime(parsed.date, parsed.time).takeIf { it != expense.dateTime }
+        } else null
+        // No meaningful per-item diff against whatever's currently in the draft (unlike the scalar
+        // fields above) — the full parsed list, offered as one apply-all-or-nothing suggestion.
+        val itemsJson = PendingLineItemsJson.encode(parsed.items)
+
+        if (title == null && vendor == null && bank == null && location == null && currencyCode == null &&
+            category == null && totalAmount == null && dateTime == null && itemsJson == null
+        ) {
+            return null
+        }
+        return PendingFieldSuggestion(
+            expenseId = expense.id,
+            title = title,
+            vendor = vendor,
+            bank = bank,
+            totalAmount = totalAmount,
+            currencyCode = currencyCode,
+            category = category,
+            location = location,
+            dateTime = dateTime,
+            itemsJson = itemsJson
         )
     }
 

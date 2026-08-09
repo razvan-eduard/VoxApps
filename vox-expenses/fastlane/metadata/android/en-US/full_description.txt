@@ -2,10 +2,14 @@ VoxExpenses is a standalone, encrypted on-device financial tracker that puts you
 
 Key Features:
 - Triple Capture Path: Log expenses via natural language voice commands (VoxCommander), high-precision receipt scanning (VoxVision), or automatic capture from bank notifications.
+- Field-by-Field Rescan: Rescanning a receipt shows each corrected field as its own suggestion to accept or skip, instead of silently overwriting what you already entered. Can also auto-rescan the moment the first receipt photo is attached.
 - Durable Notification Queue: An opt-in listener service that inspects payment notifications. Requests are durably queued and retried to ensure no transaction is missed, even if the app is stopped.
 - Rule-Based Duplicate Engine: A powerful, user-configurable engine modeled on email filters. Detect and merge duplicates based on amount, vendor, bank, or time windows with fuzzy matching support.
 - Data-Quality Scoring: Intelligent merge logic that prioritizes the most trustworthy source (Manual > Scan > Notification > Voice) when combining records.
 - Merchant Category Memory: Learns from your manual corrections to auto-apply categories to future transactions from the same vendor.
+- Smarter Location: A shared location system with a configurable last-known-location cache, a Home Town fallback, and an "always use this location" toggle for skipping GPS entirely.
 - Multi-Currency Reports: Visual breakdowns and spending alerts with support for home-currency conversion and custom decimal separators.
+- Attachments: Attach receipt photos via camera or gallery, with a paperclip indicator on any expense that has one and a confirmation prompt before deleting one.
 - P2P Sync: Secure, cloud-free bidirectional sync between two devices using NFC pairing and Bluetooth transfer.
+- Backup & Restore: Save and restore your expenses, rules, and settings to a file you choose, with Full override, Merge, or Additive restore modes.
 - SQLCipher Security: Your entire financial history is encrypted at rest.

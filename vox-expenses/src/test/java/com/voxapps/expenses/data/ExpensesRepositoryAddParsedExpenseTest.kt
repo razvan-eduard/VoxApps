@@ -31,7 +31,8 @@ class ExpensesRepositoryAddParsedExpenseTest {
         spendingLimitDao = mockk(relaxed = true)
         merchantCategoryMemoryDao = mockk(relaxed = true)
         repository = ExpensesRepository(
-            expenseDao, categoryDao, lineItemDao, spendingLimitDao, merchantCategoryMemoryDao, mockk<Context>(), mockk(relaxed = true), mockk(relaxed = true)
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, merchantCategoryMemoryDao, mockk<Context>(), mockk(relaxed = true), mockk(relaxed = true),
+            mockk(relaxed = true)
         )
         coEvery { expenseDao.getForDateRange(any(), any()) } returns emptyList()
         coEvery { expenseDao.insert(any()) } returns 99L
@@ -40,6 +41,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
     @Test
     fun `a learned mapping at threshold overrides the spoken category entirely`() = runTest {
         every { categoryDao.observeAll() } returns flowOf(listOf(shopping, groceries))
+        coEvery { categoryDao.getAll() } returns listOf(shopping, groceries)
         coEvery { merchantCategoryMemoryDao.getLearnedCategoryId("lidl", 1) } returns groceries.id
 
         repository.addParsedExpense(
@@ -55,6 +57,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
     @Test
     fun `merchant memory disabled never queries the learned mapping and resolves normally`() = runTest {
         every { categoryDao.observeAll() } returns flowOf(listOf(shopping, groceries))
+        coEvery { categoryDao.getAll() } returns listOf(shopping, groceries)
 
         repository.addParsedExpense(
             title = null, totalAmount = 10.0, currencyCode = "RON", vendor = "Lidl", bank = null,
@@ -70,6 +73,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
     @Test
     fun `a learned mapping pointing at a since-deleted category falls through to normal resolution`() = runTest {
         every { categoryDao.observeAll() } returns flowOf(listOf(shopping))
+        coEvery { categoryDao.getAll() } returns listOf(shopping)
         coEvery { merchantCategoryMemoryDao.getLearnedCategoryId("lidl", 1) } returns groceries.id // no longer exists
 
         repository.addParsedExpense(
@@ -85,6 +89,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
     @Test
     fun `auto-creating a category fetches the most recent category color for adjacency`() = runTest {
         every { categoryDao.observeAll() } returns flowOf(listOf(shopping))
+        coEvery { categoryDao.getAll() } returns listOf(shopping)
         coEvery { expenseDao.getMostRecentCategoryColor() } returns shopping.colorArgb
         coEvery { categoryDao.insert(any()) } returns 42L
 

@@ -3,9 +3,12 @@ package com.voxapps.commander
 import android.app.Application
 import com.voxapps.commander.data.remote.NativeLibManager
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.model.ImportedModelId
+import com.voxapps.commander.domain.engine.SttEngines
 import com.voxapps.commander.di.AppContainer
 import com.voxapps.commander.service.OAuth2Manager
 import com.voxapps.logging.Logger
+import com.voxapps.services.SchemaCatalog
 import com.voxapps.commander.utils.NetworkMonitor
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +51,10 @@ class VoxApplication : Application() {
             kotlinx.coroutines.runBlocking { container.settingsRepository.setModelFilterLang(Strings.Preferences.DEFAULT_LANGUAGE) }
         }
         
+        // Which folder in the schema repository is ours. Set before any registry loads, since a
+        // schema resolves its URL against it.
+        com.voxapps.services.SchemaRepo.appFolder = "commander"
+
         // Initialize RemoteModelRegistry with app context (for assets/filesDir access)
         RemoteModelRegistry.init(this)
 
@@ -55,13 +62,10 @@ class VoxApplication : Application() {
         NativeLibManager.loadAll(this)
 
         // Initialize SearchProviderRegistry with app context
-        com.voxapps.commander.domain.search.SearchProviderRegistry.init(this)
-        com.voxapps.commander.domain.search.SearchProviderRegistry.applyApiKeys(
-            container.settingsRepository.getAllSearchProviderApiKeys()
-        )
-        com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
-            container.settingsRepository.getApiKeySync()
-        )
+        com.voxapps.commander.domain.search.SearchProviderRegistry.init(this, container.settingsRepository)
+
+        // Initialize MediaServiceRegistry (declared video backends and their instances).
+        com.voxapps.commander.domain.media.MediaServiceRegistry.init(this)
 
         // Initialize IntentCatalog (data-driven intent probe catalog) — must be ready
         // before the app scan in SplashLoadingScreen (AppRegistry.init probes against it).
@@ -106,24 +110,96 @@ class VoxApplication : Application() {
             reconcileDownloadedModels()
         }
 
-        // Initial fetch of the remote model registry - Force update on start to bypass CDN caching
+        // Warm the local on-device LLM in the background (model load + XNNPACK weight-cache
+        // compile), so the first spoken/typed command doesn't pay a 15-25s cold-start cost. Never
+        // triggers a download — only fires if a local LLM engine is selected AND its model file
+        // is already on disk; otherwise setupLlm() would just no-op anyway on first real use.
+        // Fire-and-forget like every other startup task here: the splash screen isn't gated on
+        // anything in this file (no setKeepOnScreenCondition), so this never delays first paint.
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
-            val success = RemoteModelRegistry.fetchJson(container.settingsRepository, force = true)
-            if (success) {
-                // Force AppStateManager to rebuild its UI state with the fresh models
+            // The registry is already populated: init() above loads the copies in force, with no
+            // network and nothing async, so the capability checks below cannot race an empty one.
+            val s = container.settingsRepository.getSettingsSnapshot()
+            val modelId = s.activeIntentModelId
+            if (modelId != null && RemoteModelRegistry.isLlmEngine(s.aiProcessor) &&
+                container.modelDownloader.resolveLocalFile(modelId, s.aiProcessor)?.exists() == true
+            ) {
+                Logger.log("Preloading local LLM engine ($modelId / ${s.aiProcessor})", "VoxApplication")
+                container.localLlmInterpreter.preload(s.modelFilterLang.ifEmpty { null })
+            }
+        }
+
+        /*
+         * An import used to load because it existed; it now loads because it is selected.
+         *
+         * Anyone who imported a model before that change has a stored path and a selection naming
+         * some registry model — which was decorative then and would start loading now, quietly
+         * replacing the model they chose. Their import selects itself once, the same thing an
+         * import does for itself from here on. A value, not a key: nothing is renamed.
+         */
+        if (!snapshot.importSelectionMigrated) {
+            CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                val repo = container.settingsRepository
+                val settings = repo.getSettingsSnapshot()
+
+                suspend fun adopt(engineKey: String, langCode: String?, isWakeWord: Boolean) {
+                    if (engineKey.isBlank()) return
+                    val path = settings.getCustomModelPath(engineKey, langCode)
+                    if (path.isNullOrBlank()) return
+                    val importedId = ImportedModelId.of(engineKey, langCode)
+                    val current = if (isWakeWord) settings.activeWakeModelId else settings.activeVoiceModelId
+                    if (current == importedId) return
+                    Logger.log("Adopting the imported model for $engineKey as its selection", "VoxApplication")
+                    repo.setEngineModelSelection(engineKey, importedId)
+                    if (isWakeWord) repo.setActiveWakeModelId(importedId)
+                    else repo.setActiveVoiceModelId(importedId)
+                }
+
+                val voiceEngine = SttEngines.backingEngineKey(settings.voiceProcessor)
+                adopt(
+                    voiceEngine,
+                    settings.modelFilterLang.takeIf { RemoteModelRegistry.isPerLanguage(voiceEngine) },
+                    isWakeWord = false
+                )
+
+                val wakeEngine = settings.wakeWordEngineType
+                adopt(
+                    wakeEngine,
+                    settings.modelFilterLang.takeIf { RemoteModelRegistry.isPerLanguage(wakeEngine) },
+                    isWakeWord = true
+                )
+
+                repo.setImportSelectionMigrated(true)
+            }
+        }
+
+        // Copies written by the previous loader cannot say whether they came from the repository or
+        // from assets, so they are discarded once and the app starts from what it shipped with.
+        SchemaCatalog.discardCopiesFromOlderScheme(
+            alreadyDone = snapshot.schemaStoreMigrated,
+            markDone = {
+                CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                    container.settingsRepository.setSchemaStoreMigrated(true)
+                }
+            }
+        )
+
+        // The repository is the source of truth unless the user said otherwise, so every launch
+        // asks it. Every schema the app loaded takes part — the catalog is the list, so a new one is
+        // covered by existing.
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            if (!container.settingsRepository.getSettingsSnapshot().useRemoteSchemas) {
+                Logger.log("Running the schemas this build shipped with, by choice", "VoxApplication")
+                return@launch
+            }
+            val results = SchemaCatalog.refreshAll(
+                container.settingsRepository.getSettingsSnapshot().modelRepoBaseUrl
+            )
+            val updated = results.filterValues { it is com.voxapps.services.RemoteSchema.Refreshed.Updated }
+            if (updated.isNotEmpty()) {
+                Logger.log("Updated schemas: ${updated.keys}", "VoxApplication")
                 container.appStateManager.refreshAll()
             }
-
-            // Also fetch search definitions from remote repo
-            com.voxapps.commander.domain.search.SearchProviderRegistry.fetchRemote(container.settingsRepository, force = true)
-            com.voxapps.commander.domain.search.SearchProviderRegistry.applyApiKeys(
-                container.settingsRepository.getAllSearchProviderApiKeys()
-            )
-            com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
-                container.settingsRepository.getApiKeySync()
-            )
-            // Also fetch the intent catalog from the remote repo (hot-reload)
-            com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(container.settingsRepository, force = true)
         }
     }
 
@@ -136,30 +212,16 @@ class VoxApplication : Application() {
      */
     private suspend fun reconcileDownloadedModels() {
         try {
-            // RemoteModelRegistry.init() only stores the context — the schema is loaded lazily by
-            // fetchJson(). force=false loads from filesDir/assets and returns WITHOUT any network
-            // call, so this guarantees the registry is populated before we iterate it.
-            RemoteModelRegistry.fetchJson(container.settingsRepository, force = false)
-
+            // init() has already loaded the copies in force, so the registry is populated here.
             val downloader = com.voxapps.commander.data.remote.ModelDownloader(this)
             val downloaded = container.settingsRepository.getSettingsSnapshot().downloadedModelIds
             if (downloaded.isEmpty()) return
 
             var changed = false
             for (engineKey in RemoteModelRegistry.getEngineTypes()) {
-                val isArchive = RemoteModelRegistry.isZipEngine(engineKey) ||
-                    RemoteModelRegistry.getExtension(engineKey).equals(".tar.bz2", ignoreCase = true)
                 for (model in RemoteModelRegistry.getModels(engineKey)) {
                     if (model.id !in downloaded) continue
-                    // Archive (dir-based) models use the per-engine validator (which also purges a
-                    // corrupt dir); file-based models (Whisper/NLU) just need the file to exist —
-                    // validateModel requires a directory and would wrongly reject them.
-                    val ok = if (isArchive) {
-                        downloader.validateModel(model.id, engineKey)
-                    } else {
-                        downloader.resolveLocalFile(model.id, engineKey)?.exists() == true
-                    }
-                    if (!ok) {
+                    if (!downloader.isModelUsable(model.id, engineKey)) {
                         Logger.log("Reconcile: ${model.id} ($engineKey) not valid on disk — clearing downloaded flag", "VoxApplication")
                         container.settingsRepository.setModelDownloaded(model.id, false)
                         changed = true

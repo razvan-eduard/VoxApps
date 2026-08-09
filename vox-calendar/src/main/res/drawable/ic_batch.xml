@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple "several independent photos" glyph for the widget's batch capture action (see
+     VoxOcrRequest.CAPTURE_MODE_BATCH) — three separated (non-touching) squares, deliberately
+     distinct from ic_stitch.xml's overlapping cascade, since batch photos never combine with each
+     other. Same flat-mask/ColorFilter.tint convention as ic_scan.xml. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M2,9 H9 V16 H2 Z M9.5,9 H16.5 V16 H9.5 Z M17,9 H24 V16 H17 Z" />
+</vector>

@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -28,18 +31,24 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -66,11 +75,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -81,14 +92,24 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.ui.AttachmentUiItem
 import com.voxapps.attachments.ui.AttachmentsSection
+import com.voxapps.attachments.ui.GroupDeleteConfig
 import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
+import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
+import com.voxapps.design.PaperTapField
+import com.voxapps.design.SpeedDialAction
+import com.voxapps.ipc.VoxOcrRequest
+import com.voxapps.design.picklist.Picklist
+import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.calendarapp.domain.llm.LlmTasks
 import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntrySanitizer
 import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
+import com.voxapps.calendarapp.data.CalendarLayerKind
 import com.voxapps.calendarapp.data.RecurrenceFrequency
+import com.voxapps.calendarapp.data.ReminderOffsetsCodec
 import com.voxapps.calendarapp.domain.localization.LanguageManager
 import com.voxapps.calendarapp.domain.reminders.ReminderScheduler
 import com.voxapps.calendarapp.state.CalendarStateManager
@@ -103,18 +124,22 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Date
+import java.util.UUID
+import com.voxapps.design.VoxSemanticColors
 
 private val OffenseRed = Color(0xFFD32F2F)
 
-/** offsetMinutesBefore -> translation key. v1 preset set only (see plan) — no custom-minutes input. */
-private val REMINDER_PRESETS = listOf(
-    0 to "reminder_at_start",
-    5 to "reminder_5min",
-    15 to "reminder_15min",
-    30 to "reminder_30min",
-    60 to "reminder_1hour",
-    1440 to "reminder_1day"
-)
+/** Colors for the tappable "important" toggle star — same bright-red-on/darker-red-off convention as
+ *  the to-do item's own toggle in `ToDoListCard.kt`'s `TaskEditDialog`, since [CalendarEntry
+ *  .isImportant] is now a general field, not to-do-exclusive. */
+private val IMPORTANT_TOGGLE_ON_COLOR = VoxSemanticColors.importantToggleOn
+private val IMPORTANT_TOGGLE_OFF_COLOR = VoxSemanticColors.importantToggleOff
+
+/** Same fixed green as `ToDoNodeTimeline`'s/`ToDoListCard`'s `DONE_CHECK_COLOR` — [completed] is the
+ *  exact same underlying field as a to-do item's `done` now (unification — see [CalendarEntry]'s doc
+ *  comment), so its toggle here matches that one's icon/color/row style exactly instead of the old
+ *  plain Material Checkbox. */
+private val DONE_CHECK_COLOR = VoxSemanticColors.done
 
 private data class PendingCleanup(val entry: CalendarEntry, val tags: List<String>, val dirtyFields: List<DirtyField>)
 
@@ -145,34 +170,72 @@ private fun entryFieldLabel(languageManager: LanguageManager, fieldKey: String):
 fun EntryEditScreen(
     existing: CalendarEntryWithTags?,
     defaultLayer: CalendarLayer,
+    layers: List<CalendarLayer>,
     stateManager: CalendarStateManager,
+    availableTags: List<String>,
     onDone: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
     val zoneId = ZoneId.systemDefault()
     val context = LocalContext.current
 
+    // The entry's own calendar — starts out matching the existing entry (or defaultLayer for a
+    // brand-new one), but tracks selectedLayerId live so switching the picker below immediately
+    // reflects any calendar-level reminder override for the newly-chosen calendar too.
+    var selectedLayerId by remember { mutableStateOf(existing?.entry?.layerId ?: defaultLayer.id) }
+    val currentLayer = remember(selectedLayerId, layers) {
+        layers.firstOrNull { it.id == selectedLayerId } ?: defaultLayer
+    }
+    val calendarReminderOffsets = remember(currentLayer) {
+        ReminderOffsetsCodec.decode(currentLayer.reminderOffsetsMinutes)
+    }
+    val remindersOverriddenByCalendar = calendarReminderOffsets.isNotEmpty()
+    // A subscribed calendar's entries are view-only end-to-end (see the plan's confirmed decision) —
+    // your own edits would just be overwritten by the next sync anyway. Reminders are the one
+    // exception (gated separately above), since a reminder is device-local, not calendar content.
+    val isReadOnly = existing != null && currentLayer.kind == CalendarLayerKind.SUBSCRIBED
+    val selectableLayers = remember(layers) { layers.filter { it.kind == CalendarLayerKind.LOCAL } }
+
     var type by remember { mutableStateOf(existing?.entry?.type ?: CalendarEntryType.EVENT) }
     var title by remember { mutableStateOf(existing?.entry?.title ?: "") }
     var description by remember { mutableStateOf(existing?.entry?.description ?: "") }
     var location by remember { mutableStateOf(existing?.entry?.location ?: "") }
-    var startMillis by remember { mutableStateOf(existing?.entry?.startMillis ?: System.currentTimeMillis()) }
+    
+    // Non-nullable in this screen's own local state: CalendarEntry.startMillis is nullable only to
+    // represent a dateless to-do checklist item, and this screen is never reached for those (see
+    // CalendarRoot's EditTarget.ExistingTodo routing) — an existing plain Event/Task always has one,
+    // so the fallback below is purely defensive, never expected to actually trigger.
+    val initialStartMillis = remember {
+        val now = java.time.ZonedDateTime.now(zoneId)
+        val nextHour = now.truncatedTo(java.time.temporal.ChronoUnit.HOURS).plusHours(1).toInstant().toEpochMilli()
+        existing?.entry?.startMillis ?: nextHour
+    }
+    var startMillis by remember { mutableStateOf(initialStartMillis) }
     var endMillis by remember { mutableStateOf(existing?.entry?.endMillis) }
     var allDay by remember { mutableStateOf(existing?.entry?.allDay ?: false) }
     var completed by remember { mutableStateOf(existing?.entry?.completed ?: false) }
+    var important by remember { mutableStateOf(existing?.entry?.isImportant ?: false) }
     var recurrence by remember { mutableStateOf(existing?.entry?.recurrenceFrequency ?: RecurrenceFrequency.NONE) }
+    var recurrenceInterval by remember { mutableStateOf(existing?.entry?.recurrenceInterval ?: 1) }
     var recurrenceUntilMillis by remember { mutableStateOf(existing?.entry?.recurrenceUntilMillis) }
     val tags = remember { mutableStateListOf<String>().apply { addAll(existing?.tagNames ?: emptyList()) } }
     var tagInput by remember { mutableStateOf("") }
+    var tagMenuExpanded by remember { mutableStateOf(false) }
     val reminderOffsets = remember { mutableStateListOf<Int>() }
     var canScheduleExactAlarms by remember { mutableStateOf(ReminderScheduler.canScheduleExactAlarms(context)) }
 
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showStartTimePicker by remember { mutableStateOf(false) }
+    var isStartTimeSetManually by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
+    var isEndTimeSetManually by remember { mutableStateOf(false) }
     var showUntilDatePicker by remember { mutableStateOf(false) }
-    var recurrenceMenuExpanded by remember { mutableStateOf(false) }
+    
+    val isTimeRangeInvalid = remember(type, startMillis, endMillis) {
+        isTimeRangeInvalid(type, startMillis, endMillis)
+    }
+    
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var pendingCleanup by remember { mutableStateOf<PendingCleanup?>(null) }
     // Photos staged (via AttachmentFileStore, no id needed for that) while composing a brand-new
@@ -182,9 +245,13 @@ fun EntryEditScreen(
     // EntryAttachmentsSection instead).
     var pendingAttachments by remember { mutableStateOf<List<String>>(emptyList()) }
 
+    // Reads the entry's own INDIVIDUAL preference, not whatever's currently scheduled — the two only
+    // differ while a calendar-level override is active (see ReminderOffsetsCodec/CalendarLayer's doc
+    // comment), in which case the picker below is disabled and pre-checked to the calendar's own
+    // offsets instead, so reading the individual value here is still correct either way.
     LaunchedEffect(existing?.entry?.id) {
-        val entryId = existing?.entry?.id ?: return@LaunchedEffect
-        reminderOffsets.addAll(stateManager.getRemindersForEntry(entryId).map { it.offsetMinutesBefore })
+        val offsets = ReminderOffsetsCodec.decode(existing?.entry?.individualReminderOffsetsMinutes)
+        reminderOffsets.addAll(offsets)
     }
 
     // Granting the exact-alarm permission happens in system Settings, outside this screen — recheck
@@ -202,10 +269,7 @@ fun EntryEditScreen(
     }
 
     fun saveEntry(entry: CalendarEntry, entryTags: List<String>) {
-        // Reminders are v1-scoped to non-recurring entries only — a recurring entry's selection is
-        // never shown/editable (see the Reminders SectionCard below), so always pass an empty list
-        // for one rather than persisting a stale selection from before recurrence was turned on.
-        val effectiveReminderOffsets = if (entry.recurrenceFrequency == RecurrenceFrequency.NONE) reminderOffsets.toList() else emptyList()
+        val effectiveReminderOffsets = reminderOffsets.toList()
         if (existing != null) {
             stateManager.updateEntry(entry, entryTags, effectiveReminderOffsets)
         } else {
@@ -214,11 +278,15 @@ fun EntryEditScreen(
                 title = entry.title,
                 description = entry.description,
                 location = entry.location,
-                startMillis = entry.startMillis,
+                // Non-null: this screen only ever builds an entry with a real date (see
+                // initialStartMillis' doc comment) — the entity field is nullable only for to-do items.
+                startMillis = entry.startMillis!!,
                 endMillis = entry.endMillis,
                 allDay = entry.allDay,
                 completed = entry.completed,
+                isImportant = entry.isImportant,
                 recurrenceFrequency = entry.recurrenceFrequency,
+                recurrenceInterval = entry.recurrenceInterval,
                 recurrenceUntilMillis = entry.recurrenceUntilMillis,
                 layerId = entry.layerId,
                 tags = entryTags,
@@ -237,11 +305,17 @@ fun EntryEditScreen(
     // just closes without writing anything, matching the old Save button's `enabled = title.isNotBlank()`
     // guard instead of silently creating an empty-titled entry.
     fun attemptSaveAndClose() {
-        if (title.isBlank()) {
+        // A subscribed calendar's entry is view-only end-to-end — nothing typed/toggled here (other
+        // than the reminders section, which saves through its own separate path) is ever persisted.
+        if (isReadOnly) {
+            onDone()
+            return
+        }
+        if (title.isBlank() || isTimeRangeInvalid) {
             // Nothing will ever link these now — a no-op when editing an existing entry, since
             // pendingAttachments is only ever populated for a new, not-yet-saved one.
             discardPendingAttachments(pendingAttachments, context)
-            onDone()
+            if (title.isBlank()) onDone() // Close if title is blank, but don't close if only time is invalid
             return
         }
         val effectiveEnd = if (type == CalendarEntryType.EVENT) endMillis else null
@@ -263,8 +337,11 @@ fun EntryEditScreen(
             endMillis = effectiveEnd,
             allDay = allDay,
             completed = completed,
+            isImportant = important,
             recurrenceFrequency = recurrence,
-            recurrenceUntilMillis = recurrenceUntilMillis
+            recurrenceInterval = recurrenceInterval,
+            recurrenceUntilMillis = recurrenceUntilMillis,
+            layerId = selectedLayerId
         )
         when (val decision = CalendarEntrySanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
             is SaveDecision.Proceed -> {
@@ -304,6 +381,7 @@ fun EntryEditScreen(
                         BasicTextField(
                             value = title,
                             onValueChange = { title = it },
+                            readOnly = isReadOnly,
                             singleLine = true,
                             textStyle = MaterialTheme.typography.titleLarge.copy(color = LocalContentColor.current),
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -317,13 +395,15 @@ fun EntryEditScreen(
                     }
                 },
                 actions = {
-                    if (existing != null) {
-                        IconButton(onClick = { showDeleteConfirm = true }) {
-                            Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
+                    if (!isReadOnly) {
+                        if (existing != null) {
+                            IconButton(onClick = { showDeleteConfirm = true }) {
+                                Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
+                            }
                         }
-                    }
-                    IconButton(onClick = ::attemptSaveAndClose, enabled = title.isNotBlank()) {
-                        Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
+                        IconButton(onClick = ::attemptSaveAndClose, enabled = title.isNotBlank() && !isTimeRangeInvalid) {
+                            Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
+                        }
                     }
                 }
             )
@@ -333,14 +413,25 @@ fun EntryEditScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (isReadOnly) {
+                item {
+                    Text(
+                        languageManager.getString("entry_subscribed_read_only_note"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
+                        enabled = !isReadOnly,
                         selected = type == CalendarEntryType.EVENT,
                         onClick = { type = CalendarEntryType.EVENT },
                         label = { Text(languageManager.getString("entry_type_event")) }
                     )
                     FilterChip(
+                        enabled = !isReadOnly,
                         selected = type == CalendarEntryType.TASK,
                         onClick = { type = CalendarEntryType.TASK },
                         label = { Text(languageManager.getString("entry_type_task")) }
@@ -349,8 +440,14 @@ fun EntryEditScreen(
             }
 
             if (existing?.entry?.id != null) {
-                item {
-                    EntryAttachmentsSection(existing.entry.id, stateManager)
+                // A subscribed entry is view-only end-to-end — attachments write directly to the DB
+                // as soon as you add/remove one (unlike every other field here, which only takes
+                // effect through the now-hidden Save button), so this section is skipped entirely
+                // rather than merely visually disabled.
+                if (!isReadOnly) {
+                    item {
+                        EntryAttachmentsSection(existing.entry.id, stateManager)
+                    }
                 }
             } else {
                 item {
@@ -369,14 +466,39 @@ fun EntryEditScreen(
                         value = description,
                         onValueChange = { description = it },
                         singleLine = false,
-                        minLines = 2
+                        minLines = 2,
+                        enabled = !isReadOnly
                     )
-                    PaperField(label = languageManager.getString("entry_location"), value = location, onValueChange = { location = it })
-                    Text(
-                        text = "${languageManager.getString("entry_layer")}: ${defaultLayer.name}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    PaperField(
+                        label = languageManager.getString("entry_location"),
+                        value = location,
+                        onValueChange = { location = it },
+                        enabled = !isReadOnly
                     )
+                    if (isReadOnly) {
+                        Text(
+                            text = "${languageManager.getString("entry_layer")}: ${currentLayer.name}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Picklist(
+                            items = selectableLayers,
+                            selected = currentLayer,
+                            itemLabel = { it.name },
+                            onSelect = { selectedLayerId = it.id },
+                            anchor = { value, onClick ->
+                                PaperTapField(
+                                    label = languageManager.getString("entry_layer"),
+                                    value = value,
+                                    onClick = onClick,
+                                    trailingIcon = {
+                                        Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
@@ -389,6 +511,7 @@ fun EntryEditScreen(
                             label = languageManager.getString(if (type == CalendarEntryType.EVENT) "entry_start_date" else "entry_due_date"),
                             value = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(startMillis)),
                             onClick = { showStartDatePicker = true },
+                            enabled = !isReadOnly,
                             modifier = Modifier.weight(1f)
                         )
                         if (!allDay) {
@@ -396,6 +519,7 @@ fun EntryEditScreen(
                                 label = languageManager.getString("entry_start_time"),
                                 value = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(startMillis)),
                                 onClick = { showStartTimePicker = true },
+                                enabled = !isReadOnly,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -406,7 +530,7 @@ fun EntryEditScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Checkbox(checked = allDay, onCheckedChange = { checked ->
+                            Checkbox(checked = allDay, enabled = !isReadOnly, onCheckedChange = { checked ->
                                 allDay = checked
                                 if (checked) {
                                     startMillis = startOfDay(startMillis, zoneId)
@@ -416,51 +540,122 @@ fun EntryEditScreen(
                             Text(languageManager.getString("entry_all_day"))
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-                            PaperTapField(
-                                label = languageManager.getString("entry_end_date"),
-                                value = endMillis?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
-                                    ?: languageManager.getString("none"),
-                                onClick = { showEndDatePicker = true },
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (!allDay) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
                                 PaperTapField(
-                                    label = languageManager.getString("entry_end_time"),
-                                    value = endMillis?.let { DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it)) }
+                                    label = languageManager.getString("entry_end_date"),
+                                    value = endMillis?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
                                         ?: languageManager.getString("none"),
-                                    onClick = { if (endMillis == null) endMillis = startMillis; showEndTimePicker = true },
+                                    onClick = { showEndDatePicker = true },
+                                    enabled = !isReadOnly,
                                     modifier = Modifier.weight(1f)
                                 )
+                                if (!allDay) {
+                                    PaperTapField(
+                                        label = languageManager.getString("entry_end_time"),
+                                        value = endMillis?.let { DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it)) }
+                                            ?: languageManager.getString("none"),
+                                        onClick = { if (endMillis == null) endMillis = startMillis; showEndTimePicker = true },
+                                        enabled = !isReadOnly,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            if (endMillis != null && !isReadOnly) {
+                                IconButton(
+                                    onClick = { endMillis = null },
+                                    modifier = Modifier.padding(start = 8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = languageManager.getString("clear"),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
                         }
+
+                        val currentEndMillis = endMillis
+                        if (currentEndMillis != null && isTimeRangeInvalid(type, startMillis, currentEndMillis)) {
+                            Text(
+                                text = languageManager.getString("entry_time_error"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
                     } else {
-                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = completed, onCheckedChange = { completed = it })
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable(enabled = !isReadOnly) { completed = !completed }
+                        ) {
+                            Icon(
+                                if (completed) Icons.Filled.CheckCircle else Icons.Filled.CheckCircleOutline,
+                                contentDescription = null,
+                                tint = DONE_CHECK_COLOR
+                            )
+                            Spacer(Modifier.width(8.dp))
                             Text(languageManager.getString("entry_completed"))
                         }
                     }
 
-                    Box {
-                        PaperTapField(
-                            label = languageManager.getString("entry_recurrence"),
-                            value = languageManager.getString(recurrenceLabelKey(recurrence)),
-                            onClick = { recurrenceMenuExpanded = true },
-                            trailingIcon = {
-                                Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Icon(
+                            if (important) Icons.Filled.Star else Icons.Filled.StarBorder,
+                            contentDescription = null,
+                            tint = if (important) IMPORTANT_TOGGLE_ON_COLOR else IMPORTANT_TOGGLE_OFF_COLOR,
+                            modifier = Modifier.clickable(enabled = !isReadOnly) { important = !important }
                         )
-                        DropdownMenu(expanded = recurrenceMenuExpanded, onDismissRequest = { recurrenceMenuExpanded = false }) {
-                            RecurrenceFrequency.entries.forEach { freq ->
-                                DropdownMenuItem(
-                                    text = { Text(languageManager.getString(recurrenceLabelKey(freq))) },
-                                    onClick = {
-                                        recurrence = freq
-                                        if (freq == RecurrenceFrequency.NONE) recurrenceUntilMillis = null
-                                        recurrenceMenuExpanded = false
-                                    }
-                                )
+                        Spacer(Modifier.width(8.dp))
+                        Text(languageManager.getString("todo_important_event"), modifier = Modifier.weight(1f))
+                    }
+
+                    Picklist(
+                        items = RecurrenceFrequency.entries,
+                        selected = recurrence,
+                        itemLabel = { languageManager.getString(recurrenceLabelKey(it)) },
+                        onSelect = { freq ->
+                            recurrence = freq
+                            if (freq == RecurrenceFrequency.NONE) recurrenceUntilMillis = null
+                        },
+                        anchor = { value, onClick ->
+                            PaperTapField(
+                                label = languageManager.getString("entry_recurrence"),
+                                value = value,
+                                onClick = onClick,
+                                enabled = !isReadOnly,
+                                trailingIcon = {
+                                    Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            )
+                        }
+                    )
+                    if (recurrence != RecurrenceFrequency.NONE) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                languageManager.getString("entry_recurrence_every"),
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { recurrenceInterval = (recurrenceInterval - 1).coerceAtLeast(1) },
+                                enabled = !isReadOnly && recurrenceInterval > 1
+                            ) { Icon(Icons.Filled.Remove, contentDescription = null) }
+                            Text(
+                                recurrenceInterval.toString(),
+                                modifier = Modifier.widthIn(min = 24.dp),
+                                textAlign = TextAlign.Center
+                            )
+                            IconButton(
+                                onClick = { recurrenceInterval = (recurrenceInterval + 1).coerceAtMost(365) },
+                                enabled = !isReadOnly
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null)
                             }
+                            Text(languageManager.getString(recurrenceIntervalUnitKey(recurrence)))
                         }
                     }
                     if (recurrence != RecurrenceFrequency.NONE) {
@@ -468,7 +663,8 @@ fun EntryEditScreen(
                             label = languageManager.getString("entry_recurrence_until"),
                             value = recurrenceUntilMillis?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
                                 ?: languageManager.getString("entry_recurrence_forever"),
-                            onClick = { showUntilDatePicker = true }
+                            onClick = { showUntilDatePicker = true },
+                            enabled = !isReadOnly
                         )
                     }
                 }
@@ -479,41 +675,47 @@ fun EntryEditScreen(
                     SectionTitle(languageManager.getString("entry_reminders"))
                     if (recurrence != RecurrenceFrequency.NONE) {
                         Text(
-                            languageManager.getString("reminder_recurring_unsupported"),
+                            languageManager.getString("reminder_recurring_next_occurrence_note"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    if (remindersOverriddenByCalendar) {
+                        Text(
+                            languageManager.getString("reminder_set_by_calendar_note"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        ReminderOffsetsPicker(
+                            selected = calendarReminderOffsets,
+                            onToggle = {},
+                            languageManager = languageManager,
+                            enabled = false
+                        )
                     } else {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            REMINDER_PRESETS.forEach { (offset, labelKey) ->
-                                FilterChip(
-                                    selected = offset in reminderOffsets,
-                                    onClick = {
-                                        if (offset in reminderOffsets) reminderOffsets.remove(offset) else reminderOffsets.add(offset)
-                                    },
-                                    label = { Text(languageManager.getString(labelKey)) }
-                                )
-                            }
-                        }
-                        if (!canScheduleExactAlarms) {
-                            Column {
-                                Text(
-                                    languageManager.getString("reminder_exact_alarm_permission_needed"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                TextButton(
-                                    onClick = {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                                                .setData(Uri.fromParts("package", context.packageName, null))
-                                        )
-                                    }
-                                ) { Text(languageManager.getString("reminder_grant_permission")) }
-                            }
+                        ReminderOffsetsPicker(
+                            selected = reminderOffsets,
+                            onToggle = { offset ->
+                                if (offset in reminderOffsets) reminderOffsets.remove(offset) else reminderOffsets.add(offset)
+                            },
+                            languageManager = languageManager
+                        )
+                    }
+                    if (!canScheduleExactAlarms) {
+                        Column {
+                            Text(
+                                languageManager.getString("reminder_exact_alarm_permission_needed"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TextButton(
+                                onClick = {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                                            .setData(Uri.fromParts("package", context.packageName, null))
+                                    )
+                                }
+                            ) { Text(languageManager.getString("reminder_grant_permission")) }
                         }
                     }
                 }
@@ -534,13 +736,50 @@ fun EntryEditScreen(
                             }
                         }
                     }
+                    // Every tag already used on any other entry, filtered as the user types —
+                    // focusing the (possibly empty) field surfaces the full list so existing tags
+                    // are reusable/discoverable instead of retyped (and risking near-duplicates).
+                    // Rendered as a card that expands directly above the input — not a popup menu —
+                    // so it reads as the field itself growing upward, and stays open across multiple
+                    // taps (no per-tap collapse) so several tags can be picked in one go.
+                    val tagSuggestions = availableTags.filter {
+                        it !in tags && (tagInput.isBlank() || it.contains(tagInput, ignoreCase = true))
+                    }
+                    AnimatedVisibility(visible = tagMenuExpanded && tagSuggestions.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            FlowRow(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                tagSuggestions.forEach { suggestion ->
+                                    InputChip(
+                                        selected = false,
+                                        onClick = {
+                                            tags.add(suggestion)
+                                            tagInput = ""
+                                        },
+                                        label = { Text(suggestion) }
+                                    )
+                                }
+                            }
+                        }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = tagInput,
-                            onValueChange = { tagInput = it },
+                            onValueChange = {
+                                tagInput = it
+                                tagMenuExpanded = true
+                            },
                             label = { Text(languageManager.getString("entry_add_tag")) },
                             singleLine = true,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .onFocusChanged { tagMenuExpanded = it.isFocused }
                         )
                         IconButton(onClick = {
                             val clean = tagInput.trim()
@@ -573,9 +812,11 @@ fun EntryEditScreen(
             onDismiss = { showStartTimePicker = false },
             onConfirm = { millis ->
                 startMillis = millis
+                isStartTimeSetManually = true
                 showStartTimePicker = false
             },
-            languageManager = languageManager
+            languageManager = languageManager,
+            defaultToZeroMinutes = existing == null && !isStartTimeSetManually
         )
     }
     if (showEndDatePicker) {
@@ -595,9 +836,11 @@ fun EntryEditScreen(
             onDismiss = { showEndTimePicker = false },
             onConfirm = { millis ->
                 endMillis = millis
+                isEndTimeSetManually = true
                 showEndTimePicker = false
             },
-            languageManager = languageManager
+            languageManager = languageManager,
+            defaultToZeroMinutes = existing == null && !isEndTimeSetManually
         )
     }
     if (showUntilDatePicker) {
@@ -676,6 +919,22 @@ private fun recurrenceLabelKey(freq: RecurrenceFrequency): String = when (freq) 
     RecurrenceFrequency.YEARLY -> "recurrence_yearly"
 }
 
+/** Unit noun for the "every [N] ___" interval stepper, distinct from [recurrenceLabelKey]'s adjective
+ *  forms ("Daily") since this needs a plural noun regardless of N ("days", not "daily"). */
+private fun recurrenceIntervalUnitKey(freq: RecurrenceFrequency): String = when (freq) {
+    RecurrenceFrequency.NONE -> "recurrence_none"
+    RecurrenceFrequency.DAILY -> "recurrence_unit_days"
+    RecurrenceFrequency.WEEKLY -> "recurrence_unit_weeks"
+    RecurrenceFrequency.MONTHLY -> "recurrence_unit_months"
+    RecurrenceFrequency.YEARLY -> "recurrence_unit_years"
+}
+
+/** An Event's end time can't be before its start time — equal is fine (a zero-duration event), only
+ *  strictly earlier is invalid. Tasks have no end time to validate. Pulled out as a pure function so
+ *  it's unit-testable without a Composable. */
+internal fun isTimeRangeInvalid(type: CalendarEntryType, startMillis: Long, endMillis: Long?): Boolean =
+    type == CalendarEntryType.EVENT && endMillis?.let { startMillis > it } == true
+
 private fun startOfDay(millis: Long, zoneId: ZoneId): Long =
     Instant.ofEpochMilli(millis).atZone(zoneId).toLocalDate().atStartOfDay(zoneId).toInstant().toEpochMilli()
 
@@ -712,11 +971,15 @@ private fun TimeOnlyPickerDialog(
     initialMillis: Long,
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit,
-    languageManager: com.voxapps.calendarapp.domain.localization.LanguageManager
+    languageManager: com.voxapps.calendarapp.domain.localization.LanguageManager,
+    defaultToZeroMinutes: Boolean = false
 ) {
     val zoneId = ZoneId.systemDefault()
     val initialTime = remember(initialMillis) { Instant.ofEpochMilli(initialMillis).atZone(zoneId).toLocalTime() }
-    val state = rememberTimePickerState(initialHour = initialTime.hour, initialMinute = initialTime.minute)
+    val state = rememberTimePickerState(
+        initialHour = initialTime.hour,
+        initialMinute = if (defaultToZeroMinutes) 0 else initialTime.minute
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(languageManager.getString("entry_start_time")) },
@@ -740,35 +1003,75 @@ private fun EntryAttachmentsSection(entryId: Long, stateManager: CalendarStateMa
     val context = LocalContext.current
     val entities by stateManager.observeAttachments(entryId).collectAsStateWithLifecycle(initialValue = emptyList())
     val items = remember(entities) {
+        val groupSizes = entities.mapNotNull { it.groupId }.groupingBy { it }.eachCount()
         entities.map { e ->
+            val groupSize = e.groupId?.let { groupSizes[it] } ?: 0
             AttachmentUiItem(
                 id = e.id,
                 uri = AttachmentFileStore.uriFor(context, CalendarAttachments.FILE_PROVIDER_AUTHORITY, CalendarAttachments.DIR, e.fileName),
-                removable = true
+                removable = true,
+                groupLabel = if (groupSize > 1) "${e.groupOrder + 1}/$groupSize" else null,
+                groupKey = e.groupId,
+                groupSource = e.source
             )
         }
     }
-    fun handlePickedUri(uri: Uri?) {
-        if (uri != null) {
+    fun handlePickedUris(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val groupId = if (uris.size > 1) UUID.randomUUID().toString() else null
+        uris.forEachIndexed { index, uri ->
             AttachmentFileStore.stage(context, uri, CalendarAttachments.DIR)?.let { fileName ->
-                stateManager.addManualAttachment(entryId, fileName)
+                stateManager.addManualAttachment(entryId, fileName, groupId, index)
             }
         }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handlePickedUri(uri) }
-    val takePhoto = rememberCameraCaptureLauncher(CalendarAttachments.FILE_PROVIDER_AUTHORITY) { uri -> handlePickedUri(uri) }
+    val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> handlePickedUris(uris) }
+    // Zero attachments yet: single + stitch (a stitch group is one document, whole-group delete
+    // only — see AttachmentUiItem.groupSource). Already has attachments: single + batch, each new
+    // photo independent (Calendar never runs OCR/LLM on attachments at all — see LlmTasks.
+    // CALENDAR_ATTACHMENT_CAPTURE's doc comment, so "batch" here differs from Expenses' only in that
+    // there's no rescan-suggestion step, just independent staging).
+    val takePhotoSingle = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.CALENDAR_ATTACHMENT_CAPTURE}:$entryId", hint = null, produceOCR = false,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE
+    )
+    val takePhotoStitch = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.CALENDAR_ATTACHMENT_CAPTURE}:$entryId", hint = null, produceOCR = false,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH
+    )
+    val takePhotoBatch = rememberVisionCaptureLauncher(
+        baseTask = "${LlmTasks.CALENDAR_ATTACHMENT_CAPTURE}:$entryId", hint = null, produceOCR = false,
+        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
+    )
+    val captureActions = if (items.isEmpty()) {
+        listOf(
+            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
+            SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch"), takePhotoStitch)
+        )
+    } else {
+        listOf(
+            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
+            SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch"), takePhotoBatch)
+        )
+    }
     AttachmentsSection(
         title = languageManager.getString("attachments"),
         items = items,
         canAdd = items.size < 10,
-        onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-        onTakePhoto = takePhoto,
+        onPickFromGallery = { pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        captureActions = captureActions,
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
-        cameraLabel = languageManager.getString("attachment_take_photo"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->
             entities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
-        }
+        },
+        groupDelete = GroupDeleteConfig(
+            onDeleteGroup = { groupId -> stateManager.deleteAttachmentGroup(entryId, groupId, context) },
+            confirmTitle = languageManager.getString("delete_attachment_group_title"),
+            confirmMessage = languageManager.getString("delete_attachment_group_message"),
+            confirmLabel = languageManager.getString("delete"),
+            cancelLabel = languageManager.getString("cancel")
+        )
     )
 }
 
@@ -805,9 +1108,11 @@ private fun PendingEntryAttachmentsSection(pendingAttachments: List<String>, onC
         items = items,
         canAdd = pendingAttachments.size < 10,
         onPickFromGallery = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-        onTakePhoto = takePhoto,
+        // Draft (not-yet-saved) entry attachments still use the plain system camera, not Vision —
+        // out of scope for the single/stitch/batch speed dial (no OCR/record concept exists yet for
+        // a draft), so this is just the one existing "take photo" action, unchanged behavior.
+        captureActions = listOf(SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("attachment_take_photo"), takePhoto)),
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
-        cameraLabel = languageManager.getString("attachment_take_photo"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->
             pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->
@@ -855,7 +1160,8 @@ private fun PaperField(
     singleLine: Boolean = true,
     minLines: Int = 1,
     valueColor: Color = MaterialTheme.colorScheme.primary,
-    dividerColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    dividerColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+    enabled: Boolean = true
 ) {
     Column(modifier = modifier) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -870,7 +1176,8 @@ private fun PaperField(
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = valueColor),
+                readOnly = !enabled,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = if (enabled) valueColor else valueColor.copy(alpha = 0.5f)),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 keyboardOptions = keyboardOptions,
                 singleLine = singleLine,
@@ -883,29 +1190,3 @@ private fun PaperField(
     }
 }
 
-@Composable
-private fun PaperTapField(
-    label: String,
-    value: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    trailingIcon: @Composable () -> Unit = {}
-) {
-    Column(modifier = modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
-        ) {
-            Text(
-                value,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f)
-            )
-            trailingIcon()
-        }
-        Spacer(Modifier.height(4.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), thickness = 1.dp)
-    }
-}

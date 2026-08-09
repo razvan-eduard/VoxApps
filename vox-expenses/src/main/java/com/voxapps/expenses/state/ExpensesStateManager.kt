@@ -1,6 +1,8 @@
 package com.voxapps.expenses.state
 
 import android.content.Context
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
@@ -10,6 +12,7 @@ import com.voxapps.expenses.data.DuplicateRuleDao
 import com.voxapps.expenses.data.DuplicateRuleEntity
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Expense
+import com.voxapps.expenses.data.PendingFieldSuggestion
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesRepository
@@ -40,13 +43,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class ExpensesStateManager internal constructor(
+class ExpensesStateManager(
     private val settingsRepo: ExpensesSettingsRepository,
     private val expensesRepo: ExpensesRepository,
     private val sessionManager: SessionManager,
@@ -56,13 +61,16 @@ class ExpensesStateManager internal constructor(
     private val spendingLimitAlertRepo: SpendingLimitAlertRepository,
     private val pendingLlmRequestQueue: VoxLlmRequestQueue,
     private val attachmentDao: AttachmentDao,
-    private val duplicateRuleDao: DuplicateRuleDao
+    private val duplicateRuleDao: DuplicateRuleDao,
+    appContext: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val workManager = WorkManager.getInstance(appContext)
 
     private data class Runtime(
         val selectedCategoryId: Long? = null,
         val sort: SortMode = SortMode.NEWEST,
+        val selectedDateMillis: Long = System.currentTimeMillis(),
         val dateFrom: Long? = null,
         val dateTo: Long? = null,
         val selectedBank: String? = null,
@@ -76,12 +84,19 @@ class ExpensesStateManager internal constructor(
     val uiState: StateFlow<ExpensesUiState> = _uiState.asStateFlow()
 
     init {
+        val nextRunMillisFlow = workManager.getWorkInfosForUniqueWorkFlow("expense_deduplication")
+            .map { infoList ->
+                infoList.firstOrNull { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
+                    ?.nextScheduleTimeMillis
+            }
+
         combine(
             settingsRepo.settingsFlow,
             expensesRepo.expensesWithDetails,
             expensesRepo.categories,
-            _runtime
-        ) { settings, expenses, categories, rt ->
+            _runtime,
+            nextRunMillisFlow
+        ) { settings, expenses, categories, rt, nextRunMillis ->
             val locked = settings.isBiometricRequired &&
                 !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
             if (locked) {
@@ -94,19 +109,37 @@ class ExpensesStateManager internal constructor(
                     categories = categories,
                     selectedCategoryId = rt.selectedCategoryId,
                     sort = rt.sort,
+                    isGridView = settings.isGridView,
+                    selectedDateMillis = rt.selectedDateMillis,
                     dateFrom = rt.dateFrom,
                     dateTo = rt.dateTo,
                     selectedBank = rt.selectedBank,
                     selectedVendor = rt.selectedVendor,
                     availableBanks = expenses.mapNotNull { it.expense.bank }.distinct().sorted(),
-                    availableVendors = expenses.mapNotNull { it.expense.vendor }.distinct().sorted()
+                    availableVendors = expenses.mapNotNull { it.expense.vendor }.distinct().sorted(),
+                    nextScheduledDedupMillis = nextRunMillis
                 )
             }
-        }.onEach { _uiState.value = it }.launchIn(scope)
+        }
+        // Deliberately NOT flowOn(Default) and NOT stateIn/WhileSubscribed, though the combine
+        // above is real CPU work on the scope's Main dispatcher:
+        //
+        //  - flowOn moves the transform off this thread, which makes _uiState update
+        //    asynchronously. Today a change published into _runtime settles into _uiState within
+        //    the same call, and the synchronous accessors below rely on that; adding flowOn broke
+        //    exactly those expectations in NotesStateManagerTest.
+        //  - WhileSubscribed would leave uiState.value at its initial Loading value whenever no UI
+        //    is attached, and it is read synchronously, with no subscription, by headless callers
+        //    (IPC read/export responders and the widget refresh).
+        //
+        // Both are worth revisiting only behind a measurement showing this combine actually costs
+        // frames, together with a plan for those synchronous readers.
+            .onEach { _uiState.value = it }.launchIn(scope)
     }
 
     fun setCategoryFilter(categoryId: Long?) = _runtime.update { it.copy(selectedCategoryId = categoryId) }
     fun setSort(sort: SortMode) = _runtime.update { it.copy(sort = sort) }
+    fun setSelectedDate(millis: Long) = _runtime.update { it.copy(selectedDateMillis = millis) }
     fun setDateFilter(from: Long?, to: Long?) = _runtime.update { it.copy(dateFrom = from, dateTo = to) }
     fun clearDateFilter() = _runtime.update { it.copy(dateFrom = null, dateTo = null) }
     fun setBankFilter(bank: String?) = _runtime.update { it.copy(selectedBank = bank) }
@@ -128,6 +161,8 @@ class ExpensesStateManager internal constructor(
         ExpenseDeduplicationScheduler.reschedule(context, interval)
     }
     fun setHomeCurrency(code: String) { scope.launch { settingsRepo.setHomeCurrency(code) } }
+    /** Which declared currency service supplies rates — see ExternalServiceConfig.currencyServices. */
+    fun setExchangeRateServiceId(id: String) { scope.launch { settingsRepo.setExchangeRateServiceId(id) } }
     fun setPaymentSourcePackages(packages: Set<String>) { scope.launch { settingsRepo.setPaymentSourcePackages(packages) } }
     fun setBankingSourcePackages(packages: Set<String>) { scope.launch { settingsRepo.setBankingSourcePackages(packages) } }
     fun setAutoAcceptNotificationExpenses(enabled: Boolean) { scope.launch { settingsRepo.setAutoAcceptNotificationExpenses(enabled) } }
@@ -138,9 +173,11 @@ class ExpensesStateManager internal constructor(
     fun setVatDisplayEnabled(enabled: Boolean) { scope.launch { settingsRepo.setVatDisplayEnabled(enabled) } }
     fun setDecimalSeparator(separator: String) { scope.launch { settingsRepo.setDecimalSeparator(separator) } }
     fun setCalendarViewEnabled(enabled: Boolean) { scope.launch { settingsRepo.setCalendarViewEnabled(enabled) } }
+    fun setIsGridView(enabled: Boolean) { scope.launch { settingsRepo.setIsGridView(enabled) } }
     fun setDebugToastsEnabled(enabled: Boolean) { scope.launch { settingsRepo.setDebugToastsEnabled(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setAttachPhotoOnRetry(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnRetry(enabled) } }
+    fun setAutoRescanOnFirstAttachment(enabled: Boolean) { scope.launch { settingsRepo.setAutoRescanOnFirstAttachment(enabled) } }
     fun setAutoOpenScannedExpense(enabled: Boolean) { scope.launch { settingsRepo.setAutoOpenScannedExpense(enabled) } }
     fun setLocationPrefillEnabled(enabled: Boolean) { scope.launch { settingsRepo.setLocationPrefillEnabled(enabled) } }
     fun setDuplicateCheckModeManual(mode: String) { scope.launch { settingsRepo.setDuplicateCheckModeManual(mode) } }
@@ -151,7 +188,7 @@ class ExpensesStateManager internal constructor(
     fun setDuplicateRuleSetGlobalCombinator(combinator: String) { scope.launch { settingsRepo.setDuplicateRuleSetGlobalCombinator(combinator) } }
 
     // --- Duplicate rules (see DuplicateRuleEntity/DuplicateRuleDao) ---
-    val duplicateRules: Flow<List<DuplicateRuleEntity>> = duplicateRuleDao.observeAll()
+    val duplicateRules: Flow<List<DuplicateRuleEntity>> = duplicateRuleDao.observeAll().distinctUntilChanged()
     fun upsertDuplicateRule(rule: DuplicateRuleEntity) { scope.launch { duplicateRuleDao.upsert(rule) } }
     fun deleteDuplicateRule(rule: DuplicateRuleEntity) { scope.launch { duplicateRuleDao.delete(rule) } }
     fun setDuplicateRuleEnabled(id: Long, enabled: Boolean) { scope.launch { duplicateRuleDao.setEnabled(id, enabled) } }
@@ -160,6 +197,53 @@ class ExpensesStateManager internal constructor(
     fun setWidgetBorderEnabled(enabled: Boolean) { scope.launch { settingsRepo.setWidgetBorderEnabled(enabled) } }
     fun setWidgetBorderThicknessDp(thicknessDp: Int) { scope.launch { settingsRepo.setWidgetBorderThicknessDp(thicknessDp) } }
     fun setWidgetBorderColorArgb(colorArgb: Long) { scope.launch { settingsRepo.setWidgetBorderColorArgb(colorArgb) } }
+    fun setTodayEffect(effect: String) { scope.launch { settingsRepo.setTodayEffect(effect) } }
+    fun setTodayEffectStyle(style: String) { scope.launch { settingsRepo.setTodayEffectStyle(style) } }
+    fun setTodayEffectColor(colorArgb: Long) { scope.launch { settingsRepo.setTodayEffectColor(colorArgb) } }
+    fun setTodayEffectColor2(colorArgb: Long?) { scope.launch { settingsRepo.setTodayEffectColor2(colorArgb) } }
+    fun setTodayEffectSpeed(speed: Float) { scope.launch { settingsRepo.setTodayEffectSpeed(speed) } }
+    fun setTodayEffectShowInWidget(enabled: Boolean) { scope.launch { settingsRepo.setTodayEffectShowInWidget(enabled) } }
+
+    fun setBatchCleanupManualReview(enabled: Boolean) { scope.launch { settingsRepo.setBatchCleanupManualReview(enabled) } }
+
+    fun setNotificationsSystemDefault(enabled: Boolean) {
+        scope.launch {
+            settingsRepo.setNotificationsSystemDefault(enabled)
+            if (!enabled) incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsVibrationEnabled(enabled: Boolean) {
+        scope.launch {
+            settingsRepo.setNotificationsVibrationEnabled(enabled)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsSoundUri(uri: String?) {
+        scope.launch {
+            settingsRepo.setNotificationsSoundUri(uri)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    fun setNotificationsVolume(volume: Int) {
+        scope.launch {
+            settingsRepo.setNotificationsVolume(volume)
+        }
+    }
+
+    fun setNotificationsLength(length: String) {
+        scope.launch {
+            settingsRepo.setNotificationsLength(length)
+            incrementNotificationChannelVersion()
+        }
+    }
+
+    private suspend fun incrementNotificationChannelVersion() {
+        val current = settingsRepo.getSnapshot().notificationsChannelVersion
+        settingsRepo.setNotificationsChannelVersion(current + 1)
+    }
 
     /** Gate lives here (not in the repository) — mirrors the "repository has zero settings
      *  dependency" convention; [ExpensesRepository.recordManualCategoryChange] itself is
@@ -337,24 +421,29 @@ class ExpensesStateManager internal constructor(
     fun requestDuplicateCheck(context: Context) {
         scope.launch {
             val settings = settingsRepo.getSnapshot()
+            val autoApply = !settings.batchCleanupManualReview
             when (settings.duplicateCheckModeManual) {
                 ExpensesSettings.MODE_LOCAL -> {
                     val groups = expensesRepo.findLocalDuplicateGroups(settings.toNearDuplicateConfig())
-                    expenseDeduplicationRepo.mergePendingGroups(groups)
+                    if (autoApply) {
+                        expensesRepo.applyExpenseDeduplication(groups)
+                    } else {
+                        expenseDeduplicationRepo.mergePendingGroups(groups)
+                    }
                 }
                 ExpensesSettings.MODE_LOCAL_AND_AI -> {
                     val candidates = expensesRepo.ruleBasedCandidateClusters(settings.toNearDuplicateConfig()).flatten().map {
                         ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
                     }
                     if (candidates.isNotEmpty()) {
-                        ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, candidates)
+                        ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, candidates, autoApply = autoApply)
                     }
                 }
                 else -> {
                     val all = expensesRepo.expenses.first().map {
                         ExpenseSummary(it.id, it.title, it.vendor, it.totalAmount, it.currencyCode, it.dateTime, it.direction)
                     }
-                    ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, all)
+                    ExpenseDeduplicationRequestSender.send(context, pendingLlmRequestQueue, all, autoApply = autoApply)
                 }
             }
         }
@@ -437,7 +526,12 @@ class ExpensesStateManager internal constructor(
     fun observeAttachments(expenseId: Long): Flow<List<AttachmentEntity>> =
         attachmentDao.observeFor(ExpensesAttachments.RECORD_TYPE, expenseId)
 
-    fun addManualAttachment(expenseId: Long, fileName: String) {
+    /** One-shot counterpart for callers that just need the current rows once (the edit screen's
+     *  opening snapshot), rather than collecting the flow's first emission and cancelling it. */
+    suspend fun getAttachments(expenseId: Long): List<AttachmentEntity> =
+        attachmentDao.getFor(ExpensesAttachments.RECORD_TYPE, expenseId)
+
+    fun addManualAttachment(expenseId: Long, fileName: String, groupId: String? = null, groupOrder: Int = 0) {
         scope.launch {
             attachmentDao.insert(
                 AttachmentEntity(
@@ -445,7 +539,9 @@ class ExpensesStateManager internal constructor(
                     recordId = expenseId,
                     fileName = fileName,
                     source = AttachmentSource.MANUAL,
-                    createdAt = System.currentTimeMillis()
+                    createdAt = System.currentTimeMillis(),
+                    groupId = groupId,
+                    groupOrder = groupOrder
                 )
             )
         }
@@ -458,25 +554,20 @@ class ExpensesStateManager internal constructor(
         }
     }
 
-    companion object {
-        @Volatile private var instance: ExpensesStateManager? = null
-
-        fun getInstance(
-            settingsRepo: ExpensesSettingsRepository,
-            expensesRepo: ExpensesRepository,
-            sessionManager: SessionManager,
-            pendingCategoryMergeRepo: PendingCategoryMergeRepository,
-            expenseDeduplicationRepo: ExpenseDeduplicationRepository,
-            pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
-            spendingLimitAlertRepo: SpendingLimitAlertRepository,
-            pendingLlmRequestQueue: VoxLlmRequestQueue,
-            attachmentDao: AttachmentDao,
-            duplicateRuleDao: DuplicateRuleDao
-        ): ExpensesStateManager = instance ?: synchronized(this) {
-            instance ?: ExpensesStateManager(
-                settingsRepo, expensesRepo, sessionManager, pendingCategoryMergeRepo, expenseDeduplicationRepo,
-                pendingNotificationExpenseRepo, spendingLimitAlertRepo, pendingLlmRequestQueue, attachmentDao, duplicateRuleDao
-            ).also { instance = it }
+    /** Cancels a burst mid-capture (see [com.voxapps.attachments.ui.rememberBurstCaptureLauncher]) —
+     *  deletes every row+file already committed under [groupId] for this expense. */
+    fun deleteAttachmentGroup(expenseId: Long, groupId: String, context: Context) {
+        scope.launch {
+            val deleted = attachmentDao.deleteGroup(ExpensesAttachments.RECORD_TYPE, expenseId, groupId)
+            deleted.forEach { AttachmentFileStore.delete(context, ExpensesAttachments.DIR, it.fileName) }
         }
+    }
+
+    // --- Pending field suggestions (from a line-items rescan on an already-saved expense) ---
+    fun observePendingFieldSuggestion(expenseId: Long): Flow<PendingFieldSuggestion?> =
+        expensesRepo.observePendingFieldSuggestion(expenseId)
+
+    fun clearPendingFieldSuggestion(expenseId: Long) {
+        scope.launch { expensesRepo.clearPendingFieldSuggestion(expenseId) }
     }
 }

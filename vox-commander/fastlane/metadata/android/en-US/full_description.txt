@@ -3,9 +3,11 @@ VoxCommander is a privacy-first, on-device voice assistant for Android. It serve
 Key Features:
 - Wake Word Detection: Always-on listening using Vosk, Picovoice Porcupine, or the fully open-source OpenWakeWord (ONNX-based).
 - On-Device Whisper STT: High-accuracy speech-to-text powered by Whisper.cpp, running locally with multilingual support.
-- Triple AI Brain: A sophisticated NLU pipeline that uses L1 FastMap (regex rules), L2 Primary AI (Gemini Nano or Local LLM), and L3 Offline fallback for zero-latency command processing.
+- Smart Command Pipeline: Instant, offline FastMap rule matching (plain pattern matching, not AI) handles common phrases with zero latency; anything more complex goes to your choice of AI engine (Gemini Nano, a local LiteRT-LM model, or a cloud LLM), with a separate offline fallback model if that's ever unavailable.
 - Intelligent Intent Routing: Automatically maps spoken commands to system controls, media playback (Spotify/YouTube), navigation (Waze/Google Maps), or companion Vox apps.
 - Satellite App Hub: Discovers and controls independent "satellite" apps like VoxNotes or VoxExpenses via a secure IPC contract.
+- Smarter Location: A shared location system with a configurable last-known-location cache, a Home Town fallback, and an "always use this location" toggle for skipping GPS entirely.
 - External Voice Trigger: Integration with automation tools like MacroDroid or Tasker to trigger the assistant via hardware buttons or schedules.
-- 100% Private: No audio or transcription ever leaves your device. All processing is done locally, ensuring total data sovereignty.
+- Private by Design: Core processing is done locally, ensuring data sovereignty. Optional cloud features (OpenAI, Spotify) can be enabled by the user.
 - Material 3 Overlay: A sleek, floating voice UI that provides real-time transcription and status updates over any app.
+- Backup & Restore: Save and restore your settings and FastMap rules to a file you choose, with Full override, Merge, or Additive restore modes.

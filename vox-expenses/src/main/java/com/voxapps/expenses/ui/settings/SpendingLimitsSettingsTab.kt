@@ -10,15 +10,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.state.ExpensesStateManager
@@ -95,26 +93,16 @@ fun SpendingLimitsSettingsTab(
         HorizontalDivider()
 
         if (addingNew) {
-            Column {
-                OutlinedButton(onClick = { categoryMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        categories.firstOrNull { it.id == newCategoryId }?.name
-                            ?: languageManager.getString("overall_spending_label")
-                    )
-                }
-                DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text(languageManager.getString("overall_spending_label")) },
-                        onClick = { newCategoryId = null; categoryMenuExpanded = false }
-                    )
-                    categories.forEach { cat ->
-                        DropdownMenuItem(
-                            text = { Text(cat.name) },
-                            onClick = { newCategoryId = cat.id; categoryMenuExpanded = false }
-                        )
-                    }
-                }
-            }
+            Picklist(
+                items = categories,
+                selected = categories.firstOrNull { it.id == newCategoryId },
+                itemLabel = { it.name },
+                onSelect = { newCategoryId = it.id },
+                // A limit with no category is the overall one, so "none" here is a real choice
+                // rather than an empty selection.
+                noneLabel = languageManager.getString("overall_spending_label"),
+                onNoneSelected = { newCategoryId = null }
+            )
             OutlinedTextField(
                 value = newAmountText,
                 onValueChange = { newAmountText = it },

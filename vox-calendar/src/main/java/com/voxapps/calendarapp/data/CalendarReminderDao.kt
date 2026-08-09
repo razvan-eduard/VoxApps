@@ -9,6 +9,9 @@ interface CalendarReminderDao {
     @Query("SELECT * FROM reminders WHERE entryId = :entryId")
     suspend fun getForEntry(entryId: Long): List<CalendarReminder>
 
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getById(id: Long): CalendarReminder?
+
     @Query("SELECT * FROM reminders")
     suspend fun getAll(): List<CalendarReminder>
 

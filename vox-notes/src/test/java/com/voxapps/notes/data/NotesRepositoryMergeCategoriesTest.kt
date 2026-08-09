@@ -25,6 +25,7 @@ class NotesRepositoryMergeCategoriesTest {
         categoryDao = mockk(relaxed = true)
         repository = NotesRepository(noteDao, categoryDao, mockk(relaxed = true), mockk(relaxed = true))
         coEvery { categoryDao.observeAll() } returns flowOf(listOf(groceries, cumparaturi, work))
+        coEvery { categoryDao.getAll() } returns listOf(groceries, cumparaturi, work)
     }
 
     @Test

@@ -39,19 +39,26 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
+import com.voxapps.attachments.VisionAttachmentCapture
+import com.voxapps.design.toEnumOr
 import com.voxapps.expenses.ExpensesActivity
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.R
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.TransactionDirection
-import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
+import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.CategoryColors
 import com.voxapps.expenses.ui.formatAmount
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.showRequirementToast
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
+import com.voxapps.ipc.VoxOcrRequest
 import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.flow.first
 import java.time.Instant
@@ -59,6 +66,9 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import com.voxapps.widget.WidgetDayFormats
+import com.voxapps.widget.DaySeparatorStyle
+import com.voxapps.widget.DaySeparatorLabel
 
 /**
  * Home-screen widget: a snapshot of recent expenses plus quick "Add"/"Scan" actions — lives
@@ -84,12 +94,21 @@ class ExpensesWidget : GlanceAppWidget() {
         } else {
             emptyList()
         }
+        val attachedExpenseIds = container.attachmentDao
+            .getRecordIdsWithAttachments(ExpensesAttachments.RECORD_TYPE).toSet()
 
         val addIntent = Intent(context, ExpensesActivity::class.java).apply {
             putExtra(ExpensesActivity.EXTRA_QUICK_ADD, true)
         }
         val openAppIntent = Intent(context, ExpensesActivity::class.java)
-        val settingsSnapshot = container.settingsRepository.getSnapshot()
+        // Read the live flow, not getSnapshot() — that cached value is updated by its own
+        // independent collector, racing against the collector that triggers this very redraw
+        // (ExpensesContainer's combine()). Both react to the same DataStore write with no ordering
+        // guarantee between them, so getSnapshot() could still return the previous value the instant
+        // this redraw fires — a settings change (e.g. picking a new today-effect) would then render
+        // one generation stale until something else happened to trigger a second redraw. A direct
+        // flow read has no such race.
+        val settingsSnapshot = container.settingsRepository.settingsFlow.first()
         val locale = Locale.forLanguageTag(settingsSnapshot.language)
 
         val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
@@ -100,6 +119,7 @@ class ExpensesWidget : GlanceAppWidget() {
                 ExpensesWidgetContent(
                     locked = uiState is ExpensesUiState.Locked,
                     expenses = recentExpenses,
+                    attachedExpenseIds = attachedExpenseIds,
                     languageManager = container.languageManager,
                     addIntent = addIntent,
                     openAppIntent = openAppIntent,
@@ -107,31 +127,60 @@ class ExpensesWidget : GlanceAppWidget() {
                     scanEnabled = scanEnabled,
                     borderEnabled = settingsSnapshot.widgetBorderEnabled,
                     borderThicknessDp = settingsSnapshot.widgetBorderThicknessDp,
-                    borderColor = Color(settingsSnapshot.widgetBorderColorArgb.toInt())
+                    borderColor = Color(settingsSnapshot.widgetBorderColorArgb.toInt()),
+                    // todayEffectShowInWidget is a widget-only opt-out, independent of the in-app
+                    // effect — collapsing it to NONE here reuses the existing effect==NONE gate
+                    // below with no signature changes (mirrors CalendarWidget.kt).
+                    todayEffect = if (settingsSnapshot.todayEffectShowInWidget) {
+                        settingsSnapshot.todayEffect.toEnumOr(TodayEffect.NONE)
+                    } else {
+                        TodayEffect.NONE
+                    },
+                    todayEffectStyle = settingsSnapshot.todayEffectStyle.toEnumOr(TodayEffectStyle.RING),
+                    todayEffectColor = Color(settingsSnapshot.todayEffectColor.toInt())
                 )
             }
         }
     }
 }
 
-class ExpensesWidgetScanAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val container = (context.applicationContext as ExpensesApplication).container
-        val languageManager = container.languageManager
-        when {
-            !VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) ->
-                showRequirementToast(context, languageManager.getString("vision_required_message"))
-            !VoxAppsDiscovery.isCommanderInstalled(context) ->
-                showRequirementToast(context, languageManager.getString("commander_required_message"))
-            else -> ExpenseScanRequestSender.send(context)
-        }
+// Glance/RemoteViews has no expand-in-place speed dial like a real Compose FAB can render (see
+// core:design's SpeedDialFab, used everywhere else) — the widget instead shows 3 small static icons
+// (single/stitch/batch), each its own ActionCallback sharing this one gated launch helper.
+private suspend fun runWidgetScan(context: Context, captureMode: String) {
+    val container = (context.applicationContext as ExpensesApplication).container
+    val languageManager = container.languageManager
+    when {
+        !VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) ->
+            showRequirementToast(context, languageManager.getString("vision_required_message"))
+        !VoxAppsDiscovery.isCommanderInstalled(context) ->
+            showRequirementToast(context, languageManager.getString("commander_required_message"))
+        else -> VisionAttachmentCapture.launch(
+            context, "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", null, produceOCR = true, captureMode = captureMode
+        )
     }
+}
+
+class ExpensesWidgetScanSingleAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_SINGLE)
+}
+
+class ExpensesWidgetScanStitchAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_STITCH)
+}
+
+class ExpensesWidgetScanBatchAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
+        runWidgetScan(context, VoxOcrRequest.CAPTURE_MODE_BATCH)
 }
 
 @Composable
 private fun ExpensesWidgetContent(
     locked: Boolean,
     expenses: List<ExpenseWithDetails>,
+    attachedExpenseIds: Set<Long>,
     languageManager: LanguageManager,
     addIntent: Intent,
     openAppIntent: Intent,
@@ -139,7 +188,10 @@ private fun ExpensesWidgetContent(
     scanEnabled: Boolean,
     borderEnabled: Boolean,
     borderThicknessDp: Int,
-    borderColor: Color
+    borderColor: Color,
+    todayEffect: TodayEffect,
+    todayEffectStyle: TodayEffectStyle,
+    todayEffectColor: Color
 ) {
     Column(
         modifier = GlanceModifier
@@ -158,16 +210,34 @@ private fun ExpensesWidgetContent(
                 style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = GlanceTheme.colors.onSurface)
             )
             Spacer(modifier = GlanceModifier.defaultWeight())
+            // Dimmed (not hidden) when Vision/Commander aren't installed — tapping any of them still
+            // works, runWidgetScan shows an explanatory toast instead of launching Vision; Glance has
+            // no alpha modifier, so a muted tint stands in for "disabled". Enabled, each mode gets its
+            // own color (red/single, yellow/stitch, green/batch) so the three are distinguishable at a
+            // glance, not just by shape.
+            val disabledTint = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant)
+            val singleTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFE53935))) else disabledTint
+            val stitchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFFBC02D))) else disabledTint
+            val batchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFF43A047))) else disabledTint
             Image(
                 provider = ImageProvider(R.drawable.ic_scan),
-                contentDescription = languageManager.getString("scan_receipt"),
-                // Dimmed (not hidden) when Vision/Commander aren't installed — tapping it still
-                // works, ExpensesWidgetScanAction shows an explanatory toast instead of launching
-                // Vision; Glance has no alpha modifier, so a muted tint stands in for "disabled".
-                colorFilter = ColorFilter.tint(if (scanEnabled) GlanceTheme.colors.primary else GlanceTheme.colors.onSurfaceVariant),
-                modifier = GlanceModifier
-                    .size(18.dp)
-                    .clickable(actionRunCallback<ExpensesWidgetScanAction>())
+                contentDescription = languageManager.getString("capture_mode_single"),
+                colorFilter = singleTint,
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<ExpensesWidgetScanSingleAction>())
+            )
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Image(
+                provider = ImageProvider(R.drawable.ic_stitch),
+                contentDescription = languageManager.getString("capture_mode_stitch"),
+                colorFilter = stitchTint,
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<ExpensesWidgetScanStitchAction>())
+            )
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Image(
+                provider = ImageProvider(R.drawable.ic_batch),
+                contentDescription = languageManager.getString("capture_mode_batch"),
+                colorFilter = batchTint,
+                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<ExpensesWidgetScanBatchAction>())
             )
         }
 
@@ -180,7 +250,10 @@ private fun ExpensesWidgetContent(
                     style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant)
                 )
             } else {
-                RecentExpensesList(expenses, languageManager, locale, borderEnabled, borderThicknessDp, borderColor)
+                RecentExpensesList(
+                    expenses, attachedExpenseIds, languageManager, locale, borderEnabled, borderThicknessDp, borderColor,
+                    todayEffect, todayEffectStyle, todayEffectColor
+                )
             }
         }
 
@@ -224,11 +297,15 @@ private fun WidgetAddButton(text: String, addIntent: Intent) {
 @Composable
 private fun RecentExpensesList(
     expenses: List<ExpenseWithDetails>,
+    attachedExpenseIds: Set<Long>,
     languageManager: LanguageManager,
     locale: Locale,
     borderEnabled: Boolean,
     borderThicknessDp: Int,
-    borderColor: Color
+    borderColor: Color,
+    todayEffect: TodayEffect,
+    todayEffectStyle: TodayEffectStyle,
+    todayEffectColor: Color
 ) {
     val zoneId = ZoneId.systemDefault()
     val today = LocalDate.now(zoneId)
@@ -236,147 +313,196 @@ private fun RecentExpensesList(
         .sortedByDescending { it.expense.dateTime }
         .take(20)
 
-    if (recent.isEmpty()) {
-        Text(
-            text = languageManager.getString("widget_no_recent_expenses"),
-            style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant)
-        )
-        return
-    }
-
     // groupBy preserves first-seen key order, and recent is already sorted newest-first, so the
     // resulting day groups come out in reverse-chronological order for free.
-    val grouped = recent.groupBy { Instant.ofEpochMilli(it.expense.dateTime).atZone(zoneId).toLocalDate() }
+    val grouped = recent.groupBy { Instant.ofEpochMilli(it.expense.dateTime).atZone(zoneId).toLocalDate() }.toMutableMap()
+
+    // Ensure Today is always present as the first entry
+    if (!grouped.containsKey(today)) {
+        val newGrouped = mutableMapOf(today to emptyList<ExpenseWithDetails>())
+        newGrouped.putAll(grouped)
+        grouped.clear()
+        grouped.putAll(newGrouped)
+    }
+
     val context = LocalContext.current
 
     LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
         items(grouped.entries.toList(), itemId = { it.key.toEpochDay() }) { (date, items) ->
+            val isToday = date == today
+            // Widgets (Glance/RemoteViews) can't run the animated pulse the in-app effect uses, so
+            // this is a static rendering of the same effect+style+color settings: RING/FULL draw
+            // today's card with the same bordered-card treatment other days get (when enabled)
+            // colored with todayEffectColor instead of borderColor; BACKGROUND/FULL additionally
+            // tint the card's own background with it.
+            val showTodayHighlight = isToday && todayEffect != TodayEffect.NONE && todayEffectStyle != TodayEffectStyle.NONE
+            val showTodayRing = showTodayHighlight && todayEffectStyle != TodayEffectStyle.BACKGROUND
+            val showTodayBackground = showTodayHighlight && todayEffectStyle != TodayEffectStyle.RING
+            val gap = if ((borderEnabled && !isToday) || showTodayRing) (8 + borderThicknessDp * 1.5f).dp else 8.dp
+
             val dayContent: @Composable () -> Unit = {
                 DaySeparatorLabel(date, today, languageManager, locale)
 
-                items.forEach { item ->
-                    val editIntent = Intent(context, ExpensesActivity::class.java).apply {
-                        putExtra(VoxIpc.EXTRA_EXPENSE_ID, item.expense.id)
-                    }
-                    val categoryColor = item.category?.let { CategoryColors.fromStored(it.colorArgb) }
-                    Row(
-                        modifier = GlanceModifier
-                            .fillMaxWidth()
-                            .cornerRadius(6.dp)
-                            .let { m -> if (categoryColor != null) m.background(categoryColor.copy(alpha = ROW_TINT_ALPHA)) else m }
-                            .padding(horizontal = 6.dp, vertical = 4.dp)
-                            .clickable(actionStartActivity(editIntent)),
-                        verticalAlignment = Alignment.Vertical.CenterVertically
-                    ) {
-                        Text(
-                            text = item.expense.title?.takeIf { it.isNotBlank() } ?: item.expense.vendor ?: "—",
-                            maxLines = 1,
-                            style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
-                            modifier = GlanceModifier.defaultWeight()
-                        )
-                        if (!item.expense.comments.isNullOrBlank()) {
+                if (items.isEmpty()) {
+                    Text(
+                        text = languageManager.getString("widget_nothing_today"),
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            color = GlanceTheme.colors.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        ),
+                        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 8.dp)
+                    )
+                } else {
+                    items.forEach { item ->
+                        val editIntent = Intent(context, ExpensesActivity::class.java).apply {
+                            putExtra(VoxIpc.EXTRA_EXPENSE_ID, item.expense.id)
+                        }
+                        val categoryColor = item.category?.let { CategoryColors.fromStored(it.colorArgb) }
+                        Row(
+                            modifier = GlanceModifier
+                                .fillMaxWidth()
+                                .cornerRadius(6.dp)
+                                .let { m -> if (categoryColor != null) m.background(categoryColor.copy(alpha = ROW_TINT_ALPHA)) else m }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .clickable(actionStartActivity(editIntent)),
+                            verticalAlignment = Alignment.Vertical.CenterVertically
+                        ) {
+                            Row(modifier = GlanceModifier.defaultWeight(), verticalAlignment = Alignment.Vertical.CenterVertically) {
+                                Text(
+                                    text = item.expense.title?.takeIf { it.isNotBlank() } ?: item.expense.vendor ?: "—",
+                                    maxLines = 1,
+                                    style = TextStyle(fontSize = 15.sp, color = GlanceTheme.colors.onSurface),
+                                    modifier = GlanceModifier.defaultWeight()
+                                )
+                                if (item.expense.id in attachedExpenseIds) {
+                                    Spacer(modifier = GlanceModifier.width(4.dp))
+                                    Image(
+                                        provider = ImageProvider(R.drawable.ic_attachment),
+                                        contentDescription = null,
+                                        colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant),
+                                        modifier = GlanceModifier.size(12.dp)
+                                    )
+                                }
+                            }
+                            if (!item.expense.comments.isNullOrBlank()) {
+                                Spacer(modifier = GlanceModifier.width(8.dp))
+                                Text(
+                                    text = item.expense.comments,
+                                    maxLines = 2,
+                                    style = TextStyle(
+                                        fontSize = 12.sp,
+                                        color = GlanceTheme.colors.outline,
+                                        textAlign = TextAlign.End
+                                    ),
+                                    modifier = GlanceModifier.defaultWeight()
+                                )
+                            }
                             Spacer(modifier = GlanceModifier.width(8.dp))
-                            Text(
-                                text = item.expense.comments,
-                                maxLines = 2,
-                                style = TextStyle(
-                                    fontSize = 12.sp,
-                                    color = GlanceTheme.colors.outline,
-                                    textAlign = TextAlign.End
+                            Image(
+                                provider = ImageProvider(
+                                    if (item.expense.direction == TransactionDirection.INCOMING) {
+                                        R.drawable.ic_arrow_inward
+                                    } else {
+                                        R.drawable.ic_arrow_outward
+                                    }
                                 ),
-                                modifier = GlanceModifier.defaultWeight()
+                                contentDescription = null,
+                                modifier = GlanceModifier.size(13.dp)
+                            )
+                            Spacer(modifier = GlanceModifier.width(4.dp))
+                            Text(
+                                text = formatAmount(item.expense.totalAmount, item.expense.currencyCode),
+                                style = TextStyle(fontSize = 13.sp, color = GlanceTheme.colors.onSurfaceVariant)
                             )
                         }
-                        Spacer(modifier = GlanceModifier.width(8.dp))
-                        Image(
-                            provider = ImageProvider(
-                                if (item.expense.direction == TransactionDirection.INCOMING) {
-                                    R.drawable.ic_arrow_inward
-                                } else {
-                                    R.drawable.ic_arrow_outward
-                                }
-                            ),
-                            contentDescription = null,
-                            modifier = GlanceModifier.size(13.dp)
-                        )
-                        Spacer(modifier = GlanceModifier.width(4.dp))
-                        Text(
-                            text = formatAmount(item.expense.totalAmount, item.expense.currencyCode),
-                            style = TextStyle(fontSize = 13.sp, color = GlanceTheme.colors.onSurfaceVariant)
-                        )
+                        Spacer(modifier = GlanceModifier.height(2.dp))
                     }
-                    Spacer(modifier = GlanceModifier.height(2.dp))
                 }
             }
 
-            if (borderEnabled) {
-                // Putting padding and background on the SAME node doesn't create a transparent
-                // inset in this Glance/RemoteViews version (verified on-device: the inner
-                // background always covers its node's full bounds, padding included, regardless
-                // of padding size) — so the padding lives on its own middle layer with no
-                // background of its own, between the colored outer Box and the white inner Box.
-                Box(
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .cornerRadius(12.dp)
-                        .background(borderColor)
-                ) {
+            when {
+                (borderEnabled && !isToday) || showTodayRing -> {
+                    // Bordered card: historical days use borderColor, today (when the today-effect's
+                    // style calls for a ring) uses todayEffectColor instead.
+                    val ringColor = if (showTodayRing) todayEffectColor else borderColor
                     Box(
                         modifier = GlanceModifier
                             .fillMaxWidth()
-                            .padding(borderThicknessDp.dp)
+                            .padding(bottom = gap)
                     ) {
-                        Column(
+                        Box(
                             modifier = GlanceModifier
                                 .fillMaxWidth()
-                                .cornerRadius(10.dp)
-                                .background(GlanceTheme.colors.surface)
-                                .padding(8.dp)
+                                .cornerRadius(12.dp)
+                                .background(ringColor)
                         ) {
-                            dayContent()
+                            Box(
+                                modifier = GlanceModifier
+                                    .fillMaxWidth()
+                                    .padding(borderThicknessDp.dp)
+                            ) {
+                                Column(
+                                    modifier = GlanceModifier
+                                        .fillMaxWidth()
+                                        .cornerRadius(10.dp)
+                                        .let { m ->
+                                            if (showTodayBackground) {
+                                                m.background(todayEffectColor.copy(alpha = TODAY_BACKGROUND_TINT_ALPHA))
+                                            } else {
+                                                m.background(GlanceTheme.colors.surface)
+                                            }
+                                        }
+                                        .padding(8.dp)
+                                ) {
+                                    dayContent()
+                                }
+                            }
                         }
                     }
                 }
-            } else {
-                Column(modifier = GlanceModifier.fillMaxWidth().padding(8.dp)) {
-                    dayContent()
+                showTodayBackground -> {
+                    // Background-only highlight (today, style = BACKGROUND): no outer ring box.
+                    Column(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .cornerRadius(10.dp)
+                            .background(todayEffectColor.copy(alpha = TODAY_BACKGROUND_TINT_ALPHA))
+                            .padding(8.dp)
+                            .padding(bottom = gap)
+                    ) {
+                        dayContent()
+                    }
+                }
+                else -> {
+                    // Clean layout: no highlight for today, or border disabled and today-effect off.
+                    Column(modifier = GlanceModifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).padding(bottom = gap)) {
+                        dayContent()
+                    }
                 }
             }
-            Spacer(modifier = GlanceModifier.height(8.dp))
         }
     }
 }
 
 private const val ROW_TINT_ALPHA = 0.18f
+private const val TODAY_BACKGROUND_TINT_ALPHA = 0.22f
 
 private fun dayLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale): String {
-    val shortDate = date.format(DateTimeFormatter.ofPattern("d MMM", locale))
+    val shortDate = WidgetDayFormats.short(date, locale)
     return when (date) {
-        today -> "${languageManager.getString("today")} - $shortDate"
+        today -> "${languageManager.getString("today")}, $shortDate"
         today.plusDays(1) -> "${languageManager.getString("tomorrow")} - $shortDate"
-        else -> date.format(DateTimeFormatter.ofPattern("EEE, d MMM", locale))
+        else -> WidgetDayFormats.weekday(date, locale)
     }
 }
 
-/** Centered day-card header — plain text for every day, "Today"/"Tomorrow" only distinguished by
- * a bolder/larger label (the card's own background tint, set by the caller, is what visually
- * separates one day's card from the next). */
+/** The day heading for this widget: its own wording, the shared presentation. */
 @Composable
 private fun DaySeparatorLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale) {
-    val isToday = date == today
-    Box(
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            .padding(bottom = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = dayLabel(date, today, languageManager, locale),
-            style = TextStyle(
-                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                fontSize = if (isToday) 13.sp else 12.sp,
-                color = GlanceTheme.colors.primary
-            )
-        )
-    }
+    DaySeparatorLabel(
+        text = dayLabel(date, today, languageManager, locale),
+        isToday = date == today,
+        style = DaySeparatorStyle.Pill
+    )
 }

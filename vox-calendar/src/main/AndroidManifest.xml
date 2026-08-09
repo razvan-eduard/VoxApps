@@ -6,6 +6,7 @@
     <!-- Android 13+ suppresses toasts/notifications from backgrounded apps unless allowed — needed
          once a headless voice/LLM-created event wants to surface a toast. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Entry reminders: precise firing via AlarmManager.setExactAndAllowWhileIdle. Not a runtime
          dialog on Android 12+ — see ReminderScheduler.canScheduleExactAlarms()/EntryEditScreen's
          inline notice, which sends the user to Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM if this
@@ -16,6 +17,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Taking a photo directly for an attachment, via the system camera app. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Vox Calendar's one deliberate network exception: fetching a user-subscribed .ics URL (see
+         domain/subscription/IcsUrlFetcher.kt). Nothing else in this app ever makes a network call. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!--
         The COMMAND/LLM_RESULT/LLM_PROCESS signature permissions guarding the receivers below are
@@ -36,7 +41,8 @@
         <activity
             android:name=".CalendarActivity"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:launchMode="singleTask">
 
             <!-- Standalone launcher: works fully without VoxCommander -->
             <intent-filter>
@@ -60,7 +66,7 @@
             <!-- Capability advertising: Commander reads this at scan time to route the "calendar"
                  NLU domain here, with no per-app config on Commander's side. -->
             <meta-data android:name="com.voxapps.vox.domain" android:value="calendar" />
-            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import,get_schema,sync_export,sync_merge" />
+            <meta-data android:name="com.voxapps.vox.actions" android:value="create,read,export,import,get_schema,sync_export,sync_merge,get_field_schema" />
             <meta-data android:name="com.voxapps.vox.label" android:value="Calendar" />
             <meta-data
                 android:name="com.voxapps.vox.nluHint"

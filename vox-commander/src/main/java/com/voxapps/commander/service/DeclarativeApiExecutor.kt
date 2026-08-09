@@ -6,6 +6,7 @@ import com.voxapps.commander.domain.intent.registry.SequenceStep
 import com.voxapps.logging.Logger
 import com.voxapps.commander.utils.NetworkMonitor
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -48,7 +49,10 @@ object DeclarativeApiExecutor {
                     ?: return SlotOutcome(null)
                 val (result, raw) = call
                 val extras = if (!slot.extract.isNullOrEmpty()) {
-                    val root = try { JSONObject(raw) } catch (e: Exception) { null }
+                    // JSONException, not Exception: the only thing that can fail here is parsing
+                    // a non-JSON response body, and a broader catch would hide a genuine bug in
+                    // extractPath below behind the same "treat as no extras" fallback.
+                    val root = try { JSONObject(raw) } catch (e: JSONException) { null }
                     if (root != null) slot.extract.mapValues { (_, path) -> extractPath(root, path) } else emptyMap()
                 } else emptyMap()
                 SlotOutcome(result?.toString(), extras)
@@ -193,7 +197,7 @@ object DeclarativeApiExecutor {
             if (uri == skipValue) continue
 
             val path = queuePath.replace("{item}", URLEncoder.encode(uri, "UTF-8"))
-            val url = integration.baseUrl.trimEnd('/') + path
+            val url = integration.serviceUrl.trimEnd('/') + path
             if (httpRequest(method, url, token, null) != null) queued++
         }
     }
@@ -219,13 +223,14 @@ object DeclarativeApiExecutor {
             return null
         }
         val rawPath = path ?: return null
-        val url = integration.baseUrl.trimEnd('/') + substituteForPath(rawPath, vars)
+        val url = integration.serviceUrl.trimEnd('/') + substituteForPath(rawPath, vars)
         val requestBody = body?.let { substituteForBody(it, vars) }
 
         val raw = httpRequest(method, url, token, requestBody) ?: return null
         if (responsePath == null) return raw to raw
 
-        val root = try { JSONObject(raw) } catch (e: Exception) { return null }
+        // JSONException only — see the equivalent parse in runSlot.
+        val root = try { JSONObject(raw) } catch (e: JSONException) { return null }
         val extracted = extractPath(root, responsePath) ?: return null
         return extracted to raw
     }

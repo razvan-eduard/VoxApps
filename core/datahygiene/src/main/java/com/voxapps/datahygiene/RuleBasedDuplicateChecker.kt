@@ -38,9 +38,13 @@ class RuleBasedDuplicateChecker<T>(
     private val globalCombinator: RuleCombinator
 ) : DuplicateChecker<T> {
 
+    /** Built once per checker rather than per [isDuplicateOf] call — the O(n²) whole-list scans in
+     *  vox-expenses call this once per expense *pair*, so rebuilding the map inside made it O(n² · f)
+     *  map constructions for a lookup table that never changes. */
+    private val fieldsById = fields.associateBy { it.id }
+
     override fun isDuplicateOf(candidate: T, existing: T): Boolean {
         if (rules.isEmpty()) return false
-        val fieldsById = fields.associateBy { it.id }
         val results = rules.map { rule ->
             val selected = rule.fieldIds.mapNotNull { fieldsById[it] }
             if (selected.isEmpty()) {

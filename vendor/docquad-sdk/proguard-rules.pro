@@ -1,0 +1,2 @@
+-keep class com.voxapps.vision.ml.docquad.** { *; }
+-keep class ai.onnxruntime.** { *; }

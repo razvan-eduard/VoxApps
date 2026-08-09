@@ -22,16 +22,22 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:services"))
+    implementation(project(":core:logging"))
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
     implementation("androidx.compose.foundation:foundation")
-    // Just the base icon set (Add/Edit/Close/etc) for the shared color picker — not
-    // material-icons-extended, which alone is an ~87MB unshrunk jar of icons this module
-    // has no other use for.
+    // The base icon set (Add/Edit/Close/etc) for the shared color picker, plus the extended one for
+    // the download arrow on a model row — the only glyph here outside the base set. Extended is an
+    // ~87MB unshrunk jar, but every app already depends on it and R8 keeps only what is reached,
+    // so the cost is the same whether it is declared here or one module further out.
     implementation("androidx.compose.material:material-icons-core")
+    implementation(libs.androidx.compose.material.icons.extended)
     // BackHandler, for the shared DoubleBackToExitHandler composable.
     implementation(libs.androidx.activity.compose)
 
     testImplementation(libs.junit)
+    testImplementation(libs.mockk)
 }

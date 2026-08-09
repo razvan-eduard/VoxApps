@@ -1,5 +1,6 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.design.picklist.Picklist
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import androidx.compose.foundation.clickable
@@ -22,6 +23,10 @@ import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.utils.Strings
 import kotlinx.coroutines.launch
+import com.voxapps.services.SchemaCatalog
+import com.voxapps.services.RemoteSchema
+import com.voxapps.design.settings.SchemaUpdatesSection
+import com.voxapps.design.settings.SchemaUpdatesStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,7 +43,6 @@ fun GeneralSettingsTab(
 
     var modelRepoUrl by remember { mutableStateOf(settingsRepo.getSettingsSnapshot().modelRepoBaseUrl) }
     var selectedLanguage by remember(uiState.language) { mutableStateOf(uiState.language) }
-    var expanded by remember { mutableStateOf(false) }
     val languages = languageManager.getAvailableLanguages()
 
     Column(
@@ -53,107 +57,47 @@ fun GeneralSettingsTab(
     ) {
         Text(text = languageManager.getString("app_settings_section"), style = MaterialTheme.typography.titleMedium)
 
-        // Repository Base URL with gray-out logic
-        var isRepoFocused by remember { mutableStateOf(false) }
-        TextField(
-            value = modelRepoUrl,
-            onValueChange = {
+        // The same section every app that reads schemas shows. What differs between them is only
+        // where the two values are stored, which is why it takes them rather than reading anything.
+        SchemaUpdatesSection(
+            strings = SchemaUpdatesStrings(
+                sectionLabel = languageManager.getString("schema_updates_section"),
+                description = languageManager.getString("schema_updates_desc"),
+                useRemoteLabel = languageManager.getString("schema_use_remote_label"),
+                useRemoteDescription = languageManager.getString("schema_use_remote_desc"),
+                repositoryUrlLabel = languageManager.getString("model_repository_url"),
+                checkNow = languageManager.getString("schema_sync_now"),
+                followingFormat = languageManager.getString("schema_following"),
+                inStep = languageManager.getString("schema_in_step"),
+                servingFormat = languageManager.getString("schema_serving"),
+                unreachableFormat = languageManager.getString("schema_unreachable"),
+                notCheckedYet = languageManager.getString("schema_not_checked"),
+                usingBundled = languageManager.getString("schema_using_bundled")
+            ),
+            repositoryUrl = modelRepoUrl,
+            useRemote = uiState.useRemoteSchemas,
+            onRepositoryUrlChange = {
                 modelRepoUrl = it
                 scope.launch { settingsRepo.setModelRepoBaseUrl(it) }
             },
-            label = { Text(languageManager.getString("model_repository_url")) },
-            placeholder = { Text(languageManager.getString("repository_url_placeholder")) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { isRepoFocused = it.isFocused },
-            trailingIcon = {
-                IconButton(onClick = {
-                    scope.launch {
-                        val success = RemoteModelRegistry.fetchJson(settingsRepo, force = true)
-                        if (success) {
-                            appStateManager.refreshAll()
-                        }
-                        com.voxapps.commander.domain.search.SearchProviderRegistry.fetchRemote(settingsRepo, force = true)
-                        // fetchRemote() rebuilds every DynamicSearchProvider instance from scratch,
-                        // so any previously-applied key is gone until these are called again — see
-                        // SearchProviderRegistry.applySharedOpenAiKey's own doc comment. Missing here
-                        // meant the OpenAI general/knowledge provider stayed locked (hasApiKey()
-                        // false) after a manual sync even with a real key configured, until the next
-                        // full app restart re-ran VoxApplication's own copy of this same sequence.
-                        com.voxapps.commander.domain.search.SearchProviderRegistry.applyApiKeys(
-                            settingsRepo.getAllSearchProviderApiKeys()
-                        )
-                        com.voxapps.commander.domain.search.SearchProviderRegistry.applySharedOpenAiKey(
-                            settingsRepo.getApiKeySync()
-                        )
-                        com.voxapps.commander.domain.intent.registry.IntentCatalog.fetchRemote(settingsRepo, force = true)
-                    }
-                }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Sync JSON")
-                }
-            },
-            colors = if (!isRepoFocused) TextFieldDefaults.colors(
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                unfocusedIndicatorColor = Color.Transparent
-            ) else TextFieldDefaults.colors()
+            onUseRemoteChange = { appStateManager.setUseRemoteSchemas(it) },
+            onSchemasChanged = { appStateManager.refreshAll() }
         )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-        // --- THEME ---
-        Text(text = languageManager.getString("theme_section") ?: "Theme", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val modes = listOf("SYSTEM", "LIGHT", "DARK")
-            val modeLabels = listOf(
-                languageManager.getString("theme_system") ?: "System",
-                languageManager.getString("theme_light") ?: "Light",
-                languageManager.getString("theme_dark") ?: "Dark"
-            )
-            modes.forEachIndexed { idx, mode ->
-                FilterChip(
-                    selected = uiState.themeDarkMode == mode,
-                    onClick = { appStateManager.setThemeDarkMode(mode) },
-                    label = { Text(modeLabels[idx]) }
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("theme_colored") ?: "Colored (Material You)", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    languageManager.getString("theme_colored_desc") ?: "Use system dynamic colors (Android 12+)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(checked = uiState.themeColored, onCheckedChange = { appStateManager.setThemeColored(it) })
-        }
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
         Text(text = languageManager.getString("language"), style = MaterialTheme.typography.labelLarge)
 
-        Box {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(selectedLanguage.uppercase())
+        Picklist(
+            items = languages,
+            selected = selectedLanguage,
+            itemLabel = { it.uppercase() },
+            onSelect = { lang ->
+                selectedLanguage = lang
+                languageManager.loadLanguage(lang)
+                appStateManager.setAppLanguage(lang)
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.fillMaxWidth()) {
-                languages.forEach { lang ->
-                    DropdownMenuItem(
-                        text = { Text(lang.uppercase()) },
-                        onClick = {
-                            selectedLanguage = lang
-                            languageManager.loadLanguage(lang)
-                            appStateManager.setAppLanguage(lang)
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
+        )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -166,27 +110,17 @@ fun GeneralSettingsTab(
         )
 
         val voiceLanguages = Strings.VoiceLanguages.ALL
-        var voiceLangExpanded by remember { mutableStateOf(false) }
         val autoDetect = uiState.voiceLanguageAutoDetect
         Column {
-            OutlinedButton(
-                onClick = { voiceLangExpanded = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(uiState.voiceLanguage.uppercase())
-            }
-            DropdownMenu(expanded = voiceLangExpanded, onDismissRequest = { voiceLangExpanded = false }, modifier = Modifier.fillMaxWidth()) {
-                voiceLanguages.forEach { lang ->
-                    DropdownMenuItem(
-                        text = { Text(lang.uppercase()) },
-                        onClick = {
-                            appStateManager.setVoiceLanguage(lang)
-                            appStateManager.setModelFilterLang(lang)
-                            voiceLangExpanded = false
-                        }
-                    )
+            Picklist(
+                items = voiceLanguages,
+                selected = uiState.voiceLanguage,
+                itemLabel = { it.uppercase() },
+                onSelect = { lang ->
+                    appStateManager.setVoiceLanguage(lang)
+                    appStateManager.setModelFilterLang(lang)
                 }
-            }
+            )
             Spacer(modifier = Modifier.height(4.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,

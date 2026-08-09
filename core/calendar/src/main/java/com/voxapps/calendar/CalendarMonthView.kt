@@ -13,7 +13,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.effects.TodayEffect
+import com.voxapps.design.effects.TodayEffectStyle
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.Locale
@@ -47,7 +50,14 @@ fun <T : CalendarItem> CalendarMonthView(
     locale: Locale = Locale.getDefault(),
     onPeekItemClick: (T) -> Unit,
     itemContent: @Composable (T) -> Unit,
-    emptyDayContent: (@Composable (LocalDate) -> Unit)? = null
+    emptyDayContent: (@Composable (LocalDate) -> Unit)? = null,
+    today: LocalDate = LocalDate.now(),
+    todayLabel: String = "Today",
+    todayEffect: TodayEffect = TodayEffect.NONE,
+    todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
+    todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
+    todayEffectSecondaryColor: Color? = null,
+    todayEffectSpeed: Float = 1f
 ) {
     val dayBuckets = remember(allItems, month) { CalendarDateUtils.bucketByDay(allItems, month) }
     val prevPeek = remember(allItems, month, peekCount) {
@@ -67,7 +77,18 @@ fun <T : CalendarItem> CalendarMonthView(
         dayBuckets.forEach { (date, dayItems) ->
             item(key = "day-$date") {
                 Column {
-                    DayHeader(date = date, isEmpty = dayItems.isEmpty(), locale = locale)
+                    DayHeader(
+                        date = date,
+                        isEmpty = dayItems.isEmpty(),
+                        locale = locale,
+                        today = today,
+                        todayLabel = todayLabel,
+                        todayEffect = todayEffect,
+                        todayEffectStyle = todayEffectStyle,
+                        todayEffectPrimaryColor = todayEffectPrimaryColor,
+                        todayEffectSecondaryColor = todayEffectSecondaryColor,
+                        todayEffectSpeed = todayEffectSpeed
+                    )
                     if (dayItems.isEmpty()) {
                         if (emptyDayContent != null) {
                             emptyDayContent(date)

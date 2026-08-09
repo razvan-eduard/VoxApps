@@ -1,10 +1,27 @@
 package com.voxapps.calendar
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.time.YearMonth
@@ -12,17 +29,47 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * Fixed, non-scrolling month/year label shown once above the day-list (e.g. "July 2026") — replaces
- * repeating month/year on every day row (see [DayHeader]). Updates as [CalendarView] pages between
- * months. [locale] defaults to the device locale but callers should pass the app's in-app language
- * setting (see [CalendarView]'s `locale` param).
+ * Fixed, non-scrolling month/year label shown once above the day-list (e.g. "July 2026").
+ * It can act as an expandable button if [onClick] is provided.
  */
 @Composable
-internal fun MonthYearHeader(month: YearMonth, modifier: Modifier = Modifier, locale: Locale = Locale.getDefault()) {
-    Text(
-        text = "${month.month.getDisplayName(TextStyle.FULL, locale)} ${month.year}",
-        style = MaterialTheme.typography.titleLarge,
-        textAlign = TextAlign.Center,
-        modifier = modifier.padding(vertical = 12.dp)
-    )
+fun MonthYearHeader(
+    month: YearMonth,
+    modifier: Modifier = Modifier,
+    locale: Locale = Locale.getDefault(),
+    isExpanded: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val rotation by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f, label = "chevron_rotation")
+
+    Surface(
+        onClick = { onClick?.invoke() },
+        enabled = onClick != null,
+        color = if (onClick != null) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(percent = 50),
+        modifier = modifier.padding(vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "${month.month.getDisplayName(TextStyle.FULL, locale)} ${month.year}",
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center
+            )
+            if (onClick != null) {
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .rotate(rotation),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
 }

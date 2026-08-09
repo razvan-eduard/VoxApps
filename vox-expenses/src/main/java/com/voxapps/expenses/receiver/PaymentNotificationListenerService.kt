@@ -11,6 +11,7 @@ import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParsePromptBuilder
+import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
 import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
@@ -19,7 +20,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private const val TAG = "PaymentNotificationListenerService"
-private const val COMMANDER_PACKAGE = "com.voxapps.commander"
 
 /**
  * Opt-in capture of payment-app notifications ("you paid X at Y") into a pending expense for review.
@@ -143,9 +143,10 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // omitted — taskParts.getOrNull(2) must stay index-stable) when there's no known bank.
         val encodedBank = knownBankName?.let { Base64.encodeToString(it.toByteArray(Charsets.UTF_8), Base64.NO_WRAP) }.orEmpty()
         // enqueueAndSend persists this request (and appends its own trailing requestId segment to
-        // the task string, after encodedBank) before attempting delivery — see this class's doc
-        // comment and VoxLlmRequestQueue's for why that's what actually fixes a broadcast getting
-        // silently dropped, rather than the FLAG_INCLUDE_STOPPED_PACKAGES flag alone.
+        // the task string, after encodedBank) before attempting delivery. The flag alone isn't
+        // enough here — not because it fails to wake a stopped app (it does; see
+        // VoxAppsDiscovery.ping) but because this send is fire-and-forget: nothing tells us the
+        // reply never came. See VoxLlmRequestQueue's doc comment.
         container.pendingLlmRequestQueue.enqueueAndSend(
             context = applicationContext,
             sourcePackage = packageName,

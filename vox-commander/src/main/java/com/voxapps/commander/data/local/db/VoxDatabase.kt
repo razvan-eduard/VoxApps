@@ -5,11 +5,11 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.domain.intent.model.FastMapRule
+import com.voxapps.commander.utils.fromJsonOrNull
 
-@Database(entities = [FastMapRule::class], version = 12)
+@Database(entities = [FastMapRule::class], version = 13)
 @TypeConverters(StringListConverter::class, StringListListConverter::class)
 abstract class VoxDatabase : RoomDatabase() {
     abstract fun fastMapDao(): FastMapDao
@@ -25,15 +25,8 @@ class StringListConverter {
     }
 
     @TypeConverter
-    fun toStringList(value: String?): List<String> {
-        if (value.isNullOrBlank()) return emptyList()
-        return try {
-            val type = TypeToken.getParameterized(List::class.java, String::class.java).type
-            gson.fromJson(value, type)
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
+    fun toStringList(value: String?): List<String> =
+        gson.fromJsonOrNull<List<String>>(value) ?: emptyList()
 }
 
 class StringListListConverter {
@@ -46,16 +39,6 @@ class StringListListConverter {
     }
 
     @TypeConverter
-    fun toStringListList(value: String?): List<List<String>> {
-        if (value.isNullOrBlank()) return emptyList()
-        return try {
-            val outerType = TypeToken.getParameterized(
-                List::class.java,
-                TypeToken.getParameterized(List::class.java, String::class.java).type
-            ).type
-            gson.fromJson(value, outerType)
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
+    fun toStringListList(value: String?): List<List<String>> =
+        gson.fromJsonOrNull<List<List<String>>>(value) ?: emptyList()
 }

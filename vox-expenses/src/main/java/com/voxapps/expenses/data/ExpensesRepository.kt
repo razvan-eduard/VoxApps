@@ -2,7 +2,9 @@ package com.voxapps.expenses.data
 
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
+import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.attachments.AttachmentSource
 import com.voxapps.datahygiene.DuplicateChecker
 import com.voxapps.datahygiene.RuleBasedDuplicateChecker
 import com.voxapps.datahygiene.RuleCombinator
@@ -11,10 +13,13 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import java.io.File
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import com.voxapps.design.color.VoxColorPalette
 
 /** [ExpensesRepository.addExpense]'s return value when the insert was skipped because
  *  [ExpenseDuplicateChecker] found an exact match already in the database — distinct from the
@@ -39,12 +44,25 @@ class ExpensesRepository(
     private val merchantCategoryMemoryDao: MerchantCategoryMemoryDao,
     private val appContext: Context,
     private val attachmentDao: AttachmentDao,
-    private val duplicateRuleDao: DuplicateRuleDao
+    private val duplicateRuleDao: DuplicateRuleDao,
+    private val pendingFieldSuggestionDao: PendingFieldSuggestionDao
 ) {
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
-    val expensesWithDetails: Flow<List<ExpenseWithDetails>> = expenseDao.observeExpensesWithDetails()
-    val categories: Flow<List<Category>> = categoryDao.observeAll()
-    val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll()
+    val expensesWithDetails: Flow<List<ExpenseWithDetails>> =
+        expenseDao.observeExpensesWithDetails().distinctUntilChanged()
+    val categories: Flow<List<Category>> = categoryDao.observeAll().distinctUntilChanged()
+    val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll().distinctUntilChanged()
+
+    /** See [PendingFieldSuggestion]'s doc comment — the source for ExpenseEditScreen's tappable
+     *  field-suggestion chips after a line-items rescan. */
+    fun observePendingFieldSuggestion(expenseId: Long): Flow<PendingFieldSuggestion?> =
+        pendingFieldSuggestionDao.observe(expenseId)
+
+    suspend fun setPendingFieldSuggestion(suggestion: PendingFieldSuggestion) =
+        pendingFieldSuggestionDao.upsert(suggestion)
+
+    suspend fun clearPendingFieldSuggestion(expenseId: Long) =
+        pendingFieldSuggestionDao.clear(expenseId)
 
     /** Builds the current duplicate checker from whatever rules are persisted right now — fetched
      *  fresh on every call rather than cached, since rules can change between checks and this
@@ -57,20 +75,24 @@ class ExpensesRepository(
      *  fuzzy setting, then combined via [NearDuplicateConfig.globalCombinator], rather than the single
      *  shared field list [com.voxapps.datahygiene.RuleBasedDuplicateChecker] alone would allow. */
     private suspend fun buildDuplicateChecker(config: NearDuplicateConfig, automaticOnly: Boolean = false): DuplicateChecker<Expense> {
-        val rules = duplicateRuleDao.observeAll().first().filter { it.enabled && (!automaticOnly || it.appliesAutomatically) }
+        val rules = duplicateRuleDao.getAll().filter { it.enabled && (!automaticOnly || it.appliesAutomatically) }
         val exactFields = ExpenseRuleFields(fuzzyMatchEnabled = false, timeWindowMillis = config.timeWindowMillis).all
         val fuzzyFields = ExpenseRuleFields(fuzzyMatchEnabled = true, timeWindowMillis = config.timeWindowMillis).all
+        // Hoisted out of the lambda below: it runs once per expense *pair* in the O(n²) scans, so
+        // building a checker per rule in there allocated O(n² · rules) of them for objects that are
+        // identical every time.
+        val ruleCheckers = rules.map { rule ->
+            val fields = if (rule.fuzzyMatchEnabled) fuzzyFields else exactFields
+            RuleBasedDuplicateChecker(fields, listOf(rule.toDuplicateRule()), RuleCombinator.OR)
+        }
         return DuplicateChecker { candidate, existing ->
             // Unconditional, not opt-in per rule: an incoming top-up/refund and an outgoing payment of
             // the same amount are two different real transactions, never a duplicate, regardless of
             // which fields a user-configured rule happens to check. Confirmed on-device: a rule that
             // didn't explicitly include "direction" let a 1000 RON top-up and a 1000 RON payment merge.
             if (candidate.direction != existing.direction) return@DuplicateChecker false
-            if (rules.isEmpty()) return@DuplicateChecker false
-            val results = rules.map { rule ->
-                val fields = if (rule.fuzzyMatchEnabled) fuzzyFields else exactFields
-                RuleBasedDuplicateChecker(fields, listOf(rule.toDuplicateRule()), RuleCombinator.OR).isDuplicateOf(candidate, existing)
-            }
+            if (ruleCheckers.isEmpty()) return@DuplicateChecker false
+            val results = ruleCheckers.map { it.isDuplicateOf(candidate, existing) }
             when (config.globalCombinator) {
                 RuleCombinator.AND -> results.all { it }
                 RuleCombinator.OR -> results.any { it }
@@ -78,11 +100,11 @@ class ExpensesRepository(
         }
     }
 
-    suspend fun expensesSnapshot(): List<Expense> = expenseDao.observeAll().first()
+    suspend fun expensesSnapshot(): List<Expense> = expenseDao.getAll()
 
     suspend fun getExpenseById(id: Long): ExpenseWithDetails? = expenseDao.getWithDetailsById(id)
 
-    /** The color of the most recent expense's category — see [CategoryPalette.unusedOrRandomColor]'s
+    /** The color of the most recent expense's category — see [VoxColorPalette.unusedOrRandomColor]'s
      *  `precedingColor` param. */
     suspend fun mostRecentCategoryColor(): Long? = expenseDao.getMostRecentCategoryColor()
 
@@ -122,13 +144,30 @@ class ExpensesRepository(
 
     /** Insert-side of a sync merge: preserves [expense]'s uid/updatedAt verbatim — unlike [addExpense],
      *  which always mints a fresh uid and stamps updatedAt to "now" (correct for a locally *created*
-     *  row, wrong for one being replicated from a peer that already has real sync identity). */
-    suspend fun insertSyncedExpense(expense: Expense): Long = expenseDao.insert(expense.copy(id = 0))
+     *  row, wrong for one being replicated from a peer that already has real sync identity). [items]
+     *  travel with the expense rather than getting their own sync identity — see
+     *  [ExpensesSyncHandler]'s doc comment for why that's the correct model, not a shortcut. */
+    suspend fun insertSyncedExpense(expense: Expense, items: List<ExpenseLineItem> = emptyList()): Long {
+        val id = expenseDao.insert(expense.copy(id = 0))
+        if (id > 0 && items.isNotEmpty()) {
+            lineItemDao.insertAll(items.mapIndexed { index, item -> item.copy(id = 0, expenseId = id, position = index) })
+        }
+        return id
+    }
 
     /** Update-side of a sync merge: [expense] must already carry the *local* row's id (resolved via
      *  [getIdByUid] before calling this) — every other field, including updatedAt, comes from the
-     *  peer's newer version, since it won the last-write-wins comparison that got us here. */
-    suspend fun updateSyncedExpense(expense: Expense) = expenseDao.update(expense)
+     *  peer's newer version, since it won the last-write-wins comparison that got us here. [items]
+     *  unconditionally replace the local set (an empty list is a valid, correct result — it means the
+     *  peer's current state for this expense genuinely has no line items), mirroring [updateExpense]'s
+     *  delete-then-reinsert pattern exactly. */
+    suspend fun updateSyncedExpense(expense: Expense, items: List<ExpenseLineItem> = emptyList()) {
+        expenseDao.update(expense)
+        lineItemDao.deleteAllForExpense(expense.id)
+        if (items.isNotEmpty()) {
+            lineItemDao.insertAll(items.mapIndexed { index, item -> item.copy(id = 0, expenseId = expense.id, position = index) })
+        }
+    }
 
     /** Applies an incoming sync tombstone: deletes the local row by uid (a no-op if it's already
      *  gone or was never synced here) via the normal [deleteExpenseById] path, so a fresh local
@@ -201,10 +240,23 @@ class ExpensesRepository(
                 if (match != null) {
                     val enriched = enrichWithNearDuplicate(match, candidate)
                     if (enriched !== match) expenseDao.update(enriched)
-                    // The candidate's own receipt photo (if any) is now orphaned unless it got
-                    // adopted into the enriched record.
-                    if (imageName != null && enriched.receiptImageName != imageName) {
-                        deleteReceiptFiles(listOf(imageName))
+                    // The candidate itself is never persisted as its own row here — its receipt photo
+                    // (if any) either got adopted onto the existing match (track it there) or is now
+                    // orphaned with nothing else able to reference it (safe to delete outright).
+                    if (imageName != null) {
+                        if (enriched.receiptImageName == imageName) {
+                            attachmentDao.insert(
+                                AttachmentEntity(
+                                    recordType = ExpensesAttachments.RECORD_TYPE,
+                                    recordId = match.id,
+                                    fileName = imageName,
+                                    source = AttachmentSource.SCANNED,
+                                    createdAt = System.currentTimeMillis()
+                                )
+                            )
+                        } else {
+                            deleteReceiptFileRaw(imageName)
+                        }
                     }
                     return if (enriched === match) {
                         Logger.w("ExpensesRepository", "Duplicate entry — skipping insert (matches existing id=${match.id})")
@@ -221,6 +273,17 @@ class ExpensesRepository(
                 Logger.d("ExpensesRepository", "DB Insert SUCCESS - ID: $id")
                 if (items.isNotEmpty()) {
                     lineItemDao.insertAll(items.mapIndexed { index, item -> item.copy(id = 0, expenseId = id, position = index) })
+                }
+                if (imageName != null) {
+                    attachmentDao.insert(
+                        AttachmentEntity(
+                            recordType = ExpensesAttachments.RECORD_TYPE,
+                            recordId = id,
+                            fileName = imageName,
+                            source = AttachmentSource.SCANNED,
+                            createdAt = createdAt
+                        )
+                    )
                 }
             } else {
                 Logger.e("ExpensesRepository", "DB Insert returned invalid ID: $id")
@@ -253,7 +316,6 @@ class ExpensesRepository(
     suspend fun deleteExpense(expense: Expense) {
         expenseDao.delete(expense)
         expenseDao.insertTombstone(ExpenseTombstone(expense.uid, System.currentTimeMillis()))
-        deleteReceiptFiles(listOfNotNull(expense.receiptImageName))
         deleteAttachmentsFor(expense.id)
     }
 
@@ -263,7 +325,6 @@ class ExpensesRepository(
         if (expense != null) {
             expenseDao.insertTombstone(ExpenseTombstone(expense.uid, System.currentTimeMillis()))
         }
-        deleteReceiptFiles(listOfNotNull(expense?.receiptImageName))
         deleteAttachmentsFor(id)
     }
 
@@ -272,20 +333,24 @@ class ExpensesRepository(
         expenseDao.deleteAll()
         val now = System.currentTimeMillis()
         expenseDao.insertTombstones(all.map { ExpenseTombstone(it.uid, now) })
-        deleteReceiptFiles(all.mapNotNull { it.receiptImageName })
         all.forEach { deleteAttachmentsFor(it.id) }
     }
 
-    /** Best-effort cleanup of manually-added attachments (see :core:attachments) — mirrors
-     *  [deleteReceiptFiles]'s "never block/roll back the DB delete on a file-delete failure"
-     *  posture. Distinct from [deleteReceiptFiles]: the original receipt scan lives in
-     *  filesDir/receipts/ via Expense.receiptImageName, unrelated to this table/dir. */
+    /** Best-effort cleanup of every attachment on a deleted expense — both manually-added ones
+     *  (filesDir/attachments/) and the original receipt scan (filesDir/receipts/, distinguished by
+     *  [AttachmentSource.SCANNED]), now that both are rows in the same table. Checks
+     *  [AttachmentDao.countByFileName] before touching a file — an import's insert-then-delete-old
+     *  reconciliation can re-insert a row under a new id while reusing an old row's fileName, and
+     *  [applyExpenseDeduplication] reassigns a merge-adopted receipt's row onto the keeper — so this
+     *  never deletes a file another row still needs. A file-delete failure never blocks/rolls back
+     *  the DB delete — an orphan file is a far cheaper failure mode than a stuck delete. */
     private suspend fun deleteAttachmentsFor(expenseId: Long) {
         val rows = attachmentDao.deleteAllFor(ExpensesAttachments.RECORD_TYPE, expenseId)
         for (row in rows) {
             try {
                 if (attachmentDao.countByFileName(ExpensesAttachments.RECORD_TYPE, row.fileName) == 0) {
-                    AttachmentFileStore.delete(appContext, ExpensesAttachments.DIR, row.fileName)
+                    val dir = if (row.source == AttachmentSource.SCANNED) "receipts" else ExpensesAttachments.DIR
+                    AttachmentFileStore.delete(appContext, dir, row.fileName)
                 }
             } catch (e: Exception) {
                 Logger.w("ExpensesRepository", "Failed to delete attachment file for expense $expenseId", e)
@@ -293,19 +358,16 @@ class ExpensesRepository(
         }
     }
 
-    /** Best-effort cleanup: a file-delete failure never blocks/rolls back the DB delete — an orphan
-     *  file is a far cheaper failure mode than a stuck delete. Also removes the sibling raw-OCR-text
-     *  file staged for stub-expense retry, if any. */
-    private fun deleteReceiptFiles(names: List<String>) {
-        if (names.isEmpty()) return
-        val receiptsDir = File(appContext.filesDir, "receipts")
-        for (name in names) {
-            try {
-                File(receiptsDir, name).delete()
-                File(receiptsDir, name.substringBeforeLast('.') + ".txt").delete()
-            } catch (e: Exception) {
-                Logger.w("ExpensesRepository", "Failed to delete receipt file(s) for $name", e)
-            }
+    /** Deletes a scanned receipt's file(s) with no reference-count guard — safe only for a
+     *  near-duplicate candidate merged away in [addExpense] without ever becoming its own persisted
+     *  row (see that branch's own comment): nothing else can reference a filename that was never
+     *  attached to any row in the first place. Every other deletion path goes through
+     *  [deleteAttachmentsFor]'s guarded, table-backed cleanup instead. */
+    private fun deleteReceiptFileRaw(name: String) {
+        try {
+            AttachmentFileStore.delete(appContext, "receipts", name)
+        } catch (e: Exception) {
+            Logger.w("ExpensesRepository", "Failed to delete receipt file(s) for $name", e)
         }
     }
 
@@ -332,7 +394,7 @@ class ExpensesRepository(
         merchantMemoryThreshold: Int = ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD,
         source: ExpenseSource = ExpenseSource.VOICE
     ): Long {
-        val cats = categoryDao.observeAll().first()
+        val cats = categoryDao.getAll()
 
         // A learned merchant mapping is a total short-circuit — it overrides whatever the LLM/spoken
         // category or configured default would otherwise suggest, checked BEFORE resolution runs at
@@ -355,7 +417,7 @@ class ExpensesRepository(
         val spoken = spokenCategory?.trim()?.takeIf { it.isNotEmpty() }
         if (resolved.id == null && autoCreate && spoken != null) {
             val precedingColor = expenseDao.getMostRecentCategoryColor()
-            val id = addCategory(spoken, CategoryPalette.unusedOrRandomColor(cats.map { it.colorArgb }, precedingColor), cats.size, dateTime)
+            val id = addCategory(spoken, VoxColorPalette.unusedOrRandomColor(cats.map { it.colorArgb }, precedingColor), cats.size, dateTime)
             if (id > 0) resolved = FuzzyNameMatcher.Resolved(id, spoken)
         }
 
@@ -398,7 +460,7 @@ class ExpensesRepository(
     suspend fun deleteSpendingLimit(limit: SpendingLimit) = spendingLimitDao.delete(limit)
 
     suspend fun applyCategoryMerge(mapping: Map<String, String>) {
-        val cats = categoryDao.observeAll().first()
+        val cats = categoryDao.getAll()
         for ((oldName, canonicalName) in mapping) {
             if (oldName.equals(canonicalName, ignoreCase = true)) continue
             val old = cats.firstOrNull { it.name.equals(oldName, ignoreCase = true) } ?: continue
@@ -413,26 +475,34 @@ class ExpensesRepository(
      *  [Expense.dataScore] rather than always keeping the kept row's own values untouched — approving
      *  a review group used to just discard every field the discarded rows had. */
     suspend fun applyExpenseDeduplication(groups: List<DuplicateGroup>) {
-        val adoptedImageNames = mutableSetOf<String>()
         for (g in groups) {
             val keeper = expenseDao.getWithDetailsById(g.keepId)?.expense ?: continue
             val others = g.duplicateIds.filter { it != g.keepId }.mapNotNull { expenseDao.getWithDetailsById(it)?.expense }
             val merged = others.fold(keeper) { acc, other -> enrichWithNearDuplicate(acc, other) }
             if (merged != keeper) {
                 expenseDao.update(merged)
-                merged.receiptImageName?.let { adoptedImageNames += it }
+                // A blank receiptImageName can only ever be filled in by enrichWithNearDuplicate,
+                // never overwritten (see its own doc comment) — so if it changed at all, exactly one
+                // losing row donated it. Move that row's attachment record onto the keeper too,
+                // otherwise the cleanup below (deleteAttachmentsFor per loser) would delete the file
+                // this row now solely depends on.
+                if (merged.receiptImageName != null && merged.receiptImageName != keeper.receiptImageName) {
+                    val donorId = others.firstOrNull { it.receiptImageName == merged.receiptImageName }?.id
+                    if (donorId != null) {
+                        attachmentDao.reassignRecordId(ExpensesAttachments.RECORD_TYPE, donorId, g.keepId, merged.receiptImageName!!)
+                    }
+                }
             }
         }
         val idsToDelete = groups.flatMap { g -> g.duplicateIds.filter { it != g.keepId } }.distinct()
         if (idsToDelete.isEmpty()) return
-        // Excludes any receipt image a merge above just adopted into a surviving row — otherwise this
-        // would delete the file out from under the row that now references it.
-        val imageNames = expenseDao.getReceiptImageNames(idsToDelete).filterNot { it in adoptedImageNames }
         val uids = expenseDao.getUidsByIds(idsToDelete)
         expenseDao.deleteByIds(idsToDelete)
         val now = System.currentTimeMillis()
         expenseDao.insertTombstones(uids.map { ExpenseTombstone(it, now) })
-        deleteReceiptFiles(imageNames)
+        // Cleans up every remaining attachment (receipt + manual) on each deleted loser — the
+        // reassignment above already moved anything still needed onto the keeper first.
+        idsToDelete.forEach { deleteAttachmentsFor(it) }
     }
 
     /** Retroactive scan for [ExpensesSettings.MODE_LOCAL]'s manual "Check for duplicates
@@ -444,18 +514,25 @@ class ExpensesRepository(
     suspend fun findLocalDuplicateGroups(nearDuplicateConfig: NearDuplicateConfig): List<DuplicateGroup> {
         val detector = buildDuplicateChecker(nearDuplicateConfig)
         val all = expensesSnapshot().sortedBy { it.createdAt }
-        val consumed = mutableSetOf<Long>()
-        val groups = mutableListOf<DuplicateGroup>()
-        for (keep in all) {
-            if (keep.id in consumed) continue
-            val dups = all.filter { it.id != keep.id && it.id !in consumed && detector.isDuplicateOf(it, keep) }
-            if (dups.isNotEmpty()) {
-                groups += DuplicateGroup(keep.id, dups.map { it.id })
-                consumed += dups.map { it.id }
-                consumed += keep.id
+        // Explicitly off the caller's dispatcher: the manual-check entry point launches on
+        // CalendarStateManager-style Main.immediate, and this is an O(n²) pass whose comparator can
+        // run a full Levenshtein matrix per pair — on the main thread that is a guaranteed ANR once
+        // the expense list gets into the low thousands. Room's suspend DAOs hop on their own; pure
+        // CPU work like this does not.
+        return withContext(Dispatchers.Default) {
+            val consumed = mutableSetOf<Long>()
+            val groups = mutableListOf<DuplicateGroup>()
+            for (keep in all) {
+                if (keep.id in consumed) continue
+                val dups = all.filter { it.id != keep.id && it.id !in consumed && detector.isDuplicateOf(it, keep) }
+                if (dups.isNotEmpty()) {
+                    groups += DuplicateGroup(keep.id, dups.map { it.id })
+                    consumed += dups.map { it.id }
+                    consumed += keep.id
+                }
             }
+            groups
         }
-        return groups
     }
 
     /** Scoped single-row counterpart to [findLocalDuplicateGroups], for automatic protection's
@@ -508,23 +585,27 @@ class ExpensesRepository(
     ): List<List<Expense>> {
         val detector = buildDuplicateChecker(nearDuplicateConfig, automaticOnly)
         val all = expensesSnapshot()
-        fun matches(a: Expense, b: Expense) = detector.isDuplicateOf(a, b) || detector.isDuplicateOf(b, a)
-        if (scopedToId != null) {
-            val target = all.find { it.id == scopedToId } ?: return emptyList()
-            val peers = all.filter { it.id != scopedToId && matches(it, target) }
-            return if (peers.isEmpty()) emptyList() else listOf(listOf(target) + peers)
-        }
-        val consumed = mutableSetOf<Long>()
-        val clusters = mutableListOf<List<Expense>>()
-        for (anchor in all.sortedBy { it.createdAt }) {
-            if (anchor.id in consumed) continue
-            val peers = all.filter { it.id != anchor.id && it.id !in consumed && matches(it, anchor) }
-            if (peers.isNotEmpty()) {
-                clusters += listOf(anchor) + peers
-                consumed += anchor.id
-                consumed += peers.map { it.id }
+        // Same reasoning as findLocalDuplicateGroups: unscoped, this is another O(n²) CPU pass
+        // reachable from a Main-dispatched launch.
+        return withContext(Dispatchers.Default) {
+            fun matches(a: Expense, b: Expense) = detector.isDuplicateOf(a, b) || detector.isDuplicateOf(b, a)
+            if (scopedToId != null) {
+                val target = all.find { it.id == scopedToId } ?: return@withContext emptyList()
+                val peers = all.filter { it.id != scopedToId && matches(it, target) }
+                return@withContext if (peers.isEmpty()) emptyList() else listOf(listOf(target) + peers)
             }
+            val consumed = mutableSetOf<Long>()
+            val clusters = mutableListOf<List<Expense>>()
+            for (anchor in all.sortedBy { it.createdAt }) {
+                if (anchor.id in consumed) continue
+                val peers = all.filter { it.id != anchor.id && it.id !in consumed && matches(it, anchor) }
+                if (peers.isNotEmpty()) {
+                    clusters += listOf(anchor) + peers
+                    consumed += anchor.id
+                    consumed += peers.map { it.id }
+                }
+            }
+            clusters
         }
-        return clusters
     }
 }

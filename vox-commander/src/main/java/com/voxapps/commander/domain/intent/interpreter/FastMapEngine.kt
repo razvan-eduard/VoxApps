@@ -22,10 +22,11 @@ class FastMapEngine(
                 if (rule.triggerWords.isNotEmpty()) add(rule.triggerWords)
                 addAll(rule.triggerGroups.filter { it.isNotEmpty() })
             }
-            val triggerRegexStr = if (allTriggerGroups.size <= 1) {
-                RegexGenerator.fromWords(rule.triggerWords)
-            } else {
-                RegexGenerator.fromWordGroups(allTriggerGroups)
+            val triggerRegexStr = when {
+                rule.anyOrder && allTriggerGroups.size <= 1 -> RegexGenerator.fromWordsAnyOrder(rule.triggerWords)
+                rule.anyOrder -> RegexGenerator.fromWordGroupsAnyOrder(allTriggerGroups)
+                allTriggerGroups.size <= 1 -> RegexGenerator.fromWords(rule.triggerWords)
+                else -> RegexGenerator.fromWordGroups(allTriggerGroups)
             }
             val hasTrigger = triggerRegexStr.isNotBlank()
             val hasQuery = rule.queryWords.isNotEmpty()
@@ -60,8 +61,13 @@ class FastMapEngine(
                 }
 
                 // Build query
-                val query = if (rule.lazyQuery) {
-                    // Lazy: extract everything from spokenText except trigger words + app name
+                val query = if (rule.lazyQuery && !rule.anyOrder) {
+                    // Lazy: extract everything from spokenText except trigger words + app name.
+                    // Guarded on !anyOrder: the UI enforces these are mutually exclusive (see
+                    // FastMapRule.anyOrder's doc comment — an any-order trigger pattern is built
+                    // from zero-width lookaheads, so .replace() below wouldn't remove anything and
+                    // would corrupt the extracted query), but a stale/hand-edited row could still
+                    // have both set — fall back to queryWords rather than risk that corruption.
                     var remaining = spokenText
                     if (hasTrigger) {
                         triggerRegex?.let { remaining = remaining.replace(it, " ") }

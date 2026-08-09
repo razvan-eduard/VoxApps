@@ -1,11 +1,47 @@
 version: 2
+
+# Dependabot opens the pull requests; nothing merges them.
+#
+# There was an auto-merge workflow that squashed any Dependabot PR whose unit tests passed. It went
+# because "the tests passed" is a weak claim in this repo: R8 strips Gson-only classes and that
+# surfaces in release builds alone, and no unit test loads a native model — so the bumps most likely
+# to break something (OkHttp, Gson, MediaPipe, onnxruntime) were exactly the ones being merged
+# unattended. A bump that needs code changes is not a bump that should land by itself.
+#
+# CI still runs on every pull request, Dependabot's included: the full test suite and an assemble of
+# each app. The result is visible on the PR; merging is a decision someone makes.
 updates:
+  # Grouped so a week of routine upgrades is one pull request to read rather than ten. Majors are
+  # deliberately left out of the group: those are the ones that change behaviour or an API, and each
+  # deserves to be looked at on its own.
   - package-ecosystem: "gradle"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
     commit-message:
       prefix: "deps"
+    groups:
+      gradle-routine:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The workflows pin action versions too, and nothing was watching them: `actions/setup-java@v4`
+  # already prints a deprecation warning on every run. Same weekly grouping.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps"
+    groups:
+      actions-routine:
+        update-types:
+          - "minor"
+          - "patch"

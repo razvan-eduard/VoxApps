@@ -1,6 +1,7 @@
 package com.voxapps.commander.domain.diagnostic
 
 import android.content.Context
+import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.engine.google.GoogleSttEngine
 import com.voxapps.commander.domain.engine.vosk.VoskSttEngine
@@ -31,6 +32,7 @@ class BenchmarkEngine(
     private val settingsRepo: SettingsRepository,
     private val appStateManager: AppStateManager,
     private val modelDownloader: ModelDownloader,
+    private val fastMapDao: FastMapDao,
     private val localLlmInterpreter: LocalLlmInterpreter? = null,
     private val geminiNanoInterpreter: GeminiNanoInterpreter? = null,
     private val geminiCloudInterpreter: GeminiCloudInterpreter? = null
@@ -77,10 +79,10 @@ class BenchmarkEngine(
         // --- 3. WHISPER STT BENCHMARKS (CPU + GPU per downloaded model) ---
         // Skip if Whisper engine is not enabled
         if (snapshot.isWhisperSystemEnabled) {
-            val whisperKey = RemoteModelRegistry.getEngineKeyByExtension(".bin")
-            val downloadedWhisperModels = whisperKey?.let { RemoteModelRegistry.getModels(it) }?.filter {
+            val whisperKey = com.voxapps.commander.domain.engine.whisper.WhisperCppSttEngine.ENGINE_KEY
+            val downloadedWhisperModels = RemoteModelRegistry.getModels(whisperKey).filter {
                 snapshot.isModelDownloaded(it.id)
-            } ?: emptyList()
+            }
 
             if (downloadedWhisperModels.isNotEmpty()) {
                 diagInfo.append("--- WHISPER MODELS DETECTED ---\n")
@@ -110,10 +112,10 @@ class BenchmarkEngine(
         }
 
         // --- 4. VOSK STT BENCHMARKS (all downloaded Vosk models) ---
-        val voskKey = RemoteModelRegistry.getEngineKeyByExtension(".zip")
-        val downloadedVoskModels = voskKey?.let { RemoteModelRegistry.getModels(it) }?.filter {
+        val voskKey = com.voxapps.commander.domain.engine.vosk.VoskSttEngine.ENGINE_KEY
+        val downloadedVoskModels = RemoteModelRegistry.getModels(voskKey).filter {
             snapshot.isModelDownloaded(it.id)
-        } ?: emptyList()
+        }
 
         if (downloadedVoskModels.isNotEmpty()) {
             diagInfo.append("--- VOSK MODELS DETECTED ---\n")
@@ -129,7 +131,7 @@ class BenchmarkEngine(
         }
 
         // --- 5. WHISPER API STT BENCHMARK ---
-        val apiKey = snapshot.apiKey
+        val apiKey = settingsRepo.getCredentialsSnapshot().forEngine(WhisperSttEngine.ENGINE_KEY)
         if (!apiKey.isNullOrBlank()) {
             diagInfo.append("--- CLOUD CONNECTIVITY ---\n")
             diagInfo.append("Whisper API: Active (Endpoint: OpenAI)\n")
@@ -140,18 +142,32 @@ class BenchmarkEngine(
         // --- 6. GOOGLE STT (Initialization-only — intent-based, no direct API) ---
         runGoogleBenchmark()
 
-        // --- 7. LOCAL LLM INTENT BENCHMARK (MediaPipe GenAI) ---
-        // Reuse the shared LocalLlmInterpreter from AppContainer to avoid native crash
-        // (two LlmInference instances loading the same model causes SIGSEGV in MediaPipe)
+        // --- 7. LOCAL LLM INTENT BENCHMARK (LiteRT-LM) ---
+        // Reuse the shared LocalLlmInterpreter from AppContainer to avoid a native crash — two
+        // separate Engine instances loading the same model concurrently is the exact hazard
+        // LocalLlmInterpreter's Mutex exists to prevent (see its own doc comment).
         diagInfo.append("--- LOCAL LLM DIAGNOSTICS ---\n")
         if (localLlmInterpreter != null) {
             val activeModelId = snapshot.activeIntentModelId
-            if (activeModelId != null) {
-                val nluKey = RemoteModelRegistry.getEngineKeysByType("llm").firstOrNull()
-                val activeModel = nluKey?.let { RemoteModelRegistry.getModels(it) }?.find { it.id == activeModelId }
+            // The interpreter resolves its model file with the *active processor's* key, so this
+            // only measures anything when that processor is actually a local LLM. With a cloud
+            // processor selected the path is built from an engine that has no extension, the load
+            // fails, and the timing reported would be of nothing at all.
+            val processorIsLocalLlm = RemoteModelRegistry.isLlmEngine(snapshot.aiProcessor)
+            if (activeModelId != null && processorIsLocalLlm) {
+                // activeModelId alone doesn't say which local-LLM-capable engine it belongs to
+                // (there are two now: nlu_llm for .task models, nlu_llm_litertlm for .litertlm
+                // models) — search every local-LLM engine's model list rather than assuming the
+                // first one.
+                val activeModel = RemoteModelRegistry.getLlmEngineKeys()
+                    .asSequence()
+                    .flatMap { RemoteModelRegistry.getModels(it).asSequence() }
+                    .find { it.id == activeModelId }
                 val modelLabel = activeModel?.label ?: activeModelId
                 diagInfo.append("Model: $activeModelId | Label: $modelLabel (active)\n")
                 runLocalLlmBenchmark(modelLabel, localLlmInterpreter)
+            } else if (!processorIsLocalLlm) {
+                diagInfo.append("NLU Model: skipped — active processor '${snapshot.aiProcessor}' is not a local LLM\n")
             } else {
                 diagInfo.append("NLU Model: No active model selected\n")
             }
@@ -177,7 +193,7 @@ class BenchmarkEngine(
         diagInfo.append("\n")
 
         // --- 10. GEMINI CLOUD INTENT BENCHMARK (Cloud API) ---
-        val geminiKey = settingsRepo.getGeminiApiKeySync()
+        val geminiKey = settingsRepo.getCredentialsSnapshot().forEngine(Strings.AiProcessors.GEMINI_CLOUD)
         if (!geminiKey.isNullOrBlank() && snapshot.cloudIntelligenceEnabled) {
             diagInfo.append("--- GEMINI CLOUD INTENT ENGINE ---\n")
             runGeminiCloudBenchmark()
@@ -192,6 +208,13 @@ class BenchmarkEngine(
         val label = if (forceGpu) "Whisper Vulkan" else "Whisper NEON"
         try {
             val engine = WhisperCppSttEngine(context, settingsRepo, forceGpu = forceGpu)
+            val spec = com.voxapps.commander.domain.engine.EngineSpecs.build(
+                context, settingsRepo, engine.engineKey, model.id, settingsRepo.getSettingsSnapshot().voiceLanguage
+            )
+            if (spec == null || !engine.load(spec)) {
+                appStateManager.updateBenchmarkResult(BenchmarkResult(label, model.label, 0, 0f, false, "model not loadable"))
+                return
+            }
             val start = System.currentTimeMillis()
             engine.transcribe(audioData)
             val end = System.currentTimeMillis()
@@ -204,7 +227,16 @@ class BenchmarkEngine(
 
     private suspend fun runVoskBenchmark(modelId: String, modelLabel: String, langCode: String, audioData: ByteArray) {
         try {
-            val engine = VoskSttEngine(context, settingsRepo, langCode)
+            val engine = VoskSttEngine(context)
+            // Engines no longer load themselves on first use, so the benchmark must load the model
+            // it means to measure — and it measures *this* model, not whichever one is selected.
+            val spec = com.voxapps.commander.domain.engine.EngineSpecs.build(
+                context, settingsRepo, engine.engineKey, modelId, langCode, langCode
+            )
+            if (spec == null || !engine.load(spec)) {
+                appStateManager.updateBenchmarkResult(BenchmarkResult("Vosk", "$modelLabel ($langCode)", 0, 0f, false, "model not loadable"))
+                return
+            }
             val start = System.currentTimeMillis()
             engine.transcribe(audioData)
             val end = System.currentTimeMillis()
@@ -238,7 +270,7 @@ class BenchmarkEngine(
 
     private suspend fun runApiBenchmark(apiKey: String, audioData: ByteArray) {
         try {
-            val engine = WhisperSttEngine(apiKey)
+            val engine = WhisperSttEngine(apiKey, settingsRepo)
             val start = System.currentTimeMillis()
             engine.transcribe(audioData)
             val end = System.currentTimeMillis()
@@ -280,7 +312,7 @@ class BenchmarkEngine(
 
     private suspend fun runOpenAiIntentBenchmark() {
         try {
-            val engine = OpenAiInterpreter(context, settingsRepo)
+            val engine = OpenAiInterpreter(context, settingsRepo, fastMapDao)
             val start = System.currentTimeMillis()
             val result = engine.processCommand(INTENT_TEST_COMMAND)
             val end = System.currentTimeMillis()

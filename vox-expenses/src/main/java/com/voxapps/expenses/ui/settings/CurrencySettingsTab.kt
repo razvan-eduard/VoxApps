@@ -19,7 +19,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.voxapps.expenses.data.ExchangeRateApiKeyStore
 import com.voxapps.expenses.data.ExchangeRateRepository
@@ -30,6 +29,9 @@ import com.voxapps.expenses.ui.LocalLanguageManager
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import com.voxapps.design.picklist.ServicePicklist
 
 /**
  * Home currency + exchange-rate API key (a real secret, stored separately via
@@ -54,7 +56,13 @@ fun CurrencySettingsTab(
     var fetching by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf<String?>(null) }
 
-    val service = remember { ExternalServiceConfig.exchangeRateService(context) }
+    // The declared currency services, and whichever the user picked. Adding a provider is a schema
+    // edit; this screen only chooses between what is declared — the same arrangement the search
+    // providers use, through the same picklist.
+    val services = remember { ExternalServiceConfig.currencyServices(context) }
+    val service = remember(services, settings.exchangeRateServiceId) {
+        ExternalServiceConfig.chosenCurrencyService(context, settings.exchangeRateServiceId)
+    }
 
     Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(languageManager.getString("currency_settings_title"), style = MaterialTheme.typography.titleMedium)
@@ -76,22 +84,47 @@ fun CurrencySettingsTab(
 
         HorizontalDivider()
 
-        Text(languageManager.getString("exchange_rate_api_key_label"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            service?.let { String.format(languageManager.getString("exchange_rate_api_key_desc"), it.docsUrl) }
-                ?: languageManager.getString("exchange_rate_service_missing"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        OutlinedTextField(
-            value = apiKeyText,
-            onValueChange = {
-                apiKeyText = it
-                ExchangeRateApiKeyStore.set(context, it.takeIf { key -> key.isNotBlank() })
+        // Drawn whatever the count. With one declared provider the button is still the answer to
+        // "where do my rates come from?", and a screen that hides the control until a second entry
+        // arrives is indistinguishable from one where the feature never shipped.
+        //
+        // What appears beneath it — the key field, the reachability test — is decided from what the
+        // provider declares, by the same component the engine and search screens use. Frankfurter
+        // needs no key and shows none; ExchangeRate-API shows both.
+        Text(languageManager.getString("exchange_rate_provider_label"), style = MaterialTheme.typography.labelLarge)
+        ServicePicklist(
+            items = services,
+            selected = service,
+            itemLabel = { it.fallbackLabel },
+            onSelect = { chosen -> stateManager.setExchangeRateServiceId(chosen.id) },
+            credentialFor = { apiKeyText },
+            onCredentialCommit = { _, entered ->
+                apiKeyText = entered.orEmpty()
+                ExchangeRateApiKeyStore.set(context, entered)
             },
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth()
+            credentialLabel = languageManager.getString("exchange_rate_api_key_label"),
+            itemNote = { if (it.requiresCredential) languageManager.getString("exchange_rate_needs_key_note") else "" },
+            helpTextFor = { entry ->
+                entry.apiKeyUrl?.let {
+                    String.format(languageManager.getString("exchange_rate_api_key_desc"), it)
+                }
+            },
+            testingLabel = languageManager.getString("exchange_rate_testing"),
+            onlineLabel = languageManager.getString("exchange_rate_online"),
+            offlineLabel = languageManager.getString("exchange_rate_offline"),
+            missingCredentialLabel = languageManager.getString("exchange_rate_needs_key"),
+            noNetworkLabel = languageManager.getString("connection_no_network"),
+            notes = {
+                if (service == null) {
+                    Text(
+                        text = languageManager.getString("exchange_rate_service_missing"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
         )
+        Spacer(Modifier.height(8.dp))
 
         OutlinedButton(
             onClick = {

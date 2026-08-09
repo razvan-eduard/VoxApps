@@ -24,6 +24,11 @@ android {
 
 dependencies {
     implementation(project(":core:logging"))
+    // VisionAttachmentCapture builds/sends a VoxOcrRequest and starts VisionActivity — this module
+    // already owns "how an app adds a photo to a record" and is a dependency of every app, so the
+    // shared Vision-launching logic lives here rather than duplicated per app.
+    implementation(project(":core:ipc"))
+    implementation(project(":core:design"))
 
     // AttachmentEntity/Dao — each consuming app's own @Database includes them directly, same
     // pattern as :core:ipc's PendingLlmRequestEntity/Dao; this module itself has no @Database.

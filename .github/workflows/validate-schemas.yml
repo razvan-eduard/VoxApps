@@ -1,0 +1,21 @@
+# The same check the schemas repository runs, here where the files are edited first.
+#
+# The apps assert these rules in Kotlin against the copies they ship with, but only for the schema a
+# build happens to include. This runs on the folder itself, so an edit is checked whether or not it
+# reaches a build — and it is the same script the schemas repository mirrors, so the rules cannot
+# drift between the two.
+name: Validate schemas
+
+on:
+  push:
+    paths: ["remote-schemas/**", "scripts/validate_schemas.py"]
+  pull_request:
+    paths: ["remote-schemas/**", "scripts/validate_schemas.py"]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/validate_schemas.py remote-schemas

@@ -12,8 +12,8 @@ android {
         applicationId = "com.voxapps.notes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.13"
+        versionCode = 20
+        versionName = "0.20"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -64,11 +64,15 @@ android {
 }
 
 dependencies {
+    implementation(libs.gson)
     implementation(project(":core:design"))
     implementation(project(":core:calendar"))
     implementation(project(":core:ipc"))
+    implementation(project(":core:backup"))
     implementation(project(":core:attachments"))
     implementation(project(":core:logging"))
+    implementation(project(":core:widget"))
+    implementation(project(":core:preferences"))
     implementation(project(":core:datahygiene"))
     implementation(project(":core:textmatch"))
     implementation(project(":core:schema-annotations"))
@@ -114,6 +118,7 @@ dependencies {
     implementation(libs.androidx.glance.appwidget)
 
     // --- Unit tests (JVM, mirror vox-commander) ---
+    testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -121,5 +126,10 @@ dependencies {
     testImplementation("androidx.test:core:1.7.0")
     // org.json ships in android.jar at compile time; unit tests need the real implementation
     // (mirrors :core:ipc, which needed this for the exact same reason).
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260719")
+}
+
+// The Gson keep-rule test reads proguard-rules.pro, so a change there must invalidate the test task.
+tasks.withType<Test>().configureEach {
+    inputs.file("proguard-rules.pro").withPathSensitivity(PathSensitivity.RELATIVE)
 }

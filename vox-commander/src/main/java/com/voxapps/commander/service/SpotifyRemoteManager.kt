@@ -76,11 +76,15 @@ object SpotifyRemoteManager {
             .build()
 
         val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-        var callbackCalled = false
+        // AtomicBoolean rather than a captured `var`: three separate callers (the 60s timeout, the
+        // SDK's onConnected, its onFailure) race to be the one that invokes onResult, and the
+        // read-then-write pair this replaces only held because all three happen to arrive on the
+        // main thread — an invariant the Spotify SDK never promises. compareAndSet makes
+        // "exactly one of you wins" the thing the code actually says.
+        val callbackCalled = java.util.concurrent.atomic.AtomicBoolean(false)
 
         val timeoutRunnable = Runnable {
-            if (!callbackCalled) {
-                callbackCalled = true
+            if (callbackCalled.compareAndSet(false, true)) {
                 connectionError = "TIMEOUT"
                 Logger.log("Spotify connectAsync timed out after 60s — SDK did not respond", TAG)
                 onResult(false)
@@ -90,8 +94,7 @@ object SpotifyRemoteManager {
 
         SpotifyAppRemote.connect(context, connectionParams, object : Connector.ConnectionListener {
             override fun onConnected(appRemote: SpotifyAppRemote) {
-                if (callbackCalled) return
-                callbackCalled = true
+                if (!callbackCalled.compareAndSet(false, true)) return
                 mainHandler.removeCallbacks(timeoutRunnable)
                 spotifyAppRemote = appRemote
                 _connected.value = true
@@ -100,8 +103,7 @@ object SpotifyRemoteManager {
             }
 
             override fun onFailure(throwable: Throwable) {
-                if (callbackCalled) return
-                callbackCalled = true
+                if (!callbackCalled.compareAndSet(false, true)) return
                 mainHandler.removeCallbacks(timeoutRunnable)
                 val msg = throwable.message ?: "Unknown error"
                 connectionError = when {
