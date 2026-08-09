@@ -198,6 +198,11 @@ home-screen widget, sync with another phone via Vox Hub, and its own Backup & Re
 <img width="388" height="850" alt="invoice-to-expense" src="https://github.com/user-attachments/assets/244ed0fd-f71c-48cf-8f03-82d3726bf4df" />
 <img width="388" height="850" alt="voice-lidl-to-expense" src="https://github.com/user-attachments/assets/752bd7c7-79e3-4390-b1ef-d5c25daa2ca4" />
 
+Receipt scanning enriches the existing expense:
+
+https://github.com/user-attachments/assets/d348e5ca-4c92-4b45-b615-1f9e62f9bfee
+
+
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-expenses)
 
