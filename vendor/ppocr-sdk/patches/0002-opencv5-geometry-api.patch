@@ -1,17 +1,6 @@
-VoxApps patch 0002: OpenCV 5 geometry API.
-
-Upstream PaddleOCR targets OpenCV 4.x, where minAreaRect and getPerspectiveTransform live
-on Imgproc. We build OpenCV 5.0, which moved both into org.opencv.geometry.Geometry. Without
-this, a re-vendor of these two files leaves Imgproc.minAreaRect unresolved — and because the
-RotatedRect it returns then has no type, .size and .points fail too, so one missing symbol
-reads as a dozen unrelated errors.
-
-git apply skips this preamble and starts at the first diff header below.
-
-diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostProcessor.kt b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostProcessor.kt
 --- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostProcessor.kt
 +++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostProcessor.kt
-@@ -24,6 +24,7 @@ import org.opencv.core.MatOfPoint
+@@ -24,6 +24,7 @@
  import org.opencv.core.MatOfPoint2f
  import org.opencv.core.Point
  import org.opencv.core.Scalar
@@ -19,7 +8,7 @@ diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostPro
  import org.opencv.imgproc.Imgproc
  
  object DBPostProcessor {
-@@ -85,7 +86,7 @@ object DBPostProcessor {
+@@ -85,7 +86,7 @@
                  val contour = contours[index]
                  val contour2f = MatOfPoint2f(*contour.toArray())
                  val rect = try {
@@ -28,7 +17,7 @@ diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostPro
                  } finally {
                      contour2f.release()
                  }
-@@ -106,7 +107,7 @@ object DBPostProcessor {
+@@ -106,7 +107,7 @@
                  val expandedRect = MatOfPoint2f().let { expanded2f ->
                      try {
                          expanded2f.fromList(expandedPts)
@@ -37,10 +26,9 @@ diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostPro
                      } finally {
                          expanded2f.release()
                      }
-diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/QuadTextCrop.kt b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/QuadTextCrop.kt
 --- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/QuadTextCrop.kt
 +++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/QuadTextCrop.kt
-@@ -21,6 +21,7 @@ import org.opencv.core.Mat
+@@ -21,6 +21,7 @@
  import org.opencv.core.MatOfPoint2f
  import org.opencv.core.Point
  import org.opencv.core.Size
@@ -48,7 +36,7 @@ diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/QuadTextC
  import org.opencv.imgproc.Imgproc
  import kotlin.math.hypot
  import kotlin.math.max
-@@ -34,7 +35,7 @@ object QuadTextCrop {
+@@ -34,7 +35,7 @@
          val rectPoints = box.points.map { Point(it.x.toDouble(), it.y.toDouble()) }
          val rectInput = MatOfPoint2f()
          rectInput.fromList(rectPoints)
@@ -57,7 +45,7 @@ diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/QuadTextC
          rectInput.release()
  
          val boxPoints = Array(4) { Point() }
-@@ -60,7 +61,7 @@ object QuadTextCrop {
+@@ -60,7 +61,7 @@
                  Point(0.0, dstH.toDouble()),
              )
          )

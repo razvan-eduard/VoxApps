@@ -12,7 +12,7 @@ CTC decode). The pristine upstream source is kept as a git submodule at vendor/p
 sparse-checked-out to just deploy/ppocr-android/ppocr-sdk (PaddleOCR itself is a large monorepo we
 otherwise have no use for).
 
-Local patch: load models from raw bytes/files, not just APK assets. Upstream's
+Local patch 1 of 2: load models from raw bytes/files, not just APK assets. Upstream's
 `ORTSessionManager`/`ModelConfig`/`OCREngine`/`PaddleOCR` only ever read model/config files from
 `context.assets`, but Vision's models are downloaded at runtime into app-internal storage (never
 bundled in the APK or committed to git — see vox-vision/src/main/java/com/voxapps/vision/ocr/). Added
@@ -21,10 +21,18 @@ purely-additive overloads (`ORTSessionManager.loadModels(ByteArray, ByteArray)`,
 constructor params, `PaddleOCR.create(..., detModelFile: File, recModelFile: File, recConfigFile:
 File)`) — every original asset-path-based method/constructor is untouched and still works.
 
-The patch itself is maintained as a real, storable diff at
-patches/0001-load-models-from-bytes.patch (regenerate with scripts/regen_ppocr_sdk_patch.sh whenever
-the patch changes). scripts/check_ppocr_sdk_version.sh checks whether upstream has moved past the
-pinned commit and whether the stored patch would still apply cleanly against the newer tree.
+Local patch 2 of 2: the OpenCV 5 geometry API. Upstream targets OpenCV 4.x, where `minAreaRect` and
+`getPerspectiveTransform` live on `Imgproc`; we build OpenCV 5.0, which moved both into
+`org.opencv.geometry.Geometry`. `DBPostProcessor` and `QuadTextCrop` are rewritten to call them
+there. The failure this prevents is deceptive: with `Imgproc.minAreaRect` unresolved, the
+`RotatedRect` it returns has no type either, so `.size` and `.points` fail too and one missing symbol
+reads as a dozen unrelated errors in files nobody touched.
+
+Both patches are maintained as real, storable diffs under patches/ (regenerate with
+scripts/regen_ppocr_sdk_patch.sh whenever a patch changes). Which files belong to which patch is read
+out of the patch itself, so adding one to that folder is the whole of adding a patch — nothing else
+lists them. scripts/check_ppocr_sdk_version.sh checks whether upstream has moved past the pinned
+commit and whether each stored patch would still apply cleanly against the newer tree.
 
 Used by vox-vision for on-device OCR (PP-OCRv5 mobile detection + recognition models). Model files
 themselves are NOT vendored here — they are downloaded at runtime from a GitHub Release on this repo
