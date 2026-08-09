@@ -125,6 +125,34 @@ class ModelDownloaderTest {
     }
 
     @Test
+    fun `an archive cannot write outside the model directory`() {
+        // The entry name comes from inside the archive, and archives arrive from a
+        // user-configurable repository or from a file the user picked. "../" in a name is the
+        // oldest trick there is, and it lands wherever this app's uid can write.
+        every { RemoteModelRegistry.isArchiveEngine("wake_vosk") } returns true
+        val outside = File(tempDir, "victim.txt")
+        outside.writeText("original")
+
+        // Where unzipModel looks: getExternalFilesDir(DIRECTORY_DOWNLOADS)/<modelId><extension>,
+        // which this harness maps to tempDir. Put it anywhere else and the test proves nothing.
+        val archive = File(tempDir, "vosk-evil.zip")
+        java.util.zip.ZipOutputStream(archive.outputStream()).use { zos ->
+            zos.putNextEntry(java.util.zip.ZipEntry("../victim.txt"))
+            zos.write("owned".toByteArray())
+            zos.closeEntry()
+            zos.putNextEntry(java.util.zip.ZipEntry("am/final.mdl"))
+            zos.write(ByteArray(16))
+            zos.closeEntry()
+        }
+
+        var completed = false
+        downloader.unzipModel("vosk-evil", "wake_vosk") { completed = true }
+
+        assertTrue("extraction should still finish", completed)
+        assertEquals("original", outside.readText())
+    }
+
+    @Test
     fun `deleteModelFile deletes existing file-based model`() {
         val resolved = downloader.resolveLocalFile("base", "stt_whisper")
         val modelFile = resolved ?: File(tempDir, "base.bin")

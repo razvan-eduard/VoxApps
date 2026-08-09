@@ -513,6 +513,25 @@ class ModelDownloader(private val context: Context) {
     }
 
     /**
+     * Where an archive entry may be written, or null if it is trying to leave [targetDir].
+     *
+     * An entry name is attacker-controlled data: it comes from inside the archive, and the archives
+     * this app opens are a model downloaded from a user-configurable repository or a file the user
+     * picked. `File(dir, "../../x")` resolves outside `dir`, so an entry named that way writes
+     * wherever the app's own uid can write — settings, credentials, other apps' shared files. The
+     * classic archive traversal, and it is cheap to refuse.
+     *
+     * Refuses rather than sanitising the name: an archive containing such an entry is not a model
+     * that needs rescuing, and silently rewriting the path would hide what was attempted.
+     */
+    private fun confine(targetDir: File, entryName: String): File? {
+        val candidate = File(targetDir, entryName)
+        val root = targetDir.canonicalPath
+        val resolved = candidate.canonicalPath
+        return if (resolved == root || resolved.startsWith(root + File.separator)) candidate else null
+    }
+
+    /**
      * Unpacks [archive] into [targetDir], by the packaging its name declares.
      *
      * Shared by the download path and the import path: what upstream publishes is an archive, so a
@@ -528,8 +547,10 @@ class ModelDownloader(private val context: Context) {
             ZipInputStream(FileInputStream(archive)).use { zis ->
                 var entry = zis.nextEntry
                 while (entry != null) {
-                    val newFile = File(targetDir, entry.name)
-                    if (entry.isDirectory) {
+                    val newFile = confine(targetDir, entry.name)
+                    if (newFile == null) {
+                        Logger.log("Refusing archive entry outside the model directory: ${entry.name}", TAG)
+                    } else if (entry.isDirectory) {
                         newFile.mkdirs()
                     } else {
                         newFile.parentFile?.mkdirs()
@@ -552,8 +573,10 @@ class ModelDownloader(private val context: Context) {
                     TarArchiveInputStream(bzis).use { tis ->
                         var entry: TarArchiveEntry? = tis.nextEntry as? TarArchiveEntry
                         while (entry != null) {
-                            val newFile = File(targetDir, entry.name)
-                            if (entry.isDirectory) {
+                            val newFile = confine(targetDir, entry.name)
+                            if (newFile == null) {
+                                Logger.log("Refusing archive entry outside the model directory: ${entry.name}", TAG)
+                            } else if (entry.isDirectory) {
                                 newFile.mkdirs()
                             } else {
                                 newFile.parentFile?.mkdirs()
