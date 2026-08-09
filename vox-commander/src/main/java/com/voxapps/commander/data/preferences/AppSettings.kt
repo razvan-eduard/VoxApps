@@ -103,6 +103,8 @@ data class AppSettings(
     /** Whether the copies left by the previous schema loader have been discarded — see
      *  SchemaCatalog.discardCopiesFromOlderScheme. Set once, never shown to the user. */
     val schemaStoreMigrated: Boolean = false,
+    /** Whether imports made before an import selected itself have been given their selection. */
+    val importSelectionMigrated: Boolean = false,
 
     // --- DEFAULT APPS PER DOMAIN ---
     /** Map of domain -> package name. e.g. "audio" -> "com.spotify.music" */

@@ -508,5 +508,21 @@
   "schema_use_remote_label": "Folosește schemele din depozit",
   "schema_use_remote_desc": "Dezactivat rulează exact ce a fost livrat cu această versiune și șterge ce a fost descărcat.",
   "schema_using_bundled": "Se folosesc schemele livrate cu aplicația",
-  "schema_serving": "Depozitul furnizează %1$d schemă(e)"
+  "schema_serving": "Depozitul furnizează %1$d schemă(e)",
+  "import_accepted_title": "Model adăugat",
+  "import_accepted_body": "%1$s este acum modelul acestui motor și este selectat.",
+  "import_rejected_title": "Modelul nu a fost adăugat",
+  "import_rejected_wrong_kind": "Acest motor încarcă %1$s. Nu s-a copiat nimic.",
+  "import_rejected_empty": "Folderul ales este gol. Nu s-a copiat nimic.",
+  "import_rejected_unreadable": "Fișierul nu a putut fi citit. Nu s-a copiat nimic.",
+  "import_unnamed_file": "Fișierul selectat",
+  "import_source_title": "Importă un model",
+  "import_source_body": "Acest motor acceptă folderul unui model dezarhivat sau arhiva în care a fost publicat.",
+  "import_source_folder": "Folder",
+  "import_source_archive": "Arhivă",
+  "model_imported_suffix": "%1$s — importat",
+  "import_delete_source": "Ștergi arhiva?",
+  "import_keep_source": "Păstreaz-o",
+  "import_source_delete_failed": "Arhiva nu a putut fi ștearsă.",
+  "import_language_prompt": "Pentru ce limbă este acest model?"
 }

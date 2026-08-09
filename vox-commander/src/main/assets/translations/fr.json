@@ -508,5 +508,21 @@
   "schema_use_remote_label": "Utiliser les schémas du dépôt",
   "schema_use_remote_desc": "Désactivé exécute exactement ce qui a été livré avec cette version et supprime ce qui a été téléchargé.",
   "schema_using_bundled": "Utilisation des schémas livrés avec l'application",
-  "schema_serving": "Le dépôt fournit %1$d schéma(s)"
+  "schema_serving": "Le dépôt fournit %1$d schéma(s)",
+  "import_accepted_title": "Modèle ajouté",
+  "import_accepted_body": "%1$s est maintenant le modèle de ce moteur et il est sélectionné.",
+  "import_rejected_title": "Modèle non ajouté",
+  "import_rejected_wrong_kind": "Ce moteur charge %1$s. Rien n’a été copié.",
+  "import_rejected_empty": "Le dossier choisi est vide. Rien n’a été copié.",
+  "import_rejected_unreadable": "Le fichier n’a pas pu être lu. Rien n’a été copié.",
+  "import_unnamed_file": "Le fichier sélectionné",
+  "import_source_title": "Importer un modèle",
+  "import_source_body": "Ce moteur accepte le dossier d’un modèle décompressé ou l’archive dans laquelle il a été publié.",
+  "import_source_folder": "Dossier",
+  "import_source_archive": "Archive",
+  "model_imported_suffix": "%1$s — importé",
+  "import_delete_source": "Supprimer l’archive ?",
+  "import_keep_source": "La garder",
+  "import_source_delete_failed": "L’archive n’a pas pu être supprimée.",
+  "import_language_prompt": "Pour quelle langue est ce modèle ?"
 }

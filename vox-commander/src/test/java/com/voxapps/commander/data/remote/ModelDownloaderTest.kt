@@ -89,6 +89,42 @@ class ModelDownloaderTest {
     }
 
     @Test
+    fun `a file whose name does not match the engine's extension is refused`() {
+        // The destination is named after the engine, so a copied-anyway file would arrive looking
+        // exactly like a valid one: pick a .txt for Whisper and it lands as stt_whisper.bin.
+        every { RemoteModelRegistry.isArchiveEngine("stt_whisper") } returns false
+        val uri = mockk<android.net.Uri>(relaxed = true)
+        val cursor = mockk<android.database.Cursor>(relaxed = true)
+        every { cursor.moveToFirst() } returns true
+        every { cursor.getString(0) } returns "shopping-list.txt"
+        every { context.contentResolver.query(uri, any(), any(), any(), any()) } returns cursor
+
+        val outcome = downloader.importCustomModel(uri, "stt_whisper")
+
+        assertTrue(outcome is ModelDownloader.ImportOutcome.WrongKind)
+        assertEquals(".bin", (outcome as ModelDownloader.ImportOutcome.WrongKind).expected)
+        assertFalse(File(tempDir, "stt_whisper.bin").exists())
+    }
+
+    @Test
+    fun `a file with the engine's extension is accepted`() {
+        every { RemoteModelRegistry.isArchiveEngine("stt_whisper") } returns false
+        val uri = mockk<android.net.Uri>(relaxed = true)
+        val cursor = mockk<android.database.Cursor>(relaxed = true)
+        every { cursor.moveToFirst() } returns true
+        every { cursor.getString(0) } returns "ggml-tiny.bin"
+        every { context.contentResolver.query(uri, any(), any(), any(), any()) } returns cursor
+        every { context.contentResolver.openInputStream(uri) } returns "model".byteInputStream()
+
+        val outcome = downloader.importCustomModel(uri, "stt_whisper")
+
+        assertTrue(outcome is ModelDownloader.ImportOutcome.Accepted)
+        val imported = (outcome as ModelDownloader.ImportOutcome.Accepted).file
+        assertEquals(File(tempDir, "stt_whisper.bin"), imported)
+        assertTrue(imported.exists())
+    }
+
+    @Test
     fun `deleteModelFile deletes existing file-based model`() {
         val resolved = downloader.resolveLocalFile("base", "stt_whisper")
         val modelFile = resolved ?: File(tempDir, "base.bin")

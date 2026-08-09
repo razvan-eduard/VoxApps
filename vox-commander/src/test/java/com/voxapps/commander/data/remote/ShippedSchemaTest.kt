@@ -8,6 +8,7 @@ import com.voxapps.commander.utils.Strings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -177,6 +178,21 @@ class ShippedSchemaTest {
      * picker, selected — and then fail to build at the moment the service starts. The reverse gap is
      * quieter still: an implementation nothing can select looks like working code forever.
      */
+    @Test
+    fun `an archive engine's picker is filtered to archives`() {
+        // Only the registered types are filtered on. A model format has no agreed type, so naming
+        // one would hide a file the provider typed differently — the picker offers everything for
+        // those and the name is checked after picking.
+        assetModels().engines
+            .filter { (_, config) -> config.extension.lowercase() in listOf(".zip", ".tar.bz2") }
+            .forEach { (key, config) ->
+                assertFalse(
+                    "engine '$key' opens an unfiltered picker for an archive it could filter",
+                    RemoteModelRegistry.mimeTypesForExtension(config.extension).contains("*/*")
+                )
+            }
+    }
+
     @Test
     fun `an engine that accepts a custom model can actually receive one`() {
         // The screens gate the import on this capability alone. An engine claiming it while having

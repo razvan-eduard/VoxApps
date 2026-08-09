@@ -172,35 +172,110 @@ class ModelDownloader(private val context: Context) {
      * @return the imported artefact, or null if nothing could be read — the caller reports that
      *         rather than storing a path to something absent.
      */
-    fun importCustomModel(uri: Uri, engineKey: String, langCode: String? = null): File? {
-        val rootDir = context.getExternalFilesDir(null) ?: return null
+    /**
+     * What became of an import, in enough detail to tell the user.
+     *
+     * A null return said only "no", and the screen turned that into "download failed" — the wrong
+     * words for a file the user picked from their own storage, and no help at all in working out
+     * what was wrong with it.
+     */
+    sealed interface ImportOutcome {
+        /** [fromArchive] when the model was unpacked here rather than copied as it was found. */
+        data class Accepted(val file: File, val fromArchive: Boolean = false) : ImportOutcome
+        /** [expected] is what the engine declares one of its models looks like. */
+        data class WrongKind(val picked: String?, val expected: String) : ImportOutcome
+        data object Empty : ImportOutcome
+        data class Failed(val message: String?) : ImportOutcome
+    }
+
+    fun importCustomModel(uri: Uri, engineKey: String, langCode: String? = null): ImportOutcome {
+        val rootDir = context.getExternalFilesDir(null)
+            ?: return ImportOutcome.Failed("no app storage")
 
         return try {
+            val declaredEntry = RemoteModelRegistry.getEntryPoint(engineKey)
             if (RemoteModelRegistry.isArchiveEngine(engineKey)) {
                 val suffix = langCode?.let { "_$it" }.orEmpty()
                 val dest = File(rootDir, "${engineKey}_custom$suffix")
                 dest.deleteRecursively()
+
+                /*
+                 * Either the extracted model or the archive it came in.
+                 *
+                 * What upstream publishes is the archive — a Vosk model is a .zip on the vendor's
+                 * own download page — so requiring the user to unpack it first meant the file they
+                 * actually have was the one thing the import would not take.
+                 */
+                val extension = RemoteModelRegistry.getExtension(engineKey)
+                if (!DocumentsContract.isTreeUri(uri)) {
+                    val picked = displayNameOf(uri)
+                    if (picked != null && !picked.endsWith(extension, ignoreCase = true)) {
+                        Logger.log("Imported file '$picked' is not a $extension for $engineKey", TAG)
+                        return ImportOutcome.WrongKind(picked, extension)
+                    }
+                    val staged = File(rootDir, "${engineKey}_import$suffix$extension")
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            staged.outputStream().use { output -> input.copyTo(output) }
+                        } ?: return ImportOutcome.Failed("could not read the archive")
+                        dest.mkdirs()
+                        extractArchive(staged, dest, extension)
+                    } finally {
+                        staged.delete()
+                    }
+                    return if (declaredEntry != null && resolveEntry(dest, declaredEntry) == null) {
+                        Logger.log("Imported archive for $engineKey has no ${declaredEntry.match}", TAG)
+                        dest.deleteRecursively()
+                        ImportOutcome.WrongKind(picked, declaredEntry.match.orEmpty())
+                    } else {
+                        ImportOutcome.Accepted(dest, fromArchive = true)
+                    }
+                }
+
                 val treeId = DocumentsContract.getTreeDocumentId(uri)
                 copyDocumentTree(uri, DocumentsContract.buildDocumentUriUsingTree(uri, treeId), dest)
                 if (dest.listFiles().isNullOrEmpty()) {
                     Logger.log("Imported directory for $engineKey is empty", TAG)
                     dest.deleteRecursively()
-                    null
+                    ImportOutcome.Empty
+                } else if (declaredEntry != null && resolveEntry(dest, declaredEntry) == null) {
+                    // The engine says what one of its models looks like — Vosk's `am` directory,
+                    // Piper's `.onnx`. A directory that has none of it is not a model for this
+                    // engine, and copying it in would leave the user with a selection that fails
+                    // natively at load with nothing pointing back at the folder they picked.
+                    Logger.log("Imported directory for $engineKey has no ${declaredEntry.match}", TAG)
+                    dest.deleteRecursively()
+                    ImportOutcome.WrongKind(displayNameOf(uri), declaredEntry.match.orEmpty())
                 } else {
-                    dest
+                    ImportOutcome.Accepted(dest)
                 }
             } else {
-                val dest = File(rootDir, "$engineKey${RemoteModelRegistry.getExtension(engineKey)}")
+                val extension = RemoteModelRegistry.getExtension(engineKey)
+                val picked = displayNameOf(uri)
+                if (extension.isNotBlank() && picked != null && !picked.endsWith(extension, ignoreCase = true)) {
+                    // Copying it anyway would rename it to the extension the engine expects, so a
+                    // wrong file would arrive looking exactly like a right one.
+                    Logger.log("Imported file '$picked' is not a $extension for $engineKey", TAG)
+                    return ImportOutcome.WrongKind(picked, extension)
+                }
+                val dest = File(rootDir, "$engineKey$extension")
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     dest.outputStream().use { output -> input.copyTo(output) }
-                } ?: return null
-                dest
+                } ?: return ImportOutcome.Failed("could not read the file")
+                ImportOutcome.Accepted(dest)
             }
         } catch (e: Exception) {
             Logger.log("Custom model import failed for $engineKey: ${e.message}", TAG)
-            null
+            ImportOutcome.Failed(e.message)
         }
     }
+
+    /** The name the picker shows for [uri], so an import can be judged before it is copied. */
+    private fun displayNameOf(uri: Uri): String? =
+        context.contentResolver
+            .query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            ?: uri.lastPathSegment?.substringAfterLast('/')
 
     /** Walks a picked tree, mirroring its structure — a Vosk model is a directory of directories. */
     private fun copyDocumentTree(treeUri: Uri, documentUri: Uri, dest: File) {
@@ -307,6 +382,28 @@ class ModelDownloader(private val context: Context) {
         }
     }
 
+    /**
+     * Moves an imported model to the name its language gives it, returning the new path.
+     *
+     * The language is part of the file name because it is part of the key the model is stored
+     * under; re-filing it is a rename rather than a second copy of a model that may be a gigabyte.
+     */
+    fun renameCustomModel(currentPath: String, engineKey: String, langCode: String): String? {
+        val current = File(currentPath)
+        if (!current.exists()) return null
+        val root = context.getExternalFilesDir(null) ?: return null
+        val target = File(root, "${engineKey}_custom_$langCode")
+        if (current.canonicalPath == target.canonicalPath) return currentPath
+        target.deleteRecursively()
+        return if (current.renameTo(target)) {
+            Logger.log("Re-filed the import for $engineKey under $langCode", TAG)
+            target.absolutePath
+        } else {
+            Logger.log("Could not rename ${current.name} to ${target.name}", TAG)
+            null
+        }
+    }
+
     fun deleteModelFile(modelId: String, engineKey: String) {
         val file = resolveLocalFile(modelId, engineKey)
         if (file?.exists() == true) {
@@ -402,28 +499,7 @@ class ModelDownloader(private val context: Context) {
             targetDir.mkdirs()
             marker.writeText("extracting")
 
-            if (extension.equals(".tar.bz2", ignoreCase = true)) {
-                extractTarBz2(archiveFile, targetDir)
-            } else {
-                ZipInputStream(FileInputStream(archiveFile)).use { zis ->
-                    var entry = zis.nextEntry
-                    while (entry != null) {
-                        val newFile = File(targetDir, entry.name)
-                        if (entry.isDirectory) {
-                            newFile.mkdirs()
-                        } else {
-                            newFile.parentFile?.mkdirs()
-                            FileOutputStream(newFile).use { fos ->
-                                zis.copyTo(fos)
-                            }
-                        }
-                        entry = zis.nextEntry
-                    }
-                }
-            }
-
-            // Flatten nested top-level directory (e.g. vits-piper-en_US-amy-low/ contains model.onnx etc.)
-            flattenNestedDir(targetDir)
+            extractArchive(archiveFile, targetDir, extension)
 
             marker.delete()
             archiveFile.delete()
@@ -434,6 +510,36 @@ class ModelDownloader(private val context: Context) {
             // Leave the marker — cleanup will detect it on next startup
             onComplete(false)
         }
+    }
+
+    /**
+     * Unpacks [archive] into [targetDir], by the packaging its name declares.
+     *
+     * Shared by the download path and the import path: what upstream publishes is an archive, so a
+     * user importing a model has the same file the downloader would have fetched, and it has to be
+     * opened the same way. The nested-directory flatten belongs here for the same reason — an
+     * archive that wraps its contents in one folder is a property of the archive, not of how it
+     * arrived.
+     */
+    private fun extractArchive(archive: File, targetDir: File, extension: String) {
+        if (extension.equals(".tar.bz2", ignoreCase = true)) {
+            extractTarBz2(archive, targetDir)
+        } else {
+            ZipInputStream(FileInputStream(archive)).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    val newFile = File(targetDir, entry.name)
+                    if (entry.isDirectory) {
+                        newFile.mkdirs()
+                    } else {
+                        newFile.parentFile?.mkdirs()
+                        FileOutputStream(newFile).use { fos -> zis.copyTo(fos) }
+                    }
+                    entry = zis.nextEntry
+                }
+            }
+        }
+        flattenNestedDir(targetDir)
     }
 
     /**

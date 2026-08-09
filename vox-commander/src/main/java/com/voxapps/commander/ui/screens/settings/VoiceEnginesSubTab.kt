@@ -16,6 +16,8 @@ import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelItem
 import com.voxapps.commander.domain.engine.CloudDeadline
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.engine.EngineSpecs
+import com.voxapps.commander.domain.model.ImportedModel
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
@@ -45,7 +47,6 @@ fun VoiceEnginesSubTab(
     onDeleteRequest: (AppModel) -> Unit,
     onFallbackChanged: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
-    onClearCustomModel: () -> Unit = {},
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
@@ -191,15 +192,31 @@ fun VoiceEnginesSubTab(
     }
 
     // 4. Engine Specific Sections
+    // A directory-packaged engine keeps one import per language; a single-file engine keeps one.
+    val isDirectoryBased = RemoteModelRegistry.isArchiveEngine(engineKey) ||
+        RemoteModelRegistry.getExtension(engineKey).isBlank()
+
     // Agnostic model filtering by language
-    val filteredModels = remember(models, modelFilterLang, isCurrentProcessorMultilingual) {
-        if (isCurrentProcessorMultilingual) models 
-        else models.filter { it.langCode == modelFilterLang }
+    // Keyed on the imported path as well: an import lands while this screen is composed, and
+    // nothing else in these keys changes when it does — the row appeared only after leaving the
+    // tab and coming back.
+    val filteredModels = remember(
+        models, modelFilterLang, isCurrentProcessorMultilingual, refreshTrigger, uiState.customVoiceModelPath
+    ) {
+        val declared = if (isCurrentProcessorMultilingual) models
+            else models.filter { it.langCode == modelFilterLang }
+        // What the user imported, listed first and treated like any other model: it is chosen from
+        // here, and removed by the same trash icon. It used to live in a card of its own below,
+        // outranking whatever this list showed as selected.
+        val imported = EngineSpecs.importedRow(
+            settingsRepo,
+            engineKey,
+            modelFilterLang.takeIf { isDirectoryBased }
+        )
+        listOfNotNull(imported) + declared
     }
 
     // --- CUSTOM MODEL IMPORT ---
-    val isDirectoryBased = RemoteModelRegistry.isArchiveEngine(engineKey) ||
-        RemoteModelRegistry.getExtension(engineKey).isBlank()
     val supportsCustomModel = RemoteModelRegistry.supportsCustomImport(engineKey)
     // Already resolved for this engine and language by AppState — the screen used to choose
     // between two engine-named fields by asking how the engine is packaged.
@@ -207,35 +224,9 @@ fun VoiceEnginesSubTab(
     val hasCustomModel = !customModelPath.isNullOrBlank() && java.io.File(customModelPath).exists()
 
     if (supportsCustomModel) {
-        if (hasCustomModel) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = languageManager.getString("custom_model_active"),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = customModelPath,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onClearCustomModel,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(languageManager.getString("clear_custom_model"))
-                }
-            }
-        }
-    } else {
+        // No "custom model active" card any more: an import is a row in the list above, marked as
+        // imported, selected like any other model and deleted by the same trash icon. The card said
+        // the same thing in a second place and was the only way to remove one.
         OutlinedButton(
             onClick = { onImportCustomModel(if (isDirectoryBased) modelFilterLang else null) },
             modifier = Modifier.fillMaxWidth()
@@ -248,7 +239,6 @@ fun VoiceEnginesSubTab(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
-    } // end if (supportsCustomModel)
 
     Spacer(modifier = Modifier.height(12.dp))
 
@@ -267,7 +257,13 @@ fun VoiceEnginesSubTab(
             selectedItem = remember(uiState.activeVoiceModelId, filteredModels) {
                 filteredModels.find { it.id == uiState.activeVoiceModelId }
             },
-            itemLabel = { "${it.label} (${it.sizeDescription})" },
+            itemLabel = { model ->
+                val name = "${model.label} (${model.sizeDescription})"
+                // Marked, because where it came from decides what happens when it is deleted:
+                // a downloaded model can be fetched again, this one cannot.
+                if (model is ImportedModel) String.format(languageManager.getString("model_imported_suffix"), name)
+                else name
+            },
             modelIdProvider = { it.id },
             onItemSelected = { model, isDownloaded ->
                 val code = model.langCode ?: uiState.modelFilterLang

@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.model.ImportedModelId
 
 class WakeWordService : Service() {
 
@@ -291,21 +292,25 @@ class WakeWordService : Service() {
             engineDisplayWakeWord(engineType, snapshot, wakeWord)
         }
 
-        // The user's own import wins over anything the registry would resolve — the shared rule,
+        // An import is loaded because it is selected, like every other model — the shared rule,
         // asked through the same helper the speech and speech-synthesis paths use. This service was
-        // the one domain that never asked, so an import here was stored, displayed as configured,
-        // and then never loaded.
+        // the one domain that never asked at all, so an import here was stored, displayed as
+        // configured, and then never loaded.
         val customLang = if (RemoteModelRegistry.isArchiveEngine(engineType)) language else null
-        com.voxapps.commander.domain.engine.EngineSpecs
-            .importedModel(settingsRepo, engineType, customLang)
-            ?.let { file ->
-                return com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(
-                    modelId = file.name,
-                    entryPoint = file,
-                    keyword = keyword,
-                    language = language
-                )
+        if (ImportedModelId.isImported(snapshot.activeWakeModelId)) {
+            val imported = com.voxapps.commander.domain.engine.EngineSpecs
+                .importedModel(settingsRepo, engineType, customLang)
+            if (imported == null) {
+                Logger.log("Imported wake model selected but its file is gone", TAG)
+                return null
             }
+            return com.voxapps.commander.domain.engine.ModelSpec.WakeWordModel(
+                modelId = snapshot.activeWakeModelId,
+                entryPoint = imported,
+                keyword = keyword,
+                language = language
+            )
+        }
 
         if (RemoteModelRegistry.runtimeOf(engineType) == com.voxapps.commander.data.remote.EngineRuntime.DEVICE_BUILTIN) {
             // Nothing on disk: the keyword *is* the model, and the engine holds it.

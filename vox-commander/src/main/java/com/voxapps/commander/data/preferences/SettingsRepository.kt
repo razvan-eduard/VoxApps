@@ -121,6 +121,9 @@ interface SettingsRepository {
     suspend fun setUseRemoteSchemas(enabled: Boolean)
     suspend fun setSchemaStoreMigrated(done: Boolean)
 
+    /** See [AppSettings.importSelectionMigrated]. */
+    suspend fun setImportSelectionMigrated(done: Boolean)
+
     /**
      * Empties the settings store, leaving every setting at its default.
      *

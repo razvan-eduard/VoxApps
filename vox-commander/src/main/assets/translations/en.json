@@ -508,5 +508,21 @@
   "schema_use_remote_label": "Use schemas from the repository",
   "schema_use_remote_desc": "Off runs exactly what this build shipped with, and deletes anything downloaded.",
   "schema_using_bundled": "Using the schemas shipped with the app",
-  "schema_serving": "The repository supplies %1$d schema(s)"
+  "schema_serving": "The repository supplies %1$d schema(s)",
+  "import_accepted_title": "Model added",
+  "import_accepted_body": "%1$s is now this engine’s model, and is selected.",
+  "import_rejected_title": "Model not added",
+  "import_rejected_wrong_kind": "This engine loads %1$s. Nothing was copied.",
+  "import_rejected_empty": "The folder you picked is empty. Nothing was copied.",
+  "import_rejected_unreadable": "The file could not be read. Nothing was copied.",
+  "import_unnamed_file": "The selected file",
+  "import_source_title": "Import a model",
+  "import_source_body": "This engine can take the folder of an extracted model, or the archive it was published in.",
+  "import_source_folder": "Folder",
+  "import_source_archive": "Archive",
+  "model_imported_suffix": "%1$s — imported",
+  "import_delete_source": "Delete the archive?",
+  "import_keep_source": "Keep it",
+  "import_source_delete_failed": "The archive could not be deleted.",
+  "import_language_prompt": "Which language is this model for?"
 }

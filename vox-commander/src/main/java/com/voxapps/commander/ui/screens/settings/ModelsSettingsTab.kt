@@ -48,7 +48,6 @@ fun ModelsSettingsTab(
     downloadedColor: Color,
     onFallbackChanged: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
-    onClearCustomModel: () -> Unit = {},
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
@@ -174,7 +173,6 @@ fun ModelsSettingsTab(
                 onDeleteRequest = onDeleteRequest,
                 onFallbackChanged = onFallbackChanged,
                 onImportCustomModel = onImportCustomModel,
-                onClearCustomModel = onClearCustomModel,
                 refreshTrigger = refreshTrigger
             )
         } else {

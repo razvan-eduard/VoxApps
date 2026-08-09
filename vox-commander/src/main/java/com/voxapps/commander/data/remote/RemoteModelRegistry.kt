@@ -460,6 +460,42 @@ object RemoteModelRegistry {
      * [ARCHIVE_EXTENSIONS] is a list because each entry needs its own decoder in ModelDownloader,
      * so a format cannot be added by data alone — but it is the single place the set is stated.
      */
+    /**
+     * The MIME types a picker should offer for this engine's own model file.
+     *
+     * From the declared extension, so the file chooser shows the kind of file the engine can
+     * actually load instead of every file on the device.
+     *
+     * The system picker filters by MIME type rather than by name, so an extension has to be
+     * translated into one — and only the archive formats have a type every provider agrees on. The
+     * model formats do not, which is why they are left unfiltered rather than filtered by a guess:
+     * see below. The picked name is checked afterwards either way.
+     */
+    fun pickerMimeTypes(engineKey: String): Array<String> =
+        mimeTypesForExtension(getExtension(engineKey))
+
+    /** The mapping itself, so it can be checked against a schema without loading one. */
+    internal fun mimeTypesForExtension(extension: String): Array<String> = when (extension.lowercase()) {
+        // Registered types, so a provider that reports them is a provider following the standard.
+        // Filtering here is safe: a .zip is typed as a .zip everywhere.
+        ".zip" -> arrayOf("application/zip", "application/x-zip-compressed")
+        ".tar.bz2" -> arrayOf("application/x-bzip2", "application/x-bzip-compressed-tar")
+
+        /*
+         * Everything else is offered unfiltered, deliberately.
+         *
+         * A model file has no registered type, so each provider names it as it pleases — usually
+         * `application/octet-stream`, sometimes not. The picker filters by type and cannot filter by
+         * name, so naming types here would grey out any file typed differently: the user would see
+         * their model in the list and be unable to select it, with nothing on screen explaining why.
+         *
+         * A longer list is a worse afternoon; an unpickable file is a dead end. The name is checked
+         * after picking, and a wrong one is now rejected with the extension the engine wanted, so
+         * nothing unsuitable gets in either way.
+         */
+        else -> arrayOf("*/*")
+    }
+
     fun isArchiveEngine(engineKey: String): Boolean =
         ARCHIVE_EXTENSIONS.any { getExtension(engineKey).equals(it, ignoreCase = true) }
 

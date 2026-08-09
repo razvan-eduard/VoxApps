@@ -1,5 +1,6 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.design.picklist.Picklist
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import android.content.Context
@@ -57,7 +58,6 @@ fun SettingsContent(
     onRequestLocationPermission: () -> Unit = {},
     onRequestBatteryOptimizationPermission: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
-    onClearCustomModel: () -> Unit = {},
     onImportOpenWakeWordModel: () -> Unit = {}
 ) {
         val languageManager = LocalLanguageManager.current
@@ -82,6 +82,92 @@ fun SettingsContent(
         }
     }
 
+
+    // Whether the file the user picked became this engine's model, and if not, why. A rejected
+    // import leaves the list unchanged, which on its own looks like nothing happened.
+    val importResult by modelManagementViewModel.importResult.collectAsStateWithLifecycle()
+    // Held here rather than in the result: it is the user editing a choice, not the outcome.
+    var importLanguage by remember(importResult) { mutableStateOf<String?>(null) }
+    importResult?.let { result ->
+        AlertDialog(
+            onDismissRequest = { modelManagementViewModel.clearImportResult() },
+            title = {
+                Text(
+                    languageManager.getString(
+                        if (result.accepted) "import_accepted_title" else "import_rejected_title"
+                    )
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        if (result.accepted) {
+                            String.format(languageManager.getString("import_accepted_body"), result.modelName)
+                        } else {
+                            listOfNotNull(result.modelName, result.detail).joinToString("\n\n")
+                        }
+                    )
+
+                    // An engine with per-language models cannot tell which language this file is,
+                    // and neither can the file. Asked once, here, instead of taken from whichever
+                    // filter happened to be set when the picker opened.
+                    if (result.accepted && result.languages.isNotEmpty()) {
+                        Text(
+                            languageManager.getString("import_language_prompt"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Picklist(
+                            items = result.languages,
+                            selected = importLanguage ?: result.language ?: result.languages.firstOrNull(),
+                            itemLabel = { it.uppercase() },
+                            onSelect = { importLanguage = it }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                // An accepted model that came out of an archive leaves the archive behind — often
+                // hundreds of megabytes in Downloads, now duplicated inside the app. Offered, not
+                // assumed: it is the user's file and they may want to keep it.
+                val source = result.sourceArchive
+                val confirm = {
+                    importLanguage?.let {
+                        modelManagementViewModel.setImportLanguage(result.engineKey, result.language, it)
+                    }
+                    importLanguage = null
+                }
+                if (result.accepted && source != null) {
+                    TextButton(onClick = {
+                        confirm()
+                        modelManagementViewModel.deleteImportSource(source)
+                    }) {
+                        Text(languageManager.getString("import_delete_source"))
+                    }
+                } else {
+                    TextButton(onClick = {
+                        confirm()
+                        modelManagementViewModel.clearImportResult()
+                    }) {
+                        Text(languageManager.getString("ok_button"))
+                    }
+                }
+            },
+            dismissButton = {
+                if (result.accepted && result.sourceArchive != null) {
+                    TextButton(onClick = {
+                        importLanguage?.let {
+                            modelManagementViewModel.setImportLanguage(result.engineKey, result.language, it)
+                        }
+                        importLanguage = null
+                        modelManagementViewModel.clearImportResult()
+                    }) {
+                        Text(languageManager.getString("import_keep_source"))
+                    }
+                }
+            }
+        )
+    }
 
     var modelToDelete by remember { mutableStateOf<AppModel?>(null) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -224,7 +310,6 @@ fun SettingsContent(
                                     },
                                     onFallbackChanged = { appStateManager.refreshAll() },
                                     onImportCustomModel = onImportCustomModel,
-                                    onClearCustomModel = onClearCustomModel,
                                     refreshTrigger = uiState.refreshTrigger
                                 )
                                 2 -> {

@@ -3,6 +3,8 @@ package com.voxapps.commander
 import android.Manifest
 import android.os.Build
 import android.content.pm.PackageManager
+import android.content.Intent
+import android.provider.DocumentsContract
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
@@ -76,8 +78,35 @@ class MainActivity : ComponentActivity() {
         appContainer.appStateManager.refreshPermissions()
     }
 
+    /**
+     * Where the pickers open.
+     *
+     * The system picker's sort order is its own — an app can name the types it wants and the folder
+     * to start in, and nothing else. Downloads is where a model just fetched from a vendor's page
+     * is, so starting there is the closest thing to "newest first" that is ours to decide.
+     */
+    private val downloadsFolder: Uri? = runCatching {
+        DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download")
+    }.getOrNull()
+
+    /** [ActivityResultContracts.OpenDocument] with a starting folder. */
+    private inner class OpenDocumentAtDownloads : ActivityResultContracts.OpenDocument() {
+        override fun createIntent(context: android.content.Context, input: Array<String>): Intent =
+            super.createIntent(context, input).apply {
+                downloadsFolder?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) }
+            }
+    }
+
+    /** [ActivityResultContracts.OpenDocumentTree] with a starting folder. */
+    private inner class OpenDocumentTreeAtDownloads : ActivityResultContracts.OpenDocumentTree() {
+        override fun createIntent(context: android.content.Context, input: Uri?): Intent =
+            super.createIntent(context, input).apply {
+                downloadsFolder?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) }
+            }
+    }
+
     private val customVoskModelLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
+        OpenDocumentTreeAtDownloads()
     ) { uri: Uri? ->
         uri?.let {
             val engineKey = appContainer.appStateManager.uiState.value.voiceProcessor
@@ -88,16 +117,21 @@ class MainActivity : ComponentActivity() {
     }
 
     private val customWhisperModelLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        OpenDocumentAtDownloads()
     ) { uri: Uri? ->
         uri?.let {
             val engineKey = appContainer.appStateManager.uiState.value.voiceProcessor
-            appContainer.modelManagementViewModel.selectCustomModel(it, engineKey)
+            // An archive engine keeps one import per language, and this launcher now serves them
+            // too — it is how the vendor's .zip is picked. Dropping the language here stored the
+            // model under a key nothing looks up, so it vanished from the list it had just joined.
+            val langCode = pendingModelLanguage
+                ?.takeIf { com.voxapps.commander.data.remote.RemoteModelRegistry.isArchiveEngine(engineKey) }
+            appContainer.modelManagementViewModel.selectCustomModel(it, engineKey, langCode)
         }
     }
 
     private val customOpenWakeWordModelLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        OpenDocumentAtDownloads()
     ) { uri: Uri? ->
         // Imported the same way every other engine's model is, rather than by hand here.
         //
@@ -106,7 +140,11 @@ class MainActivity : ComponentActivity() {
         // not be selected, and was never loaded by anything. Going through the view model stores it
         // as this engine's custom model, which is what the picker reads, what the wake service now
         // resolves, and what "delete unused models" protects.
-        uri?.let { appContainer.modelManagementViewModel.selectCustomModel(it, OpenWakeWordEngine.ENGINE_KEY) }
+        uri?.let {
+            appContainer.modelManagementViewModel.selectCustomModel(
+                it, OpenWakeWordEngine.ENGINE_KEY, forWakeWord = true
+            )
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -154,6 +192,33 @@ class MainActivity : ComponentActivity() {
                 val successMessage by appContainer.modelManagementViewModel.selectionSuccessMessage.collectAsStateWithLifecycle()
                 val showVulkanError by appContainer.modelManagementViewModel.showVulkanError.collectAsStateWithLifecycle()
                 val loadStatus by RemoteModelRegistry.loadStatus.collectAsStateWithLifecycle()
+
+                // Which engine is waiting on "folder or archive?", or null when nothing is asking.
+                // Only the archive engines have the choice: the model can arrive either extracted,
+                // as their download leaves it, or in the archive their vendor publishes.
+                var importSourceChoiceFor by remember { mutableStateOf<String?>(null) }
+                importSourceChoiceFor?.let { engineKey ->
+                    val strings = appContainer.languageManager
+                    AlertDialog(
+                        onDismissRequest = { importSourceChoiceFor = null },
+                        title = { Text(strings.getString("import_source_title")) },
+                        text = { Text(strings.getString("import_source_body")) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                importSourceChoiceFor = null
+                                customWhisperModelLauncher.launch(
+                                    RemoteModelRegistry.pickerMimeTypes(engineKey)
+                                )
+                            }) { Text(strings.getString("import_source_archive")) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                importSourceChoiceFor = null
+                                customVoskModelLauncher.launch(null)
+                            }) { Text(strings.getString("import_source_folder")) }
+                        }
+                    )
+                }
 
                 // Show splash screen while loading assets on startup
                 var showSplash by remember { mutableStateOf(true) }
@@ -308,30 +373,24 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             onImportCustomModel = { langCode ->
-                                // Same question the import handler asks: anything that is not a
-                                // single file to copy is referenced as a directory, so it must be
-                                // offered a directory picker.
+                                // An archive engine takes either the extracted folder or the archive
+                                // upstream ships, so it is the one case with a choice to make; the
+                                // rest take a single file, filtered to what the engine declares.
                                 val proc = appContainer.appStateManager.uiState.value.voiceProcessor
-                                val isDirectoryBased =
-                                    com.voxapps.commander.data.remote.RemoteModelRegistry.isArchiveEngine(proc) ||
-                                        com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(proc).isBlank()
-                                if (isDirectoryBased) {
-                                    pendingModelLanguage = langCode
-                                    customVoskModelLauncher.launch(null)
-                                } else {
-                                    customWhisperModelLauncher.launch(arrayOf("*/*"))
+                                val registry = com.voxapps.commander.data.remote.RemoteModelRegistry
+                                pendingModelLanguage = langCode
+                                when {
+                                    registry.isArchiveEngine(proc) -> importSourceChoiceFor = proc
+                                    registry.getExtension(proc).isBlank() -> customVoskModelLauncher.launch(null)
+                                    else -> customWhisperModelLauncher.launch(registry.pickerMimeTypes(proc))
                                 }
                             },
-                            onClearCustomModel = {
-                                val engineKey = appContainer.appStateManager.uiState.value.voiceProcessor
-                                val isDirectoryBased =
-                                    com.voxapps.commander.data.remote.RemoteModelRegistry.isArchiveEngine(engineKey) ||
-                                        com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(engineKey).isBlank()
-                                val lang = if (isDirectoryBased) appContainer.appStateManager.uiState.value.modelFilterLang else null
-                                appContainer.modelManagementViewModel.clearCustomModel(engineKey, lang)
-                            },
                             onImportOpenWakeWordModel = {
-                                customOpenWakeWordModelLauncher.launch(arrayOf("*/*"))
+                                customOpenWakeWordModelLauncher.launch(
+                                    RemoteModelRegistry.pickerMimeTypes(
+                                        com.voxapps.commander.service.OpenWakeWordEngine.ENGINE_KEY
+                                    )
+                                )
                             },
                             autoStartListeningTrigger = autoStartListeningTrigger.intValue
                         )

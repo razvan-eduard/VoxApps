@@ -3,6 +3,8 @@ package com.voxapps.commander
 import android.app.Application
 import com.voxapps.commander.data.remote.NativeLibManager
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.model.ImportedModelId
+import com.voxapps.commander.domain.engine.SttEngines
 import com.voxapps.commander.di.AppContainer
 import com.voxapps.commander.service.OAuth2Manager
 import com.voxapps.logging.Logger
@@ -124,6 +126,50 @@ class VoxApplication : Application() {
             ) {
                 Logger.log("Preloading local LLM engine ($modelId / ${s.aiProcessor})", "VoxApplication")
                 container.localLlmInterpreter.preload(s.modelFilterLang.ifEmpty { null })
+            }
+        }
+
+        /*
+         * An import used to load because it existed; it now loads because it is selected.
+         *
+         * Anyone who imported a model before that change has a stored path and a selection naming
+         * some registry model — which was decorative then and would start loading now, quietly
+         * replacing the model they chose. Their import selects itself once, the same thing an
+         * import does for itself from here on. A value, not a key: nothing is renamed.
+         */
+        if (!snapshot.importSelectionMigrated) {
+            CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                val repo = container.settingsRepository
+                val settings = repo.getSettingsSnapshot()
+
+                suspend fun adopt(engineKey: String, langCode: String?, isWakeWord: Boolean) {
+                    if (engineKey.isBlank()) return
+                    val path = settings.getCustomModelPath(engineKey, langCode)
+                    if (path.isNullOrBlank()) return
+                    val importedId = ImportedModelId.of(engineKey, langCode)
+                    val current = if (isWakeWord) settings.activeWakeModelId else settings.activeVoiceModelId
+                    if (current == importedId) return
+                    Logger.log("Adopting the imported model for $engineKey as its selection", "VoxApplication")
+                    repo.setEngineModelSelection(engineKey, importedId)
+                    if (isWakeWord) repo.setActiveWakeModelId(importedId)
+                    else repo.setActiveVoiceModelId(importedId)
+                }
+
+                val voiceEngine = SttEngines.backingEngineKey(settings.voiceProcessor)
+                adopt(
+                    voiceEngine,
+                    settings.modelFilterLang.takeIf { RemoteModelRegistry.isArchiveEngine(voiceEngine) },
+                    isWakeWord = false
+                )
+
+                val wakeEngine = settings.wakeWordEngineType
+                adopt(
+                    wakeEngine,
+                    settings.modelFilterLang.takeIf { RemoteModelRegistry.isArchiveEngine(wakeEngine) },
+                    isWakeWord = true
+                )
+
+                repo.setImportSelectionMigrated(true)
             }
         }
 

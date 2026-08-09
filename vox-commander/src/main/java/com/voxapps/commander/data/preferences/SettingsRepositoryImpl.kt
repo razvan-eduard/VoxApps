@@ -159,6 +159,7 @@ class SettingsRepositoryImpl(
         val MODEL_REPO_BASE_URL = stringPreferencesKey("model_repo_base_url")
         val USE_REMOTE_SCHEMAS = booleanPreferencesKey("use_remote_schemas")
         val SCHEMA_STORE_MIGRATED = booleanPreferencesKey("schema_store_migrated")
+        val IMPORT_SELECTION_MIGRATED = booleanPreferencesKey("import_selection_migrated")
 
         // Model download state
         val DOWNLOADED_MODEL_IDS = stringSetPreferencesKey("downloaded_model_ids")
@@ -409,6 +410,7 @@ class SettingsRepositoryImpl(
             modelRepoBaseUrl = prefs[Keys.MODEL_REPO_BASE_URL] ?: Strings.Preferences.DEFAULT_MODEL_REPO_URL,
             useRemoteSchemas = prefs[Keys.USE_REMOTE_SCHEMAS] ?: true,
             schemaStoreMigrated = prefs[Keys.SCHEMA_STORE_MIGRATED] ?: false,
+            importSelectionMigrated = prefs[Keys.IMPORT_SELECTION_MIGRATED] ?: false,
 
             downloadedModelIds = prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet(),
             customModelPaths = parseCustomModelPaths(prefs[Keys.CUSTOM_MODEL_PATHS_JSON]),
@@ -902,6 +904,10 @@ class SettingsRepositoryImpl(
     override suspend fun clearAllSettings() {
         dataStore.edit { it.clear() }
         Logger.log("Settings cleared — every setting is back to its default", TAG)
+    }
+
+    override suspend fun setImportSelectionMigrated(done: Boolean) {
+        dataStore.edit { it[Keys.IMPORT_SELECTION_MIGRATED] = done }
     }
 
     override suspend fun setSchemaStoreMigrated(done: Boolean) {

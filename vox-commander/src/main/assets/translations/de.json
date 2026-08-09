@@ -508,5 +508,21 @@
   "schema_use_remote_label": "Schemas aus dem Repository verwenden",
   "schema_use_remote_desc": "Aus führt genau das aus, was mit diesem Build ausgeliefert wurde, und löscht Heruntergeladenes.",
   "schema_using_bundled": "Es werden die mit der App ausgelieferten Schemas verwendet",
-  "schema_serving": "Das Repository liefert %1$d Schema(s)"
+  "schema_serving": "Das Repository liefert %1$d Schema(s)",
+  "import_accepted_title": "Modell hinzugefügt",
+  "import_accepted_body": "%1$s ist jetzt das Modell dieser Engine und ist ausgewählt.",
+  "import_rejected_title": "Modell nicht hinzugefügt",
+  "import_rejected_wrong_kind": "Diese Engine lädt %1$s. Es wurde nichts kopiert.",
+  "import_rejected_empty": "Der gewählte Ordner ist leer. Es wurde nichts kopiert.",
+  "import_rejected_unreadable": "Die Datei konnte nicht gelesen werden. Es wurde nichts kopiert.",
+  "import_unnamed_file": "Die gewählte Datei",
+  "import_source_title": "Modell importieren",
+  "import_source_body": "Diese Engine nimmt den Ordner eines entpackten Modells oder das Archiv, in dem es veröffentlicht wurde.",
+  "import_source_folder": "Ordner",
+  "import_source_archive": "Archiv",
+  "model_imported_suffix": "%1$s — importiert",
+  "import_delete_source": "Archiv löschen?",
+  "import_keep_source": "Behalten",
+  "import_source_delete_failed": "Das Archiv konnte nicht gelöscht werden.",
+  "import_language_prompt": "Für welche Sprache ist dieses Modell?"
 }

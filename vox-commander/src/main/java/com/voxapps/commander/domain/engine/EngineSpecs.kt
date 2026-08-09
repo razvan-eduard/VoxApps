@@ -5,6 +5,8 @@ import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.commander.domain.model.ImportedModel
+import com.voxapps.commander.domain.model.ImportedModelId
 import com.voxapps.logging.Logger
 import java.io.File
 
@@ -63,13 +65,40 @@ object EngineSpecs {
         if (path.isNullOrBlank()) return null
 
         val file = File(path)
-        if (file.exists()) {
-            Logger.log("Using the imported model for $engineKey: $path", TAG)
-            return file
+        if (!file.exists()) {
+            Logger.log("Imported model for $engineKey no longer exists: $path", TAG)
+            return null
         }
-        Logger.log("Imported model for $engineKey no longer exists: $path", TAG)
-        return null
+
+        // Resolved through the engine's own declaration, exactly like a downloaded model. For the
+        // single-file engines that is the file itself (`self`); for a directory one it finds the
+        // marker — so an import that carries a wrapper folder, which is what picking the parent of
+        // a model directory produces, loads instead of failing inside the native library.
+        val entry = RemoteModelRegistry.getEntryPoint(engineKey)
+            ?: return file.also { Logger.log("Using the imported model for $engineKey: $path", TAG) }
+
+        val resolved = ModelDownloader.resolveEntry(file, entry)
+        if (resolved == null) {
+            Logger.log("Imported model for $engineKey does not look like one: $path", TAG)
+            return null
+        }
+        Logger.log("Using the imported model for $engineKey: $resolved", TAG)
+        return resolved
     }
+
+    /**
+     * The imported model for [engineKey] as a row for the model list, or null if there is none.
+     *
+     * Built from the file rather than from the stored string, so a path left behind by a file the
+     * user deleted from outside the app does not become a row that cannot load.
+     */
+    fun importedRow(
+        settingsRepo: SettingsRepository,
+        engineKey: String,
+        langCode: String? = null
+    ): ImportedModel? =
+        importedModel(settingsRepo, engineKey, langCode)
+            ?.let { ImportedModel.of(it, engineKey, langCode) }
 
     private fun localSpec(
         context: Context,
@@ -79,13 +108,30 @@ object EngineSpecs {
         language: String,
         langCode: String?
     ): ModelSpec? {
-        importedModel(settingsRepo, engineKey, langCode)?.let { file ->
-            return ModelSpec.LocalModel(modelId ?: file.name, file, language)
-        }
-
         if (modelId.isNullOrBlank()) {
             Logger.log("No model selected for $engineKey", TAG)
             return null
+        }
+
+        /*
+         * An import is chosen, not preferred.
+         *
+         * It used to win over whatever the user had selected — so the model list could mark one
+         * model as chosen while a different file was loaded, and there was no way to go back to a
+         * downloaded model without discarding the import. Selecting it is now what loads it, which
+         * is the same rule every other model follows.
+         *
+         * Selected but missing is null rather than a fall-through: quietly loading something else
+         * under the name of the model the user picked is how an engine ends up transcribing with a
+         * model nobody chose.
+         */
+        if (ImportedModelId.isImported(modelId)) {
+            val imported = importedModel(settingsRepo, engineKey, langCode)
+            if (imported == null) {
+                Logger.log("Imported model selected for $engineKey but its file is gone", TAG)
+                return null
+            }
+            return ModelSpec.LocalModel(modelId, imported, language)
         }
         val entry = ModelDownloader(context).resolveEntryPoint(modelId, engineKey)
         if (entry == null) {

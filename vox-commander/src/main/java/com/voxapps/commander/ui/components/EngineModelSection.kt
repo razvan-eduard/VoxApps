@@ -16,6 +16,7 @@ import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.ui.LocalLanguageManager
 import com.voxapps.commander.domain.model.AppModel
+import com.voxapps.commander.domain.model.ImportedModel
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.data.remote.EngineRuntime
 import com.voxapps.commander.data.remote.RemoteModelRegistry
@@ -60,7 +61,12 @@ fun <T> EngineModelSection(
 
     // Preselection priority: stored id -> first on-device model -> first item.
     val allItems = items
-    val isOnDevice: (T) -> Boolean = { (it as? AppModel)?.isBuiltIn == true || uiState.isModelDownloaded(modelIdProvider(it)) }
+    // An import is on the device by definition — it was copied there. It is in no downloaded-ids
+    // set, so asking that alone offered a download arrow for a file already on disk and no way to
+    // delete it.
+    val isOnDevice: (T) -> Boolean = {
+        it is ImportedModel || (it as? AppModel)?.isBuiltIn == true || uiState.isModelDownloaded(modelIdProvider(it))
+    }
     val firstOnDevice = allItems.firstOrNull(isOnDevice)
     val effectiveSelectedItem = selectedItem ?: firstOnDevice ?: allItems.firstOrNull()
 
@@ -108,7 +114,7 @@ fun <T> EngineModelSection(
     GroupedPicklist(
         selectedItem = effectiveSelectedItem,
         itemLabel = itemLabel,
-        isDownloaded = { item -> uiState.isModelDownloaded(modelIdProvider(item)) },
+        isDownloaded = { item -> item is ImportedModel || uiState.isModelDownloaded(modelIdProvider(item)) },
         isDefault = { item ->
             item == effectiveSelectedItem
         },
@@ -146,7 +152,7 @@ fun <T> EngineModelSection(
                 header = header,
                 items = items,
                         itemLabel = itemLabel,
-                isDownloaded = { item -> uiState.isModelDownloaded(modelIdProvider(item)) },
+                isDownloaded = { item -> item is ImportedModel || uiState.isModelDownloaded(modelIdProvider(item)) },
                 isDefault = { item ->
                     item == effectiveSelectedItem
                 },

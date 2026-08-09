@@ -592,9 +592,21 @@ fun ServiceSettingsTab(
             RemoteModelRegistry.getModels(currentEngineKey)
         }
 
-        val displayModels = remember(engineModels, uiState.modelFilterLang, supportsModelDownload) {
-            if (supportsModelDownload && !isVoskMultilingual) engineModels.filter { it.langCode == uiState.modelFilterLang }
+        val displayModels = remember(
+            engineModels, uiState.modelFilterLang, supportsModelDownload, refreshTrigger,
+            uiState.customVoiceModelPath
+        ) {
+            val declared = if (supportsModelDownload && !isVoskMultilingual)
+                engineModels.filter { it.langCode == uiState.modelFilterLang }
             else engineModels
+            // The user's own model, listed with the rest — chosen here and deleted here, which is
+            // also the only place this screen has ever had to remove one.
+            val imported = com.voxapps.commander.domain.engine.EngineSpecs.importedRow(
+                settingsRepo,
+                currentEngineKey,
+                uiState.modelFilterLang.takeIf { RemoteModelRegistry.isArchiveEngine(currentEngineKey) }
+            )
+            listOfNotNull(imported) + declared
         }
 
         // Keyed off the wake word's own model id, not the voice engine's selection. The two engines
@@ -613,7 +625,12 @@ fun ServiceSettingsTab(
                 header = languageManager.getString("available_models_header") ?: "AVAILABLE MODELS",
                 items = displayModels,
                 selectedItem = selectedModel,
-                itemLabel = { if (supportsModelDownload) "${it.label} (${it.sizeDescription})" else it.label },
+                itemLabel = { model ->
+                    val name = if (supportsModelDownload) "${model.label} (${model.sizeDescription})" else model.label
+                    if (model is com.voxapps.commander.domain.model.ImportedModel)
+                        String.format(languageManager.getString("model_imported_suffix"), name)
+                    else name
+                },
                 modelIdProvider = { it.id },
                 onItemSelected = { model, _ ->
                     appStateManager.setActiveWakeModelId(model.id)
