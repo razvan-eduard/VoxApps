@@ -1,6 +1,8 @@
+diff --git a/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt b/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt
+index 222b9ee6..05ed79a7 100644
 --- a/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt
 +++ b/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioRecorder.kt
-@@ -6,6 +6,7 @@
+@@ -6,6 +6,7 @@ import android.media.AudioFormat
  import android.media.AudioRecord
  import android.media.MediaRecorder
  import androidx.core.content.ContextCompat
@@ -8,7 +10,7 @@
  import kotlinx.coroutines.Dispatchers
  import kotlinx.coroutines.flow.Flow
  import kotlinx.coroutines.flow.flow
-@@ -20,7 +21,33 @@
+@@ -20,7 +21,33 @@ import android.annotation.SuppressLint
   * Emits audio buffers as a Flow for processing.
   */
  internal class AudioRecorder(
@@ -43,7 +45,7 @@
  ) {
      
      companion object {
-@@ -53,7 +80,7 @@
+@@ -53,7 +80,7 @@ internal class AudioRecorder(
          val bufferSize = maxOf(minBufferSize, BUFFER_SIZE_IN_SHORTS * 2)
          
          val audioRecord = AudioRecord(
@@ -52,7 +54,7 @@
              SAMPLE_RATE,
              CHANNEL_CONFIG,
              AUDIO_FORMAT,
-@@ -65,14 +92,61 @@
+@@ -65,14 +92,61 @@ internal class AudioRecorder(
          }
          
          val audioBuffer = ShortArray(BUFFER_SIZE_IN_SHORTS)

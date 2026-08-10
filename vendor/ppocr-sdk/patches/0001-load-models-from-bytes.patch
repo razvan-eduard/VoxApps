@@ -1,6 +1,8 @@
+diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/ORTSessionManager.kt b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/ORTSessionManager.kt
+index f0531040..46cd66e2 100644
 --- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/ORTSessionManager.kt
 +++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/ORTSessionManager.kt
-@@ -35,6 +35,16 @@
+@@ -35,6 +35,16 @@ class ORTSessionManager(
          private set
  
      fun loadModels(detAssetPath: String, recAssetPath: String) {
@@ -17,7 +19,7 @@
          val loadStart = System.currentTimeMillis()
          env = OrtEnvironment.getEnvironment()
          val opts = OrtSession.SessionOptions().apply {
-@@ -43,8 +53,6 @@
+@@ -43,8 +53,6 @@ class ORTSessionManager(
          }
          try {
              val ortEnv = env ?: throw OCRError.ModelLoadFailed("OCR", Exception("Environment not initialized"))
@@ -26,9 +28,11 @@
              try {
                  detSession = ortEnv.createSession(detBytes, opts)
              } catch (t: Throwable) {
+diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/model/ModelConfig.kt b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/model/ModelConfig.kt
+index 111770fe..9f7dc224 100644
 --- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/model/ModelConfig.kt
 +++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/model/ModelConfig.kt
-@@ -27,12 +27,18 @@
+@@ -27,12 +27,18 @@ data class ModelConfig(
              } catch (t: Throwable) {
                  throw OCRError.ConfigParseFailed(assetPath, t)
              }
@@ -49,9 +53,11 @@
              }
              val charListWithSpace = characterDict.toMutableList().apply {
                  if (lastOrNull() != " ") add(" ")
+diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/OCREngine.kt b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/OCREngine.kt
+index 77fd8fa5..b483f6c9 100644
 --- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/OCREngine.kt
 +++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/engine/OCREngine.kt
-@@ -32,6 +32,11 @@
+@@ -32,6 +32,11 @@ class OCREngine(
      detModelAsset: String = "models/det/inference.onnx",
      recModelAsset: String = "models/rec/inference.onnx",
      recConfigAsset: String = "models/rec/inference.yml",
@@ -63,7 +69,7 @@
  ) {
      private val ortManager = ORTSessionManager(context, engineConfig)
      private val detectionEngine: DetectionEngine
-@@ -40,9 +45,16 @@
+@@ -40,9 +45,16 @@ class OCREngine(
  
      init {
          val configured = try {
@@ -83,9 +89,11 @@
          } catch (t: Throwable) {
              ortManager.release()
              throw t
+diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/PaddleOCR.kt b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/PaddleOCR.kt
+index 6d934906..b5849a3a 100644
 --- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/PaddleOCR.kt
 +++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/PaddleOCR.kt
-@@ -22,6 +22,7 @@
+@@ -22,6 +22,7 @@ import com.paddle.ocr.model.OCRRunResult
  import com.paddle.ocr.model.OCRError
  import kotlinx.coroutines.Dispatchers
  import kotlinx.coroutines.withContext
@@ -93,7 +101,7 @@
  
  class PaddleOCR private constructor(
      private val engine: OCREngine,
-@@ -70,6 +71,28 @@
+@@ -70,6 +71,28 @@ class PaddleOCR private constructor(
                  PaddleOCR(engine)
              }
          }

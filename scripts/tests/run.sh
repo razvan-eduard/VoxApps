@@ -109,6 +109,50 @@ else
     bad "no signed manifest — the apps will refuse every schema change from this repo"
 fi
 
+log_blue "── patches survive upstream drift ──────────────────────────"
+# The precondition for a three-way apply: without index lines git cannot find the merge base, and
+# silently falls back to the all-or-nothing apply this replaced. A regen written with plain `diff -u`
+# would pass every other check here and quietly take that away.
+NO_INDEX=""
+for patch in core/wakeword/patches/*.patch vendor/ppocr-sdk/patches/*.patch; do
+    [ -f "$patch" ] || continue
+    diffs=$(grep -c '^diff --git' "$patch" || true)
+    idx=$(grep -c '^index ' "$patch" || true)
+    [ "$diffs" -eq "$idx" ] && [ "$idx" -gt 0 ] || NO_INDEX="$NO_INDEX $(basename "$patch")"
+done
+if [ -z "$NO_INDEX" ]; then
+    ok "every stored patch carries the index lines a three-way apply needs"
+else
+    bad "patches without index lines — three-way silently degrades to all-or-nothing:$NO_INDEX"
+fi
+
+# And that it does what it is for: an upstream release touching a line *near* an adaptation must
+# merge, where the old behaviour dropped the adaptation entirely.
+# shellcheck source=scripts/lib/patches.sh
+source "$VOX_ROOT/scripts/lib/patches.sh"
+DRIFT=$(mktemp -d)
+(
+    cd "$DRIFT" || exit 1
+    git init -q . && git config user.email t@t && git config user.name t
+    printf 'alpha\nbeta\ngamma\ndelta\nepsilon\n' > pristine.txt
+    printf 'alpha\nbeta\nOUR ADAPTATION\ndelta\nepsilon\n' > f.txt
+    git add f.txt && git commit -qm vendored
+    vox_patch_diff pristine.txt f.txt f.txt > p.patch
+    # upstream moves a different line and we re-vendor: working tree and index become pristine+drift
+    printf 'alpha\nbeta\ngamma\ndelta\nepsilon CHANGED UPSTREAM\n' > f.txt
+    git add f.txt
+    git apply --check p.patch 2>/dev/null && echo "PLAIN_APPLIED" || echo "PLAIN_REFUSED"
+    vox_patch_apply_3way p.patch pristine.txt
+    grep -q 'OUR ADAPTATION' f.txt && grep -q 'CHANGED UPSTREAM' f.txt && echo "BOTH_KEPT"
+) > "$DRIFT/out.txt" 2>&1
+if grep -q PLAIN_REFUSED "$DRIFT/out.txt" && grep -q '^clean$' "$DRIFT/out.txt" && grep -q BOTH_KEPT "$DRIFT/out.txt"; then
+    ok "an upstream change near an adaptation merges (plain apply refuses it)"
+else
+    bad "three-way apply did not preserve the adaptation across upstream drift" \
+        "$(tr '\n' ' ' < "$DRIFT/out.txt")"
+fi
+rm -rf "$DRIFT"
+
 log_blue "── the published schemas repository ────────────────────────"
 # schemas-repo/ is the template; razvan-eduard/VoxApps-schemas is what people fork. The mirror there
 # syncs remote-schemas and validate_schemas.py — never its own workflow — so a change made here to

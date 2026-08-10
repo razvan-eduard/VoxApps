@@ -1,6 +1,8 @@
+diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostProcessor.kt b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostProcessor.kt
+index 78fbb2e9..493dcfb8 100644
 --- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostProcessor.kt
 +++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/DBPostProcessor.kt
-@@ -24,6 +24,7 @@
+@@ -24,6 +24,7 @@ import org.opencv.core.MatOfPoint
  import org.opencv.core.MatOfPoint2f
  import org.opencv.core.Point
  import org.opencv.core.Scalar
@@ -8,7 +10,7 @@
  import org.opencv.imgproc.Imgproc
  
  object DBPostProcessor {
-@@ -85,7 +86,7 @@
+@@ -85,7 +86,7 @@ object DBPostProcessor {
                  val contour = contours[index]
                  val contour2f = MatOfPoint2f(*contour.toArray())
                  val rect = try {
@@ -17,7 +19,7 @@
                  } finally {
                      contour2f.release()
                  }
-@@ -106,7 +107,7 @@
+@@ -106,7 +107,7 @@ object DBPostProcessor {
                  val expandedRect = MatOfPoint2f().let { expanded2f ->
                      try {
                          expanded2f.fromList(expandedPts)
@@ -26,9 +28,11 @@
                      } finally {
                          expanded2f.release()
                      }
+diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/QuadTextCrop.kt b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/QuadTextCrop.kt
+index e8b5bb2b..1a3a02a5 100644
 --- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/QuadTextCrop.kt
 +++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/postprocess/QuadTextCrop.kt
-@@ -21,6 +21,7 @@
+@@ -21,6 +21,7 @@ import org.opencv.core.Mat
  import org.opencv.core.MatOfPoint2f
  import org.opencv.core.Point
  import org.opencv.core.Size
@@ -36,7 +40,7 @@
  import org.opencv.imgproc.Imgproc
  import kotlin.math.hypot
  import kotlin.math.max
-@@ -34,7 +35,7 @@
+@@ -34,7 +35,7 @@ object QuadTextCrop {
          val rectPoints = box.points.map { Point(it.x.toDouble(), it.y.toDouble()) }
          val rectInput = MatOfPoint2f()
          rectInput.fromList(rectPoints)
@@ -45,7 +49,7 @@
          rectInput.release()
  
          val boxPoints = Array(4) { Point() }
-@@ -60,7 +61,7 @@
+@@ -60,7 +61,7 @@ object QuadTextCrop {
                  Point(0.0, dstH.toDouble()),
              )
          )

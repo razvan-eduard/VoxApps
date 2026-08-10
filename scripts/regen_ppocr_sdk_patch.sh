@@ -12,6 +12,8 @@ set -e
 # Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+# shellcheck source=scripts/lib/patches.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/patches.sh"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
@@ -51,8 +53,7 @@ for PATCH_FILE in "${PATCH_FILES[@]}"; do
 
     : > "$PATCH_FILE"
     for rel in "${REL_PATHS[@]}"; do
-        diff -u --label "a/$PATCHED_DIR/$rel" --label "b/$PATCHED_DIR/$rel" \
-            "$UPSTREAM_SUBTREE/$rel" "$PATCHED_DIR/$rel" >> "$PATCH_FILE" || true
+        vox_patch_diff "$UPSTREAM_SUBTREE/$rel" "$PATCHED_DIR/$rel" "$PATCHED_DIR/$rel" >> "$PATCH_FILE"
     done
 
     if [ ! -s "$PATCH_FILE" ]; then

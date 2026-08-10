@@ -1,6 +1,8 @@
+diff --git a/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/WakeWordEngine.kt b/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/WakeWordEngine.kt
+index a1ec24fa..4ba78f27 100644
 --- a/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/WakeWordEngine.kt
 +++ b/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/WakeWordEngine.kt
-@@ -76,15 +76,33 @@
+@@ -76,15 +76,33 @@ class WakeWordEngine(
      private val models: List<WakeWordModel>,
      private val detectionMode: DetectionMode = DetectionMode.SINGLE_BEST,
      private val detectionCooldownMs: Long = 2000L,
@@ -38,7 +40,7 @@
      private val modelProcessors = mutableMapOf<WakeWordModel, ModelProcessor>()
      private val detectionCooldowns = mutableMapOf<String, Long>()
      
-@@ -183,6 +201,10 @@
+@@ -183,6 +201,10 @@ class WakeWordEngine(
          recordingJob = scope.launch {
              audioRecorder.startRecording()
                  .collect { audioBuffer ->

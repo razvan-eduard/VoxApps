@@ -1,6 +1,8 @@
+diff --git a/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioProcessor.kt b/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioProcessor.kt
+index e63c0b94..1b2704ab 100644
 --- a/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioProcessor.kt
 +++ b/core/wakeword/src/main/kotlin/com/rementia/openwakeword/lib/audio/AudioProcessor.kt
-@@ -53,7 +53,10 @@
+@@ -53,7 +53,10 @@ internal class AudioProcessor(
          streamingFeatures(audioBuffer)
          val features = getFeatures(16, -1)
          val score = modelRunner.predictWakeWord(features)

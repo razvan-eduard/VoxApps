@@ -1,3 +1,5 @@
+diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/util/ImageUtils.kt b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/util/ImageUtils.kt
+index c672a641..ff94bbae 100644
 --- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/util/ImageUtils.kt
 +++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/util/ImageUtils.kt
 @@ -15,8 +15,6 @@
@@ -9,7 +11,7 @@
  
  object ImageUtils {
  
-@@ -45,8 +43,41 @@
+@@ -45,8 +43,41 @@ object ImageUtils {
  
          newH = maxOf(MathUtils.roundHalfToEven(newH / 32.0) * 32, 32)
          newW = maxOf(MathUtils.roundHalfToEven(newW / 32.0) * 32, 32)

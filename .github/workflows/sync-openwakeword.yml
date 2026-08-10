@@ -94,19 +94,28 @@ jobs:
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: apply
         run: |
-          rm -f /tmp/apply-reject-*.txt
+          # Three-way, so an upstream release that moves lines near an adaptation merges instead of
+          # refusing. A refusal here is silent damage: the re-vendored file stays pristine and the
+          # adaptation is simply gone. A real collision arrives as conflict markers, which a person
+          # can resolve in the PR.
+          source scripts/lib/patches.sh
           STATUS="clean"
           for PATCH_FILE in core/wakeword/patches/*.patch; do
             NAME="$(basename "$PATCH_FILE")"
-            if git apply --check "$PATCH_FILE" 2>"/tmp/apply-reject-$NAME.txt"; then
-              git apply "$PATCH_FILE"
-              rm -f "/tmp/apply-reject-$NAME.txt"
-              echo "✅ $NAME applied cleanly"
-            else
-              echo "❌ $NAME did not apply — see reject details below:"
-              cat "/tmp/apply-reject-$NAME.txt"
-              STATUS="conflict"
-            fi
+            # The merge base for each hunk is the pristine upstream file the patch was cut against.
+            PRISTINE=()
+            while read -r rel; do
+              PRISTINE+=("vendor/openwakeword-android-kt/wakeword/${rel#core/wakeword/}")
+            done < <(git apply --numstat "$PATCH_FILE" | awk '{print $3}')
+
+            case "$(vox_patch_apply_3way "$PATCH_FILE" "${PRISTINE[@]}")" in
+              clean)    echo "✅ $NAME applied" ;;
+              conflict) echo "⚠️ $NAME applied with conflicts in:"
+                        vox_patch_conflicts | sed 's/^/     /'
+                        STATUS="conflict" ;;
+              *)        echo "❌ $NAME could not be applied at all"
+                        STATUS="conflict" ;;
+            esac
           done
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
 

@@ -1,6 +1,8 @@
+diff --git a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/util/OpenCVUtils.kt b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/util/OpenCVUtils.kt
+index 77aa455d..b167ce8a 100644
 --- a/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/util/OpenCVUtils.kt
 +++ b/vendor/ppocr-sdk/src/main/java/com/paddle/ocr/util/OpenCVUtils.kt
-@@ -24,7 +24,9 @@
+@@ -24,7 +24,9 @@ object OpenCVUtils {
      fun init(context: Context): Boolean {
          if (initialized) return true
          try {

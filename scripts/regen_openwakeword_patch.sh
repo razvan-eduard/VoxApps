@@ -13,6 +13,8 @@ set -e
 # Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+# shellcheck source=scripts/lib/patches.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/patches.sh"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
@@ -62,7 +64,7 @@ for PATCH_FILE in "${PATCH_FILES[@]}"; do
     : > "$PATCH_FILE"
     for REL_PATH in "${REL_PATHS[@]}"; do
         PRISTINE="vendor/openwakeword-android-kt/wakeword/${REL_PATH#core/wakeword/}"
-        diff -u --label "a/$REL_PATH" --label "b/$REL_PATH" "$PRISTINE" "$REL_PATH" >> "$PATCH_FILE" || true
+        vox_patch_diff "$PRISTINE" "$REL_PATH" "$REL_PATH" >> "$PATCH_FILE"
     done
 
     if [ ! -s "$PATCH_FILE" ]; then
