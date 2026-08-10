@@ -43,3 +43,67 @@ elif [ -n "${USERPROFILE:-}" ]; then
 else
     VOX_KEY_DIR=".voxapps"
 fi
+
+# --- Where the Android toolchain lives ---------------------------------------------------------
+#
+# Resolved rather than assumed. These scripts run on a developer's machine as much as on a runner —
+# vox-commander's preBuild calls check_whisper.sh on every build — and the SDK sits somewhere
+# different on each platform. Hardcoding one of them means the other two cannot build the app, and
+# means a workflow has to fake the expected layout with symlinks before the script will run.
+#
+# Order: what the environment says, then each platform's default. ANDROID_HOME and ANDROID_SDK_ROOT
+# are what Gradle, the SDK manager and android-actions/setup-android all set.
+
+vox_android_sdk() {
+    local candidate
+    for candidate in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" \
+                     "$HOME/Library/Android/sdk" \
+                     "$HOME/Android/Sdk" \
+                     "${LOCALAPPDATA:-}/Android/Sdk" \
+                     "/usr/local/lib/android/sdk"; do
+        [ -n "$candidate" ] && [ -d "$candidate" ] && { printf '%s' "$candidate"; return 0; }
+    done
+    return 1
+}
+
+# The newest installed NDK, or the one the environment names. `find -L`: on a runner the SDK path
+# can be a tree of symlinks, and an unfollowed find matches nothing.
+vox_android_ndk() {
+    local sdk latest candidate
+    for candidate in "${ANDROID_NDK_HOME:-}" "${ANDROID_NDK_ROOT:-}"; do
+        [ -n "$candidate" ] && [ -d "$candidate" ] && { printf '%s' "$candidate"; return 0; }
+    done
+    sdk=$(vox_android_sdk) || return 1
+    if [ -d "$sdk/ndk" ]; then
+        latest=$(find -L "$sdk/ndk" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; 2>/dev/null \
+                 | sort -V | tail -1)
+        [ -n "$latest" ] && { printf '%s' "$sdk/ndk/$latest"; return 0; }
+    fi
+    [ -d "$sdk/ndk-bundle" ] && { printf '%s' "$sdk/ndk-bundle"; return 0; }
+    return 1
+}
+
+# Where a header-only or tool package is installed. Homebrew is one answer among several, and it is
+# absent on the Linux runners that also build this.
+vox_prefix_for() {
+    local package="$1" binary="${2:-}" prefix
+    if prefix=$(brew --prefix "$package" 2>/dev/null) && [ -n "$prefix" ]; then
+        printf '%s' "$prefix"; return 0
+    fi
+    if [ -n "$binary" ] && command -v "$binary" >/dev/null 2>&1; then
+        printf '%s' "$(cd "$(dirname "$(command -v "$binary")")/.." && pwd)"; return 0
+    fi
+    for prefix in /usr/local /usr /opt/homebrew; do
+        [ -d "$prefix/include" ] && { printf '%s' "$prefix"; return 0; }
+    done
+    printf '%s' "/usr/local"
+}
+
+# sha256 of a file, on either coreutils or macOS.
+vox_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}

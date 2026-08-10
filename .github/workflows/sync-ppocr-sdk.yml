@@ -189,11 +189,6 @@ jobs:
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
 
-      - name: Symlink SDK for the OpenCV build script (hardcodes the macOS SDK path)
-        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
-        run: |
-          mkdir -p ~/Library/Android/sdk
-          ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
 
       - name: Fetch vendor/opencv submodule (needed to build OpenCV before ppocr-sdk can compile)
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'

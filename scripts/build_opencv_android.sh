@@ -37,8 +37,8 @@ OUTPUT_DIR="$PROJECT_ROOT/vendor/ppocr-sdk/opencv"
 #
 VISION_JNI_DIR="$PROJECT_ROOT/vox-vision/src/main/jniLibs"
 
-ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
-ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$(find "$ANDROID_HOME/ndk" -maxdepth 1 -type d -name "[0-9]*" | sort -V | tail -1)}"
+ANDROID_HOME="${ANDROID_HOME:-$(vox_android_sdk)}"
+ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$(vox_android_ndk)}"
 
 # Stamped with the built commit SHA on success (see bottom of this script) — skipping only on
 # "output exists" (no version check) would silently keep serving a stale build after someone bumps

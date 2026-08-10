@@ -52,7 +52,7 @@ NEEDS_UPLOAD=()
 ALL_MATCH=true
 
 for lib in "${LIBS[@]}"; do
-    LOCAL_SHA=$(shasum -a 256 "$JNI_DIR/$lib" | awk '{print $1}')
+    LOCAL_SHA=$(vox_sha256 "$JNI_DIR/$lib")
 
     # Try to get the remote asset's SHA via the GitHub API
     REMOTE_SHA=$(gh release view "$TAG" --json assets --jq ".assets[] | select(.name == \"$lib\") | .digest" 2>/dev/null | head -1)

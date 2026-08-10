@@ -24,9 +24,11 @@ for arg in "$@"; do
 done
 
 # --- DYNAMIC PATH DETECTION ---
-VULKAN_HEADERS_BASE=$(brew --prefix vulkan-headers 2>/dev/null || echo "/usr/local")
-SPIRV_HEADERS_BASE=$(brew --prefix spirv-headers 2>/dev/null || echo "/usr/local")
-SHADERC_BASE=$(brew --prefix shaderc 2>/dev/null || echo "/usr/local")
+# Homebrew where there is one, the tool's own location where there is not, then the usual prefixes.
+# These are also honoured directly, which is how a runner or an unusual layout says where to look.
+VULKAN_HEADERS_BASE="${VULKAN_HEADERS_BASE:-$(vox_prefix_for vulkan-headers)}"
+SPIRV_HEADERS_BASE="${SPIRV_HEADERS_BASE:-$(vox_prefix_for spirv-headers)}"
+SHADERC_BASE="${SHADERC_BASE:-$(vox_prefix_for shaderc glslc)}"
 
 VULKAN_INC="$VULKAN_HEADERS_BASE/include"
 SPIRV_INC="$SPIRV_HEADERS_BASE/include"
@@ -103,13 +105,11 @@ if [ -d "$PROJECT_JNI_DIR" ] && [ "$(ls -A "$PROJECT_JNI_DIR")" ]; then
 fi
 
 # --- 3. BUILD EXECUTION ---
-USER_HOME=$(eval echo "~$USER")
-NDK_BASE="$USER_HOME/Library/Android/sdk/ndk"
-# -L, and -type d rather than -type l: on the release runners this whole SDK path is built out of
-# symlinks (release-*.yml links /usr/local/lib/android/sdk into ~/Library/Android/sdk for this
-# script), so an unfollowed find matches nothing and the toolchain path comes out as "ndk//build".
-LATEST_NDK=$(find -L "$NDK_BASE" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; 2>/dev/null | sort -V | tail -1)
-NDK_PATH="$NDK_BASE/$LATEST_NDK"
+NDK_PATH=$(vox_android_ndk) || {
+    log_error "❌ No Android NDK found."
+    log_error "   Set ANDROID_NDK_HOME, or install an NDK under \$ANDROID_HOME/ndk."
+    exit 1
+}
 
 if [ "$UPGRADE_TRIGGERED" = true ] || [ "$FORCE_REBUILD" = true ]; then
     log_warn "🔥 Cleaning build directory..."

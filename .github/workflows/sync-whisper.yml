@@ -78,11 +78,6 @@ jobs:
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
 
-      - name: Symlink SDK for whisper build script
-        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
-        run: |
-          mkdir -p ~/Library/Android/sdk
-          ln -sf /usr/local/lib/android/sdk/* ~/Library/Android/sdk/
 
       - name: Install SPIRV-Headers and Shaderc for whisper Vulkan build
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
@@ -93,7 +88,6 @@ jobs:
           cd /tmp/spirv-headers && cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local && sudo cmake --install build
           git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vulkan-headers
           cd /tmp/vulkan-headers && cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local && sudo cmake --install build
-          sudo ln -sf /usr/bin/glslc /usr/local/bin/glslc 2>/dev/null || true
 
       - name: Bump submodule to latest tag
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
