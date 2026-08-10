@@ -1,5 +1,6 @@
 package com.voxapps.commander.domain.search
 
+import com.voxapps.identity.VoxRepo
 import androidx.compose.runtime.Immutable
 
 import com.google.gson.JsonParser
@@ -544,7 +545,7 @@ class DynamicSearchProvider(
             val url = endpoint.replace("{title}", encodedTitle).replace("{lang}", formattedLang)
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", def.userAgent ?: "VoxCommander/1.0 (Android Voice Assistant)")
+                .header("User-Agent", def.userAgent ?: VoxRepo.USER_AGENT)
                 .build()
 
             val response = client.newCall(request).execute()

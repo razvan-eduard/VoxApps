@@ -11,8 +11,7 @@ private const val TAG = "VoxNominatimGeocoder"
 
 /** Nominatim's usage policy requires callers to identify themselves. One definition, so every
  *  caller says the same thing and a policy complaint has a single place to be answered. */
-const val VOX_NOMINATIM_USER_AGENT =
-    "${VoxRepo.NAME} (github.com/${VoxRepo.OWNER}/${VoxRepo.NAME})"
+const val VOX_NOMINATIM_USER_AGENT = VoxRepo.USER_AGENT
 
 /**
  * OpenStreetMap Nominatim reverse geocoding — free, keyless, no Google. A `User-Agent` identifying

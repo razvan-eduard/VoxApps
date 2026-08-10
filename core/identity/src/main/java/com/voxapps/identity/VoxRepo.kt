@@ -31,6 +31,14 @@ object VoxRepo {
      */
     const val LEGACY_URL = "https://github.com/$OWNER/VoxCommander"
 
+    /**
+     * What this project calls itself to a third-party API that asks who is calling.
+     *
+     * Carries a reachable contact, which is what the policies that ask for one (OpenStreetMap's
+     * Nominatim, Wikimedia's API) actually want — a way to reach whoever is making the requests.
+     */
+    const val USER_AGENT = "$NAME/1.0 (Android; $URL)"
+
     /** Full URL of one asset on one release, e.g. `releaseAsset("whisper-libs", "libwhisper.so")`. */
     fun releaseAsset(tag: String, fileName: String): String = "$RELEASE_DOWNLOAD_BASE$tag/$fileName"
 }
