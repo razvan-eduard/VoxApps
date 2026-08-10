@@ -47,6 +47,7 @@ Usage: ./scripts/vox <flow> [command] [args...]
   schemas sign                 Sign the schemas (needs the private key)
   schemas verify               Check the manifest signature and every hash
   schemas keygen [out.pem]     Create a signing keypair (once, ever)
+  schemas hash-models [engine] Download each model once and record its sha256
 
   test                         Test this machinery: the report contract, the
                                dispatcher, and the vendored invariant
@@ -128,8 +129,9 @@ case "$FLOW" in
             validate) exec python3 scripts/validate_schemas.py "${@:2}" ;;
             sign)     exec bash scripts/sign_schemas.sh sign ;;
             verify)   exec bash scripts/sign_schemas.sh verify ;;
-            keygen)   exec bash scripts/sign_schemas.sh keygen "${2:-schema-signing.pem}" ;;
-            *) die "schemas needs a command: validate | sign | verify | keygen" ;;
+            keygen)      exec bash scripts/sign_schemas.sh keygen "${2:-}" ;;
+            hash-models) exec bash scripts/hash_models.sh "${@:2}" ;;
+            *) die "schemas needs a command: validate | sign | verify | keygen | hash-models" ;;
         esac
         ;;
 

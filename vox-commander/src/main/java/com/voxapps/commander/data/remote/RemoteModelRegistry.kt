@@ -155,7 +155,20 @@ data class RemoteModelItem(
     val is_multilingual: Boolean? = null,
     val lang_code: String? = null,
     val engine_type: String? = null,
-    val is_remote: Boolean = false
+    val is_remote: Boolean = false,
+    /**
+     * Optional SHA-256 of the downloaded artefact, lowercase hex.
+     *
+     * Declared *here*, in the schema, rather than checked against something the app knows: these
+     * files are meant to be fully dynamic — a provider points wherever they like, and that is the
+     * feature. Because the schema itself is signed, a hash written beside the URL inherits that
+     * signature's authority, so "point anywhere" and "the bytes are what the provider intended"
+     * stop being in tension.
+     *
+     * Absent means unverified, and stays supported: 97 URLs cannot be hashed in one go, and a
+     * download that worked yesterday must keep working today.
+     */
+    val sha256: String? = null
 ) : AppModel {
     override val url: String get() = path
     override val sizeDescription: String get() = size_label ?: "$size_mb MB"
@@ -427,6 +440,16 @@ object RemoteModelRegistry {
     fun getModels(engineKey: String): List<AppModel> {
         return _modelMap.value[engineKey] ?: emptyList()
     }
+
+    /**
+     * One declared model, or null when the engine or the id is unknown.
+     *
+     * Added for the checksum check, which needs the entry rather than the list — every caller that
+     * wanted a single model was filtering [getModels] itself, and a lookup written twice is a lookup
+     * that can disagree with itself about what "unknown" means.
+     */
+    fun getModel(modelId: String, engineKey: String): RemoteModelItem? =
+        cachedSchema?.engines?.get(engineKey)?.models?.firstOrNull { it.id == modelId }
 
     fun getExtension(engineKey: String): String = cachedSchema?.engines?.get(engineKey)?.extension ?: ""
 

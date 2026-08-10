@@ -460,6 +460,18 @@ class ModelDownloader(private val context: Context) {
      * multi-GB models need far longer.
      */
     fun installDownloadedModel(modelId: String, engineKey: String, onReady: (dirName: String?) -> Unit) {
+        // Integrity before installation, while the artefact is still just a file on disk and has
+        // not been handed to a native parser. The hash comes from the schema, which is signed, so
+        // this asks "are these the bytes the provider published?" — not "do I approve of this URL".
+        // A model with no declared hash is installed as before; the field is optional on purpose.
+        if (!checksumOk(modelId, engineKey)) {
+            Logger.log("Refusing $modelId: its bytes do not match the sha256 the schema declares", TAG)
+            resolveLocalFile(modelId, engineKey)?.let { corrupt ->
+                if (corrupt.isDirectory) corrupt.deleteRecursively() else corrupt.delete()
+            }
+            return
+        }
+
         if (!RemoteModelRegistry.isArchiveEngine(engineKey)) {
             onReady(null)
             return
@@ -597,6 +609,43 @@ class ModelDownloader(private val context: Context) {
      * Deletes incomplete/corrupt directories (e.g. if app crashed during unzip).
      * Returns true if the model is valid and ready to use.
      */
+    /**
+     * True when the schema declares no hash, or the file on disk matches it.
+     *
+     * Deliberately not fatal when absent: `models.json` carries 97 URLs and they cannot all be
+     * hashed at once, so an entry without the field behaves exactly as it did before. What the
+     * field buys where it *is* present is that a compromised or hijacked host cannot substitute
+     * different bytes at a URL the signed schema vouches for.
+     */
+    internal fun checksumOk(modelId: String, engineKey: String): Boolean {
+        val expected = RemoteModelRegistry.getModel(modelId, engineKey)?.sha256?.lowercase()
+            ?.takeIf { it.length == 64 } ?: return true
+
+        val file = resolveLocalFile(modelId, engineKey) ?: return true
+        // An archive is verified as the artefact that was downloaded; a directory has no single
+        // stream of bytes to hash, and by then it has already been unpacked anyway.
+        if (!file.isFile) return true
+
+        val actual = sha256Of(file) ?: return true
+        if (actual == expected) return true
+
+        Logger.log("Checksum mismatch for $modelId: expected $expected, got $actual", TAG)
+        return false
+    }
+
+    private fun sha256Of(file: File): String? = runCatching {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { stream ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = stream.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        digest.digest().joinToString("") { "%02x".format(it) }
+    }.getOrNull()
+
     fun validateModel(modelId: String, engineKey: String): Boolean {
         val targetDir = resolveLocalFile(modelId, engineKey) ?: return false
         val marker = File(targetDir.parentFile, "$modelId.downloading")
