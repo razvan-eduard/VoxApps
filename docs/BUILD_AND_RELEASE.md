@@ -143,6 +143,31 @@ skips the whisper compile for a build that only needs to know whether the Kotlin
 Everything downstream of `preBuild` still runs. `copyShippedSchemas` is **not** skippable — the
 schema tests read the assets it generates.
 
+## How `main` is protected
+
+A ruleset covers `refs/heads/main`:
+
+| rule | effect |
+|---|---|
+| `deletion`, `non_fast_forward` | the branch cannot be deleted or force-pushed |
+| `pull_request` | changes arrive as a PR; no approvals required |
+| `required_status_checks` | `scripts` and `verify` must pass before a PR merges |
+
+Repository admins bypass the first two rules and push to `main` directly. Everything that is not an
+admin — Dependabot above all — goes through a PR that cannot merge until both checks are green.
+Auto-merge is enabled, so a PR can be queued rather than watched:
+
+```
+gh pr create --fill && gh pr merge --auto --squash
+```
+
+Both required checks come from `ci.yml`, which has no path filters, so they report on every PR. A
+required check that can fail to *run* blocks a PR permanently instead of gating it, which is why the
+path-filtered workflows (`validate-schemas`, `verify-vendor-patches`) are not required here.
+
+What they cover is `./gradlew test` and `assembleDebug` — the unit tests and a debug build. Release
+packaging, R8 and anything that only appears once the app is installed are outside them.
+
 ## What runs on every push
 
 | Workflow | Trigger | What it does |
