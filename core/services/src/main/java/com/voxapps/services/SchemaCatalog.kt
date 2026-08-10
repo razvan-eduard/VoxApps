@@ -34,8 +34,12 @@ object SchemaCatalog {
      * Returns what happened per file so a caller can report it rather than guess — "3 updated, 2
      * unchanged, 1 unreachable" is a different message from "done".
      */
-    suspend fun refreshAll(baseUrl: String): Map<String, RemoteSchema.Refreshed> =
-        all().associate { it.fileName to it.refresh(baseUrl) }
+    suspend fun refreshAll(baseUrl: String): Map<String, RemoteSchema.Refreshed> {
+        // Once per cycle, not once per schema: every file is covered by the same signed manifest, so
+        // fetching it here means one extra request for the whole refresh rather than one each.
+        SchemaSignature.fetchManifest(baseUrl)
+        return all().associate { it.fileName to it.refresh(baseUrl) }
+    }
 
     /** Throws away every accepted copy, returning the app to what it shipped with. */
     fun resetAll(): List<String> = all().filter { it.resetToBundled() }.map { it.fileName }

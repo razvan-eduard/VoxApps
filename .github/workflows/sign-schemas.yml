@@ -1,0 +1,66 @@
+name: Sign schemas
+
+# The apps fetch remote-schemas/ at every launch and adopt what they get. Those files name engine
+# endpoints and carry the NLU prompt, so a change to them changes what every install does, with no
+# app update and nothing for the user to accept.
+#
+# Since SchemaSignature landed, the apps refuse a change from this repository unless its hash appears
+# in remote-schemas/manifest.json AND that manifest carries a valid signature. So an edited schema
+# without a re-signed manifest does not reach anyone — it is simply ignored, which is safe but silent.
+# This keeps the manifest honest automatically.
+#
+# The private key lives only in the SCHEMA_SIGNING_KEY secret. Anyone holding it can change what
+# every install does; rotating it means committing a new remote-schemas/signing-key.pub and shipping
+# an app release that embeds it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'remote-schemas/**'
+      - 'scripts/sign_schemas.sh'
+  workflow_dispatch: {}
+
+concurrency:
+  group: sign-schemas
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Sign the schemas
+        env:
+          SCHEMA_SIGNING_KEY: ${{ secrets.SCHEMA_SIGNING_KEY }}
+        run: |
+          if [ -z "${SCHEMA_SIGNING_KEY:-}" ]; then
+            echo "::error::SCHEMA_SIGNING_KEY is not set. Until it is, every schema change is"
+            echo "::error::invisible to the apps: they refuse anything the manifest does not cover."
+            echo "::error::Create a key with ./scripts/vox schemas keygen and add it as a secret."
+            exit 1
+          fi
+          ./scripts/vox schemas sign
+
+      # Proves the thing that matters — the committed manifest verifies against the committed public
+      # key — rather than trusting that signing succeeded.
+      - name: Verify what was just signed
+        run: ./scripts/vox schemas verify
+
+      - name: Commit the manifest if it changed
+        run: |
+          if git diff --quiet -- remote-schemas/manifest.json remote-schemas/manifest.json.sig; then
+            echo "Manifest already matched the schemas — nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add remote-schemas/manifest.json remote-schemas/manifest.json.sig
+          git commit -m "chore: re-sign schemas"
+          git push origin HEAD:main

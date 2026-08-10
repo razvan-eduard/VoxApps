@@ -102,3 +102,9 @@ google-services.json
 *.keystore
 .artifacts/
 .gradle_home/
+
+# Schema signing private key. The public half (remote-schemas/signing-key.pub) is committed and
+# embedded in the apps; the private half signs the manifest that decides whether a fetched schema is
+# allowed to change what an install does. It belongs in the SCHEMA_SIGNING_KEY secret and nowhere else.
+schema-signing.pem
+*.signing.pem

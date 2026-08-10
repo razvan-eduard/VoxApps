@@ -11,7 +11,24 @@ object SchemaRepo {
 
     /** The repository serving the schemas when nothing else is configured. Written here rather than
      *  in either app so pointing the family somewhere else is one edit. */
-    const val DEFAULT_BASE_URL = "https://github.com/razvan-eduard/VoxCommander"
+    const val DEFAULT_BASE_URL = "https://github.com/razvan-eduard/VoxApps"
+
+    /**
+     * Names this repository has had. The project was VoxCommander before it was VoxApps, and both
+     * still resolve — GitHub redirects a renamed repository, including raw content.
+     *
+     * Kept because the URL is *persisted per install*: an install that saved the old name is
+     * following the same repository, and must not be treated as somebody's fork just because the
+     * project was renamed. See [SchemaSignature.isDefaultRepo] — the difference decides whether a
+     * schema counts as signed or merely accepted.
+     *
+     * The redirect is also why this is worth pinning down: if a new repository ever took the old
+     * name, every install still using it would silently start following that one instead.
+     */
+    val KNOWN_BASE_URLS = listOf(
+        DEFAULT_BASE_URL,
+        "https://github.com/razvan-eduard/VoxCommander"
+    )
 
     /** The folder at the repository root holding every app's schemas. */
     const val FOLDER = "remote-schemas"

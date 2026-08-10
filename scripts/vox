@@ -44,6 +44,9 @@ Usage: ./scripts/vox <flow> [command] [args...]
   native whisper               Build whisper.cpp from the pinned submodule
 
   schemas validate             Validate the shipped schema JSON
+  schemas sign                 Sign the schemas (needs the private key)
+  schemas verify               Check the manifest signature and every hash
+  schemas keygen [out.pem]     Create a signing keypair (once, ever)
 
   test                         Test this machinery: the report contract, the
                                dispatcher, and the vendored invariant
@@ -118,7 +121,10 @@ case "$FLOW" in
     schemas)
         case "${1:-}" in
             validate) exec python3 scripts/validate_schemas.py "${@:2}" ;;
-            *) die "schemas needs a command: validate" ;;
+            sign)     exec bash scripts/sign_schemas.sh sign ;;
+            verify)   exec bash scripts/sign_schemas.sh verify ;;
+            keygen)   exec bash scripts/sign_schemas.sh keygen "${2:-schema-signing.pem}" ;;
+            *) die "schemas needs a command: validate | sign | verify | keygen" ;;
         esac
         ;;
 

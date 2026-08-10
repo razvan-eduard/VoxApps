@@ -114,10 +114,12 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   unpacked for you, and a file that isn't what the engine needs is refused *with the reason* rather
   than failing later — after which you're offered the deletion of the archive it came from. For
   engines that keep a model per language (Vosk), the language is asked at import.
-- **Schema updates are a choice, not something that happens** — the JSON that defines engines, search
-  providers, intents and normalisation is served from a repository and can be updated in place from
-  Settings, with the version the app shipped with always available to return to. Each app can follow
-  its own repository, so a fork works without touching the app.
+- **Schemas are served from a repository, and signed** — the JSON that defines engines, search
+  providers, intents and normalisation is fetched at launch while *Check for updates* is on, so
+  corrections arrive without an app update. Because those files say where requests go, a change from
+  the official repository is only adopted if it carries a valid signature; the app ships a public key
+  and refuses anything else. Point the app at your own fork and your schemas are still used — marked
+  *unverified*, since only the maintainer can sign. The bundled copies are always one tap away.
 - **Backup & Restore** (Settings → Backup tab) — back up FastMap rules and portable settings to a
   file you pick, or restore from one, using the same zip format Vox Hub's own export/import produces;
   restoring offers a choice of **Full override**, **Merge**, or **Additive** reconciliation (see

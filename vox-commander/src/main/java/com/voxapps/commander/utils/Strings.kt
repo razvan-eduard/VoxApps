@@ -131,7 +131,10 @@ object Strings {
     }
 
     object Urls {
-        const val DEFAULT_MODEL_REPO = "https://github.com/razvan-eduard/VoxCommander"
+        // The one definition lives in :core:services, beside the signature check that decides
+        // whether a repository counts as the maintainer's. Three copies of a URL is how one of them
+        // ends up naming a repository that was renamed two months ago.
+        const val DEFAULT_MODEL_REPO = com.voxapps.services.SchemaRepo.DEFAULT_BASE_URL
         const val VOSK_MODELS = "https://alphacephei.com/vosk/models"
         const val OPENAI_API = "https://api.openai.com/"
         const val OPENAI_CHAT_COMPLETIONS = "https://api.openai.com/v1/chat/completions"

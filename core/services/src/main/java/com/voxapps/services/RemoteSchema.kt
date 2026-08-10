@@ -53,7 +53,17 @@ class RemoteSchema<T : Any>(
     private val onLoaded: (T) -> Unit = {}
 ) {
     /** Where the schema in [value] came from — for a screen that shows the user what they are on. */
-    enum class Source { BUNDLED, ACCEPTED }
+    enum class Source {
+        /** What the app shipped with. */
+        BUNDLED,
+
+        /** Fetched, and covered by a manifest signed with the key this build embeds. */
+        ACCEPTED,
+
+        /** Fetched from a repository this build's key cannot vouch for — a fork the user chose.
+         *  Kept distinct from [ACCEPTED] so a screen can say which one the user is running. */
+        UNVERIFIED
+    }
 
     /** What a [refresh] did, so a caller can say so rather than guess. */
     sealed interface Refreshed {
@@ -65,6 +75,8 @@ class RemoteSchema<T : Any>(
         data class Unreachable(val reason: String) : Refreshed
         /** It was read and refused: not parseable, or empty enough to be a broken download. */
         data object Rejected : Refreshed
+        /** It parsed, but no valid signature covers it and it came from the default repository. */
+        data object Unsigned : Refreshed
     }
 
     init {
@@ -126,8 +138,20 @@ class RemoteSchema<T : Any>(
             return@withContext Refreshed.Rejected
         }
 
+        // Parsing proves the bytes are well-formed, not that they are the maintainer's. These files
+        // decide engine endpoints and the NLU prompt, and they are adopted unattended at launch, so
+        // a change from the default repository has to be covered by the signed manifest before it
+        // takes effect. A fork cannot sign with the embedded key, so it is accepted and marked
+        // unverified rather than refused — following your own repository is a feature.
+        val path = "${folder ?: SchemaRepo.appFolder}/$fileName"
+        val verdict = SchemaSignature.verdictFor(path, text, SchemaSignature.isDefaultRepo(baseUrl))
+        if (verdict == SchemaSignature.Verdict.FAILED) {
+            Logger.log("Refusing $fileName: no valid signature covers it", tag)
+            return@withContext Refreshed.Unsigned
+        }
+
         write(text)
-        adopt(schema, Source.ACCEPTED)
+        adopt(schema, if (verdict == SchemaSignature.Verdict.SIGNED) Source.ACCEPTED else Source.UNVERIFIED)
         Refreshed.Updated
     }
 

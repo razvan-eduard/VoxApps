@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "files": {
+    "commander/api_integrations.json": "955ec8530b4f286e500d741400dacbc51995fcacf0087ddad5d4c58ec4b8267b",
+    "commander/intents.json": "1fb99faeac56fd9c21741ead897193ef3d596c41d007a424fcc7edf0f3cbe45b",
+    "commander/media_services.json": "e679d686a11f8c74efb016bc55362395115777d1e1358aec6471b07f3ac62933",
+    "commander/models.json": "9832287b5be41a422a578a7ce0a8dbf5ecd9426f7a01ad1db7a35c90d2142de5",
+    "commander/normalization.json": "13abb522528ff1daa857f701d4cb1660867b9e831b6c3a98320fc67b52009f75",
+    "commander/search_definitions.json": "f3e7caf8258031ee2c1680185c12a1f700e8d0bac0ee66e3ce97db6f9e67053b",
+    "commander/virtual_models.json": "9202daf5a35990d21646b70202edd1fa40c9b17b60758af9767bbec2684db039",
+    "expenses/external_services.json": "424dfcfb528a028fd51aea7517f08c371b285ad5c1796da262c84689b298d2ff"
+  }
+}

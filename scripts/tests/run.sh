@@ -86,6 +86,29 @@ if [ -f "$CANARY" ]; then
     fi
 fi
 
+log_blue "── schema signing ──────────────────────────────────────────"
+if [ -f remote-schemas/manifest.json ] && [ -f remote-schemas/manifest.json.sig ]; then
+    if ./scripts/vox schemas verify >/dev/null 2>&1; then
+        ok "manifest signature and every schema hash verify"
+    else
+        bad "schemas do not match the signed manifest — run: ./scripts/vox schemas sign"
+    fi
+
+    # A verifier that only ever passes proves nothing: the apps refuse a schema the manifest does
+    # not cover, so this check has to notice an edited one.
+    VICTIM="remote-schemas/commander/normalization.json"
+    cp "$VICTIM" "$VICTIM.testbak"
+    printf ' ' >> "$VICTIM"
+    if ./scripts/vox schemas verify >/dev/null 2>&1; then
+        bad "verify PASSED with an edited schema (it proves nothing)"
+    else
+        ok "verify fails on an edited schema"
+    fi
+    mv "$VICTIM.testbak" "$VICTIM"
+else
+    bad "no signed manifest — the apps will refuse every schema change from this repo"
+fi
+
 echo
 if [ "$FAIL" -eq 0 ]; then
     log_info "✅ $PASS passed."

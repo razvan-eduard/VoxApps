@@ -10,8 +10,10 @@ different ones — this repository, or yours.
 Forking the apps to change a provider means maintaining a fork of an Android project. Forking this
 means editing JSON.
 
-Nothing here is code. Nothing here can redirect a native library or make an app run something it did
-not ship with; these files name services and say how to reach them.
+Nothing here is code, and nothing here can make an app run something it did not ship with. But
+"naming services and how to reach them" is not nothing: an endpoint is where a request goes, and the
+NLU prompt is what gets sent with it. That is exactly why the repository the apps follow by default
+is **signed**, and why a fork is treated differently — see [Signing](#signing) below.
 
 ## Using your own
 
@@ -26,10 +28,35 @@ runs the validator on your edits before your phone does.
 The app compares what you serve with what it already has, by content — an unchanged file costs
 nothing. A file that differs and still parses is adopted and kept until you change it again.
 
+Your fork's schemas are marked **unverified** in the app. That is expected and not a warning about
+you: see below for what it means.
+
 **The way back is always there.** *Settings → Advanced → System maintenance → Reset schemas to the
 shipped ones* deletes everything downloaded from a repository, and the copies that came with the app
 apply again. Those are the ones the app was built and tested against, so a broken edit here can
 never leave an install stranded.
+
+## Signing
+
+The apps embed a public key and refuse a changed schema from **their default repository** unless its
+hash appears in `remote-schemas/manifest.json` and that manifest carries a valid signature from the
+matching private key. Without that, anyone who could serve those files could change where every
+install sends speech, at the next launch, with no app update and nothing for a user to accept.
+
+A fork cannot sign with that key — only the maintainer holds the private half. So the rule bends
+rather than breaking the feature:
+
+| repository | changed schema is |
+|---|---|
+| the app's default | adopted **only** if the signed manifest covers it |
+| an exact mirror serving the original manifest and signature | adopted, and counts as signed — the signature travels with the files, not the host |
+| your fork, with your own edits | **adopted, and marked unverified** — you chose that URL |
+
+So your edits work. The app simply distinguishes "the maintainer published this" from "the user
+pointed me somewhere and I did as I was told", and says which one it is on the schema screen.
+
+If you fork this, delete `remote-schemas/manifest.json` and `manifest.json.sig` or leave them —
+either way, edited files will not match them, and your schemas are accepted as unverified.
 
 ## Layout
 
