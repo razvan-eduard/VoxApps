@@ -40,6 +40,8 @@ jobs:
       - name: Checkout (without submodules — vendor/opencv fetched explicitly below)
         uses: actions/checkout@v7
         with:
+          # Persisted for the branch push, so it is pushed by whoever opens the PR below.
+          token: ${{ secrets.README_PUSH_TOKEN || github.token }}
           submodules: false
           fetch-depth: 0
 
@@ -177,7 +179,9 @@ jobs:
       - name: Open PR
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true' && steps.commit.outputs.committed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A PAT, not GITHUB_TOKEN — see sync-whisper.yml's "Open PR" for why a PR opened with
+          # GITHUB_TOKEN can never satisfy a required check.
+          GH_TOKEN: ${{ secrets.README_PUSH_TOKEN || github.token }}
         run: |
           BUILD_STATUS="${{ steps.build.outputs.status }}"
           if [ "$BUILD_STATUS" == "pass" ]; then

@@ -35,6 +35,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          # Persisted for the branch push, so it is pushed by whoever opens the PR below.
+          token: ${{ secrets.README_PUSH_TOKEN || github.token }}
           submodules: recursive
           fetch-depth: 0
 
@@ -100,7 +102,9 @@ jobs:
         if: steps.versions.outputs.has_update == 'true'
         id: pr
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A PAT, not GITHUB_TOKEN — see sync-whisper.yml's "Open PR" for why a PR opened with
+          # GITHUB_TOKEN can never satisfy a required check.
+          GH_TOKEN: ${{ secrets.README_PUSH_TOKEN || github.token }}
         run: |
           URL=$(gh pr create \
             --title "chore: bump NewPipeExtractor ${{ steps.versions.outputs.current }} -> ${{ steps.versions.outputs.latest }}" \

@@ -221,6 +221,19 @@ for wf in .github/workflows/sync-*.yml; do
     fi
 done
 
+# A PR opened with GITHUB_TOKEN never triggers a workflow, so its required checks are absent rather
+# than pending — and a merge blocks on absent exactly as it does on failing. The PR looks fine,
+# reports nothing failing, and cannot be merged. Reads may keep GITHUB_TOKEN; opening the PR cannot.
+for wf in .github/workflows/sync-*.yml; do
+    name=$(basename "$wf" .yml)
+    if awk '/- name:/{s=$0} /GH_TOKEN/{t=$0} /gh pr create/{print t; exit}' "$wf" \
+         | grep -q 'secrets.GITHUB_TOKEN'; then
+        bad "$name: opens its PR with GITHUB_TOKEN — required checks will never run on it"
+    else
+        ok "$name: opens its PR as an account, so CI runs on it"
+    fi
+done
+
 echo
 if [ "$FAIL" -eq 0 ]; then
     log_info "✅ $PASS passed."
