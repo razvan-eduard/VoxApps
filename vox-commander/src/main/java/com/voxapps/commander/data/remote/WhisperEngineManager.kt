@@ -4,6 +4,7 @@ import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.identity.VoxRepo
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,10 +22,11 @@ class WhisperEngineManager(
         private const val TAG = "WhisperEngineManager"
         private const val LIB_DIR_NAME = "whisper_libs"
 
-        // GitHub release URL for the .so files
-        // TODO: Replace with actual release URL after uploading
+        // The `whisper-libs` release holds these .so files. The repository comes from VoxRepo:
+        // this named it directly and was left on the old name through the rename, which worked
+        // only because GitHub redirects a renamed repository.
         private const val WHISPER_LIBS_BASE_URL =
-            "https://github.com/razvan-eduard/VoxCommander/releases/download/whisper-libs/"
+            VoxRepo.RELEASE_DOWNLOAD_BASE + "whisper-libs/"
 
         // The .so files that make up the Whisper engine (in load order)
         val WHISPER_LIBS = listOf(
