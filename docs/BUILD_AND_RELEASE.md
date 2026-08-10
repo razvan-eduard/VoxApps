@@ -74,12 +74,8 @@ Output: `vox-commander/build/outputs/apk/release/vox-commander-release.apk`, byt
 `release-commander.yml` builds. `./scripts/vox release package` is the same command with the
 keystore filled in from `~/.voxapps`.
 
-This used to be untrue, and the difference mattered: the DLC libraries were stripped out of the
-built zip by a shell script that then re-signed the APK, so a local `assembleRelease` produced a
-fully-bundled APK that **could not exercise the DLC download path at all** — two bugs in that path
-reached users because of it. AGP now does the packaging, in both modes, for the APK and the bundle
-alike. See [BUILD_TIME_DEPENDENCIES.md](BUILD_TIME_DEPENDENCIES.md#why-the-dlc-libs-were-stripped-by-hand)
-for why it was ever done the other way.
+AGP does the packaging, in both modes, for the APK and the bundle alike, so a locally built release
+exercises the same DLC download path the published one does.
 
 ### How much ships inside the APK (`voxDlc`)
 
@@ -88,7 +84,7 @@ default** (`gradle.properties`):
 
 ```
 ./gradlew :vox-commander:assembleRelease                    # minimal — the default
-./gradlew :vox-commander:assembleRelease -PvoxDlc=full      # as IzzyOnDroid's 30MB cap required
+./gradlew :vox-commander:assembleRelease -PvoxDlc=full      # smaller APK, libs fetched on the splash
 ```
 
 | | `minimal` (default) | `full` |
@@ -100,9 +96,9 @@ default** (`gradle.properties`):
 
 **Whisper is unaffected by the switch.** It is the one genuinely optional payload — ~193 MB fetched
 only if you choose Whisper STT, and the Vulkan variant only where the GPU supports it — so it is
-excluded by AGP in both modes. Everything else was a *mandatory* second download: `ESSENTIAL_LIBS`
-is not a figure of speech, and splitting those out deferred nothing while adding a splash-screen
-download that can fail offline.
+excluded by AGP in both modes. Everything the switch does govern is mandatory: the app cannot run
+without those libraries, so in `full` they are a required download on the splash, which is why
+`minimal` is the default.
 
 The property reaches the app through `BuildConfig.DLC_MODE`, which is what `NativeLibs` reads to
 decide whether to fetch anything. **That is deliberate and load-bearing**: the packaging decision and
@@ -110,12 +106,9 @@ the download decision have to be the same decision. Build one way and package th
 an APK missing libraries nothing will ever fetch.
 
 **`gradle.properties` is the only place the mode is written.** The release workflows read it in a
-"Resolve DLC mode" step and use that answer for the build and for whether to attach the `.so`
-assets. They used to declare `VOX_DLC: minimal` themselves, which made sense while Gradle and a
-shell packaging script each needed the value and disagreeing shipped a broken APK — but the script
-is gone, and needing to know the mode is not a reason to state it a second and third time. A
-dispatched run can override it for that run only, via the `dlc_mode` input; blank means "whatever
-`gradle.properties` says".
+"Resolve DLC mode" step and use that answer both for the build and for whether to attach the `.so`
+assets. A dispatched run can override it for that run through the `dlc_mode` input; blank means
+"whatever `gradle.properties` says".
 
 An invalid value fails the build rather than silently choosing:
 
@@ -123,12 +116,11 @@ An invalid value fails the build rather than silently choosing:
 voxDlc must be 'minimal' or 'full', got 'nonsense'
 ```
 
-**Both apps now exclude the same way** — AGP's `packaging.jniLibs.excludes`, applied per variant.
-Commander used to strip post-build instead, on the belief that AGP could not exclude its libs; that
-was a misdiagnosis, and the difference between the two apps is gone. What remains is a real one:
-Vision's DLC libs are files in `vox-vision/src/main/jniLibs/`, so they exist on disk for upload no
-matter how the APK is packaged, while Commander's come from AAR dependencies and are excluded before
-any build output contains them. `:vox-commander:collectDlcLibs` therefore stages them straight from
+**Both apps exclude the same way** — AGP's `packaging.jniLibs.excludes`, applied per variant. They
+differ in where the excluded libraries come from: Vision's are files in
+`vox-vision/src/main/jniLibs/`, so they are on disk for upload no matter how the APK is packaged,
+while Commander's come from AAR dependencies and are excluded before any build output contains
+them. `:vox-commander:collectDlcLibs` therefore stages them straight from
 the resolved dependencies; it runs automatically after `assembleRelease` in `full`, and writes to
 `vox-commander/build/dlc-libs/`.
 
@@ -139,10 +131,9 @@ fails the build if the choice is ever ambiguous.
 
 ### Skipping the native prep
 
-`vox-commander`'s `preBuild` compiles whisper.cpp from its submodule — that's the only script left in
-a build, and it produces output the app links. The three upstream-version checks used to run here too
-and no longer do: they belong to the weekly sync bots, and one of them wrote to the vendored source
-tree while a compile was running.
+`vox-commander`'s `preBuild` compiles whisper.cpp from its submodule — the only script attached to a
+build, and it produces output the app links. The upstream-version checks belong to the weekly sync
+bots and are not wired into any build.
 
 ```
 ./gradlew :vox-commander:assembleDebug -PvoxSkipNativePrep
@@ -187,7 +178,23 @@ on:
       publish:
         type: boolean
         default: false
+      dlc_mode:          # commander/vision only; blank = whatever gradle.properties says
+        type: choice
+        options: ['', 'minimal', 'full']
 ```
+
+Commander and Vision resolve `voxDlc` in a "Resolve DLC mode" step that reads `gradle.properties`,
+and use that answer for the build **and** for whether to attach the `.so` release assets. The mode is
+never declared in the workflow — see [How much ships inside the APK](#how-much-ships-inside-the-apk-voxdlc).
+
+Gradle signs the APK and the bundle directly: the workflows set `RELEASE_KEYSTORE_PATH` and
+`RELEASE_KEYSTORE_PASSWORD` on the build step, and Commander's asserts the result with
+`apksigner verify` afterwards. Gradle only signs when it sees those variables, which is exactly the
+kind of thing worth asserting rather than assuming — an unsigned or differently-signed APK installs
+over nothing, and for signature-level IPC it breaks first-party routing silently. The schemes are
+stated in `signingConfigs` (`v1=false, v2=true, v3=true`) rather than left to AGP's default of v2
+alone, because every published release so far is v3 and an installed app updates only from an APK
+carrying the same certificate.
 
 - **Push to `main` that touches `vox-<app>/build.gradle.kts`** — the usual path. A `check_bump` step
   asks GitHub whether a Release already exists for the computed tag; if it does, every downstream

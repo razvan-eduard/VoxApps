@@ -130,8 +130,8 @@ All three wake engines are defined in `models.json` (`wake_vosk`, `wake_openwake
 
 - Fully open-source, ONNX-based wake word detection. Models are `wake_openwakeword` entries in `models.json` (bundled in `assets/openwakeword/`).
 - **Startup warmup** — Detections in the first 1.0 s after each `start()` are ignored. Right after `start()` the mel/embedding feature buffers aren't primed and emit spurious high scores; without this guard the detect → command → re-arm cycle self-triggers into a loop.
-- **Vendored + patched fork (`:core:wakeword`)** — no longer consumed as the `xyz.rementia:openwakeword`
-  JitPack artifact. Upstream runs full ONNX inference (mel-spectrogram → embedding → classifier) on
+- **Vendored + patched fork (`:core:wakeword`)** — vendored as source rather than consumed as the
+  `xyz.rementia:openwakeword` JitPack artifact. Upstream runs full ONNX inference (mel-spectrogram → embedding → classifier) on
   *every* ~80 ms audio buffer, including silence — the dominant CPU/battery cost of always-on wake word
   detection, and the library exposes no VAD/gating hook (`internal` visibility, no `feed()` API), so a
   wrapper couldn't fix it — only a source fork could. See [OpenWakeWord Fork & Sync](#openwakeword-fork--sync) below.
@@ -338,10 +338,9 @@ only the *rules* portion of the template, not the few-shot examples: `stripToRul
 `standard_nlu` string at the **first occurrence of `"Examples:"`** and discards everything after it
 (the examples are for readability/authoring, not for the LLM — the numbered rules are meant to be
 self-describing). This means **any rule — including `SATELLITE OVERRIDE` — must be written before the
-`Examples:` marker in `models.json`, or the LLM silently never sees it.** This exact mistake shipped
-once (the override was appended at the end of the file, after `Examples:`, so every satellite `create`
-command silently lost its category/content extraction until the placement was fixed) — see the
-regression tests in `PromptProviderTest.kt` (`a rule appended after Examples never reaches the model`,
+`Examples:` marker in `models.json`, or the LLM silently never sees it.** An override placed after
+`Examples:` is cut before the model ever reads it, and every satellite `create` command then loses its
+category/content extraction with no error anywhere — see the tests in `PromptProviderTest.kt` (`a rule appended after Examples never reaches the model`,
 `the real models json prompt keeps SATELLITE OVERRIDE before the Examples cut`), which read the actual
 repo-root `models.json` and assert the rule survives the cut.
 
@@ -539,7 +538,7 @@ A slot's value is one of:
   fire-and-forget (`optional: true`); the device-targeted play call and the device-less fallback play
   call share `group: "play"` so the first to succeed satisfies the whole group and the sequence
   continues on to the queueing steps afterward, rather than the whole sequence returning early.
-- `device_select` (step type only) — generic version of the old device-preference heuristic:
+- `device_select` (step type only) — declarative device preference:
   `prefer: [{field, equals}, ...]` predicates tried in order, first match wins, else first item.
 - `queue_array` (step type only) — best-effort, never fails the sequence: queues up to `limit` items
   from a prior step's stored array (skipping one matching value, e.g. the track just played) via
@@ -787,9 +786,8 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 
 ### The picklist family (`:core:design/picklist/`)
 
-Choosing one of N things used to be hand-rolled at roughly twenty sites across the apps, each with
-its own anchor, its own menu, and its own idea of where a related API-key field or connection test
-belonged. They are now three shared components, in `:core:design` so every app gets them:
+Choosing one of N things is three shared components, in `:core:design` so every app gets them —
+one anchor, one menu, and one place for a related API-key field or connection test:
 
 | Component | What it is |
 |---|---|
@@ -868,10 +866,9 @@ A model the user imports from storage is a row in the same list as a downloaded 
 weight: selected the same way, deleted by the same trash icon, and loaded **because it is selected**
 rather than because it exists.
 
-That last part is a behaviour change worth stating plainly. An import used to be invisible to the one
-screen that lists models and unconditional everywhere else — `EngineSpecs.localSpec` returned it
-before consulting the registry, so picking a downloaded model marked that model as chosen while the
-imported file kept running.
+That last part is worth stating plainly: what is selected is what loads. `EngineSpecs.localSpec`
+resolves the selection, so an imported model runs when the imported id is selected and a registry
+model runs when a registry id is — the row in the list and the file in use never disagree.
 
 - **Id scheme** — `ImportedModelId`: `custom:<engineKey>` or `custom:<engineKey>:<langCode>`,
   mirroring the key `setCustomModelPath` already uses, so a stored selection is recognised as an
@@ -1123,9 +1120,9 @@ One signature covers the whole manifest, so adding or removing a file is as dete
 | A fork the user configured | adopted, `Source.UNVERIFIED` |
 | An exact mirror serving the original manifest | adopted as **signed** — the signature travels with the files, not the host |
 
-The point is provenance, not content: a schema may still say anything, which is the feature. What
-changed is that a third party can no longer say it. A fork is accepted precisely because the user
-chose that URL, and marked so the distinction is visible.
+The point is provenance, not content: a schema may say anything, which is the feature — what the
+signature establishes is that a third party cannot say it. A fork is accepted precisely because the
+user chose that URL, and marked so the distinction is visible.
 
 Two details that make it hold:
 
@@ -1206,7 +1203,7 @@ schema tests read the generated assets)
 
 **Parsed by**: `IntentCatalog` (`domain/intent/registry/IntentCatalog.kt`) — mirrors `SearchProviderRegistry` (init / fetchRemote / ensureLocalFile / loadFromFilesDir / saveLocalFile, schema-versioned no-downgrade).
 
-**Purpose**: The catalog of standard Android intents probed per installed app (previously the hardcoded `KnownIntents.PROBE_MAP` in `AppRegistry.kt`). See §7 — `AppRegistry.probeSupported()`/`probeMetadata()` iterate this catalog.
+**Purpose**: The catalog of standard Android intents probed per installed app. See §7 — `AppRegistry.probeSupported()`/`probeMetadata()` iterate this catalog.
 
 **Contents**:
 - `schema_version` — Integer, for hot-reload detection
@@ -1339,7 +1336,7 @@ All six tasks are dependencies of `preBuild`.
 - **JitPack** — Vosk, sherpa-onnx, NewPipe Extractor
 - **Picovoice Maven** — Porcupine
 
-OpenWakeWord is no longer pulled from JitPack — it's vendored as source (`:core:wakeword`, patched) with
+OpenWakeWord is vendored as source (`:core:wakeword`, patched) rather than resolved from JitPack, with
 its pristine upstream tracked via a git submodule. See [§2 OpenWakeWord Fork & Sync](#openwakeword-fork--sync).
 
 ---
@@ -1456,9 +1453,9 @@ When several apps advertise the same domain (e.g. Vox Notes **and** a third-part
    beats a third-party alternative **silently** — signature-based, so it can't be spoofed by app name.
    Requires every first-party app to actually share one release signing certificate (see
    [Satellite App Guide §8.1](SATELLITE_APP_GUIDE.md#81-signature-level-permissions-are-the-entire-trust-mechanism))
-   — this went silently unenforced for a while (each app used its own distinct keyAlias within the
-   shared keystore file, which are unrelated key pairs), so this check quietly always returned `false`
-   between apps in release builds until that was fixed.
+   — every app must sign with the **same** alias (`vox-apps`) in the shared keystore, because two
+   aliases in one keystore file are unrelated key pairs and this check then returns `false` between
+   apps in release builds, silently.
 4. **Single third-party** — exactly one candidate → route to it.
 5. **2+ third-party, no star** — route to the first discovered and flag `ambiguous` (logged). A spoken
    "which app?" disambiguation that persists the choice as a star is a planned follow-up.
@@ -1494,9 +1491,8 @@ command bus but carrying opaque prompt/result payloads instead of structured not
   a generous 90s timeout. It's a process-wide singleton with a check-then-act `setupLlm()` and no
   synchronization of its own; a burst of concurrent callers (confirmed on-device: Expenses' "Force-check
   notifications now" forwarding several matched notifications at once) each saw the model unloaded and
-  each triggered a concurrent, memory-heavy model-load call (originally `LlmInference
-  .createFromOptions(...)` under MediaPipe GenAI, now `Engine(...).initialize()` under LiteRT-LM — the
-  engine was migrated in Aug 2026, but this hazard and the `Mutex` fix are engine-agnostic) — N full
+  each triggered a concurrent, memory-heavy model-load call (`Engine(...).initialize()` under
+  LiteRT-LM; the hazard and the `Mutex` that closes it are engine-agnostic) — N full
   copies of the model loading into RAM at once, crashing the process and silently dropping every one of
   those requests (nothing ever reached `LlmHookWorker`'s `catch` to send a reply).
 - **Reply** — `LlmHookWorker` applies only generic cleanup (`NluIntentParser.cleanGenericOutput`,
@@ -1635,8 +1631,8 @@ when the satellite process isn't already running. This is now collapsed:
   instant the mutation commits; `SchemaChangedReceiver` auto-applies it to the cache immediately. A
   precise, verified-event push, not a poll or timer.
 - **KSP-generated field schema.** `ExpenseParsePromptBuilder`/`CalendarEventParsePromptBuilder`'s
-  field-listing prose used to be hand-typed and could silently drift out of sync with the actual
-  parser (`ExpenseParseResultParser.Parsed`, etc). A new `@VoxExtractionSchema(version)` annotation
+  field-listing prose is generated rather than hand-typed, so it cannot drift out of sync with the
+  actual parser (`ExpenseParseResultParser.Parsed`, etc). A `@VoxExtractionSchema(version)` annotation
   (`:core:schema-annotations`) plus a KSP `SymbolProcessor` (`:core:schema-processor`) generates a
   `Generated<ClassName>Schema` object — `VERSION`/`FIELD_SCHEMA_JSON` — from the annotated class's
   *primary constructor parameters only* (deliberately not `getAllProperties()`, which would also pick
@@ -1741,8 +1737,8 @@ receives voice commands (its `VisionCommandReceiver` only answers the discovery 
   camera capture needs a live foreground window, and Android's background-activity-launch (BAL)
   restriction is evaluated against the **calling** app's foreground state, not the callee's — so a
   foreground-to-foreground `startActivity` (button tap → `VisionActivity`) hits no restriction at all.
-  An earlier design routed this through a `BroadcastReceiver` that tried to self-launch its own
-  Activity with no visible caller UI backing it, which BAL silently blocked; that receiver was removed.
+  Routing it through a `BroadcastReceiver` that self-launches an Activity with no visible caller UI
+  behind it is what BAL silently blocks, so no receiver sits in this path.
 - **`VisionActivity`** is `android:launchMode="singleTask"` with an `onNewIntent` override, so a second
   scan request while it's already running redelivers into the same instance instead of losing the
   pending-request extras (both the launch mode *and* the override are required together — either alone
@@ -1802,18 +1798,14 @@ a **consumer** of the `export`/`import` actions every other satellite already ex
 - Because Hub holds no Room database, its own settings (theme preference, backup schedule, per-app
   backup config below) are the only thing it persists locally.
 
-**Per-app backup configuration (`AppBackupConfig`)** — the main Export screen and scheduled backups
-used to have independently-configured, inconsistent behavior: a global 3-way scope radio
-(Settings/Data/Both) + 2 global checkboxes (secrets/photos) + a per-app include/exclude checklist for
-the manual Export button, while `BackupWorker` (the scheduled path) ignored all of it and hardcoded
-`scope=BOTH, includeSecrets=false, includePhotos=false` for every discovered app. Replaced with one
-persisted, per-package `AppBackupConfig(includeSettings, includeData, includeApiKeys,
-includeAttachments)` (`vox-hub/.../domain/backup/AppBackupConfig.kt`), stored as a hand-rolled
+**Per-app backup configuration (`AppBackupConfig`)** — the main Export screen and `BackupWorker`
+(the scheduled path) obey one persisted, per-package
+`AppBackupConfig(includeSettings, includeData, includeApiKeys, includeAttachments)` (`vox-hub/.../domain/backup/AppBackupConfig.kt`), stored as a hand-rolled
 `org.json`-encoded map in `HubSettings.appBackupConfigs` (matches Hub's existing `ExportImportUtil.kt`
 convention — Hub has no Gson dependency). Both `includeSettings=false` and `includeData=false` for an
-app means "skip it entirely," subsuming the old checklist with no separate master toggle. An app not
-yet in the map (newly installed) falls back to `AppBackupConfig.DEFAULT` via the `configFor(packageName)`
-extension — matches the pre-this-feature defaults (scope BOTH, secrets off, photos off, every app
+app means "skip it entirely," so there is no separate master toggle. An app not yet in the map (newly
+installed) falls back to `AppBackupConfig.DEFAULT` via the `configFor(packageName)` extension
+(scope BOTH, secrets off, photos off, every app
 included).
 
 This single config now drives **both** the manual Export button and `BackupWorker` identically, via
@@ -1827,16 +1819,15 @@ JSON export. The Hub main screen shows one card per discovered app with the four
 Attachments only shown for apps whose manifest advertises the `create` action, i.e. Commander is
 Settings+API keys only) plus an **All** toggle that sets every toggle for every exportable app at once;
 the Export button and the Scheduled Backups frequency/retention controls are both disabled when nothing
-is selected. `HubSettingsScreen`'s Scheduled Backups section no longer has its own separate
-data-selection controls — it just points back at the main screen's config ("This selection is also
-what scheduled backups use").
+is selected. `HubSettingsScreen`'s Scheduled Backups section has no data-selection controls of its
+own — it points back at the main screen's config ("This selection is also what scheduled backups
+use").
 
-**Multi-domain attachment zip bundling** — `BackupZipWriter.write()` used to take a single nullable
-`attachmentUriString: String?`, and both the manual Export flow and `BackupWorker` only ever populated/
-read the `"expenses"` entry of their per-domain maps, silently discarding any other domain's attachment
-URI. Generalized to a real `attachmentZipEntries: Map<String, String>` (zip-entry name → content URI)
-end to end, built by the shared `zipEntriesFor(domain, result): Map<String, String>`
-(`BackupExportRequest.kt`): the pre-existing Expenses receipts zip keeps its exact legacy entry name
+**Multi-domain attachment zip bundling** — `BackupZipWriter.write()` takes
+`attachmentZipEntries: Map<String, String>` (zip-entry name → content URI) end to end, built by the
+shared `zipEntriesFor(domain, result): Map<String, String>`
+(`BackupExportRequest.kt`), so every domain's attachment URI is carried rather than only Expenses'.
+The Expenses receipts zip keeps the exact entry name
 `"expenses-receipts.zip"` (from `VoxResult.attachmentUri`) so already-created backup files stay
 restorable; every other domain's `:core:attachments` bundle is named `"$domain-attachments.zip"` (from
 `attachmentUri` for domains with no legacy zip, or from the new **`VoxResult.secondaryAttachmentUri`**
@@ -1844,8 +1835,8 @@ field for Expenses specifically, since its primary `attachmentUri` field is alre
 receipts). `BackupZipWriter` writes one entry per map entry, best-effort (a failed
 `contentResolver.openInputStream()` for one entry logs a warning and skips just that entry, never fails
 the whole export). Restore-side `HubScreen.readExportDocument()` mirrors this: it recognizes both the
-exact legacy `"expenses-receipts.zip"` name (→ domain `expenses`, import field `receiptsZipUri`, kept
-untouched from before this feature) and the new `"$domain-attachments.zip"` pattern for any domain (→
+exact `"expenses-receipts.zip"` name (→ domain `expenses`, import field `receiptsZipUri`) and the
+`"$domain-attachments.zip"` pattern for any domain (→
 import field `attachmentsZipUri`, a separate field name so it never collides with Expenses' existing
 receipts field across independently-released app versions).
 
@@ -1898,8 +1889,8 @@ first place) — consumed by `vox-notes`, `vox-expenses`, and `vox-calendar`.
   zip there before handing Hub a `FileProvider` URI, and a missing path-config entry fails with
   `FileProvider`'s `IllegalArgumentException: Failed to find configured root` at export time, silently
   (best-effort catch) producing a backup with no attachments zip and no visible error unless
-  logcat is inspected — Vox Notes and Vox Calendar were missing this entry until it was added
-  alongside this feature (Vox Expenses already had it, reused from its pre-existing receipts zip).
+  logcat is inspected. Every app that exports attachments needs the entry; Vox Expenses' serves its
+  receipts zip as well.
 
 ### Peer-to-peer device sync (`OP_SYNC_EXPORT` / `OP_SYNC_MERGE`)
 
@@ -2199,9 +2190,7 @@ per-rule fuzzy-vs-exact toggle, per-rule "applies automatically at save vs. revi
 vox-expenses' `ExpensesRepository.buildDuplicateChecker(config, automaticOnly)` fetches the enabled
 rules (optionally filtered to `appliesAutomatically` ones only), builds the field registry once, and
 evaluates each rule against its own fuzzy setting via a single-rule checker per rule, then ORs/ANDs all
-rule results per the stored global combinator. This replaced two previously-separate systems (an
-always-on exact-match `ExpenseDuplicateChecker`, since deleted, and a 3-checkbox near-duplicate add-on)
-with one pass — see the [Vox Expenses feature list](APPS_OVERVIEW.md#vox-expenses) for the user-facing
+rule results per the stored global combinator. Exact and near duplicates are one pass — see the [Vox Expenses feature list](APPS_OVERVIEW.md#vox-expenses) for the user-facing
 behavior, including the automatic-protection Off/Local/Local+AI/AI modes and the "Manual review" toggle
 that stages an insert-time local-rule match into the same pending-review list `findLocalDuplicateGroups`
 already uses for the on-demand/scheduled check, instead of merging it silently.
@@ -2227,9 +2216,9 @@ now also verifies `direction` matches, not just amount/currency.
 ### Data-quality scoring for merges (`recordScore` / `Expense.dataScore`)
 
 Both the silent insert-time merge (`enrichWithNearDuplicate`) and the review-approved merge
-(`ExpensesRepository.applyExpenseDeduplication`) used to keep whichever record's field content was
-"first" (arrival order) rather than "best." `:core:datahygiene` now ships a generic building block for
-this, mirroring how contact-merge tools (Google/Apple Contacts) and CRM dedup actually rank duplicate
+(`ExpensesRepository.applyExpenseDeduplication`) keep the *best* field content rather than whichever
+arrived first. `:core:datahygiene` ships the generic building block for this, mirroring how
+contact-merge tools (Google/Apple Contacts) and CRM dedup actually rank duplicate
 records:
 
 - **`RecordProvenance`** (`core/datahygiene/.../RecordScore.kt`) — an interface with one member,
@@ -2262,14 +2251,14 @@ scorer's non-null field values win (falling back to the lower scorer's), instead
 safe to `fold` across more than two records.
 
 **`applyExpenseDeduplication`** now folds `enrichWithNearDuplicate` across every discarded group member
-before deleting them, backfilling the kept row's blank fields from its higher-scoring duplicates —
-approving a review group used to just discard every field the non-kept rows had. A receipt image
+before deleting them, backfilling the kept row's blank fields from its higher-scoring duplicates, so
+approving a review group keeps what the non-kept rows had rather than discarding it. A receipt image
 adopted into the surviving row this way is excluded from the subsequent file-delete pass (tracked via
 an `adoptedImageNames` set), so the merge can't delete a file the kept row now references.
 
-**Review UI** (`ExpenseCleanupSettingsTab.kt`): the keep-picker's default selection is now whichever
-group member has the highest `dataScore()`, not just whatever the detector/AI picked as its anchor id
-— still overridable via the per-member radio buttons already in place. `expensePreview()` shows each
+**Review UI** (`ExpenseCleanupSettingsTab.kt`): the keep-picker defaults to whichever group member
+has the highest `dataScore()`, rather than the detector/AI's anchor id, and stays overridable via the
+per-member radio buttons. `expensePreview()` shows each
 candidate's capture-source tag alongside total/bank/vendor/date-time, so the default is explainable
 rather than a black box. The whole tab was also restructured from one large enclosing `Card` (which
 made it visually stand out from every other Settings tab as a solid tonal block) into separate Cards
@@ -2368,9 +2357,8 @@ per app (`release-commander.yml`, `release-calendar.yml`, `release-expenses.yml`
 
 Before any of this: every push to `main` and every pull request runs `.github/workflows/ci.yml` —
 `./gradlew test` across all modules, then `assembleDebug` for all six apps. Release workflows only
-wake when an app's own `build.gradle.kts` changes, so until CI existed, a commit that touched shared
-`core/` code and no app's build file was never compiled or tested by anything. That gap failed late,
-at the next release, and blamed whoever released.
+wake when an app's own `build.gradle.kts` changes, so without this a commit touching shared `core/`
+code and no app's build file would be compiled and tested by nothing until the next release.
 
 CI runs with `-PvoxSkipNativePrep` (skips Commander's whisper compile and its three JitPack version
 checks) and asks for 6 GB of heap, because dexing six apps in one invocation ran D8 out of memory on
@@ -2388,12 +2376,12 @@ Two narrower checks run on matching paths: `validate-schemas.yml` and `verify-ve
   later step) — so pushing unrelated changes never triggers a rebuild, only an actual version bump
   does.
 
-  It asks GitHub rather than diffing `HEAD~1`, which silently broke whenever a push landed more than
-  one commit at once: `HEAD~1` then lands *inside* the same push, already showing the bumped value,
-  so `prev == curr` and the release was skipped for a version that had never been published.
+  It asks GitHub rather than diffing `HEAD~1`: when a push lands more than one commit at once,
+  `HEAD~1` is *inside* that push and already shows the bumped value, so `prev == curr` would skip the
+  release for a version that has never been published.
 - **`workflow_dispatch`** — a manual run builds, and publishes only if its `publish` input is ticked
-  (`gh workflow run release-<app>.yml -f publish=true`). The default is off because six accidental
-  dispatches once published six GitHub Releases. `check_bump` doesn't run on a dispatch at all, so a
+  (`gh workflow run release-<app>.yml -f publish=true`). The default is off so that an exploratory
+  dispatch cannot cut a GitHub Release. `check_bump` doesn't run on a dispatch at all, so a
   deliberate dispatched publish can release a version whose tag already exists — which is how a build
   that succeeded but failed to publish gets recovered.
 - **A direct tag push** (e.g. `git push origin calendar-v0.5`) also triggers the workflow (its
@@ -2405,8 +2393,8 @@ two pushes landing together can't both force-move the same tag and both delete t
 ### Tag naming (`.github/actions/compute-release-tag`)
 
 A shared composite action is the single source of truth for the `<app-prefix>-v<versionName>` tag
-convention (e.g. `calendar-v0.5`, `commander-v0.7-beta`) — previously duplicated as a ~12-line bash
-block in every `release-*.yml`. On a `main` push or `workflow_dispatch`, it reads `versionName` straight
+convention (e.g. `calendar-v0.5`, `commander-v0.7-beta`), so no `release-*.yml` computes it. On a
+`main` push or `workflow_dispatch`, it reads `versionName` straight
 out of that app's `build.gradle.kts`; on a direct tag push, it passes the pushed tag straight through
 instead of recomputing it. It also derives `is_prerelease` from whether the version name contains
 `-beta`/`-rc`/`-alpha` (used to mark a GitHub Release as a pre-release).
@@ -2443,13 +2431,10 @@ it queries this
 repo's actual GitHub Releases via `gh api`, groups them by tag prefix, picks the newest per app, reads
 each release's real published asset size and upload time directly from the API response (the upload
 time rather than the release's `published_at`, because publishing deletes and recreates the release
-for a fresh date, and a dispatched re-publish moves `published_at` without a new build at all) — not
-a hand-maintained
-number, which previously drifted — e.g. Vox Vision's README size sat stale at ~54 MB for several
-releases after R8 minification actually brought it down to ~4 MB), and rewrites the content between
-two `<!-- LATEST_RELEASES:START/END -->` HTML-comment markers in place (the marker name predates the
-table merge that folded the old separate "Latest Releases" table into this one — left as-is since
-renaming it buys nothing). Never hand-edit that table; the next regeneration overwrites it.
+for a fresh date, and a dispatched re-publish moves `published_at` without a new build at all) rather
+than a hand-maintained number, which cannot track what R8 actually produces), and rewrites the content
+between
+two `<!-- LATEST_RELEASES:START/END -->` HTML-comment markers in place. Never hand-edit that table; the next regeneration overwrites it.
 
 `.github/workflows/update-readme-releases.yml` runs that script automatically and commits the result
 whenever a new release publishes. It's triggered by `workflow_run` (listening for each of the six

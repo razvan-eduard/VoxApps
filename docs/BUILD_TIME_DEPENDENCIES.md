@@ -40,11 +40,10 @@ Only two of these scripts are wired into a build:
 | `autoCompileOpenCv` | `build_opencv_android.sh` | `vendor/ppocr-sdk` | Builds from the **pinned** submodule; never moves the pin. Early-exits when the built commit matches. |
 
 The three `autoCheck*` tasks are **deliberately not wired into `preBuild`**. "A newer Vosk exists" is
-a maintenance fact, and it already has a home: the weekly sync workflow that opens a PR. Delivering
-it a second time in every build cost three network round-trips per build, made builds behave
-differently offline, and — the reason it had to stop — ran a check that *overwrites vendored source
-files* to dry-run a patch while a compile is in progress. Nothing attached to a compile should be
-writing to the source tree. They remain runnable on demand:
+a maintenance fact, and its home is the weekly sync workflow that opens a PR. Wiring it into a build
+would cost three network round-trips per build, make builds behave differently offline, and — the
+reason it must not be — the patch dry-run *overwrites vendored source files*, which nothing attached
+to a compile may do. They are runnable on demand:
 
 ```
 ./scripts/vox check              # every upstream, one table
@@ -52,12 +51,12 @@ writing to the source tree. They remain runnable on demand:
 ./gradlew :vox-commander:checkUpstream
 ```
 
-Both dry-run scripts now restore the swapped files on `EXIT`/`INT`/`TERM`. Before that, interrupting
-one left pristine upstream files in place of the patched ones — and the wake-word case still
-compiles that way, just without the RMS silence gate.
+Both dry-run scripts restore the swapped files on `EXIT`/`INT`/`TERM`, so an interrupted check
+cannot leave pristine upstream files in place of the patched ones — a state the wake-word module
+still compiles in, just without the RMS silence gate.
 
-`-PvoxSkipNativePrep` now drops exactly one thing, `autoCompileWhisper`, for a verification build
-that only needs to know whether the Kotlin compiles. `copyShippedSchemas` runs regardless: the schema
+`-PvoxSkipNativePrep` drops exactly one thing, `autoCompileWhisper`, for a verification build that
+only needs to know whether the Kotlin compiles. `copyShippedSchemas` runs regardless: the schema
 tests read the assets it generates.
 
 `autoCompileOpenCv` has no such flag and must not get one — `vendor/ppocr-sdk/opencv/java` is
@@ -81,9 +80,8 @@ JitPack-style coordinate (confirmed empirically — it has never opened a PR for
   deliberately *not* wired into `preBuild`.
 - **`.github/workflows/sync-vosk.yml`** — same check weekly (Monday 06:00 UTC); bumps
   `libs.versions.toml`, runs `compileDebugKotlin` + `testDebugUnitTest`, and opens a PR for a
-  person. It used to merge itself on green; a green build cannot confirm wake-word model loading or
-  recognition accuracy, only that Vosk's API surface still resolves — and no unit test loads a
-  native model.
+  person to merge. A green build cannot confirm wake-word model loading or recognition accuracy,
+  only that Vosk's API surface still resolves — and no unit test loads a native model.
 
 ---
 
@@ -98,10 +96,9 @@ reliably track this JitPack-style coordinate either.
   compares it against `gradle/libs.versions.toml`, and prints an update notice (no automatic change).
 - **`autoCheckNewPipeExtractor`** Gradle task — runnable on demand, not wired into `preBuild`.
 - **`.github/workflows/sync-newpipe-extractor.yml`** — same check weekly (Tuesday 06:00 UTC); bumps
-  `libs.versions.toml`, compiles, unit-tests, and opens a PR for a person. It used to merge itself
-  on green, and this is the worst candidate in the repo for that: NewPipeExtractor breaks when
-  YouTube changes its page structure, not when its API changes, so the green build cannot see the
-  failure mode that actually happens.
+  `libs.versions.toml`, compiles, unit-tests, and opens a PR for a person to merge. NewPipeExtractor
+  breaks when YouTube changes its page structure rather than when its API changes, so a green build
+  cannot see the failure mode that actually happens.
 
 ---
 
@@ -165,16 +162,20 @@ artifact could cover well.
   after the PR is merged, because CI can only verify "it compiles," never "it still transcribes
   correctly" — that needs an actual on-device sanity check.
 
-### Stripping onnxruntime/Vosk/litertlm-android/sherpa-onnx (post-build strip, not AGP excludes)
+### Excluding onnxruntime/Vosk/litertlm-android/sherpa-onnx (`full` mode only)
 
-A local `./gradlew :vox-commander:assembleRelease` alone produces a ~40MB APK — only Whisper is
-excluded via AGP. The actual CI-published release gets to ~16MB, because
-`libonnxruntime.so`/`liblitertlm_jni.so`/`libvosk.so`/`libsherpa-onnx-jni.so` are also
-stripped, just via a different mechanism than Whisper. Deliberately **not** called "DLC" here —
-unlike Whisper's model download (a genuine user choice: pick tiny/base/small in Settings), these are
-mandatory libraries the app can't function without; they're stripped from the APK and silently
-fetched once on first launch with no user involvement, closer to a deferred/lazy asset load than
-downloadable *content*.
+`libonnxruntime.so`, `liblitertlm_jni.so`, `libvosk.so` and `libsherpa-onnx-jni.so` leave the APK
+**only in `full` mode**, which is not the default — see `voxDlc` in
+[BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md#how-much-ships-inside-the-apk-voxdlc). The default,
+`minimal`, keeps all four inside a 47MB APK and downloads nothing; `full` produces 24MB and fetches
+them on the splash.
+
+They are deliberately **not** called "DLC" in that second mode. Unlike Whisper's model download (a
+genuine user choice: pick tiny/base/small in Settings), these are mandatory libraries the app cannot
+function without — fetched once on first launch with no user involvement, closer to a deferred asset
+load than to downloadable *content*. That asymmetry is why `minimal` became the default: excluding
+them deferred nothing and turned one install into an install plus a mandatory download that can fail
+offline.
 
 These are excluded by AGP's `packaging.jniLibs.excludes`, the same mechanism as Whisper, applied per
 variant through `androidComponents.onVariants` in `vox-commander/build.gradle.kts`.
@@ -193,39 +194,22 @@ binaries rather than two copies of one — so the task selects by artifact, not 
 fails if the choice is ever ambiguous. Only sherpa's build exports the symbol version
 `libsherpa-onnx-jni.so` links against.
 
-#### Why the DLC libs were stripped by hand
+#### Where the packaging rules live
 
-Until August 2026 these four were removed from the built APK zip afterwards by
-`scripts/strip_dlc_libs.sh`, which then had to `zipalign` and re-sign, because AGP's excludes had
-been found "unreliable on arm64-v8a for this dependency set" across AGP 9.0.0–9.2.1. That
-conclusion was wrong, and the record of it is kept here because the symptom was real and reproducible
-and the wrong cause cost a subsystem.
+Native packaging is configured through `androidComponents.onVariants`, never in a `buildTypes`
+block. A `packaging {}` written inside a build type is not scoped to that build type — AGP 9.6.1
+applies it to every variant, so a release-only exclusion also strips the library out of debug
+builds, and a debug-only `pickFirst` reaches the release variant, where a `pickFirst` for a path
+overrides an `exclude` for the same path.
 
-The symptom: adding the four to `excludes` removed three of them and left `libonnxruntime.so` in the
-APK. The apparent explanation — that its two sources confuse AGP's merge — was tested by making
-sherpa-onnx the only source (`compileOnly` on onnxruntime-android). The lib still shipped, single
-source, explicitly excluded. Duplication was not the cause.
+Both apps follow this. Commander's debug variant needs a `pickFirst` for `libonnxruntime.so`, since
+two artifacts provide that path, and `minimal` release builds need the same; `full` release builds
+exclude the path outright, which drops both copies and makes the `pickFirst` unnecessary.
 
-The actual cause: **a `packaging {}` block written inside a build type is not scoped to that build
-type.** AGP 9.6.1 applies it to every variant. Measured directly — adding `libjnidispatch.so` to the
-*release* excludes removed it from `mergeDebugNativeLibs`' output. The `debug` block carried a
-`pickFirst` for `libonnxruntime.so` (needed there, since two artifacts provide it), that `pickFirst`
-reached the release variant, and a `pickFirst` beats an `exclude` for the same path. So the release
-excludes for that one library were inert, and the mechanism was blamed for it. The six Whisper libs
-in the same block worked the whole time — no `pickFirst` happened to name them.
-
-Two further consequences of the same scoping bug, both since fixed: the release Whisper excludes
-were being applied to debug builds as well (harmless only because `LibWhisper.kt` falls back to
-downloading them), and the `.aab` could not be stripped at all — a zip edit cannot reach a bundle,
-so the published bundle carried ~37 MB of libraries the APK did not. Moving to
-`androidComponents.onVariants` scopes the rules for real: release drops all ten libraries, debug
-keeps every one, and the bundle shrank from 58 MB to 19 MB.
-
-Vision's `NativeLibManager`/`build.gradle.kts` setup for onnxruntime + OpenCV (same
-mandatory-not-user-facing category as Commander's, above) uses AGP's `packaging.jniLibs.excludes`
-too, and needs no post-build stripping — its DLC libs are files in `vox-vision/src/main/jniLibs/`
-rather than dependency artifacts, so they exist on disk for upload however the APK is packaged, and
-no equivalent of Commander's `collectDlcLibs` is required.
+Vision excludes onnxruntime + OpenCV (the same mandatory-not-user-facing category as Commander's,
+above) the same way. It needs no equivalent of `collectDlcLibs`: its DLC libraries are files in
+`vox-vision/src/main/jniLibs/` rather than dependency artifacts, so they are on disk for upload
+however the APK is packaged.
 
 It had the same variant-scoping bug, though, and it bit differently: with `-PvoxDlc=full` the
 release exclusion list was also stripping OpenCV and onnxruntime out of **debug** builds, leaving
@@ -262,9 +246,8 @@ summarized here for completeness alongside its siblings:
 
 - **`scripts/check_openwakeword_version.sh`** — non-destructive dry-run: is a newer upstream tag
   available, and would each stored patch still `git apply --check` cleanly against it?
-- **`autoCheckOpenWakeWord`** Gradle task — runnable on demand, **not** wired into `preBuild`. This
-  is the one whose dry-run swaps upstream files into the working tree, which is why a version check
-  no longer runs during a compile.
+- **`autoCheckOpenWakeWord`** Gradle task — runnable on demand, **not** wired into `preBuild`. Its
+  dry-run swaps upstream files into the working tree, which no build may do.
 - **`.github/workflows/sync-openwakeword.yml`** — weekly: bumps the submodule, fully re-vendors
   `core/wakeword`'s sources, tries to `git apply` each stored patch, and if they all apply cleanly
   *and* the module compiles + unit tests pass, opens a PR that's already ready to merge. Only
@@ -389,10 +372,8 @@ Across Pattern B dependencies:
   changed the patch itself), `.github/workflows/sync-<name>.yml` (the scheduled job that does the real
   work: re-vendor + re-apply + build/test + open a PR).
 
-  **Nothing auto-merges.** `sync-vosk.yml` and `sync-newpipe-extractor.yml` used to squash their own
-  PRs on green; they were the last automatic merges in the repo after Dependabot's was removed, and
-  they went for the same reason. A green build is a weak claim here — no unit test loads a native
-  model, so it says Vosk's API still resolves rather than that recognition still works, and
+  **Nothing auto-merges.** A green build is a weak claim for these dependencies — no unit test loads
+  a native model, so it says Vosk's API still resolves rather than that recognition still works, and
   NewPipeExtractor breaks when YouTube changes its page structure, which a compile cannot see at
   all. They also merged *seconds* after opening the PR, before CI could report on it.
 - **NOTICE** file per vendored module: upstream attribution, the exact pinned commit/tag, what the
@@ -404,10 +385,10 @@ Across Pattern B dependencies:
 
 ### Sync schedule
 
-One bot per day, not five at once. They used to share `0 6 * * 1`, which meant five jobs starting
-together — `sync-opencv` building OpenCV from source, `sync-ppocr-sdk` building OpenCV *and*
-compiling Vision, `sync-openwakeword` compiling Commander — contending for runners and, now that
-nothing auto-merges, producing up to five PRs in one morning, each triggering its own CI run.
+One bot per day, not five at once. Sharing a slot would put five jobs on runners together —
+`sync-opencv` building OpenCV from source, `sync-ppocr-sdk` building OpenCV *and* compiling Vision,
+`sync-openwakeword` compiling Commander — and, since nothing auto-merges, produce up to five PRs in
+one morning, each triggering its own CI run.
 
 | Day (06:00 UTC) | Bot |
 |---|---|
@@ -451,13 +432,9 @@ If the check fails and the change was deliberate, capture it: write the diff as
 Separate from the build-time dependencies above: these are libraries the apps *load*, from inside
 the APK or from this build's own GitHub release.
 
-Commander and Vision each had their own copy of this — 240 and 241 lines, the same seven functions,
-differing in a tag prefix and a list of file names. They had drifted: Vision grew per-file retries,
-atomic `.tmp` writes, version-scoped directories and a hard failure on a missing lib, while
-Commander kept logging "CRITICAL" and continuing on to crash later somewhere less obvious. Both DLC
-bugs in August had to be fixed twice, once in each.
-
-`:core:nativelibs` is Vision's implementation, shared. Each app declares an object over it:
+`:core:nativelibs` holds the one implementation both apps use: per-file retries, atomic `.tmp`
+writes, version-scoped directories, and a hard failure on a missing library. Each app declares an
+object over it:
 
 ```kotlin
 object NativeLibManager : NativeLibs(
@@ -471,6 +448,42 @@ object NativeLibManager : NativeLibs(
 Call sites are unchanged, and Commander inherited the retries and atomic writes it never had.
 `bundled` comes from the build (see `voxDlc` in `BUILD_AND_RELEASE.md`) rather than from probing the
 filesystem — probing would turn a packaging bug into a silent download.
+
+#### Loading: ask the linker, never the filesystem
+
+`loadAll` calls `System.loadLibrary` first and falls back to `System.load` of the fetched copy. It
+must not decide "is this inside the APK?" by looking for the file, because whether a bundled library
+exists *as a file* under `nativeLibraryDir` depends on how the APK was packaged:
+
+| App | `extractNativeLibs` | Bundled libs on disk? |
+|---|---|---|
+| Commander | `true` (`useLegacyPackaging = true`) | Yes, unpacked into `nativeLibraryDir` |
+| Vision | `false` (AGP's default) | **No** — mapped straight out of the APK |
+
+An `exists()` check therefore reports "missing" for a library that is present and perfectly loadable —
+for Vision, every bundled library it has. Two further rules apply:
+
+- **Nothing loads these at startup.** `loadAll` throws on a missing library on purpose — a missing
+  library otherwise resurfaces as an `UnsatisfiedLinkError` somewhere unrelated — so calling it
+  eagerly from `Application.onCreate` killed `full` builds before any UI existed, and the splash that
+  would have downloaded them never ran. The splash (`NativeLibs.init`) owns fetching, loading and
+  reporting; anything earlier has to be non-fatal.
+- **Downloaded libraries are dropped to read-only before loading.** Android warns on every load of a
+  writable file — *"This will throw on a future Android version"* — because executable code the
+  process can still rewrite is the pattern being closed off. Measured on API 36: `setReadOnly()`
+  takes four warnings to zero, and they still load. Whisper's loader does the same, and it matters
+  more there: Whisper downloads its libraries in **both** DLC modes, so the default build is on that
+  path whenever anyone uses Whisper STT.
+
+#### Where the downloads come from
+
+Every release-asset URL — the DLC libraries, Whisper's engine, the schema repository — is built from
+`VoxRepo` in `:core:identity`, the only place the repository is named. Renaming the project, or
+pointing a fork elsewhere, is that one file.
+
+`VoxRepo.LEGACY_URL` carries the second URL this repository answers on, `…/VoxCommander`. It exists
+solely so an install that persisted that URL counts as following this repository rather than a fork
+(see `SchemaSignature.isDefaultRepo`); no URL is ever built from it.
 
 Which libraries, and whether they are optional:
 
@@ -523,7 +536,7 @@ Full command set:
 ./scripts/vox test                   test this machinery
 ```
 
-The workflows and Gradle call it too, so splitting or renaming a script no longer edits a workflow.
+The workflows and Gradle call it too, so splitting or renaming a script does not edit a workflow.
 Each script still runs correctly on its own — the dispatcher routes and documents, it never
 initialises anything a child depends on. `scripts/lib/` holds what would otherwise be copied into
 every script: colours and logging (`common.sh`, which fourteen scripts each had their own copy of),
@@ -532,12 +545,12 @@ and a workflow.
 
 ### The automation has tests
 
-Nineteen scripts and fifteen workflows gate every release, and until 2026-08-10 none of them had a
-test or a linter — while the Kotlin they gate has hundreds. Three regressions in this machinery were
-each found by dispatching a real bot and reading the failure.
+Nineteen scripts and fifteen workflows gate every release, and the contracts between them break
+silently: a script that stops emitting its report, a workflow that stops reading it, a vendored fork
+that drifts from its patches. Nothing about that surfaces in an Android build.
 
-`./scripts/vox test` asserts the contracts whose breakage is silent, and CI runs it in its own fast
-job ahead of the Android build:
+`./scripts/vox test` asserts those contracts, and CI runs it in its own fast job ahead of the Android
+build:
 
 - every check emits `key=value` on stdout and nothing else — a stray banner goes into
   `$GITHUB_OUTPUT` and fails the step with `Invalid format`

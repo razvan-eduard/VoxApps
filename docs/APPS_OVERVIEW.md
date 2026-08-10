@@ -196,9 +196,9 @@ commands in, only OCR text out.
 - **Auto-capture** — a throttled `ImageAnalysis` pass runs Otsu-threshold brightness-blob detection
   (deliberately not the stricter quad detection used for the final crop, since a document extending
   past the frame edge can't close into a 4-sided contour) and auto-triggers a capture once the bounds
-  are stable; sensitivity is user-configurable (low/medium/high). Corner/edge detection has since moved
-  to a dedicated on-device ML model (**DocQuadNet-256**) for the final crop quad, more robust on
-  cluttered backgrounds and skewed angles than the original pure-OpenCV heuristics.
+  are stable; sensitivity is user-configurable (low/medium/high). The final crop quad comes from a
+  dedicated on-device ML model (**DocQuadNet-256**), which handles cluttered backgrounds and skewed
+  angles that pure-OpenCV heuristics cannot.
 - **Edge cropping** — the final captured frame is cropped to the detected document quad via OpenCV
   (`DocumentCropper.kt`), built from source against a vendored OpenCV (see
   [`BUILD_TIME_DEPENDENCIES.md`](BUILD_TIME_DEPENDENCIES.md))
@@ -237,7 +237,7 @@ bank/payment notifications, or entered by hand.
   even be a transaction) — all three route through Commander's generic LLM hook, just with different
   `task` IDs and prompts suited to how much structure each source actually has
 - **Rescan suggestions** — re-running OCR/AI cleanup on an already-saved expense (e.g. after attaching
-  a clearer photo) no longer overwrites fields silently: each field the rescan corrected shows up as its
+  a clearer photo) never overwrites fields silently: each field the rescan corrected shows up as its
   own dismissible suggestion chip next to the current value, so you approve or reject them individually
   instead of trusting the whole rewrite at once. An **auto-rescan on first attachment** setting
   (Settings, off by default) triggers this automatically the moment a stub expense gets its first photo.
@@ -294,11 +294,10 @@ bank/payment notifications, or entered by hand.
   - **Manual review** (only shown for Local/Local + AI) — when on, an insert-time local-rule match is
     added to the same pending-review list "Check for duplicates now" produces, instead of merging
     silently, so nothing changes without a look first.
-  - This replaced two previously-separate systems (an always-on exact-match checker comparing by
-    calendar day, and a 3-checkbox near-duplicate add-on) with the one rule engine above — see the
-    technical doc link for the full evaluation model.
+  - One rule engine covers both exact and near duplicates — see the technical doc link for the full
+    evaluation model.
 - **Data-quality scoring for merges** — when two duplicates merge (silently, or approved from the
-  review list), which record's data wins per field is no longer just "whichever arrived first": each
+  review list), which record's data wins per field is decided by a score rather than arrival order: each
   expense is scored on how it was captured (Manual > Scan > Notification > Voice — manual entry is the
   most trustworthy, voice the most error-prone for proper nouns like vendor names) plus how many
   optional fields it actually has filled in, and a manually-edited record always outranks everything

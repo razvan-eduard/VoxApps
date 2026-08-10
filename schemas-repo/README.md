@@ -134,8 +134,8 @@ implement, an OAuth service that never says which flow it speaks, duplicate prov
 `defaultProvider` that is not in its category, a borrowed credential naming an engine nothing
 declares, and a built-in media backend pretending to have an endpoint.
 
-`schema_version` in these files is documentation for whoever edits them. The apps no longer read it:
-what is in force is what you served, until someone resets it.
+`schema_version` in these files is documentation for whoever edits them; the apps do not read it.
+What is in force is what you served, until someone resets it.
 
 ## Your fork is yours
 
