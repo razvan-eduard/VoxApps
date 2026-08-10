@@ -3,6 +3,16 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+/*
+ * How much of the native payload leaves the APK — see `voxDlc` in gradle.properties.
+ *
+ * One source for two decisions that must agree: whether these libs are excluded from the APK, and
+ * whether the app downloads them at first launch. Vision has no optional payload at all — it is an
+ * OCR app and these are what OCR needs — so `minimal` bundles every one of them.
+ */
+val dlcMode = (project.findProperty("voxDlc") as String?) ?: "minimal"
+require(dlcMode in setOf("minimal", "full")) { "voxDlc must be 'minimal' or 'full', got '$dlcMode'" }
+
 android {
     namespace = "com.voxapps.vision"
     compileSdk = 37
@@ -57,7 +67,11 @@ android {
             }
             packaging {
                 jniLibs {
-                    excludes += setOf(
+                    // Only in `full`. In `minimal` these stay in the APK — ~43MB that every install
+                    // downloaded on the splash anyway, since Vision is an OCR app and OCR is what
+                    // these are. Excluding them deferred nothing; it turned one install into an
+                    // install plus a mandatory download that can fail offline.
+                    if (dlcMode == "full") excludes += setOf(
                         "lib/arm64-v8a/libonnxruntime.so",
                         "lib/arm64-v8a/libopencv_core.so",
                         "lib/arm64-v8a/libopencv_imgproc.so",
@@ -91,6 +105,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    defaultConfig {
+        buildConfigField("String", "DLC_MODE", "\"$dlcMode\"")
+    }
+
     buildFeatures {
         compose = true
         // NativeLibManager builds its DLC download URL from BuildConfig.VERSION_NAME — a
@@ -103,6 +121,7 @@ dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
+    implementation(project(":core:nativelibs"))
     implementation(project(":core:preferences"))
     implementation(project(":vendor:ppocr-sdk"))
     // ML-based document corner detector (see vendor/docquad-sdk/NOTICE) — brings in

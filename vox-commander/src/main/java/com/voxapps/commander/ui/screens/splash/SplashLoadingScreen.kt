@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.commander.R
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.NativeLibManager
+import com.voxapps.nativelibs.NativeLibs
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.localization.LanguageManager
@@ -56,7 +57,7 @@ fun SplashLoadingScreen(
 
     val assetsReady = loadStatus != RemoteModelRegistry.LoadStatus.LOADING
     val appsReady = scanStatus == AppRegistry.ScanStatus.DONE
-    val nativeReady = nativeStatus == NativeLibManager.Status.READY
+    val nativeReady = nativeStatus == NativeLibs.Status.READY
 
     // Auto-advance when all critical startup components are ready
     LaunchedEffect(assetsReady, appsReady, nativeReady) {
@@ -190,7 +191,7 @@ fun SplashLoadingScreen(
 
             // Downloading essential native libs
             AnimatedVisibility(
-                visible = nativeStatus == NativeLibManager.Status.DOWNLOADING,
+                visible = nativeStatus == NativeLibs.Status.DOWNLOADING,
                 enter = fadeIn()
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -210,7 +211,7 @@ fun SplashLoadingScreen(
 
             // Native libs ready
             AnimatedVisibility(
-                visible = nativeStatus == NativeLibManager.Status.READY,
+                visible = nativeStatus == NativeLibs.Status.READY,
                 enter = fadeIn()
             ) {
                 Text(
@@ -225,7 +226,7 @@ fun SplashLoadingScreen(
             // (see NativeLibManager), but kept ready with a retry affordance rather than a dead-end
             // hang, in case a future AGP fix lets essential libs be DLC'd again.
             AnimatedVisibility(
-                visible = nativeStatus == NativeLibManager.Status.ERROR,
+                visible = nativeStatus == NativeLibs.Status.ERROR,
                 enter = fadeIn()
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {

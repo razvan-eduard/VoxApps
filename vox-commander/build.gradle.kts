@@ -26,6 +26,20 @@ android {
         }
     }
 
+    /*
+     * How much of the native payload leaves the APK — see `voxDlc` in gradle.properties.
+     *
+     * One source for two decisions that must agree: whether the release strips these libs out, and
+     * whether the app downloads them at first launch. Split across a build script and a Kotlin
+     * constant, they drift into an APK missing libs nothing fetches, or an APK carrying libs it
+     * downloads again anyway.
+     *
+     * Whisper is unaffected. It is excluded in both modes because it is the one payload that is
+     * genuinely optional: ~193MB that a Vosk or cloud user never needs.
+     */
+    val dlcMode = (project.findProperty("voxDlc") as String?) ?: "minimal"
+    require(dlcMode in setOf("minimal", "full")) { "voxDlc must be 'minimal' or 'full', got '$dlcMode'" }
+
     // CI-only release signing: RELEASE_KEYSTORE_PATH is only set in release-commander.yml (decoded
     // from a GitHub Actions secret there), so local `./gradlew assembleRelease` without it still
     // produces an unsigned APK exactly as before.
@@ -115,6 +129,11 @@ android {
         // compile-time constant that can't disagree with the running build (see its doc comment).
         buildConfig = true
     }
+
+    defaultConfig {
+        // Read by NativeLibManager, so the runtime cannot disagree with how the APK was packaged.
+        buildConfigField("String", "DLC_MODE", "\"$dlcMode\"")
+    }
     
     packaging {
         resources {
@@ -137,6 +156,7 @@ dependencies {
     implementation(project(":core:backup"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
+    implementation(project(":core:nativelibs"))
     implementation(project(":core:services"))
     implementation(project(":core:preferences"))
     implementation(platform(libs.androidx.compose.bom))

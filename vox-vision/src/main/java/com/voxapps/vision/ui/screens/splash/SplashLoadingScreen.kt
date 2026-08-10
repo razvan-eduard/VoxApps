@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.vision.R
 import com.voxapps.vision.data.NativeLibManager
+import com.voxapps.nativelibs.NativeLibs
 import com.voxapps.vision.ui.LocalLanguageManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -38,7 +39,7 @@ fun SplashLoadingScreen(
     }
 
     LaunchedEffect(nativeStatus) {
-        if (nativeStatus == NativeLibManager.Status.READY) {
+        if (nativeStatus == NativeLibs.Status.READY) {
             delay(800)
             onFinished()
         }
@@ -69,11 +70,11 @@ fun SplashLoadingScreen(
 
             // Downloading essential native libs
             AnimatedVisibility(
-                visible = nativeStatus == NativeLibManager.Status.DOWNLOADING || nativeStatus == NativeLibManager.Status.CHECKING,
+                visible = nativeStatus == NativeLibs.Status.DOWNLOADING || nativeStatus == NativeLibs.Status.CHECKING,
                 enter = fadeIn()
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (nativeStatus == NativeLibManager.Status.DOWNLOADING) {
+                    if (nativeStatus == NativeLibs.Status.DOWNLOADING) {
                         LinearProgressIndicator(
                             progress = { nativeProgress },
                             modifier = Modifier.fillMaxWidth().height(6.dp),
@@ -83,7 +84,7 @@ fun SplashLoadingScreen(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = if (nativeStatus == NativeLibManager.Status.DOWNLOADING) 
+                        text = if (nativeStatus == NativeLibs.Status.DOWNLOADING) 
                             languageManager.getString("splash_loading_engine") 
                             else "Checking components...",
                         fontSize = 14.sp,
@@ -95,7 +96,7 @@ fun SplashLoadingScreen(
 
             // Native libs ready
             AnimatedVisibility(
-                visible = nativeStatus == NativeLibManager.Status.READY,
+                visible = nativeStatus == NativeLibs.Status.READY,
                 enter = fadeIn()
             ) {
                 Text(
@@ -111,7 +112,7 @@ fun SplashLoadingScreen(
             // just defer the failure to a confusing crash later); instead it offers a retry so a
             // transient network failure (e.g. no connectivity on first launch) isn't a dead end.
             AnimatedVisibility(
-                visible = nativeStatus == NativeLibManager.Status.ERROR,
+                visible = nativeStatus == NativeLibs.Status.ERROR,
                 enter = fadeIn()
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
