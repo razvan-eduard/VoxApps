@@ -49,4 +49,4 @@ jobs:
           git submodule update --init --depth 1 vendor/openwakeword-android-kt
 
       - name: Each vendored fork is upstream + patches
-        run: ./scripts/verify_vendored_patches.sh
+        run: ./scripts/vox patches verify

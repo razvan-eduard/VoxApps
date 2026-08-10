@@ -59,7 +59,7 @@ jobs:
         id: versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/check_ppocr_sdk_version.sh --report >> "$GITHUB_OUTPUT"
+        run: ./scripts/vox check ppocr-sdk --report >> "$GITHUB_OUTPUT"
 
       - name: Check for an already-open PR for this target
         if: steps.versions.outputs.has_update == 'true'
@@ -252,7 +252,7 @@ jobs:
               cat /tmp/apply-reject.txt 2>/dev/null || echo "(reject details unavailable)"
               echo '```'
               echo ""
-              echo "After resolving, regenerate the patch file with \`./scripts/regen_ppocr_sdk_patch.sh\`."
+              echo "After resolving, regenerate the patch file with \`./scripts/vox patches regen ppocr-sdk\`."
             fi
           } > /tmp/pr-body.md
 

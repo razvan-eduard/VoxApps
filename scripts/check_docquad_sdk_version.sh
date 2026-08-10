@@ -1,16 +1,7 @@
 #!/bin/bash
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
-
-log_info() { printf "${GREEN}%s${NC}\n" "$1"; }
-log_warn() { printf "${YELLOW}%s${NC}\n" "$1"; }
-log_error() { printf "${RED}%s${NC}\n" "$1"; }
-log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
+# Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # --report: key=value on stdout, human logging on stderr. No sync workflow watches this one — it is
 # the only vendored dependency with no bot — so this is what surfaces it in check_upstream.sh.

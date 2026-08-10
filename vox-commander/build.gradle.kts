@@ -235,7 +235,7 @@ val autoCompileWhisper = tasks.register<Exec>("autoCompileWhisper") {
     group = "build"
     description = "Verifică upstream-ul whisper.cpp și recompilează prin CMake dacă este necesar."
     
-    commandLine("sh", "${project.rootDir}/scripts/check_whisper.sh")
+    commandLine("bash", "${project.rootDir}/scripts/vox", "native", "whisper")
 }
 
 // Înregistrează o sarcină de execuție pentru verificarea versiunii Vosk
@@ -245,7 +245,7 @@ val autoCheckVosk = tasks.register<Exec>("autoCheckVosk") {
 
     // bash, not sh: the script is a bash script (uses ==, [[ ]]) — same class of bug as the
     // build_opencv_android.sh fix (sh on Ubuntu runners is dash, which doesn't support these).
-    commandLine("bash", "${project.rootDir}/scripts/check_vosk_version.sh")
+    commandLine("bash", "${project.rootDir}/scripts/vox", "check", "vosk")
 }
 
 // Înregistrează o sarcină de execuție pentru verificarea versiunii NewPipeExtractor
@@ -255,7 +255,7 @@ val autoCheckNewPipeExtractor = tasks.register<Exec>("autoCheckNewPipeExtractor"
 
     // bash, not sh: the script uses [[ ]] (same class of bug as the build_opencv_android.sh fix —
     // sh on Ubuntu runners is dash, which doesn't support bashisms like [[ ]]).
-    commandLine("bash", "${project.rootDir}/scripts/check_newpipe_extractor_version.sh")
+    commandLine("bash", "${project.rootDir}/scripts/vox", "check", "newpipe-extractor")
 }
 
 // Verifică dacă fork-ul local OpenWakeWord (core/wakeword) a rămas în urma tag-urilor upstream
@@ -265,7 +265,7 @@ val autoCheckOpenWakeWord = tasks.register<Exec>("autoCheckOpenWakeWord") {
 
     // bash, not sh: the script uses a bash array (PATCHES=(...)) — same class of bug as the
     // build_opencv_android.sh fix (sh on Ubuntu runners is dash, which doesn't support this).
-    commandLine("bash", "${project.rootDir}/scripts/check_openwakeword_version.sh")
+    commandLine("bash", "${project.rootDir}/scripts/vox", "check", "openwakeword")
 }
 
 // Every schema the family ships lives in one folder at the repo root, and the whole folder is
@@ -288,7 +288,7 @@ val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
 tasks.register<Exec>("checkUpstream") {
     group = "verification"
     description = "Ask every upstream (Vosk, NewPipe, OpenWakeWord, OpenCV, PaddleOCR, whisper) whether it has moved."
-    commandLine("bash", "${project.rootDir}/scripts/check_upstream.sh")
+    commandLine("bash", "${project.rootDir}/scripts/vox", "check")
 }
 
 // The three autoCheck* tasks above are deliberately NOT wired into preBuild.

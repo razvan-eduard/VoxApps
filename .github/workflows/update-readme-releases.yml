@@ -51,7 +51,7 @@ jobs:
       - name: Regenerate Build Status table
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/update_release_readme_links.sh
+        run: ./scripts/vox release readme
 
       - name: Commit and push if changed
         env:

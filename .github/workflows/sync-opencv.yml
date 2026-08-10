@@ -46,7 +46,7 @@ jobs:
         id: versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/check_opencv_version.sh --report >> "$GITHUB_OUTPUT"
+        run: ./scripts/vox check opencv --report >> "$GITHUB_OUTPUT"
 
       - name: Check whether this target was already proposed
         if: steps.versions.outputs.has_update == 'true'

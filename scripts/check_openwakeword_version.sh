@@ -1,16 +1,7 @@
 #!/bin/bash
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
-
-log_info() { printf "${GREEN}%s${NC}\n" "$1"; }
-log_warn() { printf "${YELLOW}%s${NC}\n" "$1"; }
-log_error() { printf "${RED}%s${NC}\n" "$1"; }
-log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
+# Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # --report: key=value on stdout for sync-openwakeword.yml, human logging on stderr.
 source "$(dirname "$0")/lib/upstream_report.sh"
@@ -138,7 +129,7 @@ if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
     echo "  2. git add vendor/openwakeword-android-kt   # re-pin the submodule"
     echo "  3. Re-vendor core/wakeword/src/main/kotlin from the submodule, then re-apply every"
     echo "     patch under core/wakeword/patches/ (git apply each)."
-    echo "  4. If any conflicts, resolve by hand, then run ./scripts/regen_openwakeword_patch.sh"
+    echo "  4. If any conflicts, resolve by hand, then run ./scripts/vox patches regen wakeword"
     echo -e "  5. Rebuild + retest before committing.\n"
     echo "(The scheduled sync-openwakeword.yml workflow does all of this automatically and opens a PR —"
     echo " already merged+tested in the common case, or clearly flagged if it needs manual attention.)"

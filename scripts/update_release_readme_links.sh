@@ -1,17 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
-
-log_info() { printf "${GREEN}%s${NC}\n" "$1"; }
-log_warn() { printf "${YELLOW}%s${NC}\n" "$1"; }
-log_error() { printf "${RED}%s${NC}\n" "$1"; }
-log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
+# Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # Regenerates the "Build Status" table in README.md (between the LATEST_RELEASES:START/END
 # markers) from the repo's actual GitHub Releases — never hand-edit tag numbers or APK sizes there,

@@ -1,16 +1,7 @@
 #!/bin/bash
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
-
-log_info() { printf "${GREEN}%s${NC}\n" "$1"; }
-log_warn() { printf "${YELLOW}%s${NC}\n" "$1"; }
-log_error() { printf "${RED}%s${NC}\n" "$1"; }
-log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
+# Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # --report: key=value on stdout for sync-ppocr-sdk.yml, human logging on stderr.
 source "$(dirname "$0")/lib/upstream_report.sh"
@@ -150,7 +141,7 @@ if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
     echo "  2. git add vendor/paddleocr-upstream   # re-pin the submodule"
     echo "  3. Re-vendor vendor/ppocr-sdk/src/main from the submodule's deploy/ppocr-android/ppocr-sdk,"
     echo "     then re-apply every patch under vendor/ppocr-sdk/patches/ (git apply each, in name order)."
-    echo "  4. If it conflicts, resolve by hand, then run ./scripts/regen_ppocr_sdk_patch.sh"
+    echo "  4. If it conflicts, resolve by hand, then run ./scripts/vox patches regen ppocr-sdk"
     echo -e "  5. Rebuild + retest before committing.\n"
     fi
 else

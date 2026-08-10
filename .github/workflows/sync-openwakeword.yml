@@ -50,7 +50,7 @@ jobs:
         id: versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/check_openwakeword_version.sh --report >> "$GITHUB_OUTPUT"
+        run: ./scripts/vox check openwakeword --report >> "$GITHUB_OUTPUT"
 
       - name: Check whether this target was already proposed
         if: steps.versions.outputs.has_update == 'true'
@@ -180,7 +180,7 @@ jobs:
               done
               echo '```'
               echo ""
-              echo "After resolving, regenerate the patch file(s) with \`./scripts/regen_openwakeword_patch.sh\`."
+              echo "After resolving, regenerate the patch file(s) with \`./scripts/vox patches regen wakeword\`."
             fi
           } > /tmp/pr-body.md
 

@@ -10,15 +10,8 @@ set -e
 # Which file a patch covers is read out of the patch itself. A hardcoded pairs list here was one more
 # thing to remember when adding a patch, and forgetting it is silent: the fork keeps working locally
 # and the adaptation disappears at the next re-vendor.
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-log_info() { printf "${GREEN}%s${NC}\n" "$1"; }
-log_error() { printf "${RED}%s${NC}\n" "$1"; }
-log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
+# Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"

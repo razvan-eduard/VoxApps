@@ -1,0 +1,120 @@
+#!/bin/bash
+set -uo pipefail
+
+# One door for everything in scripts/.
+#
+#     ./scripts/vox                     what exists
+#     ./scripts/vox check               has anything upstream moved?
+#     ./scripts/vox check vosk          just that one
+#     ./scripts/vox patches verify      is each vendored fork upstream + its patches?
+#     ./scripts/vox release package     build the APK that actually ships
+#
+# The pattern is the familiar one — mach, xtask, manage.py, a Makefile: a single documented entry
+# point, with the individual scripts as implementation detail. It exists because finding the right
+# script meant knowing that checking upstreams was check_upstream.sh, verifying patches was
+# verify_vendored_patches.sh and regenerating them was regen_ppocr_sdk_patch.sh: three conventions
+# for three neighbouring jobs.
+#
+# IMPORTANT: this dispatcher routes and documents. It does not initialise anything. Every script it
+# calls must still work when run directly — that is what keeps a child debuggable in isolation and
+# stops an invisible "only works via vox" contract forming.
+
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+cd "$VOX_ROOT"
+
+usage() {
+    cat <<'EOF'
+Usage: ./scripts/vox <flow> [command] [args...]
+
+  check [name...]              Has anything upstream moved? (all, or named ones)
+                                 vosk newpipe-extractor openwakeword opencv
+                                 ppocr-sdk whisper docquad
+
+  patches verify [module]      Assert a vendored fork is exactly upstream + its patches/
+  patches regen <module>       Regenerate a fork's patches from its current source
+                                 modules: ppocr-sdk wakeword
+
+  release package              Build Commander's APK as published (stripped + signed)
+  release publish-libs         Publish whisper .so files as the DLC release
+  release readme               Regenerate the README release table
+  release fdroid               Regenerate and push F-Droid metadata
+
+  native opencv                Build OpenCV from the pinned submodule
+  native whisper               Build whisper.cpp from the pinned submodule
+
+  schemas validate             Validate the shipped schema JSON
+
+Anything not listed here is an internal helper (scripts/lib/, strip_dlc_libs.sh) called by the
+commands above, not directly.
+EOF
+}
+
+die() { log_error "$1"; echo; usage; exit 1; }
+
+FLOW="${1:-}"; shift || true
+
+case "$FLOW" in
+    ""|-h|--help|help)
+        usage
+        ;;
+
+    check)
+        exec bash scripts/check_upstream.sh "$@"
+        ;;
+
+    patches)
+        CMD="${1:-}"; shift || true
+        case "$CMD" in
+            verify) exec bash scripts/verify_vendored_patches.sh "$@" ;;
+            regen)
+                case "${1:-}" in
+                    ppocr-sdk) exec bash scripts/regen_ppocr_sdk_patch.sh ;;
+                    wakeword)  exec bash scripts/regen_openwakeword_patch.sh ;;
+                    *) die "patches regen needs a module: ppocr-sdk | wakeword" ;;
+                esac
+                ;;
+            *) die "patches needs a command: verify | regen" ;;
+        esac
+        ;;
+
+    release)
+        CMD="${1:-}"; shift || true
+        case "$CMD" in
+            package)
+                # Same script release-commander.yml runs, so the local artifact and the published
+                # one cannot drift. Needs the keystore env vars.
+                OUT="vox-commander/build/outputs/apk/release"
+                IN="$OUT/vox-commander-release.apk"
+                [ -f "$IN" ] || IN="$OUT/vox-commander-release-unsigned.apk"
+                [ -f "$IN" ] || die "No release APK in $OUT — run ./gradlew :vox-commander:assembleRelease first."
+                [ -n "${RELEASE_KEYSTORE_PATH:-}" ] || die "RELEASE_KEYSTORE_PATH is not set — see docs/BUILD_AND_RELEASE.md"
+                exec bash scripts/package_commander_release.sh \
+                    "$IN" "$OUT/VoxCommander-release-stripped.apk" \
+                    "$RELEASE_KEYSTORE_PATH" "${RELEASE_KEYSTORE_PASSWORD:-}"
+                ;;
+            publish-libs) exec bash scripts/publish_whisper_libs.sh "$@" ;;
+            readme)       exec bash scripts/update_release_readme_links.sh "$@" ;;
+            fdroid)       exec bash scripts/sync_fdroid_metadata.sh "$@" ;;
+            *) die "release needs a command: package | publish-libs | readme | fdroid" ;;
+        esac
+        ;;
+
+    native)
+        case "${1:-}" in
+            opencv)  exec bash scripts/build_opencv_android.sh ;;
+            whisper) exec sh scripts/check_whisper.sh "${@:2}" ;;
+            *) die "native needs a target: opencv | whisper" ;;
+        esac
+        ;;
+
+    schemas)
+        case "${1:-}" in
+            validate) exec python3 scripts/validate_schemas.py "${@:2}" ;;
+            *) die "schemas needs a command: validate" ;;
+        esac
+        ;;
+
+    *)
+        die "Unknown flow: $FLOW"
+        ;;
+esac

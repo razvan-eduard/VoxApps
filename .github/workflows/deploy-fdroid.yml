@@ -49,7 +49,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Generate metadata locally in the VoxApps checkout
-          ./scripts/sync_fdroid_metadata.sh
+          ./scripts/vox release fdroid
           
           echo "Generated metadata structure:"
           ls -R metadata/

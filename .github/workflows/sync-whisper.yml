@@ -42,7 +42,7 @@ jobs:
         id: versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/check_whisper_version.sh --report >> "$GITHUB_OUTPUT"
+        run: ./scripts/vox check whisper --report >> "$GITHUB_OUTPUT"
 
       - name: Check whether this target was already proposed
         if: steps.versions.outputs.has_update == 'true'
@@ -141,6 +141,6 @@ jobs:
 
           Before merging, please:
           1. Install the debug build on a device and sanity-check actual transcription quality/latency — a successful compile says nothing about STT accuracy.
-          2. Only after merging, run \`./scripts/publish_whisper_libs.sh\` yourself to publish the new \`.so\` libs as the production DLC release (this workflow deliberately never does that automatically)." \
+          2. Only after merging, run \`./scripts/vox release publish-libs\` yourself to publish the new \`.so\` libs as the production DLC release (this workflow deliberately never does that automatically)." \
             --base main \
             --head "${{ steps.bump.outputs.branch }}"

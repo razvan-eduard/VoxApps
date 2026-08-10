@@ -1,16 +1,7 @@
 #!/bin/bash
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
-
-log_info() { printf "${GREEN}%s${NC}\n" "$1"; }
-log_warn() { printf "${YELLOW}%s${NC}\n" "$1"; }
-log_error() { printf "${RED}%s${NC}\n" "$1"; }
-log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
+# Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # --report: key=value on stdout for sync-whisper.yml, human logging on stderr.
 source "$(dirname "$0")/lib/upstream_report.sh"
@@ -66,7 +57,7 @@ if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
         echo "     cd $SUBMODULE_PATH && git fetch --tags && git checkout $LATEST_TAG && cd -"
         echo "  2. ./gradlew :vox-commander:assembleDebug   # rebuilds the native libs"
         echo "  3. After merging, publish the new .so files as the DLC release:"
-        echo -e "     ./scripts/publish_whisper_libs.sh   (never automatic — the APK downloads these)\n"
+        echo -e "     ./scripts/vox release publish-libs   (never automatic — the APK downloads these)\n"
     fi
 else
     emit has_update false

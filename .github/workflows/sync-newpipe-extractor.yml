@@ -46,7 +46,7 @@ jobs:
         id: versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/check_newpipe_extractor_version.sh --report >> "$GITHUB_OUTPUT"
+        run: ./scripts/vox check newpipe-extractor --report >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
         if: steps.versions.outputs.has_update == 'true'
