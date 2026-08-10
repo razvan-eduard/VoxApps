@@ -77,6 +77,38 @@ open class NativeLibs(
 
     private fun releaseTag(): String = "$tagPrefix-v$versionName"
 
+    /**
+     * What each library is expected to hash to, recorded by the build that produced this APK.
+     *
+     * Read from the APK's own assets, so it is covered by the APK's signature. A digest served from
+     * the same place as the library would establish nothing — whoever can substitute one can
+     * substitute the other — which is why this cannot be fetched alongside the download.
+     *
+     * Absent for a `minimal` build (nothing is downloaded) and for any build made before the digests
+     * were recorded; an unknown library is then downloaded as before.
+     */
+    private fun expectedDigests(context: Context): Map<String, String> = runCatching {
+        context.assets.open(DIGEST_ASSET).bufferedReader().useLines { lines ->
+            lines.mapNotNull { line ->
+                val parts = line.trim().split(Regex("\\s+"))
+                if (parts.size == 2 && parts[0].length == 64) parts[1] to parts[0].lowercase() else null
+            }.toMap()
+        }
+    }.getOrElse { emptyMap() }
+
+    private fun sha256Of(file: File): String =
+        java.security.MessageDigest.getInstance("SHA-256").let { digest ->
+            file.inputStream().use { input ->
+                val buffer = ByteArray(1 shl 16)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        }
+
     /** Version-scoped: these libs are not interchangeable between releases. */
     private fun libDir(context: Context): File =
         File(context.filesDir, "$LIB_DIR_PREFIX${releaseTag()}")
@@ -160,6 +192,7 @@ open class NativeLibs(
         val dir = libDir(context)
         if (!dir.exists()) dir.mkdirs()
 
+        val digests = expectedDigests(context)
         var completed = 0
         for (libName in libs) {
             val target = File(dir, libName)
@@ -168,7 +201,7 @@ open class NativeLibs(
                 _downloadProgress.value = completed.toFloat() / libs.size
                 continue
             }
-            if (!downloadOne("$RELEASE_BASE${releaseTag()}/$libName", dir, libName)) {
+            if (!downloadOne("$RELEASE_BASE${releaseTag()}/$libName", dir, libName, digests[libName])) {
                 return@withContext false
             }
             completed++
@@ -184,7 +217,7 @@ open class NativeLibs(
      * transient stall meant relaunching the app to make any further progress. Completed files are
      * skipped by the caller, so a retry only re-fetches what failed.
      */
-    private suspend fun downloadOne(url: String, dir: File, libName: String): Boolean {
+    private suspend fun downloadOne(url: String, dir: File, libName: String, expected: String?): Boolean {
         val target = File(dir, libName)
         val temp = File(dir, "$libName.tmp")
         repeat(MAX_ATTEMPTS) { attempt ->
@@ -201,6 +234,16 @@ open class NativeLibs(
                     response.body?.byteStream()?.use { input ->
                         temp.outputStream().use { output -> input.copyTo(output) }
                     } ?: error("empty response body")
+                }
+                // Checked before the rename, so a file that fails never becomes the library the app
+                // loads. Treated as a failed attempt rather than a hard stop: a truncated transfer
+                // fails this too, and that is worth retrying.
+                if (expected != null && temp.exists()) {
+                    val actual = sha256Of(temp)
+                    if (actual != expected) {
+                        temp.delete()
+                        error("sha256 mismatch: expected $expected, got $actual")
+                    }
                 }
                 // Written to .tmp and renamed, so an interrupted download never leaves a
                 // half-written file that looks present to areLibsPresent.
@@ -256,6 +299,7 @@ open class NativeLibs(
 
     private companion object {
         const val LIB_DIR_PREFIX = "native_libs_"
+        const val DIGEST_ASSET = "dlc-libs.sha256"
         const val RELEASE_BASE = VoxRepo.RELEASE_DOWNLOAD_BASE
         const val MAX_ATTEMPTS = 3
         const val RETRY_DELAY_MS = 1500L

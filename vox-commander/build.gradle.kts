@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -200,6 +202,15 @@ androidComponents {
             // Debug keeps everything, so the two sources still collide and still need resolving.
             jniLibs.pickFirsts.add(onnxRuntimePath)
         }
+
+        // In `full` the digests of the libraries this build will download go into the APK, where the
+        // APK's own signature covers them. That is what makes them worth checking: a digest fetched
+        // from the same place as the library proves nothing, because whoever can serve one can serve
+        // the other. Wiring them as a generated asset also makes packaging depend on the staging
+        // task, so `assembleRelease` produces both the APK and the files to upload beside it.
+        if (dlcMode == "full" && variant.buildType == "release") {
+            variant.sources.assets?.addGeneratedSourceDirectory(stageDlcLibs, StageDlcLibs::assetsDir)
+        }
     }
 }
 
@@ -213,39 +224,55 @@ androidComponents {
  * Wired to run after `assembleRelease` in `full` mode, so a local release and CI stage the same
  * files from the same place.
  */
-val collectDlcLibs = tasks.register("collectDlcLibs") {
-    group = "build"
-    description = "Stage the full-mode DLC native libs for upload as GitHub release assets."
+/**
+ * Stages the `full`-mode DLC libraries and records what they hash to.
+ *
+ * Two outputs, from one selection, on purpose. The staged `.so` files are uploaded as release
+ * assets; the digests are written into the APK's assets so the running app knows what bytes to
+ * expect back when it downloads them. Computing them separately would let the published library and
+ * the recorded digest come from different files, which is worse than recording nothing.
+ *
+ * In `full` these libraries never reach merged_native_libs — they are excluded before it — so both
+ * come from the resolved dependencies, the same artifacts AGP itself packages from.
+ */
+abstract class StageDlcLibs : DefaultTask() {
 
-    // Resolved lazily; `isLenient` because this view only asks for the JNI artifacts and should not
-    // fail on dependencies that have none.
-    val jniArtifacts = configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {
-        isLenient = true
-        attributes { attribute(Attribute.of("artifactType", String::class.java), "android-jni") }
-    }.files
-    val outDir = layout.buildDirectory.dir("dlc-libs")
-    val wanted = dlcLibs
-    val preferredArtifact = mapOf("libonnxruntime.so" to onnxRuntimeArtifact)
-    val mode = dlcMode
+    /** The `android-jni` artifact view of the release runtime classpath. */
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val jniArtifacts: ConfigurableFileCollection
 
-    outputs.dir(outDir)
+    /** The libraries to publish, in the order NativeLibs loads them. */
+    @get:Input
+    abstract val libs: ListProperty<String>
 
-    doLast {
-        check(mode == "full") {
-            "collectDlcLibs is only meaningful with -PvoxDlc=full — in `minimal` these libs ship inside the APK."
-        }
-        val dir = outDir.get().asFile
-        dir.deleteRecursively()
-        dir.mkdirs()
+    /**
+     * lib name → a fragment of the artifact it must come from. Two artifacts can provide the same
+     * file name and they are not interchangeable; the choice is never left to directory order.
+     */
+    @get:Input
+    abstract val preferredArtifact: MapProperty<String, String>
 
+    /** Uploaded as release assets. */
+    @get:OutputDirectory
+    abstract val stagingDir: DirectoryProperty
+
+    /** Packaged into the APK, so the digests are covered by its signature. */
+    @get:OutputDirectory
+    abstract val assetsDir: DirectoryProperty
+
+    @TaskAction
+    fun stage() {
         val available = jniArtifacts.files.flatMap { root ->
             root.walkTopDown().filter { it.isFile && it.path.contains("arm64-v8a") }.toList()
         }
-        for (lib in wanted) {
+        val staging = stagingDir.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val assets = assetsDir.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val digests = StringBuilder()
+
+        for (lib in libs.get()) {
             var candidates = available.filter { it.name == lib }
-            // Two artifacts can provide the same file name and they are not interchangeable — pick
-            // by which dependency it came from, never by whichever the filesystem listed first.
-            preferredArtifact[lib]?.let { marker ->
+            preferredArtifact.get()[lib]?.let { marker ->
                 candidates = candidates.filter { it.path.contains(marker) }
             }
             val source = when {
@@ -258,17 +285,44 @@ val collectDlcLibs = tasks.register("collectDlcLibs") {
                     )
                 else -> candidates.single()
             }
-            source.copyTo(File(dir, lib), overwrite = true)
+            source.copyTo(File(staging, lib), overwrite = true)
+
+            val digest = MessageDigest.getInstance("SHA-256")
+            source.inputStream().use { input ->
+                val buffer = ByteArray(1 shl 20)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            val hex = digest.digest().joinToString("") { "%02x".format(it) }
+            digests.append(hex).append("  ").append(lib).append('\n')
+
             // Names the artifact, not the directory: which dependency a lib came from is the fact
             // worth having in the log when two of them provide the same file name.
             val artifact = source.parentFile?.parentFile?.parentFile?.name ?: "?"
-            logger.lifecycle("staged $lib (${source.length() / 1024}k) from $artifact")
+            logger.lifecycle("staged $lib (${source.length() / 1024}k, ${hex.take(12)}…) from $artifact")
         }
+        File(assets, "dlc-libs.sha256").writeText(digests.toString())
     }
 }
 
-if (dlcMode == "full") {
-    tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy(collectDlcLibs) }
+val stageDlcLibs = tasks.register<StageDlcLibs>("collectDlcLibs") {
+    group = "build"
+    description = "Stage the full-mode DLC native libs and record their digests for the APK."
+    // Resolved lazily; `isLenient` because this view only asks for the JNI artifacts and should not
+    // fail on dependencies that have none.
+    jniArtifacts.from(
+        configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {
+            isLenient = true
+            attributes { attribute(Attribute.of("artifactType", String::class.java), "android-jni") }
+        }.files
+    )
+    libs.set(dlcLibs)
+    preferredArtifact.set(mapOf("libonnxruntime.so" to onnxRuntimeArtifact))
+    stagingDir.set(layout.buildDirectory.dir("dlc-libs"))
+    assetsDir.set(layout.buildDirectory.dir("generated/dlcDigests"))
 }
 
 dependencies {

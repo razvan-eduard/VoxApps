@@ -21,4 +21,5 @@ dependencies {
     implementation(project(":core:logging"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    testImplementation(libs.junit)
 }
