@@ -47,8 +47,9 @@ files* to dry-run a patch while a compile is in progress. Nothing attached to a 
 writing to the source tree. They remain runnable on demand:
 
 ```
-./gradlew :vox-commander:autoCheckVosk
-./scripts/check_openwakeword_version.sh
+./scripts/vox check              # every upstream, one table
+./scripts/vox check vosk         # just one
+./gradlew :vox-commander:checkUpstream
 ```
 
 Both dry-run scripts now restore the swapped files on `EXIT`/`INT`/`TERM`. Before that, interrupting
@@ -76,7 +77,7 @@ JitPack-style coordinate (confirmed empirically — it has never opened a PR for
 - **`scripts/check_vosk_version.sh`** — queries the JitPack API (with a Maven Central search fallback)
   for the latest published version, compares it against `gradle/libs.versions.toml`, and prints an
   update notice (no automatic change).
-- **`autoCheckVosk`** Gradle task — runnable on demand (`./gradlew :vox-commander:autoCheckVosk`),
+- **`autoCheckVosk`** Gradle task — runnable on demand (`./scripts/vox check vosk`),
   deliberately *not* wired into `preBuild`.
 - **`.github/workflows/sync-vosk.yml`** — same check weekly (Monday 06:00 UTC); bumps
   `libs.versions.toml`, runs `compileDebugKotlin` + `testDebugUnitTest`, and opens a PR for a
@@ -226,7 +227,7 @@ summarized here for completeness alongside its siblings:
 | `core/wakeword/src/main/kotlin/.../audio/AudioRecorder.kt` | Patched by `0001` — an RMS silence gate, layered with an adaptive noise-floor margin (`:core:audio`'s `AdaptiveNoiseGate`, also shared by the Vosk engine). |
 | `core/wakeword/src/main/kotlin/.../WakeWordEngine.kt` | Patched by `0002` — forwards the gate params through to `AudioRecorder`. |
 | `core/wakeword/src/main/kotlin/.../audio/AudioProcessor.kt` | Patched by `0003` — logs a prediction score only above 0.05 (near misses, not a line per inference) and formats it with `Locale.US`. |
-| `core/wakeword/patches/*.patch` | The three patches as real unified diffs — regenerate them all with `scripts/regen_openwakeword_patch.sh`. |
+| `core/wakeword/patches/*.patch` | The three patches as real unified diffs — regenerate them all with `./scripts/vox patches regen wakeword`. |
 | `core/wakeword/NOTICE` / `LICENSE` | Apache-2.0 attribution chain. |
 
 - **`scripts/check_openwakeword_version.sh`** — non-destructive dry-run: is a newer upstream tag
@@ -296,7 +297,7 @@ to `dlopen` on modern Android (missing Bionic libc symbol `__sfp_handle_exceptio
 |---|---|
 | `vendor/paddleocr-upstream` | Git submodule — pristine upstream source, pinned to commit `211989f046cc1878460f9e65574690c00a127a1a`. **Sparse-checked-out** to just `deploy/ppocr-android/ppocr-sdk` — PaddleOCR itself is a ~2GB monorepo we otherwise have no use for; a blobless partial clone (`--filter=blob:none --sparse`) plus a shallow fetch of just the pinned commit keeps this to ~22MB instead. Reference only, never compiled directly. |
 | `vendor/ppocr-sdk/src/...` | Local Gradle module — vendored + patched copy, compiled into `vox-vision`. |
-| `vendor/ppocr-sdk/patches/*.patch` | The four patches as real unified diffs — regenerate with `scripts/regen_ppocr_sdk_patch.sh`. |
+| `vendor/ppocr-sdk/patches/*.patch` | The four patches as real unified diffs — regenerate with `./scripts/vox patches regen ppocr-sdk`. |
 | `vendor/ppocr-sdk/NOTICE` | Apache-2.0 attribution + provenance, and what each patch is for. |
 | `vendor/ppocr-sdk/opencv/` | *Not* part of this vendoring — OpenCV's build output, see the section above. Gitignored separately. |
 
@@ -313,7 +314,7 @@ Three of the four exist only because we build OpenCV ourselves. Only `0002` woul
 it were lost; `0003` and `0004` would ship as an intermittent native crash and an OpenCV that never
 initialises — which is why the invariant below is checked rather than assumed.
 
-- **`scripts/regen_ppocr_sdk_patch.sh`** — regenerates every patch from the current state of
+- **`./scripts/vox patches regen ppocr-sdk`** — regenerates every patch from the current state of
   `vendor/ppocr-sdk/` vs. the pinned `vendor/paddleocr-upstream` submodule; sanity-checks each by
   re-applying it to a copy of the pristine files and confirming it reproduces the current patched
   source byte-for-byte. Which files a patch covers is read out of the patch (`git apply --numstat`),
@@ -397,14 +398,14 @@ the PRs accumulated as permanent noise.
 
 ### The invariant: vendored source == upstream + patches
 
-`scripts/verify_vendored_patches.sh` rebuilds each vendored tree from its pinned upstream plus every
+`./scripts/vox patches verify` (scripts/verify_vendored_patches.sh) rebuilds each vendored tree from its pinned upstream plus every
 patch in `patches/`, and diffs the result against what's committed. Anything left over is a local
 edit no patch records. Run it after touching a vendored source tree; `.github/workflows/verify-vendor-patches.yml`
 runs it on any push or PR that touches a vendored tree, its patches, or the script.
 
 ```
-./scripts/verify_vendored_patches.sh              # both forks
-./scripts/verify_vendored_patches.sh wakeword     # one of them
+./scripts/vox patches verify              # both forks
+./scripts/vox patches verify wakeword     # one of them
 ```
 
 This exists because the invariant was silently false. Three adaptations lived only as edited bytes in
@@ -423,3 +424,25 @@ If the check fails and the change was deliberate, capture it: write the diff as
 All six dependencies now have a scheduled sync workflow, and the one identified staleness-detection
 bug (OpenCV's build script skipping a rebuild purely because output existed, regardless of whether it
 matched the pinned commit) has been fixed — see the OpenCV section above.
+
+---
+
+## One entry point
+
+Everything under `scripts/` is reachable through a single dispatcher, so a caller names a command
+rather than a file:
+
+```
+./scripts/vox                        what exists
+./scripts/vox check [name]           has anything upstream moved?
+./scripts/vox patches verify [mod]   is a vendored fork upstream + its patches?
+./scripts/vox patches regen <mod>    regenerate a fork's patches
+./scripts/vox native opencv|whisper  the two build-time compiles
+./scripts/vox release package        the APK as published
+```
+
+The workflows and Gradle call it too, so splitting or renaming a script no longer edits a workflow.
+Each script still runs correctly on its own — the dispatcher routes and documents, it never
+initialises anything a child depends on. `scripts/lib/` holds what would otherwise be copied into
+every script: the logging preamble, and the `--report` contract that lets one check answer both a
+person and a workflow.

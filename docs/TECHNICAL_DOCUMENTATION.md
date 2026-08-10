@@ -179,7 +179,7 @@ owning the source.
 | `core/wakeword/` | Local Gradle module (`android-library`) — vendored + patched copy of the upstream `:wakeword` module, compiled into `vox-commander`. |
 | `core/wakeword/src/main/kotlin/.../audio/AudioRecorder.kt` | Patched file #1. An RMS silence gate drops buffers below an energy floor *before* the short→float conversion and *before* anything is emitted — so `WakeWordEngine`'s ONNX inference never runs on silence. Layered with an *adaptive* margin above the live ambient noise floor (`:core:audio`'s `AdaptiveNoiseGate`, also shared by the Vosk engine — see below), so the gate keeps closing in a sustained noisy room where a fixed floor alone stops helping. Both the fixed floor (`rmsGate`) and the adaptive margin (`noiseGateMargin`) are derived from the user's Wake Word Sensitivity setting via `WakeWordSensitivity.openWakeWordRmsGate()`/`.noiseGateMargin()`; `0f`/upstream defaults preserve stock behavior. |
 | `core/wakeword/src/main/kotlin/.../WakeWordEngine.kt` | Patched file #2 (the vendored library's own engine class — not to be confused with `vox-commander`'s separate Vosk `WakeWordEngine.kt`). Just forwards `rmsGate`/`noiseGateMargin` through its public constructor to `AudioRecorder`, which is the only place that actually acts on them. |
-| `core/wakeword/patches/0001-rms-silence-gate.patch`, `0002-wakeword-engine-params.patch` | The two patches above, each maintained as a real unified diff (not just "the current file") — regenerate both together with `scripts/regen_openwakeword_patch.sh`. |
+| `core/wakeword/patches/0001-rms-silence-gate.patch`, `0002-wakeword-engine-params.patch` | The two patches above, each maintained as a real unified diff (not just "the current file") — regenerate both together with `./scripts/vox patches regen wakeword`. |
 | `core/wakeword/NOTICE` / `LICENSE` | Apache 2.0 attribution chain (OpenWakeWord, Google Speech Embedding Model, ONNX Runtime). |
 
 **Keeping it in sync with upstream releases:**
@@ -2305,7 +2305,7 @@ picker, shared settings sections), `:core:services` (`ServiceEntry`, `ProbeSpec`
 (export/import, biometric gate, snapshot replace), and `:core:datahygiene` (§21).
 
 A vendored fork is upstream **plus** the diffs in its `patches/` folder, and that is checked rather
-than assumed — `scripts/verify_vendored_patches.sh`, run in CI by `verify-vendor-patches.yml`. See
+than assumed — `./scripts/vox patches verify` (scripts/verify_vendored_patches.sh), run in CI by `verify-vendor-patches.yml`. See
 [`BUILD_TIME_DEPENDENCIES.md`](BUILD_TIME_DEPENDENCIES.md) for why, and what it caught.
 
 ---
