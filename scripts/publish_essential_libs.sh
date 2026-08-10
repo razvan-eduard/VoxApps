@@ -3,6 +3,7 @@ set -e
 
 # --- COLOR DEFINITIONS ---
 # Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # --- CONFIG ---

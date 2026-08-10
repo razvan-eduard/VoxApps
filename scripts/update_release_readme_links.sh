@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # Regenerates the "Build Status" table in README.md (between the LATEST_RELEASES:START/END

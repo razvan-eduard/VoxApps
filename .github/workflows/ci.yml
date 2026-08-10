@@ -21,6 +21,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The Kotlin had hundreds of tests and the shell that gates every release had none. Three
+  # regressions in this machinery were each found by dispatching a real bot and reading the failure
+  # — production as the test environment. Its own job, and first, because it takes seconds: a typo
+  # in a script should not be reported after a ten-minute Android build.
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Lint every script
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck -x scripts/*.sh scripts/lib/*.sh scripts/tests/*.sh scripts/vox
+
+      # The vendored-invariant tests need the pristine upstreams; the rest do not.
+      - name: Fetch the pristine upstream sources
+        run: |
+          git submodule update --init --depth 1 vendor/paddleocr-upstream
+          git -C vendor/paddleocr-upstream sparse-checkout set deploy/ppocr-android/ppocr-sdk
+          git submodule update --init --depth 1 vendor/openwakeword-android-kt
+
+      - name: Test the automation
+        run: ./scripts/vox test
+
   verify:
     runs-on: ubuntu-latest
 

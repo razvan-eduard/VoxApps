@@ -10,6 +10,7 @@ set -e
 # more thing to remember when adding a patch, and forgetting it is silent: the fork keeps working
 # locally and the adaptation disappears at the next re-vendor.
 # Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

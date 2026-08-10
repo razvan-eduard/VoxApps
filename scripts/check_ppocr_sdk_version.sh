@@ -1,9 +1,11 @@
 #!/bin/bash
 
 # Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # --report: key=value on stdout for sync-ppocr-sdk.yml, human logging on stderr.
+# shellcheck source=scripts/lib/upstream_report.sh
 source "$(dirname "$0")/lib/upstream_report.sh"
 
 # Must match STALENESS_FLOOR_DAYS in .github/workflows/sync-ppocr-sdk.yml. This is the only upstream
@@ -15,7 +17,6 @@ STALENESS_FLOOR_DAYS=7
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SUBMODULE_DIR="$PROJECT_ROOT/vendor/paddleocr-upstream"
 SUBTREE_PATH="deploy/ppocr-android/ppocr-sdk"
-UPSTREAM_URL="https://github.com/PaddlePaddle/PaddleOCR.git"
 
 # Unlike Vosk (consumed as an unmodified binary artifact), the PaddleOCR Android SDK is vendored as
 # source into vendor/ppocr-sdk with a local patch (load models from raw bytes/files, not just APK

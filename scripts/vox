@@ -19,8 +19,9 @@ set -uo pipefail
 # calls must still work when run directly — that is what keeps a child debuggable in isolation and
 # stops an invisible "only works via vox" contract forming.
 
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
-cd "$VOX_ROOT"
+cd "$VOX_ROOT" || exit 1
 
 usage() {
     cat <<'EOF'
@@ -43,6 +44,9 @@ Usage: ./scripts/vox <flow> [command] [args...]
   native whisper               Build whisper.cpp from the pinned submodule
 
   schemas validate             Validate the shipped schema JSON
+
+  test                         Test this machinery: the report contract, the
+                               dispatcher, and the vendored invariant
 
 Anything not listed here is an internal helper (scripts/lib/, strip_dlc_libs.sh) called by the
 commands above, not directly.
@@ -105,6 +109,10 @@ case "$FLOW" in
             whisper) exec sh scripts/check_whisper.sh "${@:2}" ;;
             *) die "native needs a target: opencv | whisper" ;;
         esac
+        ;;
+
+    test)
+        exec bash scripts/tests/run.sh "$@"
         ;;
 
     schemas)

@@ -1,9 +1,11 @@
 #!/bin/bash
 
 # Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # --report: key=value on stdout for sync-opencv.yml, human logging on stderr.
+# shellcheck source=scripts/lib/upstream_report.sh
 source "$(dirname "$0")/lib/upstream_report.sh"
 
 # OpenCV was the one pinned upstream with no local check script — it could only be asked "has this

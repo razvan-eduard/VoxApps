@@ -3,6 +3,7 @@ set -e
 
 # --- COLOR DEFINITIONS ---
 # Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # --- BASIC PATHS ---
@@ -38,7 +39,7 @@ perform_rollback() {
 
     if [ -n "$PREVIOUS_GIT_REV" ]; then
         log_warn "🔄 Rolling back Whisper.cpp source to revision: $PREVIOUS_GIT_REV"
-        cd "$WHISPER_DIR"
+        cd "$WHISPER_DIR" || exit 1
         git checkout "$PREVIOUS_GIT_REV" --quiet
     fi
 
@@ -62,7 +63,7 @@ if [ ! -f "$WHISPER_DIR/CMakeLists.txt" ]; then
     git -C "$PROJECT_ROOT" submodule update --init --recursive "vox-commander/src/main/cpp/whisper.cpp"
 fi
 
-cd "$WHISPER_DIR"
+cd "$WHISPER_DIR" || exit 1
 PREVIOUS_GIT_REV=$(git rev-parse HEAD)
 
 # Check for official STABLE releases (Tags)
@@ -80,7 +81,7 @@ if [ "$LATEST_STABLE_TAG" != "$CURRENT_HEAD_TAG" ] && [ "$LATEST_STABLE_TAG" != 
     elif [ -t 0 ]; then
         # Running in a real terminal, we can ask
         log_warn "🆕 NEW STABLE RELEASE AVAILABLE: $LATEST_STABLE_TAG (You are on: $CURRENT_HEAD_TAG)"
-        printf "${YELLOW}❓ Do you want to upgrade Whisper.cpp and rebuild? (y/n): ${NC}"
+        printf '%s❓ Do you want to upgrade Whisper.cpp and rebuild? (y/n): %s' "$YELLOW" "$NC"
         read -r REPLY
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             log_info "🚀 Upgrading source to stable tag $LATEST_STABLE_TAG..."
@@ -104,16 +105,17 @@ fi
 # --- 3. BUILD EXECUTION ---
 USER_HOME=$(eval echo "~$USER")
 NDK_BASE="$USER_HOME/Library/Android/sdk/ndk"
-LATEST_NDK=$(ls -1 "$NDK_BASE" | sort -V | tail -1)
+LATEST_NDK=$(find "$NDK_BASE" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort -V | tail -1)
 NDK_PATH="$NDK_BASE/$LATEST_NDK"
 
 if [ "$UPGRADE_TRIGGERED" = true ] || [ "$FORCE_REBUILD" = true ]; then
     log_warn "🔥 Cleaning build directory..."
-    rm -rf "$WHISPER_DIR/$BUILD_DIR"
+    # :? — refuse to run at all rather than delete from / if either is somehow empty.
+    rm -rf "${WHISPER_DIR:?}/${BUILD_DIR:?}"
 fi
 
 mkdir -p "$WHISPER_DIR/$BUILD_DIR"
-cd "$WHISPER_DIR/$BUILD_DIR"
+cd "$WHISPER_DIR/$BUILD_DIR" || exit 1
 
 if [ ! -f "CMakeCache.txt" ]; then
     log_info "⚙️ Configuring Hybrid Build (GPU/Vulkan support)..."

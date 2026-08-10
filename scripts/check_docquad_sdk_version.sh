@@ -1,10 +1,12 @@
 #!/bin/bash
 
 # Colours, logging and PROJECT_ROOT — shared, not re-declared per script.
+# shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # --report: key=value on stdout, human logging on stderr. No sync workflow watches this one — it is
 # the only vendored dependency with no bot — so this is what surfaces it in check_upstream.sh.
+# shellcheck source=scripts/lib/upstream_report.sh
 source "$(dirname "$0")/lib/upstream_report.sh"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

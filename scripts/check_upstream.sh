@@ -19,7 +19,7 @@ set -uo pipefail
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$PROJECT_ROOT"
+cd "$PROJECT_ROOT" || exit 1
 
 # name : script : what a "version" means for it
 CHECKS=(
@@ -47,7 +47,7 @@ done
 if [ "$REPORT" = true ]; then
     [ ${#WANTED[@]} -gt 0 ] || { log_error "--report needs a name: e.g. vox check vosk --report"; exit 1; }
     for entry in "${CHECKS[@]}"; do
-        IFS=':' read -r NAME SCRIPT KIND <<< "$entry"
+        IFS=':' read -r NAME SCRIPT _KIND <<< "$entry"
         for w in "${WANTED[@]}"; do
             [ "$w" = "$NAME" ] && exec bash "scripts/$SCRIPT" --report
         done
@@ -62,7 +62,7 @@ UPDATES=()
 FAILED=()
 
 for entry in "${CHECKS[@]}"; do
-    IFS=':' read -r NAME SCRIPT KIND <<< "$entry"
+    IFS=':' read -r NAME SCRIPT _KIND <<< "$entry"
 
     if [ ${#WANTED[@]} -gt 0 ]; then
         skip=true
