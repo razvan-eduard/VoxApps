@@ -48,9 +48,9 @@ fun ListeningScreen(
         ) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth(0.85f) // Gap stânga-dreapta
+                    .fillMaxWidth(0.85f) // Left-right gap
                     .wrapContentHeight(),
-                shape = RoundedCornerShape(32.dp), // Toate colțurile rotunjite
+                shape = RoundedCornerShape(32.dp), // All corners rounded
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 12.dp,
                 shadowElevation = 16.dp

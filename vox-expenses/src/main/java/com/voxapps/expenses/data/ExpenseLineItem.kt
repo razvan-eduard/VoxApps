@@ -30,7 +30,7 @@ data class ExpenseLineItem(
     val quantity: Double,
     val unitPrice: Double,
     val position: Int = 0,
-    // Optional per-item VAT breakdown (net/fără TVA, VAT amount, gross/total) — populated only when
+    // Optional per-item VAT breakdown (net/excluding VAT, VAT amount, gross/total) — populated only when
     // the source document explicitly shows this breakdown for the line (common on RO invoices/facturi
     // with a single line item). Left null for manual entry, voice, and any scan where the document
     // doesn't separate these — [unitPrice]/[subtotal] stay the primary fields other code reads.

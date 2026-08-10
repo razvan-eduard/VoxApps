@@ -10,7 +10,7 @@ private const val TAG = "ScanRequestSender"
 
 /**
  * Launches Vision's activity directly to fulfil a scan request (see [com.voxapps.ipc.VoxOcrRequest])
- * — the "Scanează o notiță" entry point, called both from Notes' own foreground UI and from
+ * — the "Scan a note" entry point, called both from Notes' own foreground UI and from
  * [com.voxapps.notes.ui.widget.NotesWidgetScanSingleAction] (a Glance `ActionCallback`, which runs
  * with a non-Activity context) — hence [Intent.FLAG_ACTIVITY_NEW_TASK] unconditionally: starting an
  * Activity from a non-Activity context throws without it, and it's a harmless no-op when the caller

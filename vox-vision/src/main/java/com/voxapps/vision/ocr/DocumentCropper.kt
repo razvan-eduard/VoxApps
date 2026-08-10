@@ -25,7 +25,7 @@ import kotlin.math.min
  * Standard "document scanner" technique: find the largest four-sided contour in the photo (the
  * paper's edges against the background) and perspective-warp it flat, so OCR runs on just the
  * document instead of the whole scene (background clutter otherwise gets detected as text too — see
- * the "Patru la rând" board-game-card mixed into an early test scan). Uses OpenCV's `imgproc` module,
+ * the Connect Four board-game card mixed into an early test scan). Uses OpenCV's `imgproc` module,
  * already built from source and linked via `:vendor:ppocr-sdk` for the OCR pipeline itself — no new
  * native dependency.
  *

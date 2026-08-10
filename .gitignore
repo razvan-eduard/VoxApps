@@ -76,7 +76,7 @@ google-services.json
 # =========================
 # AI Models & Audio Cache
 # =========================
-# Ignora modelele acustice grele pentru a nu bloca repo-ul
+# Heavy acoustic models — kept out so the repository stays usable
 *.bin
 *.pt
 *.zip
@@ -84,7 +84,7 @@ google-services.json
 /app/src/main/assets/models/
 
 # =========================
-# Configurații specifice proiectului
+# Project-specific configuration
 # =========================
 /build
 

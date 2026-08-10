@@ -372,38 +372,38 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
 
-// Înregistrează o sarcină de execuție pentru scriptul Bash Whisper
+// Runs the Whisper bash script.
 val autoCompileWhisper = tasks.register<Exec>("autoCompileWhisper") {
     group = "build"
-    description = "Verifică upstream-ul whisper.cpp și recompilează prin CMake dacă este necesar."
+    description = "Check whisper.cpp upstream and rebuild through CMake when it is stale."
     
     commandLine("bash", "${project.rootDir}/scripts/vox", "native", "whisper")
 }
 
-// Înregistrează o sarcină de execuție pentru verificarea versiunii Vosk
+// Checks the published Vosk version.
 val autoCheckVosk = tasks.register<Exec>("autoCheckVosk") {
     group = "verification"
-    description = "Verifică dacă a apărut o versiune mai nouă de Vosk pe JitPack."
+    description = "Check whether a newer Vosk has been published on JitPack."
 
     // bash, not sh: the script is a bash script (uses ==, [[ ]]) — same class of bug as the
     // build_opencv_android.sh fix (sh on Ubuntu runners is dash, which doesn't support these).
     commandLine("bash", "${project.rootDir}/scripts/vox", "check", "vosk")
 }
 
-// Înregistrează o sarcină de execuție pentru verificarea versiunii NewPipeExtractor
+// Checks the published NewPipeExtractor version.
 val autoCheckNewPipeExtractor = tasks.register<Exec>("autoCheckNewPipeExtractor") {
     group = "verification"
-    description = "Verifică dacă a apărut o versiune mai nouă de NewPipeExtractor pe JitPack."
+    description = "Check whether a newer NewPipeExtractor has been published on JitPack."
 
     // bash, not sh: the script uses [[ ]] (same class of bug as the build_opencv_android.sh fix —
     // sh on Ubuntu runners is dash, which doesn't support bashisms like [[ ]]).
     commandLine("bash", "${project.rootDir}/scripts/vox", "check", "newpipe-extractor")
 }
 
-// Verifică dacă fork-ul local OpenWakeWord (core/wakeword) a rămas în urma tag-urilor upstream
+// Checks whether the local OpenWakeWord fork (core/wakeword) has fallen behind upstream's tags.
 val autoCheckOpenWakeWord = tasks.register<Exec>("autoCheckOpenWakeWord") {
     group = "verification"
-    description = "Verifică dacă submodulul OpenWakeWord a rămas în urma unui tag upstream nou."
+    description = "Check whether the OpenWakeWord submodule has fallen behind a newer upstream tag."
 
     // bash, not sh: the script uses a bash array (PATCHES=(...)) — same class of bug as the
     // build_opencv_android.sh fix (sh on Ubuntu runners is dash, which doesn't support this).

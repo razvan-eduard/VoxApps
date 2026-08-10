@@ -2,7 +2,7 @@ package com.voxapps.notes.domain.llm
 
 /**
  * Builds the prompt sent to Commander's generic LLM hook after Vision hands back raw OCR text from
- * the "Scanează o notiță" flow. Mirrors CategoryMergePromptBuilder's shape. The suggested category is
+ * the "Scan a note" flow. Mirrors CategoryMergePromptBuilder's shape. The suggested category is
  * resolved through the exact same path voice notes already use
  * (NotesRepository.addVoiceNote -> VoiceCategoryResolver) — the LLM's job here is only to guess a
  * name, not to decide the final category.

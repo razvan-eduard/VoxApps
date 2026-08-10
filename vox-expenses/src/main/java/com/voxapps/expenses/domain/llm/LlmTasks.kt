@@ -7,7 +7,7 @@ package com.voxapps.expenses.domain.llm
  * [com.voxapps.expenses.receiver.LlmResultReceiver]'s dispatch, no Commander/`:core:ipc` changes.
  */
 object LlmTasks {
-    /** A raw spoken utterance ("am cumpărat 3 pâini de la magazin cu 10 lei") -> structured fields. */
+    /** A raw spoken utterance ("I bought 3 loaves of bread at the shop for 10 lei") -> structured fields. */
     const val EXPENSE_PARSE = "EXPENSE_PARSE"
 
     /** Raw OCR text from a scanned receipt (via Vox Vision) -> structured fields. */

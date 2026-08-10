@@ -88,7 +88,7 @@ private fun requiredBluetoothPermissions(): Array<String> =
 
 /**
  * Pair a new device over NFC (see NfcPairingReader/PairingHceService), trigger an on-demand sync with
- * an already-paired one (see SyncOrchestrator — the "trigger din meniu forțat" path), and toggle
+ * an already-paired one (see SyncOrchestrator — the "forced trigger from the menu" path), and toggle
  * per-peer scheduled auto-sync (ScheduledSyncWorker picks this up in the background, "de comun acord"
  * on both phones independently enabling it). Doesn't yet expose per-app category/layer scope
  * checklists — PairedPeer.scopeNamesByApp exists for that but has no UI control here.

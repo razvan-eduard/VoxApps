@@ -40,8 +40,8 @@ import org.json.JSONObject
 private data class AppScopeOptions(val packageName: String, val label: String, val availableNames: List<String>)
 
 /**
- * Per-peer category/layer checklist — the "poate nu vrem toate tipurile de expenses, sau nu toate
- * calendarele" scope selection. Reuses [VoxIpc.OP_EXPORT] (scope=DATA) purely to read each app's
+ * Per-peer category/layer checklist — the "maybe we do not want every kind of expense, or every
+ * calendar" scope selection. Reuses [VoxIpc.OP_EXPORT] (scope=DATA) purely to read each app's
  * category/layer *names* rather than adding a dedicated lightweight IPC op for it — heavier than
  * strictly necessary, but this screen is opened rarely (once per peer, when the user wants to narrow
  * what syncs), unlike [com.voxapps.hub.domain.sync.SyncOrchestrator]'s own OP_SYNC_EXPORT calls which

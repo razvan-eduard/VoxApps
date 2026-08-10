@@ -34,7 +34,7 @@ private const val NOTES_FILE_PROVIDER_AUTHORITY = "com.voxapps.notes.fileprovide
 /**
  * Notes' end of Vision's generic OCR hook — two distinct task families, dispatched by prefix (not
  * exact match, so a colon-suffixed task like an attachment capture's `:$noteId` still routes
- * correctly): [LlmTasks.NOTE_SCAN_CLEANUP] (the "Scanează o notiță" flow — forwards the raw scanned
+ * correctly): [LlmTasks.NOTE_SCAN_CLEANUP] (the "Scan a note" flow — forwards the raw scanned
  * text to Commander's generic LLM hook for cleanup; the actual note gets created when that cleanup
  * reply lands in [LlmResultReceiver]) and [LlmTasks.NOTE_ATTACHMENT_CAPTURE] (adding a photo to a
  * note — always produceOCR=false here, so this just stages the photo(s) and commits AttachmentEntity
