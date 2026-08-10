@@ -105,7 +105,10 @@ fi
 # --- 3. BUILD EXECUTION ---
 USER_HOME=$(eval echo "~$USER")
 NDK_BASE="$USER_HOME/Library/Android/sdk/ndk"
-LATEST_NDK=$(find "$NDK_BASE" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort -V | tail -1)
+# -L, and -type d rather than -type l: on the release runners this whole SDK path is built out of
+# symlinks (release-*.yml links /usr/local/lib/android/sdk into ~/Library/Android/sdk for this
+# script), so an unfollowed find matches nothing and the toolchain path comes out as "ndk//build".
+LATEST_NDK=$(find -L "$NDK_BASE" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; 2>/dev/null | sort -V | tail -1)
 NDK_PATH="$NDK_BASE/$LATEST_NDK"
 
 if [ "$UPGRADE_TRIGGERED" = true ] || [ "$FORCE_REBUILD" = true ]; then
