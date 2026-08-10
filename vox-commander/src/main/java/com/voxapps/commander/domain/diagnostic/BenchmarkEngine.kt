@@ -60,7 +60,16 @@ class BenchmarkEngine(
 
         // --- 1. HARDWARE INFO ---
         diagInfo.append("--- HARDWARE CAPABILITIES ---\n")
-        diagInfo.append(WhisperLib.getSystemInfo())
+        // getSystemInfo() is a native method, so the Whisper libraries have to be loaded before it
+        // is reached. Nothing loads them at startup — they are downloaded on demand and loaded when
+        // Whisper is actually used — so calling it cold threw an UnsatisfiedLinkError that took the
+        // whole app down from a settings button. The other two callers (WhisperCppSttEngine,
+        // VulkanProbeService) already load first; this one didn't.
+        val whisperLibDir = java.io.File(context.filesDir, "whisper_libs").absolutePath
+        diagInfo.append(
+            if (WhisperLib.load(whisperLibDir)) WhisperLib.getSystemInfo()
+            else "Whisper engine not installed — enable it in Advanced settings for hardware details"
+        )
         diagInfo.append("\n")
 
         // --- 2. VULKAN STATUS ---
