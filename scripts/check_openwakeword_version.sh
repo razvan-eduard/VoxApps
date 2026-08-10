@@ -12,6 +12,9 @@ log_warn() { printf "${YELLOW}%s${NC}\n" "$1"; }
 log_error() { printf "${RED}%s${NC}\n" "$1"; }
 log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
 
+# --report: key=value on stdout for sync-openwakeword.yml, human logging on stderr.
+source "$(dirname "$0")/lib/upstream_report.sh"
+
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SUBMODULE_DIR="$PROJECT_ROOT/vendor/openwakeword-android-kt"
 UPSTREAM_URL="https://github.com/Re-MENTIA/openwakeword-android-kt.git"
@@ -36,9 +39,9 @@ CURRENT_SHA=$(git -C "$SUBMODULE_DIR" rev-parse --short HEAD)
 
 log_blue "🔍 Checking OpenWakeWord version (submodule vs. upstream tags)..."
 if [ -n "$CURRENT_TAG" ]; then
-    echo "Current: $CURRENT_TAG ($CURRENT_SHA)"
+    log_info "Current: $CURRENT_TAG ($CURRENT_SHA)"
 else
-    echo "Current: detached at $CURRENT_SHA (no exact tag match)"
+    log_info "Current: detached at $CURRENT_SHA (no exact tag match)"
 fi
 
 # Fetch latest vX.Y.Z tag from upstream (no clone needed — just the ref list)
@@ -47,12 +50,18 @@ LATEST_TAG=$(git ls-remote --tags --refs "$UPSTREAM_URL" 2>/dev/null \
     | sed 's#refs/tags/##' \
     | sort -V | tail -1)
 
+emit current_tag "$CURRENT_TAG"
+emit current_sha "$CURRENT_SHA"
+emit latest_tag "$LATEST_TAG"
+
 if [ -z "$LATEST_TAG" ]; then
+    emit has_update false
     log_warn "⚠️ Could not reach upstream (network?) — skipping version check."
     exit 0
 fi
 
 if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
+    emit has_update true
     log_warn "🚀 UPDATE AVAILABLE: ${CURRENT_TAG:-$CURRENT_SHA} -> $LATEST_TAG"
 
     # Non-destructive dry-run per patched file: fetch the new tag's content (object database only,
@@ -120,6 +129,7 @@ if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
     restore_all
     trap - EXIT INT TERM
 
+    if [ "$REPORT" != true ]; then
     echo -e "\nThis is a ${YELLOW}vendored + patched${NC} fork. To update:"
     echo "  1. cd vendor/openwakeword-android-kt && git checkout $LATEST_TAG && cd -"
     echo "  2. git add vendor/openwakeword-android-kt   # re-pin the submodule"
@@ -129,6 +139,8 @@ if [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then
     echo -e "  5. Rebuild + retest before committing.\n"
     echo "(The scheduled sync-openwakeword.yml workflow does all of this automatically and opens a PR —"
     echo " already merged+tested in the common case, or clearly flagged if it needs manual attention.)"
+    fi
 else
+    emit has_update false
     log_info "✅ OpenWakeWord fork is up to date (${CURRENT_TAG:-$CURRENT_SHA})."
 fi

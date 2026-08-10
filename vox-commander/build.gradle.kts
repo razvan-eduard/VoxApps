@@ -279,6 +279,18 @@ val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
     into("${projectDir}/src/main/assets/schemas")
 }
 
+// One command for "has anything upstream moved?", across every vendored and pinned dependency —
+// not just Commander's three. Same scripts the sync workflows call.
+//
+//     ./gradlew :vox-commander:checkUpstream
+//
+// On demand only, for the reason spelled out below.
+tasks.register<Exec>("checkUpstream") {
+    group = "verification"
+    description = "Ask every upstream (Vosk, NewPipe, OpenWakeWord, OpenCV, PaddleOCR, whisper) whether it has moved."
+    commandLine("bash", "${project.rootDir}/scripts/check_upstream.sh")
+}
+
 // The three autoCheck* tasks above are deliberately NOT wired into preBuild.
 //
 // "A newer Vosk exists" is a maintenance fact, not a build fact, and it already has a home: the

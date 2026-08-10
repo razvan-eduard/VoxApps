@@ -12,6 +12,9 @@ log_warn() { printf "${YELLOW}%s${NC}\n" "$1"; }
 log_error() { printf "${RED}%s${NC}\n" "$1"; }
 log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
 
+# --report: key=value on stdout for sync-vosk.yml, human logging on stderr. See the header there.
+source "$(dirname "$0")/lib/upstream_report.sh"
+
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TOML_FILE="$PROJECT_ROOT/gradle/libs.versions.toml"
 
@@ -24,11 +27,13 @@ if [ -z "$CURRENT_VERSION" ]; then
 fi
 
 log_blue "🔍 Checking Vosk version (via JitPack)..."
-echo "Current version: $CURRENT_VERSION"
+log_info "Current version: $CURRENT_VERSION"
 
 # 2. Fetch latest version from JitPack (More up-to-date for Vosk)
 # JitPack API returns versions for a GitHub repo
-LATEST_VERSION=$(curl -s --connect-timeout 5 --max-time 10 https://jitpack.io/api/builds/com.github.alphacep/vosk-android/latest | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
+# head -1: JitPack's build-info JSON carries more than one version-shaped field, so an unanchored
+# grep yields several lines. sync-vosk.yml already guarded this; the script had not.
+LATEST_VERSION=$(curl -s --connect-timeout 5 --max-time 10 https://jitpack.io/api/builds/com.github.alphacep/vosk-android/latest | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
 
 if [ -z "$LATEST_VERSION" ]; then
     log_warn "⚠️ Could not reach JitPack API. Checking Maven fallback..."
@@ -38,17 +43,25 @@ if [ -z "$LATEST_VERSION" ]; then
 fi
 
 # 3. Final Comparison
+emit current "$CURRENT_VERSION"
+emit latest "$LATEST_VERSION"
+
 if [ -n "$LATEST_VERSION" ] && [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
     HIGHER_VERSION=$(printf "%s\n%s" "$CURRENT_VERSION" "$LATEST_VERSION" | sort -V | tail -1)
 
     if [ "$HIGHER_VERSION" == "$LATEST_VERSION" ]; then
+        emit has_update true
         log_warn "🚀 UPDATE AVAILABLE: $CURRENT_VERSION -> $LATEST_VERSION"
-        echo -e "\nTo update, modify your ${BLUE}gradle/libs.versions.toml${NC}:"
-        grep -n "^vosk =" "$TOML_FILE" | sed 's/^/Line /'
-        echo -e "Change to: ${GREEN}vosk = \"$LATEST_VERSION\"${NC}\n"
+        if [ "$REPORT" != true ]; then
+            echo -e "\nTo update, modify your ${BLUE}gradle/libs.versions.toml${NC}:"
+            grep -n "^vosk =" "$TOML_FILE" | sed 's/^/Line /'
+            echo -e "Change to: ${GREEN}vosk = \"$LATEST_VERSION\"${NC}\n"
+        fi
     else
+        emit has_update false
         log_info "✅ Vosk is up to date ($CURRENT_VERSION)."
     fi
 else
+    emit has_update false
     log_info "✅ Vosk is up to date ($CURRENT_VERSION)."
 fi

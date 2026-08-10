@@ -38,42 +38,15 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Determine current and latest NewPipeExtractor version
+      # Detection lives in scripts/check_newpipe_extractor_version.sh — the same script a person runs, answering in
+      # --report mode with the keys used below. This step used to be that script's logic
+      # copied into YAML: four of the six pairs happened to agree, and the ones that did not
+      # drifted silently (NewPipe's multi-line version, PaddleOCR's staleness floor).
+      - name: Determine current pin and latest upstream version
         id: versions
-        run: |
-          TOML_FILE="gradle/libs.versions.toml"
-          CURRENT_VERSION=$(grep "^newpipeExtractor =" "$TOML_FILE" | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+")
-
-          # `head -1` + `|| true` on each grep: this runs under `bash -e` (GitHub Actions' default
-          # for `run:` blocks). JitPack's build-info JSON has both a "version" and a "latestOk"
-          # field, both matching this pattern (confirmed via curl: `{"version":"0.26.3",...,
-          # "latestOk":"0.26.3",...}`) — an unanchored grep extracts both as separate lines, and
-          # writing that 2-line value into $GITHUB_OUTPUT breaks GitHub's key=value parser
-          # ("Invalid format '0.26.3'"). `|| true` additionally guards the case where grep matches
-          # nothing at all, which would otherwise abort the whole step before reaching the fallback.
-          LATEST_VERSION=$(curl -s --connect-timeout 5 --max-time 10 \
-            https://jitpack.io/api/builds/com.github.teamnewpipe/NewPipeExtractor/latest \
-            | grep -oE "v?[0-9]+\.[0-9]+\.[0-9]+" | head -1 || true)
-          if [ -z "$LATEST_VERSION" ]; then
-            # Not on Maven Central (unlike Vosk) — fall back to GitHub's own tag list.
-            LATEST_VERSION=$(git ls-remote --tags --refs https://github.com/TeamNewPipe/NewPipeExtractor.git \
-              | grep -oE "refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$" | sed 's#refs/tags/##' | sort -V | tail -1 || true)
-          fi
-          [[ -n "$LATEST_VERSION" && "$LATEST_VERSION" != v* ]] && LATEST_VERSION="v$LATEST_VERSION"
-
-          echo "current=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
-          echo "latest=$LATEST_VERSION" >> "$GITHUB_OUTPUT"
-
-          if [ -z "$LATEST_VERSION" ] || [ "$CURRENT_VERSION" == "$LATEST_VERSION" ]; then
-            echo "has_update=false" >> "$GITHUB_OUTPUT"
-          else
-            HIGHER=$(printf "%s\n%s" "${CURRENT_VERSION#v}" "${LATEST_VERSION#v}" | sort -V | tail -1)
-            if [ "$HIGHER" == "${LATEST_VERSION#v}" ]; then
-              echo "has_update=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "has_update=false" >> "$GITHUB_OUTPUT"
-            fi
-          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/check_newpipe_extractor_version.sh --report >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
         if: steps.versions.outputs.has_update == 'true'

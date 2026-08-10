@@ -34,29 +34,16 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Determine current pin and latest upstream stable tag
+      # Detection lives in scripts/check_whisper_version.sh — the same script a person runs, answering in
+      # --report mode with the keys used below. This step used to be that script's logic
+      # copied into YAML: four of the six pairs happened to agree, and the ones that did not
+      # drifted silently (NewPipe's multi-line version, PaddleOCR's staleness floor).
+      - name: Determine current pin and latest upstream version
         id: versions
-        run: |
-          cd vox-commander/src/main/cpp/whisper.cpp
-          git fetch --tags --quiet
-          CURRENT_SHA=$(git rev-parse --short HEAD)
-          CURRENT_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
-          LATEST_TAG=$(git tag -l "v*" | sort -V | tail -1)
-          cd -
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/check_whisper_version.sh --report >> "$GITHUB_OUTPUT"
 
-          echo "current_tag=$CURRENT_TAG" >> "$GITHUB_OUTPUT"
-          echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
-          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
-
-          if [ -z "$LATEST_TAG" ] || [ "$CURRENT_TAG" == "$LATEST_TAG" ]; then
-            echo "has_update=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_update=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      # A PR for this exact target in ANY state means it has already been proposed. Open: nothing
-      # new to say until someone reviews it. Closed unmerged: that was a decision to decline this
-      # upstream version, and re-opening it every week would make declining impossible.
       - name: Check whether this target was already proposed
         if: steps.versions.outputs.has_update == 'true'
         id: dedup

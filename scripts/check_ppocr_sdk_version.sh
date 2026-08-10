@@ -12,6 +12,15 @@ log_warn() { printf "${YELLOW}%s${NC}\n" "$1"; }
 log_error() { printf "${RED}%s${NC}\n" "$1"; }
 log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
 
+# --report: key=value on stdout for sync-ppocr-sdk.yml, human logging on stderr.
+source "$(dirname "$0")/lib/upstream_report.sh"
+
+# Must match STALENESS_FLOOR_DAYS in .github/workflows/sync-ppocr-sdk.yml. This is the only upstream
+# followed by default branch rather than by tag, so nobody upstream decides a commit is ready — the
+# wait stands in for that. Reporting the tip here while the bot takes a week-old commit would have
+# this script announce updates the bot will not act on.
+STALENESS_FLOOR_DAYS=7
+
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SUBMODULE_DIR="$PROJECT_ROOT/vendor/paddleocr-upstream"
 SUBTREE_PATH="deploy/ppocr-android/ppocr-sdk"
@@ -35,17 +44,35 @@ CURRENT_SHA=$(git -C "$SUBMODULE_DIR" rev-parse HEAD)
 CURRENT_SHORT=$(git -C "$SUBMODULE_DIR" rev-parse --short HEAD)
 
 log_blue "🔍 Checking PaddleOCR ppocr-android SDK version (submodule vs. upstream default branch)..."
-echo "Current: $CURRENT_SHORT"
+log_info "Current: $CURRENT_SHORT"
 
-# Fetch latest default-branch tip (no full clone needed — just the ref).
-LATEST_SHA=$(git ls-remote "$UPSTREAM_URL" HEAD 2>/dev/null | awk '{print $1}')
+# Deliberately NOT the tip: the newest commit at least STALENESS_FLOOR_DAYS old, which is what the
+# sync workflow will actually take. Unauthenticated GitHub API — 60 requests/hour is ample for a
+# manual check.
+UNTIL=$(date -u -v-"${STALENESS_FLOOR_DAYS}"d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+        || date -u -d "${STALENESS_FLOOR_DAYS} days ago" +%Y-%m-%dT%H:%M:%SZ)
+# Authenticated when a token is around (CI always, a local `gh auth token` if you have one):
+# unauthenticated GitHub API calls from Actions runners share heavily rate-limited IPs, so a bare
+# curl there is a coin flip. 60/hour unauthenticated is still ample for a manual run.
+GH_API_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-$(gh auth token 2>/dev/null || true)}}"
+AUTH_HEADER=()
+[ -n "$GH_API_TOKEN" ] && AUTH_HEADER=(-H "Authorization: Bearer $GH_API_TOKEN")
+
+LATEST_SHA=$(curl -s --connect-timeout 5 --max-time 10 "${AUTH_HEADER[@]}" \
+    "https://api.github.com/repos/PaddlePaddle/PaddleOCR/commits?until=$UNTIL&per_page=1" \
+    | grep -m1 -oE '"sha": *"[0-9a-f]{40}"' | grep -oE '[0-9a-f]{40}')
+
+emit current_sha "$CURRENT_SHA"
+emit latest_sha "$LATEST_SHA"
 
 if [ -z "$LATEST_SHA" ]; then
+    emit has_update false
     log_warn "⚠️ Could not reach upstream (network?) — skipping version check."
     exit 0
 fi
 
 if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
+    emit has_update true
     LATEST_SHORT=${LATEST_SHA:0:9}
     log_warn "🚀 UPDATE AVAILABLE: $CURRENT_SHORT -> $LATEST_SHORT (upstream default branch)"
 
@@ -111,6 +138,7 @@ if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
     restore_all
     trap - EXIT INT TERM
 
+    if [ "$REPORT" != true ]; then
     echo -e "\nThis is a ${YELLOW}vendored + patched${NC} module. To update:"
     echo "  1. cd vendor/paddleocr-upstream && git fetch --depth 1 origin $LATEST_SHA && git checkout $LATEST_SHA && cd -"
     echo "  2. git add vendor/paddleocr-upstream   # re-pin the submodule"
@@ -118,6 +146,8 @@ if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
     echo "     then re-apply every patch under vendor/ppocr-sdk/patches/ (git apply each, in name order)."
     echo "  4. If it conflicts, resolve by hand, then run ./scripts/regen_ppocr_sdk_patch.sh"
     echo -e "  5. Rebuild + retest before committing.\n"
+    fi
 else
+    emit has_update false
     log_info "✅ ppocr-sdk vendor is up to date ($CURRENT_SHORT)."
 fi

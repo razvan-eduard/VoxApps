@@ -40,42 +40,15 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Determine current and latest Vosk version
+      # Detection lives in scripts/check_vosk_version.sh — the same script a person runs, answering in
+      # --report mode with the keys used below. This step used to be that script's logic
+      # copied into YAML: four of the six pairs happened to agree, and the ones that did not
+      # drifted silently (NewPipe's multi-line version, PaddleOCR's staleness floor).
+      - name: Determine current pin and latest upstream version
         id: versions
-        run: |
-          TOML_FILE="gradle/libs.versions.toml"
-          CURRENT_VERSION=$(grep "^vosk =" "$TOML_FILE" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
-
-          # `|| true` on each grep: this runs under `bash -e` (GitHub Actions' default for `run:`
-          # blocks), so a grep that matches nothing (e.g. JitPack has no such repo — vosk-android is
-          # actually on Maven Central, not JitPack, despite this first attempt — confirmed via
-          # curl: JitPack returns "Repo not found or no token provided", no digits to match) would
-          # otherwise abort the whole step right there with its own exit code, silently skipping the
-          # Maven Central fallback below entirely rather than falling through to it. `head -1` guards
-          # against a response with more than one version-shaped substring (also observed for the
-          # sibling NewPipeExtractor sync script's JitPack response).
-          LATEST_VERSION=$(curl -s --connect-timeout 5 --max-time 10 \
-            https://jitpack.io/api/builds/com.github.alphacep/vosk-android/latest \
-            | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1 || true)
-          if [ -z "$LATEST_VERSION" ]; then
-            LATEST_VERSION=$(curl -s --connect-timeout 5 --max-time 10 \
-              "https://search.maven.org/solrsearch/select?q=g:com.alphacephei+AND+a:vosk-android&rows=50&wt=json" \
-              | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | sort -V | tail -1 || true)
-          fi
-
-          echo "current=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
-          echo "latest=$LATEST_VERSION" >> "$GITHUB_OUTPUT"
-
-          if [ -z "$LATEST_VERSION" ] || [ "$CURRENT_VERSION" == "$LATEST_VERSION" ]; then
-            echo "has_update=false" >> "$GITHUB_OUTPUT"
-          else
-            HIGHER=$(printf "%s\n%s" "$CURRENT_VERSION" "$LATEST_VERSION" | sort -V | tail -1)
-            if [ "$HIGHER" == "$LATEST_VERSION" ]; then
-              echo "has_update=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "has_update=false" >> "$GITHUB_OUTPUT"
-            fi
-          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/check_vosk_version.sh --report >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
         if: steps.versions.outputs.has_update == 'true'

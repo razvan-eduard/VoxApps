@@ -51,37 +51,16 @@ jobs:
           submodules: false
           fetch-depth: 0
 
-      - name: Determine current pin and latest eligible upstream commit
+      # Detection lives in scripts/check_ppocr_sdk_version.sh — the same script a person runs, answering in
+      # --report mode with the keys used below. This step used to be that script's logic
+      # copied into YAML: four of the six pairs happened to agree, and the ones that did not
+      # drifted silently (NewPipe's multi-line version, PaddleOCR's staleness floor).
+      - name: Determine current pin and latest upstream version
         id: versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          CURRENT_SHA=$(git ls-tree HEAD vendor/paddleocr-upstream | awk '{print $3}')
+        run: ./scripts/check_ppocr_sdk_version.sh --report >> "$GITHUB_OUTPUT"
 
-          # Deliberately NOT upstream's tip. This is the only sync that follows a default branch
-          # rather than a tag — nobody upstream decides a commit is ready, so we impose the wait
-          # ourselves: take the newest commit that is at least a week old. A bad commit (or a
-          # compromised one) is usually reverted upstream well inside that window, and we lose
-          # nothing by being a week behind an OCR SDK.
-          UNTIL=$(date -u -d "$STALENESS_FLOOR_DAYS days ago" +%Y-%m-%dT%H:%M:%SZ)
-          LATEST_SHA=$(gh api "repos/PaddlePaddle/PaddleOCR/commits?until=$UNTIL&per_page=1" --jq '.[0].sha' || true)
-          echo "Newest upstream commit older than $UNTIL: ${LATEST_SHA:-<none>}"
-
-          echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
-          echo "latest_sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
-
-          if [ -z "$LATEST_SHA" ] || [ "$CURRENT_SHA" == "$LATEST_SHA" ]; then
-            echo "has_update=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_update=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      # The branch name is deterministic (derived from the target SHA), so if upstream hasn't
-      # moved further since a previous run opened a PR for this exact SHA (still unmerged,
-      # awaiting human review), has_update is correctly still "true" but recreating + pushing the
-      # same branch name collides with the existing one (non-fast-forward rejection). Skip
-      # cleanly in that case — there's already an open PR covering this exact target, nothing new
-      # to do until a human reviews it.
       - name: Check for an already-open PR for this target
         if: steps.versions.outputs.has_update == 'true'
         id: dedup
