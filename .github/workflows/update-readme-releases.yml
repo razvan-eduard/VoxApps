@@ -47,6 +47,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
+          # main only accepts pushes from an actor the ruleset lets past, and GITHUB_TOKEN is not
+          # one: on a personal account the GitHub Actions app cannot be named as a bypass actor at
+          # all. README_PUSH_TOKEN is a fine-grained token owned by the repository admin, scoped to
+          # contents:write on this repository and nothing else. Falling back to the default token
+          # keeps a fork working — the push simply fails there, as it does for anyone without write
+          # access, rather than the job erroring on a missing secret.
+          token: ${{ secrets.README_PUSH_TOKEN || github.token }}
+          persist-credentials: true
 
       - name: Regenerate Build Status table
         env:
