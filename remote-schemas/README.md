@@ -21,3 +21,8 @@ requests go, so an app refuses a changed schema from this repository unless its 
 this folder; locally it is `./scripts/vox schemas sign` (needs the private key) and
 `./scripts/vox schemas verify` to check. An unsigned change is not dangerous — it simply never
 reaches anyone.
+
+The manifest also carries a `serial`, and an app refuses one no newer than the last it accepted. A
+valid signature does not make a manifest *current*: without that counter, anyone able to serve these
+files could replay an old, genuinely signed manifest and walk every install back to an earlier
+schema — one naming an endpoint since abandoned, say — with every signature checking out.

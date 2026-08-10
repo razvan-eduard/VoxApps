@@ -27,7 +27,7 @@ cd "$VOX_ROOT" || exit 1
 
 # Where key material lives on a developer machine: outside the repository, so `git clean -xfd`
 # cannot delete it and no ignore rule is load-bearing. Same directory as the release keystore.
-DEFAULT_KEY="$HOME/.voxapps/schema-signing.pem"
+DEFAULT_KEY="$VOX_KEY_DIR/schema-signing.pem"
 
 SCHEMA_DIR="remote-schemas"
 MANIFEST="$SCHEMA_DIR/manifest.json"
@@ -51,6 +51,11 @@ build_manifest() {
     {
         echo '{'
         echo '  "version": 1,'
+        # A counter the app refuses to go backwards on. Without it, an attacker who can serve files
+        # but cannot sign could replay an OLD, genuinely-signed manifest and its old schemas — every
+        # signature checking out while the app quietly downgrades to, say, an endpoint since moved
+        # off. Seconds since the epoch: monotonic, and no state to keep between runs.
+        echo "  \"serial\": $(date -u +%s),"
         echo '  "files": {'
         first=true
         while IFS= read -r f; do

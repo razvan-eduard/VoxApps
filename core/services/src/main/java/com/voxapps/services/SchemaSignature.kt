@@ -1,5 +1,7 @@
 package com.voxapps.services
 
+import android.content.Context
+import android.content.SharedPreferences
 import com.voxapps.logging.Logger
 import java.net.URL
 import java.security.KeyFactory
@@ -64,6 +66,18 @@ object SchemaSignature {
     @Volatile private var manifestVerified = false
 
     /**
+     * Highest manifest serial ever accepted, so the repository cannot be walked backwards.
+     *
+     * A valid signature does not make a manifest current. Someone able to serve these files but not
+     * to sign them could replay an *old, genuinely signed* manifest with its old schemas — every
+     * signature checking out while the app downgrades to a schema naming an endpoint since
+     * abandoned. Refusing a serial no greater than the last accepted one closes that.
+     */
+    private const val SERIAL_PREF = "schema_manifest_serial"
+
+    @Volatile private var lastSerial: Long = 0L
+
+    /**
      * Fetches and verifies the manifest for [baseUrl]. Call once per refresh cycle, before the
      * schemas themselves — [SchemaCatalog.refreshAll] does.
      */
@@ -80,13 +94,23 @@ object SchemaSignature {
             return
         }
 
-        manifestVerified = verify(manifestText, signatureB64)
-        if (!manifestVerified) {
+        if (!verify(manifestText, signatureB64)) {
             Logger.log("Manifest signature did not verify — treating every schema as unsigned", TAG)
             return
         }
+
+        // Signed, but is it current? An old manifest is signed just as validly as a new one.
+        val serial = parseSerial(manifestText)
+        if (serial < lastSerial) {
+            Logger.log("Refusing manifest serial $serial: older than $lastSerial already accepted", TAG)
+            return
+        }
+        lastSerial = serial
+        persistSerial(serial)
+
+        manifestVerified = true
         hashes = parseHashes(manifestText)
-        Logger.log("Manifest verified, covering ${hashes.size} schema(s)", TAG)
+        Logger.log("Manifest verified (serial $serial), covering ${hashes.size} schema(s)", TAG)
     }
 
     /**
@@ -130,6 +154,25 @@ object SchemaSignature {
         }
         return "$base?t=${System.currentTimeMillis()}"
     }
+
+    /** Remembers the highest serial across launches — a rollback is only detectable with history. */
+    fun init(context: Context) {
+        prefs = context.applicationContext
+            .getSharedPreferences("vox_schema_signature", Context.MODE_PRIVATE)
+        lastSerial = prefs?.getLong(SERIAL_PREF, 0L) ?: 0L
+    }
+
+    @Volatile private var prefs: SharedPreferences? = null
+
+    private fun persistSerial(serial: Long) {
+        prefs?.edit()?.putLong(SERIAL_PREF, serial)?.apply()
+    }
+
+    /** Exposed for the test that pins the rollback check's parsing. */
+    internal fun parseSerialForTest(manifest: String): Long = parseSerial(manifest)
+
+    private fun parseSerial(manifest: String): Long =
+        Regex("\"serial\"\\s*:\\s*(\\d+)").find(manifest)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
 
     private fun read(url: String): String? = runCatching { URL(url).readText() }.getOrNull()
 

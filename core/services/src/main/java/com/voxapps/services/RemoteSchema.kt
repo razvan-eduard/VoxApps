@@ -107,6 +107,10 @@ class RemoteSchema<T : Any>(
     /** Loads the accepted copy if there is one, otherwise the bundled one. No network, no waiting. */
     fun init(context: Context) {
         appContext = context.applicationContext
+        // Hooked here rather than asking every app to remember a second init call: any app that has
+        // a schema at all initialises one, and the signature store needs the same Context. Cheap and
+        // idempotent, so being called once per schema costs nothing.
+        SchemaSignature.init(context)
         loadLocal()
     }
 

@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "serial": 1786345497,
   "files": {
     "commander/api_integrations.json": "955ec8530b4f286e500d741400dacbc51995fcacf0087ddad5d4c58ec4b8267b",
     "commander/intents.json": "1fb99faeac56fd9c21741ead897193ef3d596c41d007a424fcc7edf0f3cbe45b",

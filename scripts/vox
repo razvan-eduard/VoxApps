@@ -95,9 +95,9 @@ case "$FLOW" in
                 [ -f "$IN" ] || IN="$OUT/vox-commander-release-unsigned.apk"
                 [ -f "$IN" ] || die "No release APK in $OUT — run ./gradlew :vox-commander:assembleRelease first."
                 # Falls back to the conventional location so a local release needs no env vars.
-                : "${RELEASE_KEYSTORE_PATH:=$HOME/.voxapps/voxapps-release.jks}"
-                if [ -z "${RELEASE_KEYSTORE_PASSWORD:-}" ] && [ -f "$HOME/.voxapps/keystore_password.txt" ]; then
-                    RELEASE_KEYSTORE_PASSWORD=$(tr -d '[:space:]' < "$HOME/.voxapps/keystore_password.txt")
+                : "${RELEASE_KEYSTORE_PATH:=$VOX_KEY_DIR/voxapps-release.jks}"
+                if [ -z "${RELEASE_KEYSTORE_PASSWORD:-}" ] && [ -f "$VOX_KEY_DIR/keystore_password.txt" ]; then
+                    RELEASE_KEYSTORE_PASSWORD=$(tr -d '[:space:]' < "$VOX_KEY_DIR/keystore_password.txt")
                 fi
                 [ -f "$RELEASE_KEYSTORE_PATH" ] || die "No keystore at $RELEASE_KEYSTORE_PATH — set RELEASE_KEYSTORE_PATH"
                 exec bash scripts/package_commander_release.sh \

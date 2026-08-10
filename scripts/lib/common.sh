@@ -24,3 +24,22 @@ log_blue()  { printf "${BLUE}%s${NC}\n" "$1"; }
 # a script in scripts/, a Gradle Exec task with its own working directory, or a CI step.
 VOX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_ROOT="${PROJECT_ROOT:-$VOX_ROOT}"
+
+# Where key material lives on a developer machine — deliberately outside the repository, since
+# `git clean -xfd` deletes gitignored files and losing the schema key costs an app release.
+#
+# Resolved rather than hardcoded to "$HOME/.voxapps": these scripts run under bash, but bash runs on
+# Linux and on Windows (Git Bash / WSL) as well as macOS, and "the home directory" is not the same
+# question on each. XDG first because that is the Linux convention, then $HOME, then Windows'
+# %USERPROFILE% for a shell that did not set HOME. VOX_KEY_DIR overrides the lot.
+if [ -n "${VOX_KEY_DIR:-}" ]; then
+    :
+elif [ -n "${XDG_CONFIG_HOME:-}" ] && [ -d "${XDG_CONFIG_HOME}/voxapps" ]; then
+    VOX_KEY_DIR="${XDG_CONFIG_HOME}/voxapps"
+elif [ -n "${HOME:-}" ]; then
+    VOX_KEY_DIR="${HOME}/.voxapps"
+elif [ -n "${USERPROFILE:-}" ]; then
+    VOX_KEY_DIR="${USERPROFILE}/.voxapps"
+else
+    VOX_KEY_DIR=".voxapps"
+fi

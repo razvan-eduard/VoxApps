@@ -1,5 +1,6 @@
 package com.voxapps.services
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,6 +64,23 @@ class SchemaSignatureTest {
     fun `without a verified manifest the default repository is refused`() {
         val verdict = SchemaSignature.verdictFor("commander/models.json", "{}", isDefaultRepo = true)
         assertTrue(verdict == SchemaSignature.Verdict.FAILED)
+    }
+
+    /**
+     * A valid signature does not make a manifest current. Someone who can serve these files but not
+     * sign them can replay an old, genuinely signed manifest — every signature checking out while
+     * the app walks backwards to a schema naming an endpoint since abandoned. The serial is what
+     * makes that detectable, so it has to survive a round trip through the manifest format.
+     */
+    @Test
+    fun `a serial is read back out of a manifest`() {
+        val manifest = """{"version":1,"serial":1786345375,"files":{"a/b.json":"${"0".repeat(64)}"}}"""
+        assertEquals(1786345375L, SchemaSignature.parseSerialForTest(manifest))
+    }
+
+    @Test
+    fun `a manifest with no serial reads as zero rather than throwing`() {
+        assertEquals(0L, SchemaSignature.parseSerialForTest("""{"version":1,"files":{}}"""))
     }
 
     @Test
