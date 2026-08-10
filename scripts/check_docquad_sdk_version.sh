@@ -21,6 +21,10 @@ UPSTREAM_URL="https://github.com/egdels/makeacopy.git"
 # knows whether a manual re-port is worth doing. It never modifies anything.
 
 if [ ! -e "$SUBMODULE_DIR/.git" ]; then
+    # Answer even when we cannot check. Exiting silently leaves a caller with no output at all,
+    # which a workflow reads as "no update" and a person reads as nothing — the same guard-before-
+    # answering shape that quietly retired the ppocr sync bot.
+    emit has_update false
     log_warn "⚠️ vendor/makeacopy-upstream submodule not initialized — skipping check."
     log_warn "   Run: git submodule update --init vendor/makeacopy-upstream"
     log_warn "   Then: git -C vendor/makeacopy-upstream sparse-checkout set --no-cone \\"
