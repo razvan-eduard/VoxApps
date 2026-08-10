@@ -45,7 +45,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # No submodules here — Commander only needs whisper.cpp + openwakeword-android-kt
           # (checked out explicitly below), not the opencv/paddleocr/makeacopy submodules
