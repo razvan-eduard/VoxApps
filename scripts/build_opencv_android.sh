@@ -27,29 +27,14 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OPENCV_DIR="$PROJECT_ROOT/vendor/opencv"
 BUILD_DIR="$PROJECT_ROOT/vendor/opencv-android-build"
 OUTPUT_DIR="$PROJECT_ROOT/vendor/ppocr-sdk/opencv"
-# vox-vision consumes vendor/ppocr-sdk's compiled classes (org.opencv.* Java API) via a normal
-# project() dependency, but AGP does NOT reliably package these arm64-v8a native libs into
-# vox-vision's final APK — confirmed via two separate, independently-reproducing failures: (1)
-# vox-vision's own mergeDebugJniLibFolders/mergeReleaseJniLibFolders produce a completely empty
-# output for vendor/ppocr-sdk's jniLibs.srcDirs()-sourced libs even in a from-scratch clean build
-# with zero other changes (predates any OpenCV 5.0 work, reproduces with the untouched original
-# script/commit); (2) even placed directly in vox-vision's OWN src/main/jniLibs/<ABI> (bypassing
-# ppocr-sdk propagation entirely), the merge step still silently drops them before the final
-# stripDebugDebugSymbols/packageDebug stage.
+# The build writes the compiled .so files to two places, and both are load-bearing:
 #
-# Symptom (2) has since been explained and fixed, and it was not an AGP defect: vox-vision's release
-# `excludes` lived in a build-type `packaging {}` block, which AGP applies to *every* variant, so
-# with -PvoxDlc=full the release exclusion list was deleting OpenCV and onnxruntime out of debug
-# builds too — including the copies this script writes into the source set. Vision now configures
-# packaging through androidComponents.onVariants, where the scoping is real; a debug build keeps all
-# 15 libs. The same leak, on Commander, is what made AGP's excludes look untrustworthy in the first
-# place (docs/BUILD_TIME_DEPENDENCIES.md).
+#   vendor/ppocr-sdk/opencv/          the module's own jniLibs.srcDirs() source, and where its
+#                                     org.opencv.* Java API is generated from — vox-vision consumes
+#                                     that through a normal project() dependency
+#   vox-vision/src/main/jniLibs/      vox-vision's own default source set, and the directory
+#                                     release-vision.yml uploads the `full`-mode DLC assets from
 #
-# Symptom (1) — an empty merge output for vendor/ppocr-sdk's jniLibs.srcDirs()-sourced libs — has
-# NOT been re-tested against that explanation and may well be a different thing. Writing the .so
-# files straight into vox-vision's own default source set (src/main/jniLibs/<ABI>, auto-discovered
-# by AGP, no jniLibs.srcDirs() declaration needed) is what this script does regardless, and it is
-# also where release-vision.yml uploads the DLC assets from.
 VISION_JNI_DIR="$PROJECT_ROOT/vox-vision/src/main/jniLibs"
 
 ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
