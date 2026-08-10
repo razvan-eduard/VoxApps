@@ -36,6 +36,7 @@ Usage: ./scripts/vox <flow> [command] [args...]
                                  modules: ppocr-sdk wakeword
 
   release package              Build Commander's APK as published (stripped + signed)
+  release sbom <app>           CycloneDX SBOM, including the vendored native sources
   release publish-libs         Publish whisper .so files as the DLC release
   release readme               Regenerate the README release table
   release fdroid               Regenerate and push F-Droid metadata
@@ -105,10 +106,11 @@ case "$FLOW" in
                 exec "$VOX_ROOT/gradlew" -p "$VOX_ROOT" \
                     :vox-commander:assembleRelease -PvoxDlc="${VOX_DLC:-minimal}"
                 ;;
+            sbom)         exec bash scripts/generate_sbom.sh "$@" ;;
             publish-libs) exec bash scripts/publish_whisper_libs.sh "$@" ;;
             readme)       exec bash scripts/update_release_readme_links.sh "$@" ;;
             fdroid)       exec bash scripts/sync_fdroid_metadata.sh "$@" ;;
-            *) die "release needs a command: package | publish-libs | readme | fdroid" ;;
+            *) die "release needs a command: package | sbom | publish-libs | readme | fdroid" ;;
         esac
         ;;
 

@@ -33,6 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Provenance is signed with a short-lived OIDC identity and recorded in GitHub's
+      # transparency log; neither is possible without these two.
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout
@@ -171,6 +175,26 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           gh release delete "$TAG" --yes || true
 
+      # What went into the APK: every resolved dependency, plus the vendored sources this app
+      # compiles at build time, which appear in no Gradle configuration and would otherwise be
+      # missing. Generated before the attestation so it is signed alongside the artifacts.
+      - name: Generate SBOM
+        if: steps.check_bump.outputs.changed != 'false'
+        run: ./scripts/vox release sbom hub
+
+      # Ties these exact bytes to this commit, this workflow and this runner, signed. A downloader
+      # runs `gh attestation verify VoxHub-<tag>.apk --repo ${{ github.repository }}` and learns
+      # the APK came from this build — rather than trusting it because of where it was hosted. Same
+      # guard as publishing: an artifact nobody can download needs no provenance.
+      - name: Attest build provenance
+        if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            VoxHub-*.apk
+            VoxHub-*.aab
+            VoxHub-sbom.json
+
       - name: Create GitHub Release
         if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         uses: softprops/action-gh-release@v2
@@ -179,6 +203,7 @@ jobs:
           files: |
             VoxHub-*.apk
             VoxHub-*.aab
+            VoxHub-sbom.json
             CHANGELOG.md
           body_path: CHANGELOG.md
           draft: false

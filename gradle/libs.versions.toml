@@ -12,6 +12,7 @@ room = "2.8.4"
 retrofit = "3.0.0"
 okhttp = "5.4.0"
 ksp = "2.3.11"
+cyclonedx = "3.4.0"
 mockk = "1.14.11"
 coroutines = "1.11.0"
 securityCrypto = "1.1.0"
@@ -106,4 +107,5 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+cyclonedx = { id = "org.cyclonedx.bom", version.ref = "cyclonedx" }
 
