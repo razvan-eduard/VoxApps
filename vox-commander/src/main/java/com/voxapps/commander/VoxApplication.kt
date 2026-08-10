@@ -58,8 +58,17 @@ class VoxApplication : Application() {
         // Initialize RemoteModelRegistry with app context (for assets/filesDir access)
         RemoteModelRegistry.init(this)
 
-        // Load essential native libraries (if already downloaded)
-        NativeLibManager.loadAll(this)
+        // Load the native libraries when they are already on disk — bundled in the APK, or fetched
+        // by a previous launch. When they are not, there is nothing to do here: SplashLoadingScreen
+        // calls NativeLibManager.init(), which downloads them, loads them and has a UI to report
+        // failure through. This has to stay non-fatal either way. loadAll() throws on a missing
+        // library on purpose (it otherwise resurfaces as an UnsatisfiedLinkError somewhere
+        // unrelated), and a throw here happens in Application.onCreate, before any UI exists — the
+        // whole app dies at launch with no way to retry.
+        runCatching { NativeLibManager.loadAll(this) }.onFailure {
+            // Left to the splash to fetch or repair, and to report through its own UI.
+            Logger.d("VoxApplication", "Native libs not loadable yet: ${it.message}")
+        }
 
         // Initialize SearchProviderRegistry with app context
         com.voxapps.commander.domain.search.SearchProviderRegistry.init(this, container.settingsRepository)

@@ -1,6 +1,7 @@
 package com.voxapps.nativelibs
 
 import android.content.Context
+import com.voxapps.identity.VoxRepo
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -92,7 +93,13 @@ open class NativeLibs(
         }
     }
 
-    /** Present in the APK, or downloaded and non-empty. */
+    /**
+     * Present in the APK, or downloaded and non-empty.
+     *
+     * Only meaningful for a `full` build, which is the only caller: the APK check below can produce
+     * a false negative when the libraries were packaged without extraction (see [loadAll]), so a
+     * bundled build must not decide anything with it — it loads what it ships and finds out.
+     */
     fun areLibsPresent(context: Context): Boolean {
         val systemDir = File(context.applicationInfo.nativeLibraryDir)
         if (libs.all { File(systemDir, it).exists() }) return true
@@ -218,18 +225,30 @@ open class NativeLibs(
      * UnsatisfiedLinkError somewhere unrelated, and the splash can act on a thrown failure.
      */
     fun loadAll(context: Context) {
-        val systemDir = File(context.applicationInfo.nativeLibraryDir)
         val dir = libDir(context)
 
         for (libName in libs) {
-            if (File(systemDir, libName).exists()) {
+            try {
+                // Asked for, not probed for. Whether a bundled library exists as a *file* under
+                // nativeLibraryDir depends on how the APK was packaged: with extractNativeLibs=false
+                // — AGP's default, and what vox-vision builds with — the libraries are mapped
+                // straight out of the APK and never unpacked, so `File(nativeLibraryDir, name)`
+                // reports missing for a library that is present and perfectly loadable. Probing that
+                // path is what made a `minimal` Vision build fail on its own bundled libs.
                 System.loadLibrary(libName.removePrefix("lib").removeSuffix(".so"))
-            } else {
+            } catch (e: UnsatisfiedLinkError) {
+                // Not in the APK: this is a `full` build, so use the copy fetched from the release.
                 val fetched = File(dir, libName)
                 if (fetched.exists() && fetched.length() > 0) {
+                    // Dropped to read-only first. Android already warns on every one of these —
+                    // "Attempt to load writable file … This will throw on a future Android version"
+                    // — because loading executable code a process can still rewrite is the pattern
+                    // being closed off. Done here rather than at download time so it also covers
+                    // files an earlier version left behind.
+                    fetched.setReadOnly()
                     System.load(fetched.absolutePath)
                 } else {
-                    throw IllegalStateException("Missing native library: $libName")
+                    throw IllegalStateException("Missing native library: $libName", e)
                 }
             }
         }
@@ -237,7 +256,7 @@ open class NativeLibs(
 
     private companion object {
         const val LIB_DIR_PREFIX = "native_libs_"
-        const val RELEASE_BASE = "https://github.com/razvan-eduard/VoxApps/releases/download/"
+        const val RELEASE_BASE = VoxRepo.RELEASE_DOWNLOAD_BASE
         const val MAX_ATTEMPTS = 3
         const val RETRY_DELAY_MS = 1500L
     }

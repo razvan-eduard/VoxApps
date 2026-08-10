@@ -118,6 +118,13 @@ class WhisperLib {
                         return false
                     }
                     Logger.log("Loading $path", LOG_TAG)
+                    // Read-only before loading. Android warns on every load of a writable file
+                    // ("This will throw on a future Android version") — executable code a process
+                    // can still rewrite is the pattern being closed off, and these libraries are
+                    // downloaded, so they land writable. Verified on API 36: this clears the
+                    // warning, and the libraries still load. Same treatment as the DLC libs in
+                    // core:nativelibs.
+                    path.setReadOnly()
                     System.load(path.absolutePath)
                 }
                 isLoaded = true
