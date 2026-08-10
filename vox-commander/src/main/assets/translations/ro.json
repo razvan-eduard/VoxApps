@@ -525,5 +525,9 @@
   "import_source_delete_failed": "Arhiva nu a putut fi ștearsă.",
   "import_language_prompt": "Pentru ce limbă este acest model?",
   "connection_no_network": "Fără conexiune",
-  "model_imported_name": "Model importat"
+  "model_imported_name": "Model importat",
+  "schema_problem": "%1$s — %2$s",
+  "schema_reason_rejected": "refuzat: nu s-a putut interpreta sau a sosit gol",
+  "schema_reason_unsigned": "refuzat: nicio semnătură validă nu îl acoperă",
+  "schema_reason_unreachable": "nu a putut fi citit (%1$s)"
 }

@@ -47,7 +47,15 @@ data class SchemaUpdatesStrings(
     /** No check has succeeded yet this session. */
     val notCheckedYet: String,
     /** Shown in place of everything else when the switch is off. */
-    val usingBundled: String
+    val usingBundled: String,
+    /** "%1$s — %2$s": which file, and what went wrong with it. */
+    val problemFormat: String,
+    /** It was read but refused — unparseable, or emptied enough to look like a broken download. */
+    val reasonRejected: String,
+    /** It parsed, but no valid signature from this repository covers it. */
+    val reasonUnsigned: String,
+    /** That one file could not be read — one argument: why (404, timeout). */
+    val reasonUnreachable: String
 )
 
 /**
@@ -197,6 +205,35 @@ fun SchemaUpdatesSection(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                /*
+                 * The files that did not make it, named.
+                 *
+                 * Every way a repository can be wrong — a private fork, a branch that is not main, a
+                 * renamed folder, a list emptied to disable something, an unsigned change — reaches
+                 * the phone as the same nothing: the app keeps what it had and says "in step". That
+                 * is right as behaviour and useless as feedback, and it is the whole of what a
+                 * non-developer has to debug against.
+                 *
+                 * Successes stay silent; only problems earn a line.
+                 */
+                results?.forEach { (fileName, outcome) ->
+                    val reason = when (outcome) {
+                        is RemoteSchema.Refreshed.Rejected -> strings.reasonRejected
+                        is RemoteSchema.Refreshed.Unsigned -> strings.reasonUnsigned
+                        is RemoteSchema.Refreshed.Unreachable -> String.format(
+                            strings.reasonUnreachable, outcome.reason.take(60)
+                        )
+                        else -> null
+                    }
+                    if (reason != null) {
+                        Text(
+                            text = String.format(strings.problemFormat, fileName, reason),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
             }
         }
     }

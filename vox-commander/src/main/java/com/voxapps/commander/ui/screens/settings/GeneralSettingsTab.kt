@@ -72,7 +72,11 @@ fun GeneralSettingsTab(
                 servingFormat = languageManager.getString("schema_serving"),
                 unreachableFormat = languageManager.getString("schema_unreachable"),
                 notCheckedYet = languageManager.getString("schema_not_checked"),
-                usingBundled = languageManager.getString("schema_using_bundled")
+                usingBundled = languageManager.getString("schema_using_bundled"),
+                problemFormat = languageManager.getString("schema_problem"),
+                reasonRejected = languageManager.getString("schema_reason_rejected"),
+                reasonUnsigned = languageManager.getString("schema_reason_unsigned"),
+                reasonUnreachable = languageManager.getString("schema_reason_unreachable")
             ),
             repositoryUrl = modelRepoUrl,
             useRemote = uiState.useRemoteSchemas,

@@ -424,5 +424,9 @@
   "schema_serving": "Das Repository liefert %1$d Schema(s)",
   "exchange_rate_provider_label": "Kursanbieter",
   "exchange_rate_needs_key_note": " — benötigt einen API-Schlüssel",
-  "connection_no_network": "Keine Verbindung"
+  "connection_no_network": "Keine Verbindung",
+  "schema_problem": "%1$s — %2$s",
+  "schema_reason_rejected": "abgelehnt: nicht lesbar oder leer angekommen",
+  "schema_reason_unsigned": "abgelehnt: keine gültige Signatur deckt es ab",
+  "schema_reason_unreachable": "konnte nicht gelesen werden (%1$s)"
 }

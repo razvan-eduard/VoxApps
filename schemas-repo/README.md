@@ -22,8 +22,23 @@ is **signed**, and why a fork is treated differently — see [Signing](#signing)
    fork: `https://github.com/<you>/<repo>`.
 3. Leave *Check for updates at startup* on, or press the refresh button beside the URL.
 
-GitHub disables Actions in a new fork until you turn them on. Doing so is worthwhile: it is what
-runs the validator on your edits before your phone does.
+**Turn Actions on first.** GitHub disables them in a new fork, and they are what checks your JSON
+before your phone does. Without that, a stray comma means your change simply never arrives — the app
+keeps the last good copy and carries on.
+
+### Things that make a change not arrive
+
+All of these look identical from the phone, which is why the app now names the file and the reason
+under *Settings → General → Schema updates*:
+
+| | |
+|---|---|
+| the fork is **private** | raw file access needs no login, so it reads as missing |
+| your default branch is not `main` | append it to the URL: `https://github.com/you/repo@yourbranch` |
+| a folder or file was renamed | the path must stay `remote-schemas/<app>/<file>.json`, exactly, including case |
+| you committed to a new branch or a PR | the app reads the branch, not the pull request |
+| you emptied a list | an empty `engines`, `intents`, `categories`, `integrations` or `backends` reads as a broken download and is refused — remove entries, don't remove all of them |
+| you deleted a file | the app falls back to its bundled copy; a fork can change schemas, not remove them |
 
 The app compares what you serve with what it already has, by content — an unchanged file costs
 nothing. A file that differs and still parses is adopted and kept until you change it again.

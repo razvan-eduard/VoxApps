@@ -525,5 +525,9 @@
   "import_source_delete_failed": "Das Archiv konnte nicht gelöscht werden.",
   "import_language_prompt": "Für welche Sprache ist dieses Modell?",
   "connection_no_network": "Keine Verbindung",
-  "model_imported_name": "Importiertes Modell"
+  "model_imported_name": "Importiertes Modell",
+  "schema_problem": "%1$s — %2$s",
+  "schema_reason_rejected": "abgelehnt: nicht lesbar oder leer angekommen",
+  "schema_reason_unsigned": "abgelehnt: keine gültige Signatur deckt es ab",
+  "schema_reason_unreachable": "konnte nicht gelesen werden (%1$s)"
 }

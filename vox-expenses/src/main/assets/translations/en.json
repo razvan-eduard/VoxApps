@@ -417,5 +417,9 @@
   "schema_serving": "The repository supplies %1$d schema(s)",
   "exchange_rate_provider_label": "Rate provider",
   "exchange_rate_needs_key_note": " — needs an API key",
-  "connection_no_network": "No connection"
+  "connection_no_network": "No connection",
+  "schema_problem": "%1$s — %2$s",
+  "schema_reason_rejected": "refused: it did not parse, or arrived empty",
+  "schema_reason_unsigned": "refused: no valid signature covers it",
+  "schema_reason_unreachable": "could not be read (%1$s)"
 }

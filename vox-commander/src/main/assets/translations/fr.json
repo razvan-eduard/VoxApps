@@ -525,5 +525,9 @@
   "import_source_delete_failed": "L’archive n’a pas pu être supprimée.",
   "import_language_prompt": "Pour quelle langue est ce modèle ?",
   "connection_no_network": "Pas de connexion",
-  "model_imported_name": "Modèle importé"
+  "model_imported_name": "Modèle importé",
+  "schema_problem": "%1$s — %2$s",
+  "schema_reason_rejected": "refusé : illisible ou vide à l'arrivée",
+  "schema_reason_unsigned": "refusé : aucune signature valide ne le couvre",
+  "schema_reason_unreachable": "n'a pas pu être lu (%1$s)"
 }

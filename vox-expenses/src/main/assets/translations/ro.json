@@ -421,5 +421,9 @@
   "schema_serving": "Depozitul furnizează %1$d schemă(e)",
   "exchange_rate_provider_label": "Furnizor de cursuri",
   "exchange_rate_needs_key_note": " — necesită o cheie API",
-  "connection_no_network": "Fără conexiune"
+  "connection_no_network": "Fără conexiune",
+  "schema_problem": "%1$s — %2$s",
+  "schema_reason_rejected": "refuzat: nu s-a putut interpreta sau a sosit gol",
+  "schema_reason_unsigned": "refuzat: nicio semnătură validă nu îl acoperă",
+  "schema_reason_unreachable": "nu a putut fi citit (%1$s)"
 }
