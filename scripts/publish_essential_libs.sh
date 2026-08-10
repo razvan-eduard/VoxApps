@@ -19,20 +19,20 @@ get_version_name() {
 COMMANDER_TAG="commander-v$(get_version_name "$PROJECT_ROOT/vox-commander/build.gradle.kts")"
 VISION_TAG="vision-v$(get_version_name "$PROJECT_ROOT/vox-vision/build.gradle.kts")"
 
-# Paths to stripped release libs after a successful build
-COMMANDER_SOURCE="$PROJECT_ROOT/vox-commander/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a"
+# Where :vox-commander:collectDlcLibs stages them. Not a build/intermediates path: in `full` these
+# libraries are excluded before the native-lib merge runs, so no intermediate ever contains them —
+# the task copies them straight from the resolved dependencies instead.
+COMMANDER_SOURCE="$PROJECT_ROOT/vox-commander/build/dlc-libs"
 # Copied straight from where scripts/build_opencv_android.sh writes them (its VISION_JNI_DIR), not
 # from a build/intermediates path — AGP 9.x doesn't reliably propagate arm64-v8a native libs through
 # its own merge/packaging pipeline for this module (same issue class as Commander's DLC excludes,
 # confirmed via extensive testing), so intermediates may not actually contain them.
 VISION_SOURCE="$PROJECT_ROOT/vox-vision/src/main/jniLibs/arm64-v8a"
 
-# These are stripped from the release APK zip directly (scripts/strip_dlc_libs.sh /
-# release-commander.yml), not via AGP's packaging.jniLibs.excludes — that's unreliable on
-# arm64-v8a for this dependency set (see vox-commander/build.gradle.kts's release packaging
-# comment). libsherpa-onnx-c-api.so/libsherpa-onnx-cxx-api.so are deliberately excluded from this
-# list — they're unused dead weight (only libsherpa-onnx-jni.so is actually loaded), stripped from
-# the APK but never uploaded/downloaded.
+# Kept out of the `full` APK by AGP's packaging.jniLibs.excludes (see vox-commander/build.gradle.kts's
+# androidComponents block). libsherpa-onnx-c-api.so/libsherpa-onnx-cxx-api.so are deliberately
+# excluded from this list — they're unused dead weight (only libsherpa-onnx-jni.so is actually
+# loaded), dropped from the APK but never uploaded/downloaded.
 COMMANDER_LIBS=(
     "libonnxruntime.so"
     "liblitertlm_jni.so"
@@ -69,8 +69,10 @@ fi
 # --- PUBLISH COMMANDER LIBS ---
 log_blue "📦 Publishing Commander DLC libs to: $COMMANDER_TAG"
 if [ ! -d "$COMMANDER_SOURCE" ]; then
-    log_warn "Commander source not found. Building..."
-    "$PROJECT_ROOT/gradlew" :vox-commander:assembleRelease
+    # -PvoxDlc=full, because these libraries only become release assets in that mode — a `minimal`
+    # build keeps them inside the APK and stages nothing.
+    log_warn "Commander DLC libs not staged. Building..."
+    "$PROJECT_ROOT/gradlew" :vox-commander:assembleRelease -PvoxDlc=full
 fi
 
 for lib in "${COMMANDER_LIBS[@]}"; do

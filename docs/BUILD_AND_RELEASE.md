@@ -62,24 +62,24 @@ rather than leaving it to be noticed.
 
 ### The APK that ships
 
-`assembleRelease` does **not** produce the published APK. AGP can't be trusted to exclude this
-project's arm64 native libs, so the release APK is built fully bundled and the DLC libs are stripped
-out of the built zip afterwards. A local `assembleRelease` therefore gives you a ~40 MB APK with
-every lib baked in; the published one is ~16 MB and downloads them at first launch. **They differ in
-behaviour, not just size** — a locally built release cannot exercise the DLC download path at all.
-
-To build what actually ships:
+`assembleRelease` **is** the published APK — set the keystore variables and Gradle signs it too:
 
 ```
 export RELEASE_KEYSTORE_PATH=~/.voxapps/voxapps-release.jks
 export RELEASE_KEYSTORE_PASSWORD=$(cat ~/.voxapps/keystore_password.txt | tr -d '[:space:]')
-./gradlew :vox-commander:packageReleaseApk
+./gradlew :vox-commander:assembleRelease -PvoxDlc=full    # or omit -P for the default, minimal
 ```
 
-Output: `vox-commander/build/outputs/apk/release/VoxCommander-release-stripped.apk`. Both this task
-and `release-commander.yml` call `scripts/package_commander_release.sh`, so there is one definition
-of the shipped artifact rather than two that can drift. Use it whenever you're testing anything
-DLC-related; `assembleRelease` is fine for ordinary feature work.
+Output: `vox-commander/build/outputs/apk/release/vox-commander-release.apk`, byte-for-byte the thing
+`release-commander.yml` builds. `./scripts/vox release package` is the same command with the
+keystore filled in from `~/.voxapps`.
+
+This used to be untrue, and the difference mattered: the DLC libraries were stripped out of the
+built zip by a shell script that then re-signed the APK, so a local `assembleRelease` produced a
+fully-bundled APK that **could not exercise the DLC download path at all** — two bugs in that path
+reached users because of it. AGP now does the packaging, in both modes, for the APK and the bundle
+alike. See [BUILD_TIME_DEPENDENCIES.md](BUILD_TIME_DEPENDENCIES.md#why-the-dlc-libs-were-stripped-by-hand)
+for why it was ever done the other way.
 
 ### How much ships inside the APK (`voxDlc`)
 
@@ -94,7 +94,7 @@ default** (`gradle.properties`):
 | | `minimal` (default) | `full` |
 |---|---|---|
 | Commander APK | ~47 MB, 11 libs inside | ~24 MB, 5 libs inside |
-| Vision APK | ~61 MB, 15 libs inside | ~15 MB, 5 libs inside |
+| Vision APK | ~61 MB, 15 libs inside | ~16 MB, 5 libs inside |
 | First launch | nothing downloads; works offline | 53 MB (Commander) / 43 MB (Vision) fetched on the splash |
 | Whisper | on demand, unchanged | on demand, unchanged |
 
@@ -107,9 +107,15 @@ download that can fail offline.
 The property reaches the app through `BuildConfig.DLC_MODE`, which is what `NativeLibs` reads to
 decide whether to fetch anything. **That is deliberate and load-bearing**: the packaging decision and
 the download decision have to be the same decision. Build one way and package the other and you ship
-an APK missing libraries nothing will ever fetch. For the same reason the release workflow sets
-`VOX_DLC` once at job level and passes it to both the Gradle build and the packaging script, and
-only attaches the `.so` release assets in `full`.
+an APK missing libraries nothing will ever fetch.
+
+**`gradle.properties` is the only place the mode is written.** The release workflows read it in a
+"Resolve DLC mode" step and use that answer for the build and for whether to attach the `.so`
+assets. They used to declare `VOX_DLC: minimal` themselves, which made sense while Gradle and a
+shell packaging script each needed the value and disagreeing shipped a broken APK — but the script
+is gone, and needing to know the mode is not a reason to state it a second and third time. A
+dispatched run can override it for that run only, via the `dlc_mode` input; blank means "whatever
+`gradle.properties` says".
 
 An invalid value fails the build rather than silently choosing:
 
@@ -117,13 +123,19 @@ An invalid value fails the build rather than silently choosing:
 voxDlc must be 'minimal' or 'full', got 'nonsense'
 ```
 
-**Why the two apps strip differently.** Vision excludes its libs with AGP's
-`packaging.jniLibs.excludes`. Commander cannot: re-tested on AGP 9.3.1, asking it to exclude the
-four leaves `libonnxruntime.so` in the APK regardless — it arrives from two sources (the onnxruntime
-AAR and sherpa-onnx's bundled copy) and AGP's merge picks a winner. It is also the largest at 28 MB.
-So Commander's `full` mode strips post-build from the APK zip and re-signs, via
-`scripts/package_commander_release.sh`. In `minimal` neither app strips anything, so the difference
-only exists in `full`.
+**Both apps now exclude the same way** — AGP's `packaging.jniLibs.excludes`, applied per variant.
+Commander used to strip post-build instead, on the belief that AGP could not exclude its libs; that
+was a misdiagnosis, and the difference between the two apps is gone. What remains is a real one:
+Vision's DLC libs are files in `vox-vision/src/main/jniLibs/`, so they exist on disk for upload no
+matter how the APK is packaged, while Commander's come from AAR dependencies and are excluded before
+any build output contains them. `:vox-commander:collectDlcLibs` therefore stages them straight from
+the resolved dependencies; it runs automatically after `assembleRelease` in `full`, and writes to
+`vox-commander/build/dlc-libs/`.
+
+Two artifacts provide a `libonnxruntime.so`: sherpa-onnx's own (~21 MB) and onnxruntime-android's
+(~28 MB). They are different binaries, and only sherpa's exports the symbol version
+`libsherpa-onnx-jni.so` needs. `collectDlcLibs` picks by artifact rather than by file name, and
+fails the build if the choice is ever ambiguous.
 
 ### Skipping the native prep
 

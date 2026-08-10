@@ -52,8 +52,8 @@ Usage: ./scripts/vox <flow> [command] [args...]
   test                         Test this machinery: the report contract, the
                                dispatcher, and the vendored invariant
 
-Anything not listed here is an internal helper (scripts/lib/, strip_dlc_libs.sh) called by the
-commands above, not directly.
+Anything not listed here is an internal helper (scripts/lib/) called by the commands above, not
+directly.
 EOF
 }
 
@@ -89,21 +89,21 @@ case "$FLOW" in
         CMD="${1:-}"; shift || true
         case "$CMD" in
             package)
-                # Same script release-commander.yml runs, so the local artifact and the published
-                # one cannot drift. Needs the keystore env vars.
-                OUT="vox-commander/build/outputs/apk/release"
-                IN="$OUT/vox-commander-release.apk"
-                [ -f "$IN" ] || IN="$OUT/vox-commander-release-unsigned.apk"
-                [ -f "$IN" ] || die "No release APK in $OUT — run ./gradlew :vox-commander:assembleRelease first."
-                # Falls back to the conventional location so a local release needs no env vars.
+                # `assembleRelease` produces the published APK itself — AGP does the DLC packaging,
+                # for the bundle as well as the APK, so no post-build step remains that could make a
+                # local artifact differ from CI's. This only fills the keystore in from its
+                # conventional location, so a signed local release needs no env vars.
+                #
+                # VOX_DLC picks the mode, the same name the workflow uses:
+                #     VOX_DLC=full ./scripts/vox release package
                 : "${RELEASE_KEYSTORE_PATH:=$VOX_KEY_DIR/voxapps-release.jks}"
                 if [ -z "${RELEASE_KEYSTORE_PASSWORD:-}" ] && [ -f "$VOX_KEY_DIR/keystore_password.txt" ]; then
                     RELEASE_KEYSTORE_PASSWORD=$(tr -d '[:space:]' < "$VOX_KEY_DIR/keystore_password.txt")
                 fi
                 [ -f "$RELEASE_KEYSTORE_PATH" ] || die "No keystore at $RELEASE_KEYSTORE_PATH — set RELEASE_KEYSTORE_PATH"
-                exec bash scripts/package_commander_release.sh \
-                    "$IN" "$OUT/VoxCommander-release-stripped.apk" \
-                    "$RELEASE_KEYSTORE_PATH" "${RELEASE_KEYSTORE_PASSWORD:-}"
+                export RELEASE_KEYSTORE_PATH RELEASE_KEYSTORE_PASSWORD
+                exec "$VOX_ROOT/gradlew" -p "$VOX_ROOT" \
+                    :vox-commander:assembleRelease -PvoxDlc="${VOX_DLC:-minimal}"
                 ;;
             publish-libs) exec bash scripts/publish_whisper_libs.sh "$@" ;;
             readme)       exec bash scripts/update_release_readme_links.sh "$@" ;;

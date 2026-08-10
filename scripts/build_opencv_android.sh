@@ -35,17 +35,21 @@ OUTPUT_DIR="$PROJECT_ROOT/vendor/ppocr-sdk/opencv"
 # with zero other changes (predates any OpenCV 5.0 work, reproduces with the untouched original
 # script/commit); (2) even placed directly in vox-vision's OWN src/main/jniLibs/<ABI> (bypassing
 # ppocr-sdk propagation entirely), the merge step still silently drops them before the final
-# stripDebugDebugSymbols/packageDebug stage. This is the same general class of AGP 9.x
-# arm64-v8a-specific native-lib packaging unreliability documented for vox-commander's DLC excludes
-# (see vox-commander/build.gradle.kts) — libonnxruntime.so from the onnxruntime-android AAR shows
-# the identical symptom here too (present for armeabi-v7a/x86/x86_64, silently missing for
-# arm64-v8a specifically). Rather than depend on that broken propagation, this script writes the
-# compiled .so files directly into vox-vision's own default jniLibs source set
-# (src/main/jniLibs/<ABI> is auto-discovered by AGP, no jniLibs.srcDirs() declaration needed), and
-# scripts/inject_vision_native_libs.sh inserts them into the already-built debug APK zip directly
-# (since even placing them in the source set doesn't survive AGP's own merge/strip pipeline) — same
-# "don't trust AGP, place the files ourselves" approach already used for vox-commander's DLC
-# stripping (scripts/strip_dlc_libs.sh).
+# stripDebugDebugSymbols/packageDebug stage.
+#
+# Symptom (2) has since been explained and fixed, and it was not an AGP defect: vox-vision's release
+# `excludes` lived in a build-type `packaging {}` block, which AGP applies to *every* variant, so
+# with -PvoxDlc=full the release exclusion list was deleting OpenCV and onnxruntime out of debug
+# builds too — including the copies this script writes into the source set. Vision now configures
+# packaging through androidComponents.onVariants, where the scoping is real; a debug build keeps all
+# 15 libs. The same leak, on Commander, is what made AGP's excludes look untrustworthy in the first
+# place (docs/BUILD_TIME_DEPENDENCIES.md).
+#
+# Symptom (1) — an empty merge output for vendor/ppocr-sdk's jniLibs.srcDirs()-sourced libs — has
+# NOT been re-tested against that explanation and may well be a different thing. Writing the .so
+# files straight into vox-vision's own default source set (src/main/jniLibs/<ABI>, auto-discovered
+# by AGP, no jniLibs.srcDirs() declaration needed) is what this script does regardless, and it is
+# also where release-vision.yml uploads the DLC assets from.
 VISION_JNI_DIR="$PROJECT_ROOT/vox-vision/src/main/jniLibs"
 
 ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"

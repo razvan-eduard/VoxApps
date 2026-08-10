@@ -19,6 +19,11 @@ on:
         description: 'Publish a GitHub Release (move the tag, upload the APK). Off = build only.'
         type: boolean
         default: false
+      dlc_mode:
+        description: 'Override the DLC mode for this run (blank = whatever gradle.properties says).'
+        type: choice
+        options: ['', 'minimal', 'full']
+        default: ''
 
 # One release at a time per app. Two pushes landing close together would both force-move the same
 # tag and both delete the same release before recreating it — whichever finished second would win,
@@ -92,15 +97,33 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
 
+      # The mode is declared once, in gradle.properties, and read here. It used to be declared here
+      # too, because Gradle and a shell packaging script each needed it and a mismatch shipped an APK
+      # missing libraries nothing would fetch. That script is gone — Gradle packages both modes now —
+      # so the only thing this workflow still needs the mode for is deciding whether to attach the
+      # .so release assets. Needing to know it is not a reason to declare it again.
+      - name: Resolve DLC mode
+        id: dlc
+        run: |
+          MODE="${{ github.event.inputs.dlc_mode }}"
+          if [ -z "$MODE" ]; then
+            MODE=$(grep -E '^voxDlc=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          fi
+          case "$MODE" in
+            minimal|full) ;;
+            *) echo "::error::voxDlc must be 'minimal' or 'full', got '$MODE'"; exit 1 ;;
+          esac
+          echo "Building in '$MODE' mode"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
       - name: Build release APK and AAB
         if: steps.check_bump.outputs.changed != 'false'
         env:
           RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
         run: |
-          ./gradlew :vox-vision:assembleRelease --no-daemon
-          ./gradlew :vox-vision:bundleRelease --no-daemon
-
+          ./gradlew :vox-vision:assembleRelease -PvoxDlc=${{ steps.dlc.outputs.mode }} --no-daemon
+          ./gradlew :vox-vision:bundleRelease -PvoxDlc=${{ steps.dlc.outputs.mode }} --no-daemon
 
       - name: Rename APK and AAB with tag
         if: steps.check_bump.outputs.changed != 'false'
@@ -146,17 +169,18 @@ jobs:
             fi
           } > CHANGELOG.md
 
+      # Only in `full`. In `minimal` these libraries are inside the APK, and publishing them as
+      # assets as well just adds ~43MB to the release that nothing will ever download.
       - name: Collect native libraries for DLC
-        if: steps.check_bump.outputs.changed != 'false'
+        if: steps.check_bump.outputs.changed != 'false' && steps.dlc.outputs.mode == 'full'
         run: |
           mkdir -p dlc-libs
           # Copied straight from vox-vision/src/main/jniLibs/arm64-v8a — the location
           # scripts/build_opencv_android.sh writes to directly (see its VISION_JNI_DIR comment) —
-          # rather than searched for in AGP's build/intermediates or the packaged APK. AGP 9.x does
-          # not reliably propagate arm64-v8a native libs through its own merge/packaging pipeline for
-          # this module (same class of issue as vox-commander's DLC excludes, confirmed via extensive
-          # local testing), so intermediates may not actually contain them even though the final
-          # release APK correctly excludes them either way.
+          # rather than out of AGP's build/intermediates, which in `full` never contains them: they
+          # are excluded before the native-lib merge runs. Being source-set files rather than
+          # dependency artifacts, they are on disk regardless of how the APK was packaged, which is
+          # why Vision needs no equivalent of Commander's collectDlcLibs task.
           cp vox-vision/src/main/jniLibs/arm64-v8a/*.so dlc-libs/
           ls -lh dlc-libs/
 
@@ -195,7 +219,7 @@ jobs:
             VoxVision-*.apk
             VoxVision-*.aab
             CHANGELOG.md
-            dlc-libs/*.so
+            ${{ steps.dlc.outputs.mode == 'full' && 'dlc-libs/*.so' || '' }}
           body_path: CHANGELOG.md
           draft: false
         env:

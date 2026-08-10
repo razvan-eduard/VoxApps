@@ -18,6 +18,44 @@ plugins {
 val dlcMode = (project.findProperty("voxDlc") as String?) ?: "minimal"
 require(dlcMode in setOf("minimal", "full")) { "voxDlc must be 'minimal' or 'full', got '$dlcMode'" }
 
+/** Built by scripts/build_whisper*.sh into src/main/jniLibs; fetched on demand by WhisperEngineManager. */
+val whisperLibs = listOf(
+    "libwhisper.so",
+    "libggml-vulkan.so",
+    "libggml.so",
+    "libggml-base.so",
+    "libggml-cpu.so",
+    "libomp.so"
+)
+
+/**
+ * Inside the APK in `minimal`; published as release assets and fetched at first launch in `full`.
+ * Must stay in step with NativeLibManager.libs, which is the list the app tries to download.
+ */
+val dlcLibs = listOf(
+    "libonnxruntime.so",
+    "liblitertlm_jni.so",
+    "libvosk.so",
+    "libsherpa-onnx-jni.so"
+)
+
+/**
+ * sherpa-onnx ships three native entry points; only libsherpa-onnx-jni.so is ever loaded (its Java
+ * bindings load "sherpa-onnx-jni" by name, and its only external NEEDED lib is libonnxruntime.so).
+ * The other two are dead weight — dropped in `full`, never published, never downloaded.
+ */
+val unusedSherpaLibs = listOf("libsherpa-onnx-c-api.so", "libsherpa-onnx-cxx-api.so")
+
+/**
+ * Two artifacts put a libonnxruntime.so at this path: sherpa-onnx's own AAR (~21MB, built by the
+ * sherpa project) and onnxruntime-android (~28MB, Microsoft's). They are different binaries, not
+ * two copies of one. The sherpa build is the one that must win — libsherpa-onnx-jni.so needs the
+ * symbol version it exports (VERS_1.27.0, see core/wakeword/build.gradle.kts), and it is the copy
+ * every published DLC asset so far has been.
+ */
+val onnxRuntimePath = "lib/arm64-v8a/libonnxruntime.so"
+val onnxRuntimeArtifact = "sherpa-onnx"
+
 
 android {
     namespace = "com.voxapps.commander"
@@ -58,62 +96,28 @@ android {
                 // APKs were installed side-by-side for the first time.
                 keyAlias = "vox-apps"
                 keyPassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                // Stated rather than defaulted. Signing moved from a post-build apksigner call to
+                // Gradle, and AGP's default here is v2 alone — while every published release so far
+                // is v3 (verified against the commander-v0.16-beta asset). An installed app updates
+                // only from an APK signed by the same certificate, so the scheme is not a detail to
+                // let a default change. v1 is JAR signing, unnecessary above API 24; minSdk is 29.
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
 
     buildTypes {
-        debug {
-            // core:wakeword's onnxruntime-android dependency and sherpa-onnx's own AAR (which
-            // bundles its own separate, independently-built libonnxruntime.so — not resolved via
-            // the onnxruntime-android Maven coordinate at all) collide as two sources for the same
-            // path — pickFirst avoids a build failure. Scoped to debug only: release excludes
-            // libonnxruntime.so entirely (DLC'd instead), and a pickFirst for a path that's also
-            // excluded silently wins over the exclude, which was quietly keeping the 28MB lib
-            // bundled in "release" despite the exclude rule below appearing to remove it.
-            packaging {
-                jniLibs {
-                    pickFirsts += setOf(
-                        "lib/arm64-v8a/libonnxruntime.so",
-                        "lib/armeabi-v7a/libonnxruntime.so",
-                        "lib/x86/libonnxruntime.so",
-                        "lib/x86_64/libonnxruntime.so",
-                    )
-                }
-            }
-        }
+        // Native packaging is NOT configured here — see the androidComponents block below the
+        // android {} block for why a `packaging {}` inside a build type does not do what it reads
+        // like.
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseKeystorePath != null) {
                 signingConfig = signingConfigs.getByName("release")
-            }
-            // Exclude Whisper native libs from release APK — they're downloaded on demand as DLC.
-            // This reduces the APK from ~166MB to ~40MB. Debug builds keep them for normal dev workflow.
-            //
-            // Other large DLC'd libs (onnxruntime, Vosk, litertlm-android, sherpa-onnx) are
-            // deliberately NOT excluded here via packaging.jniLibs.excludes, even though they're
-            // real and sizable: AGP 9.0.0–9.2.1 (every currently published 9.x release) has
-            // confirmed-unreliable arm64-v8a native-lib packaging behavior for this project's
-            // dependency set — excludes for these either get silently ignored or the merge output
-            // varies between otherwise-identical clean builds (see docs/BUILD_TIME_DEPENDENCIES.md
-            // for the full investigation). Instead, release-commander.yml strips them directly from
-            // the already-built APK zip (scripts/strip_dlc_libs.sh) — a plain file operation that
-            // isn't subject to AGP's merge-time bug — then re-signs. Local `assembleRelease` runs
-            // (this file alone) therefore still produce a fully-bundled ~40MB APK; the ~16MB
-            // stripped+DLC'd APK only exists as a CI release artifact.
-            packaging {
-                jniLibs {
-                    excludes += setOf(
-                        "lib/arm64-v8a/libwhisper.so",
-                        "lib/arm64-v8a/libggml-vulkan.so",
-                        "lib/arm64-v8a/libggml.so",
-                        "lib/arm64-v8a/libggml-base.so",
-                        "lib/arm64-v8a/libggml-cpu.so",
-                        "lib/arm64-v8a/libomp.so"
-                    )
-                }
             }
         }
     }
@@ -143,11 +147,127 @@ android {
         }
         jniLibs {
             useLegacyPackaging = true
+            // This app ships arm64-v8a only (see abiFilters). mergeNativeLibs still processes every
+            // other ABI, where onnxruntime-android and sherpa-onnx collide on the same path and fail
+            // the build outright — for libraries that would then be dropped anyway. Excluding them
+            // here removes the collision and the wasted work, and is variant-independent, so this
+            // one belongs at the android level rather than in the per-variant block below.
+            excludes += setOf(
+                "lib/armeabi-v7a/**",
+                "lib/x86/**",
+                "lib/x86_64/**"
+            )
         }
     }
     androidResources {
         noCompress += ".onnx"
     }
+}
+
+/*
+ * Which native libraries each variant packages.
+ *
+ * This is here, and not in the `buildTypes` blocks, because a `packaging {}` written inside a build
+ * type is not scoped to that build type. AGP 9.6.1 applies it to every variant: an exclude added to
+ * the release block alone also removes the file from mergeDebugNativeLibs' output (measured with a
+ * marker library). Only the variant API below scopes for real.
+ *
+ * That is what made AGP's excludes look broken. The debug block carried a pickFirst for
+ * libonnxruntime.so — needed there, because two artifacts provide that path — and it reached the
+ * release variant, where a pickFirst for a path silently beats an exclude for the same path. So the
+ * release excludes for the DLC libs did nothing, the conclusion drawn was that AGP could not be
+ * trusted to exclude native libs at all, and the libs were instead stripped out of the built APK
+ * zip afterwards by a shell script that then had to re-sign it. Scoped properly, the excludes work
+ * on the first attempt: release drops all ten libraries, debug keeps every one.
+ *
+ * The remaining cost of the old approach was the bundle: a zip edit cannot reach an AAB, so the
+ * published .aab carried ~37MB of libraries the APK did not.
+ */
+androidComponents {
+    onVariants { variant ->
+        val jniLibs = variant.packaging.jniLibs
+        if (variant.buildType == "release") {
+            jniLibs.excludes.addAll(whisperLibs.map { "lib/arm64-v8a/$it" })
+            if (dlcMode == "full") {
+                // Excluding a path drops every artifact's copy of it, so the two libonnxruntime.so
+                // sources cannot collide here and no pickFirst is needed.
+                jniLibs.excludes.addAll((dlcLibs + unusedSherpaLibs).map { "lib/arm64-v8a/$it" })
+            } else {
+                jniLibs.pickFirsts.add(onnxRuntimePath)
+            }
+        } else {
+            // Debug keeps everything, so the two sources still collide and still need resolving.
+            jniLibs.pickFirsts.add(onnxRuntimePath)
+        }
+    }
+}
+
+/*
+ * Stages the `full`-mode DLC libraries for upload as release assets.
+ *
+ * In `full` these libraries never reach merged_native_libs — they are excluded before it — so they
+ * have to be taken from the resolved dependencies instead. This reads the same artifacts AGP itself
+ * packages from, which is why it cannot drift from what the app expects to download.
+ *
+ * Wired to run after `assembleRelease` in `full` mode, so a local release and CI stage the same
+ * files from the same place.
+ */
+val collectDlcLibs = tasks.register("collectDlcLibs") {
+    group = "build"
+    description = "Stage the full-mode DLC native libs for upload as GitHub release assets."
+
+    // Resolved lazily; `isLenient` because this view only asks for the JNI artifacts and should not
+    // fail on dependencies that have none.
+    val jniArtifacts = configurations.getByName("releaseRuntimeClasspath").incoming.artifactView {
+        isLenient = true
+        attributes { attribute(Attribute.of("artifactType", String::class.java), "android-jni") }
+    }.files
+    val outDir = layout.buildDirectory.dir("dlc-libs")
+    val wanted = dlcLibs
+    val preferredArtifact = mapOf("libonnxruntime.so" to onnxRuntimeArtifact)
+    val mode = dlcMode
+
+    outputs.dir(outDir)
+
+    doLast {
+        check(mode == "full") {
+            "collectDlcLibs is only meaningful with -PvoxDlc=full — in `minimal` these libs ship inside the APK."
+        }
+        val dir = outDir.get().asFile
+        dir.deleteRecursively()
+        dir.mkdirs()
+
+        val available = jniArtifacts.files.flatMap { root ->
+            root.walkTopDown().filter { it.isFile && it.path.contains("arm64-v8a") }.toList()
+        }
+        for (lib in wanted) {
+            var candidates = available.filter { it.name == lib }
+            // Two artifacts can provide the same file name and they are not interchangeable — pick
+            // by which dependency it came from, never by whichever the filesystem listed first.
+            preferredArtifact[lib]?.let { marker ->
+                candidates = candidates.filter { it.path.contains(marker) }
+            }
+            val source = when {
+                candidates.isEmpty() ->
+                    throw GradleException("No $lib among the resolved dependencies — cannot publish it as a DLC asset.")
+                candidates.size > 1 ->
+                    throw GradleException(
+                        "$lib is provided by ${candidates.size} artifacts and no rule says which to publish:\n" +
+                            candidates.joinToString("\n") { "  $it" }
+                    )
+                else -> candidates.single()
+            }
+            source.copyTo(File(dir, lib), overwrite = true)
+            // Names the artifact, not the directory: which dependency a lib came from is the fact
+            // worth having in the log when two of them provide the same file name.
+            val artifact = source.parentFile?.parentFile?.parentFile?.name ?: "?"
+            logger.lifecycle("staged $lib (${source.length() / 1024}k) from $artifact")
+        }
+    }
+}
+
+if (dlcMode == "full") {
+    tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy(collectDlcLibs) }
 }
 
 dependencies {
@@ -156,6 +276,7 @@ dependencies {
     implementation(project(":core:location"))
     implementation(project(":core:backup"))
     implementation(project(":core:ipc"))
+    implementation(project(":core:identity"))
     implementation(project(":core:logging"))
     implementation(project(":core:nativelibs"))
     implementation(project(":core:services"))
@@ -330,54 +451,17 @@ tasks.register<Exec>("checkUpstream") {
 //     ./scripts/check_openwakeword_version.sh
 val skipNativePrep = providers.gradleProperty("voxSkipNativePrep").isPresent
 
-// The APK that ships is not the one assembleRelease produces: the DLC libs are stripped out of the
-// built zip afterwards (see the release packaging comment above for why AGP can't be trusted to
-// exclude them). That stripping used to exist only inside release-commander.yml, so a locally built
-// release APK bundled every lib and the DLC download path could not be exercised on a real device
-// at all — which is how two bugs in it reached users. This runs the same script CI runs.
+// `assembleRelease` now produces exactly the APK that ships. It used to not: the DLC libs were
+// stripped out of the built zip afterwards by a script that then re-signed it, so a locally built
+// release APK bundled every library and the DLC download path could not be exercised on a device at
+// all — which is how two bugs in it reached users. The packaging is done by AGP now (see the
+// androidComponents block), in both modes, for the APK and the bundle alike, so there is nothing
+// left to do afterwards and nothing left to drift.
 //
-//     ./gradlew :vox-commander:packageReleaseApk
+//     ./gradlew :vox-commander:assembleRelease -PvoxDlc=full
 //
-// Needs RELEASE_KEYSTORE_PATH and RELEASE_KEYSTORE_PASSWORD, same as any signed local build.
-tasks.register<Exec>("packageReleaseApk") {
-    group = "build"
-    // The script strips only in `full`; passing the mode keeps a local package consistent with how
-    // the APK was actually built.
-    environment("VOX_DLC", dlcMode)
-    description = "assembleRelease, then strip the DLC libs and re-sign — the APK as published."
-    dependsOn("assembleRelease")
-
-    // Captured at configuration time: reading `project` inside doFirst is unsupported with the
-    // configuration cache, which is on for this build.
-    val packagingScript = "${project.rootDir}/scripts/package_commander_release.sh"
-    val keystore = System.getenv("RELEASE_KEYSTORE_PATH") ?: ""
-    val password = System.getenv("RELEASE_KEYSTORE_PASSWORD") ?: ""
-    val outDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
-
-    // A local assembleRelease signs the APK when the keystore env vars are set and leaves it
-    // "-unsigned" when they are not; CI is always the latter. Take whichever exists.
-    doFirst {
-        val candidates = listOf(
-            File(outDir, "vox-commander-release.apk"),
-            File(outDir, "vox-commander-release-unsigned.apk")
-        )
-        val input = candidates.firstOrNull { it.isFile }
-            ?: throw GradleException("No release APK in $outDir — did assembleRelease run?")
-        if (keystore.isEmpty() || password.isEmpty()) {
-            throw GradleException(
-                "RELEASE_KEYSTORE_PATH and RELEASE_KEYSTORE_PASSWORD must be set — see docs/BUILD_AND_RELEASE.md"
-            )
-        }
-        commandLine(
-            "bash", packagingScript,
-            input.absolutePath,
-            File(outDir, "VoxCommander-release-stripped.apk").absolutePath,
-            keystore, password
-        )
-    }
-    // Replaced in doFirst once the real input is known; Exec requires something here at configure time.
-    commandLine("true")
-}
+// Set RELEASE_KEYSTORE_PATH and RELEASE_KEYSTORE_PASSWORD and Gradle signs it; leave them unset and
+// it is left unsigned, exactly as before.
 
 tasks.named("preBuild") {
     // Whisper stays: unlike the checks, it produces build output — the .so files this app links.
