@@ -109,6 +109,37 @@ else
     bad "no signed manifest — the apps will refuse every schema change from this repo"
 fi
 
+log_blue "── the published schemas repository ────────────────────────"
+# schemas-repo/ is the template; razvan-eduard/VoxApps-schemas is what people fork. The mirror there
+# syncs remote-schemas and validate_schemas.py — never its own workflow — so a change made here to
+# .github/workflows/ never reaches it, and the two drift with nothing to say so. The live copy named
+# the repository by its former name for two days that way, which resolves only through GitHub's
+# rename redirect: claim that name and the fork-ready repository starts mirroring somebody else's
+# schemas.
+#
+# Network-tolerant like the checks above: no gh, no auth, no network — no verdict, not a failure.
+MIRROR_TEMPLATE="schemas-repo/.github/workflows/mirror.yml"
+if [ ! -f "$MIRROR_TEMPLATE" ]; then
+    bad "no $MIRROR_TEMPLATE — the fork-ready repository has no mirror to compare against"
+elif ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+    ok "live mirror workflow: skipped (no authenticated gh)"
+else
+    # To a file, not a variable: command substitution strips trailing newlines, which shows up as a
+    # drift the file does not have.
+    LIVE_COPY="$(mktemp)"
+    gh api repos/razvan-eduard/VoxApps-schemas/contents/.github/workflows/mirror.yml \
+        -q '.content' 2>/dev/null | base64 -d > "$LIVE_COPY" 2>/dev/null
+    if [ ! -s "$LIVE_COPY" ]; then
+        ok "live mirror workflow: skipped (unreachable)"
+    elif diff -q "$LIVE_COPY" "$MIRROR_TEMPLATE" >/dev/null 2>&1; then
+        ok "live mirror workflow matches this template"
+    else
+        bad "razvan-eduard/VoxApps-schemas' mirror.yml has drifted from $MIRROR_TEMPLATE" \
+            "$(diff "$LIVE_COPY" "$MIRROR_TEMPLATE" | head -6 | tr '\n' ' ')"
+    fi
+    rm -f "$LIVE_COPY"
+fi
+
 echo
 if [ "$FAIL" -eq 0 ]; then
     log_info "✅ $PASS passed."
