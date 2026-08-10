@@ -22,6 +22,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:identity"))
     implementation(project(":core:logging"))
     implementation(libs.okhttp)
 

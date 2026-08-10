@@ -21,7 +21,7 @@ permissions:
   contents: write
 
 env:
-  SOURCE_REPO: razvan-eduard/VoxCommander
+  SOURCE_REPO: razvan-eduard/VoxApps
   SOURCE_BRANCH: main
 
 jobs:

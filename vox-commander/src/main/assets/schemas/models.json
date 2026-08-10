@@ -1101,7 +1101,7 @@
         {
           "id": "qwen2.5-1.5b-q8-ekv4096",
           "label": "Qwen 2.5 1.5B (High Precision q8, 4096 ctx)",
-          "path": "https://github.com/razvan-eduard/VoxCommander/releases/download/nlu-assets/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task",
           "size_mb": 1525,
           "size_label": null,
           "lang_code": null,
@@ -1111,7 +1111,7 @@
         {
           "id": "qwen2.5-0.5b-q8",
           "label": "Qwen 2.5 0.5B (Fastest q8, 1280 ctx — may fail on longer prompts)",
-          "path": "https://github.com/razvan-eduard/VoxCommander/releases/download/nlu-assets/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
           "size_mb": 521,
           "size_label": null,
           "lang_code": null,
@@ -1121,7 +1121,7 @@
         {
           "id": "gemma3-1b-q8-ekv4096",
           "label": "Gemma 3 1B (High Precision q8, 4096 ctx)",
-          "path": "https://github.com/razvan-eduard/VoxCommander/releases/download/nlu-assets/Gemma3-1B-IT_multi-prefill-seq_q8_ekv4096.task",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/Gemma3-1B-IT_multi-prefill-seq_q8_ekv4096.task",
           "size_mb": 1005,
           "size_label": null,
           "lang_code": null,
@@ -1148,7 +1148,7 @@
         {
           "id": "qwen3-0.6b",
           "label": "Qwen 3 0.6B (Fastest, 4096 ctx)",
-          "path": "https://github.com/razvan-eduard/VoxCommander/releases/download/nlu-assets/Qwen3-0.6B.litertlm",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/Qwen3-0.6B.litertlm",
           "size_mb": 586,
           "size_label": null,
           "lang_code": null,

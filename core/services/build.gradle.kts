@@ -18,6 +18,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:identity"))
     implementation(project(":core:logging"))
     implementation(libs.gson)
     implementation(libs.okhttp)

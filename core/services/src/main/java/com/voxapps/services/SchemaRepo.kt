@@ -1,5 +1,7 @@
 package com.voxapps.services
 
+import com.voxapps.identity.VoxRepo
+
 /**
  * Where the shipped schemas live, in the repository and in the APK.
  *
@@ -9,9 +11,8 @@ package com.voxapps.services
  */
 object SchemaRepo {
 
-    /** The repository serving the schemas when nothing else is configured. Written here rather than
-     *  in either app so pointing the family somewhere else is one edit. */
-    const val DEFAULT_BASE_URL = "https://github.com/razvan-eduard/VoxApps"
+    /** The repository serving the schemas when nothing else is configured. */
+    const val DEFAULT_BASE_URL = VoxRepo.URL
 
     /**
      * Names this repository has had. The project was VoxCommander before it was VoxApps, and both
@@ -27,7 +28,7 @@ object SchemaRepo {
      */
     val KNOWN_BASE_URLS = listOf(
         DEFAULT_BASE_URL,
-        "https://github.com/razvan-eduard/VoxCommander"
+        VoxRepo.LEGACY_URL
     )
 
     /** The folder at the repository root holding every app's schemas. */
