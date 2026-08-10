@@ -105,18 +105,33 @@ reliably track this JitPack-style coordinate either.
 ## Pattern A: onnxruntime-android (version-check only)
 
 `com.microsoft.onnxruntime:onnxruntime-android` (resolved via Maven Central) — the ONNX inference
-engine behind Vision's OCR (`vendor/ppocr-sdk`), Commander's OpenWakeWord wake-word detection
-(`core/wakeword`), and indirectly Piper TTS (`sherpa-onnx`, which bundles its own separate copy of
-`libonnxruntime.so` inside its own AAR rather than resolving this Maven coordinate — see
-`vox-commander/build.gradle.kts`'s `pickFirst`/dependencies comments for how that second copy is kept
-version-compatible with this one). Same shape as Vosk/NewPipeExtractor otherwise: no source vendored,
-nothing compiled locally, Dependabot tracks it reliably (unlike their JitPack coordinates), and bumps
-**auto-merge on green** the same as any other Pattern A dependency.
+engine behind Vision's OCR (`vendor/ppocr-sdk`, `vendor/docquad-sdk`) and Commander's OpenWakeWord
+wake-word detection (`core/wakeword`). No source vendored, nothing compiled locally.
 
-`gradle/libs.versions.toml`'s `onnxruntime` entry tracks latest (currently `1.28.0`) rather than being
-pinned — `core/wakeword` pins independently to `1.27.0` to match sherpa-onnx's own bundled copy instead;
-see that module's `build.gradle.kts` for why these two are genuinely different constraints, not
-accidental drift.
+**Two artifacts provide `libonnxruntime.so`, and the version is not free to choose.** `sherpa-onnx`
+(Piper TTS) carries its own build of ONNX Runtime inside its AAR rather than declaring this
+coordinate, so Commander receives the library twice at the same packaged path. AGP keeps sherpa's
+copy — `libsherpa-onnx-jni.so` is linked against it — and the `onnxruntime-android` artifact is
+present for its Java API and its `libonnxruntime4j_jni.so` bridge. That bridge resolves its symbols
+against whichever runtime is packaged, so:
+
+> the version `core/wakeword` declares must equal the version sherpa-onnx bundles.
+
+    sherpa-onnx v1.13.4  →  ONNX Runtime 1.27.0
+
+The two are checked against each other by symbol version: the bridge records the version it requires
+(`.gnu.version_r`), the runtime records what it exports (`.gnu.version_d`), and a mismatch means the
+bridge cannot resolve `OrtGetApiBase` — `ai.onnxruntime` then fails to load and the wake word never
+runs, while every other engine is unaffected. `vox check pairing` reads both out of a built APK, and
+runs in CI and before every publish.
+
+A newer release of this artifact is therefore wrong until sherpa-onnx itself moves, and
+`.github/dependabot.yml` ignores it for that reason. sherpa's version number says nothing about what
+it contains — v1.13.3 bundles 1.24.3, the v1.13.4 patch release bundles 1.27.0 — so the value comes
+from reading its binary, not from its tag.
+
+`gradle/libs.versions.toml`'s `onnxruntime` entry is what Vision resolves, where both the runtime and
+the bridge come from the same artifact and no such constraint applies.
 
 - No dedicated check/sync script exists for this one (Dependabot's own weekly PRs are sufficient since
   it reliably tracks Maven Central, unlike Vosk/NewPipeExtractor's JitPack coordinates).
@@ -383,6 +398,23 @@ Across Pattern B dependencies:
   unrelated to the conflict. Separate patches also let the check scripts name which one needs
   attention, and let a patch be deleted on its own when upstream absorbs it.
 
+### Where the toolchain comes from
+
+`scripts/lib/common.sh` resolves it rather than assuming a location, because these scripts run on a
+developer's machine as much as on a runner — `vox-commander`'s `preBuild` calls `check_whisper.sh` on
+every build:
+
+| resolver | order |
+|---|---|
+| `vox_android_sdk` | `ANDROID_HOME`, `ANDROID_SDK_ROOT`, then the macOS, Linux and Windows defaults |
+| `vox_android_ndk` | `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT`, newest under `$SDK/ndk`, `ndk-bundle` |
+| `vox_prefix_for` | Homebrew, the tool's own location, then the usual prefixes |
+| `vox_sha256` | coreutils or macOS |
+
+`vox_android_ndk` follows symlinks: a runner's SDK can be assembled from them.
+
+Build hosts: macOS and Linux directly, Windows through WSL — the scripts are bash.
+
 ### Sync schedule
 
 One bot per day, not five at once. Sharing a slot would put five jobs on runners together —
@@ -406,6 +438,17 @@ lapped by the next run pushing the same branch, and an in-flight run is never ki
 Deduping on open PRs only meant closing one without merging — a decision to decline that upstream
 version — brought it straight back the following week, identical, so declining was impossible and
 the PRs accumulated as permanent noise.
+
+### Applying: three-way, so a near miss is not a total loss
+
+Patches are generated with `git diff --no-index` (`scripts/lib/patches.sh`), which records the `index`
+lines a three-way merge needs, and applied with `git apply --3way` after writing each pristine file
+into the object database so the merge base resolves. An upstream release that moves lines near an
+adaptation then merges; a genuine collision arrives as conflict markers for a person to resolve in
+the PR.
+
+Conflicts are detected by looking for unmerged paths, not by the exit code — `git apply --3way`
+returns 0 when it leaves markers behind.
 
 ### The invariant: vendored source == upstream + patches
 
@@ -475,6 +518,21 @@ for Vision, every bundled library it has. Two further rules apply:
   more there: Whisper downloads its libraries in **both** DLC modes, so the default build is on that
   path whenever anyone uses Whisper STT.
 
+#### What arrives is checked against what was built
+
+`:vox-commander:collectDlcLibs` writes a `sha256` for each staged library into
+`assets/dlc-libs.sha256`, which is packaged into the APK and therefore covered by its signature.
+`NativeLibs` verifies a downloaded file against that record before the `.tmp` rename that publishes
+it, so a library failing the check never becomes one the app loads. A mismatch counts as a failed
+attempt rather than a hard stop — a truncated transfer fails the same way and is worth retrying.
+
+The digest cannot come from the same release as the library: whoever can substitute one can
+substitute the other. The trust anchor is the signed APK, the same reasoning that puts model hashes
+inside a signed schema.
+
+A `minimal` build records nothing and downloads nothing; a library with no recorded digest downloads
+as before.
+
 #### Where the downloads come from
 
 Every release-asset URL — the DLC libraries, Whisper's engine, the schema repository — is built from
@@ -492,6 +550,40 @@ Which libraries, and whether they are optional:
 | Commander | onnxruntime, litertlm, vosk, sherpa-onnx (53 MB) | **No.** onnxruntime backs OpenWakeWord, vosk the Vosk engines, litertlm the on-device LLM, sherpa Piper. Anyone using a wake word needs one on first launch. |
 | Commander | whisper + ggml + Vulkan (~193 MB) | **Yes** — only with Whisper STT, Vulkan variant only where supported. Fetched elsewhere, never bundled. |
 | Vision | onnxruntime + the OpenCV set (43 MB) | **No.** Vision is an OCR app and these are what OCR needs. |
+
+## Do the native libraries satisfy each other?
+
+    ./scripts/vox check pairing <apk> [--with-libs <dir>]
+
+Gradle resolves coordinates. It has nothing to say about a library that arrives as a *file* inside
+another artifact, which is how `libonnxruntime.so` reaches Commander twice — so a consumer compiled
+against one build can be packaged beside a different provider with no conflict to resolve. The result
+builds, installs, passes every test, and fails at `dlopen` the first time that feature is used.
+
+`scripts/check_native_pairing.py` reads the ELF structures of every `.so` in an APK and reports:
+
+| finding | read from |
+|---|---|
+| a required symbol version the packaged provider does not export | `.gnu.version_r` vs `.gnu.version_d` |
+| a needed library neither packaged nor provided by Android | `DT_NEEDED` |
+| strongly-undefined symbols nothing resolves | `.dynsym` |
+
+The third covers the libraries that carry no version records at all — the whole OpenCV set, where
+mixing builds would otherwise be invisible. Weak undefined symbols are excluded: tcmalloc hooks, gcov
+stubs and newer-API libc entry points are meant to go unresolved.
+
+Android's own exports come from the NDK sysroot stubs. Without an NDK the check still compares
+versions and reports which mode it ran in, rather than treating platform symbols as missing.
+
+`--with-libs` adds libraries that are not in the APK but will be present at run time. A `full` build
+excludes its DLC libraries and downloads them at first launch, so the APK alone shows a bridge with
+no runtime; the release workflows pass the staged directory so what is checked is what the device
+will have.
+
+Where it runs:
+
+- `ci.yml`, after `assembleDebug` — every push and every pull request, all six apps
+- each `release-*.yml`, between the build and the publish, ahead of the attestation
 
 ## Open items
 
@@ -533,6 +625,8 @@ Full command set:
 ./scripts/vox schemas sign|verify    sign the schema manifest, or check it
 ./scripts/vox schemas keygen         create a signing keypair (once, ever)
 ./scripts/vox schemas hash-models    record each model's sha256 by fetching it once
+./scripts/vox check pairing <apk>    do an APK's native libraries satisfy each other
+./scripts/vox release sbom <app>     CycloneDX SBOM, including the vendored native sources
 ./scripts/vox test                   test this machinery
 ```
 

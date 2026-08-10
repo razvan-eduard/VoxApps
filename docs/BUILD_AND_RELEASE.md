@@ -143,6 +143,35 @@ skips the whisper compile for a build that only needs to know whether the Kotlin
 Everything downstream of `preBuild` still runs. `copyShippedSchemas` is **not** skippable — the
 schema tests read the assets it generates.
 
+### What a release does before it publishes
+
+Between building the artifacts and creating the release, each `release-*.yml` runs four steps, in
+this order:
+
+| step | what it establishes |
+|---|---|
+| `apksigner verify` | the APK is signed, with the certificate every previous release used |
+| `vox release sbom <app>` | a CycloneDX SBOM — the resolved dependency graph, plus the vendored sources this app compiles, recorded by the commit each submodule is pinned to |
+| `vox check pairing` | every native library in the APK satisfies what its dependants were built against ([detail](BUILD_TIME_DEPENDENCIES.md#do-the-native-libraries-satisfy-each-other)) |
+| `actions/attest-build-provenance` | signed provenance over the APK, AAB and SBOM, recorded in GitHub's transparency log |
+
+A failure in any of them stops the run before anything is tagged, uploaded or attested. Commander and
+Vision pass `--with-libs` in `full` mode so the check sees the libraries the device will download
+rather than only what is inside the APK.
+
+Anyone can check a downloaded APK against the attestation:
+
+```
+gh attestation verify VoxCommander-<tag>.apk --repo razvan-eduard/VoxApps
+```
+
+### Build hosts
+
+macOS and Linux directly; Windows through WSL, since the scripts are bash. The Android SDK and NDK
+are resolved from `ANDROID_HOME`/`ANDROID_SDK_ROOT`/`ANDROID_NDK_HOME` and each platform's default
+location, so no environment needs a particular layout — see
+[BUILD_TIME_DEPENDENCIES.md](BUILD_TIME_DEPENDENCIES.md#where-the-toolchain-comes-from).
+
 ## How `main` is protected
 
 A ruleset covers `refs/heads/main`:
@@ -161,6 +190,12 @@ Auto-merge is enabled, so a PR can be queued rather than watched:
 gh pr create --fill && gh pr merge --auto --squash
 ```
 
+`update-readme-releases.yml` regenerates the release table after a release and commits it. It pushes
+with `README_PUSH_TOKEN`, a fine-grained token owned by an admin and scoped to `contents:write` on
+this repository — `GITHUB_TOKEN` is not a bypass actor, and on a personal account the GitHub Actions
+app cannot be named as one. A fork has no such secret and falls back to the default token, which its
+own unprotected `main` accepts.
+
 Both required checks come from `ci.yml`, which has no path filters, so they report on every PR. A
 required check that can fail to *run* blocks a PR permanently instead of gating it, which is why the
 path-filtered workflows (`validate-schemas`, `verify-vendor-patches`) are not required here.
@@ -172,7 +207,7 @@ packaging, R8 and anything that only appears once the app is installed are outsi
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `ci.yml` | every push to `main`, every PR | `./gradlew test` for all modules, then `assembleDebug` for all six apps |
+| `ci.yml` | every push to `main`, every PR | `./gradlew test` for all modules, `assembleDebug` for all six apps, then `vox check pairing` over the six APKs |
 | `validate-schemas.yml` | pushes touching `remote-schemas/**` | validates the shipped schema files |
 | `verify-vendor-patches.yml` | pushes touching a vendored fork or its patches | asserts each fork is exactly upstream + `patches/` |
 | CodeQL | GitHub's own setup | `actions`, `c-cpp`, `python` analyses |
