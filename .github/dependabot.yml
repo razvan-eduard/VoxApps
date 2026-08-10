@@ -28,6 +28,19 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # Not ours to choose. vox-commander links sherpa-onnx for Piper TTS, and that artifact carries
+      # its own build of ONNX Runtime at the same packaged path — the copy AGP keeps, because
+      # libsherpa-onnx-jni.so is linked against it. core:wakeword declares this artifact for its Java
+      # API and JNI bridge, and the bridge resolves against sherpa's runtime, so the version has to
+      # equal whatever sherpa bundles. A newer release is therefore wrong until sherpa moves first,
+      # and this bump has already shipped a broken wake word twice.
+      #
+      #     sherpa-onnx v1.13.4  →  ONNX Runtime 1.27.0
+      #
+      # `vox check pairing` fails the build when the two disagree; this keeps the proposal from being
+      # raised at all.
+      - dependency-name: "com.microsoft.onnxruntime:onnxruntime-android"
 
   # The workflows pin action versions too, and nothing was watching them: `actions/setup-java@v4`
   # already prints a deprecation warning on every run. Same weekly grouping.

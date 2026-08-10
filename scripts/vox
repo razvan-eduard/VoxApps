@@ -68,6 +68,12 @@ case "$FLOW" in
         ;;
 
     check)
+        # `pairing` asks a different question from the upstream checks: not "has anything moved
+        # upstream" but "do the native libraries in this APK actually satisfy each other".
+        if [ "${1:-}" = "pairing" ]; then
+            shift
+            exec python3 scripts/check_native_pairing.py "$@"
+        fi
         exec bash scripts/check_upstream.sh "$@"
         ;;
 

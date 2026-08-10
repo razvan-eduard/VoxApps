@@ -144,6 +144,20 @@ jobs:
       - name: Assemble every app
         run: ./gradlew assembleDebug --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP"
 
+      # A build proving the Kotlin compiles says nothing about whether the native libraries inside
+      # the APK can load each other. Two artifacts supplying the same library at different versions
+      # is invisible to Gradle — it resolves coordinates, and the second copy arrives as a file
+      # inside somebody else's artifact — so the first sign is a dlopen failure on a user's device,
+      # in whichever feature happens to use it.
+      #
+      # Runs on every push and every pull request, which is where a dependency bump arrives.
+      - name: Native libraries satisfy each other
+        run: |
+          set -euo pipefail
+          find . -path "*/build/outputs/apk/debug/*.apk" -print0 \
+            | sort -z \
+            | xargs -0 ./scripts/vox check pairing
+
       - name: Publish test results
         if: always()
         uses: actions/upload-artifact@v4

@@ -40,5 +40,16 @@ dependencies {
     // to currently disagree (vox-vision is pinned to 1.21.1 because upstream's own 1.27.0/1.28.0
     // builds are broken; sherpa-onnx bundles its own separately-built 1.27.0-tagged binary that is
     // not the same artifact).
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
+    // Determined by sherpa-onnx, not chosen here. vox-commander pulls in sherpa-onnx for Piper TTS,
+    // whose AAR carries its own build of ONNX Runtime at the same packaged path; that copy is the one
+    // AGP keeps, because libsherpa-onnx-jni.so is linked against it. So this artifact is present for
+    // its Java API and its libonnxruntime4j_jni.so bridge, and the bridge resolves its symbols
+    // against sherpa's runtime — which only works when this version equals the one sherpa bundles.
+    //
+    //     sherpa-onnx v1.13.4  →  ONNX Runtime 1.27.0
+    //
+    // A newer release of this artifact is therefore wrong until sherpa itself moves. `vox check
+    // pairing` reads both out of a built APK and fails when they disagree, and .github/dependabot.yml
+    // keeps the bot from proposing it.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
 }
