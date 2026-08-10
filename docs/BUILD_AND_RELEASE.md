@@ -81,6 +81,50 @@ and `release-commander.yml` call `scripts/package_commander_release.sh`, so ther
 of the shipped artifact rather than two that can drift. Use it whenever you're testing anything
 DLC-related; `assembleRelease` is fine for ordinary feature work.
 
+### How much ships inside the APK (`voxDlc`)
+
+One property decides whether the native payload is bundled or downloaded, and it is **`minimal` by
+default** (`gradle.properties`):
+
+```
+./gradlew :vox-commander:assembleRelease                    # minimal — the default
+./gradlew :vox-commander:assembleRelease -PvoxDlc=full      # as IzzyOnDroid's 30MB cap required
+```
+
+| | `minimal` (default) | `full` |
+|---|---|---|
+| Commander APK | ~47 MB, 11 libs inside | ~24 MB, 5 libs inside |
+| Vision APK | ~61 MB, 15 libs inside | ~15 MB, 5 libs inside |
+| First launch | nothing downloads; works offline | 53 MB (Commander) / 43 MB (Vision) fetched on the splash |
+| Whisper | on demand, unchanged | on demand, unchanged |
+
+**Whisper is unaffected by the switch.** It is the one genuinely optional payload — ~193 MB fetched
+only if you choose Whisper STT, and the Vulkan variant only where the GPU supports it — so it is
+excluded by AGP in both modes. Everything else was a *mandatory* second download: `ESSENTIAL_LIBS`
+is not a figure of speech, and splitting those out deferred nothing while adding a splash-screen
+download that can fail offline.
+
+The property reaches the app through `BuildConfig.DLC_MODE`, which is what `NativeLibs` reads to
+decide whether to fetch anything. **That is deliberate and load-bearing**: the packaging decision and
+the download decision have to be the same decision. Build one way and package the other and you ship
+an APK missing libraries nothing will ever fetch. For the same reason the release workflow sets
+`VOX_DLC` once at job level and passes it to both the Gradle build and the packaging script, and
+only attaches the `.so` release assets in `full`.
+
+An invalid value fails the build rather than silently choosing:
+
+```
+voxDlc must be 'minimal' or 'full', got 'nonsense'
+```
+
+**Why the two apps strip differently.** Vision excludes its libs with AGP's
+`packaging.jniLibs.excludes`. Commander cannot: re-tested on AGP 9.3.1, asking it to exclude the
+four leaves `libonnxruntime.so` in the APK regardless — it arrives from two sources (the onnxruntime
+AAR and sherpa-onnx's bundled copy) and AGP's merge picks a winner. It is also the largest at 28 MB.
+So Commander's `full` mode strips post-build from the APK zip and re-signs, via
+`scripts/package_commander_release.sh`. In `minimal` neither app strips anything, so the difference
+only exists in `full`.
+
 ### Skipping the native prep
 
 `vox-commander`'s `preBuild` compiles whisper.cpp from its submodule — that's the only script left in

@@ -1102,6 +1102,54 @@ and `appFolder` — set once by each `Application` before any registry starts, s
 another's files. **Each app can follow its own schema repository**, which is what makes a fork usable
 without touching the apps.
 
+### Signing: schemas are dynamic, but not substitutable
+
+These files are fetched and adopted **unattended at every launch** (`useRemoteSchemas` defaults to
+`true`), and they declare engine endpoints — where the app sends speech and the user's own API keys —
+and 97 model download URLs. Whoever can serve that path could redirect all of it at the next launch,
+with no app update and nothing for a user to accept. The SHA-256 that `RemoteSchema` already used
+compares a download against the *previous download*: it answers "did this change?", never "is this
+genuine?".
+
+The apps embed an ECDSA P-256 public key (`SchemaSignature`) and the repository publishes
+`remote-schemas/manifest.json` — every schema path and its hash — with `manifest.json.sig` over it.
+One signature covers the whole manifest, so adding or removing a file is as detectable as editing one.
+
+| Situation | Result |
+|---|---|
+| Official repo, signed | adopted, `Source.ACCEPTED` |
+| Official repo, unsigned or tampered | **refused**, `Refreshed.Unsigned`; the current copy stays |
+| Official repo, replayed older manifest | **refused** — the manifest's `serial` must exceed the last accepted |
+| A fork the user configured | adopted, `Source.UNVERIFIED` |
+| An exact mirror serving the original manifest | adopted as **signed** — the signature travels with the files, not the host |
+
+The point is provenance, not content: a schema may still say anything, which is the feature. What
+changed is that a third party can no longer say it. A fork is accepted precisely because the user
+chose that URL, and marked so the distinction is visible.
+
+Two details that make it hold:
+
+- **A fresh install has a rollback floor.** The signed manifest ships inside the APK, and `init`
+  takes `max(remembered, shipped)` — otherwise a first launch would start at serial 0 and accept any
+  old validly-signed manifest, which is the launch an attacker would target.
+- **Signing is local, never CI.** The release keystore has to be a repository secret; putting the
+  schema key beside it would mean one account compromise yields both a malicious APK and malicious
+  schemas. `verify-schemas.yml` only checks the committed result — see `BUILD_AND_RELEASE.md`.
+
+### Model integrity: `sha256` beside the URL
+
+A signed schema vouches for a URL, not for the bytes at it. So a model entry may declare a `sha256`,
+which — because the schema itself is signed — inherits that signature's authority:
+
+```json
+{ "id": "base", "path": "https://…/ggml-base.bin", "sha256": "60ed5bc3…" }
+```
+
+`ModelDownloader` checks it at the one choke point every download passes through, before the artefact
+reaches a native parser, and deletes what does not match. **Absent means unverified and stays
+supported** — 96 URLs still have none, and a download that worked yesterday must work today.
+`./scripts/vox schemas hash-models [engine]` fills the field in by fetching each model once.
+
 `RemoteSchema` fetches each file from `<repo>/main/remote-schemas/<folder>/<file>` and compares it by
 hash with the copy in force. A copy that differs *and still parses* is written to the app's `filesDir`
 and becomes the source of truth until the user resets it — updating is something the user does, with
@@ -2285,13 +2333,13 @@ new satellite app is expected to follow.
 
 ### Shared modules
 
-Twenty `:core:*` modules, plus two vendored forks compiled in-tree:
+Twenty-one `:core:*` modules, plus two vendored forks compiled in-tree:
 
 ```
 :core:apppicker      :core:attachments   :core:audio        :core:backup
 :core:calendar       :core:datahygiene   :core:design       :core:ipc
-:core:location       :core:logging       :core:onboarding   :core:preferences
-:core:schema-annotations  :core:schema-processor
+:core:location       :core:logging       :core:nativelibs   :core:onboarding
+:core:preferences    :core:schema-annotations  :core:schema-processor
 :core:services       :core:testing       :core:textmatch    :core:voxconnect
 :core:wakeword       :core:widget
 

@@ -416,6 +416,40 @@ API (`0002`), its manual resize (`0003`) and library name (`0004`), plus wakewor
 If the check fails and the change was deliberate, capture it: write the diff as
 `patches/000N-<name>.patch`, then run that module's regen script to normalise and verify it.
 
+## Native libraries at runtime (`:core:nativelibs`)
+
+Separate from the build-time dependencies above: these are libraries the apps *load*, from inside
+the APK or from this build's own GitHub release.
+
+Commander and Vision each had their own copy of this — 240 and 241 lines, the same seven functions,
+differing in a tag prefix and a list of file names. They had drifted: Vision grew per-file retries,
+atomic `.tmp` writes, version-scoped directories and a hard failure on a missing lib, while
+Commander kept logging "CRITICAL" and continuing on to crash later somewhere less obvious. Both DLC
+bugs in August had to be fixed twice, once in each.
+
+`:core:nativelibs` is Vision's implementation, shared. Each app declares an object over it:
+
+```kotlin
+object NativeLibManager : NativeLibs(
+    tagPrefix = "vision",
+    versionName = BuildConfig.VERSION_NAME,
+    libs = listOf("libonnxruntime.so", ...),   // in load order — System.load() needs deps first
+    bundled = BuildConfig.DLC_MODE == "minimal"
+)
+```
+
+Call sites are unchanged, and Commander inherited the retries and atomic writes it never had.
+`bundled` comes from the build (see `voxDlc` in `BUILD_AND_RELEASE.md`) rather than from probing the
+filesystem — probing would turn a packaging bug into a silent download.
+
+Which libraries, and whether they are optional:
+
+| App | Libraries | Optional? |
+|---|---|---|
+| Commander | onnxruntime, litertlm, vosk, sherpa-onnx (53 MB) | **No.** onnxruntime backs OpenWakeWord, vosk the Vosk engines, litertlm the on-device LLM, sherpa Piper. Anyone using a wake word needs one on first launch. |
+| Commander | whisper + ggml + Vulkan (~193 MB) | **Yes** — only with Whisper STT, Vulkan variant only where supported. Fetched elsewhere, never bundled. |
+| Vision | onnxruntime + the OpenCV set (43 MB) | **No.** Vision is an OCR app and these are what OCR needs. |
+
 ## Open items
 
 - **`check_whisper.sh`**'s Homebrew dependency detection (Vulkan headers) doesn't yet install Homebrew
@@ -441,8 +475,48 @@ rather than a file:
 ./scripts/vox release package        the APK as published
 ```
 
+Full command set:
+
+```
+./scripts/vox check [name]           has anything upstream moved?
+./scripts/vox patches verify [mod]   is a vendored fork upstream + its patches?
+./scripts/vox patches regen <mod>    regenerate a fork's patches
+./scripts/vox release package        the APK as published (honours voxDlc)
+./scripts/vox release publish-libs   publish whisper .so as the DLC release
+./scripts/vox release readme         regenerate the README release table
+./scripts/vox release fdroid         regenerate and push F-Droid metadata
+./scripts/vox native opencv|whisper  the two build-time compiles
+./scripts/vox schemas validate       validate the shipped schema JSON
+./scripts/vox schemas sign|verify    sign the schema manifest, or check it
+./scripts/vox schemas keygen         create a signing keypair (once, ever)
+./scripts/vox schemas hash-models    record each model's sha256 by fetching it once
+./scripts/vox test                   test this machinery
+```
+
 The workflows and Gradle call it too, so splitting or renaming a script no longer edits a workflow.
 Each script still runs correctly on its own — the dispatcher routes and documents, it never
 initialises anything a child depends on. `scripts/lib/` holds what would otherwise be copied into
-every script: the logging preamble, and the `--report` contract that lets one check answer both a
-person and a workflow.
+every script: colours and logging (`common.sh`, which fourteen scripts each had their own copy of),
+the key-directory resolution, and the `--report` contract that lets one check answer both a person
+and a workflow.
+
+### The automation has tests
+
+Nineteen scripts and fifteen workflows gate every release, and until 2026-08-10 none of them had a
+test or a linter — while the Kotlin they gate has hundreds. Three regressions in this machinery were
+each found by dispatching a real bot and reading the failure.
+
+`./scripts/vox test` asserts the contracts whose breakage is silent, and CI runs it in its own fast
+job ahead of the Android build:
+
+- every check emits `key=value` on stdout and nothing else — a stray banner goes into
+  `$GITHUB_OUTPUT` and fails the step with `Invalid format`
+- every check always states `has_update`, including offline or with a submodule missing — answering
+  nothing is how a bot retires unnoticed
+- the dispatcher routes, and rejects nonsense
+- each vendored fork equals upstream + patches, **and the verifier fails when it does not** —
+  asserted by planting an unrecorded edit and restoring it
+- the schemas match their signed manifest, and verification fails on an edited schema
+
+`shellcheck -x` runs over every script in the same job. It found one real hazard when introduced —
+an `rm -rf "$A/$B"` with no guard against either being empty — plus two unchecked `cd` calls.
