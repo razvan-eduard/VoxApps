@@ -32,7 +32,30 @@ CHECKS=(
     "docquad:check_docquad_sdk_version.sh:vendored SDK"
 )
 
-WANTED=("$@")
+# --report passes the named check's machine-readable output straight through, instead of printing
+# the human table. That is what `vox check <name> --report` resolves to, and it keeps the
+# name -> script mapping in this one file rather than duplicating it in the dispatcher.
+REPORT=false
+WANTED=()
+for arg in "$@"; do
+    case "$arg" in
+        --report) REPORT=true ;;
+        *) WANTED+=("$arg") ;;
+    esac
+done
+
+if [ "$REPORT" = true ]; then
+    [ ${#WANTED[@]} -gt 0 ] || { log_error "--report needs a name: e.g. vox check vosk --report"; exit 1; }
+    for entry in "${CHECKS[@]}"; do
+        IFS=':' read -r NAME SCRIPT KIND <<< "$entry"
+        for w in "${WANTED[@]}"; do
+            [ "$w" = "$NAME" ] && exec bash "scripts/$SCRIPT" --report
+        done
+    done
+    log_error "Unknown check: ${WANTED[*]}"
+    exit 1
+fi
+
 printf "${BLUE}%s${NC}\n\n" "🔍 Checking every vendored/pinned upstream…"
 
 UPDATES=()
