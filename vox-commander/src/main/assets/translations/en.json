@@ -529,5 +529,6 @@
   "schema_problem": "%1$s — %2$s",
   "schema_reason_rejected": "refused: it did not parse, or arrived empty",
   "schema_reason_unsigned": "refused: no valid signature covers it",
-  "schema_reason_unreachable": "could not be read (%1$s)"
+  "schema_reason_unreachable": "could not be read (%1$s)",
+  "model_download_rejected": "This download was refused: the file did not match the checksum the schema declares. It has been deleted — try again."
 }

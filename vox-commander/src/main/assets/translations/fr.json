@@ -529,5 +529,6 @@
   "schema_problem": "%1$s — %2$s",
   "schema_reason_rejected": "refusé : illisible ou vide à l'arrivée",
   "schema_reason_unsigned": "refusé : aucune signature valide ne le couvre",
-  "schema_reason_unreachable": "n'a pas pu être lu (%1$s)"
+  "schema_reason_unreachable": "n'a pas pu être lu (%1$s)",
+  "model_download_rejected": "Téléchargement refusé : le fichier ne correspond pas à la somme de contrôle déclarée par le schéma. Il a été supprimé — réessayez."
 }

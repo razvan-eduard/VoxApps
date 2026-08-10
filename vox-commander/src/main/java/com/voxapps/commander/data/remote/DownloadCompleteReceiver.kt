@@ -67,15 +67,27 @@ class DownloadCompleteReceiver : BroadcastReceiver() {
         // Whether this artefact needs unpacking is ModelDownloader's call, not the receiver's — it
         // owns where a model lands and what shape it takes on disk. The receiver only announces
         // the result once the model is actually usable.
-        ModelDownloader(context).installDownloadedModel(modelId, matchedEngineKey) { dirName ->
+        // A rejection has to be announced too. The success broadcast is what clears the progress
+        // row, so staying silent about a refused download leaves it spinning until the screen is
+        // rebuilt — the download looks stuck rather than refused.
+        val announce = { dirName: String?, rejected: String? ->
             val localIntent = Intent(ACTION_DOWNLOAD_COMPLETE_LOCAL).apply {
                 putExtra(EXTRA_DOWNLOAD_ID, id)
                 putExtra(EXTRA_FILE_PATH, filePath)
                 putExtra("model_type", matchedEngineKey)
                 dirName?.let { putExtra("directory_name", it) }
+                rejected?.let { putExtra(EXTRA_REJECTED, it) }
             }
-            Logger.log("Sending local broadcast for $matchedEngineKey: action=$ACTION_DOWNLOAD_COMPLETE_LOCAL, id=$id, dir=$dirName", TAG)
+            Logger.log("Sending local broadcast for $matchedEngineKey: id=$id, dir=$dirName, rejected=$rejected", TAG)
             context.sendBroadcast(localIntent)
+        }
+
+        ModelDownloader(context).installDownloadedModel(
+            modelId,
+            matchedEngineKey,
+            onRejected = { reason -> announce(null, reason) }
+        ) { dirName ->
+            announce(dirName, null)
         }
     }
 
@@ -84,5 +96,8 @@ class DownloadCompleteReceiver : BroadcastReceiver() {
         const val ACTION_DOWNLOAD_COMPLETE_LOCAL = "com.voxapps.commander.DOWNLOAD_COMPLETE_LOCAL"
         const val EXTRA_DOWNLOAD_ID = "download_id"
         const val EXTRA_FILE_PATH = "file_path"
+        /** Present when the artefact was refused — today, a checksum the schema declared and the
+         *  bytes did not match. Its absence means the download succeeded. */
+        const val EXTRA_REJECTED = "rejected"
     }
 }

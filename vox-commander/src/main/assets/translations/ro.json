@@ -529,5 +529,6 @@
   "schema_problem": "%1$s — %2$s",
   "schema_reason_rejected": "refuzat: nu s-a putut interpreta sau a sosit gol",
   "schema_reason_unsigned": "refuzat: nicio semnătură validă nu îl acoperă",
-  "schema_reason_unreachable": "nu a putut fi citit (%1$s)"
+  "schema_reason_unreachable": "nu a putut fi citit (%1$s)",
+  "model_download_rejected": "Descărcarea a fost refuzată: fișierul nu corespunde sumei de control din schemă. A fost șters — încearcă din nou."
 }

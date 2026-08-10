@@ -459,7 +459,15 @@ class ModelDownloader(private val context: Context) {
      * Extraction runs on a daemon thread because a broadcast receiver has ~10s before an ANR and
      * multi-GB models need far longer.
      */
-    fun installDownloadedModel(modelId: String, engineKey: String, onReady: (dirName: String?) -> Unit) {
+    fun installDownloadedModel(
+        modelId: String,
+        engineKey: String,
+        /** Called when the artefact was refused. A caller that ignores this leaves whatever it
+         *  started — a spinner, a progress row — running forever, because the success path is what
+         *  normally tells it the download is over. */
+        onRejected: (reason: String) -> Unit = {},
+        onReady: (dirName: String?) -> Unit
+    ) {
         // Integrity before installation, while the artefact is still just a file on disk and has
         // not been handed to a native parser. The hash comes from the schema, which is signed, so
         // this asks "are these the bytes the provider published?" — not "do I approve of this URL".
@@ -469,6 +477,7 @@ class ModelDownloader(private val context: Context) {
             resolveLocalFile(modelId, engineKey)?.let { corrupt ->
                 if (corrupt.isDirectory) corrupt.deleteRecursively() else corrupt.delete()
             }
+            onRejected("checksum")
             return
         }
 

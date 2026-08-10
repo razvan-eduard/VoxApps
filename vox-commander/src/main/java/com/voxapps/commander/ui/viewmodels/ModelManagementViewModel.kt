@@ -196,6 +196,7 @@ class ModelManagementViewModel(
             val id = intent?.getLongExtra(DownloadCompleteReceiver.EXTRA_DOWNLOAD_ID, -1) ?: -1
             val directoryName = intent?.getStringExtra("directory_name")
             val modelType = intent?.getStringExtra("model_type")
+            val rejected = intent?.getStringExtra(DownloadCompleteReceiver.EXTRA_REJECTED)
 
             Logger.log("Download complete broadcast received: id=$id, type=$modelType, dir=$directoryName, handled=${handledDownloadIds.contains(id)}", Strings.Tags.MODEL_MANAGEMENT_VIEW_MODEL)
             if (id != -1L && !handledDownloadIds.contains(id)) {
@@ -206,6 +207,15 @@ class ModelManagementViewModel(
 
                 if (modelType != null) {
                     lastDownloadType = modelType
+                }
+
+                // A refused artefact is not a success: it has already been deleted, so recording it
+                // as downloaded would leave a green row pointing at nothing. The progress row is
+                // cleared above either way, which is the part that must happen regardless.
+                if (rejected != null) {
+                    Logger.log("Download refused ($rejected): type=$modelType, id=$lastDownloadedId", Strings.Tags.MODEL_MANAGEMENT_VIEW_MODEL)
+                    _downloadError.value = languageManager.getString("model_download_rejected")
+                    return
                 }
 
                 // Don't overwrite lastDownloadedId — it was set correctly in downloadModel()
