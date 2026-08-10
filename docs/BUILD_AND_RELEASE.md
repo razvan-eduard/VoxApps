@@ -46,8 +46,19 @@ project folder — however well gitignored — is one routine cleanup away from 
 schema key means an app release to embed a replacement.
 
 `./scripts/vox release package` and `./scripts/vox schemas sign` both look here by default, so
-neither needs arguments or environment variables. `RELEASE_KEYSTORE_PATH`,
-`RELEASE_KEYSTORE_PASSWORD` and `SCHEMA_SIGNING_KEY_FILE` still override, which is what CI uses.
+neither needs arguments or environment variables.
+
+**The schema key is deliberately not in GitHub.** The release keystore has to be — CI cannot build
+signed APKs otherwise — and putting the schema key beside it would mean one account compromise
+yields both: malicious schemas *and* a malicious signed APK. So schemas are signed on your machine
+and CI only verifies (`verify-schemas.yml`). After editing anything under `remote-schemas/`:
+
+```
+./scripts/vox schemas sign      # then commit manifest.json and manifest.json.sig
+```
+
+Forget, and the apps simply ignore the change — safe, but silent, which is why CI fails the check
+rather than leaving it to be noticed.
 
 ### The APK that ships
 

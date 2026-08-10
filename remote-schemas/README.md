@@ -17,9 +17,10 @@ becomes the source of truth until the user resets it — see `RemoteSchema` in `
 
 **Editing a file here is not enough.** These are adopted unattended at launch and they say where
 requests go, so an app refuses a changed schema from this repository unless its hash appears in
-`manifest.json` and that manifest is signed. `sign-schemas.yml` re-signs on every push that touches
-this folder; locally it is `./scripts/vox schemas sign` (needs the private key) and
-`./scripts/vox schemas verify` to check. An unsigned change is not dangerous — it simply never
+`manifest.json` and that manifest is signed. Signing happens on a developer machine — `./scripts/vox schemas sign` — because the key is
+deliberately kept out of GitHub, where the release keystore already lives. `verify-schemas.yml`
+checks the result on every push touching this folder, and fails if the manifest and the schemas
+disagree. An unsigned change is not dangerous — it simply never
 reaches anyone.
 
 The manifest also carries a `serial`, and an app refuses one no newer than the last it accepted. A

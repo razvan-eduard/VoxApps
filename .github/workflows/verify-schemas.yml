@@ -1,0 +1,50 @@
+name: Verify signed schemas
+
+# The apps fetch remote-schemas/ at every launch and adopt what they get. Those files name engine
+# endpoints and carry the NLU prompt, so a change to them changes what every install does, with no
+# app update and nothing for the user to accept.
+#
+# This job does NOT sign. Signing happens on a developer machine, with a key that never goes near
+# GitHub, and this checks the result.
+#
+# The reason is that the release keystore already lives in a repository secret — it has to, or CI
+# could not build signed APKs. Putting the schema key beside it would mean one account compromise
+# yields both: the attacker pushes a workflow that signs malicious schemas AND publishes a malicious
+# APK. Keeping this key offline is the only thing that makes schema signing say something the
+# release keystore does not already say.
+#
+# So the split is: you sign locally (`./scripts/vox schemas sign`), and CI refuses to let an
+# unsigned or mis-signed change sit in main unnoticed. An unsigned schema is not dangerous — the
+# apps ignore it — but it is silent, and silence is what this converts into a failed check.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'remote-schemas/**'
+      - 'scripts/sign_schemas.sh'
+  workflow_dispatch: {}
+
+concurrency:
+  group: verify-schemas
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: The manifest must cover these schemas, and verify against the committed key
+        run: |
+          if ! ./scripts/vox schemas verify; then
+            echo "::error::The schemas and the signed manifest disagree."
+            echo "::error::Until they match, the apps ignore every change here — silently."
+            echo "::error::Fix locally: ./scripts/vox schemas sign && git commit -am 'chore: re-sign schemas'"
+            exit 1
+          fi

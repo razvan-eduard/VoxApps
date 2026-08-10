@@ -16,9 +16,11 @@ set -uo pipefail
 #     ./scripts/vox schemas sign      # writes remote-schemas/manifest.json{,.sig}
 #     ./scripts/vox schemas verify    # checks the manifest against the files and the public key
 #
-# Key handling: the private key never lives in this repo. Signing in CI reads it from the
-# SCHEMA_SIGNING_KEY secret; locally it reads $SCHEMA_SIGNING_KEY_FILE. The public half is committed
-# (remote-schemas/signing-key.pub) and embedded in the apps, which is what makes verification mean
+# Key handling: the private key never goes to GitHub. It is not a CI secret, on purpose — the
+# release keystore already is one (it must be, or CI could not sign APKs), and putting this key
+# beside it would mean a single account compromise yields both a malicious APK and malicious
+# schemas. Signing is local; CI only verifies. The public half is committed
+# (remote-schemas/signing-key.pub) and compiled into the apps, which is what makes verification mean
 # anything.
 
 # shellcheck source=scripts/lib/common.sh
@@ -82,7 +84,7 @@ case "$MODE" in
         fi
         if [ -z "$KEY_FILE" ] || [ ! -f "$KEY_FILE" ]; then
             log_error "❌ No signing key."
-            log_error "   CI: set the SCHEMA_SIGNING_KEY secret."
+            log_error "   This is signed locally by design — it is not a CI secret."
             log_error "   Locally: put it at $DEFAULT_KEY, or set SCHEMA_SIGNING_KEY_FILE"
             log_error "   To create one: ./scripts/vox schemas keygen"
             exit 1
