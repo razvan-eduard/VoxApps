@@ -106,7 +106,7 @@ jobs:
 
       - name: Set up Android SDK
         if: steps.opencv_cache.outputs.cache-hit != 'true'
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           accept-android-licenses: true
 
