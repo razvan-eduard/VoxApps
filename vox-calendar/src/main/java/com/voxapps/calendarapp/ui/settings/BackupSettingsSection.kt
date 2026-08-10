@@ -38,7 +38,8 @@ fun BackupSettingsSection(settingsRepo: CalendarSettingsRepository, settings: Ca
     val handler = remember {
         CalendarExportImportHandler(
             context, container.settingsRepository, container.sessionManager,
-            container.calendarRepository, container.attachmentDao, container.toDoListDao
+            container.calendarRepository, container.attachmentDao, container.toDoListDao,
+            container.lockedMessage
         )
     }
 

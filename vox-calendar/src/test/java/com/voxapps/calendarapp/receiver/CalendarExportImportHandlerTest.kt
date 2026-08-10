@@ -50,7 +50,10 @@ class CalendarExportImportHandlerTest {
         calendarRepo = mockk()
         attachmentDao = mockk(relaxed = true)
         toDoListDao = mockk()
-        handler = CalendarExportImportHandler(context, settingsRepo, sessionManager, calendarRepo, attachmentDao, toDoListDao)
+        handler = CalendarExportImportHandler(
+            context, settingsRepo, sessionManager, calendarRepo, attachmentDao, toDoListDao,
+            "The calendar is locked. Unlock the app."
+        )
 
         every { settingsRepo.getSnapshot() } returns CalendarSettings(isBiometricRequired = false)
         coEvery { calendarRepo.layersSnapshot() } returns emptyList()

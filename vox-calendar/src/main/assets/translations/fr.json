@@ -265,5 +265,6 @@
   "todo_bleed_to_calendar": "Afficher les tâches dans le calendrier",
   "todo_bleed_to_calendar_desc": "Indique si les tâches à faire avec une date/heure d'échéance apparaissent aussi dans la grille standard Mois/Semaine/Jour/Année. Les rappels continuent de fonctionner dans tous les cas.",
   "animations_enabled": "Animations",
-  "animations_enabled_desc": "Animations de transition décoratives, comme le retournement entre Calendrier et Listes de tâches."
+  "animations_enabled_desc": "Animations de transition décoratives, comme le retournement entre Calendrier et Listes de tâches.",
+  "locked_message": "Le calendrier est verrouillé. Déverrouillez l'application."
 }

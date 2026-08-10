@@ -24,7 +24,8 @@ import org.json.JSONObject
 class ExpensesReadResponder(
     private val settingsRepo: ExpensesSettingsRepository,
     private val sessionManager: SessionManager,
-    private val expensesRepo: ExpensesRepository
+    private val expensesRepo: ExpensesRepository,
+    private val lockedMessage: String
 ) {
     suspend fun respond(dateFrom: Long? = null, dateTo: Long? = null): VoxResult {
         val settings = settingsRepo.getSnapshot()
@@ -36,7 +37,7 @@ class ExpensesReadResponder(
             
         if (locked) {
             com.voxapps.logging.Logger.d("ExpensesReadResponder", "Read request BLOCKED (Biometric Lock)")
-            return VoxResult(ok = false, text = LOCKED_MESSAGE)
+            return VoxResult(ok = false, text = lockedMessage)
         }
 
         if (dateFrom != null && dateTo != null) {
@@ -65,9 +66,5 @@ class ExpensesReadResponder(
             listOfNotNull(label, "${expense.totalAmount} ${expense.currencyCode}").joinToString(": ")
         }
         return VoxResult(ok = true, text = text)
-    }
-
-    companion object {
-        const val LOCKED_MESSAGE = "Cheltuielile sunt blocate. Deblochează aplicația."
     }
 }

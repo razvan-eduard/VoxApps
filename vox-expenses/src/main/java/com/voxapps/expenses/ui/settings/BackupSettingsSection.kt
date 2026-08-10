@@ -38,7 +38,8 @@ fun BackupSettingsSection(settingsRepo: ExpensesSettingsRepository, settings: Ex
     val handler = remember {
         ExpensesExportImportHandler(
             context, container.settingsRepository, container.sessionManager,
-            container.expensesRepository, container.attachmentDao, container.duplicateRuleDao
+            container.expensesRepository, container.attachmentDao, container.duplicateRuleDao,
+            container.lockedMessage
         )
     }
 

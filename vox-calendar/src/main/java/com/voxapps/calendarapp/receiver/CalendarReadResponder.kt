@@ -13,21 +13,18 @@ import com.voxapps.ipc.VoxResult
 class CalendarReadResponder(
     private val settingsRepo: CalendarSettingsRepository,
     private val sessionManager: SessionManager,
-    private val calendarRepo: CalendarRepository
+    private val calendarRepo: CalendarRepository,
+    private val lockedMessage: String
 ) {
     suspend fun respond(): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
-        if (locked) return VoxResult(ok = false, text = LOCKED_MESSAGE)
+        if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         val text = calendarRepo.entriesSnapshot().joinToString("\n") { ewt ->
             "${ewt.entry.title}: ${ewt.entry.startMillis}"
         }
         return VoxResult(ok = true, text = text)
-    }
-
-    companion object {
-        const val LOCKED_MESSAGE = "Calendarul este blocat. Deblochează aplicația."
     }
 }

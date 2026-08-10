@@ -185,5 +185,6 @@
   "notifications_length_long": "Lung",
   "capture_mode_single": "O singură poză",
   "capture_mode_stitch": "Îmbinare",
-  "capture_mode_batch": "Lot"
+  "capture_mode_batch": "Lot",
+  "locked_message": "Notele sunt blocate. Deblochează aplicația."
 }

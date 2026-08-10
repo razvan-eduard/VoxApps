@@ -49,10 +49,9 @@ class CalendarExportImportHandler(
     private val sessionManager: SessionManager,
     private val calendarRepo: CalendarRepository,
     private val attachmentDao: AttachmentDao,
-    private val toDoListDao: ToDoListDao
+    private val toDoListDao: ToDoListDao,
+    override val lockedMessage: String
 ) : VoxExportImportHandler(context, CalendarAttachments.DIR, CalendarAttachments.FILE_PROVIDER_AUTHORITY) {
-
-    override val lockedMessage: String get() = CalendarReadResponder.LOCKED_MESSAGE
 
     override suspend fun isLocked(): Boolean {
         val settings = settingsRepo.getSnapshot()

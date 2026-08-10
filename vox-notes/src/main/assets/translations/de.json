@@ -185,5 +185,6 @@
   "notifications_length_long": "Lang",
   "capture_mode_single": "Einzelaufnahme",
   "capture_mode_stitch": "Zusammenfügen",
-  "capture_mode_batch": "Stapel"
+  "capture_mode_batch": "Stapel",
+  "locked_message": "Die Notizen sind gesperrt. Entsperre die App."
 }

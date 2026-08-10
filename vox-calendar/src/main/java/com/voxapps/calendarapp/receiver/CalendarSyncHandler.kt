@@ -29,13 +29,14 @@ import com.voxapps.design.color.VoxColorPalette
 class CalendarSyncHandler(
     private val settingsRepo: CalendarSettingsRepository,
     private val sessionManager: SessionManager,
-    private val calendarRepo: CalendarRepository
+    private val calendarRepo: CalendarRepository,
+    private val lockedMessage: String
 ) {
     suspend fun export(since: Long, scopeNames: List<String>?): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
-        if (locked) return VoxResult(ok = false, text = CalendarReadResponder.LOCKED_MESSAGE)
+        if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         val layerNameById = calendarRepo.layers.first().associate { it.id to it.name }
         val scopeSet = scopeNames?.takeIf { it.isNotEmpty() }?.map { it.lowercase() }?.toSet()
@@ -62,7 +63,7 @@ class CalendarSyncHandler(
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
-        if (locked) return VoxResult(ok = false, text = CalendarReadResponder.LOCKED_MESSAGE)
+        if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         val root = try {
             JSONObject(deltaJson)

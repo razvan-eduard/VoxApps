@@ -100,7 +100,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val responder = ExpensesReadResponder(
                     container.settingsRepository,
                     container.sessionManager,
-                    container.expensesRepository
+                    container.expensesRepository,
+                    container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
@@ -123,7 +124,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.sessionManager,
                     container.expensesRepository,
                     container.attachmentDao,
-                    container.duplicateRuleDao
+                    container.duplicateRuleDao,
+                    container.lockedMessage
                 )
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
                 VoxBackupDispatch.dispatch(this) {
@@ -138,7 +140,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.sessionManager,
                     container.expensesRepository,
                     container.attachmentDao,
-                    container.duplicateRuleDao
+                    container.duplicateRuleDao,
+                    container.lockedMessage
                 )
                 VoxBackupDispatch.dispatch(this) {
                     handler.import(command.text.orEmpty(), VoxImportMode.fromWireValue(command.importMode))
@@ -149,7 +152,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val handler = ExpensesSyncHandler(
                     container.settingsRepository,
                     container.sessionManager,
-                    container.expensesRepository
+                    container.expensesRepository,
+                    container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
@@ -165,7 +169,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val handler = ExpensesSyncHandler(
                     container.settingsRepository,
                     container.sessionManager,
-                    container.expensesRepository
+                    container.expensesRepository,
+                    container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {

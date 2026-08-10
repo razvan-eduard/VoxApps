@@ -428,5 +428,6 @@
   "schema_problem": "%1$s — %2$s",
   "schema_reason_rejected": "refusé : illisible ou vide à l'arrivée",
   "schema_reason_unsigned": "refusé : aucune signature valide ne le couvre",
-  "schema_reason_unreachable": "n'a pas pu être lu (%1$s)"
+  "schema_reason_unreachable": "n'a pas pu être lu (%1$s)",
+  "locked_message": "Les dépenses sont verrouillées. Déverrouillez l'application."
 }

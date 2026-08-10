@@ -185,5 +185,6 @@
   "notifications_length_long": "Long",
   "capture_mode_single": "Single shot",
   "capture_mode_stitch": "Stitch",
-  "capture_mode_batch": "Batch"
+  "capture_mode_batch": "Batch",
+  "locked_message": "The notes are locked. Unlock the app."
 }

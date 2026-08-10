@@ -33,7 +33,7 @@ class NotesSyncHandlerTest {
         settingsRepo = mockk()
         sessionManager = mockk()
         notesRepo = mockk()
-        handler = NotesSyncHandler(settingsRepo, sessionManager, notesRepo)
+        handler = NotesSyncHandler(settingsRepo, sessionManager, notesRepo, "The notes are locked. Unlock the app.")
 
         every { settingsRepo.getSnapshot() } returns NotesSettings(isBiometricRequired = false)
         every { notesRepo.categories } returns flowOf(emptyList())

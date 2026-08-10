@@ -89,7 +89,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val responder = NotesReadResponder(
                     container.settingsRepository,
                     container.sessionManager,
-                    container.notesRepository
+                    container.notesRepository,
+                    container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
@@ -111,7 +112,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.settingsRepository,
                     container.sessionManager,
                     container.notesRepository,
-                    container.attachmentDao
+                    container.attachmentDao,
+                    container.lockedMessage
                 )
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
                 VoxBackupDispatch.dispatch(this) {
@@ -125,7 +127,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.settingsRepository,
                     container.sessionManager,
                     container.notesRepository,
-                    container.attachmentDao
+                    container.attachmentDao,
+                    container.lockedMessage
                 )
                 VoxBackupDispatch.dispatch(this) {
                     handler.import(command.text.orEmpty(), VoxImportMode.fromWireValue(command.importMode))
@@ -136,7 +139,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val handler = NotesSyncHandler(
                     container.settingsRepository,
                     container.sessionManager,
-                    container.notesRepository
+                    container.notesRepository,
+                    container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
@@ -152,7 +156,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val handler = NotesSyncHandler(
                     container.settingsRepository,
                     container.sessionManager,
-                    container.notesRepository
+                    container.notesRepository,
+                    container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {

@@ -51,6 +51,14 @@ class NotesContainer(context: Context) {
         it.loadLanguage(settingsRepository.getSnapshot().language)
     }
 
+    /**
+     * What a caller over the IPC bus is told when this app is locked. Read through
+     * [languageManager] because it is spoken and displayed by whoever asked — Commander's TTS, Hub's
+     * backup screen — so it has to be in the language the user set, not the language it was written
+     * in.
+     */
+    val lockedMessage: String get() = languageManager.getString("locked_message")
+
     init {
         // Keeps NotesWidget's home-screen snapshot fresh — reacts to lock-state transitions
         // (uiState), data changes (notesWithCategory, read independently of any in-app filter, see

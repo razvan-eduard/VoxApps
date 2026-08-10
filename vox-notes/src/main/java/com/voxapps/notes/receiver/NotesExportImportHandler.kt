@@ -31,10 +31,9 @@ class NotesExportImportHandler(
     private val settingsRepo: NotesSettingsRepository,
     private val sessionManager: SessionManager,
     private val notesRepo: NotesRepository,
-    private val attachmentDao: AttachmentDao
+    private val attachmentDao: AttachmentDao,
+    override val lockedMessage: String
 ) : VoxExportImportHandler(context, NotesAttachments.DIR, NotesAttachments.FILE_PROVIDER_AUTHORITY) {
-
-    override val lockedMessage: String get() = NotesReadResponder.LOCKED_MESSAGE
 
     override suspend fun isLocked(): Boolean {
         val settings = settingsRepo.getSnapshot()

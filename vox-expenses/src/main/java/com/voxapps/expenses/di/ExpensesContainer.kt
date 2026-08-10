@@ -73,6 +73,14 @@ class ExpensesContainer(context: Context) {
         appContext
     )
 
+    /**
+     * What a caller over the IPC bus is told when this app is locked. Read through
+     * [languageManager] because it is spoken and displayed by whoever asked — Commander's TTS, Hub's
+     * backup screen — so it has to be in the language the user set, not the language it was written
+     * in.
+     */
+    val lockedMessage: String get() = languageManager.getString("locked_message")
+
     val languageManager = LanguageManager(appContext).also {
         it.loadLanguage(settingsRepository.getSnapshot().language)
     }

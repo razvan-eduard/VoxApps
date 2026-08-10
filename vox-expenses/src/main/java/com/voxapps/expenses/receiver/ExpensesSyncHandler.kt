@@ -35,13 +35,14 @@ import com.voxapps.design.color.VoxColorPalette
 class ExpensesSyncHandler(
     private val settingsRepo: ExpensesSettingsRepository,
     private val sessionManager: SessionManager,
-    private val expensesRepo: ExpensesRepository
+    private val expensesRepo: ExpensesRepository,
+    private val lockedMessage: String
 ) {
     suspend fun export(since: Long, scopeNames: List<String>?): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
-        if (locked) return VoxResult(ok = false, text = ExpensesReadResponder.LOCKED_MESSAGE)
+        if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         val scopeSet = scopeNames?.takeIf { it.isNotEmpty() }?.map { it.lowercase() }?.toSet()
 
@@ -67,7 +68,7 @@ class ExpensesSyncHandler(
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
-        if (locked) return VoxResult(ok = false, text = ExpensesReadResponder.LOCKED_MESSAGE)
+        if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         val root = try {
             JSONObject(deltaJson)

@@ -57,7 +57,8 @@ class ExpensesExportImportHandler(
     private val sessionManager: SessionManager,
     private val expensesRepo: ExpensesRepository,
     private val attachmentDao: AttachmentDao,
-    private val duplicateRuleDao: DuplicateRuleDao
+    private val duplicateRuleDao: DuplicateRuleDao,
+    private val lockedMessage: String
 ) {
     suspend fun export(
         scope: String = VoxIpc.EXPORT_SCOPE_BOTH,
@@ -66,7 +67,7 @@ class ExpensesExportImportHandler(
     ): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = VoxBiometricGate.isLocked(settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid)
-        if (locked) return VoxResult(ok = false, text = ExpensesReadResponder.LOCKED_MESSAGE)
+        if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         val json = JSONObject()
         var attachmentUri: String? = null
@@ -150,7 +151,7 @@ class ExpensesExportImportHandler(
     suspend fun import(payloadJson: String, importMode: VoxImportMode = VoxImportMode.MERGE): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = VoxBiometricGate.isLocked(settings.isBiometricRequired, settings.sessionTimeoutMinutes, sessionManager::isSessionValid)
-        if (locked) return VoxResult(ok = false, text = ExpensesReadResponder.LOCKED_MESSAGE)
+        if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         val root = try {
             JSONObject(payloadJson)

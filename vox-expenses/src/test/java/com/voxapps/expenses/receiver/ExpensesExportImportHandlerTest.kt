@@ -48,7 +48,10 @@ class ExpensesExportImportHandlerTest {
         expensesRepo = mockk()
         attachmentDao = mockk(relaxed = true)
         duplicateRuleDao = mockk(relaxed = true)
-        handler = ExpensesExportImportHandler(context, settingsRepo, sessionManager, expensesRepo, attachmentDao, duplicateRuleDao)
+        handler = ExpensesExportImportHandler(
+            context, settingsRepo, sessionManager, expensesRepo, attachmentDao, duplicateRuleDao,
+            "The expenses are locked. Unlock the app."
+        )
 
         every { settingsRepo.getSnapshot() } returns ExpensesSettings(isBiometricRequired = false)
         every { expensesRepo.categories } returns flowOf(emptyList())

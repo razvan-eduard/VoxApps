@@ -21,7 +21,10 @@ class NotesReadResponderTest {
     private val settingsRepo = mockk<NotesSettingsRepository>()
     private val sessionManager = mockk<SessionManager>()
     private val notesRepo = mockk<NotesRepository>()
-    private val responder = NotesReadResponder(settingsRepo, sessionManager, notesRepo)
+    // The locked reply is localized by the caller (NotesContainer.lockedMessage) and passed in, so
+    // this responder stays free of Android and of any particular language.
+    private val lockedMessage = "The notes are locked. Unlock the app."
+    private val responder = NotesReadResponder(settingsRepo, sessionManager, notesRepo, lockedMessage)
 
     @Test
     fun `locked read never touches the DB and returns the spoken message`() = runTest {
@@ -31,7 +34,7 @@ class NotesReadResponderTest {
         val result = responder.respond()
 
         assertFalse(result.ok)
-        assertEquals(NotesReadResponder.LOCKED_MESSAGE, result.text)
+        assertEquals(lockedMessage, result.text)
         coVerify(exactly = 0) { notesRepo.notesSnapshot() }
     }
 

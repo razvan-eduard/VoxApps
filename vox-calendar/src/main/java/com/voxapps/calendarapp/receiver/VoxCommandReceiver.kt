@@ -107,7 +107,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val responder = CalendarReadResponder(
                     container.settingsRepository,
                     container.sessionManager,
-                    container.calendarRepository
+                    container.calendarRepository,
+                    container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
@@ -130,7 +131,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.sessionManager,
                     container.calendarRepository,
                     container.attachmentDao,
-                    container.toDoListDao
+                    container.toDoListDao,
+                    container.lockedMessage
                 )
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
                 VoxBackupDispatch.dispatch(this) {
@@ -145,7 +147,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.sessionManager,
                     container.calendarRepository,
                     container.attachmentDao,
-                    container.toDoListDao
+                    container.toDoListDao,
+                    container.lockedMessage
                 )
                 VoxBackupDispatch.dispatch(this) {
                     handler.import(command.text.orEmpty(), VoxImportMode.fromWireValue(command.importMode))
@@ -156,7 +159,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val handler = CalendarSyncHandler(
                     container.settingsRepository,
                     container.sessionManager,
-                    container.calendarRepository
+                    container.calendarRepository,
+                    container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
@@ -172,7 +176,8 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val handler = CalendarSyncHandler(
                     container.settingsRepository,
                     container.sessionManager,
-                    container.calendarRepository
+                    container.calendarRepository,
+                    container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {

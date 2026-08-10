@@ -36,7 +36,7 @@ class ExpensesSyncHandlerTest {
         settingsRepo = mockk()
         sessionManager = mockk()
         expensesRepo = mockk()
-        handler = ExpensesSyncHandler(settingsRepo, sessionManager, expensesRepo)
+        handler = ExpensesSyncHandler(settingsRepo, sessionManager, expensesRepo, "The expenses are locked. Unlock the app.")
 
         every { settingsRepo.getSnapshot() } returns ExpensesSettings(isBiometricRequired = false)
         every { expensesRepo.categories } returns flowOf(emptyList())

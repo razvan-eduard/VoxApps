@@ -38,7 +38,10 @@ class NotesExportImportHandlerTest {
         sessionManager = mockk()
         notesRepo = mockk()
         attachmentDao = mockk(relaxed = true)
-        handler = NotesExportImportHandler(mockk<Context>(), settingsRepo, sessionManager, notesRepo, attachmentDao)
+        handler = NotesExportImportHandler(
+            mockk<Context>(), settingsRepo, sessionManager, notesRepo, attachmentDao,
+            "The notes are locked. Unlock the app."
+        )
 
         every { settingsRepo.getSnapshot() } returns NotesSettings(isBiometricRequired = false)
         every { notesRepo.categories } returns flowOf(emptyList())

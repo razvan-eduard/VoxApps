@@ -265,5 +265,6 @@
   "todo_bleed_to_calendar": "Show to-do tasks in calendar",
   "todo_bleed_to_calendar_desc": "Whether to-do items with a due date/time also show up on the standard Month/Week/Day/Year grid. Reminders keep working either way.",
   "animations_enabled": "Animations",
-  "animations_enabled_desc": "Decorative transition animations, like the flip between Calendar and To-do lists."
+  "animations_enabled_desc": "Decorative transition animations, like the flip between Calendar and To-do lists.",
+  "locked_message": "The calendar is locked. Unlock the app."
 }

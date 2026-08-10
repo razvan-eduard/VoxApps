@@ -22,7 +22,10 @@ class ExpensesReadResponderTest {
     private val settingsRepo = mockk<ExpensesSettingsRepository>()
     private val sessionManager = mockk<SessionManager>()
     private val expensesRepo = mockk<ExpensesRepository>()
-    private val responder = ExpensesReadResponder(settingsRepo, sessionManager, expensesRepo)
+    // Localized by the caller (ExpensesContainer.lockedMessage) and passed in, so this responder
+    // stays free of Android and of any particular language.
+    private val lockedMessage = "The expenses are locked. Unlock the app."
+    private val responder = ExpensesReadResponder(settingsRepo, sessionManager, expensesRepo, lockedMessage)
 
     @Test
     fun `date-range read includes id and colorArgb for Calendar's day-summary sheet`() = runTest {
@@ -55,6 +58,6 @@ class ExpensesReadResponderTest {
         val result = responder.respond()
 
         assertFalse(result.ok)
-        assertEquals(ExpensesReadResponder.LOCKED_MESSAGE, result.text)
+        assertEquals(lockedMessage, result.text)
     }
 }

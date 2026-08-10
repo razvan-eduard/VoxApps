@@ -36,7 +36,7 @@ class CalendarSyncHandlerTest {
         settingsRepo = mockk()
         sessionManager = mockk()
         calendarRepo = mockk()
-        handler = CalendarSyncHandler(settingsRepo, sessionManager, calendarRepo)
+        handler = CalendarSyncHandler(settingsRepo, sessionManager, calendarRepo, "The calendar is locked. Unlock the app.")
 
         every { settingsRepo.getSnapshot() } returns CalendarSettings(isBiometricRequired = false)
         every { calendarRepo.layers } returns flowOf(emptyList())

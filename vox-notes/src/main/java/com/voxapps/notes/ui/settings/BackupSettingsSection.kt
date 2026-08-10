@@ -34,7 +34,14 @@ fun BackupSettingsSection(settingsRepo: NotesSettingsRepository, settings: Notes
     val scope = rememberCoroutineScope()
     val container = remember { (context.applicationContext as NotesApplication).container }
     val handler = remember {
-        NotesExportImportHandler(context, container.settingsRepository, container.sessionManager, container.notesRepository, container.attachmentDao)
+        NotesExportImportHandler(
+            context,
+            container.settingsRepository,
+            container.sessionManager,
+            container.notesRepository,
+            container.attachmentDao,
+            container.lockedMessage
+        )
     }
 
     var isBusy by remember { mutableStateOf(false) }

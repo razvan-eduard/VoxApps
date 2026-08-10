@@ -25,13 +25,14 @@ import com.voxapps.design.color.VoxColorPalette
 class NotesSyncHandler(
     private val settingsRepo: NotesSettingsRepository,
     private val sessionManager: SessionManager,
-    private val notesRepo: NotesRepository
+    private val notesRepo: NotesRepository,
+    private val lockedMessage: String
 ) {
     suspend fun export(since: Long, scopeNames: List<String>?): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
-        if (locked) return VoxResult(ok = false, text = NotesReadResponder.LOCKED_MESSAGE)
+        if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         val categoryNameById = notesRepo.categories.first().associate { it.id to it.name }
         val scopeSet = scopeNames?.takeIf { it.isNotEmpty() }?.map { it.lowercase() }?.toSet()
@@ -55,7 +56,7 @@ class NotesSyncHandler(
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
-        if (locked) return VoxResult(ok = false, text = NotesReadResponder.LOCKED_MESSAGE)
+        if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         val root = try {
             JSONObject(deltaJson)

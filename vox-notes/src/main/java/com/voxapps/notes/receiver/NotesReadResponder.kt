@@ -24,7 +24,8 @@ import org.json.JSONObject
 class NotesReadResponder(
     private val settingsRepo: NotesSettingsRepository,
     private val sessionManager: SessionManager,
-    private val notesRepo: NotesRepository
+    private val notesRepo: NotesRepository,
+    private val lockedMessage: String
 ) {
     suspend fun respond(dateFrom: Long? = null, dateTo: Long? = null): VoxResult {
         val settings = settingsRepo.getSnapshot()
@@ -33,7 +34,7 @@ class NotesReadResponder(
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
 
-        if (locked) return VoxResult(ok = false, text = LOCKED_MESSAGE)
+        if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         if (dateFrom != null && dateTo != null) {
             val notes = notesRepo.notesForDateRange(dateFrom, dateTo)
@@ -57,9 +58,5 @@ class NotesReadResponder(
             listOfNotNull(note.title, note.text).joinToString(": ")
         }
         return VoxResult(ok = true, text = text)
-    }
-
-    companion object {
-        const val LOCKED_MESSAGE = "Notele sunt blocate. Deblochează aplicația."
     }
 }

@@ -265,5 +265,6 @@
   "todo_bleed_to_calendar": "Aufgaben im Kalender anzeigen",
   "todo_bleed_to_calendar_desc": "Ob To-do-Aufgaben mit Fälligkeitsdatum/-zeit auch im normalen Monats-/Wochen-/Tages-/Jahresraster erscheinen. Erinnerungen funktionieren in jedem Fall weiter.",
   "animations_enabled": "Animationen",
-  "animations_enabled_desc": "Dekorative Übergangsanimationen, wie der Flip zwischen Kalender und To-do-Listen."
+  "animations_enabled_desc": "Dekorative Übergangsanimationen, wie der Flip zwischen Kalender und To-do-Listen.",
+  "locked_message": "Der Kalender ist gesperrt. Entsperre die App."
 }
