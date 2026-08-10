@@ -196,6 +196,31 @@ else
     rm -f "$LIVE_COPY"
 fi
 
+log_blue "── the sync workflows' dedup gate ──────────────────────────"
+#
+# `gh pr list --json ... -q '.[0] | "\(.number) \(.state)"'` renders an empty result as the literal
+# string "null null", which is not empty — so a `[ -n "$EXISTING" ]` test reads "no PR exists" as
+# "a PR exists" and the sync skips every single run. Nothing reports it: the job is green, every
+# step after the gate is `skipped`, and the only symptom is upstream updates that never arrive.
+# `select(.)` drops the null so an absent PR is an empty string.
+for wf in .github/workflows/sync-*.yml; do
+    name=$(basename "$wf" .yml)
+    grep -q 'gh pr list --head' "$wf" || continue
+    if grep -q "select(\.)" "$wf"; then
+        ok "$name: dedup distinguishes no-PR from a PR"
+    else
+        bad "$name: dedup interpolates .[0] without select(.) — an absent PR reads as 'null null'" \
+            "$(grep -n 'gh pr list --head' "$wf" | head -1)"
+    fi
+
+    # The gate has to stay overridable, or a target declined once can never be reconsidered.
+    if grep -q 'inputs.force' "$wf"; then
+        ok "$name: a declined target can be re-proposed with force"
+    else
+        bad "$name: dedup has no force override"
+    fi
+done
+
 echo
 if [ "$FAIL" -eq 0 ]; then
     log_info "✅ $PASS passed."

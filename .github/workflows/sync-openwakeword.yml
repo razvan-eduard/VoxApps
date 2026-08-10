@@ -19,7 +19,12 @@ name: Sync OpenWakeword Fork
 on:
   schedule:
     - cron: '0 6 * * 3' # weekly, Wednesday 06:00 UTC
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Re-propose a target that was previously declined'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -59,8 +64,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="chore/sync-openwakeword-${{ steps.versions.outputs.latest_tag }}"
-          EXISTING=$(gh pr list --head "$BRANCH" --state all --json number,state -q '.[0] | "\(.number) \(.state)"' || true)
-          if [ -n "$EXISTING" ]; then
+          EXISTING=$(gh pr list --head "$BRANCH" --state all --json number,state -q '.[0] | select(.) | "\(.number) \(.state)"' || true)
+          if [ -n "$EXISTING" ] && [ "${{ inputs.force }}" = "true" ]; then
+            echo "PR $EXISTING already exists for $BRANCH — re-proposing it (force)"
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$EXISTING" ]; then
             echo "PR $EXISTING already exists for $BRANCH — nothing to do"
             echo "proceed=false" >> "$GITHUB_OUTPUT"
           else

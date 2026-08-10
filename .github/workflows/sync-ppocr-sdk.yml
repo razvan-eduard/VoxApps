@@ -23,7 +23,12 @@ name: Sync PaddleOCR ppocr-sdk Fork
 on:
   schedule:
     - cron: '0 6 * * 5' # weekly, Friday 06:00 UTC
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Re-propose a target that was previously declined'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -73,9 +78,16 @@ jobs:
           # taking this upstream commit" — and it has to stick. Deduping on open PRs only meant a
           # closed one came straight back the following week, identical, so declining an update was
           # impossible and the PRs accumulated as permanent noise instead.
-          EXISTING=$(gh pr list --head "$BRANCH" --state all --json number,state -q '.[0] | "\(.number) \(.state)"' || true)
-          if [ -n "$EXISTING" ]; then
-            echo "PR $EXISTING already exists for $BRANCH — skipping re-sync"
+          #
+          # A decision is not a life sentence: dispatching with force re-proposes a declined target,
+          # which is how a target closed for a reason since fixed gets another run. Only a manual
+          # dispatch can set it, so the weekly schedule still respects every past decline.
+          EXISTING=$(gh pr list --head "$BRANCH" --state all --json number,state -q '.[0] | select(.) | "\(.number) \(.state)"' || true)
+          if [ -n "$EXISTING" ] && [ "${{ inputs.force }}" = "true" ]; then
+            echo "PR $EXISTING already exists for $BRANCH — re-proposing it (force)"
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$EXISTING" ]; then
+            echo "PR $EXISTING already exists for $BRANCH — nothing to do"
             echo "proceed=false" >> "$GITHUB_OUTPUT"
           else
             echo "proceed=true" >> "$GITHUB_OUTPUT"
