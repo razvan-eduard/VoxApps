@@ -29,6 +29,9 @@ UPSTREAM_URL="https://github.com/Re-MENTIA/openwakeword-android-kt.git"
 # dry-run locally, non-destructively (the working tree is left untouched either way).
 
 if [ ! -e "$SUBMODULE_DIR/.git" ]; then
+    # Answer definitely rather than saying nothing: a silent exit leaves check_upstream.sh reporting
+    # "unknown", which reads like a network failure rather than an uninitialised submodule.
+    emit has_update false
     log_warn "⚠️ vendor/openwakeword-android-kt submodule not initialized — skipping check."
     log_warn "   Run: git submodule update --init vendor/openwakeword-android-kt"
     exit 0

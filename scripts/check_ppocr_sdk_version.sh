@@ -33,15 +33,15 @@ UPSTREAM_URL="https://github.com/PaddlePaddle/PaddleOCR.git"
 # moved past our pinned commit on its default branch, and whether the stored patch would still apply
 # cleanly against the newer tree — non-destructively (the working tree is left untouched either way).
 
-if [ ! -e "$SUBMODULE_DIR/.git" ]; then
-    log_warn "⚠️ vendor/paddleocr-upstream submodule not initialized — skipping check."
-    log_warn "   Run: git submodule update --init vendor/paddleocr-upstream"
-    log_warn "   Then: git -C vendor/paddleocr-upstream sparse-checkout set $SUBTREE_PATH"
-    exit 0
-fi
+# Read the pin out of the repo tree, not out of the submodule working copy: detection has to work
+# where the submodule was never checked out — which is exactly how sync-ppocr-sdk.yml runs
+# (submodules: false, it clones the sparse upstream itself later). Gating the whole script on the
+# submodule made this report empty on the runner and silently retired the bot.
+HAVE_SUBMODULE=false
+[ -e "$SUBMODULE_DIR/.git" ] && HAVE_SUBMODULE=true
 
-CURRENT_SHA=$(git -C "$SUBMODULE_DIR" rev-parse HEAD)
-CURRENT_SHORT=$(git -C "$SUBMODULE_DIR" rev-parse --short HEAD)
+CURRENT_SHA=$(git -C "$PROJECT_ROOT" ls-tree HEAD vendor/paddleocr-upstream | awk '{print $3}')
+CURRENT_SHORT=${CURRENT_SHA:0:9}
 
 log_blue "🔍 Checking PaddleOCR ppocr-android SDK version (submodule vs. upstream default branch)..."
 log_info "Current: $CURRENT_SHORT"
@@ -75,6 +75,11 @@ if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
     emit has_update true
     LATEST_SHORT=${LATEST_SHA:0:9}
     log_warn "🚀 UPDATE AVAILABLE: $CURRENT_SHORT -> $LATEST_SHORT (upstream default branch)"
+
+    if [ "$HAVE_SUBMODULE" != true ]; then
+        log_warn "   (vendor/paddleocr-upstream not checked out — skipping the would-it-still-apply dry-run)"
+        log_warn "    git submodule update --init vendor/paddleocr-upstream to enable it."
+    else
 
     # Non-destructive dry-run, once per patch: fetch the files that patch touches at the latest
     # commit (object database only, no working-tree checkout of the whole repo), swap them in
@@ -137,6 +142,7 @@ if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
 
     restore_all
     trap - EXIT INT TERM
+    fi
 
     if [ "$REPORT" != true ]; then
     echo -e "\nThis is a ${YELLOW}vendored + patched${NC} module. To update:"

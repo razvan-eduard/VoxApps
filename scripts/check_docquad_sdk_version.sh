@@ -12,6 +12,10 @@ log_warn() { printf "${YELLOW}%s${NC}\n" "$1"; }
 log_error() { printf "${RED}%s${NC}\n" "$1"; }
 log_blue() { printf "${BLUE}%s${NC}\n" "$1"; }
 
+# --report: key=value on stdout, human logging on stderr. No sync workflow watches this one — it is
+# the only vendored dependency with no bot — so this is what surfaces it in check_upstream.sh.
+source "$(dirname "$0")/lib/upstream_report.sh"
+
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SUBMODULE_DIR="$PROJECT_ROOT/vendor/makeacopy-upstream"
 UPSTREAM_URL="https://github.com/egdels/makeacopy.git"
@@ -35,16 +39,21 @@ CURRENT_SHA=$(git -C "$SUBMODULE_DIR" rev-parse HEAD)
 CURRENT_SHORT=$(git -C "$SUBMODULE_DIR" rev-parse --short HEAD)
 
 log_blue "🔍 Checking MakeACopy DocQuad ML detector version (submodule vs. upstream default branch)..."
-echo "Current: $CURRENT_SHORT"
+log_info "Current: $CURRENT_SHORT"
 
 LATEST_SHA=$(git ls-remote "$UPSTREAM_URL" HEAD 2>/dev/null | awk '{print $1}')
 
+emit current_sha "$CURRENT_SHA"
+emit latest_sha "$LATEST_SHA"
+
 if [ -z "$LATEST_SHA" ]; then
+    emit has_update false
     log_warn "⚠️ Could not reach upstream (network?) — skipping version check."
     exit 0
 fi
 
 if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
+    emit has_update true
     LATEST_SHORT=${LATEST_SHA:0:9}
     log_warn "🚀 UPDATE AVAILABLE: $CURRENT_SHORT -> $LATEST_SHORT (upstream default branch)"
 
@@ -86,5 +95,6 @@ if [ "$CURRENT_SHA" != "$LATEST_SHA" ]; then
         log_info "✅ None of the 4 ported files changed upstream — safe to just re-pin the submodule."
     fi
 else
+    emit has_update false
     log_info "✅ docquad-sdk vendor is up to date ($CURRENT_SHORT)."
 fi
