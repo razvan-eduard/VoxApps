@@ -492,7 +492,6 @@
   "schema_sync_report": "%1$d aktualisiert, %2$d unverändert, %3$d fehlgeschlagen",
   "schema_source_bundled": "mit der App ausgeliefert",
   "schema_source_accepted": "aus dem Repository",
-  "system_maintenance_section": "Systemwartung",
   "reset_schemas_button": "Schemas auf die ausgelieferten zurücksetzen",
   "reset_schemas_description": "Löscht die aus dem Repository geladenen Kopien. Es gelten wieder die dieses Builds.",
   "reset_schemas_confirm": "Alle aus dem Repository geladenen Schemas verwerfen und zu denen dieses Builds zurückkehren?",

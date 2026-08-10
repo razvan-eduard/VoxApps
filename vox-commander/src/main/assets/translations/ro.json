@@ -492,7 +492,6 @@
   "schema_sync_report": "%1$d actualizate, %2$d neschimbate, %3$d eșuate",
   "schema_source_bundled": "livrată cu aplicația",
   "schema_source_accepted": "din depozit",
-  "system_maintenance_section": "Întreținere sistem",
   "reset_schemas_button": "Restabilește schemele livrate",
   "reset_schemas_description": "Șterge copiile descărcate din depozit. Se aplică din nou cele livrate cu această versiune.",
   "reset_schemas_confirm": "Renunți la toate schemele descărcate din depozit și revii la cele livrate cu această versiune?",

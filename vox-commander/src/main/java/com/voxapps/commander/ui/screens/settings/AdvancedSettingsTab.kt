@@ -345,20 +345,12 @@ fun AdvancedSettingsTab(
                         Text(languageManager.getString("clear_default_fallback"))
                     }
                     Text(text = languageManager.getString("maintenance_warning"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
 
-        // --- TUTORIAL SECTION ---
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = languageManager.getString("system_maintenance_section"),
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Resetting the settings lived in a second card under its own heading, and that
+                    // heading read "System maintenance" — the same words as this one, one line
+                    // apart, so the screen appeared to have the section twice. All three are
+                    // destructive maintenance actions, so they belong in the one card.
+                    //
                     // No "reset schemas" here: turning off *Use schemas from the repository* in
                     // General is that reset, and one way to undo something is enough.
                     OutlinedButton(
