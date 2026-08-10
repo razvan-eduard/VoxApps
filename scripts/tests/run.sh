@@ -109,6 +109,18 @@ else
     bad "no signed manifest — the apps will refuse every schema change from this repo"
 fi
 
+log_blue "── the dispatcher runs scripts with the shell they need ────"
+# Every script here sources scripts/lib/common.sh through ${BASH_SOURCE[0]} and uses `source`, both
+# of which dash lacks. macOS's /bin/sh is bash in POSIX mode and runs them anyway, so invoking one
+# with `sh` works on a laptop and fails only on an Ubuntu runner — and only in the jobs that reach
+# it, which is why a release found this and CI did not.
+SH_INVOCATIONS=$(grep -nE '^\s*[a-z-]+\)\s*exec sh ' "$VOX_ROOT/scripts/vox" || true)
+if [ -z "$SH_INVOCATIONS" ]; then
+    ok "every dispatched script is run with bash"
+else
+    bad "the dispatcher runs a script with sh; on Ubuntu that is dash" "$(printf '%s' "$SH_INVOCATIONS" | tr '\n' ' ')"
+fi
+
 log_blue "── patches survive upstream drift ──────────────────────────"
 # The precondition for a three-way apply: without index lines git cannot find the merge base, and
 # silently falls back to the all-or-nothing apply this replaced. A regen written with plain `diff -u`

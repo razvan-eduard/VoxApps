@@ -123,7 +123,10 @@ case "$FLOW" in
     native)
         case "${1:-}" in
             opencv)  exec bash scripts/build_opencv_android.sh ;;
-            whisper) exec sh scripts/check_whisper.sh "${@:2}" ;;
+            # bash, not sh: this sources scripts/lib/common.sh via ${BASH_SOURCE[0]}, and sh on the
+            # Ubuntu runners is dash, which has neither that variable nor `source`. macOS's sh is
+            # bash in POSIX mode and runs it happily, so the difference only appears in CI.
+            whisper) exec bash scripts/check_whisper.sh "${@:2}" ;;
             *) die "native needs a target: opencv | whisper" ;;
         esac
         ;;
