@@ -292,6 +292,24 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         run: ./scripts/vox release sbom commander
 
+      # The last thing between a built APK and a published one. A library that cannot resolve its
+      # dependencies produces an APK that installs, runs, and fails the moment the feature using it
+      # is touched — which is how a broken wake word reached two releases.
+      - name: Native libraries satisfy each other
+        if: steps.check_bump.outputs.changed != 'false'
+        run: |
+          set -euo pipefail
+          # In `full` the DLC libraries are not in the APK — they are downloaded at first launch —
+          # so they are added to the set being checked. Without them the APK looks as though its
+          # JNI bridge has no runtime, which would make `full` checked less thoroughly than
+          # `minimal`, exactly backwards.
+          EXTRA=""
+          if [ "${{ steps.dlc.outputs.mode }}" = "full" ]; then
+            EXTRA="--with-libs vox-commander/build/dlc-libs"
+          fi
+          # shellcheck disable=SC2086
+          ./scripts/vox check pairing VoxCommander-*.apk $EXTRA
+
       # Ties these exact bytes to this commit, this workflow and this runner, signed. A downloader
       # runs `gh attestation verify VoxCommander-<tag>.apk --repo ${{ github.repository }}` and learns
       # the APK came from this build — rather than trusting it because of where it was hosted. Same

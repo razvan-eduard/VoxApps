@@ -182,6 +182,13 @@ jobs:
         if: steps.check_bump.outputs.changed != 'false'
         run: ./scripts/vox release sbom hub
 
+      # The last thing between a built APK and a published one. A library that cannot resolve its
+      # dependencies produces an APK that installs, runs, and fails the moment the feature using it
+      # is touched — which is how a broken wake word reached two releases.
+      - name: Native libraries satisfy each other
+        if: steps.check_bump.outputs.changed != 'false'
+        run: ./scripts/vox check pairing VoxHub-*.apk
+
       # Ties these exact bytes to this commit, this workflow and this runner, signed. A downloader
       # runs `gh attestation verify VoxHub-<tag>.apk --repo ${{ github.repository }}` and learns
       # the APK came from this build — rather than trusting it because of where it was hosted. Same
