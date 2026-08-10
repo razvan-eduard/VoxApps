@@ -36,6 +36,13 @@ object SchemaSignature {
     private const val PUBLIC_KEY_B64 =
         "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvyVjjmZu2RbRohHdaSJf2S7eIqSOMLd7mJXa/mmPK0tAXVdBESUAe+mGHmVP9aT18yCizw2ID7hdRc3TKBl/Qg=="
 
+    /**
+     * Exposed only so a test can assert this matches `remote-schemas/signing-key.pub`. The key is
+     * compiled in rather than read at runtime — a trust anchor belongs inside the signed APK — and
+     * that test is what stops the two copies drifting silently. See SchemaSigningKeyTest.
+     */
+    internal val embeddedPublicKeyForTest: String get() = PUBLIC_KEY_B64
+
     private const val MANIFEST = "manifest.json"
     private const val TAG = "SchemaSignature"
 

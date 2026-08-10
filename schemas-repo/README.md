@@ -58,6 +58,22 @@ pointed me somewhere and I did as I was told", and says which one it is on the s
 If you fork this, delete `remote-schemas/manifest.json` and `manifest.json.sig` or leave them —
 either way, edited files will not match them, and your schemas are accepted as unverified.
 
+### If you also build your own apps
+
+Forking the *app* repository gives you a build that trusts the original key, because the public key
+is compiled in — a trust anchor belongs inside the APK, not loaded from beside it. To become your
+own signing authority:
+
+1. `./scripts/vox schemas keygen` — writes a new `remote-schemas/signing-key.pub` and a private key
+   you keep offline.
+2. Update `PUBLIC_KEY_B64` in `core/services/.../SchemaSignature.kt` to the new public key.
+3. Add your repository to `SchemaRepo.KNOWN_BASE_URLS` so your build treats it as its own default
+   rather than as somebody's fork.
+
+Step 2 is not optional and not silent: `SchemaSigningKeyTest` fails the build if the compiled key and
+`signing-key.pub` disagree, and says which line to change. Without it your signing would be
+decorative — you would sign with one key and verify with another.
+
 ## Layout
 
     remote-schemas/
