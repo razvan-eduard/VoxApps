@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Shallow on purpose — see release-commander.yml for why depth 1. The version-bump
           # check no longer needs any git history (see "Detect versionCode bump" below); the

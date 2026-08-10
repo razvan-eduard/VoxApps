@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Sparse and shallow for PaddleOCR: it is a large monorepo and the only part that matters here
       # is the subtree the fork was taken from. OpenWakeWord is small enough to take whole.
