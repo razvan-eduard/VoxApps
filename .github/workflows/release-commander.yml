@@ -34,6 +34,15 @@ jobs:
     permissions:
       contents: write
 
+    env:
+      # How much of the native payload leaves the APK. Must be one value for the whole job: the
+      # build bakes it into BuildConfig.DLC_MODE (telling the app whether to expect these libs
+      # inside itself) and the packaging step obeys it. Build one way and package the other and the
+      # APK ships without libraries nothing will ever fetch.
+      #   minimal — everything but whisper stays in the APK, nothing downloads at first launch
+      #   full    — stripped out and published as release assets, as IzzyOnDroid's 30MB cap needed
+      VOX_DLC: minimal
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -147,8 +156,8 @@ jobs:
       - name: Build release APK and AAB (unsigned — signed after DLC stripping below)
         if: steps.check_bump.outputs.changed != 'false'
         run: |
-          ./gradlew :vox-commander:assembleRelease --no-daemon
-          ./gradlew :vox-commander:bundleRelease --no-daemon
+          ./gradlew :vox-commander:assembleRelease -PvoxDlc=$VOX_DLC --no-daemon
+          ./gradlew :vox-commander:bundleRelease -PvoxDlc=$VOX_DLC --no-daemon
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -259,7 +268,7 @@ jobs:
             VoxCommander-*.apk
             VoxCommander-*.aab
             CHANGELOG.md
-            dlc-libs/*.so
+            ${{ env.VOX_DLC == 'full' && 'dlc-libs/*.so' || '' }}
           body_path: CHANGELOG.md
           generate_release_notes: true
           draft: false

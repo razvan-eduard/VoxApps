@@ -13,7 +13,15 @@ set -euo pipefail
 # Both the workflow and Gradle's `packageReleaseApk` task call this, so there is one list of libs
 # and one procedure rather than two that can drift.
 #
+# The DLC mode decides whether anything is stripped at all. It must match the mode the APK was
+# BUILT with — BuildConfig.DLC_MODE tells the app whether to expect these libs inside itself, so
+# stripping a `minimal` build produces an APK missing libraries that nothing will ever fetch. Read
+# from $VOX_DLC, defaulting to the same `minimal` as gradle.properties.
+#
 # Usage: package_commander_release.sh <input.apk> <output.apk> <keystore> <keystore-password> [key-alias]
+
+# shellcheck source=scripts/lib/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 if [ "$#" -lt 4 ]; then
     echo "Usage: $0 <input.apk> <output.apk> <keystore> <keystore-password> [key-alias]" >&2
@@ -44,6 +52,22 @@ fi
 WORK_APK="$(dirname "$OUTPUT_APK")/.packaging-$(basename "$INPUT_APK")"
 mkdir -p "$(dirname "$OUTPUT_APK")"
 cp "$INPUT_APK" "$WORK_APK"
+
+VOX_DLC="${VOX_DLC:-minimal}"
+
+if [ "$VOX_DLC" = "minimal" ]; then
+    # Nothing to strip: the libs belong in the APK, and the app was built expecting them there.
+    # Signing is still ours to do because the build deliberately produced an unsigned APK.
+    log_info "voxDlc=minimal — keeping the native libs in the APK, signing as-is."
+    BUILD_TOOLS="$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -maxdepth 1 -type d | sort -V | tail -1)"
+    "$BUILD_TOOLS/zipalign" -p -f 4 "$WORK_APK" "$OUTPUT_APK.aligned" || exit 1
+    "$BUILD_TOOLS/apksigner" sign \
+        --ks "$KEYSTORE" --ks-pass "pass:$KEYSTORE_PASSWORD" --ks-key-alias "$KEY_ALIAS" \
+        --out "$OUTPUT_APK" "$OUTPUT_APK.aligned" || exit 1
+    rm -f "$OUTPUT_APK.aligned" "$WORK_APK"
+    log_info "✅ $(basename "$OUTPUT_APK") — $(( $(wc -c < "$OUTPUT_APK") / 1048576 )) MB, libs included."
+    exit 0
+fi
 
 # sherpa-onnx ships two alternate native entry points; only sherpa-onnx-jni.so is actually used
 # (its only external NEEDED lib is libonnxruntime.so, and the Java bindings load "sherpa-onnx-jni"

@@ -4,6 +4,21 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+/*
+ * How much of the native payload leaves the APK — see `voxDlc` in gradle.properties.
+ *
+ * One source for two decisions that must agree: whether the release strips these libs out, and
+ * whether the app downloads them at first launch. Split across a build script and a Kotlin
+ * constant, they drift into an APK missing libs nothing fetches, or an APK carrying libs it
+ * downloads again anyway.
+ *
+ * Whisper is unaffected. It is excluded in both modes because it is the one payload that is
+ * genuinely optional: ~193MB that a Vosk or cloud user never needs.
+ */
+val dlcMode = (project.findProperty("voxDlc") as String?) ?: "minimal"
+require(dlcMode in setOf("minimal", "full")) { "voxDlc must be 'minimal' or 'full', got '$dlcMode'" }
+
+
 android {
     namespace = "com.voxapps.commander"
     compileSdk {
@@ -25,20 +40,6 @@ android {
             abiFilters.addAll(listOf("arm64-v8a"))
         }
     }
-
-    /*
-     * How much of the native payload leaves the APK — see `voxDlc` in gradle.properties.
-     *
-     * One source for two decisions that must agree: whether the release strips these libs out, and
-     * whether the app downloads them at first launch. Split across a build script and a Kotlin
-     * constant, they drift into an APK missing libs nothing fetches, or an APK carrying libs it
-     * downloads again anyway.
-     *
-     * Whisper is unaffected. It is excluded in both modes because it is the one payload that is
-     * genuinely optional: ~193MB that a Vosk or cloud user never needs.
-     */
-    val dlcMode = (project.findProperty("voxDlc") as String?) ?: "minimal"
-    require(dlcMode in setOf("minimal", "full")) { "voxDlc must be 'minimal' or 'full', got '$dlcMode'" }
 
     // CI-only release signing: RELEASE_KEYSTORE_PATH is only set in release-commander.yml (decoded
     // from a GitHub Actions secret there), so local `./gradlew assembleRelease` without it still
@@ -340,9 +341,15 @@ val skipNativePrep = providers.gradleProperty("voxSkipNativePrep").isPresent
 // Needs RELEASE_KEYSTORE_PATH and RELEASE_KEYSTORE_PASSWORD, same as any signed local build.
 tasks.register<Exec>("packageReleaseApk") {
     group = "build"
+    // The script strips only in `full`; passing the mode keeps a local package consistent with how
+    // the APK was actually built.
+    environment("VOX_DLC", dlcMode)
     description = "assembleRelease, then strip the DLC libs and re-sign — the APK as published."
     dependsOn("assembleRelease")
 
+    // Captured at configuration time: reading `project` inside doFirst is unsupported with the
+    // configuration cache, which is on for this build.
+    val packagingScript = "${project.rootDir}/scripts/package_commander_release.sh"
     val keystore = System.getenv("RELEASE_KEYSTORE_PATH") ?: ""
     val password = System.getenv("RELEASE_KEYSTORE_PASSWORD") ?: ""
     val outDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
@@ -362,7 +369,7 @@ tasks.register<Exec>("packageReleaseApk") {
             )
         }
         commandLine(
-            "bash", "${project.rootDir}/scripts/package_commander_release.sh",
+            "bash", packagingScript,
             input.absolutePath,
             File(outDir, "VoxCommander-release-stripped.apk").absolutePath,
             keystore, password
