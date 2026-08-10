@@ -18,7 +18,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 README_FILE="$PROJECT_ROOT/README.md"
-REPO="razvan-eduard/VoxApps"
+# Whichever repository this is running in, not whichever one wrote the script. In Actions that is
+# GITHUB_REPOSITORY; locally it is whatever `gh` resolves the checkout to. A fork that hardcoded the
+# upstream would publish a table of somebody else's releases, with download links to their APKs.
+REPO="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)}"
+if [ -z "$REPO" ]; then
+    log_error "❌ Cannot tell which repository this is — set GITHUB_REPOSITORY or run inside a checkout."
+    exit 1
+fi
 
 # app-prefix (tag prefix, also vox-<prefix> module dir) : Display Name : Vox<PascalCase> asset prefix
 # Single source of truth for this mapping lives here — a new satellite app needs one new line.
