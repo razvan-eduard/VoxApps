@@ -93,7 +93,7 @@ jobs:
 
       - name: Set up Android SDK
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           accept-android-licenses: true
 
