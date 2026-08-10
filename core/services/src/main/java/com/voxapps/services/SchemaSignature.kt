@@ -155,11 +155,27 @@ object SchemaSignature {
         return "$base?t=${System.currentTimeMillis()}"
     }
 
-    /** Remembers the highest serial across launches — a rollback is only detectable with history. */
+    /**
+     * Remembers the highest serial across launches — a rollback is only detectable against history.
+     *
+     * A fresh install has no history, so the floor comes from the manifest shipped inside the APK.
+     * Otherwise a first launch would start at zero and accept any old, validly-signed manifest,
+     * which is the launch an attacker would target: rollback protection that only protects
+     * already-updated installs protects the wrong ones.
+     */
     fun init(context: Context) {
-        prefs = context.applicationContext
-            .getSharedPreferences("vox_schema_signature", Context.MODE_PRIVATE)
-        lastSerial = prefs?.getLong(SERIAL_PREF, 0L) ?: 0L
+        val app = context.applicationContext
+        prefs = app.getSharedPreferences("vox_schema_signature", Context.MODE_PRIVATE)
+
+        val remembered = prefs?.getLong(SERIAL_PREF, 0L) ?: 0L
+        val shipped = runCatching {
+            app.assets.open("${SchemaRepo.ASSET_FOLDER}/$MANIFEST").bufferedReader().use { it.readText() }
+        }.getOrNull()?.let(::parseSerial) ?: 0L
+
+        lastSerial = maxOf(remembered, shipped)
+        if (shipped > remembered) {
+            Logger.log("Rollback floor from the shipped manifest: $shipped", TAG)
+        }
     }
 
     @Volatile private var prefs: SharedPreferences? = null

@@ -57,7 +57,7 @@ build_manifest() {
         # but cannot sign could replay an OLD, genuinely-signed manifest and its old schemas — every
         # signature checking out while the app quietly downgrades to, say, an endpoint since moved
         # off. Seconds since the epoch: monotonic, and no state to keep between runs.
-        echo "  \"serial\": $(date -u +%s),"
+        echo "  \"serial\": ${SERIAL:-$(date -u +%s)},"
         echo '  "files": {'
         first=true
         while IFS= read -r f; do
@@ -89,6 +89,22 @@ case "$MODE" in
             log_error "   To create one: ./scripts/vox schemas keygen"
             exit 1
         fi
+
+        # The serial is a clock reading, and a clock can go backwards — a machine with a skewed or
+        # just-corrected clock would sign a manifest the apps then refuse as older than the one they
+        # already have, and nothing would say so: updates would simply stop arriving. Never emit a
+        # serial that is not greater than the one already published.
+        PREV_SERIAL=0
+        [ -f "$MANIFEST" ] && PREV_SERIAL=$(grep -oE '"serial": *[0-9]+' "$MANIFEST" | grep -oE '[0-9]+' || echo 0)
+        NOW=$(date -u +%s)
+        if [ "$NOW" -le "$PREV_SERIAL" ]; then
+            log_warn "⚠️ This machine's clock ($NOW) is not ahead of the published serial ($PREV_SERIAL)."
+            log_warn "   Using $((PREV_SERIAL + 1)) so the apps still accept this — but check the clock."
+            SERIAL=$((PREV_SERIAL + 1))
+        else
+            SERIAL="$NOW"
+        fi
+        export SERIAL
 
         build_manifest > "$MANIFEST"
         openssl dgst -sha256 -sign "$KEY_FILE" -out /tmp/manifest.sig.bin "$MANIFEST" || {

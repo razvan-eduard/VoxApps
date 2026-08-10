@@ -140,6 +140,10 @@ val copyShippedSchemas = tasks.register<Copy>("copyShippedSchemas") {
     description = "Copies this app's schemas (and any shared ones) into src/main/assets/schemas/"
     from("${project.rootDir}/remote-schemas/expenses") { include("*.json") }
     from("${project.rootDir}/remote-schemas/shared") { include("*.json") }
+    // The signed manifest travels with the app so a *fresh* install has a rollback floor. Without
+    // it lastSerial starts at zero and a first launch would accept any old, validly-signed manifest
+    // — rollback protection would only ever protect installs that had already seen something newer.
+    from("${project.rootDir}/remote-schemas") { include("manifest.json") }
     into("${projectDir}/src/main/assets/schemas")
 }
 
