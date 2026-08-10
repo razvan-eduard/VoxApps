@@ -70,7 +70,7 @@
             <meta-data android:name="com.voxapps.vox.label" android:value="Calendar" />
             <meta-data
                 android:name="com.voxapps.vox.nluHint"
-                android:value="If the user names a target calendar (e.g. &quot;add to my Work calendar&quot;, &quot;pe calendarul de acasă&quot;), put that calendar's name in the category field; otherwise category=null. Put everything else the user said about the event or task (title, date, time, location, anything mentioned) into the text field verbatim — do not try to resolve relative dates yourself, that happens separately." />
+                android:value="If the user names a target calendar (e.g. &quot;add to my Work calendar&quot;, &quot;on the home calendar&quot;), put that calendar's name in the category field; otherwise category=null. Put everything else the user said about the event or task (title, date, time, location, anything mentioned) into the text field verbatim — do not try to resolve relative dates yourself, that happens separately." />
         </receiver>
 
         <!--

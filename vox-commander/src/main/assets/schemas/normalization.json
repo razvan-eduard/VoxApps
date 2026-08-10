@@ -349,7 +349,7 @@
   },
   "ro": {
     "layer_1_replacements": {
-      "description": "Înlocuiri statice exacte pentru abrevieri și simboluri",
+      "description": "Static exact-match replacements for abbreviations and symbols",
       "rules": {
         "\\bDr\\.\\b": "doctor",
         "\\bDl\\.\\b": "domnul",

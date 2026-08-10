@@ -58,7 +58,7 @@
             <meta-data android:name="com.voxapps.vox.label" android:value="Notes" />
             <meta-data
                 android:name="com.voxapps.vox.nluHint"
-                android:value="If the user names a target list/category (e.g. &quot;note it in shopping&quot;, &quot;adaugă la cumpărături&quot;, &quot;in the work list&quot;), put that category name in the category field; otherwise category=null." />
+                android:value="If the user names a target list/category (e.g. &quot;note it in shopping&quot;, &quot;add to the shopping list&quot;, &quot;in the work list&quot;), put that category name in the category field; otherwise category=null." />
         </receiver>
 
         <!--
@@ -77,7 +77,7 @@
 
         <!--
             OCR-scan result: Vision delivers an async reply here after scanning a document Notes
-            asked it to (the "Scanează o notiță" entry point). Guarded by the shared OCR_RESULT
+            asked it to (the "Scan a note" entry point). Guarded by the shared OCR_RESULT
             permission — only same-signing-key apps can deliver it. The ocr.task meta-data is what
             Vision's dynamic "send scan to this app" dispatcher discovery reads to build a button.
         -->

@@ -292,9 +292,9 @@ If L2 fails (e.g., no internet for Cloud engines, or a Local engine crash), the 
 
 ```kotlin
 data class NluIntent(
-    val actionVerb: String,           // "play", "caută", "spune" (original language)
-    val logicalSubject: String?,      // "Scorpions", "România" (the entity)
-    val modifiers: List<String>,      // ["rapid"], ["încet"] (how)
+    val actionVerb: String,           // "play", "search", "say" (original language)
+    val logicalSubject: String?,      // "Scorpions", "Japan" (the entity)
+    val modifiers: List<String>,      // ["quickly"], ["slowly"] (how)
     val contextWords: List<String>,   // ["pe", "spotify"] (where/app)
     val domain: String,               // "audio", "maps", "messaging", etc.
     val action: String,               // "play", "navigate", "send", etc.
@@ -355,7 +355,7 @@ does not need to grow as more satellites are added. Anything domain-*specific* (
 Post-processes LLM output:
 - Validates domain and action against `IntentTaxonomy`
 - Normalizes target app names
-- Infers missing fields from anatomy (e.g., if action_verb is "caută" → domain=search)
+- Infers missing fields from anatomy (e.g., if action_verb is "search" → domain=search)
 - Handles edge cases (generic subjects, multi-word proper nouns)
 
 ---

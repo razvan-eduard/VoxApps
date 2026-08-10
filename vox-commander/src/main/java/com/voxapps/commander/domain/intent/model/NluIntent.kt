@@ -6,10 +6,10 @@ import androidx.compose.runtime.Immutable
  * Anatomy-based NLU intent produced by all interpreters (LLM + FastMap).
  *
  * The sentence is dissected into grammatical/logical roles:
- * - [actionVerb]:    The main predicate (e.g. "play", "caută", "spune", "oprește")
- * - [logicalSubject]: The core entity/topic, stripped of verbs/adverbs/prepositions (e.g. "România", "Scorpions")
- * - [modifiers]:     Adverbs/adjectives that modify HOW the action should be done (e.g. "rapid", "încet")
- * - [contextWords]:  Remaining words indicating location, app, or platform (e.g. "pe spotify", "în Ploiești")
+ * - [actionVerb]:    The main predicate (e.g. "play", "search", "say", "stop")
+ * - [logicalSubject]: The core entity/topic, stripped of verbs/adverbs/prepositions (e.g. "Japan", "Scorpions")
+ * - [modifiers]:     Adverbs/adjectives that modify HOW the action should be done (e.g. "quickly", "slowly")
+ * - [contextWords]:  Remaining words indicating location, app, or platform (e.g. "on spotify", "în Ploiești")
  *
  * Routing metadata (domain, action, targetApp, category) is inferred by the LLM
  * or by [NluIntentParser] from the anatomy fields.
