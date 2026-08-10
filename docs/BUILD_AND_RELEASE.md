@@ -17,8 +17,8 @@ vendored native-library build steps (Whisper.cpp, Vosk, OpenCV, etc.) see
 
 ```
 cd /Users/swimnobody/StudioProjects/VoxApps
-export RELEASE_KEYSTORE_PATH=~/Downloads/voxapps-release.jks
-export RELEASE_KEYSTORE_PASSWORD=$(cat ~/Downloads/keystore_password.txt | tr -d '[:space:]')
+export RELEASE_KEYSTORE_PATH=~/.voxapps/voxapps-release.jks
+export RELEASE_KEYSTORE_PASSWORD=$(cat ~/.voxapps/keystore_password.txt | tr -d '[:space:]')
 ./gradlew :vox-<app>:assembleRelease --no-daemon
 ```
 
@@ -31,6 +31,24 @@ installed over an existing signed install.
 mismatch forces Android to uninstall first, wiping that app's local data. Debug APKs are fine on a
 disposable emulator only.
 
+### Where the keys live
+
+All key material sits in `~/.voxapps/` (mode 700), outside the repository:
+
+| File | What it signs |
+|---|---|
+| `voxapps-release.jks` | every app's APK — alias `vox-apps`, shared across the family so the signature-level IPC permissions match |
+| `keystore_password.txt` | that keystore's password |
+| `schema-signing.pem` | the schema manifest, so a fetched schema can change what an install does |
+
+Outside the repository on purpose. `git clean -xfd` deletes ignored files, so a key kept in the
+project folder — however well gitignored — is one routine cleanup away from gone, and losing the
+schema key means an app release to embed a replacement.
+
+`./scripts/vox release package` and `./scripts/vox schemas sign` both look here by default, so
+neither needs arguments or environment variables. `RELEASE_KEYSTORE_PATH`,
+`RELEASE_KEYSTORE_PASSWORD` and `SCHEMA_SIGNING_KEY_FILE` still override, which is what CI uses.
+
 ### The APK that ships
 
 `assembleRelease` does **not** produce the published APK. AGP can't be trusted to exclude this
@@ -42,8 +60,8 @@ behaviour, not just size** — a locally built release cannot exercise the DLC d
 To build what actually ships:
 
 ```
-export RELEASE_KEYSTORE_PATH=~/Downloads/voxapps-release.jks
-export RELEASE_KEYSTORE_PASSWORD=$(cat ~/Downloads/keystore_password.txt | tr -d '[:space:]')
+export RELEASE_KEYSTORE_PATH=~/.voxapps/voxapps-release.jks
+export RELEASE_KEYSTORE_PASSWORD=$(cat ~/.voxapps/keystore_password.txt | tr -d '[:space:]')
 ./gradlew :vox-commander:packageReleaseApk
 ```
 

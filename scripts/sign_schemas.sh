@@ -25,6 +25,10 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 cd "$VOX_ROOT" || exit 1
 
+# Where key material lives on a developer machine: outside the repository, so `git clean -xfd`
+# cannot delete it and no ignore rule is load-bearing. Same directory as the release keystore.
+DEFAULT_KEY="$HOME/.voxapps/schema-signing.pem"
+
 SCHEMA_DIR="remote-schemas"
 MANIFEST="$SCHEMA_DIR/manifest.json"
 SIGNATURE="$SCHEMA_DIR/manifest.json.sig"
@@ -64,6 +68,7 @@ build_manifest() {
 case "$MODE" in
     sign)
         KEY_FILE="${SCHEMA_SIGNING_KEY_FILE:-}"
+        [ -z "$KEY_FILE" ] && [ -f "$DEFAULT_KEY" ] && KEY_FILE="$DEFAULT_KEY"
         TMP_KEY=""
         if [ -z "$KEY_FILE" ] && [ -n "${SCHEMA_SIGNING_KEY:-}" ]; then
             TMP_KEY=$(mktemp)
@@ -73,7 +78,7 @@ case "$MODE" in
         if [ -z "$KEY_FILE" ] || [ ! -f "$KEY_FILE" ]; then
             log_error "❌ No signing key."
             log_error "   CI: set the SCHEMA_SIGNING_KEY secret."
-            log_error "   Locally: export SCHEMA_SIGNING_KEY_FILE=/path/to/schema-signing.pem"
+            log_error "   Locally: put it at $DEFAULT_KEY, or set SCHEMA_SIGNING_KEY_FILE"
             log_error "   To create one: ./scripts/vox schemas keygen"
             exit 1
         fi
@@ -127,7 +132,8 @@ case "$MODE" in
         ;;
 
     keygen)
-        OUT="${2:-schema-signing.pem}"
+        OUT="${2:-$DEFAULT_KEY}"
+        mkdir -p "$(dirname "$OUT")" && chmod 700 "$(dirname "$OUT")" 2>/dev/null
         if [ -f "$OUT" ]; then
             log_error "❌ $OUT already exists — refusing to overwrite a signing key."
             exit 1
