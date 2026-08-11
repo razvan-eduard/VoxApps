@@ -213,9 +213,14 @@ adopted when they match the recorded digests rather than downloaded again.
 
 ### Verifying what is downloaded
 
-`recordWhisperDigests` hashes the libraries the build produced into an `assets/whisper-libs.sha256`
-asset, so the digests sit inside the APK where its signature covers them — a digest served from the
-release the library came from would prove nothing. `WhisperEngineManager` downloads to `.tmp`, checks
+`recordWhisperDigests` writes an `assets/whisper-libs.sha256` asset recording what the published
+`whisper-libs-<sha12>` release serves, read from GitHub's per-asset digest metadata — not a hash of
+the locally compiled libraries, because whisper.cpp does not build reproducibly across toolchains and
+what an install downloads is the published set, whichever machine built this APK. When no release
+exists for the pin (a checkout mid-bump), the local build is hashed as a fallback and the release
+workflow refuses to publish in that state; it also compares the APK's recorded digests against the
+release's before publishing. The digests sit inside the APK where its signature covers them — a
+digest served at runtime from the release the library came from would prove nothing. `WhisperEngineManager` downloads to `.tmp`, checks
 the digest, and renames only on a match, which also stops an interrupted transfer leaving a truncated
 `.so` that `areLibsDownloaded()` counts as present. A file with no recorded digest is logged and
 accepted; a mismatch fails the download.

@@ -1,3 +1,4 @@
+import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 
 plugins {
@@ -364,6 +365,9 @@ val stageDlcLibs = tasks.register<StageDlcLibs>("collectDlcLibs") {
  */
 abstract class HashWhisperLibs : DefaultTask() {
 
+    @get:javax.inject.Inject
+    abstract val execOps: org.gradle.process.ExecOperations
+
     @get:InputFiles
     abstract val libFiles: ConfigurableFileCollection
 
@@ -384,6 +388,38 @@ abstract class HashWhisperLibs : DefaultTask() {
     @get:OutputDirectory
     abstract val assetsDir: DirectoryProperty
 
+    /**
+     * The digests GitHub records for the published release's assets, or null when the release does
+     * not exist or cannot be asked.
+     *
+     * The published release is what every install downloads, and it is not this machine's compile:
+     * whisper.cpp does not build reproducibly across toolchains, so hashing the locally built
+     * libraries writes digests that describe a binary nobody will ever be served. The install then
+     * verifies a correct download against them, fails, and Whisper cannot be enabled — an APK that
+     * builds, passes every gate that doesn't look, and breaks only on a user's phone.
+     */
+    private fun publishedDigests(tag: String): Map<String, String>? {
+        val out = ByteArrayOutputStream()
+        val result = execOps.exec {
+            commandLine(
+                "gh", "release", "view", tag,
+                "--json", "assets",
+                "--jq", ".assets[] | \"\\(.digest)  \\(.name)\""
+            )
+            standardOutput = out
+            errorOutput = ByteArrayOutputStream()
+            isIgnoreExitValue = true
+        }
+        if (result.exitValue != 0) return null
+        return out.toString().lineSequence()
+            .mapNotNull { line ->
+                val parts = line.trim().split(Regex("\\s+"))
+                if (parts.size == 2 && parts[0].startsWith("sha256:"))
+                    parts[1] to parts[0].removePrefix("sha256:")
+                else null
+            }.toMap().ifEmpty { null }
+    }
+
     @TaskAction
     fun record() {
         val assets = assetsDir.get().asFile.apply { deleteRecursively(); mkdirs() }
@@ -394,24 +430,39 @@ abstract class HashWhisperLibs : DefaultTask() {
         require(commit.length >= 12) { "Cannot resolve the whisper.cpp commit; got '$commit'." }
         File(assets, "whisper-libs.commit").writeText(commit + "\n")
 
+        val published = publishedDigests("whisper-libs-${commit.take(12)}")
+
         for (lib in libs.get()) {
-            val source = available.firstOrNull { it.name == lib }
-                ?: throw GradleException(
-                    "$lib is missing from src/main/jniLibs — the Whisper build must run before its " +
-                        "digests can be recorded."
-                )
-            val digest = MessageDigest.getInstance("SHA-256")
-            source.inputStream().use { input ->
-                val buffer = ByteArray(1 shl 20)
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read <= 0) break
-                    digest.update(buffer, 0, read)
+            val fromRelease = published?.get(lib)
+            val hex: String
+            if (fromRelease != null) {
+                hex = fromRelease.lowercase()
+                logger.lifecycle("whisper digest ${hex.take(12)}… $lib (published release)")
+            } else {
+                // No published release for this pin — a checkout mid-bump, or a machine without gh.
+                // The local compile is all there is to describe; an install of THIS build that
+                // downloads the (differently built) published set would fail verification, which is
+                // why the release workflow's whisper-published gate refuses to publish in that state.
+                val source = available.firstOrNull { it.name == lib }
+                    ?: throw GradleException(
+                        "$lib is missing from src/main/jniLibs and whisper-libs-${commit.take(12)} " +
+                            "is not published — nothing exists to record a digest of."
+                    )
+                val digest = MessageDigest.getInstance("SHA-256")
+                source.inputStream().use { input ->
+                    val buffer = ByteArray(1 shl 20)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        digest.update(buffer, 0, read)
+                    }
                 }
+                hex = digest.digest().joinToString("") { "%02x".format(it) }
+                logger.lifecycle(
+                    "whisper digest ${hex.take(12)}… $lib (LOCAL build — no published release for this pin)"
+                )
             }
-            val hex = digest.digest().joinToString("") { "%02x".format(it) }
             digests.append(hex).append("  ").append(lib).append('\n')
-            logger.lifecycle("whisper digest ${hex.take(12)}… $lib (${source.length() / 1024}k)")
         }
         File(assets, "whisper-libs.sha256").writeText(digests.toString())
     }
@@ -419,9 +470,12 @@ abstract class HashWhisperLibs : DefaultTask() {
 
 val hashWhisperLibs = tasks.register<HashWhisperLibs>("recordWhisperDigests") {
     group = "build"
-    description = "Record the Whisper libraries' SHA-256 digests for the APK to verify downloads against."
-    // By name: autoCompileWhisper is registered further down this file, and the digests must be
-    // taken from the libraries that build produced.
+    description = "Record the published Whisper libraries' SHA-256 digests for the APK to verify downloads against."
+    // The published digests are a network answer Gradle cannot track as an input, and a stale cached
+    // set is exactly the defect this task exists to prevent. It costs two API calls; always run it.
+    outputs.upToDateWhen { false }
+    // By name: autoCompileWhisper is registered further down this file. The local libraries are the
+    // fallback when no release exists for the pin, so they must exist before this runs.
     dependsOn("autoCompileWhisper")
     // The pin recorded in this commit, which is the same value publish_whisper_libs.sh names the
     // release after. providers.exec rather than a bare command so the configuration cache can track

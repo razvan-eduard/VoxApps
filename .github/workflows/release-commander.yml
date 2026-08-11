@@ -215,14 +215,36 @@ jobs:
           set -euo pipefail
           APK="VoxCommander-${{ steps.version.outputs.tag }}.apk"
           LISTING=$(unzip -l "$APK")
+          # A herestring, not `echo | grep -q`: -q closes the pipe at the first match, echo takes
+          # SIGPIPE, and under pipefail a *found* asset is then reported as missing — racily, which
+          # is worse than reliably.
           for asset in assets/whisper-libs.sha256 assets/whisper-libs.commit; do
-            echo "$LISTING" | grep -qF "$asset" \
+            grep -qF "$asset" <<< "$LISTING" \
               || { echo "::error::$asset missing from $APK"; exit 1; }
           done
           if [ "${{ steps.dlc.outputs.mode }}" = "full" ]; then
-            echo "$LISTING" | grep -qF "assets/dlc-libs.sha256" \
+            grep -qF "assets/dlc-libs.sha256" <<< "$LISTING" \
               || { echo "::error::assets/dlc-libs.sha256 missing from $APK"; exit 1; }
           fi
+
+          # Present is not enough: the digests must describe the binaries the whisper-libs release
+          # actually serves, or every install verifies a correct download against the wrong hashes
+          # and Whisper cannot be enabled. whisper.cpp does not build reproducibly across toolchains,
+          # so digests hashed from this runner's compile are guaranteed wrong — the build records the
+          # release's own digests, and this proves that happened.
+          PIN=$(git rev-parse "HEAD:vox-commander/src/main/cpp/whisper.cpp")
+          TAG="whisper-libs-${PIN:0:12}"
+          APK_DIGESTS=$(unzip -p "$APK" assets/whisper-libs.sha256 | sort)
+          RELEASE_DIGESTS=$(gh release view "$TAG" --json assets \
+            --jq '.assets[] | select(.name|endswith(".so")) | "\(.digest|sub("sha256:";""))  \(.name)"' | sort)
+          if [ "$APK_DIGESTS" != "$RELEASE_DIGESTS" ]; then
+            echo "::error::the APK's recorded whisper digests do not match what $TAG serves"
+            echo "APK:";     echo "$APK_DIGESTS"
+            echo "release:"; echo "$RELEASE_DIGESTS"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deepen checkout for changelog
         if: steps.check_bump.outputs.changed != 'false'

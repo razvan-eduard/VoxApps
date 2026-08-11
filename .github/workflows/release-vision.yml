@@ -159,7 +159,10 @@ jobs:
         run: |
           set -euo pipefail
           APK="VoxVision-${{ steps.version.outputs.tag }}.apk"
-          unzip -l "$APK" | grep -qF "assets/dlc-libs.sha256" \
+          # A herestring, not `unzip | grep -q`: -q closes the pipe at the first match and pipefail
+          # then reports a found asset as missing — racily.
+          LISTING=$(unzip -l "$APK")
+          grep -qF "assets/dlc-libs.sha256" <<< "$LISTING" \
             || { echo "::error::assets/dlc-libs.sha256 missing from $APK"; exit 1; }
 
       - name: Deepen checkout for changelog
