@@ -177,6 +177,37 @@ artifact could cover well.
   after the PR is merged, because CI can only verify "it compiles," never "it still transcribes
   correctly" — that needs an actual on-device sanity check.
 
+### Two libraries, not six
+
+`libwhisper.so` and `libomp.so` are the whole engine. The CMake build sets `BUILD_SHARED_LIBS OFF`,
+so ggml is linked into `libwhisper.so`: it defines every ggml symbol it uses, requires none from
+outside, and declares no `DT_NEEDED` on a ggml library. Its Vulkan backend is compiled in and binds
+to the platform's own `libvulkan.so`; `libomp.so` is its one non-platform dependency.
+
+The list lives in `whisperLibs` (`vox-commander/build.gradle.kts`), and the loader, the packaging
+excludes and `publish_whisper_libs.sh` all take it from there — `LibWhisper` returns `false` when a
+named file is absent, so the loader and the published set have to agree.
+
+### Keeping the published runtime in step with the pin
+
+Exclusion is part of the build and always happens; publishing is a person running a script. Between
+a pin moving and that script running, an APK is built against one whisper.cpp while every install
+downloads another, and the SBOM published beside it names the pin rather than what is served.
+
+`publish_whisper_libs.sh` records the commit it built from as a `built-from.txt` release asset.
+`./scripts/vox check whisper-published` compares that against `HEAD`'s submodule pin, and every
+Commander release runs it before publishing. It reads one small asset rather than rebuilding whisper,
+so it costs two API calls. A release predating the marker reports `unknown` and passes.
+
+### Verifying what is downloaded
+
+`recordWhisperDigests` hashes the libraries the build produced into an `assets/whisper-libs.sha256`
+asset, so the digests sit inside the APK where its signature covers them — a digest served from the
+release the library came from would prove nothing. `WhisperEngineManager` downloads to `.tmp`, checks
+the digest, and renames only on a match, which also stops an interrupted transfer leaving a truncated
+`.so` that `areLibsDownloaded()` counts as present. A file with no recorded digest is logged and
+accepted; a mismatch fails the download.
+
 ### Excluding onnxruntime/Vosk/litertlm-android/sherpa-onnx (`full` mode only)
 
 `libonnxruntime.so`, `liblitertlm_jni.so`, `libvosk.so` and `libsherpa-onnx-jni.so` leave the APK

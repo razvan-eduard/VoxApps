@@ -145,13 +145,14 @@ schema tests read the assets it generates.
 
 ### What a release does before it publishes
 
-Between building the artifacts and creating the release, each `release-*.yml` runs four steps, in
+Between building the artifacts and creating the release, each `release-*.yml` runs these steps, in
 this order:
 
 | step | what it establishes |
 |---|---|
 | `apksigner verify` | the APK is signed, with the certificate every previous release used |
 | `vox release sbom <app>` | a CycloneDX SBOM — the resolved dependency graph, plus the vendored sources this app compiles, recorded by the commit each submodule is pinned to |
+| `vox check whisper-published` | *(Commander)* the Whisper runtime the app downloads was built from the commit this source pins, so the SBOM above describes what is actually served ([detail](BUILD_TIME_DEPENDENCIES.md#keeping-the-published-runtime-in-step-with-the-pin)) |
 | `vox check pairing` | every native library in the APK satisfies what its dependants were built against ([detail](BUILD_TIME_DEPENDENCIES.md#do-the-native-libraries-satisfy-each-other)) |
 | `actions/attest-build-provenance` | signed provenance over the APK, AAB and SBOM, recorded in GitHub's transparency log |
 
