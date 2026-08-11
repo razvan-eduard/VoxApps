@@ -152,7 +152,7 @@ this order:
 |---|---|
 | `apksigner verify` | the APK is signed, with the certificate every previous release used |
 | `vox release sbom <app>` | a CycloneDX SBOM — the resolved dependency graph, plus the vendored sources this app compiles, recorded by the commit each submodule is pinned to |
-| `vox check whisper-published` | *(Commander)* the Whisper runtime the app downloads was built from the commit this source pins, so the SBOM above describes what is actually served ([detail](BUILD_TIME_DEPENDENCIES.md#keeping-the-published-runtime-in-step-with-the-pin)) |
+| `vox check whisper-published` | *(Commander)* the release the app will fetch its Whisper runtime from exists, so an install cannot 404 on libraries its APK expects ([detail](BUILD_TIME_DEPENDENCIES.md#addressing-the-runtime-by-the-commit-it-was-built-from)) |
 | `vox check pairing` | every native library in the APK satisfies what its dependants were built against ([detail](BUILD_TIME_DEPENDENCIES.md#do-the-native-libraries-satisfy-each-other)) |
 | `actions/attest-build-provenance` | signed provenance over the APK, AAB and SBOM, recorded in GitHub's transparency log |
 

@@ -188,16 +188,26 @@ The list lives in `whisperLibs` (`vox-commander/build.gradle.kts`), and the load
 excludes and `publish_whisper_libs.sh` all take it from there — `LibWhisper` returns `false` when a
 named file is absent, so the loader and the published set have to agree.
 
-### Keeping the published runtime in step with the pin
+### Addressing the runtime by the commit it was built from
 
-Exclusion is part of the build and always happens; publishing is a person running a script. Between
-a pin moving and that script running, an APK is built against one whisper.cpp while every install
-downloads another, and the SBOM published beside it names the pin rather than what is served.
+Exclusion is part of the build and always happens; publishing is a person running a script. An
+address with no version in it therefore serves whatever was published last, rather than what the APK
+was compiled against.
 
-`publish_whisper_libs.sh` records the commit it built from as a `built-from.txt` release asset.
-`./scripts/vox check whisper-published` compares that against `HEAD`'s submodule pin, and every
-Commander release runs it before publishing. It reads one small asset rather than rebuilding whisper,
-so it costs two API calls. A release predating the marker reports `unknown` and passes.
+The release is named for the whisper.cpp commit — `whisper-libs-<sha12>`. The build records that
+commit into the APK as `assets/whisper-libs.commit`, the app derives both its download tag and its
+library directory from it, and `publish_whisper_libs.sh` writes to the same name, so an install can
+only ask for the build its APK expects. `./scripts/vox check whisper-published` asks whether that
+release exists, and every Commander release runs it before publishing.
+
+Scoped to the commit rather than to the app version, unlike the DLC libraries below: releases are
+pruned, and tying the runtime to an app release would strip it from installs that stay on an older
+version. Several app versions share one whisper build.
+
+A build recording no commit falls back to the original `whisper-libs` tag and unscoped directory,
+which is what installs predating this ask for. On upgrade, libraries already on the device are
+adopted when they match the recorded digests rather than downloaded again, and directories from
+superseded commits are removed.
 
 ### Verifying what is downloaded
 
