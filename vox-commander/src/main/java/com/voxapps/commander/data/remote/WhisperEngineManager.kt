@@ -22,16 +22,23 @@ class WhisperEngineManager(
         private const val TAG = "WhisperEngineManager"
 
         /**
-         * Where a build with no recorded commit keeps its libraries, and the release it fetches them
-         * from. One tag shared by every version ever released: an address with no version in it, so
-         * what arrives is whatever was published last rather than what this build expects. Kept
-         * because installs that predate the recorded commit still ask for it.
+         * One directory, named the same for every build.
+         *
+         * WhisperCppSttEngine, VulkanProbeService, BenchmarkEngine and AppStateManager all build
+         * this path themselves rather than asking here, so a per-commit directory would be written
+         * by the downloader and looked for by nobody.
          */
-        private const val LEGACY_LIB_DIR = "whisper_libs"
+        private const val LIB_DIR_NAME = "whisper_libs"
+
+        /**
+         * The release a build with no recorded commit fetches from: one tag shared by every version
+         * ever released, so what arrives is whatever was published last rather than what that build
+         * expects. Kept because installs predating the recorded commit still ask for it.
+         */
         private const val LEGACY_TAG = "whisper-libs"
 
-        /** Per whisper.cpp commit, so a bump downloads afresh instead of finding stale files. */
-        private const val LIB_DIR_PREFIX = "whisper_libs_"
+        /** Written beside the libraries, naming the whisper.cpp commit they were fetched for. */
+        private const val COMMIT_MARKER = ".whisper-commit"
 
         /** Both written into the APK by recordWhisperDigests; see vox-commander/build.gradle.kts. */
         private const val DIGEST_ASSET = "whisper-libs.sha256"
@@ -62,55 +69,33 @@ class WhisperEngineManager(
     private val baseUrl: String
         get() = VoxRepo.RELEASE_DOWNLOAD_BASE + releaseTag + "/"
 
-    /**
-     * Version-scoped, like core:nativelibs' — these libraries are not interchangeable between
-     * whisper.cpp commits, and a shared directory would let files from an earlier one satisfy the
-     * "already downloaded" check and be loaded instead.
-     */
     val libDir: File
-        get() = whisperCommit
-            ?.let { File(context.filesDir, "$LIB_DIR_PREFIX${it.take(12)}") }
-            ?: File(context.filesDir, LEGACY_LIB_DIR)
+        get() = File(context.filesDir, LIB_DIR_NAME)
 
     /**
-     * Moves libraries an earlier version left in the unscoped directory, when they are the ones this
-     * build expects. Without it every upgrade past this point re-downloads ~107MB that is already on
-     * the device and already correct.
+     * Are the libraries on disk the ones this build asks for?
+     *
+     * Presence alone cannot answer it: after a whisper.cpp bump the previous build's libraries are
+     * still there, still named the same, and would be loaded instead of the ones the APK was
+     * compiled against — the same disagreement the per-commit release tag removes for downloads.
+     *
+     * Answered from a marker rather than by hashing, so it costs a small read instead of ~107MB of
+     * SHA-256 on every check. Libraries fetched before the marker existed carry none; those are
+     * accepted, since they are what the install has been running and re-downloading them would cost
+     * the user the whole payload to learn nothing.
      */
-    private fun adoptLegacyLibs() {
-        val target = libDir
-        if (target.name == LEGACY_LIB_DIR || target.exists()) return
-        val legacy = File(context.filesDir, LEGACY_LIB_DIR)
-        if (!legacy.isDirectory) return
-
-        val expected = expectedDigests()
-        if (expected.isEmpty()) return
-        val matches = WHISPER_LIBS.all { lib ->
-            val f = File(legacy, lib)
-            f.exists() && expected[lib]?.equals(sha256Of(f)) == true
-        }
-        if (!matches) return
-
-        if (legacy.renameTo(target)) {
-            Logger.log("Adopted existing Whisper libs into ${target.name}", TAG)
-        }
-    }
-
-    /** Directories from earlier whisper.cpp commits; nothing loads them once the pin has moved. */
-    private fun cleanupOldVersions() {
-        val current = libDir.name
-        context.filesDir.listFiles()?.forEach { file ->
-            if (file.isDirectory && file.name.startsWith(LIB_DIR_PREFIX) && file.name != current) {
-                file.deleteRecursively()
-                Logger.log("Removed superseded Whisper libs: ${file.name}", TAG)
-            }
-        }
+    private fun libsAreStale(): Boolean {
+        val expected = whisperCommit ?: return false
+        val recorded = runCatching { File(libDir, COMMIT_MARKER).readText().trim() }.getOrNull()
+            ?: return false
+        return recorded != expected
     }
 
     /**
      * Checks if all Whisper .so files are present in filesDir/whisper_libs/.
      */
     fun areLibsDownloaded(): Boolean {
+        if (libsAreStale()) return false
         return WHISPER_LIBS.all { File(libDir, it).exists() }
     }
 
@@ -166,10 +151,12 @@ class WhisperEngineManager(
     suspend fun downloadLibs(
         onProgress: (Float) -> Unit = {}
     ): Boolean = withContext(Dispatchers.IO) {
-        // Before the existence check below, so libraries already on the device are reused rather
-        // than fetched again under a new directory name.
-        adoptLegacyLibs()
-        cleanupOldVersions()
+        // Libraries from an earlier whisper.cpp are removed before the per-file existence check
+        // below, which would otherwise treat them as already downloaded and keep loading them.
+        if (libsAreStale()) {
+            Logger.log("Whisper libs are from an earlier whisper.cpp — refetching", TAG)
+            libDir.listFiles()?.forEach { it.delete() }
+        }
         if (!libDir.exists()) libDir.mkdirs()
 
         val client = okhttp3.OkHttpClient()
@@ -241,6 +228,10 @@ class WhisperEngineManager(
                 return@withContext false
             }
         }
+
+        // Written last, so it is only ever present beside a complete set. A marker left by a partial
+        // download would make the next launch treat those libraries as current.
+        whisperCommit?.let { runCatching { File(libDir, COMMIT_MARKER).writeText(it) } }
 
         Logger.log("All Whisper libs downloaded successfully", TAG)
         true
