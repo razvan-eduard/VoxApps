@@ -1,6 +1,7 @@
 package com.whispercpp.whisper
 
 import android.content.res.AssetManager
+import com.voxapps.commander.data.remote.WhisperEngineManager
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.*
 import java.util.concurrent.Executors
@@ -91,10 +92,6 @@ class WhisperLib {
                 // Try system-installed libraries first
                 try {
                     System.loadLibrary("omp")
-                    System.loadLibrary("ggml-base")
-                    System.loadLibrary("ggml-cpu")
-                    System.loadLibrary("ggml-vulkan")
-                    System.loadLibrary("ggml")
                     System.loadLibrary("whisper")
                     isLoaded = true
                     Logger.log("Libraries loaded from system", LOG_TAG)
@@ -109,8 +106,11 @@ class WhisperLib {
                     return false
                 }
 
-                // Load order matters: dependencies must be loaded before dependents
-                val libs = listOf("libomp.so", "libggml-base.so", "libggml-cpu.so", "libggml-vulkan.so", "libggml.so", "libwhisper.so")
+                // Load order matters: dependencies must be loaded before dependents. libwhisper.so
+                // links ggml statically and names libomp.so as its only non-platform DT_NEEDED, so
+                // this is the whole set. An older install may still hold libggml*.so files here from
+                // a previous list; they are left alone rather than loaded, since nothing binds them.
+                val libs = WhisperEngineManager.WHISPER_LIBS
                 for (lib in libs) {
                     val path = java.io.File(libDir, lib)
                     if (!path.exists()) {

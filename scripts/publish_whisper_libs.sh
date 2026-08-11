@@ -12,7 +12,11 @@ JNI_DIR="$PROJECT_ROOT/vox-commander/src/main/jniLibs/arm64-v8a"
 TAG="whisper-libs"
 
 # --- LIBS TO UPLOAD (in load order) ---
-LIBS=("libomp.so" "libggml.so" "libggml-base.so" "libggml-cpu.so" "libggml-vulkan.so" "libwhisper.so")
+#
+# The build links ggml statically into libwhisper.so, so these two are the whole engine. The release
+# also holds libggml*.so assets uploaded by an earlier form of this list; they are left in place for
+# installs that still ask for them, and are not refreshed.
+LIBS=("libomp.so" "libwhisper.so")
 
 # --- CHECK PREREQUISITES ---
 if ! command -v gh &> /dev/null; then

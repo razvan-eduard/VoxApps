@@ -21,13 +21,16 @@ plugins {
 val dlcMode = (project.findProperty("voxDlc") as String?) ?: "minimal"
 require(dlcMode in setOf("minimal", "full")) { "voxDlc must be 'minimal' or 'full', got '$dlcMode'" }
 
-/** Built by scripts/build_whisper*.sh into src/main/jniLibs; fetched on demand by WhisperEngineManager. */
+/**
+ * Built into src/main/jniLibs; fetched on demand by WhisperEngineManager.
+ *
+ * Two libraries, not six. The CMake build links ggml statically (BUILD_SHARED_LIBS OFF in
+ * src/main/cpp/CMakeLists.txt), so libwhisper.so defines every ggml symbol it uses and declares no
+ * DT_NEEDED on a ggml library — there is no separate libggml*.so for it to bind to. libomp.so is
+ * its one real shared dependency.
+ */
 val whisperLibs = listOf(
     "libwhisper.so",
-    "libggml-vulkan.so",
-    "libggml.so",
-    "libggml-base.so",
-    "libggml-cpu.so",
     "libomp.so"
 )
 

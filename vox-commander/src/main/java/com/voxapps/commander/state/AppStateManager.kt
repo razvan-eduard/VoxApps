@@ -495,12 +495,15 @@ class AppStateManager private constructor(
         // These are engine keys, so the screen can name each group from the registry.
         val litertLmEngine = "nlu_llm_litertlm" // schema key; no compiled class owns it
         val soFiles = listOf(
+            // ggml has no row of its own: it is linked into libwhisper.so rather than shipped
+            // beside it, so a row per ggml file would report libraries that are never fetched as
+            // permanently missing.
             Triple("libwhisper.so", "Core Whisper STT Engine", WhisperCppSttEngine.ENGINE_KEY),
-            Triple("libggml.so", "GGML Tensor Library", WhisperCppSttEngine.ENGINE_KEY),
-            Triple("libggml-cpu.so", "GGML CPU Operations", WhisperCppSttEngine.ENGINE_KEY),
-            Triple("libggml-base.so", "GGML Base Library", WhisperCppSttEngine.ENGINE_KEY),
-            Triple("libggml-vulkan.so", "Vulkan GPU Acceleration", WhisperCppSttEngine.ENGINE_KEY),
             Triple("libomp.so", "OpenMP Multi-threading", WhisperCppSttEngine.ENGINE_KEY),
+            // Vulkan is a capability, not a file — the backend is inside libwhisper.so, and whether
+            // it can be used is decided by VulkanProbeService running real GPU work in its own
+            // process. Answered like Google AICore below rather than by looking for a library.
+            Triple(VULKAN_CAPABILITY, "Vulkan GPU Acceleration", WhisperCppSttEngine.ENGINE_KEY),
             Triple("libvosk.so", "Vosk Voice Engine", VoskSttEngine.ENGINE_KEY),
             Triple("liblitertlm_jni.so", "LiteRT-LM Engine", litertLmEngine),
             Triple("Google AICore", "Gemini Nano System Service", Strings.AiProcessors.GEMINI_NATIVE)
@@ -510,15 +513,22 @@ class AppStateManager private constructor(
             val exists: Boolean
             val isIncompatible: Boolean
 
+            // Check system nativeLibraryDir first, then downloaded whisper_libs
+            fun libPresent(fileName: String) =
+                java.io.File(context.applicationInfo.nativeLibraryDir, fileName).exists() ||
+                    java.io.File(context.filesDir, "whisper_libs/$fileName").exists()
+
             if (name == "Google AICore") {
                 isIncompatible = geminiIncompatible
                 exists = !isIncompatible
+            } else if (name == VULKAN_CAPABILITY) {
+                // Present once the engine carrying the backend is on device; the probe's verdict is
+                // what decides whether it is usable.
+                isIncompatible = vulkanIncompatible
+                exists = libPresent("libwhisper.so")
             } else {
-                // Check system nativeLibraryDir first, then downloaded whisper_libs
-                val systemFile = java.io.File(context.applicationInfo.nativeLibraryDir, name)
-                val downloadedFile = java.io.File(context.filesDir, "whisper_libs/$name")
-                exists = systemFile.exists() || downloadedFile.exists()
-                isIncompatible = name.contains("ggml-vulkan") && vulkanIncompatible
+                exists = libPresent(name)
+                isIncompatible = false
             }
 
             val isActive: Boolean
@@ -652,6 +662,12 @@ class AppStateManager private constructor(
     }
 
     companion object {
+        /**
+         * Names the Vulkan row in the native-component list. Not a file name: the backend is linked
+         * into libwhisper.so, so there is nothing on disk to look for.
+         */
+        const val VULKAN_CAPABILITY = "Vulkan GPU"
+
         @Volatile
         private var instance: AppStateManager? = null
 

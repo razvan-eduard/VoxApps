@@ -28,13 +28,14 @@ class WhisperEngineManager(
         private const val WHISPER_LIBS_BASE_URL =
             VoxRepo.RELEASE_DOWNLOAD_BASE + "whisper-libs/"
 
-        // The .so files that make up the Whisper engine (in load order)
+        // The .so files that make up the Whisper engine, in load order: libwhisper.so needs
+        // libomp.so, so libomp.so is loaded first.
+        //
+        // ggml is linked into libwhisper.so statically, so it contributes no file here. The release
+        // still carries libggml*.so assets for installs that predate this list; they satisfy nothing
+        // and are not fetched.
         val WHISPER_LIBS = listOf(
             "libomp.so",
-            "libggml.so",
-            "libggml-base.so",
-            "libggml-cpu.so",
-            "libggml-vulkan.so",
             "libwhisper.so"
         )
     }
