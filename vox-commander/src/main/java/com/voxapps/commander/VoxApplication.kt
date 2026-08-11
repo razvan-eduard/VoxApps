@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -85,6 +86,13 @@ class VoxApplication : Application() {
 
         // Initialize network monitor for realtime connectivity tracking
         NetworkMonitor.init(this)
+
+        // A probe that fires on a fresh launch races the network stack; give ServiceProbe a way to
+        // wait for a validated network first. The wait is capped inside ServiceProbe, so a phone
+        // that is genuinely offline still gets its verdict.
+        com.voxapps.services.ServiceProbe.awaitNetwork = {
+            NetworkMonitor.onlineFlow.first { it }
+        }
 
         // Clean up stale .downloading markers from interrupted model extractions
         val rootDir = getExternalFilesDir(null)

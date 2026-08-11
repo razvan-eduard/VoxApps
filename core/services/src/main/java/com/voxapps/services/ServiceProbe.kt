@@ -34,6 +34,28 @@ object ServiceProbe {
     const val DEFAULT_TIMEOUT_SECONDS = 15
 
     /**
+     * Awaits a network that can actually carry the request, when the app provides a way to ask.
+     *
+     * A probe fires when its card composes, which on a fresh launch races the network stack — the
+     * request goes out before the system has validated a route, fails on the phone rather than the
+     * service, and the card blames the endpoint. This module cannot observe connectivity itself
+     * (that is app-side machinery), so the app installs the wait once at startup and every probe
+     * gets it. Null — an app that never sets it — means probes behave as before.
+     */
+    @Volatile
+    var awaitNetwork: (suspend () -> Unit)? = null
+
+    /**
+     * Cap on that wait. A phone that is genuinely offline must still produce a verdict rather than
+     * a spinner: after this, the probe proceeds, fails on the socket, and reports offline.
+     */
+    private const val NETWORK_WAIT_MS = 3000L
+
+    private suspend fun networkReady() {
+        awaitNetwork?.let { withTimeoutOrNull(NETWORK_WAIT_MS) { it() } }
+    }
+
+    /**
      * Requests [spec]'s URL and reports whether it answered.
      *
      * [timeoutSeconds] is the same budget the caller's other outbound calls obey, so a silent
@@ -79,6 +101,7 @@ object ServiceProbe {
         }
 
         Logger.log("Probing ${spec.id} at ${request.url.host}", TAG)
+        networkReady()
 
         var code: Int? = null
         var offline = false
@@ -121,6 +144,7 @@ object ServiceProbe {
         probe: suspend () -> Boolean
     ): Boolean {
         Logger.log("Probing $id", TAG)
+        networkReady()
         return bounded(id, timeoutSeconds) { probe() }
     }
 
@@ -145,6 +169,14 @@ object ServiceProbe {
     } catch (e: java.net.UnknownHostException) {
         // Not a verdict on the service: the name never resolved, so nothing was asked of it.
         Logger.log("Probe for $id could not resolve its host: ${e.message}", TAG)
+        onUnresolvable()
+        false
+    } catch (e: java.net.SocketException) {
+        // Same class of failure by a different route: ConnectException and NoRouteToHostException
+        // both extend this, and all of them mean the connection never left the phone — a route that
+        // is not up yet, not a service that declined. A timeout is deliberately NOT here: it already
+        // spent the full budget, so retrying it doubles the wait for a spinner someone is watching.
+        Logger.log("Probe for $id never reached the network: ${e.message}", TAG)
         onUnresolvable()
         false
     } catch (e: Exception) {
