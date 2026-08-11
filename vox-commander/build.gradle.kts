@@ -214,6 +214,13 @@ androidComponents {
         if (dlcMode == "full" && variant.buildType == "release") {
             variant.sources.assets?.addGeneratedSourceDirectory(stageDlcLibs, StageDlcLibs::assetsDir)
         }
+
+        // Unconditional for release, unlike the DLC digests above: the Whisper libraries are excluded
+        // from every release build in both modes, so every release downloads them and every release
+        // needs something to check them against.
+        if (variant.buildType == "release") {
+            variant.sources.assets?.addGeneratedSourceDirectory(hashWhisperLibs, HashWhisperLibs::assetsDir)
+        }
     }
 }
 
@@ -326,6 +333,69 @@ val stageDlcLibs = tasks.register<StageDlcLibs>("collectDlcLibs") {
     preferredArtifact.set(mapOf("libonnxruntime.so" to onnxRuntimeArtifact))
     stagingDir.set(layout.buildDirectory.dir("dlc-libs"))
     assetsDir.set(layout.buildDirectory.dir("generated/dlcDigests"))
+}
+
+/*
+ * Records what the Whisper libraries should hash to, for the app to check what it downloads.
+ *
+ * Same reasoning as the DLC digests above: the file lands in the APK, so the APK's signature covers
+ * it, and a digest served from the release the library came from would prove nothing.
+ *
+ * The inputs are the libraries this build produced — the same files publish_whisper_libs.sh uploads
+ * — so the recorded digest describes the binary that build expects, not whatever the release happens
+ * to hold later.
+ */
+abstract class HashWhisperLibs : DefaultTask() {
+
+    @get:InputFiles
+    abstract val libFiles: ConfigurableFileCollection
+
+    @get:Input
+    abstract val libs: ListProperty<String>
+
+    @get:OutputDirectory
+    abstract val assetsDir: DirectoryProperty
+
+    @TaskAction
+    fun record() {
+        val assets = assetsDir.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val available = libFiles.files.filter { it.isFile }
+        val digests = StringBuilder()
+
+        for (lib in libs.get()) {
+            val source = available.firstOrNull { it.name == lib }
+                ?: throw GradleException(
+                    "$lib is missing from src/main/jniLibs — the Whisper build must run before its " +
+                        "digests can be recorded."
+                )
+            val digest = MessageDigest.getInstance("SHA-256")
+            source.inputStream().use { input ->
+                val buffer = ByteArray(1 shl 20)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            val hex = digest.digest().joinToString("") { "%02x".format(it) }
+            digests.append(hex).append("  ").append(lib).append('\n')
+            logger.lifecycle("whisper digest ${hex.take(12)}… $lib (${source.length() / 1024}k)")
+        }
+        File(assets, "whisper-libs.sha256").writeText(digests.toString())
+    }
+}
+
+val hashWhisperLibs = tasks.register<HashWhisperLibs>("recordWhisperDigests") {
+    group = "build"
+    description = "Record the Whisper libraries' SHA-256 digests for the APK to verify downloads against."
+    // By name: autoCompileWhisper is registered further down this file, and the digests must be
+    // taken from the libraries that build produced.
+    dependsOn("autoCompileWhisper")
+    // The files themselves, not the directory: a directory added to a file collection stays a
+    // directory, and every entry would then be filtered out as "not a file".
+    libFiles.from(whisperLibs.map { layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/$it") })
+    libs.set(whisperLibs)
+    assetsDir.set(layout.buildDirectory.dir("generated/whisperDigests"))
 }
 
 dependencies {

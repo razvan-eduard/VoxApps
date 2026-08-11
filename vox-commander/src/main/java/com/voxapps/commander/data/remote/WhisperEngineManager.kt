@@ -22,6 +22,9 @@ class WhisperEngineManager(
         private const val TAG = "WhisperEngineManager"
         private const val LIB_DIR_NAME = "whisper_libs"
 
+        /** Written into the APK by the recordWhisperDigests task; see vox-commander/build.gradle.kts. */
+        private const val DIGEST_ASSET = "whisper-libs.sha256"
+
         // The `whisper-libs` release holds these .so files. The repository comes from VoxRepo:
         // this named it directly and was left on the old name through the rename, which worked
         // only because GitHub redirects a renamed repository.
@@ -63,6 +66,38 @@ class WhisperEngineManager(
     }
 
     /**
+     * What each library should hash to, read from the asset the build records.
+     *
+     * The digests are inside the APK, so its signature covers them; a digest fetched from the
+     * release the library came from would prove nothing, since whoever can serve one can serve the
+     * other. Same file format as core:nativelibs' dlc-libs.sha256 — "<sha256>  <name>" per line.
+     *
+     * An empty map means nothing can be verified; downloads then proceed unchecked, which is the
+     * behaviour of a build that recorded no digests rather than a reason to refuse to run.
+     */
+    private fun expectedDigests(): Map<String, String> = runCatching {
+        context.assets.open(DIGEST_ASSET).bufferedReader().useLines { lines ->
+            lines.mapNotNull { line ->
+                val parts = line.trim().split(Regex("\\s+"))
+                if (parts.size == 2 && parts[0].length == 64) parts[1] to parts[0].lowercase() else null
+            }.toMap()
+        }
+    }.getOrElse { emptyMap() }
+
+    private fun sha256Of(file: File): String =
+        java.security.MessageDigest.getInstance("SHA-256").let { digest ->
+            file.inputStream().use { input ->
+                val buffer = ByteArray(1 shl 16)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        }
+
+    /**
      * Downloads all Whisper .so files to filesDir/whisper_libs/.
      * Returns true if all downloads were enqueued successfully.
      * Uses OkHttp for direct file downloads (more control than DownloadManager for multiple files).
@@ -76,6 +111,8 @@ class WhisperEngineManager(
         var downloadedCount = 0
         val totalFiles = WHISPER_LIBS.size
 
+        val expected = expectedDigests()
+
         for (libName in WHISPER_LIBS) {
             val targetFile = File(libDir, libName)
             if (targetFile.exists()) {
@@ -88,6 +125,11 @@ class WhisperEngineManager(
             val url = WHISPER_LIBS_BASE_URL + libName
             Logger.log("Downloading $libName from $url", TAG)
 
+            // Written to .tmp and renamed once verified, so a transfer that is interrupted or serves
+            // the wrong bytes never leaves a file that areLibsDownloaded() counts as present and
+            // LibWhisper then loads.
+            val tempFile = File(libDir, "$libName.tmp")
+
             try {
                 val request = okhttp3.Request.Builder().url(url).build()
                 client.newCall(request).execute().use { response ->
@@ -97,10 +139,31 @@ class WhisperEngineManager(
                     }
 
                     response.body?.byteStream()?.use { input ->
-                        targetFile.outputStream().use { output ->
+                        tempFile.outputStream().use { output ->
                             input.copyTo(output)
                         }
                     }
+                }
+
+                val want = expected[libName]
+                if (want != null) {
+                    val actual = sha256Of(tempFile)
+                    if (actual != want) {
+                        Logger.log("$libName failed verification: expected $want, got $actual", TAG)
+                        tempFile.delete()
+                        return@withContext false
+                    }
+                } else {
+                    // No recorded digest for this file. Reported rather than passed over silently:
+                    // it means the build did not record one, and every later download of it is
+                    // unchecked.
+                    Logger.log("No recorded digest for $libName — downloaded without verification", TAG)
+                }
+
+                if (tempFile.length() <= 0 || !tempFile.renameTo(targetFile)) {
+                    Logger.log("Could not finalise $libName", TAG)
+                    tempFile.delete()
+                    return@withContext false
                 }
 
                 Logger.log("Downloaded $libName (${targetFile.length()} bytes)", TAG)
@@ -109,7 +172,7 @@ class WhisperEngineManager(
             } catch (e: Exception) {
                 Logger.log("Error downloading $libName: ${e.message}", TAG)
                 // Clean up partial download
-                targetFile.delete()
+                tempFile.delete()
                 return@withContext false
             }
         }
