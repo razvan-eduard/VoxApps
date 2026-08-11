@@ -83,7 +83,8 @@
           "size_label": "40M",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498"
         },
         {
           "id": "vosk-model-en-us-0.22",
@@ -93,7 +94,8 @@
           "size_label": "1.8G",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "47f9a81ebb039dbb0bd319175c36ac393c0893b796c2b6303e64cf58c27b69f6"
         },
         {
           "id": "vosk-model-en-us-0.22-lgraph",
@@ -103,7 +105,8 @@
           "size_label": "128M",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "d9838b4aaa82a75c4a17f5aca300eaca129aaab2a7cbf951bafbb500eb9c4334"
         },
         {
           "id": "vosk-model-en-us-0.42-gigaspeech",
@@ -113,7 +116,8 @@
           "size_label": "2.3G",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "d6755c99b0bc8fb3c56962690dc55e9792abd92550dda0b8899f17da55bf3f30"
         },
         {
           "id": "vosk-model-en-us-daanzu-20200905",
@@ -123,7 +127,8 @@
           "size_label": "1.0G",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "b7147e3081d2d52c859364937e213d0e37a7cee07eb365355ec8fb0a2465e8b8"
         },
         {
           "id": "vosk-model-en-us-daanzu-20200905-lgraph",
@@ -133,7 +138,8 @@
           "size_label": "129M",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "c1b52c219845fbd6ee51101395a2d9842bbfa1c43ce81b233c671039b508ecf2"
         },
         {
           "id": "vosk-model-en-us-librispeech-0.2",
@@ -143,7 +149,8 @@
           "size_label": "845M",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "4463f49df2b6303095baaeddb8f48586fd6ca350deeca300709c54ba22ca18e2"
         },
         {
           "id": "vosk-model-small-en-us-zamia-0.5",
@@ -153,7 +160,8 @@
           "size_label": "49M",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "7a7025bae67cade7065c127f7afe1a68828d252820e025af4311fe5840c1d7cd"
         },
         {
           "id": "vosk-model-en-us-aspire-0.2",
@@ -163,7 +171,8 @@
           "size_label": "1.4G",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "5295814f861d773608c05b6a663f7edd04b4287df6aa4f8a3b2550658a9f4c61"
         },
         {
           "id": "vosk-model-en-us-0.21",
@@ -173,7 +182,8 @@
           "size_label": "1.6G",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "e240e4e94d99c7e2acea81e30ef73d616f79ef934c97279139bf204375c994cf"
         },
         {
           "id": "vosk-model-en-in-0.5",
@@ -183,7 +193,8 @@
           "size_label": "1G",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "0365c52f79308d81c2de832cf934ce42da6bf7e04dd3acd4203cacf50ab70f5c"
         },
         {
           "id": "vosk-model-small-en-in-0.4",
@@ -193,7 +204,8 @@
           "size_label": "36M",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "20663dcac4d5cb783a579c54d98339344a688e4ec6e1b4a4b059fd1235454cc7"
         },
         {
           "id": "vosk-model-small-cn-0.22",
@@ -203,7 +215,8 @@
           "size_label": "42M",
           "lang_code": "cn",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "3af8b0e7e0f835ae9d414ce5df580237a3cfb08d586c9fbbb0f7ff29ad5b14ba"
         },
         {
           "id": "vosk-model-cn-0.22",
@@ -213,7 +226,8 @@
           "size_label": "1.3G",
           "lang_code": "cn",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "7f5580bf7ca3d9e8ce8be68337378950ed78ef974df7a7d4ead8dbe32bec2fa1"
         },
         {
           "id": "vosk-model-cn-kaldi-multicn-0.15",
@@ -223,7 +237,8 @@
           "size_label": "1.5G",
           "lang_code": "cn",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "8fc4e24c5a6b108d2d0e8466f3c57b1464d5147d927de410b6226de0f1c2ac52"
         },
         {
           "id": "vosk-model-ru-0.42",
@@ -233,7 +248,8 @@
           "size_label": "1.8G",
           "lang_code": "ru",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "00eb9e5ed8230492da1acf702cd3548e1282256a5fdde8f188253e77217e9429"
         },
         {
           "id": "vosk-model-small-ru-0.22",
@@ -243,7 +259,8 @@
           "size_label": "45M",
           "lang_code": "ru",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "961d5ff98a17f4aa6de69864d0aa71fa5bac682301d2b5d17a3f24c5c99a46d4"
         },
         {
           "id": "vosk-model-ru-0.22",
@@ -253,7 +270,8 @@
           "size_label": "1.5G",
           "lang_code": "ru",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "84d9e2cf6324480e4e768da7d75122fd1250df5449b89d8f9d9417ec7a27fb23"
         },
         {
           "id": "vosk-model-ru-0.10",
@@ -263,7 +281,8 @@
           "size_label": "2.5G",
           "lang_code": "ru",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "7292fafb8346b4ad36246849763d5d92e21f5da3b9d113605377ef9e3843d3ee"
         },
         {
           "id": "vosk-model-small-fr-0.22",
@@ -273,7 +292,8 @@
           "size_label": "41M",
           "lang_code": "fr",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "cabf6180e177eb9b3a9a9d43a437bd5e549f3a7d09525e5d69a3fed787be12ad"
         },
         {
           "id": "vosk-model-fr-0.22",
@@ -283,7 +303,8 @@
           "size_label": "1.4G",
           "lang_code": "fr",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "b26c34e5ea1b9f9dee6cef5e910a1d93e9adb60f1a0a3f85c069976aec481e46"
         },
         {
           "id": "vosk-model-small-fr-pguyot-0.3",
@@ -293,7 +314,8 @@
           "size_label": "39M",
           "lang_code": "fr",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "170cce4efbc69a8c559427374640538c17e32640872b976858aa1d67a97e1253"
         },
         {
           "id": "vosk-model-fr-0.6-linto-2.2.0",
@@ -303,7 +325,8 @@
           "size_label": "1.5G",
           "lang_code": "fr",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "dd94db81e424bb2e34a24df85d9a7f81978b947db7b78a25ea28afa6385b2336"
         },
         {
           "id": "vosk-model-de-0.21",
@@ -313,7 +336,8 @@
           "size_label": "1.9G",
           "lang_code": "de",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "245060756f8d8394fc5b13639cf220b7620205795f30f37b6823878d4f603b2a"
         },
         {
           "id": "vosk-model-de-tuda-0.6-900k",
@@ -323,7 +347,8 @@
           "size_label": "4.4G",
           "lang_code": "de",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "b4fc9b9a6258f0acf97ee5a8a1573d9ea88e936c0f4770aeb4d83cb4397f7a96"
         },
         {
           "id": "vosk-model-small-de-zamia-0.3",
@@ -333,7 +358,8 @@
           "size_label": "49M",
           "lang_code": "de",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "f8b080a69799bfb59402537d981edfcc59e9860e56b507c538d6eb8ac41dd4a6"
         },
         {
           "id": "vosk-model-small-de-0.15",
@@ -343,7 +369,8 @@
           "size_label": "45M",
           "lang_code": "de",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "b7e53c90b1f0a38456f4cd62b366ecd58803cd97cd42b06438e2c131713d5e43"
         },
         {
           "id": "vosk-model-small-es-0.42",
@@ -353,7 +380,8 @@
           "size_label": "39M",
           "lang_code": "es",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "09b239888f633ef2f0b4e09736e3d9936acfd810bc65d53fad45261762c6511f"
         },
         {
           "id": "vosk-model-es-0.42",
@@ -363,7 +391,8 @@
           "size_label": "1.4G",
           "lang_code": "es",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "bbbfaf9239bed5dcb0d140886b5834fcc13c13c7fb2f2799ae790f03ff20bfce"
         },
         {
           "id": "vosk-model-small-pt-0.3",
@@ -373,7 +402,8 @@
           "size_label": "31M",
           "lang_code": "pt",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "6e1ce909032e1afa7a88e68a3d628ecafff302bdf195befab308826c395e93b7"
         },
         {
           "id": "vosk-model-pt-fb-v0.1.1-20220516_2113",
@@ -383,7 +413,8 @@
           "size_label": "1.6G",
           "lang_code": "pt",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "19f88d07e7f540c8e52b06be0af044ed72a1b3bb29b07ae31685520f059e842e"
         },
         {
           "id": "vosk-model-el-gr-0.7",
@@ -393,7 +424,8 @@
           "size_label": "1.1G",
           "lang_code": "el",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "59684f024e1db4ab63587c3cd5cc7ea3096b69a086cb275dbe017d7732e148e4"
         },
         {
           "id": "vosk-model-small-tr-0.3",
@@ -403,7 +435,8 @@
           "size_label": "35M",
           "lang_code": "tr",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "8c8d07cec1bce31add14967c16891c84152cdf76d391e33c08278119b9ea96e5"
         },
         {
           "id": "vosk-model-small-vn-0.4",
@@ -413,7 +446,8 @@
           "size_label": "32M",
           "lang_code": "vn",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "efe5c8494212110471a79befc48c79da679e5b1fc52a4ffb500222ff86d622e5"
         },
         {
           "id": "vosk-model-vn-0.4",
@@ -423,7 +457,8 @@
           "size_label": "78M",
           "lang_code": "vn",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "a8ce6ee52e369b8f23f56e87e037db10322e6d94779b08d5e1ab21cb4b737380"
         },
         {
           "id": "vosk-model-small-it-0.22",
@@ -433,7 +468,8 @@
           "size_label": "48M",
           "lang_code": "it",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "9ec65e75861d1c6c2e457cccd932705340dcdf233f5b239f00733b4de0bf3267"
         },
         {
           "id": "vosk-model-it-0.22",
@@ -443,7 +479,8 @@
           "size_label": "1.2G",
           "lang_code": "it",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "5cdc9f0f596e3db270b92fc4c1fd0f1a3e3d5d19ae0d30b69fc008639257de09"
         },
         {
           "id": "vosk-model-small-nl-0.22",
@@ -453,7 +490,8 @@
           "size_label": "39M",
           "lang_code": "nl",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "039811c3b829de64e4f123a9f684a53784005b212a346ac0b899dc7efce2ed0a"
         },
         {
           "id": "vosk-model-nl-spraakherkenning-0.6",
@@ -463,7 +501,8 @@
           "size_label": "860M",
           "lang_code": "nl",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "088d40014c43684d65f3cc15f4b06ad764b4407b47854812e8364427702c8b56"
         },
         {
           "id": "vosk-model-nl-spraakherkenning-0.6-lgraph",
@@ -473,7 +512,8 @@
           "size_label": "100M",
           "lang_code": "nl",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "ad3bdd17d19c99b6b9235669346fe79e871ecf0163b0b1efbe6d6b1ea88d9b5d"
         },
         {
           "id": "vosk-model-small-ca-0.4",
@@ -483,7 +523,8 @@
           "size_label": "42M",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "99f90bfff5c2b187c705ddbc20aaa2600eddc359466f404404f1db6029fba5d4"
         },
         {
           "id": "vosk-model-ar-mgb2-0.4",
@@ -493,7 +534,8 @@
           "size_label": "318M",
           "lang_code": "ar",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "357469ae1bb4d7a3810c9cd6b86d33bc135898dfc134e6df8bc2ddd28c5fe77a"
         },
         {
           "id": "vosk-model-ar-0.22-linto-1.1.0",
@@ -503,7 +545,8 @@
           "size_label": "1.3G",
           "lang_code": "ar",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "6fc103417517203a5503e176963e3a7e20d32da4c37f4ff21181e9d64e1f02bf"
         },
         {
           "id": "vosk-model-small-ar-tn-0.1-linto",
@@ -513,7 +556,8 @@
           "size_label": "158M",
           "lang_code": "ar",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "dec314da301a22ceee91a9c7121f469e17f6be9dbb6fce8c3d37739a20d16b38"
         },
         {
           "id": "vosk-model-ar-tn-0.1-linto",
@@ -523,7 +567,8 @@
           "size_label": "517M",
           "lang_code": "ar",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "23dda9314f921226311c241ee8d72d20e82eb0f6bf64a5dee99d8ac0f4227398"
         },
         {
           "id": "vosk-model-fa-0.42",
@@ -533,7 +578,8 @@
           "size_label": "1.6G",
           "lang_code": "fa",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "5f03187838a187cd3f8766e3d329da37bf5ddd81a861081132743b76d8a8d14a"
         },
         {
           "id": "vosk-model-small-fa-0.42",
@@ -543,7 +589,8 @@
           "size_label": "53M",
           "lang_code": "fa",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "977cb5faa538f3a835ccfd35f5f6d8284b5c450b89c700b9bd4736b66536ad46"
         },
         {
           "id": "vosk-model-fa-0.5",
@@ -553,7 +600,8 @@
           "size_label": "1G",
           "lang_code": "fa",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "a034cbd1a407d071eabf4e4a895476d2db05d6cbb8516a1b299654a5c9ac9ac8"
         },
         {
           "id": "vosk-model-small-fa-0.5",
@@ -563,7 +611,8 @@
           "size_label": "60M",
           "lang_code": "fa",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "7e5697239c6bcbfd4188659bb92c8603cd3228a8a4370d789aaeb9d2eeac42c9"
         },
         {
           "id": "vosk-model-tl-ph-generic-0.6",
@@ -573,7 +622,8 @@
           "size_label": "320M",
           "lang_code": "tl",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "0a2e067e716c9a084379f9d2c0d7b4764a035adc9f23a8cdc167bcfbfde51259"
         },
         {
           "id": "vosk-model-small-uk-v3-nano",
@@ -583,7 +633,8 @@
           "size_label": "73M",
           "lang_code": "uk",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "d6b50be0a2d20f891720f3a83c98290bb2d396fd666142dbf716e8ad302f8233"
         },
         {
           "id": "vosk-model-small-uk-v3-small",
@@ -593,7 +644,8 @@
           "size_label": "133M",
           "lang_code": "uk",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "ee05b6a8c796c53c61cd1c821d38e897e5bd67b4d691d8797ec8f9e5100d4247"
         },
         {
           "id": "vosk-model-uk-v3",
@@ -603,7 +655,8 @@
           "size_label": "343M",
           "lang_code": "uk",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "b1a0dbb9a19bfb6cdbad5bb4d43b71281ab57ad4a8c2a372656c83b994b72b1f"
         },
         {
           "id": "vosk-model-uk-v3-lgraph",
@@ -613,7 +666,8 @@
           "size_label": "325M",
           "lang_code": "uk",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "01aae714d1d2d392f73841c2dfcb18f486925ecab79b9ad4850a42070da64f6d"
         },
         {
           "id": "vosk-model-small-kz-0.42",
@@ -623,7 +677,8 @@
           "size_label": "58M",
           "lang_code": "kz",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "b6d6bfe6195c866805bd18b1f56723e4d2ba4866e81df1481006d0c5704fda4f"
         },
         {
           "id": "vosk-model-kz-0.42",
@@ -633,7 +688,8 @@
           "size_label": "1.3G",
           "lang_code": "kz",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "3ec71d3b1b1efee07efb22f4db7b37666bc59017f3567b40557af3112ed77a86"
         },
         {
           "id": "vosk-model-small-sv-rhasspy-0.15",
@@ -643,7 +699,8 @@
           "size_label": "289M",
           "lang_code": "sv",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "5b54f2ca8cacf9766588d05f6c8ca7e8921f054f050726e29d3516e78aefe054"
         },
         {
           "id": "vosk-model-small-ja-0.22",
@@ -653,7 +710,8 @@
           "size_label": "48M",
           "lang_code": "ja",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "efa092d280153a77615e9e0c7d7283e93e600de3d19d3bec686c57ef19d52eac"
         },
         {
           "id": "vosk-model-ja-0.22",
@@ -663,7 +721,8 @@
           "size_label": "1Gb",
           "lang_code": "ja",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "af620db815ef716f90355f911092ba0c7454d91d793ecdd8dee2df6342e0e9cc"
         },
         {
           "id": "vosk-model-small-eo-0.42",
@@ -673,7 +732,8 @@
           "size_label": "42M",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "4459ca908f7eae862a5975305f2a720735f5205a9884d8f559dc46fe70034636"
         },
         {
           "id": "vosk-model-small-hi-0.22",
@@ -683,7 +743,8 @@
           "size_label": "42M",
           "lang_code": "hi",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "7c50a10866889f0ac21d912c20537a055a597ed09fc1d3e5bcd798f9f0017e48"
         },
         {
           "id": "vosk-model-hi-0.22",
@@ -693,7 +754,8 @@
           "size_label": "1.5Gb",
           "lang_code": "hi",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "eaf9bdbd703c79e957f7ea893502e12b336f98d7cd420138bcb224b36ccf86ac"
         },
         {
           "id": "vosk-model-small-cs-0.4-rhasspy",
@@ -703,7 +765,8 @@
           "size_label": "44M",
           "lang_code": "cs",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "287c3bbefc8ad67b4ab9636eecef3d62acc3719990777d03e226db5a7f19fbda"
         },
         {
           "id": "vosk-model-small-pl-0.22",
@@ -713,7 +776,8 @@
           "size_label": "50M",
           "lang_code": "pl",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "c4cd16498ea544f446f9e9a55cbd602b71cfe5a2b6f2b0834d81e1b6fce15f0d"
         },
         {
           "id": "vosk-model-small-uz-0.22",
@@ -723,7 +787,8 @@
           "size_label": "49M",
           "lang_code": "uz",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "ffb77328df64f222a3fac6e368e0baff9dc1258f11b6b5ca5deaa82e5f688e6a"
         },
         {
           "id": "vosk-model-small-ko-0.22",
@@ -733,7 +798,8 @@
           "size_label": "82M",
           "lang_code": "ko",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "eea36124087fed26c59996a4761519458e3bd185e8ea9d9865ad8760c4a1d989"
         },
         {
           "id": "vosk-model-br-0.8",
@@ -743,7 +809,8 @@
           "size_label": "70M",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "b54d9984c5b9dace1be7fbc62c46f23fc64c69a1e5ce7dd0c331f52bc3f632a0"
         },
         {
           "id": "vosk-model-gu-0.42",
@@ -753,7 +820,8 @@
           "size_label": "700M",
           "lang_code": "gu",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "e6de0d5a9bceaee3c4e9f38061e3c8e9be582a622bea29e49188b1f2627f4396"
         },
         {
           "id": "vosk-model-small-gu-0.42",
@@ -763,7 +831,8 @@
           "size_label": "100M",
           "lang_code": "gu",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "e87b7055e52b38a493a8308cf815b6fc05b9a89ef8aee18b4cbc2867cfc5f42a"
         },
         {
           "id": "vosk-model-tg-0.22",
@@ -773,7 +842,8 @@
           "size_label": "327M",
           "lang_code": "tg",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "e5d2b1951a97e17c97912cb6628cba37f01ab7323d00d3a1c5f41ecc0f2c9461"
         },
         {
           "id": "vosk-model-small-tg-0.22",
@@ -783,7 +853,8 @@
           "size_label": "50M",
           "lang_code": "tg",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "870a7e0051e0cdc019e8d5f03acd89b44ef32f8d3935e2cf4e834d61921f0175"
         },
         {
           "id": "vosk-model-small-te-0.42",
@@ -793,7 +864,8 @@
           "size_label": "58M",
           "lang_code": "te",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "3e77b05becc7599a596ccebd8b22cb95eb4eca0cfca524827cdfbfd66af09497"
         },
         {
           "id": "vosk-model-small-ky-0.42",
@@ -803,7 +875,8 @@
           "size_label": "49M",
           "lang_code": "ky",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "7a3595e6a6bd138e1f82689e7b13bdc838d84d96a83cbb1848658ee5094307b2"
         },
         {
           "id": "vosk-model-ky-0.42",
@@ -813,7 +886,8 @@
           "size_label": "1.1G",
           "lang_code": "ky",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "bb91100d609768c556734e7a1e7b4ad31d488b6046c6663eb3a6aa09d2846d3c"
         },
         {
           "id": "vosk-model-small-ka-0.42",
@@ -823,7 +897,8 @@
           "size_label": "45M",
           "lang_code": "ka",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "a4aa25c879c479428694d6839bbdfcaf1e879361f34f6a9301d750e95cc63b6d"
         },
         {
           "id": "vosk-model-ka-0.42",
@@ -833,7 +908,8 @@
           "size_label": "700M",
           "lang_code": "ka",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "76c87ae665ee7931eeba26dcdab74fa4d02e95cb5ccbb7beda13f147e183a0c7"
         },
         {
           "id": "vosk-model-spk-0.4",
@@ -843,7 +919,8 @@
           "size_label": "13M",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "a74d8f51144484813e16af689bb0f916b7a111e2347f467c4933c1166097b5a7"
         },
         {
           "id": "vosk-recasepunc-en-0.22",
@@ -853,7 +930,8 @@
           "size_label": "1.6G",
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "06ad74a18ab99e6a91b955c3d40edba6585e4fb35607c566287ae28d1dba626b"
         },
         {
           "id": "vosk-recasepunc-ru-0.22",
@@ -863,7 +941,8 @@
           "size_label": "1.6G",
           "lang_code": "ru",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "27637aed2241fc01eae47c0f59198e815498fd257938eee23d3af87b0ddc91ef"
         },
         {
           "id": "vosk-recasepunc-de-0.21",
@@ -873,7 +952,8 @@
           "size_label": "1.1G",
           "lang_code": "de",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "e2c9c6b51a8f7670c221fe10dde879ad983830c5982ac161161c48c49bfe09c9"
         }
       ]
     },
@@ -1106,7 +1186,8 @@
           "size_label": null,
           "lang_code": null,
           "engine_type": "LITERTLM",
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "82968d0a6c3872cf016fdbcfc591571605f4c7fd2b0f64d2533df502cc6596b3"
         },
         {
           "id": "qwen2.5-0.5b-q8",
@@ -1116,7 +1197,8 @@
           "size_label": null,
           "lang_code": null,
           "engine_type": "LITERTLM",
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "e608953f169aeb1bd7b9155fec2559825e08453fc209b84eda3a781ed0452fd2"
         },
         {
           "id": "gemma3-1b-q8-ekv4096",
@@ -1126,7 +1208,8 @@
           "size_label": null,
           "lang_code": null,
           "engine_type": "LITERTLM",
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "9fc939cf525890ea060a815c5cd4395a1496161e3930c3891891be9e255ac09f"
         }
       ]
     },
@@ -1153,7 +1236,8 @@
           "size_label": null,
           "lang_code": null,
           "engine_type": "LITERTLM",
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "555579ff2f4fd13379abe69c1c3ab5200f7338bc92471557f1d6614a6e5ab0b4"
         }
       ]
     },
@@ -1181,7 +1265,8 @@
           "size_label": null,
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "8fb427b8637334072ee5723d72fa418c45bfdd4b7deebeacdf2938662618c1cb"
         },
         {
           "id": "vits-piper-en_US-lessac-medium",
@@ -1191,7 +1276,8 @@
           "size_label": null,
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "9e3febfacf0abf4270172d2958bcec246032b7e88efc2720840cc80c93de334e"
         },
         {
           "id": "vits-piper-en_US-lessac-high",
@@ -1201,7 +1287,8 @@
           "size_label": null,
           "lang_code": "en",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "8619d204c7005866fe4f420181dfa79622af6a6222389f0b0818d2af31e0db0e"
         },
         {
           "id": "vits-piper-ro_RO-mihai-medium",
@@ -1211,7 +1298,8 @@
           "size_label": null,
           "lang_code": "ro",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "cfbee3cdc25cf063339f69e189f4d93cc3be6610d267567537323ced3cf87f4d"
         },
         {
           "id": "vits-piper-de_DE-thorsten-low",
@@ -1221,7 +1309,8 @@
           "size_label": null,
           "lang_code": "de",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "41fab35910fdcec4696b031951d8fd6c262e594cf77b35e1068fadbeb5a091a6"
         },
         {
           "id": "vits-piper-de_DE-thorsten-medium",
@@ -1231,7 +1320,8 @@
           "size_label": null,
           "lang_code": "de",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "50487d9c95fdf2191f31d2588569381063ba1591dcd4c7d4bdd30f12b2191714"
         },
         {
           "id": "vits-piper-de_DE-thorsten-high",
@@ -1241,7 +1331,8 @@
           "size_label": null,
           "lang_code": "de",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "dd4ed1b0d42c30a1a4862fc2b243e8044d52b8889c9ff3d1e99e92028888bc4a"
         },
         {
           "id": "vits-piper-fr_FR-siwis-low",
@@ -1251,7 +1342,8 @@
           "size_label": null,
           "lang_code": "fr",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "3d69170c160c8375c4123901a72a3845222b39456d39ab74f5bbd7310952b5af"
         },
         {
           "id": "vits-piper-fr_FR-siwis-medium",
@@ -1261,7 +1353,8 @@
           "size_label": null,
           "lang_code": "fr",
           "engine_type": null,
-          "is_remote": true
+          "is_remote": true,
+          "sha256": "375909aa30842b3a4efa10b1beb1d761af792960ae6873b4d53889f96c66195b"
         }
       ]
     }

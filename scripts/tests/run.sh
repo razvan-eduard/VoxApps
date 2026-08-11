@@ -427,6 +427,45 @@ else
         "gradle=[${V_GRADLE//$'\n'/ }] kt=[${V_KT//$'\n'/ }]"
 fi
 
+log_blue "── every downloadable model declares its hash ──────────────"
+# The runtime check refuses a mismatch only where the schema declares a sha256; an entry without
+# one downloads unverified, with nothing but a log line saying so. The field is what extends the
+# schema signature from "this URL is the maintainer's" to "these bytes are what must arrive there"
+# — so a new model landing without it silently reopens the gap for exactly that model. Asserted
+# over every registry with downloadable entries, with a floor on the count so an emptied or
+# unparseable registry cannot read as fully covered.
+MODEL_HASH_REPORT=$(python3 - <<'PY'
+import json
+missing, total = [], 0
+
+doc = json.load(open("remote-schemas/commander/models.json"))
+for engine_key, engine in (doc.get("engines") or {}).items():
+    for model in (engine.get("models") or []):
+        if (model.get("path") or "").startswith("http"):
+            total += 1
+            if len(model.get("sha256") or "") != 64:
+                missing.append(f"{engine_key}/{model.get('id', '?')}")
+
+ocr = json.load(open("vox-vision/src/main/assets/ocr_models.json"))
+for name, entry in ocr.items():
+    if isinstance(entry, dict) and (entry.get("url") or "").startswith("http"):
+        total += 1
+        if len(entry.get("sha256") or "") != 64:
+            missing.append(f"ocr/{name}")
+
+print(total)
+print(" ".join(missing))
+PY
+)
+MODEL_TOTAL=$(printf '%s\n' "$MODEL_HASH_REPORT" | sed -n 1p)
+MODEL_MISSING=$(printf '%s\n' "$MODEL_HASH_REPORT" | sed -n 2p)
+if [ -z "$MODEL_MISSING" ] && [ "${MODEL_TOTAL:-0}" -ge 96 ]; then
+    ok "all $MODEL_TOTAL downloadable models declare a sha256"
+else
+    bad "downloadable models without a sha256 (of ${MODEL_TOTAL:-?}) — their downloads are unverified" \
+        "$MODEL_MISSING"
+fi
+
 log_blue "── report contract without CI's environment ────────────────"
 # CI exports GH_TOKEN and friends, so a broken \${VAR:-\$(fallback)} in a check script fails only
 # on a developer machine — the environment masks the defect exactly where the report gates a bot.
