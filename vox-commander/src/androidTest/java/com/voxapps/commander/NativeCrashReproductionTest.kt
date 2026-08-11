@@ -3,6 +3,7 @@ package com.voxapps.commander
 import android.content.Context
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.domain.intent.interpreter.LocalLlmInterpreter
@@ -91,7 +92,7 @@ class NativeCrashReproductionTest {
     fun `llm_concurrentPredictSync_crashReproduction`() = runBlocking {
         val settingsRepo = getSettingsRepo()
         val modelDownloader = getModelDownloader()
-        val interpreter = LocalLlmInterpreter(context, settingsRepo, modelDownloader)
+        val interpreter = LocalLlmInterpreter(context, settingsRepo, modelDownloader, getFastMapDao())
 
         // Check if model is available
         val snapshot = settingsRepo.getSettingsSnapshot()
@@ -236,5 +237,12 @@ class NativeCrashReproductionTest {
         val container = (appContext as? com.voxapps.commander.VoxApplication)?.container
             ?: throw IllegalStateException("Could not get AppContainer")
         return container.modelDownloader
+    }
+
+    private fun getFastMapDao(): FastMapDao {
+        val appContext = context.applicationContext
+        val container = (appContext as? com.voxapps.commander.VoxApplication)?.container
+            ?: throw IllegalStateException("Could not get AppContainer")
+        return container.fastMapDao
     }
 }

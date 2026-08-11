@@ -3,6 +3,7 @@ package com.voxapps.commander
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.voxapps.commander.data.remote.NativeLibManager
+import com.voxapps.nativelibs.NativeLibs
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -25,6 +26,6 @@ class NativeLibManagerInstrumentedTest {
     fun essentialNativeLibsLoadSuccessfully() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         NativeLibManager.init(context)
-        assertEquals(NativeLibManager.Status.READY, NativeLibManager.status.value)
+        assertEquals(NativeLibs.Status.READY, NativeLibManager.status.value)
     }
 }
