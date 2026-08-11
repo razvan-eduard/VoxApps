@@ -289,6 +289,20 @@ jobs:
       # The last thing between a built APK and a published one. A library that cannot resolve its
       # dependencies produces an APK that installs, runs, and fails the moment the feature using it
       # is touched — which is how a broken wake word reached two releases.
+      # The Whisper libraries are not in the APK — AGP excludes them from every release build and the
+      # app downloads them from the `whisper-libs` release. That release is published by hand, so the
+      # pin can move without it, and then this APK is built against one whisper.cpp while every
+      # install runs another. The SBOM published beside it names the pin, so the release would make a
+      # provenance claim about a runtime it does not serve.
+      #
+      # A release predating the provenance marker reports `unknown` rather than failing, so this
+      # gates on a definite mismatch only.
+      - name: The published Whisper runtime matches this source
+        if: steps.check_bump.outputs.changed != 'false'
+        run: ./scripts/vox check whisper-published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Native libraries satisfy each other
         if: steps.check_bump.outputs.changed != 'false'
         run: |

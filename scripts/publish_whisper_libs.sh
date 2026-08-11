@@ -77,6 +77,23 @@ for lib in "${LIBS[@]}"; do
     fi
 done
 
+# --- PROVENANCE MARKER ---
+# Records which whisper.cpp commit these binaries were built from, so a build can tell whether the
+# release still serves the runtime its source pins. Without it the two can only be compared by
+# rebuilding whisper and hashing the result, which is twenty minutes nobody spends on a hunch.
+#
+# Uploaded even when the libraries themselves are unchanged: the marker is what a release job reads,
+# and an absent or stale one reads as "unknown", which is the state this exists to remove.
+PIN=$(git -C "$PROJECT_ROOT" rev-parse "HEAD:vox-commander/src/main/cpp/whisper.cpp")
+MARKER_FILE="$(mktemp -d)/built-from.txt"
+printf '%s\n' "$PIN" > "$MARKER_FILE"
+REMOTE_PIN=$(gh release view "$TAG" --json assets \
+    --jq '.assets[] | select(.name == "built-from.txt") | .name' 2>/dev/null || true)
+if [ -z "$REMOTE_PIN" ] || [ "$ALL_MATCH" != true ]; then
+    log_info "Recording provenance: built from ${PIN:0:12}"
+    gh release upload "$TAG" "$MARKER_FILE" --clobber
+fi
+
 if [ "$ALL_MATCH" = true ]; then
     log_info "✅ All libs are identical to release assets. Nothing to publish."
     exit 0
@@ -91,4 +108,6 @@ for lib in "${NEEDS_UPLOAD[@]}"; do
 done
 
 log_info "🎉 Published ${#NEEDS_UPLOAD[@]} lib(s) to release '$TAG'"
-log_info "   Download URL: https://github.com/razvan-eduard/VoxCommander/releases/download/$TAG/<libname>.so"
+# Named from the same place the app builds its download URLs (core/identity VoxRepo), rather than
+# repeating a repository name that has already been changed once.
+log_info "   Download URL: https://github.com/razvan-eduard/VoxApps/releases/download/$TAG/<libname>.so"

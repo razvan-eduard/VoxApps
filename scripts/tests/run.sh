@@ -196,6 +196,25 @@ else
     rm -f "$LIVE_COPY"
 fi
 
+log_blue "── the published Whisper runtime ───────────────────────────"
+#
+# AGP excludes the Whisper libraries from every release build and the app downloads them from a
+# release published by hand, so the pin can move without the runtime moving with it. The gate that
+# notices is only useful while the release job still runs it.
+if grep -q "check whisper-published" .github/workflows/release-commander.yml; then
+    ok "the release gates on the published Whisper runtime matching the pin"
+else
+    bad "release-commander.yml no longer checks the published Whisper runtime"
+fi
+
+# --report is what a workflow would consume; it must answer, not exit silently.
+out=$(./scripts/vox check whisper-published --report 2>/dev/null)
+if printf '%s\n' "$out" | grep -qE '^in_step=(true|false|unknown)$'; then
+    ok "whisper-published states in_step"
+else
+    bad "whisper-published --report gave no in_step" "$(printf '%s' "$out" | head -2)"
+fi
+
 log_blue "── the sync workflows' dedup gate ──────────────────────────"
 #
 # `gh pr list --json ... -q '.[0] | "\(.number) \(.state)"'` renders an empty result as the literal

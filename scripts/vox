@@ -74,6 +74,13 @@ case "$FLOW" in
             shift
             exec python3 scripts/check_native_pairing.py "$@"
         fi
+        # `whisper-published` asks a third question: not what upstream has, nor whether an APK's
+        # libraries agree, but whether the runtime the app downloads was built from the commit this
+        # source pins. Those can differ because publishing that runtime is a manual step.
+        if [ "${1:-}" = "whisper-published" ]; then
+            shift
+            exec bash scripts/check_whisper_published.sh "$@"
+        fi
         exec bash scripts/check_upstream.sh "$@"
         ;;
 
