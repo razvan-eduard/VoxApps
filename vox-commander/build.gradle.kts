@@ -16,7 +16,7 @@ plugins {
  * downloads again anyway.
  *
  * Whisper is unaffected. It is excluded in both modes because it is the one payload that is
- * genuinely optional: ~193MB that a Vosk or cloud user never needs.
+ * genuinely optional: ~107MB that a Vosk or cloud user never needs.
  */
 val dlcMode = (project.findProperty("voxDlc") as String?) ?: "minimal"
 require(dlcMode in setOf("minimal", "full")) { "voxDlc must be 'minimal' or 'full', got '$dlcMode'" }

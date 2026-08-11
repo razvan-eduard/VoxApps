@@ -589,7 +589,7 @@ Which libraries, and whether they are optional:
 | App | Libraries | Optional? |
 |---|---|---|
 | Commander | onnxruntime, litertlm, vosk, sherpa-onnx (53 MB) | **No.** onnxruntime backs OpenWakeWord, vosk the Vosk engines, litertlm the on-device LLM, sherpa Piper. Anyone using a wake word needs one on first launch. |
-| Commander | whisper + ggml + Vulkan (~193 MB) | **Yes** — only with Whisper STT, Vulkan variant only where supported. Fetched elsewhere, never bundled. |
+| Commander | whisper (~107 MB, ggml and the Vulkan backend linked in) | **Yes** — only with Whisper STT, Vulkan variant only where supported. Fetched elsewhere, never bundled. |
 | Vision | onnxruntime + the OpenCV set (43 MB) | **No.** Vision is an OCR app and these are what OCR needs. |
 
 ## Do the native libraries satisfy each other?

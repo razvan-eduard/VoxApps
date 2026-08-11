@@ -94,7 +94,7 @@ default** (`gradle.properties`):
 | First launch | nothing downloads; works offline | 53 MB (Commander) / 43 MB (Vision) fetched on the splash |
 | Whisper | on demand, unchanged | on demand, unchanged |
 
-**Whisper is unaffected by the switch.** It is the one genuinely optional payload — ~193 MB fetched
+**Whisper is unaffected by the switch.** It is the one genuinely optional payload — ~107 MB fetched
 only if you choose Whisper STT, and the Vulkan variant only where the GPU supports it — so it is
 excluded by AGP in both modes. Everything the switch does govern is mandatory: the app cannot run
 without those libraries, so in `full` they are a required download on the splash, which is why
