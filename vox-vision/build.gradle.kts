@@ -277,5 +277,8 @@ dependencies {
     // plain compile can never observe (see docs/BUILD_TIME_DEPENDENCIES.md's onnxruntime-android
     // section).
     androidTestImplementation(libs.androidx.junit)
+    // Carries androidx.test:runner, the AndroidJUnitRunner named in testInstrumentationRunner —
+    // ext:junit alone does not, and without it the test APK crashes before any test runs.
+    androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.kotlinx.coroutines.android)
 }
