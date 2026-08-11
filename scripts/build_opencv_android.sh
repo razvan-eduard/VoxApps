@@ -23,6 +23,9 @@ set -Eeuo pipefail
 # problem: BUILD_ANDROID_PROJECTS=ON + BUILD_opencv_java=ON, building `gen_opencv_java_source` first
 # so the JNI glue code exists before the full build compiles it.
 
+# shellcheck source=scripts/lib/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OPENCV_DIR="$PROJECT_ROOT/vendor/opencv"
 BUILD_DIR="$PROJECT_ROOT/vendor/opencv-android-build"

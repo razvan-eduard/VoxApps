@@ -16,6 +16,9 @@ set -uo pipefail
 # Each check script also answers in machine-readable form (`--report`), which is how the sync
 # workflows consume the same detection rather than carrying their own copy of it.
 
+# shellcheck source=scripts/lib/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
