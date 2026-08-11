@@ -8,9 +8,13 @@ name: Instrumented Tests
 #
 # Ubuntu + KVM rather than a Mac: GitHub's hosted arm64 macOS runners cannot nest a VM (HVF
 # reports HV_UNSUPPORTED), so an arm64 AVD never boots there. An x86_64 Android 11 google_apis
-# image runs this repo's arm64-v8a libraries through the system image's ARM binary translation —
-# slower per instruction, hardware-accelerated as a VM, and the only hosted-runner path that
-# executes these libraries at all. It also shares ci.yml's Linux OpenCV cache.
+# image runs arm64-v8a libraries through the system image's ARM binary translation instead —
+# which carries commander's whole native set, and is the only hosted-runner path that executes
+# these libraries at all.
+#
+# Commander only. Translation has a fidelity ceiling: vision's OpenCV load crashes the translated
+# process while passing on real arm64, so its connected test runs where real arm64 exists —
+#     ANDROID_SERIAL=<arm64 avd> ./gradlew :vox-vision:connectedDebugAndroidTest
 #
 # NativeCrashReproductionTest is excluded: its *_crashReproduction tests bring the process down on
 # purpose (they exist to prove tombstone patterns reproduce) and are run one at a time by hand.
@@ -30,14 +34,10 @@ concurrency:
 jobs:
   connected:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
 
     env:
       GRADLE_HEAP: -Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
-      # Same pinning rationale as ci.yml: the NDK version is part of the OpenCV cache key because
-      # native output built by one NDK is not interchangeable with another's.
-      NDK_VERSION: 27.1.12297006
-      CMAKE_VERSION: 3.22.1
 
     steps:
       - name: Checkout
@@ -61,36 +61,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          accept-android-licenses: true
-
-      # vox-vision needs the OpenCV build in its source set — same cache discipline as ci.yml,
-      # keyed per-OS, so the first macOS run pays for one build and every later one restores it.
-      - name: Resolve the pinned OpenCV commit
-        id: opencv_pin
-        run: echo "sha=$(git ls-tree HEAD vendor/opencv | awk '{print $3}')" >> "$GITHUB_OUTPUT"
-
-      - name: Restore built OpenCV
-        id: opencv_cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            vendor/ppocr-sdk/opencv
-            vox-vision/src/main/jniLibs
-          key: opencv-${{ runner.os }}-ndk${{ env.NDK_VERSION }}-${{ steps.opencv_pin.outputs.sha }}-${{ hashFiles('scripts/build_opencv_android.sh') }}
-
-      - name: Fetch OpenCV sources
-        if: steps.opencv_cache.outputs.cache-hit != 'true'
-        run: git submodule update --init --depth 1 vendor/opencv
-
-      - name: Install NDK and CMake
-        if: steps.opencv_cache.outputs.cache-hit != 'true'
-        run: sdkmanager --install "ndk;${NDK_VERSION}" "cmake;${CMAKE_VERSION}"
-
-      # API 30 x86_64 google_apis: the Android 11 image is where ARM binary translation shipped,
-      # which is what lets an x86_64 AVD execute the arm64-v8a-only libraries under test.
       - name: Run the instrumented tests on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -98,19 +68,9 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          # One line: the action runs each script line as its own command, so a backslash
-          # continuation reaches gradle as a literal argument.
-          script: ./gradlew :vox-commander:connectedDebugAndroidTest :vox-vision:connectedDebugAndroidTest --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP" -Pandroid.testInstrumentationRunnerArguments.notClass=com.voxapps.commander.NativeCrashReproductionTest
-
-      # Split restore/save so a red test run still keeps the OpenCV build it paid for.
-      - name: Save built OpenCV
-        if: always() && steps.opencv_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            vendor/ppocr-sdk/opencv
-            vox-vision/src/main/jniLibs
-          key: ${{ steps.opencv_cache.outputs.cache-primary-key }}
+          # One line: the action runs each script line as its own `sh -c`, so a continuation or
+          # an `if` block would land as separate commands.
+          script: ./gradlew :vox-commander:connectedDebugAndroidTest --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP" -Pandroid.testInstrumentationRunnerArguments.notClass=com.voxapps.commander.NativeCrashReproductionTest
 
       - name: Publish test results
         if: always()
