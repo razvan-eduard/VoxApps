@@ -23,8 +23,10 @@ permissions:
 
 jobs:
   smoke:
-    # Apple-silicon runner: the APKs are arm64-v8a only, so the emulator must be arm64.
-    runs-on: macos-15
+    # Ubuntu + KVM: GitHub's hosted arm64 macOS runners cannot nest a VM, so an arm64 AVD never
+    # boots there. The x86_64 Android 11 google_apis image executes the arm64-v8a-only APK
+    # through its ARM binary translation instead.
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
@@ -33,16 +35,20 @@ jobs:
         with:
           name: ${{ inputs.artifact }}
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          accept-android-licenses: true
+      # The emulator is a VM; without KVM access it falls back to unaccelerated emulation and
+      # times out before booting.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
       - name: Install, launch and watch for a crash
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
-          arch: arm64-v8a
+          api-level: 30
+          arch: x86_64
           target: google_apis
           disable-animations: true
           script: |

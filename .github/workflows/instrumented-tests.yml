@@ -2,9 +2,15 @@ name: Instrumented Tests
 
 # The only tests that can catch a native-linking regression run on a device, and until this
 # workflow nothing ran them — the suite guarding against exactly the failure class that reached
-# releases twice was never executed. Weekly rather than per-push: the repo ships arm64-v8a only,
-# so the emulator must be arm64 on an Apple-silicon runner, and the native surface changes rarely
-# — CI already compiles these sources on every push, which is what catches ordinary drift.
+# releases twice was never executed. Weekly rather than per-push: the native surface changes
+# rarely, and CI already compiles these sources on every push, which is what catches ordinary
+# drift.
+#
+# Ubuntu + KVM rather than a Mac: GitHub's hosted arm64 macOS runners cannot nest a VM (HVF
+# reports HV_UNSUPPORTED), so an arm64 AVD never boots there. An x86_64 Android 11 google_apis
+# image runs this repo's arm64-v8a libraries through the system image's ARM binary translation —
+# slower per instruction, hardware-accelerated as a VM, and the only hosted-runner path that
+# executes these libraries at all. It also shares ci.yml's Linux OpenCV cache.
 #
 # NativeCrashReproductionTest is excluded: its *_crashReproduction tests bring the process down on
 # purpose (they exist to prove tombstone patterns reproduce) and are run one at a time by hand.
@@ -23,9 +29,7 @@ concurrency:
 
 jobs:
   connected:
-    # Apple-silicon runner: an arm64 AVD needs an arm64 host with virtualization support, which
-    # the macos-15 image provides. An x86_64 emulator cannot load this repo's native libraries.
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     timeout-minutes: 90
 
     env:
@@ -38,6 +42,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # The emulator is a VM; without KVM access it falls back to unaccelerated emulation and
+      # times out before booting.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
       - name: Set up JDK
         uses: actions/setup-java@v5
@@ -76,11 +89,13 @@ jobs:
         if: steps.opencv_cache.outputs.cache-hit != 'true'
         run: sdkmanager --install "ndk;${NDK_VERSION}" "cmake;${CMAKE_VERSION}"
 
-      - name: Run the instrumented tests on an arm64 emulator
+      # API 30 x86_64 google_apis: the Android 11 image is where ARM binary translation shipped,
+      # which is what lets an x86_64 AVD execute the arm64-v8a-only libraries under test.
+      - name: Run the instrumented tests on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
-          arch: arm64-v8a
+          api-level: 30
+          arch: x86_64
           target: google_apis
           disable-animations: true
           script: |
