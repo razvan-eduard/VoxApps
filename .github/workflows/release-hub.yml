@@ -113,6 +113,19 @@ jobs:
           cp vox-hub/build/outputs/bundle/release/vox-hub-release.aab \
              VoxHub-${{ steps.version.outputs.tag }}.aab
 
+      # A signed APK is the one thing this workflow cannot be wrong about: an unsigned or
+      # wrongly-signed build installs over nothing and, for a signature-level IPC app, silently
+      # breaks first-party routing. Gradle only signs when it sees the keystore env vars, so assert
+      # rather than assume.
+      - name: Verify the APK is signed
+        if: steps.check_bump.outputs.changed != 'false'
+        run: |
+          # -L: on a runner the SDK path can be a tree of symlinks, and an unfollowed find
+          # matches nothing (see scripts/lib/common.sh).
+          BUILD_TOOLS="$(find -L "$ANDROID_HOME/build-tools" -maxdepth 1 -type d | sort -V | tail -1)"
+          "$BUILD_TOOLS/apksigner" verify --print-certs \
+            "VoxHub-${{ steps.version.outputs.tag }}.apk"
+
       - name: Deepen checkout for changelog
         if: steps.check_bump.outputs.changed != 'false'
         run: git fetch --prune --unshallow --tags origin
@@ -154,6 +167,28 @@ jobs:
       # "just build it and see" dispatch tagged the commit and cut a release at whatever version
       # happened to be current, walking straight around the guard that exists to prevent exactly
       # that. Building and testing still run: that is what a dispatch is for.
+      # A published tag is an address installed APKs still resolve — the DLC downloader builds its
+      # URLs from the version it was compiled with. Moving such a tag to a different commit
+      # replaces the assets behind every one of those addresses in place. Republishing the same
+      # commit (a fresh publish date) is fine; anything else needs a version bump.
+      - name: Refuse to move a published tag
+        if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          # The peeled ref (^{}) sorts after the plain one, so tail -1 resolves an annotated tag
+          # to its commit and leaves a lightweight tag as-is.
+          REMOTE_SHA=$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | tail -1 | cut -f1)
+          if [ -n "$REMOTE_SHA" ] && [ "$REMOTE_SHA" != "$(git rev-parse HEAD)" ]; then
+            if gh release view "$TAG" --repo "${{ github.repository }}" --json isDraft \
+                 --jq 'select(.isDraft == false)' 2>/dev/null | grep -q .; then
+              echo "::error::$TAG is already published from $REMOTE_SHA — bump the version before releasing"
+              exit 1
+            fi
+          fi
+
       - name: Point the tag at this commit
         if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         run: |
@@ -214,5 +249,6 @@ jobs:
             CHANGELOG.md
           body_path: CHANGELOG.md
           draft: false
+          prerelease: ${{ steps.version.outputs.is_prerelease }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

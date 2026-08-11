@@ -3,18 +3,22 @@ set -uo pipefail
 
 # Fills in the `sha256` beside a model's URL in a schema, by downloading it once and hashing it.
 #
-# The field is what binds a signed schema's URL to the bytes that should arrive there. Writing 97 of
+# The field is what binds a signed schema's URL to the bytes that should arrive there. Writing 96 of
 # them by hand is the reason a feature like this never gets adopted, so this does it — one model, a
 # whole engine, or everything.
 #
 #     ./scripts/vox schemas hash-models                    # everything missing a hash
 #     ./scripts/vox schemas hash-models stt_whisper        # one engine
 #     ./scripts/vox schemas hash-models --dry-run          # say what would be fetched
+#     ./scripts/vox schemas hash-models --schema vox-vision/src/main/assets/ocr_models.json
 #
-# Downloads to a temp file and discards it; nothing lands in the repo but the hash. Entries that
-# already carry one are skipped, so it is safe to re-run and cheap to resume.
+# Two file shapes are understood: the engine registry (`{"engines": {…"models": [{path, sha256}]}}`,
+# the commander schema) and the flat map (`{"<name>": {url, sha256}}`, vision's bundled
+# ocr_models.json). Downloads to a temp file and discards it; nothing lands in the repo but the
+# hash. Entries that already carry one are skipped, so it is safe to re-run and cheap to resume.
 #
-# Re-sign afterwards — the schema changed:  ./scripts/vox schemas sign
+# A schema under remote-schemas/ must be re-signed afterwards:  ./scripts/vox schemas sign
+# (bundled assets are covered by the APK signature and need nothing.)
 
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
@@ -24,12 +28,20 @@ SCHEMA="remote-schemas/commander/models.json"
 DRY_RUN=false
 ENGINE=""
 
+EXPECT_SCHEMA=false
 for arg in "$@"; do
+    if $EXPECT_SCHEMA; then
+        SCHEMA="$arg"
+        EXPECT_SCHEMA=false
+        continue
+    fi
     case "$arg" in
         --dry-run) DRY_RUN=true ;;
+        --schema) EXPECT_SCHEMA=true ;;
         *) ENGINE="$arg" ;;
     esac
 done
+$EXPECT_SCHEMA && { log_error "❌ --schema needs a path"; exit 1; }
 
 [ -f "$SCHEMA" ] || { log_error "❌ No $SCHEMA"; exit 1; }
 command -v python3 >/dev/null || { log_error "❌ python3 is needed to rewrite the JSON safely"; exit 1; }
@@ -49,13 +61,25 @@ with open(schema_path) as f:
     doc = json.load(f)
 
 targets = []
-for engine_key, engine in (doc.get("engines") or {}).items():
-    if only_engine and engine_key != only_engine:
-        continue
-    for model in (engine.get("models") or []):
-        url = model.get("path") or ""
-        if url.startswith("http") and not model.get("sha256"):
-            targets.append((engine_key, model, url))
+if isinstance(doc.get("engines"), dict):
+    # The engine registry shape: engines -> models -> {path, sha256}.
+    for engine_key, engine in (doc["engines"] or {}).items():
+        if only_engine and engine_key != only_engine:
+            continue
+        for model in (engine.get("models") or []):
+            url = model.get("path") or ""
+            if url.startswith("http") and not model.get("sha256"):
+                targets.append((engine_key, model, url))
+else:
+    # The flat map shape: name -> {url, sha256}.
+    for name, entry in doc.items():
+        if only_engine and name != only_engine:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        url = entry.get("url") or ""
+        if url.startswith("http") and not entry.get("sha256"):
+            targets.append((name, entry, url))
 
 if not targets:
     print("  Nothing to do — every downloadable model already declares a sha256.")
@@ -92,5 +116,6 @@ if done:
         json.dump(doc, f, indent=2, ensure_ascii=False)
         f.write("\n")
     print(f"\n  Wrote {done} hash(es) into {schema_path}")
-    print("  Re-sign the schemas:  ./scripts/vox schemas sign")
+    if schema_path.startswith("remote-schemas/"):
+        print("  Re-sign the schemas:  ./scripts/vox schemas sign")
 PY

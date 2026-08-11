@@ -14,6 +14,9 @@ android {
         targetSdk = 36
         versionCode = 12
         versionName = "0.12"
+        // No first-party native libs today; pins the ABI so a future transitive dependency with
+        // multi-ABI .so files cannot quietly quadruple the APK.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     // CI-only release signing: RELEASE_KEYSTORE_PATH is only set in the release-*.yml workflows
@@ -33,6 +36,13 @@ android {
                 // APKs were installed side-by-side for the first time.
                 keyAlias = "vox-apps"
                 keyPassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                // Stated rather than defaulted. AGP's default here is v2 alone — while every
+                // published release so far is v3. An installed app updates only from an APK signed
+                // by the same certificate, so the scheme is not a detail to let a default change.
+                // v1 is JAR signing, unnecessary above API 24; minSdk is 29.
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
@@ -43,6 +53,7 @@ android {
             // without R8, every unused one ships in the APK — this is what made a dependency-light
             // app like Hub balloon to 46MB despite having no Room/SQLCipher/native libs.
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseKeystorePath != null) {
                 signingConfig = signingConfigs.getByName("release")

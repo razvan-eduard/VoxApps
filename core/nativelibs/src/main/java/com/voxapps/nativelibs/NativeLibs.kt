@@ -140,6 +140,16 @@ open class NativeLibs(
         return libs.all { File(dir, it).let { f -> f.exists() && f.length() > 0 } }
     }
 
+    /**
+     * Whether one named library is on device — in the APK's nativeLibraryDir or fetched into the
+     * version-scoped directory. For diagnostics display only: it carries the same
+     * extraction-dependent caveat as [areLibsPresent], so nothing loads or decides based on it.
+     */
+    fun hasLib(context: Context, name: String): Boolean {
+        if (File(context.applicationInfo.nativeLibraryDir, name).exists()) return true
+        return File(libDir(context), name).let { it.exists() && it.length() > 0 }
+    }
+
     /** Call once at startup, from the splash. */
     suspend fun init(context: Context) = withContext(Dispatchers.IO) {
         if (_status.value == Status.READY) return@withContext
@@ -157,12 +167,16 @@ open class NativeLibs(
         }
 
         _status.value = Status.CHECKING
-        cleanupOldVersions(context)
 
         if (areLibsPresent(context)) {
             try {
                 loadAll(context)
                 _status.value = Status.READY
+                // Only after this version is loaded and running: removing the previous version's
+                // directory any earlier turns a failed download into a device with no working
+                // libraries at all — the old set cannot be loaded by this version, but it is the
+                // only thing left to fall back on until the new set is actually in service.
+                cleanupOldVersions(context)
             } catch (e: Throwable) {
                 Logger.e(tag, "Native load failed for existing files: ${e.message}")
                 libDir(context).deleteRecursively()
@@ -178,6 +192,9 @@ open class NativeLibs(
             try {
                 loadAll(context)
                 _status.value = Status.READY
+                // Same reasoning as in init(): superseded directories go only once this version
+                // reached READY.
+                cleanupOldVersions(context)
             } catch (e: Throwable) {
                 Logger.e(tag, "Native load failed after download: ${e.message}")
                 _status.value = Status.ERROR
@@ -193,6 +210,11 @@ open class NativeLibs(
         if (!dir.exists()) dir.mkdirs()
 
         val digests = expectedDigests(context)
+        // Said once per download run, not per file: without the recorded digests every fetched
+        // library is accepted as-is, and that state should never be silent.
+        if (digests.isEmpty()) {
+            Logger.e(tag, "No ${DIGEST_ASSET} recorded in this APK — downloads are unverified")
+        }
         var completed = 0
         for (libName in libs) {
             val target = File(dir, libName)

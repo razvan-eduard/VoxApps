@@ -1,5 +1,14 @@
 {
-  "det": "https://github.com/razvan-eduard/VoxApps/releases/download/ocr-models-v1/det.onnx",
-  "latin": "https://github.com/razvan-eduard/VoxApps/releases/download/ocr-models-v1/latin_rec.onnx",
-  "latin_config": "https://github.com/razvan-eduard/VoxApps/releases/download/ocr-models-v1/latin_rec.yml"
+  "det": {
+    "url": "https://github.com/razvan-eduard/VoxApps/releases/download/ocr-models-v1/det.onnx",
+    "sha256": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d"
+  },
+  "latin": {
+    "url": "https://github.com/razvan-eduard/VoxApps/releases/download/ocr-models-v1/latin_rec.onnx",
+    "sha256": "e3110fd85fae66e3e9cdb17e2d881c6a68b65ce0f51a7522e8edcf69d8592d3b"
+  },
+  "latin_config": {
+    "url": "https://github.com/razvan-eduard/VoxApps/releases/download/ocr-models-v1/latin_rec.yml",
+    "sha256": "0bbe984570f597af3638e50bdf2e8276f3ab26a61966096538b3b0d1849f5c84"
+  }
 }

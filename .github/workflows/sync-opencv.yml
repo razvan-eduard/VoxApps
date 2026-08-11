@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           # Persisted for the branch push, so it is pushed by whoever opens the PR below.
-          token: ${{ secrets.README_PUSH_TOKEN || github.token }}
+          token: ${{ secrets.README_PUSH_TOKEN }}
           submodules: false
           fetch-depth: 0
 
@@ -181,7 +181,7 @@ jobs:
         env:
           # A PAT, not GITHUB_TOKEN — see sync-whisper.yml's "Open PR" for why a PR opened with
           # GITHUB_TOKEN can never satisfy a required check.
-          GH_TOKEN: ${{ secrets.README_PUSH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.README_PUSH_TOKEN }}
         run: |
           BUILD_STATUS="${{ steps.build.outputs.status }}"
           if [ "$BUILD_STATUS" == "pass" ]; then

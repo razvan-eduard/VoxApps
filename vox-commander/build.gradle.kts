@@ -48,7 +48,8 @@ val dlcLibs = listOf(
 /**
  * sherpa-onnx ships three native entry points; only libsherpa-onnx-jni.so is ever loaded (its Java
  * bindings load "sherpa-onnx-jni" by name, and its only external NEEDED lib is libonnxruntime.so).
- * The other two are dead weight — dropped in `full`, never published, never downloaded.
+ * The other two are dead weight — dropped from every release build, never published, never
+ * downloaded.
  */
 val unusedSherpaLibs = listOf("libsherpa-onnx-c-api.so", "libsherpa-onnx-cxx-api.so")
 
@@ -152,6 +153,11 @@ android {
             pickFirsts += "META-INF/jpms.args"
         }
         jniLibs {
+            // Forces native libraries to be extracted to nativeLibraryDir as real files on install.
+            // Load-bearing: WhisperEngineManager.isWhisperAvailable() and AppStateManager's
+            // diagnostics probe File(nativeLibraryDir, name) — under the default (false) the
+            // libraries are mapped straight out of the APK and never exist as files there, so both
+            // probes report missing for libraries that are present and loadable.
             useLegacyPackaging = true
             // This app ships arm64-v8a only (see abiFilters). mergeNativeLibs still processes every
             // other ABI, where onnxruntime-android and sherpa-onnx collide on the same path and fail
@@ -194,10 +200,12 @@ androidComponents {
         val jniLibs = variant.packaging.jniLibs
         if (variant.buildType == "release") {
             jniLibs.excludes.addAll(whisperLibs.map { "lib/arm64-v8a/$it" })
+            // Never loaded in any mode (see unusedSherpaLibs), so every release drops them.
+            jniLibs.excludes.addAll(unusedSherpaLibs.map { "lib/arm64-v8a/$it" })
             if (dlcMode == "full") {
                 // Excluding a path drops every artifact's copy of it, so the two libonnxruntime.so
                 // sources cannot collide here and no pickFirst is needed.
-                jniLibs.excludes.addAll((dlcLibs + unusedSherpaLibs).map { "lib/arm64-v8a/$it" })
+                jniLibs.excludes.addAll(dlcLibs.map { "lib/arm64-v8a/$it" })
             } else {
                 jniLibs.pickFirsts.add(onnxRuntimePath)
             }
@@ -218,7 +226,16 @@ androidComponents {
         // Unconditional for release, unlike the DLC digests above: the Whisper libraries are excluded
         // from every release build in both modes, so every release downloads them and every release
         // needs something to check them against.
-        if (variant.buildType == "release") {
+        //
+        // Debug gets them too whenever the libraries are on disk to hash — without the assets a
+        // sideloaded debug APK falls back to the floating `whisper-libs` tag and unverified
+        // downloads. Gated on presence because a checkout without the compiled libraries (CI's
+        // -PvoxSkipNativePrep builds) must still assemble; those APKs record nothing, exactly as
+        // before.
+        val whisperLibsOnDisk = whisperLibs.all {
+            File(projectDir, "src/main/jniLibs/arm64-v8a/$it").exists()
+        }
+        if (variant.buildType == "release" || whisperLibsOnDisk) {
             variant.sources.assets?.addGeneratedSourceDirectory(hashWhisperLibs, HashWhisperLibs::assetsDir)
         }
     }

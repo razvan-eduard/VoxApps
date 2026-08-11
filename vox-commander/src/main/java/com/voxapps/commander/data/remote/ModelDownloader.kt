@@ -474,6 +474,13 @@ class ModelDownloader(private val context: Context) {
         // A model with no declared hash is installed as before; the field is optional on purpose.
         if (!checksumOk(modelId, engineKey)) {
             Logger.log("Refusing $modelId: its bytes do not match the sha256 the schema declares", TAG)
+            // Both homes of the refused bytes: the downloaded archive, and whatever reached the
+            // install location. Leaving the archive behind would let the next attempt "verify"
+            // the same refused bytes again.
+            if (RemoteModelRegistry.isArchiveEngine(engineKey)) {
+                val extension = RemoteModelRegistry.getExtension(engineKey)
+                File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "$modelId$extension").delete()
+            }
             resolveLocalFile(modelId, engineKey)?.let { corrupt ->
                 if (corrupt.isDirectory) corrupt.deleteRecursively() else corrupt.delete()
             }
@@ -619,23 +626,39 @@ class ModelDownloader(private val context: Context) {
      * Returns true if the model is valid and ready to use.
      */
     /**
-     * True when the schema declares no hash, or the file on disk matches it.
+     * True when the schema declares no hash, or the downloaded artefact matches it.
      *
-     * Deliberately not fatal when absent: `models.json` carries 97 URLs and they cannot all be
-     * hashed at once, so an entry without the field behaves exactly as it did before. What the
-     * field buys where it *is* present is that a compromised or hijacked host cannot substitute
-     * different bytes at a URL the signed schema vouches for.
+     * The artefact is what arrived over the network: for an archive engine that is the archive
+     * itself, which must be hashed while it is still on disk — the extracted directory has no
+     * single stream of bytes to check — so this runs before extraction. For a file engine it is
+     * the file itself.
+     *
+     * Deliberately not fatal when absent: `models.json` carries 96 URLs and they cannot all be
+     * hashed at once, so an entry without the field behaves exactly as it did before. Where the
+     * field *is* present, anything that prevents the comparison — artefact missing, unreadable —
+     * counts as unverified, not as verified: a declared expectation that cannot be checked is a
+     * refusal, never a pass.
      */
     internal fun checksumOk(modelId: String, engineKey: String): Boolean {
         val expected = RemoteModelRegistry.getModel(modelId, engineKey)?.sha256?.lowercase()
             ?.takeIf { it.length == 64 } ?: return true
 
-        val file = resolveLocalFile(modelId, engineKey) ?: return true
-        // An archive is verified as the artefact that was downloaded; a directory has no single
-        // stream of bytes to hash, and by then it has already been unpacked anyway.
-        if (!file.isFile) return true
+        val artefact = if (RemoteModelRegistry.isArchiveEngine(engineKey)) {
+            val extension = RemoteModelRegistry.getExtension(engineKey)
+            File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "$modelId$extension")
+        } else {
+            resolveLocalFile(modelId, engineKey) ?: return true
+        }
+        if (!artefact.isFile) {
+            Logger.log("No artefact on disk to verify $modelId against its declared sha256", TAG)
+            return false
+        }
 
-        val actual = sha256Of(file) ?: return true
+        val actual = sha256Of(artefact)
+        if (actual == null) {
+            Logger.log("Could not hash $modelId's artefact — treating as unverified", TAG)
+            return false
+        }
         if (actual == expected) return true
 
         Logger.log("Checksum mismatch for $modelId: expected $expected, got $actual", TAG)

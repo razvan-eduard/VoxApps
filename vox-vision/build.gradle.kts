@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -76,6 +78,13 @@ android {
                 // APKs were installed side-by-side for the first time.
                 keyAlias = "vox-apps"
                 keyPassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                // Stated rather than defaulted. AGP's default here is v2 alone — while every
+                // published release so far is v3. An installed app updates only from an APK signed
+                // by the same certificate, so the scheme is not a detail to let a default change.
+                // v1 is JAR signing, unnecessary above API 24; minSdk is 29.
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
@@ -139,8 +148,93 @@ androidComponents {
     onVariants { variant ->
         if (dlcMode == "full" && variant.buildType == "release") {
             variant.packaging.jniLibs.excludes.addAll(dlcLibs.map { "lib/arm64-v8a/$it" })
+
+            // The digests of the libraries this build will download go into the APK, where the
+            // APK's own signature covers them — a digest fetched from the same place as the
+            // library would prove nothing. Wiring them as a generated asset also makes packaging
+            // depend on the staging task, so `assembleRelease` produces both the APK and the files
+            // to upload beside it, from one selection.
+            variant.sources.assets?.addGeneratedSourceDirectory(stageDlcLibs, StageDlcLibs::assetsDir)
         }
     }
+}
+
+/*
+ * Stages the `full`-mode DLC libraries and records what they hash to. Twin of vox-commander's
+ * StageDlcLibs, adapted for how this app sources them: the ten libraries are source-set files
+ * written by scripts/build_opencv_android.sh into src/main/jniLibs, not resolved dependency
+ * artifacts, so the inputs are those files directly.
+ *
+ * Two outputs, from one selection, on purpose. The staged `.so` files are uploaded as release
+ * assets; the digests are written into the APK's assets so the running app knows what bytes to
+ * expect back when it downloads them. Computing them separately would let the published library
+ * and the recorded digest come from different files, which is worse than recording nothing.
+ */
+abstract class StageDlcLibs : DefaultTask() {
+
+    /** The source-set directory build_opencv_android.sh writes to. */
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val jniDir: ConfigurableFileCollection
+
+    /** The libraries to publish, in the order NativeLibs loads them. */
+    @get:Input
+    abstract val libs: ListProperty<String>
+
+    /** Uploaded as release assets. */
+    @get:OutputDirectory
+    abstract val stagingDir: DirectoryProperty
+
+    /** Packaged into the APK, so the digests are covered by its signature. */
+    @get:OutputDirectory
+    abstract val assetsDir: DirectoryProperty
+
+    @TaskAction
+    fun stage() {
+        val available = jniDir.files.flatMap { root ->
+            root.walkTopDown().filter { it.isFile && it.name.endsWith(".so") }.toList()
+        }
+        val staging = stagingDir.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val assets = assetsDir.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val digests = StringBuilder()
+
+        for (lib in libs.get()) {
+            val source = available.firstOrNull { it.name == lib }
+                ?: throw GradleException(
+                    "No $lib in src/main/jniLibs — run scripts/build_opencv_android.sh before " +
+                        "publishing DLC assets."
+                )
+            source.copyTo(File(staging, lib), overwrite = true)
+
+            val digest = MessageDigest.getInstance("SHA-256")
+            source.inputStream().use { input ->
+                val buffer = ByteArray(1 shl 20)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            val hex = digest.digest().joinToString("") { "%02x".format(it) }
+            digests.append(hex).append("  ").append(lib).append('\n')
+            logger.lifecycle("staged $lib (${source.length() / 1024}k, ${hex.take(12)}…)")
+        }
+        File(assets, "dlc-libs.sha256").writeText(digests.toString())
+    }
+}
+
+val stageDlcLibs = tasks.register<StageDlcLibs>("collectDlcLibs") {
+    group = "build"
+    description = "Stage the full-mode DLC native libs and record their digests for the APK."
+    jniDir.from(layout.projectDirectory.dir("src/main/jniLibs/arm64-v8a"))
+    libs.set(dlcLibs)
+    stagingDir.set(layout.buildDirectory.dir("dlc-libs"))
+    assetsDir.set(layout.buildDirectory.dir("generated/dlcDigests"))
+}
+
+// KeepRulesTest reads proguard-rules.pro, so a change there must invalidate the test task.
+tasks.withType<Test>().configureEach {
+    inputs.file("proguard-rules.pro").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 dependencies {

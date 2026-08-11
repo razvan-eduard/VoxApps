@@ -15,7 +15,12 @@ name: Sync NewPipeExtractor Version
 on:
   schedule:
     - cron: '0 6 * * 2' # weekly, Tuesday 06:00 UTC
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Re-propose even if a PR for this version already exists (any state).'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -36,7 +41,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           # Persisted for the branch push, so it is pushed by whoever opens the PR below.
-          token: ${{ secrets.README_PUSH_TOKEN || github.token }}
+          token: ${{ secrets.README_PUSH_TOKEN }}
           submodules: recursive
           fetch-depth: 0
 
@@ -50,21 +55,42 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./scripts/vox check newpipe-extractor --report >> "$GITHUB_OUTPUT"
 
-      - name: Set up JDK 17
+      # `--state all` on purpose: a declined bump stays declined — without this gate the cron
+      # re-proposes it every week, forever. `select(.)` filters the null jq emits for an empty
+      # list, which would otherwise render as a non-empty string and read as an existing PR.
+      - name: Check whether this target was already proposed
         if: steps.versions.outputs.has_update == 'true'
+        id: dedup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="chore/sync-newpipe-extractor-${{ steps.versions.outputs.latest }}"
+          EXISTING=$(gh pr list --head "$BRANCH" --state all --json number,state -q '.[0] | select(.) | "\(.number) \(.state)"' || true)
+          if [ -n "$EXISTING" ] && [ "${{ inputs.force }}" = "true" ]; then
+            echo "PR $EXISTING already exists for $BRANCH — re-proposing it (force)"
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$EXISTING" ]; then
+            echo "PR $EXISTING already exists for $BRANCH — nothing to do"
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 17
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Set up Android SDK
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         uses: android-actions/setup-android@v4
         with:
           accept-android-licenses: true
 
       - name: Bump version in libs.versions.toml
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: bump
         run: |
           LATEST="${{ steps.versions.outputs.latest }}"
@@ -74,7 +100,7 @@ jobs:
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Grant execute permission for gradlew
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: chmod +x gradlew
 
       # -x autoCompileWhisper etc.: these preBuild-wired tasks are unrelated to what this workflow
@@ -83,14 +109,14 @@ jobs:
       # this workflow doesn't install (unlike release-commander.yml) — same exclusion
       # sync-openwakeword.yml already uses.
       - name: Compile + run unit tests
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           ./gradlew :vox-commander:compileDebugKotlin :vox-commander:testDebugUnitTest \
                     -PvoxSkipNativePrep \
                     --no-daemon
 
       - name: Commit and push
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -99,12 +125,12 @@ jobs:
           git push origin "${{ steps.bump.outputs.branch }}"
 
       - name: Open PR
-        if: steps.versions.outputs.has_update == 'true'
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         id: pr
         env:
           # A PAT, not GITHUB_TOKEN — see sync-whisper.yml's "Open PR" for why a PR opened with
           # GITHUB_TOKEN can never satisfy a required check.
-          GH_TOKEN: ${{ secrets.README_PUSH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.README_PUSH_TOKEN }}
         run: |
           URL=$(gh pr create \
             --title "chore: bump NewPipeExtractor ${{ steps.versions.outputs.current }} -> ${{ steps.versions.outputs.latest }}" \

@@ -154,9 +154,15 @@ jobs:
       - name: Native libraries satisfy each other
         run: |
           set -euo pipefail
-          find . -path "*/build/outputs/apk/debug/*.apk" -print0 \
-            | sort -z \
-            | xargs -0 ./scripts/vox check pairing
+          mapfile -d '' -t APKS < <(find . -path "*/build/outputs/apk/debug/*.apk" -print0 | sort -z)
+          # Six apps assembled above. Fewer APKs here means the output layout moved and this
+          # check would quietly examine a subset while staying green.
+          if [ "${#APKS[@]}" -ne 6 ]; then
+            echo "::error::expected 6 debug APKs, found ${#APKS[@]}"
+            printf '%s\n' "${APKS[@]}"
+            exit 1
+          fi
+          ./scripts/vox check pairing "${APKS[@]}"
 
       - name: Publish test results
         if: always()

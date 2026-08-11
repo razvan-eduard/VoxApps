@@ -58,8 +58,13 @@ class VulkanProbeService : Service() {
 
         try {
             Logger.log("Loading native libraries...", TAG)
-            val libDir = File(filesDir, "whisper_libs").absolutePath
-            WhisperLib.load(libDir)
+            // No repair or refetch here: this runs in an isolated process whose whole job is to
+            // answer whether the installed libraries work on this GPU. A load failure is a verdict.
+            val libDir = com.voxapps.commander.data.remote.WhisperEngineManager.libDir(this).absolutePath
+            if (!WhisperLib.load(libDir)) {
+                Logger.log("Native libraries failed to load — cannot probe", TAG)
+                return false
+            }
 
             Logger.log("Loading Whisper model with GPU for inference test...", TAG)
             val ctx = WhisperContext.createContextFromFile(path, useGpu = true)

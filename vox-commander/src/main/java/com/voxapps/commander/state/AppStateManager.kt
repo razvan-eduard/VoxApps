@@ -513,10 +513,19 @@ class AppStateManager private constructor(
             val exists: Boolean
             val isIncompatible: Boolean
 
-            // Check system nativeLibraryDir first, then downloaded whisper_libs
-            fun libPresent(fileName: String) =
-                java.io.File(context.applicationInfo.nativeLibraryDir, fileName).exists() ||
-                    java.io.File(context.filesDir, "whisper_libs/$fileName").exists()
+            // Each name is asked at the place its own downloader writes: the DLC libraries live in
+            // core:nativelibs' version-scoped directory, whisper's in WhisperEngineManager's — one
+            // shared path here would answer for at most one of the two.
+            fun libPresent(fileName: String) = when {
+                fileName in com.voxapps.commander.data.remote.NativeLibManager.libs ->
+                    com.voxapps.commander.data.remote.NativeLibManager.hasLib(context, fileName)
+                else ->
+                    java.io.File(context.applicationInfo.nativeLibraryDir, fileName).exists() ||
+                        java.io.File(
+                            com.voxapps.commander.data.remote.WhisperEngineManager.libDir(context),
+                            fileName
+                        ).exists()
+            }
 
             if (name == "Google AICore") {
                 isIncompatible = geminiIncompatible

@@ -40,8 +40,10 @@ for entry in "${APPS[@]}"; do
     else
         echo "  Latest tag: $LATEST_TAG"
 
-        # Extract versionCode from the build.gradle.kts
-        VERSION_CODE=$(grep 'versionCode' "$DIR/build.gradle.kts" | grep -oE '[0-9]+' || echo "")
+        # Extract versionCode from the build.gradle.kts. Bounded to one number: `grep -oE` emits
+        # every number on every matching line, so a second versionCode mention (a comment, a
+        # flavor) would otherwise turn this into a multi-line value and the changelog path with it.
+        VERSION_CODE=$(grep -m1 'versionCode' "$DIR/build.gradle.kts" | grep -oE '[0-9]+' | head -1 || echo "")
 
         if [ -z "$VERSION_CODE" ]; then
             echo "  Warning: Could not find versionCode for $DIR, skipping changelog."

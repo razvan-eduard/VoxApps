@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           # Persisted for the branch push, so it is pushed by whoever opens the PR below.
-          token: ${{ secrets.README_PUSH_TOKEN || github.token }}
+          token: ${{ secrets.README_PUSH_TOKEN }}
           submodules: recursive
           fetch-depth: 0
 
@@ -140,7 +140,7 @@ jobs:
           # opens a PR. The cost is that a PR opened that way has its required checks *absent*
           # rather than pending, and a merge is blocked on absent exactly as it is on failing, so
           # the PR can never become mergeable. Opening it as an account makes CI run on it.
-          GH_TOKEN: ${{ secrets.README_PUSH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.README_PUSH_TOKEN }}
         run: |
           gh pr create \
             --title "chore: whisper.cpp upstream ${{ steps.versions.outputs.latest_tag }} available" \

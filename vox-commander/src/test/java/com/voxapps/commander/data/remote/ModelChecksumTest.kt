@@ -50,7 +50,7 @@ class ModelChecksumTest {
     }
 
     /**
-     * An entry without the field must keep working. models.json carries 97 URLs; they cannot all be
+     * An entry without the field must keep working. models.json carries 96 URLs; they cannot all be
      * hashed at once, and a download that worked yesterday has to work today — so absence means
      * "unverified", never "rejected".
      */

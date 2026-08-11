@@ -199,11 +199,30 @@ jobs:
       - name: Verify the APK is signed
         if: steps.check_bump.outputs.changed != 'false'
         run: |
-          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -type d | sort -V | tail -1)"
+          # -L: on a runner the SDK path can be a tree of symlinks, and an unfollowed find
+          # matches nothing (see scripts/lib/common.sh).
+          BUILD_TOOLS="$(find -L "$ANDROID_HOME/build-tools" -maxdepth 1 -type d | sort -V | tail -1)"
           "$BUILD_TOOLS/apksigner" verify --print-certs \
             "VoxCommander-${{ steps.version.outputs.tag }}.apk"
-        env:
-          ANDROID_HOME: /usr/local/lib/android/sdk
+
+      # The digests the app verifies its downloads against ride inside the APK as generated
+      # assets. Nothing else fails when the wiring that stages them is lost — build, suite and
+      # release all stay green while every install downloads unverified — so the APK is opened
+      # and checked here.
+      - name: Verification assets are inside the APK
+        if: steps.check_bump.outputs.changed != 'false'
+        run: |
+          set -euo pipefail
+          APK="VoxCommander-${{ steps.version.outputs.tag }}.apk"
+          LISTING=$(unzip -l "$APK")
+          for asset in assets/whisper-libs.sha256 assets/whisper-libs.commit; do
+            echo "$LISTING" | grep -qF "$asset" \
+              || { echo "::error::$asset missing from $APK"; exit 1; }
+          done
+          if [ "${{ steps.dlc.outputs.mode }}" = "full" ]; then
+            echo "$LISTING" | grep -qF "assets/dlc-libs.sha256" \
+              || { echo "::error::assets/dlc-libs.sha256 missing from $APK"; exit 1; }
+          fi
 
       - name: Deepen checkout for changelog
         if: steps.check_bump.outputs.changed != 'false'
@@ -258,6 +277,28 @@ jobs:
       # "just build it and see" dispatch tagged the commit and cut a release at whatever version
       # happened to be current, walking straight around the guard that exists to prevent exactly
       # that. Building and testing still run: that is what a dispatch is for.
+      # A published tag is an address installed APKs still resolve — the DLC downloader builds its
+      # URLs from the version it was compiled with. Moving such a tag to a different commit
+      # replaces the assets behind every one of those addresses in place. Republishing the same
+      # commit (a fresh publish date) is fine; anything else needs a version bump.
+      - name: Refuse to move a published tag
+        if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          # The peeled ref (^{}) sorts after the plain one, so tail -1 resolves an annotated tag
+          # to its commit and leaves a lightweight tag as-is.
+          REMOTE_SHA=$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | tail -1 | cut -f1)
+          if [ -n "$REMOTE_SHA" ] && [ "$REMOTE_SHA" != "$(git rev-parse HEAD)" ]; then
+            if gh release view "$TAG" --repo "${{ github.repository }}" --json isDraft \
+                 --jq 'select(.isDraft == false)' 2>/dev/null | grep -q .; then
+              echo "::error::$TAG is already published from $REMOTE_SHA — bump the version before releasing"
+              exit 1
+            fi
+          fi
+
       - name: Point the tag at this commit
         if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         run: |

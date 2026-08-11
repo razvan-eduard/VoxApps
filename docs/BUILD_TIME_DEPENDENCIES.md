@@ -195,19 +195,21 @@ address with no version in it therefore serves whatever was published last, rath
 was compiled against.
 
 The release is named for the whisper.cpp commit — `whisper-libs-<sha12>`. The build records that
-commit into the APK as `assets/whisper-libs.commit`, the app derives both its download tag and its
-library directory from it, and `publish_whisper_libs.sh` writes to the same name, so an install can
-only ask for the build its APK expects. `./scripts/vox check whisper-published` asks whether that
-release exists, and every Commander release runs it before publishing.
+commit into the APK as `assets/whisper-libs.commit`, the app derives its download tag from it, and
+`publish_whisper_libs.sh` writes to the same name, so an install can only ask for the build its APK
+expects. `./scripts/vox check whisper-published` asks whether that release exists, and every
+Commander release runs it before publishing.
 
-Scoped to the commit rather than to the app version, unlike the DLC libraries below: releases are
-pruned, and tying the runtime to an app release would strip it from installs that stay on an older
-version. Several app versions share one whisper build.
+Scoped to the commit rather than to the app version so several app versions share one whisper
+build. Published releases are permanent: releases accumulate rather than being pruned, and a
+published tag's assets are never deleted or replaced, so any address an installed APK carries keeps
+resolving.
 
-A build recording no commit falls back to the original `whisper-libs` tag and unscoped directory,
-which is what installs predating this ask for. On upgrade, libraries already on the device are
-adopted when they match the recorded digests rather than downloaded again, and directories from
-superseded commits are removed.
+A build recording no commit falls back to the original `whisper-libs` tag, which is what installs
+predating this ask for. The library directory is shared across builds; a `.whisper-commit` marker
+records which build its contents came from, and contents whose marker does not match the APK's
+recorded commit are replaced at the next download. On upgrade, libraries already on the device are
+adopted when they match the recorded digests rather than downloaded again.
 
 ### Verifying what is downloaded
 

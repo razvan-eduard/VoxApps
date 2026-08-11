@@ -35,6 +35,13 @@ android {
                 // APKs were installed side-by-side for the first time.
                 keyAlias = "vox-apps"
                 keyPassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                // Stated rather than defaulted. AGP's default here is v2 alone — while every
+                // published release so far is v3. An installed app updates only from an APK signed
+                // by the same certificate, so the scheme is not a detail to let a default change.
+                // v1 is JAR signing, unnecessary above API 24; minSdk is 29.
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
@@ -46,6 +53,7 @@ android {
             // builds under IzzyOnDroid's size guideline — per-ABI splitting wouldn't help here since
             // the bulk is DEX bytecode, not native libs.
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseKeystorePath != null) {
                 signingConfig = signingConfigs.getByName("release")

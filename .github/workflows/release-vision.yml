@@ -93,9 +93,9 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run unit tests (if any)
+      - name: Run unit tests
         if: steps.check_bump.outputs.changed != 'false'
-        run: ./gradlew :vox-vision:testDebugUnitTest --no-daemon || echo "No tests found"
+        run: ./gradlew :vox-vision:testDebugUnitTest --no-daemon
 
       - name: Decode signing keystore
         if: steps.check_bump.outputs.changed != 'false'
@@ -137,6 +137,31 @@ jobs:
           cp vox-vision/build/outputs/bundle/release/vox-vision-release.aab \
              VoxVision-${{ steps.version.outputs.tag }}.aab
 
+      # A signed APK is the one thing this workflow cannot be wrong about: an unsigned or
+      # wrongly-signed build installs over nothing and, for a signature-level IPC app, silently
+      # breaks first-party routing. Gradle only signs when it sees the keystore env vars, so assert
+      # rather than assume.
+      - name: Verify the APK is signed
+        if: steps.check_bump.outputs.changed != 'false'
+        run: |
+          # -L: on a runner the SDK path can be a tree of symlinks, and an unfollowed find
+          # matches nothing (see scripts/lib/common.sh).
+          BUILD_TOOLS="$(find -L "$ANDROID_HOME/build-tools" -maxdepth 1 -type d | sort -V | tail -1)"
+          "$BUILD_TOOLS/apksigner" verify --print-certs \
+            "VoxVision-${{ steps.version.outputs.tag }}.apk"
+
+      # The digests the app verifies its downloads against ride inside the APK as a generated
+      # asset. Nothing else fails when the wiring that stages them is lost — build, suite and
+      # release all stay green while every install downloads unverified — so the APK is opened
+      # and checked here.
+      - name: Verification assets are inside the APK
+        if: steps.check_bump.outputs.changed != 'false' && steps.dlc.outputs.mode == 'full'
+        run: |
+          set -euo pipefail
+          APK="VoxVision-${{ steps.version.outputs.tag }}.apk"
+          unzip -l "$APK" | grep -qF "assets/dlc-libs.sha256" \
+            || { echo "::error::assets/dlc-libs.sha256 missing from $APK"; exit 1; }
+
       - name: Deepen checkout for changelog
         if: steps.check_bump.outputs.changed != 'false'
         run: git fetch --prune --unshallow --tags origin
@@ -173,26 +198,39 @@ jobs:
             fi
           } > CHANGELOG.md
 
-      # Only in `full`. In `minimal` these libraries are inside the APK, and publishing them as
-      # assets as well just adds ~43MB to the release that nothing will ever download.
-      - name: Collect native libraries for DLC
-        if: steps.check_bump.outputs.changed != 'false' && steps.dlc.outputs.mode == 'full'
-        run: |
-          mkdir -p dlc-libs
-          # Copied straight from vox-vision/src/main/jniLibs/arm64-v8a — the location
-          # scripts/build_opencv_android.sh writes to directly (see its VISION_JNI_DIR comment) —
-          # rather than out of AGP's build/intermediates, which in `full` never contains them: they
-          # are excluded before the native-lib merge runs. Being source-set files rather than
-          # dependency artifacts, they are on disk regardless of how the APK was packaged, which is
-          # why Vision needs no equivalent of Commander's collectDlcLibs task.
-          cp vox-vision/src/main/jniLibs/arm64-v8a/*.so dlc-libs/
-          ls -lh dlc-libs/
-
+      # In `full`, `assembleRelease` also runs collectDlcLibs (packaging depends on it via the
+      # generated digests asset), which stages the upload set into vox-vision/build/dlc-libs/ from
+      # the same selection whose digests went into the APK. Uploading from that staging directory —
+      # not from src/main/jniLibs — keeps the published assets, the app's download list and the
+      # recorded digests one selection. In `minimal` these libraries are inside the APK and
+      # publishing them as assets would add ~43MB to the release that nothing ever downloads.
       # Publishing is for a push, not for a dispatch. `check_bump` only runs on a push to main, so
       # its output is empty on a manual run — and an empty value is not 'false', which meant every
       # "just build it and see" dispatch tagged the commit and cut a release at whatever version
       # happened to be current, walking straight around the guard that exists to prevent exactly
       # that. Building and testing still run: that is what a dispatch is for.
+      # A published tag is an address installed APKs still resolve — the DLC downloader builds its
+      # URLs from the version it was compiled with. Moving such a tag to a different commit
+      # replaces the assets behind every one of those addresses in place. Republishing the same
+      # commit (a fresh publish date) is fine; anything else needs a version bump.
+      - name: Refuse to move a published tag
+        if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          # The peeled ref (^{}) sorts after the plain one, so tail -1 resolves an annotated tag
+          # to its commit and leaves a lightweight tag as-is.
+          REMOTE_SHA=$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | tail -1 | cut -f1)
+          if [ -n "$REMOTE_SHA" ] && [ "$REMOTE_SHA" != "$(git rev-parse HEAD)" ]; then
+            if gh release view "$TAG" --repo "${{ github.repository }}" --json isDraft \
+                 --jq 'select(.isDraft == false)' 2>/dev/null | grep -q .; then
+              echo "::error::$TAG is already published from $REMOTE_SHA — bump the version before releasing"
+              exit 1
+            fi
+          fi
+
       - name: Point the tag at this commit
         if: steps.check_bump.outputs.changed != 'false' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         run: |
@@ -234,7 +272,7 @@ jobs:
           # `minimal`, exactly backwards.
           EXTRA=""
           if [ "${{ steps.dlc.outputs.mode }}" = "full" ]; then
-            EXTRA="--with-libs dlc-libs"
+            EXTRA="--with-libs vox-vision/build/dlc-libs"
           fi
           # shellcheck disable=SC2086
           ./scripts/vox check pairing VoxVision-*.apk $EXTRA
@@ -262,8 +300,9 @@ jobs:
             VoxVision-*.aab
             VoxVision-sbom.json
             CHANGELOG.md
-            ${{ steps.dlc.outputs.mode == 'full' && 'dlc-libs/*.so' || '' }}
+            ${{ steps.dlc.outputs.mode == 'full' && 'vox-vision/build/dlc-libs/*.so' || '' }}
           body_path: CHANGELOG.md
           draft: false
+          prerelease: ${{ steps.version.outputs.is_prerelease }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

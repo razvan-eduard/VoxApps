@@ -226,6 +226,32 @@ else
     bad "whisper-libs tag does not follow the pin" "pin=$pin reported=$reported"
 fi
 
+# A gate that has only ever passed is indistinguishable from one that cannot fail, so both
+# directions are exercised: the real pin must pass, and a pin nothing was published for must fail.
+# --report keeps exit 0 by contract, which is why the gating form is what is tested here.
+if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+    ok "whisper-published gate both ways: skipped (no authenticated gh)"
+else
+    if ./scripts/vox check whisper-published >/dev/null 2>&1; then
+        ok "the gate passes on the real pin"
+    else
+        bad "the gate fails on the real pin — is the runtime published?"
+    fi
+    FAKE_PIN="0000000000000000000000000000000000000000"
+    if VOX_WHISPER_PIN=$FAKE_PIN ./scripts/vox check whisper-published >/dev/null 2>&1; then
+        bad "the gate PASSED for a pin with no release (it proves nothing)"
+    else
+        ok "the gate fails for a pin with no release"
+    fi
+    rep=$(VOX_WHISPER_PIN=$FAKE_PIN ./scripts/vox check whisper-published --report 2>/dev/null)
+    if printf '%s\n' "$rep" | grep -qx 'published=false'; then
+        ok "and its report says published=false for that pin"
+    else
+        bad "the report did not say published=false for a pin with no release" \
+            "$(printf '%s' "$rep" | head -3 | tr '\n' ' ')"
+    fi
+fi
+
 log_blue "── the sync workflows' dedup gate ──────────────────────────"
 #
 # `gh pr list --json ... -q '.[0] | "\(.number) \(.state)"'` renders an empty result as the literal
@@ -233,9 +259,17 @@ log_blue "── the sync workflows' dedup gate ──────────�
 # "a PR exists" and the sync skips every single run. Nothing reports it: the job is green, every
 # step after the gate is `skipped`, and the only symptom is upstream updates that never arrive.
 # `select(.)` drops the null so an absent PR is an empty string.
+#
+# A workflow with no gate at all is not exempt — it re-proposes a declined bump every cron,
+# forever. Skipping it here would also mean losing the gate loses the test.
+SYNC_WF_COUNT=0
 for wf in .github/workflows/sync-*.yml; do
     name=$(basename "$wf" .yml)
-    grep -q 'gh pr list --head' "$wf" || continue
+    SYNC_WF_COUNT=$((SYNC_WF_COUNT + 1))
+    if ! grep -q 'gh pr list --head' "$wf"; then
+        bad "$name: no dedup gate at all — a declined bump is re-proposed every cron"
+        continue
+    fi
     if grep -q "select(\.)" "$wf"; then
         ok "$name: dedup distinguishes no-PR from a PR"
     else
@@ -254,13 +288,157 @@ done
 # A PR opened with GITHUB_TOKEN never triggers a workflow, so its required checks are absent rather
 # than pending — and a merge blocks on absent exactly as it does on failing. The PR looks fine,
 # reports nothing failing, and cannot be merged. Reads may keep GITHUB_TOKEN; opening the PR cannot.
+#
+# Asserted on behaviour, not spelling: `${{ secrets.X || github.token }}` never contains the string
+# `secrets.GITHUB_TOKEN`, yet resolves to exactly that token when the secret is unset — so any
+# mention of github.token in the PR-opening env is a failure, and the PAT must be named.
 for wf in .github/workflows/sync-*.yml; do
     name=$(basename "$wf" .yml)
-    if awk '/- name:/{s=$0} /GH_TOKEN/{t=$0} /gh pr create/{print t; exit}' "$wf" \
-         | grep -q 'secrets.GITHUB_TOKEN'; then
-        bad "$name: opens its PR with GITHUB_TOKEN — required checks will never run on it"
+    token_line=$(awk '/GH_TOKEN/{t=$0} /gh pr create/{print t; exit}' "$wf")
+    if printf '%s' "$token_line" | grep -qE 'github\.token|GITHUB_TOKEN'; then
+        bad "$name: the PR-opening token can resolve to GITHUB_TOKEN — required checks would never run" \
+            "$token_line"
+    elif printf '%s' "$token_line" | grep -q 'README_PUSH_TOKEN'; then
+        ok "$name: opens its PR with the PAT, so CI runs on it"
     else
-        ok "$name: opens its PR as an account, so CI runs on it"
+        bad "$name: no PR-opening token found" "$token_line"
+    fi
+done
+
+if [ "$SYNC_WF_COUNT" -eq 6 ]; then
+    ok "the dedup and token loops saw all 6 sync workflows"
+else
+    bad "the sync loops saw $SYNC_WF_COUNT workflows, expected 6 — coverage shrank silently"
+fi
+
+log_blue "── the release workflows do the same things ────────────────"
+# Six workflows publish with the same stakes, and each gate exists only in the file it was pasted
+# into. A gate present in five of six is invisible from inside any one of them: the sixth simply
+# publishes green without it. Parity is asserted per file, with the missing pieces named, and the
+# loop counts its files so a renamed glob cannot quietly assert nothing.
+RELEASE_WF_COUNT=0
+for wf in .github/workflows/release-*.yml; do
+    name=$(basename "$wf" .yml)
+    RELEASE_WF_COUNT=$((RELEASE_WF_COUNT + 1))
+    missing=""
+    grep -q 'apksigner" verify' "$wf" || missing="$missing apksigner-verify"
+    grep -q 'prerelease:' "$wf" || missing="$missing prerelease-flag"
+    grep -q 'check pairing' "$wf" || missing="$missing native-pairing"
+    grep -q 'release sbom' "$wf" || missing="$missing sbom"
+    grep -q 'attest-build-provenance' "$wf" || missing="$missing attestation"
+    # A test step that swallows its own failure is a gate in name only.
+    if grep -E 'gradlew.*[tT]est' "$wf" | grep -qE '\|\| (echo|true)'; then
+        missing="$missing softened-tests"
+    fi
+    if [ -z "$missing" ]; then
+        ok "$name: every release gate present"
+    else
+        bad "$name: missing$missing"
+    fi
+done
+if [ "$RELEASE_WF_COUNT" -eq 6 ]; then
+    ok "the parity loop saw all 6 release workflows"
+else
+    bad "the parity loop saw $RELEASE_WF_COUNT release workflows, expected 6"
+fi
+
+# A published tag is an address installed APKs still resolve — the DLC downloader builds its URLs
+# from the version it was compiled with. The guard that refuses to repoint one must exist in every
+# release workflow, or a build at an unbumped version silently replaces the assets behind every
+# installed APK's download URL.
+guarded=$(grep -l 'Refuse to move a published tag' .github/workflows/release-*.yml | wc -l | tr -d ' ')
+if [ "$guarded" -eq 6 ]; then
+    ok "every release workflow refuses to move a published tag"
+else
+    bad "only $guarded of 6 release workflows carry the republish guard"
+fi
+
+log_blue "── F-Droid deploys are wired to real workflow names ────────"
+# workflow_run triggers match on the display name. Renaming a release workflow silently detaches
+# its F-Droid deploy: GitHub does not warn about a trigger that matches nothing — the deploy just
+# stops firing for that app.
+DEPLOY=.github/workflows/deploy-fdroid.yml
+TRIGGERS=$(awk '/workflows:/{f=1;next} f && /^[[:space:]]*-/{line=$0; sub(/^[^-]*- */,"",line); gsub(/"/,"",line); print line; next} f{exit}' "$DEPLOY")
+TRIGGER_COUNT=0
+UNMATCHED=""
+while IFS= read -r wfname; do
+    [ -n "$wfname" ] || continue
+    TRIGGER_COUNT=$((TRIGGER_COUNT + 1))
+    hits=$(grep -l "^name: $wfname\$" .github/workflows/release-*.yml 2>/dev/null | wc -l | tr -d ' ')
+    [ "$hits" -eq 1 ] || UNMATCHED="$UNMATCHED '$wfname'"
+done <<< "$TRIGGERS"
+if [ -z "$UNMATCHED" ] && [ "$TRIGGER_COUNT" -eq "$RELEASE_WF_COUNT" ]; then
+    ok "all $TRIGGER_COUNT deploy triggers name an existing release workflow, one each"
+else
+    bad "deploy-fdroid trigger drift ($TRIGGER_COUNT triggers, $RELEASE_WF_COUNT release workflows)" \
+        "unmatched:$UNMATCHED"
+fi
+
+log_blue "── writer and reader agree on the library lists ────────────"
+# Each list exists in more than one place: what the build excludes, what the app loads, what the
+# publish script uploads, what the release gate looks for. Nothing but these assertions ties the
+# copies together — the 0.20 incident was exactly a writer and its readers disagreeing.
+# The end marker is a line that is only `)` or `),` — a `)` inside a comment must not close the
+# range early, and the quoted-name grep keeps commented-out entries and prose out of the list.
+so_list() {
+    sed -n "/$2/,/^[[:space:]]*),\{0,1\}[[:space:]]*$/p" "$1" \
+        | grep -oE '"lib[A-Za-z0-9._-]+\.so"' | tr -d '"' | sort
+}
+
+WEM="vox-commander/src/main/java/com/voxapps/commander/data/remote/WhisperEngineManager.kt"
+W_KT=$(so_list "$WEM" 'WHISPER_LIBS = listOf(')
+W_GRADLE=$(so_list vox-commander/build.gradle.kts 'val whisperLibs = listOf(')
+W_PUB=$(grep -m1 '^LIBS=' scripts/publish_whisper_libs.sh | grep -oE '"[^"]+\.so"' | tr -d '"' | sort)
+W_CHECK=$(grep -m1 '^LIBS=' scripts/check_whisper_published.sh | grep -oE '"[^"]+\.so"' | tr -d '"' | sort)
+w_count=$(printf '%s\n' "$W_KT" | grep -c . || true)
+if [ "$w_count" -eq 2 ] && [ "$W_KT" = "$W_GRADLE" ] && [ "$W_KT" = "$W_PUB" ] && [ "$W_KT" = "$W_CHECK" ]; then
+    ok "the whisper lib list agrees across its four copies (2 libs)"
+else
+    bad "whisper lib list drift across engine/build/publish/gate" \
+        "kt=[${W_KT//$'\n'/ }] gradle=[${W_GRADLE//$'\n'/ }] publish=[${W_PUB//$'\n'/ }] gate=[${W_CHECK//$'\n'/ }]"
+fi
+
+# In the Kotlin copy order is load semantics: the list is walked into System.load() calls and
+# libwhisper.so NEEDs libomp.so, so libomp must come first. The other copies only name files.
+first=$(sed -n '/WHISPER_LIBS = listOf(/,/)/p' "$WEM" | grep -oE 'lib(omp|whisper)\.so' | head -1)
+if [ "$first" = "libomp.so" ]; then
+    ok "the engine loads libomp before libwhisper"
+else
+    bad "WHISPER_LIBS no longer loads libomp first — libwhisper cannot resolve its dependency"
+fi
+
+C_GRADLE=$(so_list vox-commander/build.gradle.kts 'val dlcLibs = listOf(')
+C_KT=$(so_list vox-commander/src/main/java/com/voxapps/commander/data/remote/NativeLibManager.kt 'libs = listOf(')
+c_count=$(printf '%s\n' "$C_KT" | grep -c . || true)
+if [ "$c_count" -eq 4 ] && [ "$C_GRADLE" = "$C_KT" ]; then
+    ok "commander's DLC list agrees between build and loader (4 libs)"
+else
+    bad "commander dlcLibs and NativeLibManager.libs disagree" \
+        "gradle=[${C_GRADLE//$'\n'/ }] kt=[${C_KT//$'\n'/ }]"
+fi
+
+V_GRADLE=$(so_list vox-vision/build.gradle.kts 'val dlcLibs = listOf(')
+V_KT=$(so_list vox-vision/src/main/java/com/voxapps/vision/data/NativeLibManager.kt 'libs = listOf(')
+v_count=$(printf '%s\n' "$V_KT" | grep -c . || true)
+if [ "$v_count" -eq 10 ] && [ "$V_GRADLE" = "$V_KT" ]; then
+    ok "vision's DLC list agrees between build and loader (10 libs)"
+else
+    bad "vision dlcLibs and NativeLibManager.libs disagree" \
+        "gradle=[${V_GRADLE//$'\n'/ }] kt=[${V_KT//$'\n'/ }]"
+fi
+
+log_blue "── report contract without CI's environment ────────────────"
+# CI exports GH_TOKEN and friends, so a broken \${VAR:-\$(fallback)} in a check script fails only
+# on a developer machine — the environment masks the defect exactly where the report gates a bot.
+# The contract is therefore pinned on the no-env path explicitly.
+for name in ppocr-sdk whisper; do
+    out=$(env -u GH_TOKEN -u GITHUB_TOKEN -u GITHUB_REPOSITORY \
+              -u VULKAN_HEADERS_BASE -u SPIRV_HEADERS_BASE -u SHADERC_BASE \
+              ./scripts/vox check "$name" --report 2>/dev/null)
+    if printf '%s\n' "$out" | grep -qE '^has_update=(true|false)$'; then
+        ok "$name: report contract holds with no ambient environment"
+    else
+        bad "$name: report breaks when CI's env vars are absent" "$(printf '%s' "$out" | head -2)"
     fi
 done
 

@@ -14,11 +14,43 @@ JNI_DIR="$PROJECT_ROOT/vox-commander/src/main/jniLibs/arm64-v8a"
 # identifies a build rather than a shelf. A single reused tag served whatever was published last,
 # which is how an APK compiled against one whisper.cpp came to run another.
 #
-# Scoped to the commit rather than to the app version because releases are pruned: tying it to an app
-# release would delete the runtime for installs that stay on an older version, and many app versions
-# share one whisper build anyway.
+# Scoped to the commit rather than to the app version because many app versions share one whisper
+# build. Published releases are permanent — a tag's assets are never deleted or replaced — so every
+# address an installed APK carries keeps resolving.
 WHISPER_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse "HEAD:vox-commander/src/main/cpp/whisper.cpp")
 TAG="whisper-libs-${WHISPER_COMMIT:0:12}"
+
+# --verify: after publishing (or when everything already matches), download each asset over the
+# same anonymous URL every install uses and hash it against the local build. The API digest
+# comparison below answers "what does GitHub think it stored"; this answers "what does the
+# release actually serve" — an interrupted --clobber can make those differ.
+VERIFY=false
+for arg in "$@"; do
+    case "$arg" in
+        --verify) VERIFY=true ;;
+        *) log_error "Unknown argument: $arg"; exit 1 ;;
+    esac
+done
+
+verify_remote() {
+    local repo base lib tmp rc=0
+    repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+    base="https://github.com/$repo/releases/download/$TAG"
+    for lib in "${LIBS[@]}"; do
+        tmp=$(mktemp)
+        if ! curl -sSLf --max-time 900 -o "$tmp" "$base/$lib"; then
+            log_error "  $lib: could not download from $base"
+            rc=1
+        elif [ "$(vox_sha256 "$tmp")" != "$(vox_sha256 "$JNI_DIR/$lib")" ]; then
+            log_error "  $lib: served bytes differ from the local build"
+            rc=1
+        else
+            log_info "  $lib: release serves the local build's bytes"
+        fi
+        rm -f "$tmp"
+    done
+    return $rc
+}
 
 # --- LIBS TO UPLOAD (in load order) ---
 #
@@ -88,6 +120,10 @@ done
 
 if [ "$ALL_MATCH" = true ]; then
     log_info "✅ All libs are identical to release assets. Nothing to publish."
+    if $VERIFY; then
+        log_blue "🔍 Reading back what the release serves..."
+        verify_remote || exit 1
+    fi
     exit 0
 fi
 
@@ -98,6 +134,11 @@ for lib in "${NEEDS_UPLOAD[@]}"; do
     gh release upload "$TAG" "$JNI_DIR/$lib" --clobber
     log_info "  ✅ $lib uploaded ($(du -h "$JNI_DIR/$lib" | cut -f1))"
 done
+
+if $VERIFY; then
+    log_blue "🔍 Reading back what the release serves..."
+    verify_remote || exit 1
+fi
 
 log_info "🎉 Published ${#NEEDS_UPLOAD[@]} lib(s) to release '$TAG'"
 # Named from the same place the app builds its download URLs (core/identity VoxRepo), rather than

@@ -1,7 +1,9 @@
 package com.voxapps.commander.domain.engine.whisper
 
 import android.content.Context
+import com.voxapps.commander.data.remote.WhisperEngineManager
 import com.voxapps.commander.utils.AudioConvert
+import com.voxapps.commander.utils.NetworkMonitor
 import com.voxapps.logging.Logger
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.engine.BaseVoxEngine
@@ -29,6 +31,7 @@ class WhisperCppSttEngine(
     private val TAG = Strings.Tags.WHISPER_CPP_STT_ENGINE
     private var whisperContext: WhisperContext? = null
     private var isUsingGpu = false
+    private val libManager = WhisperEngineManager(context, settingsRepo)
 
     /**
      * Builds the whisper context from an already-resolved model file.
@@ -49,8 +52,31 @@ class WhisperCppSttEngine(
 
         // Lazy-load native .so files only when Whisper is actually used, avoiding ~60MB RSS
         // when another STT engine is active.
-        val libDir = File(context.filesDir, "whisper_libs").absolutePath
-        WhisperLib.load(libDir)
+        //
+        // The load path is also where staleness is settled: it is the one place that runs every
+        // time the libraries are consumed, so an app update that moved the whisper.cpp pin
+        // refetches here. Fetching stays inside the consent the original enable gave — nothing is
+        // downloaded over a metered connection; the previous build's libraries still work, so a
+        // metered launch runs them and the refresh waits for an unmetered one.
+        val libDir = WhisperEngineManager.libDir(context).absolutePath
+        if (libManager.needsRefresh()) {
+            if (NetworkMonitor.isMetered) {
+                Logger.log("Whisper libraries need refreshing, but the connection is metered — loading what is present", TAG)
+            } else if (!libManager.downloadLibs()) {
+                Logger.log("Whisper library refresh failed — loading what is present", TAG)
+            }
+        }
+        if (!WhisperLib.load(libDir)) {
+            // One repair attempt: files that exist but cannot load are replaced and loading is
+            // tried once more. Still nothing over metered.
+            val repaired = !NetworkMonitor.isMetered &&
+                libManager.repairLibs() &&
+                WhisperLib.load(libDir)
+            if (!repaired) {
+                Logger.log("Whisper native libraries failed to load", TAG)
+                return@withContext false
+            }
+        }
 
         val modelPath = local.entryPoint.absolutePath
         if (!local.entryPoint.exists()) {

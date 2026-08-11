@@ -16,17 +16,16 @@ import java.io.File
  */
 class WhisperEngineManager(
     private val context: Context,
-    private val settingsRepo: SettingsRepository
+    private val settingsRepo: SettingsRepository,
+    private val httpClient: okhttp3.OkHttpClient = okhttp3.OkHttpClient()
 ) {
     companion object {
         private const val TAG = "WhisperEngineManager"
 
         /**
-         * One directory, named the same for every build.
-         *
-         * WhisperCppSttEngine, VulkanProbeService, BenchmarkEngine and AppStateManager all build
-         * this path themselves rather than asking here, so a per-commit directory would be written
-         * by the downloader and looked for by nobody.
+         * One directory, named the same for every build; [libDir] is the only place any code
+         * derives this path from, so the downloader and the loaders cannot disagree on it.
+         * Contents are tied to a build by the [COMMIT_MARKER] beside them, not by the name.
          */
         private const val LIB_DIR_NAME = "whisper_libs"
 
@@ -52,6 +51,13 @@ class WhisperEngineManager(
             "libomp.so",
             "libwhisper.so"
         )
+
+        /**
+         * Where the downloaded libraries live. Static so the call sites that run without a manager
+         * instance — the Vulkan probe in its own process, the benchmark, diagnostics — derive the
+         * path from the same constant the downloader writes to.
+         */
+        fun libDir(context: Context): File = File(context.filesDir, LIB_DIR_NAME)
     }
 
     /**
@@ -70,7 +76,7 @@ class WhisperEngineManager(
         get() = VoxRepo.RELEASE_DOWNLOAD_BASE + releaseTag + "/"
 
     val libDir: File
-        get() = File(context.filesDir, LIB_DIR_NAME)
+        get() = libDir(context)
 
     /**
      * Are the libraries on disk the ones this build asks for?
@@ -109,6 +115,28 @@ class WhisperEngineManager(
         if (systemHasLibs) return true
         // Check downloaded libs
         return areLibsDownloaded()
+    }
+
+    /**
+     * True when the load path should bring the directory in line with this build before loading:
+     * the commit marker names another build, or a listed file is missing or empty. False when the
+     * APK carries the libraries itself — the directory is never consulted then.
+     */
+    fun needsRefresh(): Boolean {
+        val systemDir = File(context.applicationInfo.nativeLibraryDir)
+        if (WHISPER_LIBS.all { File(systemDir, it).exists() }) return false
+        if (libsAreStale()) return true
+        return !WHISPER_LIBS.all { File(libDir, it).length() > 0 }
+    }
+
+    /**
+     * Replaces the on-disk libraries outright, then refetches. For the load path's one repair
+     * attempt: bytes that exist but cannot be loaded tell nothing a digest check can use, so they
+     * are removed rather than adopted.
+     */
+    suspend fun repairLibs(): Boolean = withContext(Dispatchers.IO) {
+        libDir.listFiles()?.forEach { it.delete() }
+        downloadLibs()
     }
 
     /**
@@ -159,7 +187,6 @@ class WhisperEngineManager(
         }
         if (!libDir.exists()) libDir.mkdirs()
 
-        val client = okhttp3.OkHttpClient()
         var downloadedCount = 0
         val totalFiles = WHISPER_LIBS.size
 
@@ -167,11 +194,33 @@ class WhisperEngineManager(
 
         for (libName in WHISPER_LIBS) {
             val targetFile = File(libDir, libName)
+            val want = expected[libName]
             if (targetFile.exists()) {
-                Logger.log("$libName already exists, skipping", TAG)
-                downloadedCount++
-                onProgress(downloadedCount.toFloat() / totalFiles)
-                continue
+                // A present file is reused only when it can be tied to this build: adopted when it
+                // hashes to what the build recorded — which also upgrades an install whose files
+                // predate the commit marker without re-downloading — and replaced when it is empty
+                // or hashes to anything else. With no recorded digest there is nothing to tie it
+                // to; what the install has been running is kept, since re-fetching would cost the
+                // whole payload to learn nothing.
+                val keep = when {
+                    targetFile.length() <= 0 -> false
+                    want == null -> {
+                        Logger.log("$libName already exists, keeping (no digest to check against)", TAG)
+                        true
+                    }
+                    sha256Of(targetFile) == want -> {
+                        Logger.log("$libName matches the recorded digest, keeping", TAG)
+                        true
+                    }
+                    else -> false
+                }
+                if (keep) {
+                    downloadedCount++
+                    onProgress(downloadedCount.toFloat() / totalFiles)
+                    continue
+                }
+                Logger.log("$libName on disk cannot be tied to this build — refetching", TAG)
+                targetFile.delete()
             }
 
             val url = baseUrl + libName
@@ -184,7 +233,7 @@ class WhisperEngineManager(
 
             try {
                 val request = okhttp3.Request.Builder().url(url).build()
-                client.newCall(request).execute().use { response ->
+                httpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         Logger.log("Failed to download $libName: HTTP ${response.code}", TAG)
                         return@withContext false
@@ -197,7 +246,6 @@ class WhisperEngineManager(
                     }
                 }
 
-                val want = expected[libName]
                 if (want != null) {
                     val actual = sha256Of(tempFile)
                     if (actual != want) {

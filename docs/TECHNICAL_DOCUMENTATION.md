@@ -205,20 +205,21 @@ owning the source.
 
 ### Whisper.cpp Integration
 
-- **Native library**: `libwhisper.so` (GGML-based, compiled via CMake)
-- **Engine**: `WhisperSttEngine` in `domain/engine/whisper/`
+- **Native libraries**: `libwhisper.so` (ggml linked in statically, Vulkan backend included —
+  compiled via CMake with `BUILD_SHARED_LIBS OFF`) plus `libomp.so`, its one shared dependency
+- **Engine**: `WhisperCppSttEngine` in `domain/engine/whisper/`
 - **Models**: Downloaded on-demand from HuggingFace (`ggml-tiny.bin`, `ggml-base.bin`, `ggml-small.bin`)
-- **Release builds**: Whisper native libs excluded from APK via AGP's
-  `packaging.jniLibs.excludes` (reliable for this lib), downloaded as real, user-facing DLC — the
-  model download above is the user-visible part of the same mechanism. onnxruntime, Vosk,
-  litertlm-android, and sherpa-onnx-jni are stripped from the APK the same way but aren't DLC in that
-  sense: there's no user choice involved, they're mandatory libraries the app needs to function at
-  all, silently fetched once on first launch — stripped via a post-build script instead of AGP's
-  exclude mechanism, which is confirmed-unreliable on arm64-v8a for those specific libs (see
-  `docs/BUILD_TIME_DEPENDENCIES.md`). CI-published release: ~166MB → ~16MB. A plain local
-  `assembleRelease` only gets the Whisper reduction (~40MB) since the strip step lives in
-  `release-commander.yml`, not Gradle.
-- **Vulkan**: Optional GPU acceleration via `libggml-vulkan.so` (probed at first run, disabled if incompatible)
+- **Release builds**: the two whisper libs are excluded from the APK via variant-scoped
+  `jniLibs.excludes` (`androidComponents.onVariants`) and downloaded as real, user-facing DLC
+  (~107 MB, fetched by `WhisperEngineManager` when the user enables Whisper, verified against
+  digests recorded in the APK as `assets/whisper-libs.sha256`) — the model download above is the
+  user-visible part of the same mechanism. onnxruntime, Vosk, litertlm-android, and sherpa-onnx-jni
+  aren't DLC in that sense: they're mandatory libraries the app needs to function. In `minimal` DLC
+  mode (the default) they ship inside the APK; in `full` mode they're excluded the same way and
+  silently fetched once at first launch by `core:nativelibs` (see
+  `docs/BUILD_TIME_DEPENDENCIES.md`).
+- **Vulkan**: Optional GPU acceleration via the ggml Vulkan backend inside `libwhisper.so`
+  (probed at first run in a separate process, disabled if incompatible)
 
 ### STT Flow
 
@@ -890,9 +891,11 @@ The green "on-device" indicator is a persisted `downloadedModelIds` flag, not re
 
 ### Whisper Native Libraries
 
-- Debug builds: `libwhisper.so`, `libggml.so`, `libggml-vulkan.so` bundled in APK
-- Release builds: Excluded from APK, downloaded as DLC at runtime
-- Vulkan probed at first launch, `vulkanIncompatible` flag set if GPU doesn't support
+- Debug builds: `libwhisper.so` and `libomp.so` bundled in APK
+- Release builds: Excluded from APK, downloaded as DLC at runtime (~107 MB, digest-checked
+  against `assets/whisper-libs.sha256`)
+- Vulkan probed at first launch in a separate process, `vulkanIncompatible` flag set if GPU
+  doesn't support
 
 ---
 
