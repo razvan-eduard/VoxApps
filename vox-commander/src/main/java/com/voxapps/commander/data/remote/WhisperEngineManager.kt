@@ -20,31 +20,92 @@ class WhisperEngineManager(
 ) {
     companion object {
         private const val TAG = "WhisperEngineManager"
-        private const val LIB_DIR_NAME = "whisper_libs"
 
-        /** Written into the APK by the recordWhisperDigests task; see vox-commander/build.gradle.kts. */
+        /**
+         * Where a build with no recorded commit keeps its libraries, and the release it fetches them
+         * from. One tag shared by every version ever released: an address with no version in it, so
+         * what arrives is whatever was published last rather than what this build expects. Kept
+         * because installs that predate the recorded commit still ask for it.
+         */
+        private const val LEGACY_LIB_DIR = "whisper_libs"
+        private const val LEGACY_TAG = "whisper-libs"
+
+        /** Per whisper.cpp commit, so a bump downloads afresh instead of finding stale files. */
+        private const val LIB_DIR_PREFIX = "whisper_libs_"
+
+        /** Both written into the APK by recordWhisperDigests; see vox-commander/build.gradle.kts. */
         private const val DIGEST_ASSET = "whisper-libs.sha256"
-
-        // The `whisper-libs` release holds these .so files. The repository comes from VoxRepo:
-        // this named it directly and was left on the old name through the rename, which worked
-        // only because GitHub redirects a renamed repository.
-        private const val WHISPER_LIBS_BASE_URL =
-            VoxRepo.RELEASE_DOWNLOAD_BASE + "whisper-libs/"
+        private const val COMMIT_ASSET = "whisper-libs.commit"
 
         // The .so files that make up the Whisper engine, in load order: libwhisper.so needs
         // libomp.so, so libomp.so is loaded first.
         //
-        // ggml is linked into libwhisper.so statically, so it contributes no file here. The release
-        // still carries libggml*.so assets for installs that predate this list; they satisfy nothing
-        // and are not fetched.
+        // ggml is linked into libwhisper.so statically, so it contributes no file here.
         val WHISPER_LIBS = listOf(
             "libomp.so",
             "libwhisper.so"
         )
     }
 
+    /**
+     * The whisper.cpp commit this build was compiled against, or null on a build that recorded none.
+     */
+    private val whisperCommit: String? by lazy {
+        runCatching { context.assets.open(COMMIT_ASSET).bufferedReader().use { it.readText() }.trim() }
+            .getOrNull()?.takeIf { it.length >= 12 }
+    }
+
+    /** The release these libraries come from — named for the build, so it cannot serve another. */
+    private val releaseTag: String
+        get() = whisperCommit?.let { "$LEGACY_TAG-${it.take(12)}" } ?: LEGACY_TAG
+
+    private val baseUrl: String
+        get() = VoxRepo.RELEASE_DOWNLOAD_BASE + releaseTag + "/"
+
+    /**
+     * Version-scoped, like core:nativelibs' — these libraries are not interchangeable between
+     * whisper.cpp commits, and a shared directory would let files from an earlier one satisfy the
+     * "already downloaded" check and be loaded instead.
+     */
     val libDir: File
-        get() = File(context.filesDir, LIB_DIR_NAME)
+        get() = whisperCommit
+            ?.let { File(context.filesDir, "$LIB_DIR_PREFIX${it.take(12)}") }
+            ?: File(context.filesDir, LEGACY_LIB_DIR)
+
+    /**
+     * Moves libraries an earlier version left in the unscoped directory, when they are the ones this
+     * build expects. Without it every upgrade past this point re-downloads ~107MB that is already on
+     * the device and already correct.
+     */
+    private fun adoptLegacyLibs() {
+        val target = libDir
+        if (target.name == LEGACY_LIB_DIR || target.exists()) return
+        val legacy = File(context.filesDir, LEGACY_LIB_DIR)
+        if (!legacy.isDirectory) return
+
+        val expected = expectedDigests()
+        if (expected.isEmpty()) return
+        val matches = WHISPER_LIBS.all { lib ->
+            val f = File(legacy, lib)
+            f.exists() && expected[lib]?.equals(sha256Of(f)) == true
+        }
+        if (!matches) return
+
+        if (legacy.renameTo(target)) {
+            Logger.log("Adopted existing Whisper libs into ${target.name}", TAG)
+        }
+    }
+
+    /** Directories from earlier whisper.cpp commits; nothing loads them once the pin has moved. */
+    private fun cleanupOldVersions() {
+        val current = libDir.name
+        context.filesDir.listFiles()?.forEach { file ->
+            if (file.isDirectory && file.name.startsWith(LIB_DIR_PREFIX) && file.name != current) {
+                file.deleteRecursively()
+                Logger.log("Removed superseded Whisper libs: ${file.name}", TAG)
+            }
+        }
+    }
 
     /**
      * Checks if all Whisper .so files are present in filesDir/whisper_libs/.
@@ -105,6 +166,10 @@ class WhisperEngineManager(
     suspend fun downloadLibs(
         onProgress: (Float) -> Unit = {}
     ): Boolean = withContext(Dispatchers.IO) {
+        // Before the existence check below, so libraries already on the device are reused rather
+        // than fetched again under a new directory name.
+        adoptLegacyLibs()
+        cleanupOldVersions()
         if (!libDir.exists()) libDir.mkdirs()
 
         val client = okhttp3.OkHttpClient()
@@ -122,7 +187,7 @@ class WhisperEngineManager(
                 continue
             }
 
-            val url = WHISPER_LIBS_BASE_URL + libName
+            val url = baseUrl + libName
             Logger.log("Downloading $libName from $url", TAG)
 
             // Written to .tmp and renamed once verified, so a transfer that is interrupted or serves

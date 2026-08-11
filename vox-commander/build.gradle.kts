@@ -353,6 +353,17 @@ abstract class HashWhisperLibs : DefaultTask() {
     @get:Input
     abstract val libs: ListProperty<String>
 
+    /**
+     * The whisper.cpp commit these libraries were built from.
+     *
+     * Written into the APK because it is what names the release the app downloads from. A single
+     * reused tag would mean the app asking for "whatever is published now" — an address with no
+     * version in it, which is how an install ends up running a different build from the one its APK
+     * was compiled against.
+     */
+    @get:Input
+    abstract val whisperCommit: Property<String>
+
     @get:OutputDirectory
     abstract val assetsDir: DirectoryProperty
 
@@ -361,6 +372,10 @@ abstract class HashWhisperLibs : DefaultTask() {
         val assets = assetsDir.get().asFile.apply { deleteRecursively(); mkdirs() }
         val available = libFiles.files.filter { it.isFile }
         val digests = StringBuilder()
+
+        val commit = whisperCommit.get().trim()
+        require(commit.length >= 12) { "Cannot resolve the whisper.cpp commit; got '$commit'." }
+        File(assets, "whisper-libs.commit").writeText(commit + "\n")
 
         for (lib in libs.get()) {
             val source = available.firstOrNull { it.name == lib }
@@ -391,6 +406,17 @@ val hashWhisperLibs = tasks.register<HashWhisperLibs>("recordWhisperDigests") {
     // By name: autoCompileWhisper is registered further down this file, and the digests must be
     // taken from the libraries that build produced.
     dependsOn("autoCompileWhisper")
+    // The pin recorded in this commit, which is the same value publish_whisper_libs.sh names the
+    // release after. providers.exec rather than a bare command so the configuration cache can track
+    // it instead of being invalidated by it.
+    whisperCommit.set(
+        providers.exec {
+            commandLine(
+                "git", "-C", rootDir.absolutePath,
+                "rev-parse", "HEAD:vox-commander/src/main/cpp/whisper.cpp"
+            )
+        }.standardOutput.asText.map { it.trim() }
+    )
     // The files themselves, not the directory: a directory added to a file collection stays a
     // directory, and every entry would then be filtered out as "not a file".
     libFiles.from(whisperLibs.map { layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/$it") })

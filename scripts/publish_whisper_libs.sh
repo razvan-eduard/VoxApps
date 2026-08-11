@@ -9,7 +9,16 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 # --- PATHS ---
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 JNI_DIR="$PROJECT_ROOT/vox-commander/src/main/jniLibs/arm64-v8a"
-TAG="whisper-libs"
+
+# Named for the whisper.cpp commit these libraries were built from, so the address the app asks for
+# identifies a build rather than a shelf. A single reused tag served whatever was published last,
+# which is how an APK compiled against one whisper.cpp came to run another.
+#
+# Scoped to the commit rather than to the app version because releases are pruned: tying it to an app
+# release would delete the runtime for installs that stay on an older version, and many app versions
+# share one whisper build anyway.
+WHISPER_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse "HEAD:vox-commander/src/main/cpp/whisper.cpp")
+TAG="whisper-libs-${WHISPER_COMMIT:0:12}"
 
 # --- LIBS TO UPLOAD (in load order) ---
 #
@@ -45,8 +54,8 @@ if gh release view "$TAG" &> /dev/null; then
 else
     log_info "Creating release '$TAG'..."
     gh release create "$TAG" \
-        --title "Whisper Native Libraries (arm64-v8a)" \
-        --notes "Compiled Whisper.cpp native libraries for Android arm64-v8a. These are downloaded on-demand by the app (DLC)." \
+        --title "Whisper Native Libraries (arm64-v8a) — ${WHISPER_COMMIT:0:12}" \
+        --notes "Compiled from whisper.cpp $WHISPER_COMMIT for Android arm64-v8a. Downloaded on demand by builds pinning that commit; the tag names the build so an app cannot be served a different one." \
         --target main
 fi
 
@@ -76,23 +85,6 @@ for lib in "${LIBS[@]}"; do
         ALL_MATCH=false
     fi
 done
-
-# --- PROVENANCE MARKER ---
-# Records which whisper.cpp commit these binaries were built from, so a build can tell whether the
-# release still serves the runtime its source pins. Without it the two can only be compared by
-# rebuilding whisper and hashing the result, which is twenty minutes nobody spends on a hunch.
-#
-# Uploaded even when the libraries themselves are unchanged: the marker is what a release job reads,
-# and an absent or stale one reads as "unknown", which is the state this exists to remove.
-PIN=$(git -C "$PROJECT_ROOT" rev-parse "HEAD:vox-commander/src/main/cpp/whisper.cpp")
-MARKER_FILE="$(mktemp -d)/built-from.txt"
-printf '%s\n' "$PIN" > "$MARKER_FILE"
-REMOTE_PIN=$(gh release view "$TAG" --json assets \
-    --jq '.assets[] | select(.name == "built-from.txt") | .name' 2>/dev/null || true)
-if [ -z "$REMOTE_PIN" ] || [ "$ALL_MATCH" != true ]; then
-    log_info "Recording provenance: built from ${PIN:0:12}"
-    gh release upload "$TAG" "$MARKER_FILE" --clobber
-fi
 
 if [ "$ALL_MATCH" = true ]; then
     log_info "✅ All libs are identical to release assets. Nothing to publish."

@@ -209,10 +209,21 @@ fi
 
 # --report is what a workflow would consume; it must answer, not exit silently.
 out=$(./scripts/vox check whisper-published --report 2>/dev/null)
-if printf '%s\n' "$out" | grep -qE '^in_step=(true|false|unknown)$'; then
-    ok "whisper-published states in_step"
+if printf '%s\n' "$out" | grep -qE '^published=(true|false)$'; then
+    ok "whisper-published states published"
 else
-    bad "whisper-published --report gave no in_step" "$(printf '%s' "$out" | head -2)"
+    bad "whisper-published --report gave no verdict" "$(printf '%s' "$out" | head -2)"
+fi
+
+# The tag the app asks for and the tag the publish script writes are both derived from the submodule
+# pin. If they were derived differently the app would 404 on a release that exists, so both are
+# checked against the pin rather than against each other.
+pin=$(git rev-parse "HEAD:vox-commander/src/main/cpp/whisper.cpp" 2>/dev/null | cut -c1-12)
+reported=$(printf '%s\n' "$out" | grep '^tag=' | cut -d= -f2)
+if [ -n "$pin" ] && [ "$reported" = "whisper-libs-$pin" ]; then
+    ok "the published runtime is addressed by the commit it was built from"
+else
+    bad "whisper-libs tag does not follow the pin" "pin=$pin reported=$reported"
 fi
 
 log_blue "── the sync workflows' dedup gate ──────────────────────────"
