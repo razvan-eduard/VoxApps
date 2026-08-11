@@ -36,6 +36,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      # Whether an APK was actually built this run — the smoke job has nothing to test otherwise.
+      built: ${{ steps.check_bump.outputs.changed != 'false' }}
     permissions:
       contents: write
       # Provenance is signed with a short-lived OIDC identity and recorded in GitHub's
@@ -149,6 +152,14 @@ jobs:
           BUILD_TOOLS="$(find -L "$ANDROID_HOME/build-tools" -maxdepth 1 -type d | sort -V | tail -1)"
           "$BUILD_TOOLS/apksigner" verify --print-certs \
             "VoxVision-${{ steps.version.outputs.tag }}.apk"
+
+      - name: Upload the APK for the smoke test
+        if: steps.check_bump.outputs.changed != 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-apk
+          path: VoxVision-*.apk
+          retention-days: 1
 
       # The digests the app verifies its downloads against ride inside the APK as a generated
       # asset. Nothing else fails when the wiring that stages them is lost — build, suite and
@@ -306,3 +317,14 @@ jobs:
           prerelease: ${{ steps.version.outputs.is_prerelease }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Installs and launches the exact APK built above on an arm64 emulator — the check no
+  # APK-content inspection can replace. deploy-fdroid fires only on a fully green run, so a red
+  # smoke keeps this release out of the F-Droid repo and flags the run.
+  smoke:
+    needs: build
+    if: needs.build.outputs.built == 'true'
+    uses: ./.github/workflows/smoke-test.yml
+    with:
+      artifact: smoke-apk
+      application-id: com.voxapps.vision

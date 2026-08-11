@@ -144,6 +144,13 @@ jobs:
       - name: Assemble every app
         run: ./gradlew assembleDebug --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP"
 
+      # The instrumented tests only *run* on a device (see instrumented-tests.yml), but compiling
+      # them is one cheap step here — and it is the difference between an API drift in those
+      # sources failing this push or rotting until the next emulator run. The files most worth
+      # protecting are the ones named for native-linking regressions, which no unit test can see.
+      - name: Compile the instrumented tests
+        run: ./gradlew compileDebugAndroidTestSources --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP"
+
       # A build proving the Kotlin compiles says nothing about whether the native libraries inside
       # the APK can load each other. Two artifacts supplying the same library at different versions
       # is invisible to Gradle — it resolves coordinates, and the second copy arrives as a file

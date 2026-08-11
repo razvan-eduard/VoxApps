@@ -326,6 +326,7 @@ for wf in .github/workflows/release-*.yml; do
     grep -q 'check pairing' "$wf" || missing="$missing native-pairing"
     grep -q 'release sbom' "$wf" || missing="$missing sbom"
     grep -q 'attest-build-provenance' "$wf" || missing="$missing attestation"
+    grep -q 'smoke-test.yml' "$wf" || missing="$missing smoke-gate"
     # A test step that swallows its own failure is a gate in name only.
     if grep -E 'gradlew.*[tT]est' "$wf" | grep -qE '\|\| (echo|true)'; then
         missing="$missing softened-tests"

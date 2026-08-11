@@ -1,0 +1,108 @@
+name: Instrumented Tests
+
+# The only tests that can catch a native-linking regression run on a device, and until this
+# workflow nothing ran them — the suite guarding against exactly the failure class that reached
+# releases twice was never executed. Weekly rather than per-push: the repo ships arm64-v8a only,
+# so the emulator must be arm64 on an Apple-silicon runner, and the native surface changes rarely
+# — CI already compiles these sources on every push, which is what catches ordinary drift.
+#
+# NativeCrashReproductionTest is excluded: its *_crashReproduction tests bring the process down on
+# purpose (they exist to prove tombstone patterns reproduce) and are run one at a time by hand.
+
+on:
+  schedule:
+    - cron: '0 5 * * 3' # weekly, Wednesday 05:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: instrumented-tests
+  cancel-in-progress: true
+
+jobs:
+  connected:
+    # Apple-silicon runner: an arm64 AVD needs an arm64 host with virtualization support, which
+    # the macos-15 image provides. An x86_64 emulator cannot load this repo's native libraries.
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    env:
+      GRADLE_HEAP: -Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
+      # Same pinning rationale as ci.yml: the NDK version is part of the OpenCV cache key because
+      # native output built by one NDK is not interchangeable with another's.
+      NDK_VERSION: 27.1.12297006
+      CMAKE_VERSION: 3.22.1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-licenses: true
+
+      # vox-vision needs the OpenCV build in its source set — same cache discipline as ci.yml,
+      # keyed per-OS, so the first macOS run pays for one build and every later one restores it.
+      - name: Resolve the pinned OpenCV commit
+        id: opencv_pin
+        run: echo "sha=$(git ls-tree HEAD vendor/opencv | awk '{print $3}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore built OpenCV
+        id: opencv_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            vendor/ppocr-sdk/opencv
+            vox-vision/src/main/jniLibs
+          key: opencv-${{ runner.os }}-ndk${{ env.NDK_VERSION }}-${{ steps.opencv_pin.outputs.sha }}-${{ hashFiles('scripts/build_opencv_android.sh') }}
+
+      - name: Fetch OpenCV sources
+        if: steps.opencv_cache.outputs.cache-hit != 'true'
+        run: git submodule update --init --depth 1 vendor/opencv
+
+      - name: Install NDK and CMake
+        if: steps.opencv_cache.outputs.cache-hit != 'true'
+        run: sdkmanager --install "ndk;${NDK_VERSION}" "cmake;${CMAKE_VERSION}"
+
+      - name: Run the instrumented tests on an arm64 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: arm64-v8a
+          target: google_apis
+          disable-animations: true
+          script: |
+            ./gradlew :vox-commander:connectedDebugAndroidTest :vox-vision:connectedDebugAndroidTest \
+              --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP" \
+              -Pandroid.testInstrumentationRunnerArguments.notClass=com.voxapps.commander.NativeCrashReproductionTest
+
+      # Split restore/save so a red test run still keeps the OpenCV build it paid for.
+      - name: Save built OpenCV
+        if: always() && steps.opencv_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            vendor/ppocr-sdk/opencv
+            vox-vision/src/main/jniLibs
+          key: ${{ steps.opencv_cache.outputs.cache-primary-key }}
+
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: instrumented-test-results
+          path: '**/build/reports/androidTests/**'
+          retention-days: 14
+          if-no-files-found: ignore
