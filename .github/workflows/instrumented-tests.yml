@@ -98,10 +98,9 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: |
-            ./gradlew :vox-commander:connectedDebugAndroidTest :vox-vision:connectedDebugAndroidTest \
-              --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP" \
-              -Pandroid.testInstrumentationRunnerArguments.notClass=com.voxapps.commander.NativeCrashReproductionTest
+          # One line: the action runs each script line as its own command, so a backslash
+          # continuation reaches gradle as a literal argument.
+          script: ./gradlew :vox-commander:connectedDebugAndroidTest :vox-vision:connectedDebugAndroidTest --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP" -Pandroid.testInstrumentationRunnerArguments.notClass=com.voxapps.commander.NativeCrashReproductionTest
 
       # Split restore/save so a red test run still keeps the OpenCV build it paid for.
       - name: Save built OpenCV

@@ -30,6 +30,9 @@ Usage: ./scripts/vox <flow> [command] [args...]
   check [name...]              Has anything upstream moved? (all, or named ones)
                                  vosk newpipe-extractor openwakeword opencv
                                  ppocr-sdk whisper docquad
+  check pairing <apk...>       Do an APK's native libraries satisfy each other?
+  check whisper-published      Does the published Whisper runtime match the pin?
+  check smoke <apk> <app-id>   Does the APK survive a cold launch on the adb device?
 
   patches verify [module]      Assert a vendored fork is exactly upstream + its patches/
   patches regen <module>       Regenerate a fork's patches from its current source
@@ -80,6 +83,12 @@ case "$FLOW" in
         if [ "${1:-}" = "whisper-published" ]; then
             shift
             exec bash scripts/check_whisper_published.sh "$@"
+        fi
+        # `smoke` asks the runtime question: does this APK install and survive a cold launch on
+        # the device adb sees. The other checks read files and APIs; this one needs a device.
+        if [ "${1:-}" = "smoke" ]; then
+            shift
+            exec bash scripts/smoke_launch_check.sh "$@"
         fi
         exec bash scripts/check_upstream.sh "$@"
         ;;

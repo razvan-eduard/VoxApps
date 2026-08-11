@@ -326,7 +326,7 @@ for wf in .github/workflows/release-*.yml; do
     grep -q 'check pairing' "$wf" || missing="$missing native-pairing"
     grep -q 'release sbom' "$wf" || missing="$missing sbom"
     grep -q 'attest-build-provenance' "$wf" || missing="$missing attestation"
-    grep -q 'smoke-test.yml' "$wf" || missing="$missing smoke-gate"
+    grep -q 'check smoke' "$wf" || missing="$missing smoke-gate"
     # A test step that swallows its own failure is a gate in name only.
     if grep -E 'gradlew.*[tT]est' "$wf" | grep -qE '\|\| (echo|true)'; then
         missing="$missing softened-tests"
@@ -342,6 +342,20 @@ if [ "$RELEASE_WF_COUNT" -eq 6 ]; then
 else
     bad "the parity loop saw $RELEASE_WF_COUNT release workflows, expected 6"
 fi
+
+# The emulator action runs each line of its `script:` input as a separate `sh -c` — a multi-line
+# script there is N independent commands, so an `if` block is a syntax error and a line
+# continuation a stray argument, discovered only when the workflow actually runs. Logic belongs
+# in scripts/; the action's input names one command.
+for wf in .github/workflows/*.yml; do
+    grep -q 'android-emulator-runner' "$wf" || continue
+    name=$(basename "$wf" .yml)
+    if grep -qE '^[[:space:]]*script:[[:space:]]*[|>]' "$wf"; then
+        bad "$name: multi-line script in the emulator action — each line runs as its own sh -c"
+    else
+        ok "$name: the emulator action gets a single-line script"
+    fi
+done
 
 # A published tag is an address installed APKs still resolve — the DLC downloader builds its URLs
 # from the version it was compiled with. The guard that refuses to repoint one must exist in every
