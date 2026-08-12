@@ -8,6 +8,6 @@ Key Features:
 - Satellite App Hub: Discovers and controls independent "satellite" apps like VoxNotes or VoxExpenses via a secure IPC contract.
 - Smarter Location: A shared location system with a configurable last-known-location cache, a Home Town fallback, and an "always use this location" toggle for skipping GPS entirely.
 - External Voice Trigger: Integration with automation tools like MacroDroid or Tasker to trigger the assistant via hardware buttons or schedules.
-- Private by Design: Core processing is done locally, ensuring data sovereignty. Optional cloud features (OpenAI, Spotify) can be enabled by the user.
+- Private by Design: Core processing is done locally, ensuring data sovereignty. Anything that isn't stays off until you say otherwise — dedicated toggles for cloud AI engines (OpenAI) and for Google system services (system speech recognition) both default to off, so nothing cloud- or Google-operated runs without an explicit opt-in.
 - Material 3 Overlay: A sleek, floating voice UI that provides real-time transcription and status updates over any app.
 - Backup & Restore: Save and restore your settings and FastMap rules to a file you choose, with Full override, Merge, or Additive restore modes.
