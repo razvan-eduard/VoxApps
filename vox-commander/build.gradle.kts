@@ -87,8 +87,8 @@ android {
         applicationId = "com.voxapps.commander"
         minSdk = 29
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.24-beta"
+        versionCode = 26
+        versionName = "0.25-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
