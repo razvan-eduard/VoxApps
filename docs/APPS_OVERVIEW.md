@@ -24,9 +24,9 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   1. **FastMap rules** (see below) — instant, free, entirely offline pattern matches you define
      yourself. Plain keyword/regex matching, not AI. If one fires, nothing else runs.
   2. **AI Intent Translator** (Settings → AI & Models → Intent Engines) — the actual AI step, reached
-     only when no FastMap rule fires: your choice of a cloud LLM (OpenAI), Gemini Nano running
-     natively on-device, Gemini Cloud, or an on-device LLM running via **LiteRT-LM** (migrated from
-     MediaPipe GenAI for broader model compatibility and better performance).
+     only when no FastMap rule fires: your choice of a cloud LLM (OpenAI) or an on-device GGUF
+     model running via **llama.cpp**, with grammar-constrained decoding so the model can only emit
+     a valid intent.
   3. **Offline fallback** — a *separately*-configured backup engine+model used only if the AI step
      above fails or is unreachable (skipped automatically if it'd be identical to it).
 

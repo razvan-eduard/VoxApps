@@ -73,7 +73,7 @@
         {
           "element": "intent_engine",
           "title": "Intent Engine",
-          "description": "Select how commands are interpreted: OpenAI, Gemini, local LLM, or FastMap (offline regex)."
+          "description": "Select how commands are interpreted: OpenAI, local LLM, or FastMap (offline regex)."
         },
         {
           "element": "model_download",
@@ -280,7 +280,7 @@
         {
           "element": "intent_engine",
           "title": "Intent-Engine",
-          "description": "Wählen Sie, wie Befehle interpretiert werden: OpenAI, Gemini, lokales LLM oder FastMap (Offline)."
+          "description": "Wählen Sie, wie Befehle interpretiert werden: OpenAI, lokales LLM oder FastMap (Offline)."
         },
         {
           "element": "model_download",
@@ -487,7 +487,7 @@
         {
           "element": "intent_engine",
           "title": "Moteur d'Intent",
-          "description": "Sélectionnez comment les commandes sont interprétées : OpenAI, Gemini, LLM local ou FastMap (hors ligne)."
+          "description": "Sélectionnez comment les commandes sont interprétées : OpenAI, LLM local ou FastMap (hors ligne)."
         },
         {
           "element": "model_download",
@@ -694,7 +694,7 @@
         {
           "element": "intent_engine",
           "title": "Motor de Intent",
-          "description": "Selectează cum sunt interpretate comenzile: OpenAI, Gemini, LLM local sau FastMap (offline)."
+          "description": "Selectează cum sunt interpretate comenzile: OpenAI, LLM local sau FastMap (offline)."
         },
         {
           "element": "model_download",

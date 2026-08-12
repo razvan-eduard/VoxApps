@@ -76,7 +76,6 @@ class SettingsRepositoryImpl(
         /** The single-key names used before credentials were per engine. Read once by
          *  [migrateLegacyCredentials] and then gone; never written again. */
         const val LEGACY_OPENAI = "api_key"
-        const val LEGACY_GEMINI = "gemini_api_key"
         const val LEGACY_PICOVOICE = "picovoice_access_key"
     }
 
@@ -89,7 +88,6 @@ class SettingsRepositoryImpl(
      */
     private val legacyCredentialOwners = listOf(
         SecureKeys.LEGACY_OPENAI to listOf(Strings.AiProcessors.OPENAI, Strings.Processors.WHISPER_API),
-        SecureKeys.LEGACY_GEMINI to listOf(Strings.AiProcessors.GEMINI_CLOUD),
         // The models.json key for Porcupine. A literal rather than a reference into the service
         // layer, which the data layer has no business importing — and it is a stored identifier.
         SecureKeys.LEGACY_PICOVOICE to listOf("wake_porcupine")
@@ -151,9 +149,6 @@ class SettingsRepositoryImpl(
 
         // Whisper Engine (DLC)
         val WHISPER_SYSTEM_ENABLED = booleanPreferencesKey("whisper_system_enabled")
-
-        // Gemini
-        val GEMINI_INCOMPATIBLE = booleanPreferencesKey("gemini_incompatible")
 
         // Remote repository
         val MODEL_REPO_BASE_URL = stringPreferencesKey("model_repo_base_url")
@@ -307,7 +302,6 @@ class SettingsRepositoryImpl(
                 all["whisper_system_enabled"]?.let { prefs[Keys.WHISPER_SYSTEM_ENABLED] = it as Boolean }
 
                 // Gemini
-                all["gemini_incompatible"]?.let { prefs[Keys.GEMINI_INCOMPATIBLE] = it as Boolean }
 
                 // Remote repository
                 all[Strings.Preferences.KEY_MODEL_REPO_BASE_URL]?.let { prefs[Keys.MODEL_REPO_BASE_URL] = it as String }
@@ -351,7 +345,7 @@ class SettingsRepositoryImpl(
     // --- REACTIVE FLOW ---
     override val settingsFlow: Flow<AppSettings> = dataStore.data.map { prefs ->
         AppSettings(
-            // apiKey/geminiApiKey are deliberately absent: they live in the encrypted store, which
+            // apiKey is deliberately absent: it lives in the encrypted store, which
             // this flow cannot observe, so reading them here produced a copy that went stale the
             // moment a key was entered and stayed stale until an unrelated setting happened to
             // write. They are served by credentialsFlow, and the fields on AppSettings survive only
@@ -405,7 +399,6 @@ class SettingsRepositoryImpl(
 
             isWhisperSystemEnabled = prefs[Keys.WHISPER_SYSTEM_ENABLED] ?: false,
 
-            geminiIncompatible = prefs[Keys.GEMINI_INCOMPATIBLE] ?: false,
 
             modelRepoBaseUrl = prefs[Keys.MODEL_REPO_BASE_URL] ?: Strings.Preferences.DEFAULT_MODEL_REPO_URL,
             useRemoteSchemas = prefs[Keys.USE_REMOTE_SCHEMAS] ?: true,
@@ -490,7 +483,6 @@ class SettingsRepositoryImpl(
         legacyCredentialOwners.forEach { (legacyName, engines) ->
             val value = when (legacyName) {
                 SecureKeys.LEGACY_OPENAI -> imported.apiKey
-                SecureKeys.LEGACY_GEMINI -> imported.geminiApiKey
                 else -> imported.picovoiceAccessKey
             } ?: return@forEach
             engines.filterNot { it in restored }.forEach { setEngineApiKey(it, value) }
@@ -680,6 +672,76 @@ class SettingsRepositoryImpl(
         }
         editor.apply()
         if (moved) Logger.log("Moved single-key credentials into the per-engine namespace", TAG)
+    }
+
+    /**
+     * Removes every stored trace of the retired Google LLM engines (Gemini Cloud / Gemini Nano).
+     *
+     * Self-guarding like [migratePicovoiceKey] rather than flag-driven: each step keys off the
+     * retired value still being present, so later launches find nothing to do. The processor
+     * remap must run before the first settings read that routes a command — a selection naming a
+     * retired engine resolves to no engine at all, which would silently drop the cascade's
+     * primary stage — which is why [com.voxapps.commander.di.AppContainer] calls this on the same
+     * blocking path as [migrateFromSharedPreferencesIfNeeded].
+     */
+    suspend fun migrateGoogleLlmRemoval() {
+        // Stored identifiers of engines that no longer exist — literals by the same reasoning as
+        // the legacy names in [legacyCredentialOwners].
+        val retired = setOf("GEMINI_CLOUD", "GEMINI_NATIVE")
+        val legacyIncompatible = booleanPreferencesKey("gemini_incompatible")
+        val legacyGeminiCredential = "gemini_api_key"
+        dataStore.edit { prefs ->
+            if (prefs[Keys.AI_PROCESSOR] in retired) {
+                val fallback = com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultLlmEngineKey()
+                if (fallback != null) prefs[Keys.AI_PROCESSOR] = fallback
+                else prefs.remove(Keys.AI_PROCESSOR)
+                Logger.log("aiProcessor named a retired engine — reset to the default", TAG)
+            }
+            if (prefs[Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR] in retired) {
+                prefs.remove(Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR)
+                prefs.remove(Keys.DEFAULT_INTENT_FALLBACK_MODEL)
+            }
+            prefs.remove(legacyIncompatible)
+        }
+        encryptedPrefs.edit()
+            .remove(SecureKeys.forEngine("GEMINI_CLOUD"))
+            .remove(legacyGeminiCredential)
+            .apply()
+    }
+
+    /**
+     * Removes every stored trace of the retired LiteRT-LM engine key and its model formats.
+     *
+     * Self-guarding like [migrateGoogleLlmRemoval]: each step keys off a retired value or file
+     * still being present. The key remap goes to `nlu_llm` rather than the app default — a user
+     * who had `nlu_llm_litertlm` selected chose the *local* engine, and `nlu_llm` is that same
+     * choice under the collapsed key. Orphaned `.task`/`.litertlm` model files are deleted and
+     * their ids dropped from the downloaded set: nothing can load them, and they are
+     * gigabyte-class.
+     */
+    suspend fun migrateLiteRtRemoval() {
+        val retiredKey = "nlu_llm_litertlm" // stored identifier of an engine that no longer exists
+        dataStore.edit { prefs ->
+            if (prefs[Keys.AI_PROCESSOR] == retiredKey) prefs[Keys.AI_PROCESSOR] = "nlu_llm"
+            if (prefs[Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR] == retiredKey) {
+                prefs[Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR] = "nlu_llm"
+                prefs.remove(Keys.DEFAULT_INTENT_FALLBACK_MODEL)
+            }
+
+            val orphans = appContext.getExternalFilesDir(null)?.listFiles()
+                ?.filter { it.isFile && (it.name.endsWith(".task") || it.name.endsWith(".litertlm")) }
+                .orEmpty()
+            if (orphans.isNotEmpty()) {
+                val orphanIds = orphans.map { it.name.substringBeforeLast('.') }.toSet()
+                orphans.forEach { it.delete() }
+                prefs[Keys.DOWNLOADED_MODEL_IDS] =
+                    (prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet()) - orphanIds
+                if (prefs[Keys.ACTIVE_INTENT_MODEL_ID] in orphanIds) {
+                    prefs.remove(Keys.ACTIVE_INTENT_MODEL_ID)
+                }
+                Logger.log("Deleted ${orphans.size} retired-format model file(s)", TAG)
+            }
+        }
     }
 
     /**
@@ -893,11 +955,6 @@ class SettingsRepositoryImpl(
     // --- WHISPER ENGINE (DLC) ---
     override suspend fun setWhisperSystemEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.WHISPER_SYSTEM_ENABLED] = enabled }
-    }
-
-    // --- GEMINI ---
-    override suspend fun setGeminiIncompatible(incompatible: Boolean) {
-        dataStore.edit { it[Keys.GEMINI_INCOMPATIBLE] = incompatible }
     }
 
     // --- REMOTE REPOSITORY ---
@@ -1176,6 +1233,13 @@ class SettingsRepositoryImpl(
         "porcupine" -> "wake_porcupine"
         "openwakeword" -> "wake_openwakeword"
         "piper" -> "piper_tts"
+        // Retired engines (stored identifiers, so literals): a selection naming one would resolve
+        // to no engine at all and silently drop the cascade's primary stage — fall back to the
+        // default local LLM engine instead. The LiteRT key maps to nlu_llm specifically: it was
+        // the same local engine under its pre-collapse key.
+        "GEMINI_CLOUD", "GEMINI_NATIVE" ->
+            com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultLlmEngineKey() ?: raw
+        "nlu_llm_litertlm" -> "nlu_llm"
         else -> raw
     }
 

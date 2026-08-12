@@ -9,7 +9,7 @@ import com.voxapps.logging.Logger
 import java.io.ByteArrayOutputStream
 
 /**
- * Shared image-reading helper for the multimodal engines ([OpenAiInterpreter], [GeminiCloudInterpreter]).
+ * Image-reading helper for the multimodal engine ([OpenAiInterpreter]).
  * The caller (e.g. Expenses) must have already granted Commander read access to [imageUri] via
  * [android.content.Context.grantUriPermission] — this just resolves and decodes it.
  */
@@ -18,7 +18,7 @@ object ImageAttachmentUtil {
     private const val TAG = "ImageAttachmentUtil"
 
     /** Decodes [imageUri] into a [Bitmap], or null if it can't be read/decoded. */
-    fun readBitmap(context: Context, imageUri: String): Bitmap? = try {
+    private fun readBitmap(context: Context, imageUri: String): Bitmap? = try {
         context.contentResolver.openInputStream(Uri.parse(imageUri))?.use { BitmapFactory.decodeStream(it) }
     } catch (e: Exception) {
         Logger.log("Failed to read image attachment: ${e.message}", TAG)

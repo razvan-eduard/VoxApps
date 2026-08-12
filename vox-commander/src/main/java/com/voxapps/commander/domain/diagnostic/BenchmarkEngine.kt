@@ -8,8 +8,6 @@ import com.voxapps.commander.domain.engine.vosk.VoskSttEngine
 import com.voxapps.commander.domain.engine.whisper.WhisperCppSttEngine
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.data.remote.ModelDownloader
-import com.voxapps.commander.domain.intent.interpreter.GeminiNanoInterpreter
-import com.voxapps.commander.domain.intent.interpreter.GeminiCloudInterpreter
 import com.voxapps.commander.domain.intent.interpreter.LocalLlmInterpreter
 import com.voxapps.commander.domain.intent.interpreter.OpenAiInterpreter
 import com.voxapps.commander.domain.intent.model.NluIntent
@@ -33,9 +31,7 @@ class BenchmarkEngine(
     private val appStateManager: AppStateManager,
     private val modelDownloader: ModelDownloader,
     private val fastMapDao: FastMapDao,
-    private val localLlmInterpreter: LocalLlmInterpreter? = null,
-    private val geminiNanoInterpreter: GeminiNanoInterpreter? = null,
-    private val geminiCloudInterpreter: GeminiCloudInterpreter? = null
+    private val localLlmInterpreter: LocalLlmInterpreter? = null
 ) {
     companion object {
         private const val TAG = "BenchmarkEngine"
@@ -151,7 +147,7 @@ class BenchmarkEngine(
         // --- 6. GOOGLE STT (Initialization-only — intent-based, no direct API) ---
         runGoogleBenchmark()
 
-        // --- 7. LOCAL LLM INTENT BENCHMARK (LiteRT-LM) ---
+        // --- 7. LOCAL LLM INTENT BENCHMARK (llama.cpp) ---
         // Reuse the shared LocalLlmInterpreter from AppContainer to avoid a native crash — two
         // separate Engine instances loading the same model concurrently is the exact hazard
         // LocalLlmInterpreter's Mutex exists to prevent (see its own doc comment).
@@ -164,10 +160,8 @@ class BenchmarkEngine(
             // fails, and the timing reported would be of nothing at all.
             val processorIsLocalLlm = RemoteModelRegistry.isLlmEngine(snapshot.aiProcessor)
             if (activeModelId != null && processorIsLocalLlm) {
-                // activeModelId alone doesn't say which local-LLM-capable engine it belongs to
-                // (there are two now: nlu_llm for .task models, nlu_llm_litertlm for .litertlm
-                // models) — search every local-LLM engine's model list rather than assuming the
-                // first one.
+                // activeModelId alone doesn't say which local-LLM-capable engine it belongs to —
+                // search every local-LLM engine's model list rather than assuming the first one.
                 val activeModel = RemoteModelRegistry.getLlmEngineKeys()
                     .asSequence()
                     .flatMap { RemoteModelRegistry.getModels(it).asSequence() }
@@ -189,23 +183,6 @@ class BenchmarkEngine(
         if (!apiKey.isNullOrBlank() && snapshot.cloudIntelligenceEnabled) {
             diagInfo.append("--- OPENAI INTENT ENGINE ---\n")
             runOpenAiIntentBenchmark()
-            diagInfo.append("\n")
-        }
-
-        // --- 9. GEMINI NANO INTENT BENCHMARK (On-Device) ---
-        diagInfo.append("--- GEMINI NANO DIAGNOSTICS ---\n")
-        val geminiSupported = !snapshot.geminiIncompatible
-        diagInfo.append("AICore: ${if (geminiSupported) "SUPPORTED" else "INCOMPATIBLE"}\n")
-        if (geminiSupported) {
-            runGeminiNanoBenchmark()
-        }
-        diagInfo.append("\n")
-
-        // --- 10. GEMINI CLOUD INTENT BENCHMARK (Cloud API) ---
-        val geminiKey = settingsRepo.getCredentialsSnapshot().forEngine(Strings.AiProcessors.GEMINI_CLOUD)
-        if (!geminiKey.isNullOrBlank() && snapshot.cloudIntelligenceEnabled) {
-            diagInfo.append("--- GEMINI CLOUD INTENT ENGINE ---\n")
-            runGeminiCloudBenchmark()
             diagInfo.append("\n")
         }
 
@@ -340,73 +317,6 @@ class BenchmarkEngine(
             appStateManager.updateBenchmarkResult(BenchmarkResult(
                 engine = "OpenAI Intent",
                 model = Strings.Models.GPT_4O_MINI,
-                inferenceTimeMs = 0,
-                rtf = 0f,
-                isSuccess = false,
-                error = e.message
-            ))
-        }
-    }
-
-    private suspend fun runGeminiNanoBenchmark() {
-        if (geminiNanoInterpreter == null) {
-            appStateManager.updateBenchmarkResult(BenchmarkResult(
-                engine = "Gemini Nano",
-                model = "on-device (AICore)",
-                inferenceTimeMs = 0,
-                rtf = 0f,
-                isSuccess = false,
-                error = "Interpreter not available"
-            ))
-            return
-        }
-        try {
-            val start = System.currentTimeMillis()
-            val result = geminiNanoInterpreter.processCommand(INTENT_TEST_COMMAND)
-            val end = System.currentTimeMillis()
-            val elapsed = end - start
-
-            val validation = validateIntentPayload(result)
-            appStateManager.updateBenchmarkResult(BenchmarkResult(
-                engine = "Gemini Nano",
-                model = "on-device (AICore)",
-                inferenceTimeMs = elapsed,
-                rtf = 0f,
-                isSuccess = validation.isSuccess,
-                error = validation.error ?: "On-device inference not yet implemented (awaiting AICore SDK)"
-            ))
-        } catch (e: Exception) {
-            appStateManager.updateBenchmarkResult(BenchmarkResult(
-                engine = "Gemini Nano",
-                model = "on-device (AICore)",
-                inferenceTimeMs = 0,
-                rtf = 0f,
-                isSuccess = false,
-                error = e.message
-            ))
-        }
-    }
-
-    private suspend fun runGeminiCloudBenchmark() {
-        try {
-            val start = System.currentTimeMillis()
-            val result = geminiCloudInterpreter?.processCommand(INTENT_TEST_COMMAND)
-            val end = System.currentTimeMillis()
-            val elapsed = end - start
-
-            val validation = validateIntentPayload(result)
-            appStateManager.updateBenchmarkResult(BenchmarkResult(
-                engine = "Gemini Cloud",
-                model = Strings.Models.GEMINI_1_5_FLASH,
-                inferenceTimeMs = elapsed,
-                rtf = 0f,
-                isSuccess = validation.isSuccess,
-                error = validation.error
-            ))
-        } catch (e: Exception) {
-            appStateManager.updateBenchmarkResult(BenchmarkResult(
-                engine = "Gemini Cloud",
-                model = Strings.Models.GEMINI_1_5_FLASH,
                 inferenceTimeMs = 0,
                 rtf = 0f,
                 isSuccess = false,

@@ -117,15 +117,6 @@ fun IntentEnginesSubTab(
                         },
                         credentialLabel = languageManager.getString("engine_api_key"),
                         disabledSuffix = " (Incompatible)",
-                        itemEnabled = { entry ->
-                            // Only what this device cannot run is disabled — whether it carries
-                            // Gemini Nano is a probe result no declaration can supply. A missing
-                            // credential is not a reason to disable: the field that fixes it sits
-                            // under the selection, so greying the engine out made its own key
-                            // unreachable.
-                            entry.id != Strings.AiProcessors.GEMINI_NATIVE ||
-                                !settingsRepo.getSettingsSnapshot().geminiIncompatible
-                        },
                         itemNote = { entry ->
                             // Credentials come from uiState rather than a snapshot read: this is
                             // composition, so a value fetched here would be fixed until something

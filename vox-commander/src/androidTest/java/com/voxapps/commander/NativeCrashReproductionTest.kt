@@ -38,11 +38,9 @@ import java.io.File
  * 1. **On-device LLM SIGSEGV** (tombstone_08-11, 16-21):
  *    - Signal 11 (SIGSEGV), null pointer dereference at 0x0
  *    - Originally reproduced against MediaPipe GenAI's libllm_inference_engine_jni.so →
- *      LlmTaskRunner.nativePredictSync; the engine has since been migrated to LiteRT-LM
- *      (liblitertlm_jni.so, Engine/Conversation API). Whether LiteRT-LM's Conversation has the
- *      same concurrent-access hazard as MediaPipe's LlmInferenceSession is unconfirmed — this
- *      test still exists to prove the Mutex in LocalLlmInterpreter is load-bearing regardless of
- *      which engine backs it.
+ *      LlmTaskRunner.nativePredictSync; the engine has since been migrated to llama.cpp
+ *      (libllama.so via LlamaBridge, documented not thread-safe). This test exists to prove the
+ *      Mutex in LocalLlmInterpreter is load-bearing regardless of which engine backs it.
  *    - Thread: DefaultDispatch (Dispatchers.IO coroutine)
  *    - Root cause (as originally diagnosed): concurrent access to a shared session/conversation
  *      object from multiple coroutines
@@ -74,13 +72,12 @@ class NativeCrashReproductionTest {
 
     /**
      * Reproduces tombstone pattern #3: SIGSEGV originally found in MediaPipe's
-     * LlmTaskRunner.nativePredictSync, now re-run against LiteRT-LM's Engine/Conversation.
+     * LlmTaskRunner.nativePredictSync, now re-run against llama.cpp's context via LlamaBridge.
      *
      * Multiple concurrent coroutines calling processCommand() on Dispatchers.IO race on the
-     * shared engine/conversation fields inside LocalLlmInterpreter. Whether LiteRT-LM's
-     * Conversation is thread-safe under concurrent sendMessage() calls is unconfirmed — this test
-     * exists specifically to catch a regression either way, since the Mutex in
-     * LocalLlmInterpreter is the only thing standing between this and a crash.
+     * shared model/context handle inside LocalLlmInterpreter. The bridge is documented not
+     * thread-safe — the Mutex in LocalLlmInterpreter is the only thing standing between this
+     * and a crash, which is exactly what this test exists to catch a regression in.
      *
      * **Expected result:** Process crash (SIGSEGV) — test will fail with process death.
      * If the test PASSES without crash, the concurrency issue has been fixed (or the Mutex is

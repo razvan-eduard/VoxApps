@@ -15,7 +15,6 @@ object Strings {
         const val WHISPER_CPP_STT_ENGINE = "WhisperCppSttEngine"
         const val MODEL_MANAGEMENT_VIEW_MODEL = "ModelManagementViewModel"
         const val AI_INTERPRETER = "AiInterpreter"
-        const val GEMINI_NANO_INTERPRETER = "GeminiNanoInterpreter"
         const val OPENAI_INTERPRETER = "OpenAiInterpreter"
         const val LOCAL_LLM_INTERPRETER = "LocalLlmInterpreter"
         const val TTS_MANAGER = "TtsManager"
@@ -32,9 +31,6 @@ object Strings {
     object AiProcessors {
         // Local injections (not in models.json — no dynamic key available)
         const val OPENAI = "OPENAI"
-        const val GEMINI_NATIVE = "GEMINI_NATIVE"
-        const val GEMINI_CLOUD = "GEMINI_CLOUD"
-
 
         /**
          * Processors whose inference happens off-device.
@@ -44,7 +40,7 @@ object Strings {
          * and consults this set only when the schema does not describe the key — an older remote
          * copy, or a value from a backup naming an engine that no longer exists.
          */
-        val CLOUD_PROCESSORS = setOf(OPENAI, GEMINI_CLOUD)
+        val CLOUD_PROCESSORS = setOf(OPENAI)
     }
 
     object Routes {
@@ -142,7 +138,6 @@ object Strings {
 
     object Models {
         const val GPT_4O_MINI = "gpt-4o-mini"
-        const val GEMINI_1_5_FLASH = "gemini-1.5-flash"
         const val WHISPER_1 = "whisper-1"
     }
 

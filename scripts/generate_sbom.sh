@@ -46,6 +46,7 @@ BOM=$(find "vox-$APP/build" -name "bom.json" -print -quit)
 # claiming OpenCV for Vox Notes would be worse than one that omits it.
 case "$APP" in
     commander) VENDORED="vox-commander/src/main/cpp/whisper.cpp|whisper.cpp|https://github.com/ggml-org/whisper.cpp
+vox-commander/src/main/cpp/llama.cpp|llama.cpp|https://github.com/ggml-org/llama.cpp
 vendor/openwakeword-android-kt|openwakeword-android-kt|https://github.com/rementia/openwakeword-android-kt" ;;
     vision)    VENDORED="vendor/opencv|opencv|https://github.com/opencv/opencv
 vendor/paddleocr-upstream|PaddleOCR|https://github.com/PaddlePaddle/PaddleOCR" ;;

@@ -11,8 +11,6 @@ import com.voxapps.commander.domain.intent.IntentDecisionMap
 import com.voxapps.commander.domain.intent.interpreter.FastMapEngine
 import com.voxapps.commander.domain.intent.interpreter.LocalLlmInterpreter
 import com.voxapps.commander.domain.intent.interpreter.OpenAiInterpreter
-import com.voxapps.commander.domain.intent.interpreter.GeminiNanoInterpreter
-import com.voxapps.commander.domain.intent.interpreter.GeminiCloudInterpreter
 import com.voxapps.commander.domain.intent.registry.AppRegistry
 import com.voxapps.commander.domain.intent.router.IntentRouter
 import com.voxapps.commander.domain.localization.LanguageManager
@@ -63,14 +61,10 @@ class AppContainer(context: Context) {
     private val l1Engine = FastMapEngine(fastMapDao)
     private val l2Engine = OpenAiInterpreter(appContext, settingsRepository, fastMapDao)
     val localLlmInterpreter = LocalLlmInterpreter(appContext, settingsRepository, modelDownloader, fastMapDao)
-    val geminiNanoInterpreter = GeminiNanoInterpreter(appContext, settingsRepository)
-    val geminiCloudInterpreter = GeminiCloudInterpreter(appContext, settingsRepository, fastMapDao)
-    val masterIntentEngine = IntentDecisionMap(l1Engine, l2Engine, localLlmInterpreter, geminiNanoInterpreter, geminiCloudInterpreter, settingsRepository)
+    val masterIntentEngine = IntentDecisionMap(l1Engine, l2Engine, localLlmInterpreter, settingsRepository)
     val llmHookEngineSelector = com.voxapps.commander.domain.intent.LlmHookEngineSelector(
         openAiEngine = l2Engine,
-        geminiCloudEngine = geminiCloudInterpreter,
         localLlmEngine = localLlmInterpreter,
-        geminiNanoEngine = geminiNanoInterpreter,
         settingsRepo = settingsRepository
     )
     val intentRouter = IntentRouter(appContext, settingsRepository)
@@ -98,6 +92,8 @@ class AppContainer(context: Context) {
         // needs to run a full app scan. Both are ordering constraints, not just slow work.
         kotlinx.coroutines.runBlocking {
             settingsRepositoryImpl.migrateFromSharedPreferencesIfNeeded()
+            settingsRepositoryImpl.migrateGoogleLlmRemoval()
+            settingsRepositoryImpl.migrateLiteRtRemoval()
             // Try loading from cache (fast path). If cache empty, splash screen will scan.
             // One read, reused below — this used to call getSettingsSnapshot() twice in a row, and
             // on a cold start (empty cache) each call is its own blocking DataStore round-trip.
@@ -121,28 +117,10 @@ class AppContainer(context: Context) {
         }
         Logger.log("AppContainer init - starting compatibility checks", "AppContainer")
         checkVulkanCrashCookie()
-        detectGeminiSupport()
 
         // Scan for Vox satellite apps (contract-implementing companions) at warmup so their NLU
         // domains are available immediately. Re-scanned on refresh from the Integrations screen.
         com.voxapps.commander.domain.integration.VoxSatelliteRegistry.refresh(appContext)
-    }
-
-    /**
-     * Checks if Gemini Nano (AICore) is available on the system.
-     */
-    private fun detectGeminiSupport() {
-        try {
-            val pm = appContext.packageManager
-            pm.getPackageInfo("com.google.android.aicore", 0)
-            Logger.log("AICore detected - Gemini Nano supported", "GeminiProbe")
-            kotlinx.coroutines.runBlocking { settingsRepository.setGeminiIncompatible(false) }
-        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-            Logger.log("AICore not found - marking Gemini Nano incompatible", "GeminiProbe")
-            kotlinx.coroutines.runBlocking { settingsRepository.setGeminiIncompatible(true) }
-        } catch (e: Exception) {
-            Logger.log("Error probing Gemini support: ${e.message}", "GeminiProbe")
-        }
     }
 
     /**

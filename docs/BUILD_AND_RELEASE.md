@@ -89,14 +89,15 @@ default** (`gradle.properties`):
 
 | | `minimal` (default) | `full` |
 |---|---|---|
-| Commander APK | ~47 MB, 11 libs inside | ~24 MB, 5 libs inside |
+| Commander APK | ~36 MB, 10 libs inside | ~24 MB, 5 libs inside |
 | Vision APK | ~61 MB, 15 libs inside | ~16 MB, 5 libs inside |
-| First launch | nothing downloads; works offline | 53 MB (Commander) / 43 MB (Vision) fetched on the splash |
-| Whisper | on demand, unchanged | on demand, unchanged |
+| First launch | nothing downloads; works offline | 33 MB (Commander) / 43 MB (Vision) fetched on the splash |
+| Whisper / llama.cpp | on demand, unchanged | on demand, unchanged |
 
-**Whisper is unaffected by the switch.** It is the one genuinely optional payload — ~107 MB fetched
-only if you choose Whisper STT, and the Vulkan variant only where the GPU supports it — so it is
-excluded by AGP in both modes. Everything the switch does govern is mandatory: the app cannot run
+**Whisper and the llama.cpp runtime are unaffected by the switch.** They are the genuinely
+optional payloads — ~107 MB fetched only if you choose Whisper STT (Vulkan probed at first run),
+~4 MB of libllama.so fetched only when a local LLM engine is selected — so both are excluded by
+AGP in both modes. Everything the switch does govern is mandatory: the app cannot run
 without those libraries, so in `full` they are a required download on the splash, which is why
 `minimal` is the default.
 

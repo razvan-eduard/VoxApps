@@ -485,28 +485,26 @@ class AppStateManager private constructor(
         val currentState = _uiState.value
         val voiceProcessor = currentState.voiceProcessor
         val aiProcessor = currentState.aiProcessor
-        // Derive compatibility from intentModelReady/voiceModelReady instead of getSettingsSnapshot()
-        val geminiIncompatible = aiProcessor == Strings.AiProcessors.GEMINI_NATIVE && !currentState.intentModelReady
+        // Derive compatibility from voiceModelReady instead of getSettingsSnapshot()
         val vulkanIncompatible = voiceProcessor == Strings.Processors.WHISPER_VULKAN && !currentState.voiceModelReady
         
         // (libName, description, engineKey). The third column used to be a naming of its own —
         // "whisper", "vosk", "llm", "gemini" — a fourth way to say which engine something belongs
         // to, matching neither the schema's keys nor the stored processor values nor anything else.
         // These are engine keys, so the screen can name each group from the registry.
-        val litertLmEngine = "nlu_llm_litertlm" // schema key; no compiled class owns it
+        val localLlmEngine = "nlu_llm" // schema key; served by LocalLlmInterpreter
         val soFiles = listOf(
-            // ggml has no row of its own: it is linked into libwhisper.so rather than shipped
-            // beside it, so a row per ggml file would report libraries that are never fetched as
-            // permanently missing.
+            // ggml has no row of its own: it is linked into libwhisper.so and libllama.so rather
+            // than shipped beside them, so a row per ggml file would report libraries that are
+            // never fetched as permanently missing.
             Triple("libwhisper.so", "Core Whisper STT Engine", WhisperCppSttEngine.ENGINE_KEY),
             Triple("libomp.so", "OpenMP Multi-threading", WhisperCppSttEngine.ENGINE_KEY),
             // Vulkan is a capability, not a file — the backend is inside libwhisper.so, and whether
             // it can be used is decided by VulkanProbeService running real GPU work in its own
-            // process. Answered like Google AICore below rather than by looking for a library.
+            // process. Answered by the probe's verdict rather than by looking for a library.
             Triple(VULKAN_CAPABILITY, "Vulkan GPU Acceleration", WhisperCppSttEngine.ENGINE_KEY),
             Triple("libvosk.so", "Vosk Voice Engine", VoskSttEngine.ENGINE_KEY),
-            Triple("liblitertlm_jni.so", "LiteRT-LM Engine", litertLmEngine),
-            Triple("Google AICore", "Gemini Nano System Service", Strings.AiProcessors.GEMINI_NATIVE)
+            Triple("libllama.so", "llama.cpp LLM Engine", localLlmEngine)
         )
 
         val statusList = soFiles.map { (name, desc, category) ->
@@ -514,11 +512,17 @@ class AppStateManager private constructor(
             val isIncompatible: Boolean
 
             // Each name is asked at the place its own downloader writes: the DLC libraries live in
-            // core:nativelibs' version-scoped directory, whisper's in WhisperEngineManager's — one
-            // shared path here would answer for at most one of the two.
+            // core:nativelibs' version-scoped directory, whisper's in WhisperEngineManager's,
+            // llama's in LlamaEngineManager's — one shared path here would answer for at most one.
             fun libPresent(fileName: String) = when {
                 fileName in com.voxapps.commander.data.remote.NativeLibManager.libs ->
                     com.voxapps.commander.data.remote.NativeLibManager.hasLib(context, fileName)
+                fileName in com.voxapps.commander.data.remote.LlamaEngineManager.LLAMA_LIBS ->
+                    java.io.File(context.applicationInfo.nativeLibraryDir, fileName).exists() ||
+                        java.io.File(
+                            com.voxapps.commander.data.remote.LlamaEngineManager.libDir(context),
+                            fileName
+                        ).exists()
                 else ->
                     java.io.File(context.applicationInfo.nativeLibraryDir, fileName).exists() ||
                         java.io.File(
@@ -527,10 +531,7 @@ class AppStateManager private constructor(
                         ).exists()
             }
 
-            if (name == "Google AICore") {
-                isIncompatible = geminiIncompatible
-                exists = !isIncompatible
-            } else if (name == VULKAN_CAPABILITY) {
+            if (name == VULKAN_CAPABILITY) {
                 // Present once the engine carrying the backend is on device; the probe's verdict is
                 // what decides whether it is usable.
                 isIncompatible = vulkanIncompatible

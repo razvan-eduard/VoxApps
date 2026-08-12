@@ -22,8 +22,6 @@ import com.voxapps.commander.utils.Strings
  */
 class AiEngineResolver(
     private val openAiEngine: AssistantEngine,
-    private val geminiCloudEngine: AssistantEngine,
-    private val geminiNanoEngine: AssistantEngine,
     private val localLlmEngine: AssistantEngine
 ) {
     /** @property requiresCloud whether this engine is gated on `cloudIntelligenceEnabled`. */
@@ -35,8 +33,6 @@ class AiEngineResolver(
      */
     fun resolve(processor: String): Choice? = when (processor) {
         Strings.AiProcessors.OPENAI -> Choice(openAiEngine, requiresCloud = true)
-        Strings.AiProcessors.GEMINI_CLOUD -> Choice(geminiCloudEngine, requiresCloud = true)
-        Strings.AiProcessors.GEMINI_NATIVE -> Choice(geminiNanoEngine, requiresCloud = false)
         // Everything else is a model id from models.json rather than one of the built-in keys above.
         else -> if (RemoteModelRegistry.isLlmEngine(processor)) {
             Choice(localLlmEngine, requiresCloud = false)

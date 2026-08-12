@@ -18,8 +18,6 @@ class IntentDecisionMap(
     private val l1Engine: AssistantEngine,
     private val l2CloudEngine: AssistantEngine,
     private val l3LocalEngine: AssistantEngine,
-    private val geminiNanoEngine: AssistantEngine,
-    private val geminiCloudEngine: AssistantEngine,
     private val settingsRepo: SettingsRepository
 ) : AssistantEngine {
 
@@ -28,8 +26,6 @@ class IntentDecisionMap(
     /** Single source of truth for processor-key -> engine, shared by L2, L3 and [rawPrompt]. */
     private val resolver = AiEngineResolver(
         openAiEngine = l2CloudEngine,
-        geminiCloudEngine = geminiCloudEngine,
-        geminiNanoEngine = geminiNanoEngine,
         localLlmEngine = l3LocalEngine
     )
 

@@ -1,5 +1,5 @@
 {
-  "schema_version": 12,
+  "schema_version": 13,
   "engines": {
     "GOOGLE": {
       "engine_label": "Google Speech Recognition",
@@ -49,39 +49,6 @@
         "requires_api_key",
         "multimodal"
       ],
-      "type": [
-        "llm"
-      ],
-      "models": []
-    },
-    "GEMINI_CLOUD": {
-      "engine_label": "Gemini Cloud (API)",
-      "label_key": "engine_label_gemini_cloud",
-      "api_key_url": "https://aistudio.google.com/apikey",
-      "endpoint": "https://generativelanguage.googleapis.com/v1beta",
-      "probe_url": "models",
-      "auth": {
-        "style": "query",
-        "param": "key"
-      },
-      "is_multilingual": true,
-      "extension": "",
-      "runtime": "cloud",
-      "capabilities": [
-        "requires_api_key",
-        "multimodal"
-      ],
-      "type": [
-        "llm"
-      ],
-      "models": []
-    },
-    "GEMINI_NATIVE": {
-      "engine_label": "Gemini Nano (System)",
-      "label_key": "engine_label_gemini_nano",
-      "is_multilingual": true,
-      "extension": "",
-      "runtime": "android_local",
       "type": [
         "llm"
       ],

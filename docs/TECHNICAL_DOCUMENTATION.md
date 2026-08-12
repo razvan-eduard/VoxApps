@@ -213,7 +213,9 @@ owning the source.
   `jniLibs.excludes` (`androidComponents.onVariants`) and downloaded as real, user-facing DLC
   (~107 MB, fetched by `WhisperEngineManager` when the user enables Whisper, verified against
   digests recorded in the APK as `assets/whisper-libs.sha256`) — the model download above is the
-  user-visible part of the same mechanism. onnxruntime, Vosk, litertlm-android, and sherpa-onnx-jni
+  user-visible part of the same mechanism, and the llama.cpp runtime (libllama.so, ~4 MB, fetched
+  by `LlamaEngineManager` from its per-commit `llama-libs-<sha12>` release when a local LLM engine
+  is selected) follows the same shape. onnxruntime, Vosk, and sherpa-onnx-jni
   aren't DLC in that sense: they're mandatory libraries the app needs to function. In `minimal` DLC
   mode (the default) they ship inside the APK; in `full` mode they're excluded the same way and
   silently fetched once at first launch by `core:nativelibs` (see
@@ -273,10 +275,8 @@ The first AI attempt. User selects via `aiProcessor` setting:
 
 | Processor | Engine | Description |
 |-----------|--------|-------------|
-| `openai` | `OpenAiInterpreter` | OpenAI Chat Completions API (Cloud) |
-| `gemini_native` | `GeminiNanoInterpreter` | Gemini Nano on-device (AICore) |
-| `gemini_cloud` | `GeminiCloudInterpreter` | Gemini Pro API (Cloud) |
-| Custom LLM | `LocalLlmInterpreter` | On-device LLM (LiteRT-LM) |
+| `OPENAI` | `OpenAiInterpreter` | OpenAI Chat Completions API (Cloud) |
+| `nlu_llm` (any local_llm-capable key) | `LocalLlmInterpreter` | On-device LLM (llama.cpp, GGUF, grammar-constrained) |
 
 All interpreters implement `AssistantEngine`:
 
@@ -736,7 +736,7 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 
 | Group | Fields |
 |-------|--------|
-| API/Cloud | `apiKey`, `geminiApiKey` |
+| API/Cloud | `apiKey` |
 | Language | `language`, `voiceLanguage`, `voiceLanguageAutoDetect`, `modelFilterLang` |
 | Voice Engine | `voiceProcessor`, `activeVoiceModelId` |
 | Intent Engine | `aiProcessor`, `activeIntentModelId`, `cloudIntelligenceEnabled` |
@@ -1166,7 +1166,7 @@ schema tests read the generated assets)
 
 **Contents**:
 - `schema_version` — Integer, used to detect newer versions for hot-reload
-- `prompts.standard_nlu` — The NLU system prompt sent to LLM interpreters (OpenAI, Gemini, Local LLM). Contains sentence anatomy rules, domain/action taxonomy, and JSON output format
+- `prompts.standard_nlu` — The NLU system prompt sent to LLM interpreters (OpenAI, Local LLM). Contains sentence anatomy rules, domain/action taxonomy, and JSON output format
 - `engines` — Map of engine key → engine definition. Each engine has `type`, `is_multilingual`, `extension`, a `capabilities` list, and a `models` array:
   - `stt_whisper` — Whisper.cpp models (tiny, base, small) with download URLs and sizes
   - `wake_vosk` — Vosk models (`voice` + `wake_word`); capabilities include `calibration`, `wake_word_text`, `model_download`
@@ -1302,8 +1302,7 @@ tasks.named("preBuild") {
 | Vosk Android | (via libs.versions) | Wake word + STT |
 | Whisper.cpp | (submodule, CMake) | On-device STT |
 | sherpa-onnx | v1.13.4 (JitPack) | Piper TTS |
-| LiteRT-LM | (via libs.versions) | On-device LLM inference |
-| Google Generative AI | 0.9.0 | Gemini Nano |
+| llama.cpp | (submodule, CMake) | On-device LLM inference (GGUF, GBNF grammar sampling) |
 | Picovoice Porcupine | 4.0.2 | Wake word engine |
 | OpenWakeWord | v0.1.5 (rementia, vendored fork — `:core:wakeword`) | Wake word engine, RMS silence-gate patched |
 | ONNX Runtime | 1.27.0 | ML inference for OpenWakeWord |
@@ -1675,22 +1674,22 @@ LLM hook cleanup) can now attach the actual photo alongside the OCR text when th
 supports images — additive, not a replacement. Skipping OCR entirely in favor of the photo was
 considered and rejected: multimodal image-reading beating OCR+text on dense receipt/document text is
 an unvalidated assumption, and a raw photo is strictly more data leaving the device (and more cloud
-vision tokens — OpenAI/Gemini price images by pixel-dimension tiling, not JPEG quality or color depth)
+vision tokens — OpenAI prices images by pixel-dimension tiling, not JPEG quality or color depth)
 than OCR-extracted text. So OCR always runs; the photo, when enabled, is one more input on the same
 single LLM call — never a second call.
 
-- **Capability declaration.** `RemoteModelRegistry.isMultimodal(processor)` checks a hardcoded set for
-  the two cloud processors that are actually multimodal today (OpenAI, Gemini Cloud — Gemini *Native*
-  is on-device and not yet implemented for the LLM hook at all, so it's excluded), falling back to
-  `hasCapability(engineKey, "multimodal")` for JSON-defined local engines (none declare it yet). A new
+- **Capability declaration.** `RemoteModelRegistry.isMultimodal(processor)` answers from the
+  engine's declared capabilities — OpenAI is the one processor declaring `multimodal` today,
+  and `hasCapability(engineKey, "multimodal")` covers JSON-defined local engines (none declare it
+  yet). A new
   generic `VoxIpc.ACTION_CAPABILITY_QUERY` (ordered broadcast, `CapabilityQueryReceiver` on
   Commander's side, `VoxCapabilityClient.isMultimodal()` client-side) exposes this to any first-party
   app — deliberately separate from `VoxSatelliteSchema`/`OP_GET_SCHEMA`, since this is global Commander
   engine state, not per-satellite data.
 - **Local-vs-remote declaration.** The same query also reports `RemoteModelRegistry.isLocalEngine(processor)`
-  — the inverse of a small hardcoded cloud set (`Strings.AiProcessors.CLOUD_PROCESSORS = {OPENAI,
-  GEMINI_CLOUD}`; everything else, including Gemini Native and any `models.json`-defined downloaded
-  engine, is local by elimination) — alongside `multimodal` in one round-trip
+  — the inverse of a small hardcoded cloud set (`Strings.AiProcessors.CLOUD_PROCESSORS =
+  {OPENAI}`; everything else, including any `models.json`-defined downloaded engine, is local by
+  elimination) — alongside `multimodal` in one round-trip
   (`VoxCapabilityClient.EngineCapabilities`). Callers use it to tune a prompt to the active engine's
   capability tier rather than assuming one: `VoxCapabilityClient.isLocalEngine()` fails safe to `true`
   on an inconclusive probe (the opposite direction from `isMultimodal()`'s fail-safe-`false`), since
@@ -1704,7 +1703,7 @@ single LLM call — never a second call.
   preferences: **"Send photo to AI"** (off by default — real token cost on top of free local OCR) and
   **"Photo detail for AI"** (Low/Medium/High → 768/1024/1536px long edge). Only resolution changes
   LLM token cost for an attached image; JPEG compression quality and color depth don't factor into
-  either OpenAI's or Gemini's tiling-based image tokenization, so neither is exposed as a
+  OpenAI's tiling-based image tokenization, so neither is exposed as a
   cost-relevant setting. When "Send photo to AI" is on, capture produces a **second**, separately
   downscaled JPEG (`downscaleToLongEdge`) alongside the existing full-resolution one, and both are
   handed back via a new `VoxOcrResult.aiImageUri` field (kept distinct from `imageUri`, which stays
@@ -1716,9 +1715,8 @@ single LLM call — never a second call.
   tracing its code, not assumed). `VoxLlmRequest` gained an `attachmentUri` field the satellite fills
   in only after its own toggle is on *and* Vision actually provided a downscaled copy; `LlmHookWorker`
   forwards it to `LlmHookEngineSelector.run(promptText, imageUri)`, which threads it to whichever
-  engine is selected — `OpenAiInterpreter`/`GeminiCloudInterpreter` attach it (base64 data URI for
-  OpenAI's chat-completions format, `content { image(bitmap) }` for the Gemini SDK), every other
-  engine implementation ignores the parameter.
+  engine is selected — `OpenAiInterpreter` attaches it (base64 data URI in the chat-completions
+  format), every other engine implementation ignores the parameter.
 - **Cross-app URI grants require a local copy, not a re-grant.** A plain read grant on someone else's
   FileProvider URI (e.g. what Vision grants Notes/Expenses for `aiImageUri`) can't be re-granted
   onward to a third app (Commander) — only the URI's actual owner can grant it to an arbitrary
@@ -2286,7 +2284,7 @@ vox-commander/src/main/java/com/voxapps/commander/
 │   ├── engine/                  # STT/TTS engines (Whisper, Vosk, Piper, Android TTS)
 │   ├── intent/
 │   │   ├── IntentDecisionMap.kt # Triple AI Brain orchestrator
-│   │   ├── interpreter/         # OpenAI, Gemini Nano, Local LLM, FastMap
+│   │   ├── interpreter/         # OpenAI, Local LLM (llama.cpp), FastMap
 │   │   ├── model/NluIntent.kt   # Universal intent data class
 │   │   ├── taxonomy/            # IntentTaxonomy (domains, actions)
 │   │   ├── registry/AppRegistry # App scanning, URI templates

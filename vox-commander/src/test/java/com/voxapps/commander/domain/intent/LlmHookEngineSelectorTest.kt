@@ -18,20 +18,16 @@ import org.junit.Test
 class LlmHookEngineSelectorTest {
 
     private lateinit var openAiEngine: AssistantEngine
-    private lateinit var geminiCloudEngine: AssistantEngine
     private lateinit var localLlmEngine: AssistantEngine
-    private lateinit var geminiNanoEngine: AssistantEngine
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var selector: LlmHookEngineSelector
 
     @Before
     fun setup() {
         openAiEngine = mockk()
-        geminiCloudEngine = mockk()
         localLlmEngine = mockk()
-        geminiNanoEngine = mockk()
         settingsRepo = mockk()
-        selector = LlmHookEngineSelector(openAiEngine, geminiCloudEngine, localLlmEngine, geminiNanoEngine, settingsRepo)
+        selector = LlmHookEngineSelector(openAiEngine, localLlmEngine, settingsRepo)
     }
 
     private fun settingsWith(processor: String, cloudEnabled: Boolean = true) =
@@ -72,30 +68,6 @@ class LlmHookEngineSelectorTest {
 
         assertTrue(outcome is RawPromptOutcome.Error)
         assertEquals("OpenAI request failed: unknown error", (outcome as RawPromptOutcome.Error).reason)
-    }
-
-    @Test
-    fun `routes to Gemini Cloud when configured and cloud enabled`() = runTest {
-        every { settingsRepo.getSettingsSnapshot() } returns settingsWith(Strings.AiProcessors.GEMINI_CLOUD)
-        coEvery { geminiCloudEngine.rawPrompt("hi") } returns "cloud answer"
-
-        val outcome = selector.run("hi")
-
-        assertTrue(outcome is RawPromptOutcome.Success)
-        assertEquals("cloud answer", (outcome as RawPromptOutcome.Success).rawText)
-    }
-
-    @Test
-    fun `Gemini Nano always short-circuits with an informative error`() = runTest {
-        every { settingsRepo.getSettingsSnapshot() } returns settingsWith(Strings.AiProcessors.GEMINI_NATIVE)
-
-        val outcome = selector.run("hi")
-
-        assertTrue(outcome is RawPromptOutcome.Error)
-        assertEquals(
-            "Gemini Nano on-device is not yet supported for generic LLM requests",
-            (outcome as RawPromptOutcome.Error).reason
-        )
     }
 
     @Test

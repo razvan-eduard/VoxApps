@@ -32,6 +32,7 @@ Usage: ./scripts/vox <flow> [command] [args...]
                                  ppocr-sdk whisper docquad
   check pairing <apk...>       Do an APK's native libraries satisfy each other?
   check whisper-published      Does the published Whisper runtime match the pin?
+  check llama-published        Does the published llama runtime match the pin?
   check smoke <apk> <app-id>   Does the APK survive a cold launch on the adb device?
 
   patches verify [module]      Assert a vendored fork is exactly upstream + its patches/
@@ -41,11 +42,13 @@ Usage: ./scripts/vox <flow> [command] [args...]
   release package              Build Commander's APK as published (stripped + signed)
   release sbom <app>           CycloneDX SBOM, including the vendored native sources
   release publish-libs         Publish whisper .so files as the DLC release
+  release publish-llama-libs   Publish libllama.so as the per-commit release
   release readme               Regenerate the README release table
   release fdroid               Regenerate and push F-Droid metadata
 
   native opencv                Build OpenCV from the pinned submodule
   native whisper               Build whisper.cpp from the pinned submodule
+  native llama                 Build llama.cpp from the pinned submodule
 
   schemas validate             Validate the shipped schema JSON
   schemas sign                 Sign the schemas (needs the private key)
@@ -80,6 +83,10 @@ case "$FLOW" in
         # `whisper-published` asks a third question: not what upstream has, nor whether an APK's
         # libraries agree, but whether the runtime the app downloads was built from the commit this
         # source pins. Those can differ because publishing that runtime is a manual step.
+        if [ "${1:-}" = "llama-published" ]; then
+            shift
+            exec bash scripts/check_llama_published.sh "$@"
+        fi
         if [ "${1:-}" = "whisper-published" ]; then
             shift
             exec bash scripts/check_whisper_published.sh "$@"
@@ -130,9 +137,10 @@ case "$FLOW" in
                 ;;
             sbom)         exec bash scripts/generate_sbom.sh "$@" ;;
             publish-libs) exec bash scripts/publish_whisper_libs.sh "$@" ;;
+            publish-llama-libs) exec bash scripts/publish_llama_libs.sh "$@" ;;
             readme)       exec bash scripts/update_release_readme_links.sh "$@" ;;
             fdroid)       exec bash scripts/sync_fdroid_metadata.sh "$@" ;;
-            *) die "release needs a command: package | sbom | publish-libs | readme | fdroid" ;;
+            *) die "release needs a command: package | sbom | publish-libs | publish-llama-libs | readme | fdroid" ;;
         esac
         ;;
 
@@ -143,6 +151,7 @@ case "$FLOW" in
             # Ubuntu runners is dash, which has neither that variable nor `source`. macOS's sh is
             # bash in POSIX mode and runs it happily, so the difference only appears in CI.
             whisper) exec bash scripts/check_whisper.sh "${@:2}" ;;
+            llama)   exec bash scripts/check_llama.sh "${@:2}" ;;
             *) die "native needs a target: opencv | whisper" ;;
         esac
         ;;

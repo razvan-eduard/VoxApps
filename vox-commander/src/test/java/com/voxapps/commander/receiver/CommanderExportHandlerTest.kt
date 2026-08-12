@@ -26,7 +26,6 @@ class CommanderExportHandlerTest {
             credentials = Credentials(
                 mapOf(
                     "OPENAI" to "openai-key",
-                    "GEMINI_CLOUD" to "gemini-key",
                     "wake_porcupine" to "picovoice-key",
                     "WHISPER_API" to "whisper-key"
                 )
@@ -42,7 +41,6 @@ class CommanderExportHandlerTest {
 
         // ...and the single-key fields are still written, so an older build can restore this file.
         assertEquals("openai-key", restored.apiKey)
-        assertEquals("gemini-key", restored.geminiApiKey)
         assertEquals("picovoice-key", restored.picovoiceAccessKey)
     }
 
@@ -55,7 +53,6 @@ class CommanderExportHandlerTest {
             credentials = Credentials(
                 mapOf(
                     "OPENAI" to "openai-key",
-                    "GEMINI_CLOUD" to "gemini-key",
                     "wake_porcupine" to "picovoice-key",
                     "WHISPER_API" to "whisper-key"
                 )
@@ -65,9 +62,24 @@ class CommanderExportHandlerTest {
         val restored = CommanderExportHandler.parsePortableSettings(json)!!
         assertTrue(restored.engineApiKeys.isEmpty())
         assertNull(restored.apiKey)
-        assertNull(restored.geminiApiKey)
         assertNull(restored.picovoiceAccessKey)
         assertTrue(restored.searchProviderApiKeys.isEmpty())
+    }
+
+    @Test
+    fun `a backup from a build that still carried the Gemini fields imports cleanly`() {
+        // Fields a retired engine wrote into old exports; Gson drops what AppSettings no longer
+        // declares, so the file must parse and every surviving field must come through.
+        val legacyJson = """
+            {"aiProcessor":"OPENAI","apiKey":"openai-key",
+             "geminiApiKey":"gemini-key","geminiIncompatible":true,
+             "language":"en"}
+        """.trimIndent()
+
+        val restored = CommanderExportHandler.parsePortableSettings(legacyJson)!!
+        assertEquals("OPENAI", restored.aiProcessor)
+        assertEquals("openai-key", restored.apiKey)
+        assertEquals("en", restored.language)
     }
 
     @Test

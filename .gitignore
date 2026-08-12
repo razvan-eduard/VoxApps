@@ -114,3 +114,6 @@ schema-signing.pem
 # version, not the source.
 __pycache__/
 *.pyc
+
+# llama.cpp local CMake output (mirrors whisper.cpp/build-android-hybrid, which lives inside the submodule)
+vox-commander/src/main/cpp/llama-build/build-android/

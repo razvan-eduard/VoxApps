@@ -32,6 +32,7 @@ CHECKS=(
     "opencv:check_opencv_version.sh:submodule tag (built from source)"
     "ppocr-sdk:check_ppocr_sdk_version.sh:submodule commit (fork + 4 patches)"
     "whisper:check_whisper_version.sh:submodule tag (built from source)"
+    "llama:check_llama_version.sh:submodule tag (built from source)"
     "docquad:check_docquad_sdk_version.sh:vendored SDK"
 )
 

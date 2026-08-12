@@ -61,9 +61,7 @@ fun AdvancedSettingsTab(
             appStateManager,
             appContainer.modelDownloader,
             appContainer.fastMapDao,
-            appContainer.localLlmInterpreter,
-            appContainer.geminiNanoInterpreter,
-            appContainer.geminiCloudInterpreter
+            appContainer.localLlmInterpreter
         )
     }
     val isRunning = uiState.voiceState == VoiceState.BENCHMARKING

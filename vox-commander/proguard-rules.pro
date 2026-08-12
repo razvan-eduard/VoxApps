@@ -8,10 +8,6 @@
 -dontwarn com.spotify.**
 -dontwarn com.fasterxml.jackson.databind.**
 
-# LiteRT-LM (on-device LLM)
--keep class com.google.ai.edge.litertlm.** { *; }
--dontwarn com.google.ai.edge.litertlm.**
-
 # Rhino / Mozilla (Scripting)
 -dontwarn java.beans.**
 -dontwarn javax.script.**
@@ -28,6 +24,11 @@
 # yet triggered/reported since it only surfaces when actually transcribing audio.
 -keep class com.whispercpp.whisper.WhisperLib { *; }
 -keep class com.whispercpp.whisper.WhisperLib$Companion { *; }
+
+# llama.cpp JNI bridge: llama_jni.cpp's JNIEXPORT functions are named
+# Java_com_voxapps_llamacpp_LlamaBridgeImpl_* — the same by-literal-name linking as WhisperLib
+# above, so a renamed LlamaBridgeImpl fails with UnsatisfiedLinkError at first local-LLM use.
+-keep class com.voxapps.llamacpp.** { *; }
 
 # Sherpa-ONNX / ONNX Runtime
 # The onnxruntime-android AAR's actual Java package is ai.onnxruntime.* (com.microsoft.onnxruntime

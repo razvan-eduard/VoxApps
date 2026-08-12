@@ -1,13 +1,13 @@
 package com.voxapps.commander.domain.intent.interpreter
 
 import android.content.Context
-import com.google.ai.edge.litertlm.Engine
-import com.google.ai.edge.litertlm.Conversation
 import com.voxapps.commander.data.local.dao.FastMapDao
-import com.voxapps.commander.data.preferences.AppSettings
 import com.voxapps.commander.data.preferences.SettingsRepository
+import com.voxapps.commander.data.remote.LlamaEngineManager
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.testutil.TestDataFactory
+import com.voxapps.llamacpp.LibLlama
+import com.voxapps.llamacpp.LlamaBridge
 import com.voxapps.logging.Logger
 import io.mockk.coEvery
 import io.mockk.every
@@ -22,42 +22,59 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 import java.io.File
+import java.util.Collections
 
 /**
- * Tests for [LocalLlmInterpreter] focusing on crash reproduction conditions:
+ * [LocalLlmInterpreter] against a fake [LlamaBridge] — the contract the llama.cpp backend must
+ * keep, runnable on the JVM because the bridge is the seam:
  *
- * 1. **Concurrent access race condition** (tombstone pattern #3):
- *    Multiple coroutines calling processCommand() simultaneously on Dispatchers.IO
- *    can race on engine / baseConversation fields. LiteRT-LM's [Conversation] concurrency
- *    contract hasn't been separately re-verified here — treat it as unsafe under concurrent
- *    access until proven otherwise on-device (this test's whole point is proving the Mutex
- *    around it is load-bearing regardless of which engine backs it).
- *
- * 2. **Stale engine-cache corruption recovery**:
- *    MediaPipe's implementation left behind XNNPACK cache files that could corrupt after a
- *    native crash, requiring an explicit cleanup pass in setupLlm() before every load. LiteRT-LM
- *    is instead given a dedicated per-app cache directory via EngineConfig.cacheDir; whether it
- *    has an analogous stale-cache failure mode of its own is unconfirmed and needs verification
- *    on a real device — see setupLlm()'s cacheDir wiring in LocalLlmInterpreter.kt.
- *
- * 3. **Conversation invalidation after failure** (tombstone pattern #3):
- *    If sendMessage() throws, the base conversation should be invalidated
- *    to prevent using a corrupted conversation object.
+ *  - the Mutex serializes native access (one model load under a concurrent burst — the crash
+ *    NativeCrashReproductionTest reproduces on-device);
+ *  - the grammar is built and actually handed to the sampler on every NLU call, never silently
+ *    dropped (free-text output that *sometimes* parses is the worst failure shape);
+ *  - preload loads the model once and pays the prefill once;
+ *  - a cancelled native call surfaces as "no intent", not a crash or a hang.
  */
-@Ignore("Requires LiteRT-LM native libs — run as instrumented test on device")
 class LocalLlmInterpreterTest {
+
+    /** Records calls; behaviour is adjustable per test. */
+    private class FakeBridge : LlamaBridge {
+        val loadCalls = Collections.synchronizedList(mutableListOf<String>())
+        val completeCalls = Collections.synchronizedList(mutableListOf<Triple<String, String, String>>())
+        var freeCount = 0
+        var response: String? =
+            """{"action":"play","domain":"audio","logical_subject":"Scorpions","confidence":0.9}"""
+        var nextHandle = 1L
+
+        override fun loadModel(path: String, nCtx: Int, nThreads: Int): Long {
+            loadCalls.add(path)
+            return nextHandle
+        }
+        override fun freeModel(handle: Long) { freeCount++ }
+        override fun jsonSchemaToGrammar(schemaJson: String): String = "root ::= \"x\""
+        override fun complete(
+            handle: Long, systemPrompt: String, userText: String,
+            grammarGbnf: String, maxTokens: Int, temperature: Float
+        ): String? {
+            completeCalls.add(Triple(systemPrompt, userText, grammarGbnf))
+            return response
+        }
+        override fun cancel(handle: Long) {}
+        override fun clearMemory(handle: Long) {}
+        override fun contextTokenCount(handle: Long): Int = 0
+    }
 
     private lateinit var context: Context
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var modelDownloader: ModelDownloader
     private lateinit var fastMapDao: FastMapDao
-    private lateinit var interpreter: LocalLlmInterpreter
+    private lateinit var libManager: LlamaEngineManager
+    private lateinit var bridge: FakeBridge
     private lateinit var tempDir: File
-    private lateinit var cacheDir: File
     private lateinit var modelFile: File
 
     @Before
@@ -70,169 +87,127 @@ class LocalLlmInterpreterTest {
         mockkObject(Logger)
         every { Logger.log(any(), any()) } returns Unit
 
+        // The loader touches System.load; the bridge seam covers inference but not loading, so
+        // the loader object itself is stubbed on the JVM.
+        mockkObject(LibLlama)
+        every { LibLlama.load(any()) } returns true
+
         tempDir = File(System.getProperty("java.io.tmpdir"), "vox_llm_test_${System.currentTimeMillis()}")
         tempDir.mkdirs()
-        cacheDir = File(tempDir, "cache").apply { mkdirs() }
-        modelFile = File(tempDir, "qwen2.5-0.5b-q8.task").apply { writeText("fake model") }
+        modelFile = File(tempDir, "qwen3-0.6b-q8.gguf").apply { writeText("fake model") }
 
         context = mockk(relaxed = true)
-        every { context.cacheDir } returns cacheDir
-
         settingsRepo = mockk(relaxed = true)
         modelDownloader = mockk(relaxed = true)
         fastMapDao = mockk(relaxed = true)
+        libManager = mockk(relaxed = true)
+        every { libManager.needsRefresh() } returns false
+        bridge = FakeBridge()
 
-        every { modelDownloader.resolveLocalFile(any(), any()) } returns modelFile
         coEvery { fastMapDao.getAllRulesOnce() } returns emptyList()
-
-        interpreter = LocalLlmInterpreter(context, settingsRepo, modelDownloader, fastMapDao)
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            aiProcessor = "nlu_llm",
+            activeIntentModelId = "qwen3-0.6b-q8"
+        )
+        every { modelDownloader.resolveLocalFile("qwen3-0.6b-q8", "nlu_llm") } returns modelFile
     }
 
     @After
-    fun teardown() {
-        unmockkAll()
-        tempDir.deleteRecursively()
-    }
+    fun tearDown() = unmockkAll()
 
-    // === ENGINE CACHE DIRECTORY ===
+    private fun interpreter() =
+        LocalLlmInterpreter(context, settingsRepo, modelDownloader, fastMapDao, bridge, libManager)
 
     @Test
-    fun `setupLlm creates a dedicated cache directory before loading model`() {
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = "qwen2.5-0.5b-q8",
-            downloadedModelIds = setOf("qwen2.5-0.5b-q8")
-        )
+    fun `processCommand parses the bridge's constrained output into an intent`() = runTest {
+        val intent = interpreter().processCommand("play scorpions", null)
 
-        // setupLlm is private, but processCommand calls it first
-        // Since Engine.initialize() will fail (no real native lib in JVM test),
-        // setupLlm will return early after the cache dir is created
-        runTest {
-            val result = interpreter.processCommand("play music")
-            assertNull(result) // Returns null because Engine can't be initialized in JVM
-        }
-
-        assertTrue(File(cacheDir, "litertlm_cache").exists())
-    }
-
-    // === MODEL NOT FOUND ===
-
-    @Test
-    fun `processCommand returns null when model file does not exist`() = runTest {
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = "qwen2.5-0.5b-q8"
-        )
-        every { modelDownloader.resolveLocalFile(any(), any()) } returns File(tempDir, "nonexistent.task")
-
-        val result = interpreter.processCommand("play music")
-        assertNull(result)
+        assertNotNull(intent)
+        assertEquals("audio", intent!!.domain)
+        assertEquals("play", intent.action)
     }
 
     @Test
-    fun `processCommand returns null when no activeIntentModelId is set`() = runTest {
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = null
-        )
+    fun `every NLU call hands the sampler a coupled grammar — never empty`() = runTest {
+        interpreter().processCommand("play scorpions", null)
 
-        val result = interpreter.processCommand("play music")
-        assertNull(result)
+        assertEquals(1, bridge.completeCalls.size)
+        val grammar = bridge.completeCalls[0].third
+        assertTrue("grammar was empty — output would be unconstrained free text", grammar.isNotBlank())
+        assertTrue("grammar lost the action-first domain coupling", "action-domain ::=" in grammar)
+        assertTrue("grammar lost the root rule", "root ::=" in grammar)
     }
 
     @Test
-    fun `processCommand returns null when modelDownloader returns null`() = runTest {
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = "qwen2.5-0.5b-q8"
-        )
-        every { modelDownloader.resolveLocalFile(any(), any()) } returns null
-
-        val result = interpreter.processCommand("play music")
-        assertNull(result)
-    }
-
-    // === CONCURRENT ACCESS (RACE CONDITION EXPOSURE) ===
-
-    @Test
-    fun `concurrent processCommand calls share same engine instance without synchronization`() = runTest {
-        // This test exposes the race condition: multiple coroutines on Dispatchers.IO
-        // can call setupLlm() simultaneously. The field `engine` is read/written
-        // without any mutex or synchronization, leading to:
-        // - Double model loading (wasteful)
-        // - Concurrent access to Conversation (potential native crash, unverified for LiteRT-LM)
-        //
-        // In JVM tests this doesn't crash, but on device it causes the tombstone pattern.
-
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = "qwen2.5-0.5b-q8",
-            downloadedModelIds = setOf("qwen2.5-0.5b-q8")
+    fun `processCommand returns null when no model is selected`() = runTest {
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            aiProcessor = "nlu_llm", activeIntentModelId = null
         )
 
-        // Launch 5 concurrent calls — in JVM they'll all fail at Engine.initialize() (throws)
-        // but on device with real native libs, this would race on the engine field
-        val results = (1..5).map {
-            async { interpreter.processCommand("command $it") }
-        }.awaitAll()
-
-        // All return null because Engine.initialize() fails in JVM
-        results.forEach { assertNull(it) }
-    }
-
-    // === CONVERSATION INVALIDATION AFTER FAILURE ===
-
-    @Test
-    fun `processCommand falls back to one-shot conversation when base conversation creation fails`() = runTest {
-        // When baseConversation creation fails, processCommand should try a fresh one-shot
-        // conversation. This tests the fallback path that exists in the code.
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = "qwen2.5-0.5b-q8",
-            downloadedModelIds = setOf("qwen2.5-0.5b-q8")
-        )
-
-        // In JVM, Engine.initialize() fails, so we never reach conversation creation
-        // This test just verifies the null path doesn't throw
-        val result = interpreter.processCommand("play music")
-        assertNull(result)
-    }
-
-    // === MODEL RELOAD ON CHANGE ===
-
-    @Test
-    fun `setupLlm reloads when modelId changes`() = runTest {
-        // First call with model A
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = "qwen2.5-0.5b-q8"
-        )
-        interpreter.processCommand("test 1")
-
-        // Second call with different model — should trigger reload
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = "gemma3-1b-q8"
-        )
-        interpreter.processCommand("test 2")
-
-        // In JVM both return null (no native lib), but the test verifies
-        // no exception is thrown during model switch
+        assertNull(interpreter().processCommand("play scorpions", null))
+        assertEquals(0, bridge.loadCalls.size)
     }
 
     @Test
-    fun `setupLlm reloads when engineKey changes`() = runTest {
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = "qwen2.5-0.5b-q8"
+    fun `processCommand returns null when the model file does not exist`() = runTest {
+        modelFile.delete()
+
+        assertNull(interpreter().processCommand("play scorpions", null))
+        assertEquals(0, bridge.loadCalls.size)
+    }
+
+    @Test
+    fun `a cancelled native call surfaces as no intent, not a crash`() = runTest {
+        bridge.response = null
+
+        assertNull(interpreter().processCommand("play scorpions", null))
+    }
+
+    @Test
+    fun `a concurrent burst loads the model exactly once`() = runTest {
+        val i = interpreter()
+        (1..3).map { async { i.processCommand("play scorpions", null) } }.awaitAll()
+
+        assertEquals(1, bridge.loadCalls.size)
+    }
+
+    @Test
+    fun `preload loads the model once and pays the prefill once`() = runTest {
+        val i = interpreter()
+        assertTrue(i.preload())
+
+        assertEquals(1, bridge.loadCalls.size)
+        assertEquals(1, bridge.completeCalls.size)
+
+        // The command after preload must reuse the loaded model, not load again.
+        i.processCommand("play scorpions", null)
+        assertEquals(1, bridge.loadCalls.size)
+    }
+
+    @Test
+    fun `a different selection swaps the model`() = runTest {
+        val other = File(tempDir, "other.gguf").apply { writeText("fake model 2") }
+        every { modelDownloader.resolveLocalFile("other", "nlu_llm") } returns other
+
+        val i = interpreter()
+        i.processCommand("play scorpions", null)
+        i.processCommand(
+            "play scorpions", null,
+            com.voxapps.commander.domain.engine.EngineSelection("nlu_llm", "other")
         )
-        interpreter.processCommand("test 1")
 
-        // Change engine key (e.g., from nlu_llm to a different engine)
-        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createSettingsWithLlmEngine(
-            activeIntentModelId = "qwen2.5-0.5b-q8"
-        ).copy(aiProcessor = "nlu_llm_v2")
-        interpreter.processCommand("test 2")
+        assertEquals(listOf(modelFile.absolutePath, other.absolutePath), bridge.loadCalls)
+        assertEquals(1, bridge.freeCount)
     }
 
-    // === HELPER ASSERTIONS ===
+    @Test
+    fun `rawPrompt runs unconstrained with no system framing`() = runTest {
+        bridge.response = "free text answer"
+        val out = interpreter().rawPrompt("summarize this", null)
 
-    private fun assertTrue(condition: Boolean) {
-        org.junit.Assert.assertTrue(condition)
-    }
-
-    private fun assertFalse(condition: Boolean) {
-        org.junit.Assert.assertFalse(condition)
+        assertEquals("free text answer", out)
+        val (sys, _, grammar) = bridge.completeCalls[0]
+        assertEquals("", sys)
+        assertEquals("", grammar)
     }
 }

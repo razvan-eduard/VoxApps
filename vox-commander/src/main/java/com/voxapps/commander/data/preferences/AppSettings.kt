@@ -22,7 +22,6 @@ data class AppSettings(
     // and still honoured on import, so a backup moves in both directions between app versions.
     val engineApiKeys: Map<String, String> = emptyMap(),
     val apiKey: String? = null,
-    val geminiApiKey: String? = null,
 
     // --- LANGUAGE ---
     val language: String = Strings.Preferences.DEFAULT_LANGUAGE,
@@ -88,9 +87,6 @@ data class AppSettings(
 
     // --- WHISPER ENGINE (DLC) ---
     val isWhisperSystemEnabled: Boolean = false,
-
-    // --- GEMINI ---
-    val geminiIncompatible: Boolean = false,
 
     // --- REMOTE REPOSITORY ---
     val modelRepoBaseUrl: String = Strings.Preferences.DEFAULT_MODEL_REPO_URL,
