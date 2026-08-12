@@ -95,9 +95,10 @@ default** (`gradle.properties`):
 | Whisper / llama.cpp | on demand, unchanged | on demand, unchanged |
 
 **Whisper and the llama.cpp runtime are unaffected by the switch.** They are the genuinely
-optional payloads — ~107 MB fetched only if you choose Whisper STT (Vulkan probed at first run),
-~4 MB of libllama.so fetched only when a local LLM engine is selected — so both are excluded by
-AGP in both modes. Everything the switch does govern is mandatory: the app cannot run
+optional payloads — ~107 MB fetched only if you choose Whisper STT, ~39 MB of libllama.so (hybrid
+CPU+Vulkan) fetched only when a local LLM engine is selected — so both are excluded by
+AGP in both modes. Each engine's GPU use is a separate opt-in toggle, proven per device by a
+sandboxed compatibility probe (see `TECHNICAL_DOCUMENTATION.md`). Everything the switch does govern is mandatory: the app cannot run
 without those libraries, so in `full` they are a required download on the splash, which is why
 `minimal` is the default.
 
@@ -143,6 +144,12 @@ upstream-version checks belong to the weekly sync bots and are not wired into an
 skips the whisper and llama compiles for a build that only needs to know whether the Kotlin compiles.
 Everything downstream of `preBuild` still runs. `copyShippedSchemas` is **not** skippable — the
 schema tests read the assets it generates.
+
+Both native compiles produce hybrid CPU+Vulkan libraries whose GPU shaders are compiled on the
+build host, so any machine running them needs the host shader toolchain (`glslc`, SPIRV-Headers,
+Vulkan-Headers — see `BUILD_TIME_DEPENDENCIES.md`). In CI, `release-commander.yml` and
+`instrumented-tests.yml` are the two workflows that build the llama library, and both install that
+toolchain before invoking the compile.
 
 ### What a release does before it publishes
 

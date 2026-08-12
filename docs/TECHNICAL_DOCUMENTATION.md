@@ -225,15 +225,16 @@ owning the source.
   (~88 MB for libwhisper.so + libomp.so on arm64, fetched by `WhisperEngineManager` when the user
   enables Whisper, verified against
   digests recorded in the APK as `assets/whisper-libs.sha256`) — the model download above is the
-  user-visible part of the same mechanism, and the llama.cpp runtime (libllama.so, ~4 MB, fetched
+  user-visible part of the same mechanism, and the llama.cpp runtime (libllama.so, ~39 MB, fetched
   by `LlamaEngineManager` from its fingerprint-addressed `llama-libs-<pin12>` release when a local
   LLM engine is selected — see [§13](#13-model-management)) follows the same shape. onnxruntime, Vosk, and sherpa-onnx-jni
   aren't DLC in that sense: they're mandatory libraries the app needs to function. In `minimal` DLC
   mode (the default) they ship inside the APK; in `full` mode they're excluded the same way and
   silently fetched once at first launch by `core:nativelibs` (see
   `docs/BUILD_TIME_DEPENDENCIES.md`).
-- **Vulkan**: Optional GPU acceleration via the ggml Vulkan backend inside `libwhisper.so`
-  (probed at first run in a separate process, disabled if incompatible)
+- **Vulkan**: Opt-in GPU acceleration via the ggml Vulkan backend inside `libwhisper.so` — a
+  per-engine toggle, off by default, proven per device by a sandboxed compatibility probe (see
+  [§4 GPU Acceleration](#gpu-acceleration-vulkan))
 
 ### STT Flow
 
@@ -403,6 +404,64 @@ Gradle task — see [§18](#18-dependency-graph)). The Kotlin side talks to it t
   (per `IntentTaxonomy.getActionsForDomain`, plus `launch` over every domain) — so the sampler
   cannot produce an action/domain combination outside the taxonomy, and the remaining `NluIntent`
   fields are optional keys in a fixed order.
+
+### GPU Acceleration (Vulkan)
+
+Covers both on-device engines. `libwhisper.so` and `libllama.so` are hybrid CPU+Vulkan builds — one library carries both
+backends, and the backend is chosen per model load, so the CPU path is always available as the
+fallback. GPU use is a **per-engine boolean**, not an engine of its own: two
+"GPU acceleration (Experimental)" switches in Settings → Advanced → the Engine & Model Management
+card (`whisperGpuEnabled`, `llamaGpuEnabled`), both off by default. No engine picker contains a
+GPU entry.
+
+- **Backend selection (llama).** `LlamaBridge.loadModel` takes `nGpuLayers` — `0` runs entirely
+  on the CPU, `-1` offloads every layer to the GPU — passed through to
+  `llama_model_params.n_gpu_layers` in `llama_jni.cpp`. `LocalLlmInterpreter.setupLlm` computes
+  the wish as `llamaGpuEnabled && !llamaGpuIncompatible` and folds a `loadedGpu` flag into its
+  reload invalidation, so a toggle flip reloads the model on the other backend through exactly
+  the path a model change takes. `LlamaBridge.lastTimings` (`nativeLastTimings`, backed by
+  `llama_perf_context`) reports prompt-eval and decode timings separately. Whisper's half is
+  `WhisperCppSttEngine`, which resolves `whisperGpuEnabled && !whisperGpuIncompatible` at context
+  load.
+- **Compatibility is proven per device, not assumed.** Enabling a toggle arms a one-shot probe:
+  `VulkanProbe` binds `VulkanProbeService`, which runs in a separate `:vulkanprobe` process and
+  performs a real GPU inference — whisper transcribes one second of silence with the active voice
+  model; llama decodes under a `root ::= "XOK"` sentinel grammar on the tiny `stories260K.gguf`
+  test model (fetched once into the cache, never over a metered connection — the multi-GB active
+  model is never duplicated into a second process). Verdicts are `COMPATIBLE`, `INCOMPATIBLE`
+  (which also snaps the toggle back off), and `UNDECIDED`.
+- **A probe-process death is attributed, not assumed.** The probe process is an ordinary LMK
+  target, so a death without a reply is classified through
+  `ActivityManager.getHistoricalProcessExitReasons` (API 30+): a crash reads as `INCOMPATIBLE`,
+  a kill (LMK, user, dependency death) as `UNDECIDED`. On API 29, or with no exit record, the
+  death is treated as `INCOMPATIBLE` — in a process whose only work is the inference under test,
+  that is the overwhelmingly likely cause.
+- **`UNDECIDED` persists an attempt count and never auto-refires.** Re-enabling the toggle re-arms
+  the probe until `MAX_GPU_PROBE_ATTEMPTS` (3); past the cap, enabling skips the probe and the
+  runtime crash cookie guards the first real use.
+- **Runtime crash cookie.** A native GPU crash mid-inference cannot be caught in-process, so
+  every *unverified* GPU inference journals a per-engine cookie to disk synchronously before it
+  starts (`setGpuRuntimeAttemptSync`) and clears it after; a success sets `*GpuRuntimeVerified`
+  and ends the bookkeeping. `AppContainer` checks for a surviving cookie at construction and
+  attributes the previous main-process death through the OS exit record — only an attributed
+  `REASON_CRASH_NATIVE` counts a strike (`*GpuCrashStrikes`), and at `GPU_CRASH_STRIKE_LIMIT` (2)
+  the verdict latches `*GpuIncompatible` and the toggle turns off.
+- **"Test again."** Each switch shows a verdict line (incompatible / verified / probe passed) and,
+  once a verdict exists, a "Test again" action (`AppStateManager.clearGpuVerdict`) that forgets
+  this device's verdict so the next enable re-probes from scratch.
+- **Diagnostics.** The Native Library Inventory carries two capability rows, "Whisper GPU" and
+  "LLM GPU", answered by the stored incompatible verdict rather than by looking for a file — the
+  Vulkan backend lives inside each engine's library.
+- **Benchmark.** The benchmark runs paired "Local LLM (CPU)" and "Local LLM (GPU)" rows (a
+  "Skipped (Hardware Incompatible)" row when the verdict is latched), each with an NLU case and a
+  ~1500-token receipt-scale raw-prompt case; the detailed report carries prompt-eval and decode
+  tok/s separately. Both backends drive the one shared interpreter singleton under its mutex,
+  with `benchmarkGpuOverride` forcing the backend — never a second instance loading the same
+  multi-GB model.
+- **`WHISPER_VULKAN` engine-key rewrite.** `SettingsRepositoryImpl.migrateWhisperVulkanRetirement`
+  (one-shot, guarded by `gpuStateMigrated`, called from `AppContainer`) rewrites a stored
+  `voiceProcessor` of `WHISPER_VULKAN` into `stt_whisper` plus `whisperGpuEnabled`;
+  `normalizeEngineKey` performs the same remap on backup import.
 
 ### NluIntentParser (`NluIntentParser.kt`)
 
@@ -808,7 +867,7 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 | TTS | `ttsEnabled`, `ttsEngineType`, `ttsSpeechRate`, `ttsPitch`, `ttsAudioFocusMode`, `piperVoiceModelId` |
 | Aliases | `appAliasRules` |
 | Location | `locationHomeTownLat`, `locationHomeTownLon`, `locationCacheTtl`, `locationAlwaysUseHomeTown` |
-| Vulkan | `vulkanIncompatible`, `vulkanProbeDone`, `experimentalVulkanEnabled` |
+| GPU acceleration | `whisperGpuEnabled`, `llamaGpuEnabled` — the user's choice, and the only GPU fields that ride a backup. The rest is this device's verdict, excluded from export: per engine, `*GpuIncompatible`, `*GpuProbeDone`, `*GpuProbeAttempts`, `*GpuRuntimeAttempt` (the crash cookie), `*GpuRuntimeVerified`, `*GpuCrashStrikes` (see [§4 GPU Acceleration](#gpu-acceleration-vulkan)). `gpuStateMigrated` guards the one-shot `WHISPER_VULKAN` rewrite and rides exports like the other migration flags. |
 | Logging | `debugLoggingEnabled`, `debugToastsEnabled` |
 
 ### Sync vs Async
@@ -844,7 +903,7 @@ page but the menu itself.
 | Apps & Integrations | App Manager | `AppManagerTab.kt` | Default apps per domain, media session permission, return-to-previous-app, external trigger |
 | Apps & Integrations | Integrations | `IntegrationsTab.kt` (+ `PipedSettingsSection`, `SearchSettingsSection` on the same page) | Spotify OAuth, Vox Apps, Piped/NewPipe selection, search providers |
 | System | Permissions | `PermissionsSettingsTab.kt` | Runtime permissions management |
-| System | Advanced | `AdvancedSettingsTab.kt` | Vulkan, offline fallback, the cloud/Google consent toggles (the Google one labeled "Google on-device support", key `google_services_title`), maintenance. The Logging section (the debug-logging and debug-toast switches plus `LogViewerCard`) is deliberately the page's **last** section — the viewer grows without bound. |
+| System | Advanced | `AdvancedSettingsTab.kt` | Offline fallback, the Engine & Model Management card — the cloud/Google consent toggles (the Google one labeled "Google on-device support", key `google_services_title`), the two per-engine "GPU acceleration (Experimental)" switches with their verdict line and "Test again" action ([§4](#gpu-acceleration-vulkan)) — and maintenance. The Logging section (the debug-logging and debug-toast switches plus `LogViewerCard`) is deliberately the page's **last** section — the viewer grows without bound. |
 | Data | Backup & Diagnostics | `BenchmarkSettingsTab.kt` + `BackupSettingsSection` | One page for both: the backup card rides as the diagnostics `LazyColumn`'s header, so the page has a single scroll surface |
 
 ### Reusable Components
@@ -971,8 +1030,8 @@ The green "on-device" indicator is a persisted `downloadedModelIds` flag, not re
 - Debug builds: `libwhisper.so` and `libomp.so` bundled in APK
 - Release builds: Excluded from APK, downloaded as DLC at runtime (~88 MB for the two arm64 libs,
   digest-checked against `assets/whisper-libs.sha256`)
-- Vulkan probed at first launch in a separate process, `vulkanIncompatible` flag set if GPU
-  doesn't support
+- GPU (Vulkan) use is a per-engine opt-in toggle, proven per device by a sandboxed compatibility
+  probe — see [§4 GPU Acceleration](#gpu-acceleration-vulkan)
 
 ### Llama Runtime Library (`LlamaEngineManager`)
 
@@ -2512,7 +2571,8 @@ already compiles these sources on every push. It runs on Ubuntu with KVM enabled
 arm64 macOS runners cannot nest a VM, so an arm64 AVD never boots there): an x86_64 Android 11
 `google_apis` image executes the arm64-v8a libraries through the system image's ARM binary
 translation. The job builds `libllama.so` first (`./scripts/vox native llama` — the llama build is
-CPU-only and needs nothing beyond NDK+CMake), because `LlamaBridgeSmokeTest` is what answers whether
+hybrid CPU+Vulkan, so beyond NDK+CMake the job installs the host shader toolchain: `glslc`,
+SPIRV-Headers, Vulkan-Headers), because `LlamaBridgeSmokeTest` is what answers whether
 the compiled runtime actually executes. Commander only: translation has a fidelity ceiling
 (vision's OpenCV load crashes the translated process while passing on real arm64), and
 `NativeCrashReproductionTest` is excluded — its tests bring the process down on purpose and are run
