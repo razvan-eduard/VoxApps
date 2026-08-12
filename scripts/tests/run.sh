@@ -270,12 +270,12 @@ else
     bad "llama-published --report gave no verdict" "$(printf '%s' "$out" | head -2)"
 fi
 
-pin=$(git ls-tree HEAD "vox-commander/src/main/cpp/llama.cpp" 2>/dev/null | awk '{print $3}' | cut -c1-12)
+pin=$(./scripts/llama_build_pin.sh 2>/dev/null | cut -c1-12)
 reported=$(printf '%s\n' "$out" | grep '^tag=' | cut -d= -f2)
 if [ -n "$pin" ] && [ "$reported" = "llama-libs-$pin" ]; then
-    ok "the published llama runtime is addressed by the commit it was built from"
+    ok "the published llama runtime is addressed by the build it was compiled from"
 else
-    bad "llama-libs tag does not follow the pin" "pin=$pin reported=$reported"
+    bad "llama-libs tag does not follow the build pin" "pin=$pin reported=$reported"
 fi
 
 if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
@@ -536,7 +536,7 @@ PY
 )
 MODEL_TOTAL=$(printf '%s\n' "$MODEL_HASH_REPORT" | sed -n 1p)
 MODEL_MISSING=$(printf '%s\n' "$MODEL_HASH_REPORT" | sed -n 2p)
-if [ -z "$MODEL_MISSING" ] && [ "${MODEL_TOTAL:-0}" -eq 104 ]; then
+if [ -z "$MODEL_MISSING" ] && [ "${MODEL_TOTAL:-0}" -eq 105 ]; then
     ok "all $MODEL_TOTAL downloadable models declare a sha256"
 else
     bad "downloadable models without a sha256 (of ${MODEL_TOTAL:-?}) — their downloads are unverified" \

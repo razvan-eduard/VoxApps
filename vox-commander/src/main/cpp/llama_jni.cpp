@@ -27,14 +27,20 @@
 
 namespace {
 
+// Two KV sequences per context: grammar-constrained NLU calls own one, free-text raw-prompt
+// calls (satellite hooks) own the other. Their prompts share no prefix, so under a single
+// sequence each kind of call evicted the other's resident prompt and repaid its full prefill on
+// every alternation; separate sequences make the longest-common-prefix reuse hold per kind.
+constexpr int N_SLOTS = 2;
+
 struct LlamaHandle {
     llama_model * model = nullptr;
     llama_context * ctx = nullptr;
     const llama_vocab * vocab = nullptr;
-    // Tokens currently resident in the KV as a decoded prefix. Kept so a repeated system prompt
-    // costs one decode of the user tail, not a re-prefill of the whole template — the generic
-    // longest-common-prefix reuse llama-server does, template-agnostic on purpose.
-    std::vector<llama_token> cached;
+    // Per-slot tokens currently resident in the KV as a decoded prefix. Kept so a repeated
+    // system prompt costs one decode of the user tail, not a re-prefill of the whole template —
+    // the generic longest-common-prefix reuse llama-server does, template-agnostic on purpose.
+    std::vector<llama_token> cached[N_SLOTS];
     std::atomic<bool> abort{false};
     int n_batch = 0;
 };
@@ -77,13 +83,24 @@ std::string apply_template(llama_model * model, const std::string & sys, const s
     return std::string(buf.data(), n);
 }
 
-bool decode_range(LlamaHandle * h, const std::vector<llama_token> & tokens, size_t from) {
+// llama_batch_get_one pins everything to sequence 0, so slot-aware decoding builds its batches
+// explicitly: position = index in the slot's sequence, logits only for the prompt's final token.
+bool decode_range(LlamaHandle * h, const std::vector<llama_token> & tokens, size_t from, int slot) {
+    llama_batch batch = llama_batch_init(h->n_batch, 0, 1);
     for (size_t i = from; i < tokens.size(); i += h->n_batch) {
-        const int n = (int) std::min((size_t) h->n_batch, tokens.size() - i);
-        llama_batch batch = llama_batch_get_one(const_cast<llama_token *>(tokens.data()) + i, n);
-        if (llama_decode(h->ctx, batch) != 0) return false;
-        if (h->abort.load()) return false;
+        const size_t n = std::min((size_t) h->n_batch, tokens.size() - i);
+        common_batch_clear(batch);
+        for (size_t j = 0; j < n; j++) {
+            const size_t idx = i + j;
+            common_batch_add(batch, tokens[idx], (llama_pos) idx, { (llama_seq_id) slot },
+                             idx == tokens.size() - 1);
+        }
+        if (llama_decode(h->ctx, batch) != 0 || h->abort.load()) {
+            llama_batch_free(batch);
+            return false;
+        }
     }
+    llama_batch_free(batch);
     return true;
 }
 
@@ -107,6 +124,7 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeLoadModel(
 
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = (uint32_t) nCtx;
+    cparams.n_seq_max = N_SLOTS;
     cparams.n_threads = nThreads;
     cparams.n_threads_batch = nThreads;
 
@@ -156,12 +174,14 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeJsonSchemaToGrammar(JNIEnv * env
 JNIEXPORT jstring JNICALL
 Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeComplete(
         JNIEnv * env, jobject, jlong handle,
-        jstring jsys, jstring juser, jstring jgrammar, jint maxTokens, jfloat temperature) {
+        jstring jsys, jstring juser, jstring jgrammar, jint maxTokens, jfloat temperature,
+        jint jslot) {
     auto * h = reinterpret_cast<LlamaHandle *>(handle);
     if (!h) {
         throw_runtime(env, "complete() on a freed handle");
         return nullptr;
     }
+    const int slot = (jslot >= 0 && jslot < N_SLOTS) ? (int) jslot : 0;
     h->abort.store(false);
 
     const std::string prompt = apply_template(h->model, jstr(env, jsys), jstr(env, juser));
@@ -176,15 +196,24 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeComplete(
         return nullptr;
     }
 
+    // The slots share one KV pool of n_ctx cells. When this call plus the other slot's resident
+    // prefix cannot coexist, the other slot is evicted — it repays its prefill next time, which
+    // is exactly what every call paid before slots existed; this call proceeding matters more.
+    const int other = 1 - slot;
+    if (tokens.size() + (size_t) maxTokens + h->cached[other].size() >= (size_t) llama_n_ctx(h->ctx)) {
+        llama_memory_seq_rm(llama_get_memory(h->ctx), (llama_seq_id) other, -1, -1);
+        h->cached[other].clear();
+    }
+
     // Reuse whatever prefix is already resident; at least the final token must be re-decoded so
     // sampling has fresh logits.
     size_t lcp = 0;
-    while (lcp < tokens.size() && lcp < h->cached.size() && tokens[lcp] == h->cached[lcp]) lcp++;
+    while (lcp < tokens.size() && lcp < h->cached[slot].size() && tokens[lcp] == h->cached[slot][lcp]) lcp++;
     if (lcp == tokens.size()) lcp = tokens.size() - 1;
-    llama_memory_seq_rm(llama_get_memory(h->ctx), 0, (llama_pos) lcp, -1);
-    h->cached.clear(); // repopulated only on success — a failed decode leaves an honest empty cache
+    llama_memory_seq_rm(llama_get_memory(h->ctx), (llama_seq_id) slot, (llama_pos) lcp, -1);
+    h->cached[slot].clear(); // repopulated only on success — a failed decode leaves an honest empty cache
 
-    if (!decode_range(h, tokens, lcp)) {
+    if (!decode_range(h, tokens, lcp, slot)) {
         if (h->abort.load()) return nullptr;
         throw_runtime(env, "prompt decode failed");
         return nullptr;
@@ -212,14 +241,18 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeComplete(
 
     std::string out;
     bool cancelled = false;
+    llama_pos pos = (llama_pos) tokens.size();
+    llama_batch gbatch = llama_batch_init(1, 0, 1);
     for (int i = 0; i < maxTokens; i++) {
         if (h->abort.load()) { cancelled = true; break; }
         llama_token tok = llama_sampler_sample(chain, h->ctx, -1);
         if (llama_vocab_is_eog(h->vocab, tok)) break;
         out += common_token_to_piece(h->ctx, tok, /*special*/ false);
-        llama_batch batch = llama_batch_get_one(&tok, 1);
-        if (llama_decode(h->ctx, batch) != 0) {
+        common_batch_clear(gbatch);
+        common_batch_add(gbatch, tok, pos++, { (llama_seq_id) slot }, true);
+        if (llama_decode(h->ctx, gbatch) != 0) {
             if (!h->abort.load()) {
+                llama_batch_free(gbatch);
                 llama_sampler_free(chain);
                 throw_runtime(env, "decode failed mid-generation");
                 return nullptr;
@@ -228,10 +261,11 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeComplete(
             break;
         }
     }
+    llama_batch_free(gbatch);
     llama_sampler_free(chain);
 
     if (cancelled) return nullptr;
-    h->cached = std::move(tokens); // prompt only: the next call's seq_rm drops generated tokens
+    h->cached[slot] = std::move(tokens); // prompt only: the next call's seq_rm drops generated tokens
     return env->NewStringUTF(out.c_str());
 }
 
@@ -246,14 +280,18 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeClearMemory(JNIEnv *, jobject, j
     auto * h = reinterpret_cast<LlamaHandle *>(handle);
     if (!h || !h->ctx) return;
     llama_memory_clear(llama_get_memory(h->ctx), /*data*/ true);
-    h->cached.clear();
+    for (auto & c : h->cached) c.clear();
 }
 
 JNIEXPORT jint JNICALL
 Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeContextTokenCount(JNIEnv *, jobject, jlong handle) {
     auto * h = reinterpret_cast<LlamaHandle *>(handle);
     if (!h || !h->ctx) return 0;
-    return (jint) (llama_memory_seq_pos_max(llama_get_memory(h->ctx), 0) + 1);
+    jint total = 0;
+    for (int slot = 0; slot < N_SLOTS; slot++) {
+        total += (jint) (llama_memory_seq_pos_max(llama_get_memory(h->ctx), (llama_seq_id) slot) + 1);
+    }
+    return total;
 }
 
 } // extern "C"

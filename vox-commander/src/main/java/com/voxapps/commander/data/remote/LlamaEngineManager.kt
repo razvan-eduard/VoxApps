@@ -32,11 +32,13 @@ class LlamaEngineManager(
          */
         private const val LIB_DIR_NAME = "llama_libs"
 
-        /** Release tag prefix; the full tag is "$TAG_PREFIX-<llama.cpp sha12>". Unlike whisper
-         *  there is no legacy bare tag — no install predates the recorded commit. */
+        /** Release tag prefix; the full tag is "$TAG_PREFIX-<build pin12>", the pin being the
+         *  build fingerprint the APK recorded (submodule + JNI bridge + CMake config — see
+         *  scripts/llama_build_pin.sh). Unlike whisper there is no legacy bare tag — no install
+         *  predates the recorded pin. */
         private const val TAG_PREFIX = "llama-libs"
 
-        /** Written beside the libraries, naming the llama.cpp commit they were fetched for. */
+        /** Written beside the libraries, naming the build pin they were fetched for. */
         private const val COMMIT_MARKER = ".llama-commit"
 
         /** Both written into the APK by recordLlamaDigests; see vox-commander/build.gradle.kts. */

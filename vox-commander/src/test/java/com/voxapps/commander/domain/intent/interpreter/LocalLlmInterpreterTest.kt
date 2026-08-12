@@ -45,6 +45,7 @@ class LocalLlmInterpreterTest {
     private class FakeBridge : LlamaBridge {
         val loadCalls = Collections.synchronizedList(mutableListOf<String>())
         val completeCalls = Collections.synchronizedList(mutableListOf<Triple<String, String, String>>())
+        val completeSlots = Collections.synchronizedList(mutableListOf<Int>())
         var freeCount = 0
         var response: String? =
             """{"action":"play","domain":"audio","logical_subject":"Scorpions","confidence":0.9}"""
@@ -58,9 +59,10 @@ class LocalLlmInterpreterTest {
         override fun jsonSchemaToGrammar(schemaJson: String): String = "root ::= \"x\""
         override fun complete(
             handle: Long, systemPrompt: String, userText: String,
-            grammarGbnf: String, maxTokens: Int, temperature: Float
+            grammarGbnf: String, maxTokens: Int, temperature: Float, slot: Int
         ): String? {
             completeCalls.add(Triple(systemPrompt, userText, grammarGbnf))
+            completeSlots.add(slot)
             return response
         }
         override fun cancel(handle: Long) {}
@@ -209,6 +211,46 @@ class LocalLlmInterpreterTest {
         val (sys, _, grammar) = bridge.completeCalls[0]
         assertEquals("", sys)
         assertEquals("", grammar)
+    }
+
+    @Test
+    fun `NLU and raw prompts run in separate KV slots`() = runTest {
+        val i = interpreter()
+        i.processCommand("play scorpions", null)
+        bridge.response = "free text answer"
+        i.rawPrompt("summarize this", null)
+
+        // A shared slot would mean each kind of call evicts the other's cached prompt prefix.
+        assertEquals(
+            listOf(LlamaBridge.SLOT_NLU, LlamaBridge.SLOT_RAW),
+            bridge.completeSlots
+        )
+    }
+
+    @Test
+    fun `a failed rawPrompt records why and a successful one clears it`() = runTest {
+        val i = interpreter()
+        bridge.response = null
+        assertNull(i.rawPrompt("summarize this", null))
+        assertTrue(
+            "expected a busy reason, got: ${i.lastErrorReason}",
+            i.lastErrorReason!!.contains("busy")
+        )
+
+        bridge.response = "free text answer"
+        assertEquals("free text answer", i.rawPrompt("summarize this", null))
+        assertNull(i.lastErrorReason)
+    }
+
+    @Test
+    fun `rawPrompt with no selected model reports that, not busyness`() = runTest {
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            aiProcessor = "nlu_llm", activeIntentModelId = null
+        )
+
+        val i = interpreter()
+        assertNull(i.rawPrompt("summarize this", null))
+        assertEquals("no local model selected", i.lastErrorReason)
     }
 
     @Test

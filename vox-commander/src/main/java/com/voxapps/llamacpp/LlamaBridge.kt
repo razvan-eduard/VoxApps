@@ -28,8 +28,10 @@ interface LlamaBridge {
      * non-empty. Returns the generated text, or null when [cancel] interrupted the call — the
      * caller maps null to its own cancellation type. Throws on real failures.
      *
-     * The system prompt's KV prefix is reused across calls (longest-common-prefix), so a repeated
-     * system prompt costs one decode of the user tail rather than a full re-prefill.
+     * The system prompt's KV prefix is reused across calls (longest-common-prefix), per [slot]:
+     * a repeated system prompt costs one decode of the user tail rather than a full re-prefill.
+     * Slots exist because the two kinds of caller share no prompt prefix — under one sequence
+     * each evicted the other's resident prompt on every alternation.
      */
     fun complete(
         handle: Long,
@@ -37,7 +39,8 @@ interface LlamaBridge {
         userText: String,
         grammarGbnf: String,
         maxTokens: Int,
-        temperature: Float
+        temperature: Float,
+        slot: Int = SLOT_NLU
     ): String?
 
     /** Interrupts a running [complete] from any thread; observed both per-token and mid-graph. */
@@ -48,6 +51,13 @@ interface LlamaBridge {
 
     /** Tokens currently resident in the context — the testability seam for KV-clear assertions. */
     fun contextTokenCount(handle: Long): Int
+
+    companion object {
+        /** KV slot for grammar-constrained NLU completions — the stable system-prompt prefix. */
+        const val SLOT_NLU = 0
+        /** KV slot for free-text raw-prompt completions (satellite LLM hooks). */
+        const val SLOT_RAW = 1
+    }
 }
 
 /** The real JNI binding. [LibLlama.load] must have succeeded before any call. */
@@ -70,8 +80,9 @@ object LlamaBridgeImpl : LlamaBridge {
         userText: String,
         grammarGbnf: String,
         maxTokens: Int,
-        temperature: Float
-    ): String? = nativeComplete(handle, systemPrompt, userText, grammarGbnf, maxTokens, temperature)
+        temperature: Float,
+        slot: Int
+    ): String? = nativeComplete(handle, systemPrompt, userText, grammarGbnf, maxTokens, temperature, slot)
 
     override fun cancel(handle: Long) = nativeCancel(handle)
 
@@ -88,7 +99,8 @@ object LlamaBridgeImpl : LlamaBridge {
         userText: String,
         grammarGbnf: String,
         maxTokens: Int,
-        temperature: Float
+        temperature: Float,
+        slot: Int
     ): String?
     private external fun nativeCancel(handle: Long)
     private external fun nativeClearMemory(handle: Long)
