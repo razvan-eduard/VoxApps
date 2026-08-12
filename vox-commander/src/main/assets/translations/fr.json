@@ -114,9 +114,7 @@
   "app_alias_delete_msg": "Supprimer la règle d'alias pour \"${displayName}\" ? Alias : ${aliases}",
   "save_button": "Enregistrer",
   "tab_advanced": "Avancé",
-  "tab_backup": "Sauvegarde",
-  "tab_theme": "Thème",
-  "tab_diagnostics": "Diagnostic",
+  "tab_backup": "Sauvegarde et diagnostic",
   "engine_api_key": "Clé API",
   "tab_benchmark": "Diagnostic",
   "tab_verbose_logging": "Logs détaillés",
@@ -529,7 +527,12 @@
   "model_download_rejected": "Téléchargement refusé : le fichier ne correspond pas à la somme de contrôle déclarée par le schéma. Il a été supprimé — réessayez.",
   "engine_cloud_disabled_suffix": " — activer l'IA cloud",
   "engine_model_management": "Gestion des moteurs et modèles",
-  "google_services_title": "Services système Google",
-  "google_services_desc": "Autorise les moteurs basés sur les services système Google (reconnaissance vocale). Ils peuvent fonctionner en partie sur l'appareil mais sont opérés par Google.",
-  "model_imported_suffix": " — importé"
+  "google_services_title": "Prise en charge Google sur l'appareil",
+  "google_services_desc": "Autorise les moteurs qui utilisent les services Google sur l'appareil (reconnaissance vocale). Ils fonctionnent sur l'appareil mais sont opérés par Google.",
+  "model_imported_suffix": " — importé",
+  "settings_section_general": "Général",
+  "settings_section_engines": "Moteurs et modèles",
+  "settings_section_apps": "Applications et intégrations",
+  "settings_section_system": "Système",
+  "settings_section_data": "Données"
 }

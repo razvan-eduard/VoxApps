@@ -73,6 +73,12 @@ interface SettingsRepository {
     suspend fun setCloudIntelligenceEnabled(enabled: Boolean)
     suspend fun setGoogleServicesEnabled(enabled: Boolean)
 
+    /** Forgets every stored selection that names one of [engineKeys] — processor choices, their
+     *  active model ids, per-engine model memories, TTS engine, offline fallbacks — in one atomic
+     *  edit. Removing the preference (rather than writing some substitute value) is the point:
+     *  the next read resolves the same schema-driven default a fresh install would. */
+    suspend fun clearEngineSelections(engineKeys: Set<String>)
+
     // --- PER-ENGINE MODEL SELECTIONS ---
     suspend fun setEngineModelSelection(engineKey: String, modelId: String)
 

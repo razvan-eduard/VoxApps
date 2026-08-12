@@ -843,6 +843,34 @@ class SettingsRepositoryImpl(
         dataStore.edit { it[Keys.GOOGLE_SERVICES_ENABLED] = enabled }
     }
 
+    override suspend fun clearEngineSelections(engineKeys: Set<String>) {
+        if (engineKeys.isEmpty()) return
+        dataStore.edit { prefs ->
+            if (prefs[Keys.VOICE_PROCESSOR] in engineKeys) {
+                prefs.remove(Keys.VOICE_PROCESSOR)
+                prefs.remove(Keys.ACTIVE_VOICE_MODEL_ID)
+            }
+            if (prefs[Keys.AI_PROCESSOR] in engineKeys) {
+                prefs.remove(Keys.AI_PROCESSOR)
+                prefs.remove(Keys.ACTIVE_INTENT_MODEL_ID)
+            }
+            if (prefs[Keys.TTS_ENGINE_TYPE] in engineKeys) prefs.remove(Keys.TTS_ENGINE_TYPE)
+            if (prefs[Keys.DEFAULT_VOICE_FALLBACK_PROCESSOR] in engineKeys) {
+                prefs.remove(Keys.DEFAULT_VOICE_FALLBACK_PROCESSOR)
+                prefs.remove(Keys.DEFAULT_VOICE_FALLBACK_MODEL)
+            }
+            if (prefs[Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR] in engineKeys) {
+                prefs.remove(Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR)
+                prefs.remove(Keys.DEFAULT_INTENT_FALLBACK_MODEL)
+            }
+            val selections = parseStringMap(prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON])
+            if (selections.keys.any { it in engineKeys }) {
+                prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON] =
+                    gson.toJson(selections.filterKeys { it !in engineKeys })
+            }
+        }
+    }
+
     // --- WAKE WORD ---
     override suspend fun setWakeWord(word: String) {
         dataStore.edit { it[Keys.WAKE_WORD] = word }

@@ -350,6 +350,58 @@ class AppStateManagerTest {
     }
 
     @Test
+    fun `disabling cloud intelligence forgets every cloud engine selection`() = runTest {
+        every { RemoteModelRegistry.getEngineTypes() } returns
+            listOf("stt_whisper", Strings.Processors.WHISPER_API, Strings.AiProcessors.OPENAI)
+        every { RemoteModelRegistry.runtimeOf(Strings.AiProcessors.OPENAI) } returns EngineRuntime.CLOUD
+
+        stateManager.uiState.test {
+            awaitItem()
+
+            stateManager.setCloudIntelligenceEnabled(false)
+
+            testScheduler.advanceUntilIdle()
+            coVerify {
+                settingsRepo.clearEngineSelections(
+                    setOf(Strings.Processors.WHISPER_API, Strings.AiProcessors.OPENAI)
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `disabling Google support forgets google_service engine selections`() = runTest {
+        every { RemoteModelRegistry.getEngineTypes() } returns
+            listOf(Strings.Processors.GOOGLE, "stt_whisper")
+        every { RemoteModelRegistry.hasCapability(any(), any()) } returns false
+        every {
+            RemoteModelRegistry.hasCapability(Strings.Processors.GOOGLE, "google_service")
+        } returns true
+
+        stateManager.uiState.test {
+            awaitItem()
+
+            stateManager.setGoogleServicesEnabled(false)
+
+            testScheduler.advanceUntilIdle()
+            coVerify { settingsRepo.clearEngineSelections(setOf(Strings.Processors.GOOGLE)) }
+        }
+    }
+
+    @Test
+    fun `enabling a gate never touches stored selections`() = runTest {
+        stateManager.uiState.test {
+            awaitItem()
+
+            stateManager.setCloudIntelligenceEnabled(true)
+            stateManager.setGoogleServicesEnabled(true)
+
+            testScheduler.advanceUntilIdle()
+            coVerify(exactly = 0) { settingsRepo.clearEngineSelections(any()) }
+        }
+    }
+
+    @Test
     fun `setEngineApiKey delegates to SettingsRepository, keyed by engine`() = runTest {
         stateManager.uiState.test {
             awaitItem()
