@@ -38,6 +38,30 @@ class VoxLlmRequestQueue(
         data: List<String> = emptyList(),
         attachmentUri: String? = null
     ): String {
+        // One pending row per (source, target, task). Every capture path that can rediscover the
+        // same work — a listener reconnect, a manual force-check, a periodic sweep — funnels
+        // through here, and each used to mint a fresh requestId for it: the same notification
+        // could hold several live rows at once, each independently processed, each independently
+        // answered. Re-sending the stored row instead keeps delivery durable (that is the send
+        // below) without multiplying the request. The task string is the identity because callers
+        // already encode what the request is about in it (notification key, expense id, ...);
+        // rows past the retry cap dedupe too — an explicit re-enqueue is exactly the manual
+        // retry that should reach a dormant row.
+        val duplicate = dao.getAll().firstOrNull { row ->
+            row.targetPackage == targetPackage &&
+                VoxLlmRequest.fromJson(row.payloadJson)?.let {
+                    it.sourcePackage == sourcePackage && splitRequestId(it.task).first == task
+                } == true
+        }
+        if (duplicate != null) {
+            val stored = VoxLlmRequest.fromJson(duplicate.payloadJson)
+            if (stored != null) {
+                dao.incrementAttempt(duplicate.requestId, System.currentTimeMillis())
+                sender(context, stored, duplicate.targetPackage)
+                return duplicate.requestId
+            }
+        }
+
         val requestId = UUID.randomUUID().toString()
         val request = VoxLlmRequest(
             sourcePackage = sourcePackage,

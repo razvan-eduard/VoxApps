@@ -10,12 +10,15 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 JNI_DIR="$PROJECT_ROOT/vox-commander/src/main/jniLibs/arm64-v8a"
 
-# Named for the llama.cpp commit the library was built from, so the address the app asks for
-# identifies a build rather than a shelf — same rule as whisper's tags. Published releases are
-# permanent: a tag's assets are never deleted or replaced, so every address an installed APK
-# carries keeps resolving.
+# Named for the build fingerprint (scripts/llama_build_pin.sh: submodule + JNI bridge + CMake
+# config), so the address the app asks for identifies a build rather than a shelf. Published
+# releases are permanent: a tag's assets are never deleted or replaced, so every address an
+# installed APK carries keeps resolving — which is also why the pin must cover the bridge: a
+# bridge change with an unmoved tag would leave this script nothing valid to publish to.
+# The upstream commit is still resolved separately for the human-facing release notes.
 LLAMA_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse "HEAD:vox-commander/src/main/cpp/llama.cpp")
-TAG="llama-libs-${LLAMA_COMMIT:0:12}"
+LLAMA_PIN=$("$PROJECT_ROOT/scripts/llama_build_pin.sh")
+TAG="llama-libs-${LLAMA_PIN:0:12}"
 
 # --verify: after publishing (or when everything already matches), download each asset over the
 # same anonymous URL every install uses and hash it against the local build. The API digest

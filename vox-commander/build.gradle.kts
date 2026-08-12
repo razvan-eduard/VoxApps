@@ -536,16 +536,14 @@ val hashLlamaLibs = tasks.register<HashEngineLibs>("recordLlamaDigests") {
     description = "Record the published llama libraries' SHA-256 digests for the APK to verify downloads against."
     outputs.upToDateWhen { false }
     dependsOn("autoCompileLlama")
-    // The index, not HEAD: `ls-files -s` answers with the staged gitlink, which equals HEAD's pin
-    // on any committed checkout and still answers on the one checkout HEAD cannot serve — the
-    // commit that introduces the submodule. Output shape: "160000 <sha> 0\t<path>".
+    // The build fingerprint, not the submodule gitlink: libllama.so is submodule + JNI bridge +
+    // CMake config, and the published tag must move when any of them does. One script owns the
+    // computation so this task, the publish script, and the release gate can never derive
+    // different addresses for the same tree.
     engineCommit.set(
         providers.exec {
-            commandLine(
-                "git", "-C", rootDir.absolutePath,
-                "ls-files", "-s", "vox-commander/src/main/cpp/llama.cpp"
-            )
-        }.standardOutput.asText.map { it.trim().split(Regex("\\s+"))[1] }
+            commandLine("bash", rootDir.resolve("scripts/llama_build_pin.sh").absolutePath)
+        }.standardOutput.asText.map { it.trim() }
     )
     tagPrefix.set("llama-libs")
     digestAssetName.set("llama-libs.sha256")

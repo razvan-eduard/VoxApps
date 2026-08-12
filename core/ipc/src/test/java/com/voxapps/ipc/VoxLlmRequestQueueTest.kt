@@ -63,6 +63,69 @@ class VoxLlmRequestQueueTest {
     }
 
     @Test
+    fun `re-enqueueing a task with a live pending row re-sends that row instead of inserting a second`() = runTest {
+        val storedId = "11111111-2222-3333-4444-555555555555"
+        val stored = VoxLlmRequest(
+            sourcePackage = "com.voxapps.expenses",
+            task = "NOTIFICATION_EXPENSE_PARSE:encodedKey:$storedId",
+            promptText = "prompt"
+        )
+        coEvery { dao.getAll() } returns listOf(
+            PendingLlmRequestEntity(
+                requestId = storedId,
+                payloadJson = stored.toJson(),
+                targetPackage = "com.voxapps.commander",
+                createdAt = 1L,
+                attemptCount = 3,
+                lastAttemptAt = 1L
+            )
+        )
+
+        val returnedId = queue.enqueueAndSend(
+            context = mockk(relaxed = true),
+            sourcePackage = "com.voxapps.expenses",
+            task = "NOTIFICATION_EXPENSE_PARSE:encodedKey",
+            promptText = "a freshly rebuilt prompt",
+            targetPackage = "com.voxapps.commander"
+        )
+
+        assertEquals(storedId, returnedId)
+        coVerify(exactly = 0) { dao.insert(any()) }
+        coVerify(exactly = 1) { dao.incrementAttempt(storedId, any()) }
+        // The stored payload is what goes out — its task tag matches the row a reply will fulfil.
+        assertEquals(stored.task, sentRequests.single().first.task)
+    }
+
+    @Test
+    fun `a different task from the same source is not treated as a duplicate`() = runTest {
+        val stored = VoxLlmRequest(
+            sourcePackage = "com.voxapps.expenses",
+            task = "NOTIFICATION_EXPENSE_PARSE:otherKey:11111111-2222-3333-4444-555555555555",
+            promptText = "prompt"
+        )
+        coEvery { dao.getAll() } returns listOf(
+            PendingLlmRequestEntity(
+                requestId = "11111111-2222-3333-4444-555555555555",
+                payloadJson = stored.toJson(),
+                targetPackage = "com.voxapps.commander",
+                createdAt = 1L,
+                attemptCount = 1,
+                lastAttemptAt = 1L
+            )
+        )
+
+        queue.enqueueAndSend(
+            context = mockk(relaxed = true),
+            sourcePackage = "com.voxapps.expenses",
+            task = "NOTIFICATION_EXPENSE_PARSE:thisKey",
+            promptText = "prompt",
+            targetPackage = "com.voxapps.commander"
+        )
+
+        coVerify(exactly = 1) { dao.insert(any()) }
+    }
+
+    @Test
     fun `splitRequestId leaves a task with no requestId segment untouched`() {
         val (task, requestId) = VoxLlmRequestQueue.splitRequestId("CATEGORY_DEDUPLICATION")
         assertEquals("CATEGORY_DEDUPLICATION", task)

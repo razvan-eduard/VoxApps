@@ -85,6 +85,10 @@ class LlmHookEngineSelectorTest {
 
     @Test
     fun `local LLM unavailable produces a descriptive error`() = runTest {
+        // localLlmEngine here is a bare AssistantEngine mock, not a real LocalLlmInterpreter, so
+        // the selector's cast for lastErrorReason can't find a specific cause — the generic
+        // unavailable fallback is correct here. The specific causes (busy/timeout, model missing,
+        // generation failure) live on LocalLlmInterpreter, exercised by that class's own tests.
         mockkObject(RemoteModelRegistry)
         every { RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
         every { settingsRepo.getSettingsSnapshot() } returns settingsWith("nlu_llm")
@@ -93,7 +97,10 @@ class LlmHookEngineSelectorTest {
         val outcome = selector.run("hi")
 
         assertTrue(outcome is RawPromptOutcome.Error)
-        assertEquals("Local model unavailable (not downloaded or failed to load)", (outcome as RawPromptOutcome.Error).reason)
+        assertEquals(
+            "Local engine: unavailable (not downloaded or failed to load)",
+            (outcome as RawPromptOutcome.Error).reason
+        )
     }
 
     @Test

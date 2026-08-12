@@ -56,6 +56,35 @@ class LlamaBridgeSmokeTest {
             assertEquals("grammar was not attached to the sampler", "XOK", out)
 
             assertTrue("nothing resident after a completion", LlamaBridgeImpl.contextTokenCount(handle) > 0)
+
+            // Slot isolation: a raw-slot completion must not evict slot 0's resident prefix, and
+            // a constrained completion must still answer correctly after alternating. The token
+            // count strictly growing across the raw call is the eviction check — under one
+            // sequence the raw call would first drop slot 0's tokens.
+            val residentAfterNlu = LlamaBridgeImpl.contextTokenCount(handle)
+            LlamaBridgeImpl.complete(
+                handle,
+                systemPrompt = "",
+                userText = "The little dog",
+                grammarGbnf = "",
+                maxTokens = 4,
+                temperature = 0.1f,
+                slot = com.voxapps.llamacpp.LlamaBridge.SLOT_RAW
+            )
+            assertTrue(
+                "raw-slot call evicted the NLU slot's resident tokens",
+                LlamaBridgeImpl.contextTokenCount(handle) > residentAfterNlu
+            )
+            val outAfterAlternation = LlamaBridgeImpl.complete(
+                handle,
+                systemPrompt = "",
+                userText = "Once upon a time",
+                grammarGbnf = "root ::= \"XOK\"",
+                maxTokens = 8,
+                temperature = 0.1f
+            )
+            assertEquals("constrained output wrong after slot alternation", "XOK", outAfterAlternation)
+
             LlamaBridgeImpl.clearMemory(handle)
             assertEquals("clearMemory left tokens resident", 0, LlamaBridgeImpl.contextTokenCount(handle))
         } finally {

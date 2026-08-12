@@ -54,6 +54,12 @@ class LlmHookEngineSelector(
     private fun failureReason(processor: String): String = when (processor) {
         Strings.AiProcessors.OPENAI ->
             "OpenAI request failed: ${(openAiEngine as? OpenAiInterpreter)?.lastErrorReason ?: "unknown error"}"
-        else -> "Local model unavailable (not downloaded or failed to load)"
+        // Same pattern as the OpenAI arm: the engine records why it answered null, so a busy
+        // engine (queued hooks, a slow cold prefill) is reported as busy — a transient the
+        // caller's queue retries — instead of being blamed on the model's presence.
+        else -> "Local engine: ${
+            (localLlmEngine as? com.voxapps.commander.domain.intent.interpreter.LocalLlmInterpreter)
+                ?.lastErrorReason ?: "unavailable (not downloaded or failed to load)"
+        }"
     }
 }

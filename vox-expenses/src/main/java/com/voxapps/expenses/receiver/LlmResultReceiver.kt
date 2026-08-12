@@ -279,7 +279,14 @@ class LlmResultReceiver : BroadcastReceiver() {
                         val cleanVendor = FieldCleaner.clean(parsed.vendor, "vendor", "NotificationExpense")
                         val cleanBank = knownBankName ?: FieldCleaner.clean(parsed.bank, "bank", "NotificationExpense")
                         val cleanCategory = FieldCleaner.clean(parsed.category, "category", "NotificationExpense")
-                        if (settings.autoAcceptNotificationExpenses) {
+                        // The parser already refuses a payment without an amount; this is the
+                        // other half of that gate. A reply naming neither a title nor a vendor
+                        // identifies nothing — auto-accepting it files an anonymous record the
+                        // user can only puzzle over. Free-text model output earns auto-accept
+                        // only when it carries something recognizable; otherwise it goes to the
+                        // pending-review list, where approving it is a human call.
+                        val identifiable = !cleanTitle.isNullOrBlank() || !cleanVendor.isNullOrBlank()
+                        if (settings.autoAcceptNotificationExpenses && identifiable) {
                             // Same insert path as ExpensesStateManager.approveNotificationExpense —
                             // skips the pending-review queue entirely. It's still a normal, editable
                             // expense row afterward, just created without an explicit Approve tap.

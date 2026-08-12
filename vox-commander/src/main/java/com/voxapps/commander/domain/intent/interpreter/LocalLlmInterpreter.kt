@@ -26,6 +26,12 @@ import kotlinx.coroutines.withTimeoutOrNull
  *  See [LocalLlmInterpreter.mutex]'s doc comment for why a serialized call can still need one. */
 private const val LOCAL_LLM_TIMEOUT_MS = 90_000L
 
+/** Raw-prompt calls come from background WorkManager jobs (satellite LLM hooks), where nobody is
+ *  watching a spinner — the constraint is WorkManager's own ~10-minute budget, not interactive
+ *  latency. The interactive 90s would cut off a cold call that pays model load plus a long task
+ *  prompt's full prefill; this covers the queue wait and the run together. */
+private const val RAW_PROMPT_TIMEOUT_MS = 300_000L
+
 /** Total context budget (input + output) — the NLU system prompt alone exceeds 1900 tokens, and
  *  every model in the lineup is served with at least a 4096-token context. */
 private const val LLM_CONTEXT_TOKENS = 4096
@@ -135,6 +141,12 @@ class LocalLlmInterpreter(
     private var cachedGrammar: String? = null
     private var cachedGrammarKey: String? = null
     @Volatile private var isProcessing = false
+
+    /** Why the most recent [rawPrompt] returned null — read by the LLM-hook error path the same
+     *  way OpenAiInterpreter.lastErrorReason is, so a reply can say what actually went wrong
+     *  instead of blaming the model's presence for every failure shape. */
+    @Volatile var lastErrorReason: String? = null
+        private set
 
     /** Serializes every call that touches [handle] — this class is a single process-wide singleton
      *  (see AppContainer), and [setupLlm]'s `if (handle != 0L) return` is a check-then-act with no
@@ -250,15 +262,22 @@ class LocalLlmInterpreter(
     /**
      * Warms the engine up front — runtime load, model mmap, and one dummy decode that leaves the
      * system prompt's KV prefix resident — so the user's first real command doesn't pay the full
-     * prefill (~25s of prompt evaluation for the ~1900-token NLU prompt on a mid-range phone,
-     * measured). The bridge reuses the longest common prompt prefix across calls, so the prefix
-     * this leaves behind is exactly what the first command's prompt then starts from.
+     * prefill (~25s of prompt evaluation for the ~1900-token NLU prompt on a mid-range phone with
+     * a sub-1B model; minutes on a 3B). The bridge reuses the longest common prompt prefix across
+     * calls, so the prefix this leaves behind is exactly what the first command's prompt then
+     * starts from.
+     *
+     * The background budget, not the interactive one: nobody is waiting on preload, and its
+     * completing is precisely what makes the 90s interactive budget honest for a large model —
+     * a command then pays only its own input tail. Cutting preload off at 90s left a big model's
+     * prefill forever half-done and wiped: every command restarted it from token zero inside a
+     * window it could never fit.
      */
     suspend fun preload(modelFilterLang: String? = null): Boolean =
         withContext(Dispatchers.IO) {
             val selection = activeSelection() ?: return@withContext false
             mutex.withLock {
-                withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) {
+                withTimeoutOrNull(RAW_PROMPT_TIMEOUT_MS) {
                     setupLlm(selection)
                     if (handle == 0L) return@withTimeoutOrNull false
                     val settings = settingsRepo.getSettingsSnapshot()
@@ -360,11 +379,12 @@ class LocalLlmInterpreter(
         userText: String,
         grammar: String,
         maxTokens: Int,
-        temperature: Float = 0.1f
+        temperature: Float = 0.1f,
+        slot: Int = LlamaBridge.SLOT_NLU
     ): String? = suspendCancellableCoroutine { cont ->
         cont.invokeOnCancellation { bridge.cancel(handle) }
         val result = runCatching {
-            bridge.complete(handle, systemPrompt, userText, grammar, maxTokens, temperature)
+            bridge.complete(handle, systemPrompt, userText, grammar, maxTokens, temperature, slot)
         }
         if (cont.isActive) {
             cont.resumeWith(result)
@@ -373,10 +393,21 @@ class LocalLlmInterpreter(
 
     override suspend fun rawPrompt(promptText: String, imageUri: String?): String? =
         withContext(Dispatchers.IO) {
-            val selection = activeSelection() ?: return@withContext null
-            mutex.withLock {
-                withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) { doRawPrompt(promptText, selection) }
+            val selection = activeSelection()
+            if (selection == null) {
+                lastErrorReason = "no local model selected"
+                return@withContext null
             }
+            // Busy is the default verdict: if the timeout fires — waiting for the mutex or
+            // mid-decode — nothing below ran to record a more specific reason, and "busy" is the
+            // truthful one (the caller's queue retries it later). The timeout wraps the lock wait
+            // too, so a burst of queued hooks fails fast as busy instead of stacking up forever.
+            lastErrorReason = "engine busy — did not finish within ${RAW_PROMPT_TIMEOUT_MS / 1000}s"
+            val out = withTimeoutOrNull(RAW_PROMPT_TIMEOUT_MS) {
+                mutex.withLock { doRawPrompt(promptText, selection) }
+            }
+            if (out != null) lastErrorReason = null
+            out
         }
 
     private suspend fun doRawPrompt(promptText: String, selection: EngineSelection): String? {
@@ -386,15 +417,25 @@ class LocalLlmInterpreter(
         isProcessing = true
         try {
             setupLlm(selection)
-            if (handle == 0L) return null
+            if (handle == 0L) {
+                lastErrorReason = "model not available (not downloaded or failed to load)"
+                return null
+            }
             // No system prompt and no grammar: a raw-prompt call carries its own framing per task
             // (satellite LLM hook), and its output is free text the caller post-processes.
             return try {
-                completeCancellable("", promptText, "", maxTokens = 512, temperature = 0.2f)
+                // Raw prompts run in their own KV slot: their framing shares no prefix with the
+                // NLU system prompt, so under one slot every hook call evicted the preloaded NLU
+                // prefix and the next voice command repaid the whole prefill (and vice versa).
+                completeCancellable(
+                    "", promptText, "", maxTokens = 512, temperature = 0.2f,
+                    slot = LlamaBridge.SLOT_RAW
+                )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Logger.log("LLM rawPrompt generation failed: ${e.message}", TAG)
+                lastErrorReason = "generation failed: ${e.message}"
                 null
             }
         } finally {
