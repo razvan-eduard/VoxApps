@@ -51,7 +51,15 @@ data class AppState(
     val themeColored: Boolean,
     val isWakeWordServiceListening: Boolean,
     val isVerboseLoggingEnabled: Boolean,
-    val isExperimentalVulkanEnabled: Boolean,
+    // Per-engine GPU acceleration — the user's wish and this device's verdict, per engine.
+    val whisperGpuEnabled: Boolean,
+    val llamaGpuEnabled: Boolean,
+    val whisperGpuIncompatible: Boolean,
+    val whisperGpuProbeDone: Boolean,
+    val whisperGpuRuntimeVerified: Boolean,
+    val llamaGpuIncompatible: Boolean,
+    val llamaGpuProbeDone: Boolean,
+    val llamaGpuRuntimeVerified: Boolean,
     val isWhisperSystemEnabled: Boolean,
     val downloadPreference: String,
 
@@ -121,10 +129,9 @@ data class AppState(
             val voiceProcessor = settings.voiceProcessor
             val modelFilterLang = settings.modelFilterLang
             val activeVoiceModelId = settings.activeVoiceModelId
-            // Whose declaration answers for this selection. See SttEngines.backingEngineKey — every
-            // processor is its own engine key except the one that is a mode of another engine.
-            val voiceEngineKey =
-                com.voxapps.commander.domain.engine.SttEngines.backingEngineKey(voiceProcessor)
+            // Every stored processor value is an engine key of its own — GPU mode is a property
+            // of the engine (the shared GPU state), never a processor key.
+            val voiceEngineKey = voiceProcessor
 
             // A directory-packaged engine keeps one custom model per language; a single-file engine
             // keeps one. Both live under the engine's own key, so the selection resolves its own.
@@ -203,7 +210,14 @@ data class AppState(
                 themeColored = settings.themeColored,
                 isWakeWordServiceListening = isWakeWordServiceListening,
                 isVerboseLoggingEnabled = settings.debugLoggingEnabled,
-                isExperimentalVulkanEnabled = settings.experimentalVulkanEnabled,
+                whisperGpuEnabled = settings.whisperGpuEnabled,
+                llamaGpuEnabled = settings.llamaGpuEnabled,
+                whisperGpuIncompatible = settings.whisperGpuIncompatible,
+                whisperGpuProbeDone = settings.whisperGpuProbeDone,
+                whisperGpuRuntimeVerified = settings.whisperGpuRuntimeVerified,
+                llamaGpuIncompatible = settings.llamaGpuIncompatible,
+                llamaGpuProbeDone = settings.llamaGpuProbeDone,
+                llamaGpuRuntimeVerified = settings.llamaGpuRuntimeVerified,
                 isWhisperSystemEnabled = settings.isWhisperSystemEnabled,
                 downloadPreference = settings.downloadPreference,
                 ttsEnabled = settings.ttsEnabled,
@@ -262,7 +276,14 @@ data class AppState(
             themeColored = false,
             isWakeWordServiceListening = false,
             isVerboseLoggingEnabled = false,
-            isExperimentalVulkanEnabled = false,
+            whisperGpuEnabled = false,
+            llamaGpuEnabled = false,
+            whisperGpuIncompatible = false,
+            whisperGpuProbeDone = false,
+            whisperGpuRuntimeVerified = false,
+            llamaGpuIncompatible = false,
+            llamaGpuProbeDone = false,
+            llamaGpuRuntimeVerified = false,
             isWhisperSystemEnabled = false,
             downloadPreference = "wifi_and_metered",
             ttsEnabled = true,

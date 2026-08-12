@@ -282,22 +282,35 @@ fun AdvancedSettingsTab(
 
                     HorizontalDivider()
 
-                    // --- Whisper Vulkan (Experimental) ---
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Whisper Vulkan (Experimental)", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                            Text("Enable GPU acceleration via Vulkan. May cause crashes on some devices.", style = MaterialTheme.typography.bodySmall)
-                        }
-                        Switch(
-                            checked = uiState.isExperimentalVulkanEnabled,
-                            enabled = uiState.isWhisperSystemEnabled,
-                            onCheckedChange = { appStateManager.setExperimentalVulkanEnabled(it) }
-                        )
-                    }
+                    // --- GPU acceleration (Experimental), one switch per engine ---
+                    // The switch IS the consent gesture: enabling arms the one-shot isolated
+                    // probe, an incompatible verdict greys it out, and "Test again" forgets
+                    // this device's verdict so the next enable re-proves it.
+                    GpuAccelerationRow(
+                        title = languageManager.getString("gpu_whisper_title"),
+                        engine = com.voxapps.commander.data.preferences.SettingsRepository.GPU_WHISPER,
+                        enabled = uiState.whisperGpuEnabled,
+                        switchable = uiState.isWhisperSystemEnabled,
+                        incompatible = uiState.whisperGpuIncompatible,
+                        verified = uiState.whisperGpuRuntimeVerified,
+                        probeDone = uiState.whisperGpuProbeDone,
+                        languageManager = languageManager,
+                        appStateManager = appStateManager
+                    )
+
+                    HorizontalDivider()
+
+                    GpuAccelerationRow(
+                        title = languageManager.getString("gpu_llama_title"),
+                        engine = com.voxapps.commander.data.preferences.SettingsRepository.GPU_LLAMA,
+                        enabled = uiState.llamaGpuEnabled,
+                        switchable = true,
+                        incompatible = uiState.llamaGpuIncompatible,
+                        verified = uiState.llamaGpuRuntimeVerified,
+                        probeDone = uiState.llamaGpuProbeDone,
+                        languageManager = languageManager,
+                        appStateManager = appStateManager
+                    )
 
                     HorizontalDivider()
 
@@ -545,6 +558,61 @@ fun AdvancedSettingsTab(
 
 private fun restartApp(context: android.content.Context) {
     com.jakewharton.processphoenix.ProcessPhoenix.triggerRebirth(context)
+}
+
+/** One engine's GPU switch with its verdict line and, once a verdict exists, "Test again". */
+@Composable
+private fun GpuAccelerationRow(
+    title: String,
+    engine: String,
+    enabled: Boolean,
+    switchable: Boolean,
+    incompatible: Boolean,
+    verified: Boolean,
+    probeDone: Boolean,
+    languageManager: LanguageManager,
+    appStateManager: AppStateManager
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Text(languageManager.getString("gpu_toggle_desc"), style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(
+                checked = enabled,
+                enabled = switchable && !incompatible,
+                onCheckedChange = { appStateManager.setGpuEnabled(engine, it) }
+            )
+        }
+        val verdict = when {
+            incompatible -> languageManager.getString("gpu_verdict_incompatible")
+            verified -> languageManager.getString("gpu_verdict_verified")
+            probeDone -> languageManager.getString("gpu_verdict_probed")
+            else -> null
+        }
+        if (verdict != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    verdict,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (incompatible) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(onClick = { appStateManager.clearGpuVerdict(engine) }) {
+                    Text(languageManager.getString("gpu_test_again"))
+                }
+            }
+        }
+    }
 }
 
 private fun buildBenchmarkReport(results: List<BenchmarkResult>, systemInfo: String): String {

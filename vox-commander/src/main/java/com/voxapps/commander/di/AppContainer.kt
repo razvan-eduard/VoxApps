@@ -94,6 +94,7 @@ class AppContainer(context: Context) {
             settingsRepositoryImpl.migrateFromSharedPreferencesIfNeeded()
             settingsRepositoryImpl.migrateGoogleLlmRemoval()
             settingsRepositoryImpl.migrateLiteRtRemoval()
+            settingsRepositoryImpl.migrateWhisperVulkanRetirement()
             // Try loading from cache (fast path). If cache empty, splash screen will scan.
             // One read, reused below — this used to call getSettingsSnapshot() twice in a row, and
             // on a cold start (empty cache) each call is its own blocking DataStore round-trip.
@@ -116,7 +117,7 @@ class AppContainer(context: Context) {
             }
         }
         Logger.log("AppContainer init - starting compatibility checks", "AppContainer")
-        checkVulkanCrashCookie()
+        checkGpuCrashCookies()
 
         // Scan for Vox satellite apps (contract-implementing companions) at warmup so their NLU
         // domains are available immediately. Re-scanned on refresh from the Integrations screen.
@@ -124,21 +125,63 @@ class AppContainer(context: Context) {
     }
 
     /**
-     * Crash-cookie check. Before a real GPU transcription, [SettingsRepository.setVulkanRuntimeAttemptSync]
-     * is committed synchronously. If the process crashed natively during that GPU work,
-     * the flag survives to the next launch. Finding it pending here means the last GPU
-     * attempt killed the process, so we mark Vulkan incompatible and clear the cookie.
+     * Crash-cookie check, per engine. Before a real GPU inference on an unverified device,
+     * [SettingsRepository.setGpuRuntimeAttemptSync] is committed synchronously; a cookie still
+     * pending here means the process died mid-attempt. A death is not automatically the GPU's
+     * fault, so where the platform keeps an exit record (API 30+) only a crash counts a strike —
+     * an OOM kill, a force-stop or a swipe-away clears the cookie and counts nothing — and the
+     * verdict latches at two strikes, not one. Where there is no record (API 29, or none kept),
+     * nothing is counted: a device can only be condemned on evidence.
+     *
+     * A legacy whisper cookie (written by the pre-alignment single-engine mechanism) is honored
+     * as a whisper attempt once, then cleared.
      */
-    private fun checkVulkanCrashCookie() {
+    private fun checkGpuCrashCookies() {
         val snapshot = settingsRepository.getSettingsSnapshot()
-        Logger.log("checkVulkanCrashCookie: pending=${snapshot.vulkanRuntimeAttempt}", "VulkanProbe")
-        if (snapshot.vulkanRuntimeAttempt) {
-            kotlinx.coroutines.runBlocking { settingsRepository.setVulkanIncompatible(true) }
-            kotlinx.coroutines.runBlocking { settingsRepository.setVulkanRuntimeAttemptSync(false) }
-            Logger.log(
-                "Detected native crash during previous Vulkan GPU use -> marking incompatible",
-                "VulkanProbe"
-            )
+        val legacyWhisperCookie = snapshot.vulkanRuntimeAttempt
+        handleGpuCrashCookie(
+            SettingsRepository.GPU_WHISPER,
+            pending = snapshot.whisperGpuRuntimeAttempt || legacyWhisperCookie,
+            strikes = snapshot.whisperGpuCrashStrikes
+        )
+        handleGpuCrashCookie(
+            SettingsRepository.GPU_LLAMA,
+            pending = snapshot.llamaGpuRuntimeAttempt,
+            strikes = snapshot.llamaGpuCrashStrikes
+        )
+        if (legacyWhisperCookie) settingsRepository.setVulkanRuntimeAttemptSync(false)
+    }
+
+    private fun handleGpuCrashCookie(engine: String, pending: Boolean, strikes: Int) {
+        if (!pending) return
+        settingsRepository.setGpuRuntimeAttemptSync(engine, false)
+        val crashed = lastMainProcessExitWasNativeCrash()
+        Logger.log("GPU crash cookie pending for $engine — crash-attributed=$crashed strikes=$strikes", "GpuProbe")
+        if (crashed != true) return
+        val newStrikes = strikes + 1
+        kotlinx.coroutines.runBlocking {
+            settingsRepository.setGpuCrashStrikes(engine, newStrikes)
+            if (newStrikes >= GPU_CRASH_STRIKE_LIMIT) {
+                settingsRepository.setGpuIncompatible(engine, true)
+                settingsRepository.setGpuEnabled(engine, false)
+                Logger.log("GPU marked incompatible for $engine after $newStrikes crash strikes", "GpuProbe")
+            }
+        }
+    }
+
+    /** True/false when the platform can answer, null when it cannot (API 29, no record). */
+    private fun lastMainProcessExitWasNativeCrash(): Boolean? {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return null
+        return try {
+            val am = appContext.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+                as android.app.ActivityManager
+            val record = am.getHistoricalProcessExitReasons(appContext.packageName, 0, 8)
+                .firstOrNull { it.processName == appContext.packageName }
+                ?: return null
+            record.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE
+        } catch (e: Exception) {
+            Logger.log("Exit-record lookup failed: ${e.message}", "GpuProbe")
+            null
         }
     }
 
@@ -155,6 +198,10 @@ class AppContainer(context: Context) {
     }
 
     companion object {
+        /** Crash-attributed strikes before a GPU verdict latches — one unlucky death is not a
+         *  condemnation, two attributed native crashes are. */
+        private const val GPU_CRASH_STRIKE_LIMIT = 2
+
         private const val DB_NAME = "vox-database"
     }
 }

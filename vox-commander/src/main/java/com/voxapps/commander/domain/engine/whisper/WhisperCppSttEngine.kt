@@ -22,8 +22,11 @@ import java.io.File
 class WhisperCppSttEngine(
     private val context: Context,
     private val settingsRepo: SettingsRepository,
-    private val forceGpu: Boolean = false,
-    private val onVulkanIncompatible: () -> Unit = {}
+    private val onVulkanIncompatible: () -> Unit = {},
+    /** Benchmark-only backend forcing: null lets the shared GPU state decide (production);
+     *  true/false pins one backend for a comparison run. A latched incompatible verdict wins
+     *  over a forced true — the benchmark reports that as a skip, it does not override it. */
+    private val gpuOverride: Boolean? = null
 ) : BaseVoxEngine(), SttEngine {
 
     override val engineKey: String = ENGINE_KEY
@@ -85,9 +88,10 @@ class WhisperCppSttEngine(
         }
         val snapshot = settingsRepo.getSettingsSnapshot()
 
-        // TIER 1: Try Vulkan (GPU)
+        // TIER 1: Try Vulkan (GPU) — the wish and the verdict both live in the shared per-engine
+        // GPU state now; there is no per-construction flag, so every caller gets the same answer.
         run {
-            val attemptVulkan = forceGpu && !snapshot.vulkanIncompatible
+            val attemptVulkan = (gpuOverride ?: snapshot.whisperGpuEnabled) && !snapshot.whisperGpuIncompatible
             if (attemptVulkan) {
                 Logger.log("Attempting to initialize with VULKAN...", TAG)
                 try {
@@ -98,8 +102,12 @@ class WhisperCppSttEngine(
                         return@withContext true
                     }
                 } catch (e: Throwable) {
+                    // A caught init failure is deterministic evidence, unlike a process death —
+                    // no strike counting needed to latch it.
                     Logger.log("VULKAN init failed. Marking as incompatible. ${e.message}", TAG)
-                    kotlinx.coroutines.runBlocking { settingsRepo.setVulkanIncompatible(true) }
+                    kotlinx.coroutines.runBlocking {
+                        settingsRepo.setGpuIncompatible(SettingsRepository.GPU_WHISPER, true)
+                    }
                     withContext(Dispatchers.Main) { onVulkanIncompatible() }
                 }
             }
@@ -150,22 +158,24 @@ class WhisperCppSttEngine(
                 // try/catch. Commit a marker before real GPU work; if the process dies,
                 // AppContainer detects the leftover cookie next launch and disables Vulkan.
                 val snapshot = settingsRepo.getSettingsSnapshot()
-                val guardGpu = isUsingGpu && !snapshot.vulkanRuntimeVerified
-                if (guardGpu) settingsRepo.setVulkanRuntimeAttemptSync(true)
+                val guardGpu = isUsingGpu && !snapshot.whisperGpuRuntimeVerified
+                if (guardGpu) settingsRepo.setGpuRuntimeAttemptSync(SettingsRepository.GPU_WHISPER, true)
 
                 // Force language if provided to prevent Cyrillic/Slavic hallucinations
                 val result = currentContext.transcribeData(floatAudio, threads, language = langCode, printTimestamp = false)
 
                 if (guardGpu) {
                     // Survived a real GPU transcription -> device is genuinely compatible.
-                    settingsRepo.setVulkanRuntimeAttemptSync(false)
-                    kotlinx.coroutines.runBlocking { settingsRepo.setVulkanRuntimeVerified(true) }
+                    settingsRepo.setGpuRuntimeAttemptSync(SettingsRepository.GPU_WHISPER, false)
+                    kotlinx.coroutines.runBlocking {
+                        settingsRepo.setGpuRuntimeVerified(SettingsRepository.GPU_WHISPER, true)
+                    }
                 }
 
                 result.trim()
             } catch (e: Exception) {
                 Logger.log("Transcription failed: ${e.message}", TAG)
-                if (isUsingGpu) settingsRepo.setVulkanRuntimeAttemptSync(false)
+                if (isUsingGpu) settingsRepo.setGpuRuntimeAttemptSync(SettingsRepository.GPU_WHISPER, false)
                 "Error: ${e.message}"
             }
         }

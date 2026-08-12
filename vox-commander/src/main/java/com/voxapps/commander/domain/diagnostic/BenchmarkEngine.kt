@@ -70,11 +70,11 @@ class BenchmarkEngine(
 
         // --- 2. VULKAN STATUS ---
         diagInfo.append("--- WHISPER VULKAN COMPATIBILITY ---\n")
-        if (snapshot.vulkanIncompatible) {
+        if (snapshot.whisperGpuIncompatible) {
             diagInfo.append("Status: INCOMPATIBLE (GPU crashes during Whisper inference)\n")
-        } else if (snapshot.vulkanRuntimeVerified) {
+        } else if (snapshot.whisperGpuRuntimeVerified) {
             diagInfo.append("Status: VERIFIED (GPU inference tested successfully)\n")
-        } else if (snapshot.vulkanProbeDone) {
+        } else if (snapshot.whisperGpuProbeDone) {
             diagInfo.append("Status: COMPATIBLE (probe passed, inference not yet verified)\n")
         } else {
             diagInfo.append("Status: UNKNOWN (probe not yet run)\n")
@@ -99,7 +99,7 @@ class BenchmarkEngine(
 
             for (model in downloadedWhisperModels) {
                 runSingleWhisperBenchmark(model, forceGpu = false, dummyAudio)
-                if (settingsRepo.getSettingsSnapshot().vulkanIncompatible) {
+                if (settingsRepo.getSettingsSnapshot().whisperGpuIncompatible) {
                     appStateManager.updateBenchmarkResult(BenchmarkResult(
                         engine = "Whisper Vulkan",
                         model = model.label,
@@ -168,7 +168,7 @@ class BenchmarkEngine(
                     .find { it.id == activeModelId }
                 val modelLabel = activeModel?.label ?: activeModelId
                 diagInfo.append("Model: $activeModelId | Label: $modelLabel (active)\n")
-                runLocalLlmBenchmark(modelLabel, localLlmInterpreter)
+                runLocalLlmBenchmark(modelLabel, localLlmInterpreter, snapshot.llamaGpuIncompatible, diagInfo)
             } else if (!processorIsLocalLlm) {
                 diagInfo.append("NLU Model: skipped — active processor '${snapshot.aiProcessor}' is not a local LLM\n")
             } else {
@@ -193,7 +193,7 @@ class BenchmarkEngine(
     private suspend fun runSingleWhisperBenchmark(model: AppModel, forceGpu: Boolean, audioData: ByteArray) {
         val label = if (forceGpu) "Whisper Vulkan" else "Whisper NEON"
         try {
-            val engine = WhisperCppSttEngine(context, settingsRepo, forceGpu = forceGpu)
+            val engine = WhisperCppSttEngine(context, settingsRepo, gpuOverride = forceGpu)
             val spec = com.voxapps.commander.domain.engine.EngineSpecs.build(
                 context, settingsRepo, engine.engineKey, model.id, settingsRepo.getSettingsSnapshot().voiceLanguage
             )
@@ -268,32 +268,83 @@ class BenchmarkEngine(
         }
     }
 
-    private suspend fun runLocalLlmBenchmark(modelLabel: String, interpreter: LocalLlmInterpreter) {
-        try {
-            val start = System.currentTimeMillis()
-            val result = interpreter.processCommand(INTENT_TEST_COMMAND)
-            val end = System.currentTimeMillis()
-            val elapsed = end - start
-
-            val validation = validateIntentPayload(result)
-            appStateManager.updateBenchmarkResult(BenchmarkResult(
-                engine = "Local LLM",
-                model = modelLabel,
-                inferenceTimeMs = elapsed,
-                rtf = 0f,
-                isSuccess = validation.isSuccess,
-                error = validation.error
-            ))
-        } catch (e: Exception) {
-            appStateManager.updateBenchmarkResult(BenchmarkResult(
-                engine = "Local LLM",
-                model = modelLabel,
-                inferenceTimeMs = 0,
-                rtf = 0f,
-                isSuccess = false,
-                error = e.message
-            ))
+    /**
+     * Both backends, two cases each. CPU always runs; GPU runs unless the device is already
+     * ruled out (then a symmetric "Skipped" row, like whisper's). Everything goes through the
+     * one shared interpreter (its mutex the sole serializer), never a second instance loading
+     * the same multi-GB model. The prompt-eval / decode split — where the backends differ most —
+     * is written to the detailed report; the table row carries the total.
+     */
+    private suspend fun runLocalLlmBenchmark(
+        modelLabel: String,
+        interpreter: LocalLlmInterpreter,
+        gpuIncompatible: Boolean,
+        diagInfo: StringBuilder
+    ) {
+        // The interactive NLU command, then a receipt-scale raw prompt — the heaviest thing the
+        // engine actually parses (Vision stitches multi-photo OCR into thousands of tokens), and
+        // the case that makes or breaks the 3B on this hardware.
+        val cases = listOf(
+            Triple("NLU", INTENT_TEST_COMMAND, false),
+            Triple("Receipt", syntheticReceiptPrompt(), true)
+        )
+        for (gpu in listOf(false, true)) {
+            val backend = if (gpu) "GPU" else "CPU"
+            if (gpu && gpuIncompatible) {
+                appStateManager.updateBenchmarkResult(BenchmarkResult(
+                    engine = "Local LLM ($backend)", model = modelLabel,
+                    inferenceTimeMs = 0, rtf = 0f, isSuccess = false,
+                    error = "Skipped (Hardware Incompatible)"
+                ))
+                continue
+            }
+            for ((caseName, prompt, raw) in cases) {
+                try {
+                    val run = interpreter.runForBenchmark(prompt, forceGpu = gpu, raw = raw)
+                    if (run == null) {
+                        appStateManager.updateBenchmarkResult(BenchmarkResult(
+                            engine = "Local LLM ($backend/$caseName)", model = modelLabel,
+                            inferenceTimeMs = 0, rtf = 0f, isSuccess = false,
+                            error = "no result (busy/timeout)"
+                        ))
+                        continue
+                    }
+                    val ok = if (raw) !run.text.isNullOrBlank() else validateIntentPayload(run.intent).isSuccess
+                    val prefillTps = if (run.promptEvalMs > 0) run.promptTokens * 1000f / run.promptEvalMs else 0f
+                    val decodeTps = if (run.decodeMs > 0) run.decodeTokens * 1000f / run.decodeMs else 0f
+                    diagInfo.append(
+                        "LLM $backend/$caseName: total=${run.totalMs}ms " +
+                            "prefill=${run.promptTokens}tok/${run.promptEvalMs}ms (${"%.1f".format(prefillTps)} tok/s) " +
+                            "decode=${run.decodeTokens}tok/${run.decodeMs}ms (${"%.1f".format(decodeTps)} tok/s)\n"
+                    )
+                    appStateManager.updateBenchmarkResult(BenchmarkResult(
+                        engine = "Local LLM ($backend/$caseName)", model = modelLabel,
+                        inferenceTimeMs = run.totalMs, rtf = prefillTps,
+                        isSuccess = ok, error = if (ok) null else "invalid/empty output"
+                    ))
+                } catch (e: Exception) {
+                    appStateManager.updateBenchmarkResult(BenchmarkResult(
+                        engine = "Local LLM ($backend/$caseName)", model = modelLabel,
+                        inferenceTimeMs = 0, rtf = 0f, isSuccess = false, error = e.message
+                    ))
+                }
+            }
         }
+    }
+
+    /** ~1500 tokens of receipt-shaped lines — a stand-in for a stitched multi-photo Vision OCR,
+     *  the largest raw prompt the engine sees in production. */
+    private fun syntheticReceiptPrompt(): String {
+        val header = "Parse this receipt into structured JSON.\nSTORE: MEGA MART #4471\nDATE: 2026-08-12\n"
+        val line = StringBuilder(header)
+        var i = 1
+        // ~40 items keeps it in the low-thousands of tokens without risking the 4096 context ceiling.
+        while (i <= 40) {
+            line.append("ITEM $i  Product name ${'A' + (i % 26)} large  QTY 1  UNIT 3.4$i  TOTAL 3.4$i\n")
+            i++
+        }
+        line.append("SUBTOTAL 137.55\nVAT 19% 26.13\nTOTAL 163.68\nCARD **** 1234 APPROVED\n")
+        return line.toString()
     }
 
     private suspend fun runOpenAiIntentBenchmark() {

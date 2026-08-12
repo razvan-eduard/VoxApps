@@ -207,19 +207,19 @@ class ModelDownloaderTest {
 
     @Test
     fun `deleteUnusedModels protects active voice and intent models`() = runBlocking {
-        every { RemoteModelRegistry.getExtension(Strings.Processors.WHISPER_VULKAN) } returns ".bin"
+        every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
         every { RemoteModelRegistry.getExtension("nlu_llm") } returns ".gguf"
 
         // Create files at the exact paths resolveLocalFile returns
-        val activeVoice = downloader.resolveLocalFile("base", Strings.Processors.WHISPER_VULKAN)!!
+        val activeVoice = downloader.resolveLocalFile("base", "stt_whisper")!!
         activeVoice.writeText("active voice")
-        val unusedModel = downloader.resolveLocalFile("tiny", Strings.Processors.WHISPER_VULKAN)!!
+        val unusedModel = downloader.resolveLocalFile("tiny", "stt_whisper")!!
         unusedModel.writeText("unused")
         val essentialDir = File(tempDir, "transcriptions")
         essentialDir.mkdirs()
 
         val settings = TestDataFactory.createAppSettings(
-            voiceProcessor = Strings.Processors.WHISPER_VULKAN,
+            voiceProcessor = "stt_whisper",
             aiProcessor = "nlu_llm",
             activeVoiceModelId = "base",
             activeIntentModelId = "qwen",
@@ -247,15 +247,15 @@ class ModelDownloaderTest {
      */
     @Test
     fun `deleteUnusedModels keeps a model the user imported`() = runBlocking {
-        every { RemoteModelRegistry.getExtension(Strings.Processors.WHISPER_VULKAN) } returns ".bin"
+        every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
 
         val custom = File(tempDir, "stt_whisper.bin")
         custom.writeText("the user's own model")
-        val unused = downloader.resolveLocalFile("tiny", Strings.Processors.WHISPER_VULKAN)!!
+        val unused = downloader.resolveLocalFile("tiny", "stt_whisper")!!
         unused.writeText("unused")
 
         val settings = TestDataFactory.createAppSettings(
-            voiceProcessor = Strings.Processors.WHISPER_VULKAN,
+            voiceProcessor = "stt_whisper",
             activeVoiceModelId = "base",
             downloadedModelIds = setOf("tiny"),
             customModelPaths = mapOf("stt_whisper" to custom.absolutePath)

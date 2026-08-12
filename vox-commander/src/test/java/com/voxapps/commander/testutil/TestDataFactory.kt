@@ -292,7 +292,7 @@ object TestDataFactory {
         downloadedModelIds: Set<String> = setOf("base"),
         vulkanProbeDone: Boolean = true
     ) = createAppSettings(
-        voiceProcessor = com.voxapps.commander.utils.Strings.Processors.WHISPER_VULKAN,
+        voiceProcessor = "stt_whisper",
         activeVoiceModelId = activeVoiceModelId,
         downloadedModelIds = downloadedModelIds,
         vulkanProbeDone = vulkanProbeDone

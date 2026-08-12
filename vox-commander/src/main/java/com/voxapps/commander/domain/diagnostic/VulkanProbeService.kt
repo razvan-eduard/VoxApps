@@ -8,7 +8,10 @@ import android.os.Looper
 import android.os.Message
 import android.os.Messenger
 import android.os.RemoteException
+import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.logging.Logger
+import com.voxapps.llamacpp.LibLlama
+import com.voxapps.llamacpp.LlamaBridgeImpl
 import com.whispercpp.whisper.WhisperContext
 import com.whispercpp.whisper.WhisperLib
 import java.io.File
@@ -16,20 +19,23 @@ import kotlinx.coroutines.runBlocking
 import kotlin.concurrent.thread
 
 /**
- * Runs a full Whisper GPU inference test in an ISOLATED process (declared via android:process
- * in the manifest). This validates the entire GPU pipeline (attention, layernorm, etc.)
- * exactly as used in real transcription. If the GPU workload crashes the process natively,
- * only this process dies; the client detects the disconnect and marks Vulkan incompatible,
- * keeping the main app crash-free.
+ * Runs a real GPU inference for one engine in an ISOLATED process (declared via android:process
+ * in the manifest) — whisper transcribes a second of silence, llama decodes a grammar sentinel —
+ * validating the entire GPU pipeline exactly as production uses it. If the GPU workload crashes
+ * the process natively, only this process dies; the client observes the disconnect and
+ * attributes it, keeping the main app crash-free. Which engine is probed rides in
+ * [EXTRA_ENGINE] ([SettingsRepository.GPU_WHISPER] / [SettingsRepository.GPU_LLAMA]).
  */
 class VulkanProbeService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val messenger = Messenger(IncomingHandler())
     private var modelPath: String? = null
+    private var engine: String = SettingsRepository.GPU_WHISPER
 
     override fun onBind(intent: Intent?): IBinder {
         modelPath = intent?.getStringExtra(EXTRA_MODEL_PATH)
+        engine = intent?.getStringExtra(EXTRA_ENGINE) ?: SettingsRepository.GPU_WHISPER
         return messenger.binder
     }
 
@@ -40,7 +46,11 @@ class VulkanProbeService : Service() {
                     val reply = msg.replyTo
                     thread(name = "vulkan-inference-test") {
                         // May crash this (isolated) process natively on broken GPUs.
-                        val ok = runFullInferenceTest()
+                        val ok = if (engine == SettingsRepository.GPU_LLAMA) {
+                            runLlamaInferenceTest()
+                        } else {
+                            runFullInferenceTest()
+                        }
                         sendResult(reply, ok)
                     }
                 }
@@ -92,6 +102,47 @@ class VulkanProbeService : Service() {
         }
     }
 
+    /**
+     * The llama half of the probe: load the tiny test model with every layer on the GPU and
+     * decode under a sentinel grammar. Exactly `XOK` back means the whole pipeline — driver,
+     * shader compilation, matmul, grammar-constrained sampling — ran on this device's GPU and
+     * produced a correct result; a plausible-looking wrong answer fails, same as a crash.
+     */
+    private fun runLlamaInferenceTest(): Boolean {
+        val path = modelPath
+        if (path == null || !File(path).exists()) {
+            Logger.log("Llama probe model invalid or not found: $path", TAG)
+            return false
+        }
+        return try {
+            // Same no-repair contract as the whisper branch: this process answers whether the
+            // installed runtime works on this GPU; a load failure is a verdict.
+            val libDir = com.voxapps.commander.data.remote.LlamaEngineManager(this).libDir
+            if (!LibLlama.load(libDir)) {
+                Logger.log("llama native library failed to load — cannot probe", TAG)
+                return false
+            }
+            val handle = LlamaBridgeImpl.loadModel(path, nCtx = 512, nThreads = 2, nGpuLayers = -1)
+            try {
+                val out = LlamaBridgeImpl.complete(
+                    handle,
+                    systemPrompt = "",
+                    userText = "Once upon a time",
+                    grammarGbnf = "root ::= \"XOK\"",
+                    maxTokens = 8,
+                    temperature = 0.1f
+                )
+                Logger.log("Llama GPU probe output: $out", TAG)
+                out == "XOK"
+            } finally {
+                LlamaBridgeImpl.freeModel(handle)
+            }
+        } catch (e: Throwable) {
+            Logger.log("Llama GPU probe failed: ${e.message}", TAG)
+            false
+        }
+    }
+
     private fun sendResult(reply: Messenger?, ok: Boolean) {
         try {
             val m = Message.obtain(null, MSG_RESULT)
@@ -109,5 +160,6 @@ class VulkanProbeService : Service() {
         const val MSG_RUN_TEST = 1
         const val MSG_RESULT = 2
         const val EXTRA_MODEL_PATH = "model_path"
+        const val EXTRA_ENGINE = "engine"
     }
 }

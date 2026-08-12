@@ -124,6 +124,10 @@ class AppStateManager private constructor(
     private val _vulkanTestPassed = MutableStateFlow<Boolean?>(null)
     val vulkanTestPassed: StateFlow<Boolean?> = _vulkanTestPassed.asStateFlow()
 
+    /** Which engine the running/most recent GPU test is about — the modal's label. */
+    private val _gpuTestEngine = MutableStateFlow<String?>(null)
+    val gpuTestEngine: StateFlow<String?> = _gpuTestEngine.asStateFlow()
+
     // --- APP SCAN STATE ---
     private val _appScanState = MutableStateFlow<AppScanState>(AppScanState.Idle)
     val appScanState: StateFlow<AppScanState> = _appScanState.asStateFlow()
@@ -206,7 +210,6 @@ class AppStateManager private constructor(
         }.launchIn(scope)
 
         refreshPermissions()
-        setupVulkanTestTrigger()
     }
 
     /**
@@ -430,6 +433,35 @@ class AppStateManager private constructor(
     private inline fun gatedEngineKeys(predicate: (String) -> Boolean): Set<String> =
         RemoteModelRegistry.getEngineTypes().filterTo(mutableSetOf(), predicate)
 
+    /**
+     * The GPU toggle. Enabling is what arms the one-shot compatibility probe — there is no
+     * engine row to select anymore, so the toggle is the only consent gesture there is. An
+     * already-latched incompatible verdict makes enabling a no-op (the UI shows why); an
+     * exhausted probe budget just skips the probe — the engines' own tiered load plus the
+     * crash cookie still guard the first real GPU use.
+     */
+    fun setGpuEnabled(engine: String, enabled: Boolean) {
+        scope.launch {
+            if (!enabled) {
+                repo.setGpuEnabled(engine, false)
+                return@launch
+            }
+            val s = repo.getSettingsSnapshot()
+            val incompatible = if (engine == SettingsRepository.GPU_WHISPER) s.whisperGpuIncompatible else s.llamaGpuIncompatible
+            if (incompatible) return@launch
+            repo.setGpuEnabled(engine, true)
+            val probeDone = if (engine == SettingsRepository.GPU_WHISPER) s.whisperGpuProbeDone else s.llamaGpuProbeDone
+            val attempts = if (engine == SettingsRepository.GPU_WHISPER) s.whisperGpuProbeAttempts else s.llamaGpuProbeAttempts
+            if (!probeDone && attempts < MAX_GPU_PROBE_ATTEMPTS) startGpuTest(engine)
+        }
+    }
+
+    /** The "Test again" action: forgets this device's verdict for [engine] so the next
+     *  enable re-probes from scratch. */
+    fun clearGpuVerdict(engine: String) {
+        scope.launch { repo.clearGpuVerdict(engine) }
+    }
+
     fun setDebugLoggingEnabled(enabled: Boolean) {
         Logger.setEnabled(enabled)
         scope.launch { repo.setDebugLoggingEnabled(enabled) }
@@ -438,10 +470,6 @@ class AppStateManager private constructor(
     fun setDebugToastsEnabled(enabled: Boolean) {
         Logger.setToastsEnabled(enabled)
         scope.launch { repo.setDebugToastsEnabled(enabled) }
-    }
-
-    fun setExperimentalVulkanEnabled(enabled: Boolean) {
-        scope.launch { repo.setExperimentalVulkanEnabled(enabled) }
     }
 
     fun setWhisperSystemEnabled(enabled: Boolean) {
@@ -527,8 +555,12 @@ class AppStateManager private constructor(
         val currentState = _uiState.value
         val voiceProcessor = currentState.voiceProcessor
         val aiProcessor = currentState.aiProcessor
-        // Derive compatibility from voiceModelReady instead of getSettingsSnapshot()
-        val vulkanIncompatible = voiceProcessor == Strings.Processors.WHISPER_VULKAN && !currentState.voiceModelReady
+        // The stored verdict, not a derivation: the row answers the same question the settings
+        // already answer, and a derived answer disagreed with them whenever anything else made
+        // the model not ready.
+        val gpuSnapshot = repo.getSettingsSnapshot()
+        val whisperGpuIncompatible = gpuSnapshot.whisperGpuIncompatible
+        val llamaGpuIncompatible = gpuSnapshot.llamaGpuIncompatible
         
         // (libName, description, engineKey). The third column used to be a naming of its own —
         // "whisper", "vosk", "llm", "gemini" — a fourth way to say which engine something belongs
@@ -544,9 +576,10 @@ class AppStateManager private constructor(
             // Vulkan is a capability, not a file — the backend is inside libwhisper.so, and whether
             // it can be used is decided by VulkanProbeService running real GPU work in its own
             // process. Answered by the probe's verdict rather than by looking for a library.
-            Triple(VULKAN_CAPABILITY, "Vulkan GPU Acceleration", WhisperCppSttEngine.ENGINE_KEY),
+            Triple(VULKAN_CAPABILITY_WHISPER, "Whisper GPU Acceleration", WhisperCppSttEngine.ENGINE_KEY),
             Triple("libvosk.so", "Vosk Voice Engine", VoskSttEngine.ENGINE_KEY),
-            Triple("libllama.so", "llama.cpp LLM Engine", localLlmEngine)
+            Triple("libllama.so", "llama.cpp LLM Engine", localLlmEngine),
+            Triple(VULKAN_CAPABILITY_LLAMA, "LLM GPU Acceleration", localLlmEngine)
         )
 
         val statusList = soFiles.map { (name, desc, category) ->
@@ -573,11 +606,14 @@ class AppStateManager private constructor(
                         ).exists()
             }
 
-            if (name == VULKAN_CAPABILITY) {
-                // Present once the engine carrying the backend is on device; the probe's verdict is
-                // what decides whether it is usable.
-                isIncompatible = vulkanIncompatible
+            if (name == VULKAN_CAPABILITY_WHISPER) {
+                // Present once the engine carrying the backend is on device; the probe's stored
+                // verdict — not a derivation — is what decides whether it is usable.
+                isIncompatible = whisperGpuIncompatible
                 exists = libPresent("libwhisper.so")
+            } else if (name == VULKAN_CAPABILITY_LLAMA) {
+                isIncompatible = llamaGpuIncompatible
+                exists = libPresent("libllama.so")
             } else {
                 exists = libPresent(name)
                 isIncompatible = false
@@ -597,7 +633,7 @@ class AppStateManager private constructor(
                 //
                 // Whisper on the GPU is the same engine asked to run differently, and the only
                 // selection whose stored value is not an engine key of its own.
-                val selectedVoiceEngine = SttEngines.backingEngineKey(voiceProcessor)
+                val selectedVoiceEngine = voiceProcessor
                 isActive = category == selectedVoiceEngine ||
                     category == aiProcessor ||
                     category == currentState.wakeWordEngineType
@@ -627,72 +663,100 @@ class AppStateManager private constructor(
         updateRuntime { copy(refreshTrigger = refreshTrigger + 1) }
     }
 
-    // --- VULKAN TEST TRIGGER ---
-    private fun setupVulkanTestTrigger() {
-        combine(
-            _uiState,
-            _vulkanTestState
-        ) { uiState, testState ->
-            Pair(uiState, testState)
-        }.onEach { (uiState, testState) ->
-            val s = repo.getSettingsSnapshot()
-            if (testState == VulkanTestState.IDLE &&
-                uiState.voiceProcessor == Strings.Processors.WHISPER_VULKAN &&
-                uiState.voiceModelReady &&
-                !s.vulkanProbeDone &&
-                !s.vulkanIncompatible) {
-                startVulkanTest()
+    // --- GPU COMPATIBILITY TEST ---
+
+    /** Resolves the model the probe should load for [engine], or null when none is available —
+     *  whisper probes the user's active voice model; llama probes the tiny bundled-class test
+     *  asset so a 2 GB active model is never duplicated into a second process. */
+    private suspend fun gpuProbeModelPath(engine: String): String? = when (engine) {
+        SettingsRepository.GPU_WHISPER -> {
+            val modelId = _uiState.value.activeVoiceModelId ?: return null
+            val extension = com.voxapps.commander.data.remote.RemoteModelRegistry
+                .getExtension(com.voxapps.commander.domain.engine.whisper.WhisperCppSttEngine.ENGINE_KEY)
+            java.io.File(context.getExternalFilesDir(null), "$modelId$extension")
+                .takeIf { it.exists() }?.absolutePath
+        }
+        SettingsRepository.GPU_LLAMA -> withContext(Dispatchers.IO) {
+            val target = java.io.File(context.cacheDir, GPU_PROBE_LLAMA_MODEL)
+            if (target.exists() && target.length() > 0) return@withContext target.absolutePath
+            if (com.voxapps.commander.utils.NetworkMonitor.isMetered) return@withContext null
+            try {
+                val url = com.voxapps.identity.VoxRepo.RELEASE_DOWNLOAD_BASE + "nlu-assets/" + GPU_PROBE_LLAMA_MODEL
+                java.net.URL(url).openStream().use { input ->
+                    target.outputStream().use { input.copyTo(it) }
+                }
+                target.takeIf { it.length() > 0 }?.absolutePath
+            } catch (e: Exception) {
+                Logger.log("GPU probe model download failed: ${e.message}", "GpuTest")
+                target.delete()
+                null
             }
-        }.launchIn(scope)
+        }
+        else -> null
     }
 
-    private fun startVulkanTest() {
+    private fun startGpuTest(engine: String) {
         _vulkanTestState.value = VulkanTestState.RUNNING
         _vulkanTestPassed.value = null
+        _gpuTestEngine.value = engine
 
-        val modelId = _uiState.value.activeVoiceModelId
-        // The GPU probe runs the whisper engine's own model — WHISPER_VULKAN is that engine asked
-        // to run on the GPU, not an engine of its own, so it is that engine's key that resolves the
-        // file. Asked by extension, this would answer "whichever engine ships .bin files first".
-        val whisperKey = SttEngines.backingEngineKey(Strings.Processors.WHISPER_VULKAN)
-        val extension = com.voxapps.commander.data.remote.RemoteModelRegistry.getExtension(whisperKey)
-        val modelPath = java.io.File(context.getExternalFilesDir(null), "$modelId$extension").absolutePath
-
-        Logger.log("Starting Vulkan compatibility test with model: $modelPath", "VulkanTest")
-
-        com.voxapps.commander.domain.diagnostic.VulkanProbe(
-            context = context,
-            modelPath = modelPath
-        ) { outcome ->
-            when (outcome) {
-                com.voxapps.commander.domain.diagnostic.VulkanProbe.Outcome.COMPATIBLE -> {
-                    Logger.log("Vulkan test PASSED", "VulkanTest")
-                    _vulkanTestState.value = VulkanTestState.RESULT
-                    _vulkanTestPassed.value = true
-                    scope.launch { repo.setVulkanProbeDone(true) }
-                }
-                com.voxapps.commander.domain.diagnostic.VulkanProbe.Outcome.INCOMPATIBLE -> {
-                    Logger.log("Vulkan test FAILED - switching to NEON", "VulkanTest")
-                    _vulkanTestState.value = VulkanTestState.RESULT
-                    _vulkanTestPassed.value = false
-                    scope.launch {
-                        repo.setVulkanIncompatible(true)
-                        repo.setVulkanProbeDone(true)
-                        setVoiceProcessor(com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultVoiceEngineKey() ?: "")
+        scope.launch {
+            val modelPath = gpuProbeModelPath(engine)
+            if (modelPath == null) {
+                // Nothing to probe with. Not a verdict: the engine's own tiered load and the
+                // crash cookie still guard the first real GPU use.
+                Logger.log("GPU test for $engine skipped — no probe model available", "GpuTest")
+                _vulkanTestState.value = VulkanTestState.IDLE
+                _gpuTestEngine.value = null
+                return@launch
+            }
+            Logger.log("Starting GPU compatibility test for $engine with model: $modelPath", "GpuTest")
+            com.voxapps.commander.domain.diagnostic.VulkanProbe(
+                context = context,
+                modelPath = modelPath,
+                engine = engine
+            ) { outcome ->
+                when (outcome) {
+                    com.voxapps.commander.domain.diagnostic.VulkanProbe.Outcome.COMPATIBLE -> {
+                        Logger.log("GPU test for $engine PASSED", "GpuTest")
+                        _vulkanTestState.value = VulkanTestState.RESULT
+                        _vulkanTestPassed.value = true
+                        scope.launch { repo.setGpuProbeDone(engine, true) }
+                    }
+                    com.voxapps.commander.domain.diagnostic.VulkanProbe.Outcome.INCOMPATIBLE -> {
+                        Logger.log("GPU test for $engine FAILED — staying on the CPU", "GpuTest")
+                        _vulkanTestState.value = VulkanTestState.RESULT
+                        _vulkanTestPassed.value = false
+                        scope.launch {
+                            repo.setGpuIncompatible(engine, true)
+                            repo.setGpuProbeDone(engine, true)
+                            // The toggle snaps back off: an enabled flag over a latched
+                            // incompatible verdict would be a wish the engine ignores.
+                            repo.setGpuEnabled(engine, false)
+                        }
+                    }
+                    com.voxapps.commander.domain.diagnostic.VulkanProbe.Outcome.UNDECIDED -> {
+                        // Persist the attempt and stop: no automatic re-fire. The user can flip
+                        // the toggle again (until the attempt budget runs out) or Test again.
+                        Logger.log("GPU test for $engine UNDECIDED", "GpuTest")
+                        _vulkanTestState.value = VulkanTestState.IDLE
+                        _vulkanTestPassed.value = null
+                        _gpuTestEngine.value = null
+                        scope.launch {
+                            val s = repo.getSettingsSnapshot()
+                            val attempts = if (engine == SettingsRepository.GPU_WHISPER) s.whisperGpuProbeAttempts else s.llamaGpuProbeAttempts
+                            repo.setGpuProbeAttempts(engine, attempts + 1)
+                        }
                     }
                 }
-                com.voxapps.commander.domain.diagnostic.VulkanProbe.Outcome.UNDECIDED -> {
-                    Logger.log("Vulkan test UNDECIDED - will retry later", "VulkanTest")
-                    _vulkanTestState.value = VulkanTestState.IDLE
-                    _vulkanTestPassed.value = null
-                }
-            }
-        }.start()
+            }.start()
+        }
     }
 
     fun dismissVulkanTestResult() {
         _vulkanTestState.value = VulkanTestState.IDLE
         _vulkanTestPassed.value = null
+        _gpuTestEngine.value = null
     }
 
     fun startAppScan() {
@@ -714,11 +778,18 @@ class AppStateManager private constructor(
     }
 
     companion object {
+        /** UNDECIDED probe outcomes stop re-arming after this many attempts — the engines' own
+         *  guarded first use takes over. */
+        const val MAX_GPU_PROBE_ATTEMPTS = 3
+        /** The tiny real gguf the llama GPU probe decodes — published beside the NLU models. */
+        const val GPU_PROBE_LLAMA_MODEL = "stories260K.gguf"
+
         /**
          * Names the Vulkan row in the native-component list. Not a file name: the backend is linked
          * into libwhisper.so, so there is nothing on disk to look for.
          */
-        const val VULKAN_CAPABILITY = "Vulkan GPU"
+        const val VULKAN_CAPABILITY_WHISPER = "Whisper GPU"
+        const val VULKAN_CAPABILITY_LLAMA = "LLM GPU"
 
         @Volatile
         private var instance: AppStateManager? = null

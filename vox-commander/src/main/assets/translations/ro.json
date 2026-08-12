@@ -362,7 +362,6 @@
   "vulkan_failed_message": "GPU-ul tău a eșuat testul de stres. S-a trecut la NEON (CPU) pentru stabilitate.",
   "engine_label_google": "Recunoaștere Vocală Google",
   "engine_label_whisper_api": "OpenAI Whisper API",
-  "engine_label_vulkan_experimental": "Whisper Vulkan (Experimental)",
   "engine_label_openai_gpt": "OpenAI GPT (Cloud)",
   "available_models_header": "MODELE DISPONIBILE",
   "nlu_model_selection_title": "Selectare Model NLU",
@@ -534,5 +533,12 @@
   "settings_section_engines": "Motoare și modele",
   "settings_section_apps": "Aplicații și integrări",
   "settings_section_system": "Sistem",
-  "settings_section_data": "Date"
+  "settings_section_data": "Date",
+  "gpu_whisper_title": "Accelerare GPU Whisper (Experimental)",
+  "gpu_llama_title": "Accelerare GPU LLM (Experimental)",
+  "gpu_toggle_desc": "Rulează acest motor pe GPU (Vulkan). Activarea pornește un test de compatibilitate unic într-un proces izolat; dacă dispozitivul îl pică, comutatorul se oprește singur.",
+  "gpu_verdict_incompatible": "Acest dispozitiv a picat testul GPU — rulează pe CPU.",
+  "gpu_verdict_verified": "GPU verificat pe acest dispozitiv.",
+  "gpu_verdict_probed": "Test GPU trecut — așteaptă prima utilizare reală.",
+  "gpu_test_again": "Testează din nou"
 }
