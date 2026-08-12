@@ -81,64 +81,71 @@ fun IntentEnginesSubTab(
                     )
                 }
 
-                if (uiState.cloudIntelligenceEnabled) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(modifier = Modifier.alpha(0.5f))
-                    Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(modifier = Modifier.alpha(0.5f))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    Text(
-                        text = languageManager.getString("ai_processor_label"),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                Text(
+                    text = languageManager.getString("ai_processor_label"),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
                     
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    // Every engine that interprets, on-device or not. The cloud services used to be
-                    // appended here by hand — three lines that had to be kept in step with a label
-                    // table and an availability check elsewhere; they are declared engines now.
-                    val aiOptions = remember(uiState.availableModels) {
-                        RemoteModelRegistry.serviceEntries("llm")
-                    }
-
-                    // One component decides what belongs under the selection, from what the engine
-                    // declares: the key field for a cloud service, the reachability test for
-                    // anything with an endpoint, neither for an on-device one. This screen used to
-                    // draw the test inside the picklist and the key field after it, which is the
-                    // opposite order from the search providers doing the same job.
-                    ServicePicklist(
-                        items = aiOptions,
-                        selected = aiOptions.firstOrNull { it.id == uiState.aiProcessor },
-                        itemLabel = { RemoteModelRegistry.getEngineLabel(it.id, languageManager) },
-                        onSelect = { appStateManager.setAiProcessor(it.id) },
-                        credentialFor = { uiState.credentials.forEngine(it.credentialOwnerId) },
-                        onCredentialCommit = { entry, key ->
-                            appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
-                        },
-                        credentialLabel = languageManager.getString("engine_api_key"),
-                        disabledSuffix = " (Incompatible)",
-                        itemNote = { entry ->
-                            // Credentials come from uiState rather than a snapshot read: this is
-                            // composition, so a value fetched here would be fixed until something
-                            // else recomposed the menu.
-                            if (entry.requiresCredential && !uiState.credentials.has(entry.id))
-                                " — needs an API key" else ""
-                        },
-                        helpTextFor = { entry ->
-                            entry.helpTextKey?.let { languageManager.getString(it) }
-                                ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
-                        },
-                        timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) }
-                    )
+                // Every engine that interprets, on-device or not. The cloud services used to be
+                // appended here by hand — three lines that had to be kept in step with a label
+                // table and an availability check elsewhere; they are declared engines now.
+                val aiOptions = remember(uiState.availableModels) {
+                    RemoteModelRegistry.serviceEntries("llm")
                 }
+
+                // One component decides what belongs under the selection, from what the engine
+                // declares: the key field for a cloud service, the reachability test for
+                // anything with an endpoint, neither for an on-device one. This screen used to
+                // draw the test inside the picklist and the key field after it, which is the
+                // opposite order from the search providers doing the same job.
+                ServicePicklist(
+                    items = aiOptions,
+                    selected = aiOptions.firstOrNull { it.id == uiState.aiProcessor },
+                    itemLabel = { RemoteModelRegistry.getEngineLabel(it.id, languageManager) },
+                    onSelect = { appStateManager.setAiProcessor(it.id) },
+                    credentialFor = { uiState.credentials.forEngine(it.credentialOwnerId) },
+                    onCredentialCommit = { entry, key ->
+                        appStateManager.setEngineApiKey(entry.credentialOwnerId, key)
+                    },
+                    credentialLabel = languageManager.getString("engine_api_key"),
+                    // The toggle above gates exactly what its stored key says — cloud engines.
+                    // AiEngineResolver only consults it for a Choice whose requiresCloud is
+                    // true, so a local engine runs (and is configured here) regardless; hiding
+                    // this whole picker behind the toggle made a fully-local setup demand a
+                    // cloud-named consent to reach its own engine.
+                    itemEnabled = { entry ->
+                        uiState.cloudIntelligenceEnabled ||
+                            RemoteModelRegistry.runtimeOf(entry.id) != EngineRuntime.CLOUD
+                    },
+                    disabledSuffix = languageManager.getString("engine_cloud_disabled_suffix"),
+                    itemNote = { entry ->
+                        // Credentials come from uiState rather than a snapshot read: this is
+                        // composition, so a value fetched here would be fixed until something
+                        // else recomposed the menu.
+                        if (entry.requiresCredential && !uiState.credentials.has(entry.id))
+                            " — needs an API key" else ""
+                    },
+                    helpTextFor = { entry ->
+                        entry.helpTextKey?.let { languageManager.getString(it) }
+                            ?.takeIf { it.isNotBlank() && it != entry.helpTextKey }
+                    },
+                    timeoutSecondsFor = { CloudDeadline.secondsFor(it.id, settingsRepo) }
+                )
             }
         }
 
         // --- NLU MODEL SELECTION ---
         // Only show if the current engine is a JSON-defined LLM with actual models
         val nluModels = uiState.availableModels[engineKey] ?: emptyList()
-        
-        if (uiState.cloudIntelligenceEnabled && nluModels.isNotEmpty()) {
+
+        if (nluModels.isNotEmpty()) {
             val selectedModel = remember(uiState.activeIntentModelId, nluModels) {
                 nluModels.find { it.id == uiState.activeIntentModelId }
             }
