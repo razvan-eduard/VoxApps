@@ -42,7 +42,11 @@ object CommanderExportHandler {
      *    .restoreImportedSettings] can put them back; they are transport, not state.
      * Always excluded, regardless of [includeSecrets]:
      *  - Raw local filesystem paths, meaningless on another device/after reinstall:
-     *    [AppSettings.wakeWordModelPath], [AppSettings.customModelPaths].
+     *    [AppSettings.wakeWordModelPath], [AppSettings.customModelPaths]. The import *files*
+     *    cannot travel in a settings backup, but the *selections* naming them do — an
+     *    ImportedModelId's slug is derived from the filename, so re-importing the same file on
+     *    the restored device reconstructs the same id and the restored selection starts working
+     *    again without being re-picked.
      *  - Pure caches/device-capability probe results, all auto-regenerated at runtime:
      *    [AppSettings.appCacheJson], [AppSettings.downloadedModelIds],
      *    [AppSettings.vulkanIncompatible], [AppSettings.vulkanProbeDone],
