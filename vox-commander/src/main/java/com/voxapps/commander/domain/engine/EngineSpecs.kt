@@ -59,9 +59,17 @@ object EngineSpecs {
     fun importedModel(
         settingsRepo: SettingsRepository,
         engineKey: String,
-        langCode: String? = null
+        langCode: String? = null,
+        importId: String? = null
     ): File? {
-        val path = settingsRepo.getSettingsSnapshot().getCustomModelPath(engineKey, langCode)
+        val settings = settingsRepo.getSettingsSnapshot()
+        // A slugged id names its import directly; a legacy id (or none) falls back to the engine's
+        // single slot, which is what pre-migration selections mean.
+        val path = if (importId != null && ImportedModelId.slugOf(importId) != null) {
+            settings.customModelPaths[importId]
+        } else {
+            settings.getCustomModelPath(engineKey, langCode)
+        }
         if (path.isNullOrBlank()) return null
 
         val file = File(path)
@@ -98,7 +106,27 @@ object EngineSpecs {
         langCode: String? = null
     ): ImportedModel? =
         importedModel(settingsRepo, engineKey, langCode)
-            ?.let { ImportedModel.of(it, engineKey, langCode) }
+            ?.let { ImportedModel.of(ImportedModelId.of(engineKey, langCode), it, engineKey, langCode) }
+
+    /**
+     * Every import stored for [engineKey] (and [langCode], where the engine keeps one per
+     * language) as rows for the model list — slugged entries plus, until the migration has
+     * rewritten it, the legacy single slot. Built from the files rather than the stored strings,
+     * so a path whose file the user deleted from outside the app never becomes a row.
+     */
+    fun importedRows(
+        settingsRepo: SettingsRepository,
+        engineKey: String,
+        langCode: String? = null
+    ): List<ImportedModel> {
+        val slugged = settingsRepo.getSettingsSnapshot().importsFor(engineKey, langCode)
+            .mapNotNull { (id, _) ->
+                importedModel(settingsRepo, engineKey, langCode, importId = id)
+                    ?.let { ImportedModel.of(id, it, engineKey, langCode) }
+            }
+        val legacy = importedRow(settingsRepo, engineKey, langCode)
+        return slugged + listOfNotNull(legacy)
+    }
 
     private fun localSpec(
         context: Context,
@@ -126,7 +154,7 @@ object EngineSpecs {
          * model nobody chose.
          */
         if (ImportedModelId.isImported(modelId)) {
-            val imported = importedModel(settingsRepo, engineKey, langCode)
+            val imported = importedModel(settingsRepo, engineKey, langCode, importId = modelId)
             if (imported == null) {
                 Logger.log("Imported model selected for $engineKey but its file is gone", TAG)
                 return null

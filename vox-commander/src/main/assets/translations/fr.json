@@ -530,5 +530,6 @@
   "engine_cloud_disabled_suffix": " — activer l'IA cloud",
   "engine_model_management": "Gestion des moteurs et modèles",
   "google_services_title": "Services système Google",
-  "google_services_desc": "Autorise les moteurs basés sur les services système Google (reconnaissance vocale). Ils peuvent fonctionner en partie sur l'appareil mais sont opérés par Google."
+  "google_services_desc": "Autorise les moteurs basés sur les services système Google (reconnaissance vocale). Ils peuvent fonctionner en partie sur l'appareil mais sont opérés par Google.",
+  "model_imported_suffix": " — importé"
 }

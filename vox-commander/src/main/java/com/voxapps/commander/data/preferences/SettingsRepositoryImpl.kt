@@ -156,6 +156,7 @@ class SettingsRepositoryImpl(
         val USE_REMOTE_SCHEMAS = booleanPreferencesKey("use_remote_schemas")
         val SCHEMA_STORE_MIGRATED = booleanPreferencesKey("schema_store_migrated")
         val IMPORT_SELECTION_MIGRATED = booleanPreferencesKey("import_selection_migrated")
+        val MULTI_IMPORT_MIGRATED = booleanPreferencesKey("multi_import_migrated")
 
         // Model download state
         val DOWNLOADED_MODEL_IDS = stringSetPreferencesKey("downloaded_model_ids")
@@ -406,6 +407,7 @@ class SettingsRepositoryImpl(
             useRemoteSchemas = prefs[Keys.USE_REMOTE_SCHEMAS] ?: true,
             schemaStoreMigrated = prefs[Keys.SCHEMA_STORE_MIGRATED] ?: false,
             importSelectionMigrated = prefs[Keys.IMPORT_SELECTION_MIGRATED] ?: false,
+            multiImportMigrated = prefs[Keys.MULTI_IMPORT_MIGRATED] ?: false,
 
             downloadedModelIds = prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet(),
             customModelPaths = parseCustomModelPaths(prefs[Keys.CUSTOM_MODEL_PATHS_JSON]),
@@ -987,6 +989,10 @@ class SettingsRepositoryImpl(
         dataStore.edit { it[Keys.IMPORT_SELECTION_MIGRATED] = done }
     }
 
+    override suspend fun setMultiImportMigrated(done: Boolean) {
+        dataStore.edit { it[Keys.MULTI_IMPORT_MIGRATED] = done }
+    }
+
     override suspend fun setSchemaStoreMigrated(done: Boolean) {
         dataStore.edit { it[Keys.SCHEMA_STORE_MIGRATED] = done }
     }
@@ -1009,6 +1015,22 @@ class SettingsRepositoryImpl(
     }
 
     // --- CUSTOM MODEL PATHS ---
+    override suspend fun putImport(importId: String, path: String) {
+        dataStore.edit { prefs ->
+            val currentMap = parseCustomModelPaths(prefs[Keys.CUSTOM_MODEL_PATHS_JSON] ?: "{}").toMutableMap()
+            currentMap[importId] = path
+            prefs[Keys.CUSTOM_MODEL_PATHS_JSON] = gson.toJson(currentMap)
+        }
+    }
+
+    override suspend fun removeImport(importId: String) {
+        dataStore.edit { prefs ->
+            val currentMap = parseCustomModelPaths(prefs[Keys.CUSTOM_MODEL_PATHS_JSON] ?: "{}").toMutableMap()
+            currentMap.remove(importId)
+            prefs[Keys.CUSTOM_MODEL_PATHS_JSON] = gson.toJson(currentMap)
+        }
+    }
+
     override suspend fun setCustomModelPath(engineKey: String, path: String, langCode: String?) {
         dataStore.edit { prefs ->
             val mapKey = if (langCode != null) "${engineKey}_$langCode" else engineKey

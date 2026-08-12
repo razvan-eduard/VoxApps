@@ -363,11 +363,14 @@ class ModelManagementViewModelTest {
         val uri = mockk<Uri>()
         every { RemoteModelRegistry.getExtension("wake_vosk") } returns ""
         every { modelDownloader.importCustomModel(uri, "wake_vosk", "en") } returns
-            ModelDownloader.ImportOutcome.Accepted(java.io.File("/data/files/wake_vosk_custom_en"))
+            ModelDownloader.ImportOutcome.Accepted(
+                java.io.File("/data/files/wake_vosk_custom_small"),
+                importId = "custom:wake_vosk:en:small"
+            )
 
         viewModel.selectCustomModel(uri, "wake_vosk", "en")
 
-        coVerify { settingsRepo.setCustomModelPath("wake_vosk", "/data/files/wake_vosk_custom_en", "en") }
+        coVerify { settingsRepo.putImport("custom:wake_vosk:en:small", "/data/files/wake_vosk_custom_small") }
         verify { appStateManager.refreshAll() }
     }
 
@@ -378,14 +381,17 @@ class ModelManagementViewModelTest {
         every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
 
         every { modelDownloader.importCustomModel(any(), any(), any()) } returns
-            ModelDownloader.ImportOutcome.Accepted(java.io.File("/data/files/stt_whisper.bin"))
+            ModelDownloader.ImportOutcome.Accepted(
+                java.io.File("/data/files/stt_whisper_custom_ggml-tiny.bin"),
+                importId = "custom:stt_whisper::ggml-tiny"
+            )
 
         viewModel.selectCustomModel(uri, "stt_whisper")
 
-        coVerify { settingsRepo.setCustomModelPath("stt_whisper", "/data/files/stt_whisper.bin") }
+        coVerify { settingsRepo.putImport("custom:stt_whisper::ggml-tiny", "/data/files/stt_whisper_custom_ggml-tiny.bin") }
         // An import is loaded because it is selected, so it selects itself.
-        coVerify { settingsRepo.setEngineModelSelection("stt_whisper", "custom:stt_whisper") }
-        coVerify { settingsRepo.setActiveVoiceModelId("custom:stt_whisper") }
+        coVerify { settingsRepo.setEngineModelSelection("stt_whisper", "custom:stt_whisper::ggml-tiny") }
+        coVerify { settingsRepo.setActiveVoiceModelId("custom:stt_whisper::ggml-tiny") }
         verify { appStateManager.refreshAll() }
     }
 

@@ -331,8 +331,11 @@ class WhisperEngineManager(
                     settingsRepo.setModelDownloaded(modelId, false)
                 }
             }
-            // Clear custom model path and active model ID
+            // Clear every whisper import (slugged and legacy) and the active model ID
             val whisperKey = com.voxapps.commander.domain.engine.whisper.WhisperCppSttEngine.ENGINE_KEY
+            settingsRepo.getSettingsSnapshot().customModelPaths.keys
+                .filter { com.voxapps.commander.domain.model.ImportedModelId.engineOf(it) == whisperKey }
+                .forEach { settingsRepo.removeImport(it) }
             settingsRepo.setCustomModelPath(whisperKey, "")
             settingsRepo.setEngineModelSelection(whisperKey, "")
             settingsRepo.setActiveVoiceModelId(null)

@@ -257,6 +257,16 @@ class AppStateManager private constructor(
             val savedSelection = settings.engineModelSelections[processor]
             val newActiveModelId = when {
                 // If saved selection exists and is still a valid model, use it
+                // An imported selection is not in the registry's model list; it is valid
+                // exactly when its stored path still resolves to a file.
+                savedSelection != null &&
+                    com.voxapps.commander.domain.model.ImportedModelId.isImported(savedSelection) &&
+                    com.voxapps.commander.domain.engine.EngineSpecs.importedModel(
+                        repo,
+                        com.voxapps.commander.domain.model.ImportedModelId.engineOf(savedSelection).orEmpty(),
+                        com.voxapps.commander.domain.model.ImportedModelId.langOf(savedSelection),
+                        importId = savedSelection
+                    ) != null -> savedSelection
                 savedSelection != null && models.any { it.id == savedSelection } -> savedSelection
                 // Otherwise use first downloaded model if any
                 models.any { settings.isModelDownloaded(it.id) } -> models.first { settings.isModelDownloaded(it.id) }.id
@@ -461,6 +471,16 @@ class AppStateManager private constructor(
             val models = com.voxapps.commander.data.remote.RemoteModelRegistry.getModels(processor)
             val savedSelection = settings.engineModelSelections[processor]
             val newActiveModelId = when {
+                // An imported selection is not in the registry's model list; it is valid
+                // exactly when its stored path still resolves to a file.
+                savedSelection != null &&
+                    com.voxapps.commander.domain.model.ImportedModelId.isImported(savedSelection) &&
+                    com.voxapps.commander.domain.engine.EngineSpecs.importedModel(
+                        repo,
+                        com.voxapps.commander.domain.model.ImportedModelId.engineOf(savedSelection).orEmpty(),
+                        com.voxapps.commander.domain.model.ImportedModelId.langOf(savedSelection),
+                        importId = savedSelection
+                    ) != null -> savedSelection
                 savedSelection != null && models.any { it.id == savedSelection } -> savedSelection
                 models.any { settings.isModelDownloaded(it.id) } -> models.first { settings.isModelDownloaded(it.id) }.id
                 models.isNotEmpty() -> models.first().id

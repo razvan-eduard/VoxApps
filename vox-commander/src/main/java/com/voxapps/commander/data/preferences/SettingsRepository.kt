@@ -121,6 +121,7 @@ interface SettingsRepository {
 
     /** See [AppSettings.importSelectionMigrated]. */
     suspend fun setImportSelectionMigrated(done: Boolean)
+    suspend fun setMultiImportMigrated(done: Boolean)
 
     /**
      * Empties the settings store, leaving every setting at its default.
@@ -136,6 +137,9 @@ interface SettingsRepository {
 
     // --- CUSTOM MODEL PATHS ---
     suspend fun setCustomModelPath(engineKey: String, path: String, langCode: String? = null)
+    /** Stores/removes one named import; [importId] is a slugged [ImportedModelId]. */
+    suspend fun putImport(importId: String, path: String)
+    suspend fun removeImport(importId: String)
 
     // --- DEFAULT APPS PER DOMAIN ---
     suspend fun setDefaultAppPackage(domain: String, packageName: String?)

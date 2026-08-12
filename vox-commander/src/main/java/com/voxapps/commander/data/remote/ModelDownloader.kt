@@ -181,7 +181,7 @@ class ModelDownloader(private val context: Context) {
      */
     sealed interface ImportOutcome {
         /** [fromArchive] when the model was unpacked here rather than copied as it was found. */
-        data class Accepted(val file: File, val fromArchive: Boolean = false) : ImportOutcome
+        data class Accepted(val file: File, val fromArchive: Boolean = false, val importId: String = "") : ImportOutcome
         /** [expected] is what the engine declares one of its models looks like. */
         data class WrongKind(val picked: String?, val expected: String) : ImportOutcome
         data object Empty : ImportOutcome
@@ -194,9 +194,23 @@ class ModelDownloader(private val context: Context) {
 
         return try {
             val declaredEntry = RemoteModelRegistry.getEntryPoint(engineKey)
+            // Each import gets a destination of its own, named after the picked file — a second
+            // import adds a model instead of replacing the first. The slug is uniquified against
+            // what is already on disk, and the id is derived from the same final slug so the
+            // stored key and the file can never disagree.
+            val baseSlug = com.voxapps.commander.domain.model.ImportedModelId
+                .slugFrom(displayNameOf(uri) ?: "model")
+            fun uniqueSlug(nameFor: (String) -> String): String {
+                var slug = baseSlug
+                var n = 2
+                while (File(rootDir, nameFor(slug)).exists()) { slug = "$baseSlug-$n"; n++ }
+                return slug
+            }
             if (RemoteModelRegistry.isArchiveEngine(engineKey)) {
+                val slug = uniqueSlug { "${engineKey}_custom_$it" }
+                val importId = com.voxapps.commander.domain.model.ImportedModelId.of(engineKey, langCode, slug)
                 val suffix = langCode?.let { "_$it" }.orEmpty()
-                val dest = File(rootDir, "${engineKey}_custom$suffix")
+                val dest = File(rootDir, "${engineKey}_custom_$slug")
                 dest.deleteRecursively()
 
                 /*
@@ -228,7 +242,7 @@ class ModelDownloader(private val context: Context) {
                         dest.deleteRecursively()
                         ImportOutcome.WrongKind(picked, declaredEntry.match.orEmpty())
                     } else {
-                        ImportOutcome.Accepted(dest, fromArchive = true)
+                        ImportOutcome.Accepted(dest, fromArchive = true, importId = importId)
                     }
                 }
 
@@ -247,7 +261,7 @@ class ModelDownloader(private val context: Context) {
                     dest.deleteRecursively()
                     ImportOutcome.WrongKind(displayNameOf(uri), declaredEntry.match.orEmpty())
                 } else {
-                    ImportOutcome.Accepted(dest)
+                    ImportOutcome.Accepted(dest, importId = importId)
                 }
             } else {
                 val extension = RemoteModelRegistry.getExtension(engineKey)
@@ -258,11 +272,13 @@ class ModelDownloader(private val context: Context) {
                     Logger.log("Imported file '$picked' is not a $extension for $engineKey", TAG)
                     return ImportOutcome.WrongKind(picked, extension)
                 }
-                val dest = File(rootDir, "$engineKey$extension")
+                val slug = uniqueSlug { "${engineKey}_custom_$it$extension" }
+                val importId = com.voxapps.commander.domain.model.ImportedModelId.of(engineKey, langCode, slug)
+                val dest = File(rootDir, "${engineKey}_custom_$slug$extension")
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     dest.outputStream().use { output -> input.copyTo(output) }
                 } ?: return ImportOutcome.Failed("could not read the file")
-                ImportOutcome.Accepted(dest)
+                ImportOutcome.Accepted(dest, importId = importId)
             }
         } catch (e: Exception) {
             Logger.log("Custom model import failed for $engineKey: ${e.message}", TAG)

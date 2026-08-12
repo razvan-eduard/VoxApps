@@ -530,5 +530,6 @@
   "engine_cloud_disabled_suffix": " — Cloud-KI aktivieren",
   "engine_model_management": "Engine- & Modellverwaltung",
   "google_services_title": "Google-Systemdienste",
-  "google_services_desc": "Erlaubt Engines, die auf Google-Systemdiensten basieren (Spracherkennung). Diese laufen teils auf dem Gerät, werden aber von Google betrieben."
+  "google_services_desc": "Erlaubt Engines, die auf Google-Systemdiensten basieren (Spracherkennung). Diese laufen teils auf dem Gerät, werden aber von Google betrieben.",
+  "model_imported_suffix": " — importiert"
 }

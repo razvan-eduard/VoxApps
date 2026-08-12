@@ -601,12 +601,12 @@ fun ServiceSettingsTab(
             else engineModels
             // The user's own model, listed with the rest — chosen here and deleted here, which is
             // also the only place this screen has ever had to remove one.
-            val imported = com.voxapps.commander.domain.engine.EngineSpecs.importedRow(
+            val imported = com.voxapps.commander.domain.engine.EngineSpecs.importedRows(
                 settingsRepo,
                 currentEngineKey,
                 uiState.modelFilterLang.takeIf { RemoteModelRegistry.isPerLanguage(currentEngineKey) }
             )
-            listOfNotNull(imported) + declared
+            imported + declared
         }
 
         // Keyed off the wake word's own model id, not the voice engine's selection. The two engines
@@ -627,9 +627,10 @@ fun ServiceSettingsTab(
                 selectedItem = selectedModel,
                 itemLabel = { model ->
                     if (model is com.voxapps.commander.domain.model.ImportedModel) {
-                        val name = languageManager.getString("model_imported_name") +
-                            (model.langCode?.let { " (${it.uppercase()})" } ?: "")
-                        "$name (${model.sizeDescription})"
+                        val name = model.label.takeUnless { it.startsWith("${model.engineType}_custom") }
+                            ?: (languageManager.getString("model_imported_name") +
+                                (model.langCode?.let { " (${it.uppercase()})" } ?: ""))
+                        "$name${languageManager.getString("model_imported_suffix")} (${model.sizeDescription})"
                     } else if (supportsModelDownload) {
                         "${model.label} (${model.sizeDescription})"
                     } else {

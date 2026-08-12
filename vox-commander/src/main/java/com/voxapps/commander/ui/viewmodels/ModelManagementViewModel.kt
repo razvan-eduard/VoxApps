@@ -146,17 +146,23 @@ class ModelManagementViewModel(
         if (from == to) return
         viewModelScope.launch {
             val settings = settingsRepo.getSettingsSnapshot()
-            val currentPath = settings.getCustomModelPath(engineKey, from) ?: return@launch
+            // The import being re-filed is the one just accepted — under a slugged id since
+            // multi-import; the legacy single slot remains the fallback for pre-migration state.
+            val current = settings.importsFor(engineKey, from).entries.lastOrNull()
+            val currentPath = current?.value ?: settings.getCustomModelPath(engineKey, from) ?: return@launch
+            val slug = ImportedModelId.slugOf(current?.key)
+                ?: ImportedModelId.slugFrom(java.io.File(currentPath).name)
             val renamed = modelDownloader.renameCustomModel(currentPath, engineKey, to)
             if (renamed == null) {
                 Logger.log("Could not re-file the import under $to", TAG)
                 return@launch
             }
 
-            settingsRepo.setCustomModelPath(engineKey, "", from)
-            settingsRepo.setCustomModelPath(engineKey, renamed, to)
+            current?.key?.let { settingsRepo.removeImport(it) }
+                ?: settingsRepo.setCustomModelPath(engineKey, "", from)
 
-            val importedId = ImportedModelId.of(engineKey, to)
+            val importedId = ImportedModelId.of(engineKey, to, slug)
+            settingsRepo.putImport(importedId, renamed)
             settingsRepo.setEngineModelSelection(engineKey, importedId)
             settingsRepo.setActiveVoiceModelId(importedId)
             // The list is filtered by language, so a model filed under one the screen is not showing
@@ -368,9 +374,9 @@ class ModelManagementViewModel(
             is ModelDownloader.ImportOutcome.Accepted -> {
                 // Selecting it is what loads it now, so an import that did not select itself would
                 // sit in the list doing nothing — the user picked this file; that is the choice.
-                val importedId = ImportedModelId.of(engineKey, langCode)
+                val importedId = outcome.importId.ifBlank { ImportedModelId.of(engineKey, langCode) }
                 viewModelScope.launch {
-                    settingsRepo.setCustomModelPath(engineKey, outcome.file.absolutePath, langCode)
+                    settingsRepo.putImport(importedId, outcome.file.absolutePath)
                     settingsRepo.setEngineModelSelection(engineKey, importedId)
                     // Which selection to write cannot be read off the engine: wake_vosk is a voice
                     // engine and a wake-word engine at once. The screen that opened the picker knows.
@@ -472,9 +478,13 @@ class ModelManagementViewModel(
             // only where the file is: this one was copied in rather than downloaded, so nothing
             // could resolve it from the registry.
             val langCode = ImportedModelId.langOf(modelId)
-            val path = settingsRepo.getSettingsSnapshot().getCustomModelPath(engineKey, langCode)
+            val snapshot = settingsRepo.getSettingsSnapshot()
+            val slugged = ImportedModelId.slugOf(modelId) != null
+            val path = if (slugged) snapshot.customModelPaths[modelId]
+                       else snapshot.getCustomModelPath(engineKey, langCode)
             viewModelScope.launch {
-                settingsRepo.setCustomModelPath(engineKey, "", langCode)
+                if (slugged) settingsRepo.removeImport(modelId)
+                else settingsRepo.setCustomModelPath(engineKey, "", langCode)
                 path?.let { modelDownloader.deleteCustomModel(it) }
             }
         } else {
