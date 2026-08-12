@@ -527,5 +527,8 @@
   "schema_reason_unsigned": "refused: no valid signature covers it",
   "schema_reason_unreachable": "could not be read (%1$s)",
   "model_download_rejected": "This download was refused: the file did not match the checksum the schema declares. It has been deleted — try again.",
-  "engine_cloud_disabled_suffix": " — enable cloud AI"
+  "engine_cloud_disabled_suffix": " — enable cloud AI",
+  "engine_model_management": "Engine & Model Management",
+  "google_services_title": "Google system services",
+  "google_services_desc": "Allow engines backed by Google system services (speech recognition). These can run partly on-device but are Google-operated."
 }

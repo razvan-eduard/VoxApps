@@ -527,5 +527,8 @@
   "schema_reason_unsigned": "refusé : aucune signature valide ne le couvre",
   "schema_reason_unreachable": "n'a pas pu être lu (%1$s)",
   "model_download_rejected": "Téléchargement refusé : le fichier ne correspond pas à la somme de contrôle déclarée par le schéma. Il a été supprimé — réessayez.",
-  "engine_cloud_disabled_suffix": " — activer l'IA cloud"
+  "engine_cloud_disabled_suffix": " — activer l'IA cloud",
+  "engine_model_management": "Gestion des moteurs et modèles",
+  "google_services_title": "Services système Google",
+  "google_services_desc": "Autorise les moteurs basés sur les services système Google (reconnaissance vocale). Ils peuvent fonctionner en partie sur l'appareil mais sont opérés par Google."
 }

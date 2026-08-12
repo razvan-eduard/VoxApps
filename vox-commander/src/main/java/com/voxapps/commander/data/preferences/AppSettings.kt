@@ -88,6 +88,13 @@ data class AppSettings(
     // --- WHISPER ENGINE (DLC) ---
     val isWhisperSystemEnabled: Boolean = false,
 
+    // --- GOOGLE SYSTEM SERVICES ---
+    // Gates engines the schema marks with the "google_service" capability (system speech
+    // recognition). Separate from cloudIntelligenceEnabled: those services can run partly
+    // on-device, but they are Google-operated and opaque about what leaves the phone.
+    // Off by default, like the cloud toggle: anything Google-operated is an explicit opt-in.
+    val googleServicesEnabled: Boolean = false,
+
     // --- REMOTE REPOSITORY ---
     val modelRepoBaseUrl: String = Strings.Preferences.DEFAULT_MODEL_REPO_URL,
 

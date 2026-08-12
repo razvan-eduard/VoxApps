@@ -34,6 +34,7 @@ data class AppState(
     val aiProcessor: String,
     val activeIntentModelId: String?,
     val cloudIntelligenceEnabled: Boolean,
+    val googleServicesEnabled: Boolean,
     
     // --- WAKE WORD SETTINGS ---
     val wakeWord: String,
@@ -179,6 +180,7 @@ data class AppState(
                 aiProcessor = settings.aiProcessor,
                 activeIntentModelId = settings.activeIntentModelId,
                 cloudIntelligenceEnabled = settings.cloudIntelligenceEnabled,
+                googleServicesEnabled = settings.googleServicesEnabled,
                 wakeWord = settings.wakeWord,
                 wakeWordEnabled = settings.wakeWordEnabled,
                 wakeWordModelPath = settings.wakeWordModelPath,
@@ -237,6 +239,7 @@ data class AppState(
             aiProcessor = "",
             activeIntentModelId = null,
             cloudIntelligenceEnabled = false,
+            googleServicesEnabled = false,
             wakeWord = "",
             wakeWordEnabled = false,
             wakeWordModelPath = null,

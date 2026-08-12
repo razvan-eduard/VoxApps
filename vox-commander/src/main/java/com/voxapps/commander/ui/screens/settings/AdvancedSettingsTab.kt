@@ -241,13 +241,50 @@ fun AdvancedSettingsTab(
         item {
             HorizontalDivider()
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = "Experimental Features", style = MaterialTheme.typography.titleMedium)
+            Text(text = languageManager.getString("engine_model_management"), style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(12.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f))
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // --- Cloud AI engines ---
+                    // Restricts engines the schema declares `runtime: "cloud"` — no engine names
+                    // are hardcoded here or anywhere the gate is applied.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(languageManager.getString("cloud_intelligence_title"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                            Text(languageManager.getString("cloud_intelligence_desc"), style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(
+                            checked = uiState.cloudIntelligenceEnabled,
+                            onCheckedChange = { appStateManager.setCloudIntelligenceEnabled(it) }
+                        )
+                    }
+
+                    // --- Google system services ---
+                    // Restricts engines the schema marks with the "google_service" capability.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(languageManager.getString("google_services_title"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                            Text(languageManager.getString("google_services_desc"), style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(
+                            checked = uiState.googleServicesEnabled,
+                            onCheckedChange = { appStateManager.setGoogleServicesEnabled(it) }
+                        )
+                    }
+
+                    HorizontalDivider()
+
                     // --- Whisper Engine (DLC) ---
 
                     Row(
@@ -325,6 +362,12 @@ fun AdvancedSettingsTab(
                             onCheckedChange = { appStateManager.setExperimentalVulkanEnabled(it) }
                         )
                     }
+
+                    HorizontalDivider()
+
+                    Button(onClick = onCleanupRequest, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
+                        Text(languageManager.getString("delete_unused_models"))
+                    }
                 }
             }
         }
@@ -336,9 +379,6 @@ fun AdvancedSettingsTab(
             Spacer(modifier = Modifier.height(12.dp))
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f))) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = onCleanupRequest, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
-                        Text(languageManager.getString("delete_unused_models"))
-                    }
                     Button(onClick = onClearDefaultFallback, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)) {
                         Text(languageManager.getString("clear_default_fallback"))
                     }

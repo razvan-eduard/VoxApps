@@ -58,33 +58,8 @@ fun IntentEnginesSubTab(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = languageManager.getString("cloud_intelligence_title"), 
-                            style = MaterialTheme.typography.bodyLarge, 
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = languageManager.getString("cloud_intelligence_desc"), 
-                            style = MaterialTheme.typography.bodySmall, 
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = uiState.cloudIntelligenceEnabled,
-                        onCheckedChange = { appStateManager.setCloudIntelligenceEnabled(it) }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(modifier = Modifier.alpha(0.5f))
-                Spacer(modifier = Modifier.height(16.dp))
-
+                // The cloud/Google toggles live in Advanced settings → Engine & Model Management;
+                // this screen only reflects them (gated entries disable in the picker below).
                 Text(
                     text = languageManager.getString("ai_processor_label"),
                     style = MaterialTheme.typography.labelMedium,

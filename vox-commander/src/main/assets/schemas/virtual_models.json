@@ -1,5 +1,5 @@
 {
-  "schema_version": 13,
+  "schema_version": 14,
   "engines": {
     "GOOGLE": {
       "engine_label": "Google Speech Recognition",
@@ -10,7 +10,10 @@
       "type": [
         "voice"
       ],
-      "models": []
+      "models": [],
+      "capabilities": [
+        "google_service"
+      ]
     },
     "WHISPER_API": {
       "engine_label": "OpenAI Whisper API",

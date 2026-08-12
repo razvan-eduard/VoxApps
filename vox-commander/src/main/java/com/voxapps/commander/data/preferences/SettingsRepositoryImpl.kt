@@ -110,6 +110,7 @@ class SettingsRepositoryImpl(
         val AI_PROCESSOR = stringPreferencesKey("ai_processor")
         val ACTIVE_INTENT_MODEL_ID = stringPreferencesKey("active_intent_model_id")
         val CLOUD_INTELLIGENCE_ENABLED = booleanPreferencesKey("cloud_intelligence_enabled")
+        val GOOGLE_SERVICES_ENABLED = booleanPreferencesKey("google_services_enabled")
 
         // Wake word
         val WAKE_WORD = stringPreferencesKey("wake_word")
@@ -364,6 +365,7 @@ class SettingsRepositoryImpl(
             aiProcessor = prefs[Keys.AI_PROCESSOR] ?: com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultLlmEngineKey() ?: "",
             activeIntentModelId = prefs[Keys.ACTIVE_INTENT_MODEL_ID],
             cloudIntelligenceEnabled = prefs[Keys.CLOUD_INTELLIGENCE_ENABLED] ?: false,
+            googleServicesEnabled = prefs[Keys.GOOGLE_SERVICES_ENABLED] ?: false,
 
             engineModelSelections = parseStringMap(prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON]),
             searchProviderSelections = parseStringMap(prefs[Keys.SEARCH_PROVIDER_SELECTIONS_JSON]),
@@ -508,6 +510,7 @@ class SettingsRepositoryImpl(
             imported.activeIntentModelId?.let { prefs[Keys.ACTIVE_INTENT_MODEL_ID] = it }
                 ?: prefs.remove(Keys.ACTIVE_INTENT_MODEL_ID)
             prefs[Keys.CLOUD_INTELLIGENCE_ENABLED] = imported.cloudIntelligenceEnabled
+            prefs[Keys.GOOGLE_SERVICES_ENABLED] = imported.googleServicesEnabled
 
             prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON] = gson.toJson(imported.engineModelSelections)
             prefs[Keys.SEARCH_PROVIDER_SELECTIONS_JSON] = gson.toJson(imported.searchProviderSelections)
@@ -832,6 +835,10 @@ class SettingsRepositoryImpl(
 
     override suspend fun setCloudIntelligenceEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.CLOUD_INTELLIGENCE_ENABLED] = enabled }
+    }
+
+    override suspend fun setGoogleServicesEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.GOOGLE_SERVICES_ENABLED] = enabled }
     }
 
     // --- WAKE WORD ---

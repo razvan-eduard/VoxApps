@@ -527,5 +527,8 @@
   "schema_reason_unsigned": "abgelehnt: keine gültige Signatur deckt es ab",
   "schema_reason_unreachable": "konnte nicht gelesen werden (%1$s)",
   "model_download_rejected": "Dieser Download wurde abgelehnt: Die Datei entspricht nicht der im Schema angegebenen Prüfsumme. Sie wurde gelöscht — bitte erneut versuchen.",
-  "engine_cloud_disabled_suffix": " — Cloud-KI aktivieren"
+  "engine_cloud_disabled_suffix": " — Cloud-KI aktivieren",
+  "engine_model_management": "Engine- & Modellverwaltung",
+  "google_services_title": "Google-Systemdienste",
+  "google_services_desc": "Erlaubt Engines, die auf Google-Systemdiensten basieren (Spracherkennung). Diese laufen teils auf dem Gerät, werden aber von Google betrieben."
 }

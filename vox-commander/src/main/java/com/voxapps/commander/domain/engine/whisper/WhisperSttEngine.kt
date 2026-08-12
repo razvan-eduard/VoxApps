@@ -80,8 +80,16 @@ class WhisperSttEngine(
      * be present. Deliberately no round-trip: a real API call at startup costs money, can rate-limit,
      * and tells a third party the app launched. An invalid key surfaces from an actual transcription.
      */
-    override suspend fun unavailableReason(spec: ModelSpec): String? =
-        if (apiKey.isNotBlank()) null else "API key is missing"
+    override suspend fun unavailableReason(spec: ModelSpec): String? = when {
+        // Schema-driven, not a hardcoded key list: this engine declares `runtime: "cloud"`, and
+        // that declaration is what the cloud toggle restricts.
+        com.voxapps.commander.data.remote.RemoteModelRegistry.runtimeOf(ENGINE_KEY) ==
+            com.voxapps.commander.data.remote.EngineRuntime.CLOUD &&
+            !settingsRepo.getSettingsSnapshot().cloudIntelligenceEnabled ->
+            "cloud AI engines are disabled in settings"
+        apiKey.isBlank() -> "API key is missing"
+        else -> null
+    }
 
     companion object {
         const val ENGINE_KEY = "WHISPER_API"

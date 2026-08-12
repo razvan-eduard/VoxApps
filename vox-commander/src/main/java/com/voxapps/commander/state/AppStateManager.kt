@@ -394,6 +394,10 @@ class AppStateManager private constructor(
         scope.launch { repo.setSttSensitivity(sensitivity) }
     }
 
+    fun setGoogleServicesEnabled(enabled: Boolean) {
+        scope.launch { repo.setGoogleServicesEnabled(enabled) }
+    }
+
     fun setCloudIntelligenceEnabled(enabled: Boolean) {
         scope.launch { repo.setCloudIntelligenceEnabled(enabled) }
     }

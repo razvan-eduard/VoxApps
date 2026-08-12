@@ -633,7 +633,7 @@ class ModelDownloader(private val context: Context) {
      * single stream of bytes to check — so this runs before extraction. For a file engine it is
      * the file itself.
      *
-     * Deliberately not fatal when absent: `models.json` carries 100 URLs and they cannot all be
+     * Deliberately not fatal when absent: `models.json` carries 101 URLs and they cannot all be
      * hashed at once, so an entry without the field behaves exactly as it did before. Where the
      * field *is* present, anything that prevents the comparison — artefact missing, unreadable —
      * counts as unverified, not as verified: a declared expectation that cannot be checked is a
