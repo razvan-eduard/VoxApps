@@ -54,7 +54,7 @@ object SttEngines {
 
         VoskSttEngine.ENGINE_KEY -> VoskSttEngine(context)
 
-        GoogleSttEngine.ENGINE_KEY -> GoogleSttEngine(context)
+        GoogleSttEngine.ENGINE_KEY -> GoogleSttEngine(context, settingsRepo)
 
         WhisperSttEngine.ENGINE_KEY -> {
             val apiKey = settingsRepo.getCredentialsSnapshot().forEngine(WhisperSttEngine.ENGINE_KEY)

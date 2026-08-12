@@ -32,10 +32,14 @@ class AiEngineResolver(
      * engine at all — an unrecognised value, or a model id that isn't an LLM.
      */
     fun resolve(processor: String): Choice? = when (processor) {
-        Strings.AiProcessors.OPENAI -> Choice(openAiEngine, requiresCloud = true)
+        // requiresCloud comes from the schema, not from this file: an engine is gated on the
+        // cloud toggle exactly when it declares `runtime: "cloud"`. Naming keys here would be a
+        // second copy of that fact.
+        Strings.AiProcessors.OPENAI ->
+            Choice(openAiEngine, requiresCloud = RemoteModelRegistry.runtimeOf(processor) == com.voxapps.commander.data.remote.EngineRuntime.CLOUD)
         // Everything else is a model id from models.json rather than one of the built-in keys above.
         else -> if (RemoteModelRegistry.isLlmEngine(processor)) {
-            Choice(localLlmEngine, requiresCloud = false)
+            Choice(localLlmEngine, requiresCloud = RemoteModelRegistry.runtimeOf(processor) == com.voxapps.commander.data.remote.EngineRuntime.CLOUD)
         } else {
             null
         }

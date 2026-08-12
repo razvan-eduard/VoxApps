@@ -71,6 +71,7 @@ interface SettingsRepository {
     suspend fun setAiProcessor(processor: String)
     suspend fun setActiveIntentModelId(modelId: String?)
     suspend fun setCloudIntelligenceEnabled(enabled: Boolean)
+    suspend fun setGoogleServicesEnabled(enabled: Boolean)
 
     // --- PER-ENGINE MODEL SELECTIONS ---
     suspend fun setEngineModelSelection(engineKey: String, modelId: String)

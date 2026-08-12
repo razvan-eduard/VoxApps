@@ -1265,6 +1265,17 @@
           "engine_type": "LLAMACPP",
           "is_remote": true,
           "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e"
+        },
+        {
+          "id": "qwen2.5-3b-q4_k_m",
+          "label": "Qwen 2.5 3B (Max Precision q4, 4096 ctx)",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/qwen2.5-3b-instruct-q4_k_m.gguf",
+          "size_mb": 2007,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": "LLAMACPP",
+          "is_remote": true,
+          "sha256": "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d"
         }
       ]
     },

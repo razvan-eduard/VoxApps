@@ -237,7 +237,7 @@ class BenchmarkEngine(
     private suspend fun runGoogleBenchmark() {
         try {
             val start = System.currentTimeMillis()
-            val engine = GoogleSttEngine(context)
+            val engine = GoogleSttEngine(context, settingsRepo)
             val end = System.currentTimeMillis()
             val available = engine.isAvailable
             engine.release()

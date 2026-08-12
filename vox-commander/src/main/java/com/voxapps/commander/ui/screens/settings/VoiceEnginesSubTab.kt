@@ -121,12 +121,20 @@ fun VoiceEnginesSubTab(
                  * transcription engine unlocked when a key for something else was entered.
                  */
                 when {
+                    // Schema-driven gates, same predicates the engines' own availability probes
+                    // use: `runtime: "cloud"` answers to the cloud toggle, the "google_service"
+                    // capability to the Google-services toggle.
+                    RemoteModelRegistry.runtimeOf(proc) == com.voxapps.commander.data.remote.EngineRuntime.CLOUD &&
+                        !uiState.cloudIntelligenceEnabled -> false
+                    RemoteModelRegistry.hasCapability(proc, "google_service") &&
+                        !uiState.googleServicesEnabled -> false
                     proc == Strings.Processors.GOOGLE -> googleSttAvailable
                     proc == Strings.Processors.WHISPER_VULKAN ->
                         uiState.isWhisperSystemEnabled && !settingsRepo.getSettingsSnapshot().vulkanIncompatible
                     else -> true
                 }
             },
+            disabledSuffix = languageManager.getString("engine_cloud_disabled_suffix"),
             itemNote = { entry ->
                 if (entry.requiresCredential && !uiState.credentials.has(entry.id))
                     " — needs an API key" else ""
