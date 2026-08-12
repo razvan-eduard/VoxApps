@@ -4,41 +4,45 @@ import com.voxapps.design.picklist.Picklist
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteModelRegistry
-import com.voxapps.design.VoxDarkMode
-import com.voxapps.design.settings.ThemeSettingsScreen
-import com.voxapps.design.settings.ThemeSettingsStrings
+import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.service.WakeWordService
 import com.voxapps.commander.domain.model.AppModel
 import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.screens.main.ListeningScreen
 import com.voxapps.commander.utils.Strings
-import com.voxapps.design.toEnumOr
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+
+private enum class SettingsPage {
+    MENU, GENERAL, MODELS, SERVICE, APP_MANAGER, INTEGRATIONS, PERMISSIONS, ADVANCED, BACKUP
+}
 
 @Composable
 fun SettingsContent(
@@ -63,12 +67,14 @@ fun SettingsContent(
 ) {
         val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     // REALTIME STATE - observe AppStateManager uiState for reactive updates
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
-    
-    val pagerState = rememberPagerState(pageCount = { 10 })
+
+    var page by remember { mutableStateOf(SettingsPage.MENU) }
+    // The subpage back arrow and the system back do the same thing; on the menu itself the
+    // system back keeps meaning "leave settings", which the caller already handles.
+    BackHandler(enabled = page != SettingsPage.MENU) { page = SettingsPage.MENU }
 
     val isVoskLoading by modelManagementViewModel.isVoskLoading.collectAsStateWithLifecycle()
     val isVoskOffline by modelManagementViewModel.isVoskOffline.collectAsStateWithLifecycle()
@@ -176,6 +182,18 @@ fun SettingsContent(
 
     val downloadedColor = Color(0xFF2E7D32)
 
+    val pageTitle = when (page) {
+        SettingsPage.MENU -> languageManager.getString("settings")
+        SettingsPage.GENERAL -> languageManager.getString("tab_general")
+        SettingsPage.MODELS -> languageManager.getString("tab_ai_models")
+        SettingsPage.SERVICE -> languageManager.getString("tab_service")
+        SettingsPage.APP_MANAGER -> languageManager.getString("tab_app_manager")
+        SettingsPage.INTEGRATIONS -> languageManager.getString("tab_integrations")
+        SettingsPage.PERMISSIONS -> languageManager.getString("tab_permissions")
+        SettingsPage.ADVANCED -> languageManager.getString("tab_advanced")
+        SettingsPage.BACKUP -> languageManager.getString("tab_backup")
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
@@ -184,50 +202,79 @@ fun SettingsContent(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                     color = MaterialTheme.colorScheme.surface
                 ) {
-                    Column {
-                        Text(
-                            text = languageManager.getString("settings"),
-                            style = MaterialTheme.typography.headlineSmall,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
-                        )
-
-                        ScrollableTabRow(
-                            selectedTabIndex = pagerState.currentPage,
-                            edgePadding = 16.dp,
-                            containerColor = Color.Transparent,
-                            divider = {}, 
-                            indicator = { tabPositions ->
-                                if (pagerState.currentPage < tabPositions.size) {
-                                    TabRowDefaults.SecondaryIndicator(
-                                        Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage])
-                                    )
-                                }
-                            },
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        ) {
-                            val tabs = listOf("tab_general", "tab_ai_models", "tab_service", "tab_app_manager", "tab_integrations", "tab_permissions", "tab_advanced", "tab_backup", "tab_theme", "tab_diagnostics")
-                            
-                            tabs.forEachIndexed { index, tabKey ->
-                                val selected = pagerState.currentPage == index
-                                Tab(
-                                    selected = selected,
-                                    onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                                    text = { Text(text = languageManager.getString(tabKey), fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) },
-                                    modifier = Modifier.padding(horizontal = 4.dp).background(color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, shape = RoundedCornerShape(24.dp))
-                                )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (page != SettingsPage.MENU) {
+                            IconButton(onClick = { page = SettingsPage.MENU }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = languageManager.getString("settings"))
                             }
                         }
+                        Text(
+                            text = pageTitle,
+                            style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.padding(
+                                start = if (page == SettingsPage.MENU) 16.dp else 0.dp,
+                                top = 16.dp, bottom = 16.dp, end = 16.dp
+                            )
+                        )
                     }
                 }
             }
         ) { padding ->
-            Box(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-                HorizontalPager(
-                    state = pagerState, 
-                    modifier = Modifier.fillMaxSize(), 
-                    beyondViewportPageCount = 1
-                ) { page ->
-                    if (page == 6) { // Advanced (uses LazyColumn, no scroll wrapper)
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                when (page) {
+                    // Same menu shape as the other Vox apps' settings screens: full-bleed section
+                    // bands from core/design separating plain ListItem entries, one per page.
+                    SettingsPage.MENU -> Column(
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    ) {
+                        SettingsSectionHeader(languageManager.getString("settings_section_general"))
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("tab_general")) },
+                            leadingContent = { Icon(Icons.Default.Tune, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
+                        )
+                        SettingsSectionHeader(languageManager.getString("settings_section_engines"))
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("tab_ai_models")) },
+                            leadingContent = { Icon(Icons.Default.Memory, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.MODELS }
+                        )
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("tab_service")) },
+                            leadingContent = { Icon(Icons.Default.Mic, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SERVICE }
+                        )
+                        SettingsSectionHeader(languageManager.getString("settings_section_apps"))
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("tab_app_manager")) },
+                            leadingContent = { Icon(Icons.Default.Apps, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.APP_MANAGER }
+                        )
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("tab_integrations")) },
+                            leadingContent = { Icon(Icons.Default.Extension, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.INTEGRATIONS }
+                        )
+                        SettingsSectionHeader(languageManager.getString("settings_section_system"))
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("tab_permissions")) },
+                            leadingContent = { Icon(Icons.Default.Shield, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.PERMISSIONS }
+                        )
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("tab_advanced")) },
+                            leadingContent = { Icon(Icons.Default.Build, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.ADVANCED }
+                        )
+                        SettingsSectionHeader(languageManager.getString("settings_section_data"))
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("tab_backup")) },
+                            leadingContent = { Icon(Icons.Default.Backup, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
+                        )
+                    }
+                    // Advanced uses a LazyColumn of its own, no scroll wrapper.
+                    SettingsPage.ADVANCED -> Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                         AdvancedSettingsTab(
 
                             settingsRepo = settingsRepo,
@@ -238,52 +285,34 @@ fun SettingsContent(
                             },
                             refreshTrigger = uiState.refreshTrigger
                         )
-                    } else if (page == 7) { // Backup & Restore (card only, own scroll wrapper)
+                    }
+                    // Backup & Diagnostics: the backup card rides as the diagnostics list's
+                    // header so the page has a single scroll surface.
+                    SettingsPage.BACKUP -> Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                         val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())
-                        Column(
-                            modifier = Modifier.fillMaxSize().padding(top = 16.dp).verticalScroll(rememberScrollState())
-                        ) {
-                            BackupSettingsSection(
-                                settingsRepo = settingsRepo,
-                                settings = settings,
-                                credentials = uiState.credentials
-                            )
-                        }
-                    } else if (page == 9) { // Diagnostics (LazyColumn of its own, no scroll wrapper)
-                        // Which native libraries are present, which engine each belongs to, and
-                        // whether that engine is the one running. The screen existed and was
-                        // reachable from nowhere: nothing referenced this composable, so the status
-                        // it renders was computed, published to a flow, and displayed by no one.
                         BenchmarkSettingsTab(
+
                             appStateManager = appStateManager,
-                            refreshTrigger = uiState.refreshTrigger
+                            refreshTrigger = uiState.refreshTrigger,
+                            header = {
+                                BackupSettingsSection(
+                                    settingsRepo = settingsRepo,
+                                    settings = settings,
+                                    credentials = uiState.credentials
+                                )
+                            }
                         )
-                    } else if (page == 8) { // Theme (ThemeSettingsScreen already scrolls itself, no outer scroll wrapper)
-                        ThemeSettingsScreen(
-                            darkMode = uiState.themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
-                            colored = uiState.themeColored,
-                            onDarkModeChange = { appStateManager.setThemeDarkMode(it.name) },
-                            onColoredChange = { appStateManager.setThemeColored(it) },
-                            strings = ThemeSettingsStrings(
-                                darkModeSectionLabel = languageManager.getString("theme_section"),
-                                themeSystemLabel = languageManager.getString("theme_system"),
-                                themeLightLabel = languageManager.getString("theme_light"),
-                                themeDarkLabel = languageManager.getString("theme_dark"),
-                                coloredLabel = languageManager.getString("theme_colored"),
-                                coloredDesc = languageManager.getString("theme_colored_desc")
-                            ),
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
+                    }
+                    else -> {
                         val focusManager = LocalFocusManager.current
-                    Column(modifier = Modifier.fillMaxSize().padding(top = 16.dp).verticalScroll(rememberScrollState()).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { focusManager.clearFocus() }), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(top = 16.dp).verticalScroll(rememberScrollState()).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { focusManager.clearFocus() }), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             when (page) {
-                                0 -> GeneralSettingsTab(
+                                SettingsPage.GENERAL -> GeneralSettingsTab(
 
                                     settingsRepo = settingsRepo,
                                     appStateManager = appStateManager
                                 )
-                                1 -> ModelsSettingsTab(
+                                SettingsPage.MODELS -> ModelsSettingsTab(
 
                                     settingsRepo = settingsRepo,
                                     appStateManager = appStateManager,
@@ -314,7 +343,7 @@ fun SettingsContent(
                                     onImportIntentModel = onImportIntentModel,
                                     refreshTrigger = uiState.refreshTrigger
                                 )
-                                2 -> {
+                                SettingsPage.SERVICE -> {
                                     ServiceSettingsTab(
 
                                         settingsRepo = settingsRepo,
@@ -331,12 +360,12 @@ fun SettingsContent(
                                         refreshTrigger = uiState.refreshTrigger
                                     )
                                 }
-                                3 -> AppManagerTab(
+                                SettingsPage.APP_MANAGER -> AppManagerTab(
 
                                     settingsRepo = settingsRepo,
                                     appStateManager = appStateManager
                                 )
-                                4 -> {
+                                SettingsPage.INTEGRATIONS -> {
                                     IntegrationsTab(
 
                                         settingsRepo = settingsRepo
@@ -353,7 +382,7 @@ fun SettingsContent(
                                         settingsRepo = settingsRepo
                                     )
                                 }
-                                5 -> PermissionsSettingsTab(
+                                SettingsPage.PERMISSIONS -> PermissionsSettingsTab(
 
                                     appStateManager = appStateManager,
                                     onRequestMicrophone = onRequestMicrophonePermission,
@@ -362,6 +391,7 @@ fun SettingsContent(
                                     onRequestLocation = onRequestLocationPermission,
                                     onRequestBatteryOptimization = onRequestBatteryOptimizationPermission
                                 )
+                                else -> {}
                             }
                         }
                     }

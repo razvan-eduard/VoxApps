@@ -114,9 +114,7 @@
   "app_alias_delete_msg": "Alias-Regel für \"${displayName}\" löschen? Aliase: ${aliases}",
   "save_button": "Speichern",
   "tab_advanced": "Erweitert",
-  "tab_backup": "Sicherung",
-  "tab_theme": "Design",
-  "tab_diagnostics": "Diagnose",
+  "tab_backup": "Backup & Diagnose",
   "engine_api_key": "API-Schlüssel",
   "tab_benchmark": "Diagnose",
   "tab_verbose_logging": "Detaillierte Logs",
@@ -529,7 +527,12 @@
   "model_download_rejected": "Dieser Download wurde abgelehnt: Die Datei entspricht nicht der im Schema angegebenen Prüfsumme. Sie wurde gelöscht — bitte erneut versuchen.",
   "engine_cloud_disabled_suffix": " — Cloud-KI aktivieren",
   "engine_model_management": "Engine- & Modellverwaltung",
-  "google_services_title": "Google-Systemdienste",
-  "google_services_desc": "Erlaubt Engines, die auf Google-Systemdiensten basieren (Spracherkennung). Diese laufen teils auf dem Gerät, werden aber von Google betrieben.",
-  "model_imported_suffix": " — importiert"
+  "google_services_title": "Google-Unterstützung auf dem Gerät",
+  "google_services_desc": "Erlaubt Engines, die Googles Dienste auf dem Gerät nutzen (Spracherkennung). Sie laufen auf dem Gerät, werden aber von Google betrieben.",
+  "model_imported_suffix": " — importiert",
+  "settings_section_general": "Allgemein",
+  "settings_section_engines": "Engines & Modelle",
+  "settings_section_apps": "Apps & Integrationen",
+  "settings_section_system": "System",
+  "settings_section_data": "Daten"
 }

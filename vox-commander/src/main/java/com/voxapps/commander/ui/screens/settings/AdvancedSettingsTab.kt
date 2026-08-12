@@ -82,72 +82,8 @@ fun AdvancedSettingsTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // --- LOGGING SECTION (same two-switch + viewer shape as every other app's Logs tab) ---
-        item {
-            Text(text = languageManager.getString("advanced_settings_section"), style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(languageManager.getString("debug_logging"), style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        languageManager.getString("debug_logging_desc"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = settings.debugLoggingEnabled,
-                    onCheckedChange = { appStateManager.setDebugLoggingEnabled(it) }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Dependent on debug logging being on — same as every other app's Logs tab, and
-            // matches the fact that a toast is just an alternate rendering of the same log event.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    languageManager.getString("debug_toasts_label"),
-                    color = if (settings.debugLoggingEnabled) LocalContentColor.current else Color.Gray
-                )
-                Switch(
-                    checked = settings.debugToastsEnabled,
-                    enabled = settings.debugLoggingEnabled,
-                    onCheckedChange = { appStateManager.setDebugToastsEnabled(it) }
-                )
-            }
-        }
-
-        // --- VERBOSE LOGS SECTION (shared viewer, same as every other app's Logs tab) ---
-        if (settings.debugLoggingEnabled) {
-            item {
-                LogViewerCard(
-                    logs = logs,
-                    strings = LogViewerStrings(
-                        sectionTitle = languageManager.getString("verbose_logging_section"),
-                        clearLabel = languageManager.getString("clear_logs"),
-                        copyLabel = languageManager.getString("copy_button"),
-                        shareLabel = languageManager.getString("share_button"),
-                        noLogsLabel = languageManager.getString("no_logs")
-                    ),
-                    shareSubject = "VoxCommander Logs"
-                )
-            }
-        }
-
         // --- BENCHMARK SECTION ---
         item {
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
@@ -429,6 +365,69 @@ fun AdvancedSettingsTab(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+        }
+
+        // --- LOGGING SECTION (same two-switch + viewer shape as every other app's Logs tab) ---
+        // Deliberately the page's last section: the viewer below it grows without bound while
+        // logging is on, and anything placed after it would sit below an ever-longer scroll.
+        item {
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("debug_logging"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("debug_logging_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.debugLoggingEnabled,
+                    onCheckedChange = { appStateManager.setDebugLoggingEnabled(it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Dependent on debug logging being on — same as every other app's Logs tab, and
+            // matches the fact that a toast is just an alternate rendering of the same log event.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    languageManager.getString("debug_toasts_label"),
+                    color = if (settings.debugLoggingEnabled) LocalContentColor.current else Color.Gray
+                )
+                Switch(
+                    checked = settings.debugToastsEnabled,
+                    enabled = settings.debugLoggingEnabled,
+                    onCheckedChange = { appStateManager.setDebugToastsEnabled(it) }
+                )
+            }
+        }
+
+        // --- VERBOSE LOGS SECTION (shared viewer, same as every other app's Logs tab) ---
+        if (settings.debugLoggingEnabled) {
+            item {
+                LogViewerCard(
+                    logs = logs,
+                    strings = LogViewerStrings(
+                        sectionTitle = languageManager.getString("verbose_logging_section"),
+                        clearLabel = languageManager.getString("clear_logs"),
+                        copyLabel = languageManager.getString("copy_button"),
+                        shareLabel = languageManager.getString("share_button"),
+                        noLogsLabel = languageManager.getString("no_logs")
+                    ),
+                    shareSubject = "VoxCommander Logs"
+                )
             }
         }
 

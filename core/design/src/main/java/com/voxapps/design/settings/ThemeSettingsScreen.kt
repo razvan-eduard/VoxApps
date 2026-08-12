@@ -58,6 +58,26 @@ fun ThemeSettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        ThemeSettingsBody(darkMode, colored, onDarkModeChange, onColoredChange, strings, todayEffect, extraContent)
+    }
+}
+
+/**
+ * The page's content without the scroll wrapper, for a caller that folds the theme settings into
+ * an already-scrolling settings page instead of giving them a page of their own. Same
+ * values-in/callbacks-out contract as [ThemeSettingsScreen], which is now just this inside the
+ * standard scroll column.
+ */
+@Composable
+fun ColumnScope.ThemeSettingsBody(
+    darkMode: VoxDarkMode,
+    colored: Boolean,
+    onDarkModeChange: (VoxDarkMode) -> Unit,
+    onColoredChange: (Boolean) -> Unit,
+    strings: ThemeSettingsStrings,
+    todayEffect: TodayEffectSettings? = null,
+    extraContent: (@Composable ColumnScope.() -> Unit)? = null
+) {
         Text(strings.darkModeSectionLabel, style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val modes = listOf(
@@ -94,5 +114,4 @@ fun ThemeSettingsScreen(
             HorizontalDivider()
             extraContent()
         }
-    }
 }

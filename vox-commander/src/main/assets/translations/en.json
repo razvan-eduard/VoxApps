@@ -134,9 +134,7 @@
   "app_alias_delete_msg": "Delete alias rule for \"${displayName}\"? Aliases: ${aliases}",
   "save_button": "Save",
   "tab_advanced": "Advanced",
-  "tab_backup": "Backup",
-  "tab_theme": "Theme",
-  "tab_diagnostics": "Diagnostics",
+  "tab_backup": "Backup & Diagnostics",
   "engine_api_key": "API key",
   "tab_benchmark": "Benchmark",
   "tab_verbose_logging": "Verbose Logging",
@@ -529,7 +527,12 @@
   "model_download_rejected": "This download was refused: the file did not match the checksum the schema declares. It has been deleted — try again.",
   "engine_cloud_disabled_suffix": " — enable cloud AI",
   "engine_model_management": "Engine & Model Management",
-  "google_services_title": "Google system services",
-  "google_services_desc": "Allow engines backed by Google system services (speech recognition). These can run partly on-device but are Google-operated.",
-  "model_imported_suffix": " — imported"
+  "google_services_title": "Google on-device support",
+  "google_services_desc": "Allow engines that use Google's on-device services (speech recognition). They run on the phone but are Google-operated.",
+  "model_imported_suffix": " — imported",
+  "settings_section_general": "General",
+  "settings_section_engines": "Engines & Models",
+  "settings_section_apps": "Apps & Integrations",
+  "settings_section_system": "System",
+  "settings_section_data": "Data"
 }

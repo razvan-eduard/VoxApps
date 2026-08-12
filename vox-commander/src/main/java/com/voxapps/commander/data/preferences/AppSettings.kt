@@ -88,10 +88,10 @@ data class AppSettings(
     // --- WHISPER ENGINE (DLC) ---
     val isWhisperSystemEnabled: Boolean = false,
 
-    // --- GOOGLE SYSTEM SERVICES ---
+    // --- GOOGLE ON-DEVICE SUPPORT ---
     // Gates engines the schema marks with the "google_service" capability (system speech
-    // recognition). Separate from cloudIntelligenceEnabled: those services can run partly
-    // on-device, but they are Google-operated and opaque about what leaves the phone.
+    // recognition). Separate from cloudIntelligenceEnabled: those services run on the phone,
+    // but they are Google-operated and opaque about what leaves it.
     // Off by default, like the cloud toggle: anything Google-operated is an explicit opt-in.
     val googleServicesEnabled: Boolean = false,
 

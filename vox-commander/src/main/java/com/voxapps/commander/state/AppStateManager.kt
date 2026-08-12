@@ -405,12 +405,30 @@ class AppStateManager private constructor(
     }
 
     fun setGoogleServicesEnabled(enabled: Boolean) {
-        scope.launch { repo.setGoogleServicesEnabled(enabled) }
+        scope.launch {
+            repo.setGoogleServicesEnabled(enabled)
+            if (!enabled) repo.clearEngineSelections(gatedEngineKeys { key ->
+                RemoteModelRegistry.hasCapability(key, "google_service")
+            })
+        }
     }
 
     fun setCloudIntelligenceEnabled(enabled: Boolean) {
-        scope.launch { repo.setCloudIntelligenceEnabled(enabled) }
+        scope.launch {
+            repo.setCloudIntelligenceEnabled(enabled)
+            if (!enabled) repo.clearEngineSelections(gatedEngineKeys { key ->
+                RemoteModelRegistry.runtimeOf(key) == com.voxapps.commander.data.remote.EngineRuntime.CLOUD
+            })
+        }
     }
+
+    /** Turning a gate off also forgets the selections it had authorized — the affected engines
+     *  fall back to schema defaults, exactly as if they had never been chosen. Which engines a
+     *  gate covers is the schema's call (runtime / capability), never a key list in code, so the
+     *  same disable works for engines that don't exist yet. Re-enabling restores nothing: the
+     *  gate is consent, not a mute button. */
+    private inline fun gatedEngineKeys(predicate: (String) -> Boolean): Set<String> =
+        RemoteModelRegistry.getEngineTypes().filterTo(mutableSetOf(), predicate)
 
     fun setDebugLoggingEnabled(enabled: Boolean) {
         Logger.setEnabled(enabled)

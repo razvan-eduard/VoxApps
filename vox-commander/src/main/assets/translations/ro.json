@@ -132,9 +132,7 @@
   "app_alias_delete_msg": "Ștergi regula de alias pentru \"${displayName}\"? Alias-uri: ${aliases}",
   "save_button": "Salvează",
   "tab_advanced": "Avansat",
-  "tab_backup": "Backup",
-  "tab_theme": "Temă",
-  "tab_diagnostics": "Diagnosticare",
+  "tab_backup": "Backup și diagnosticare",
   "engine_api_key": "Cheie API",
   "tab_benchmark": "Diagnostic",
   "tab_verbose_logging": "Log detaliat",
@@ -529,7 +527,12 @@
   "model_download_rejected": "Descărcarea a fost refuzată: fișierul nu corespunde sumei de control din schemă. A fost șters — încearcă din nou.",
   "engine_cloud_disabled_suffix": " — activează AI cloud",
   "engine_model_management": "Gestionare motoare și modele",
-  "google_services_title": "Servicii de sistem Google",
-  "google_services_desc": "Permite motoarele bazate pe serviciile de sistem Google (recunoaștere vocală). Pot rula parțial pe dispozitiv, dar sunt operate de Google.",
-  "model_imported_suffix": " — importat"
+  "google_services_title": "Suport Google pe dispozitiv",
+  "google_services_desc": "Permite motoarele care folosesc serviciile Google de pe dispozitiv (recunoaștere vocală). Rulează pe dispozitiv, dar sunt operate de Google.",
+  "model_imported_suffix": " — importat",
+  "settings_section_general": "General",
+  "settings_section_engines": "Motoare și modele",
+  "settings_section_apps": "Aplicații și integrări",
+  "settings_section_system": "Sistem",
+  "settings_section_data": "Date"
 }

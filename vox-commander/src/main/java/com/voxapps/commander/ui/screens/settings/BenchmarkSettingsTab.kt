@@ -41,7 +41,11 @@ import java.util.Locale
 fun BenchmarkSettingsTab(
 
     appStateManager: AppStateManager,
-    refreshTrigger: Int = 0
+    refreshTrigger: Int = 0,
+    /** Rendered as the list's first entry, inside the same scroll surface — how the Backup &
+     *  Diagnostics page stacks the backup card above the diagnostics without nesting a second
+     *  scrollable. */
+    header: (@Composable () -> Unit)? = null
 ) {
         val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
@@ -74,6 +78,10 @@ fun BenchmarkSettingsTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (header != null) {
+            item { header() }
+            item { HorizontalDivider() }
+        }
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),

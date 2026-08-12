@@ -27,6 +27,10 @@ import com.voxapps.services.SchemaCatalog
 import com.voxapps.services.RemoteSchema
 import com.voxapps.design.settings.SchemaUpdatesSection
 import com.voxapps.design.settings.SchemaUpdatesStrings
+import com.voxapps.design.settings.ThemeSettingsBody
+import com.voxapps.design.settings.ThemeSettingsStrings
+import com.voxapps.design.VoxDarkMode
+import com.voxapps.design.toEnumOr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -143,5 +147,21 @@ fun GeneralSettingsTab(
                 )
             }
         }
+
+        HorizontalDivider()
+        ThemeSettingsBody(
+            darkMode = uiState.themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
+            colored = uiState.themeColored,
+            onDarkModeChange = { appStateManager.setThemeDarkMode(it.name) },
+            onColoredChange = { appStateManager.setThemeColored(it) },
+            strings = ThemeSettingsStrings(
+                darkModeSectionLabel = languageManager.getString("theme_section"),
+                themeSystemLabel = languageManager.getString("theme_system"),
+                themeLightLabel = languageManager.getString("theme_light"),
+                themeDarkLabel = languageManager.getString("theme_dark"),
+                coloredLabel = languageManager.getString("theme_colored"),
+                coloredDesc = languageManager.getString("theme_colored_desc")
+            )
+        )
     }
 }
