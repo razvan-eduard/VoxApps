@@ -61,6 +61,20 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # -PvoxSkipNativePrep below skips both native engines, and whisper stays skipped (its build
+      # wants the Vulkan/SPIRV toolchain, and its runtime is downloaded at test time anyway). The
+      # llama build is CPU-only and needs nothing beyond NDK+CMake, so it is compiled here on
+      # purpose: LlamaBridgeSmokeTest is what answers whether libllama.so executes under this
+      # emulator's ARM binary translation, and it can only ask that with the library in the APK.
+      # The script initializes the llama.cpp submodule itself on a bare checkout.
+      - name: Install NDK and CMake for the llama build
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Build libllama.so
+        run: ./scripts/vox native llama
+
       - name: Run the instrumented tests on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
