@@ -92,8 +92,11 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   Model Management card — including two privacy gates, both **off by default**, "Cloud AI engines" and
   "Google on-device support", each restricting whatever engines the schema declares as cloud/Google-
   backed and, when switched off, clearing every engine/model selection it gated back to schema
-  defaults; plus delete-unused-models cleanup — system maintenance, tutorial replay, and Logging
-  last), and Backup & Diagnostics (one page: the backup card above the diagnostics list).
+  defaults; two experimental GPU-acceleration toggles, one per on-device engine (speech and local
+  LLM), both **off by default** — enabling one runs a per-device compatibility test in a sandboxed
+  process, and an incompatible device stays on the CPU; plus delete-unused-models cleanup — system
+  maintenance, tutorial replay, and Logging last), and Backup & Diagnostics (one page: the backup
+  card above the diagnostics list).
 
   <img width="388" height="850" alt="Settings: the menu page" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/25_settings_tabs.png" />
 

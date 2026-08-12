@@ -39,7 +39,7 @@ Only three of these scripts are wired into a build:
 | Task | Script | Module | Effect on your tree |
 |---|---|---|---|
 | `autoCompileWhisper` | `check_whisper.sh` | `vox-commander` | Builds the `.so` files. Can check out a newer whisper tag, but only with `--upgrade` or a typed `y` at an interactive prompt — unreachable under Gradle, whose `Exec` stdin is not a TTY. |
-| `autoCompileLlama` | `check_llama.sh` | `vox-commander` | Builds `libllama.so` (CPU backend, static ggml, stripped at deploy). Same upgrade discipline as whisper's. |
+| `autoCompileLlama` | `check_llama.sh` | `vox-commander` | Builds `libllama.so` (hybrid CPU+Vulkan, static ggml, stripped at deploy). Same upgrade discipline as whisper's. |
 | `autoCompileOpenCv` | `build_opencv_android.sh` | `vendor/ppocr-sdk` | Builds from the **pinned** submodule; never moves the pin. Early-exits when the built commit matches. |
 
 The three `autoCheck*` tasks are **deliberately not wired into `preBuild`**. "A newer Vosk exists" is
@@ -144,9 +144,10 @@ the bridge come from the same artifact and no such constraint applies.
   files on a real device). Runs weekly in CI: `instrumented-tests.yml` (Wednesday 05:00 UTC) boots
   an x86_64 Android emulator on an ubuntu runner with KVM opened up, executing Commander's
   arm64-v8a libraries through the system image's ARM binary translation. Before the emulator step
-  it installs the NDK and CMake via `android-actions/setup-android` and runs
-  `./scripts/vox native llama`, so `libllama.so` is in the test APK and `LlamaBridgeSmokeTest` can
-  answer whether it executes under translation. Commander only — translation has a fidelity
+  it installs the NDK and CMake via `android-actions/setup-android`, installs the host shader
+  toolchain (`glslc`, SPIRV-Headers, Vulkan-Headers — the hybrid CPU+Vulkan llama build compiles
+  its shaders on the build host), and runs `./scripts/vox native llama`, so `libllama.so` is in
+  the test APK and `LlamaBridgeSmokeTest` can answer whether it executes under translation. Commander only — translation has a fidelity
   ceiling, and Vision's OpenCV load crashes the translated process while passing on real arm64, so
   its connected test runs where real arm64 exists
   (`ANDROID_SERIAL=<arm64 avd> ./gradlew :vox-vision:connectedDebugAndroidTest`). Every
@@ -286,12 +287,13 @@ however the APK is packaged.
 Vision's debug build keeps all 15 libs; its release drops to 5 in `full` (16 MB) and keeps all 15
 in `minimal` (61 MB).
 
-**Known gap (planned, not yet done):** `check_whisper.sh` assumes Vulkan headers
+**Known gap (planned, not yet done):** `check_whisper.sh` and `check_llama.sh` assume Vulkan headers
 (`vulkan-headers`/`spirv-headers`/`shaderc`) are already installed via Homebrew
-(`VULKAN_HEADERS_BASE`/`SPIRV_HEADERS_BASE`/`SHADERC_BASE`, falling back to `/usr/local` if `brew` is
-missing entirely) — it doesn't yet check for or install Homebrew/these formulae itself if they're
-absent, so a fresh machine needs them installed manually first. Planned follow-up: detect Homebrew is
-missing and install it, then `brew install` the three formulae, before invoking CMake.
+(`VULKAN_HEADERS_BASE`/`SPIRV_HEADERS_BASE`/`SHADERC_BASE`, resolved through `vox_prefix_for` and
+falling back to `/usr/local` if `brew` is missing entirely) — neither checks for or installs
+Homebrew/these formulae itself if they're absent, so a fresh machine needs them installed manually
+first. Planned follow-up: detect Homebrew is missing and install it, then `brew install` the three
+formulae, before invoking CMake.
 
 ---
 
@@ -305,12 +307,20 @@ mechanism, differing only where the engine genuinely differs:
 - **Build:** `scripts/check_llama.sh` via `autoCompileLlama` (preBuild, skipped by
   `-PvoxSkipNativePrep`). A CMake project of its own at `src/main/cpp/llama-build/` — not an
   `add_subdirectory` in whisper's CMakeLists, because both submodules vendor ggml under identical
-  target names and one configure holding both would collide. Flags: `GGML_VULKAN OFF` (CPU only),
+  target names and one configure holding both would collide. Flags: `GGML_VULKAN ON` (hybrid
+  CPU+Vulkan in the one library; the backend is chosen per model load via `n_gpu_layers`),
   `GGML_OPENMP OFF` (llama's own threadpool; no libomp dependency), `BUILD_SHARED_LIBS OFF`
-  (static ggml), `LLAMA_BUILD_COMMON ON` (grammar/chat-template helpers).
-- **One library.** `libllama.so` (~4 MB stripped) defines every ggml symbol it uses, exports only
+  (static ggml), `LLAMA_BUILD_COMMON ON` (grammar/chat-template helpers). The Vulkan backend
+  compiles its shaders on the build host with `glslc`, so the CMakeLists carries the same
+  host-shader-compiler preamble as whisper's: `CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER` plus
+  forced `Vulkan_INCLUDE_DIR`/`SPIRV-Headers_DIR`/`Vulkan_GLSLC_EXECUTABLE` caches, fed by four
+  `-D` arguments from `check_llama.sh`, which resolves the host packages
+  (`vulkan-headers`/`spirv-headers`/`shaderc`) through `vox_prefix_for`.
+- **One library.** `libllama.so` (~39 MB stripped) defines every ggml symbol it uses, exports only
   its `Java_com_voxapps_llamacpp_*` JNI surface (`--exclude-libs,ALL` plus hidden visibility), and
-  has no non-platform `DT_NEEDED` at all. `scripts/check_native_pairing.py` holds this property.
+  declares no non-platform `DT_NEEDED` — its Vulkan backend binds to the platform's own
+  `libvulkan.so`, which sits in `scripts/check_native_pairing.py`'s platform set, so the pairing
+  gate holds this property.
 - **Distribution:** excluded from every release APK by `androidComponents.onVariants`; published
   by hand as the release `llama-libs-<pin12>` (`scripts/publish_llama_libs.sh`,
   `./scripts/vox release publish-llama-libs`); fetched on demand by `LlamaEngineManager` when a
@@ -641,7 +651,7 @@ Which libraries, and whether they are optional:
 |---|---|---|
 | Commander | onnxruntime, vosk, sherpa-onnx (33 MB) | **No.** onnxruntime backs OpenWakeWord, vosk the Vosk engines, sherpa Piper. Anyone using a wake word needs one on first launch. |
 | Commander | whisper (~107 MB, ggml and the Vulkan backend linked in) | **Yes** — only with Whisper STT, Vulkan variant only where supported. Fetched elsewhere, never bundled. |
-| Commander | llama.cpp (~4 MB libllama.so, ggml linked in, CPU backend) | **Yes** — only when a local LLM engine is selected. Fetched from its `llama-libs-<pin12>` release, the pin a build fingerprint over the submodule, JNI bridge and CMake config (`scripts/llama_build_pin.sh`), never bundled. |
+| Commander | llama.cpp (~39 MB libllama.so, ggml and the Vulkan backend linked in) | **Yes** — only when a local LLM engine is selected. Fetched from its `llama-libs-<pin12>` release, the pin a build fingerprint over the submodule, JNI bridge and CMake config (`scripts/llama_build_pin.sh`), never bundled. |
 | Vision | onnxruntime + the OpenCV set (43 MB) | **No.** Vision is an OCR app and these are what OCR needs. |
 
 ## Do the native libraries satisfy each other?
