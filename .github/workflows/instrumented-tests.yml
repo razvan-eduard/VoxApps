@@ -67,6 +67,14 @@ jobs:
       # purpose: LlamaBridgeSmokeTest is what answers whether libllama.so executes under this
       # emulator's ARM binary translation, and it can only ask that with the library in the APK.
       # The script initializes the llama.cpp submodule itself on a bare checkout.
+      # sdkmanager is not on the bare runner's PATH — the emulator action below manages its own
+      # SDK, so this workflow never needed it before the llama build did. Same setup step the
+      # sync workflows use.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-licenses: true
+
       - name: Install NDK and CMake for the llama build
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
