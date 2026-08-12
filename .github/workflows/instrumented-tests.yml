@@ -61,12 +61,13 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # -PvoxSkipNativePrep below skips both native engines, and whisper stays skipped (its build
-      # wants the Vulkan/SPIRV toolchain, and its runtime is downloaded at test time anyway). The
-      # llama build is CPU-only and needs nothing beyond NDK+CMake, so it is compiled here on
-      # purpose: LlamaBridgeSmokeTest is what answers whether libllama.so executes under this
-      # emulator's ARM binary translation, and it can only ask that with the library in the APK.
-      # The script initializes the llama.cpp submodule itself on a bare checkout.
+      # -PvoxSkipNativePrep below skips both native engines, and whisper stays skipped (its
+      # runtime is downloaded at test time anyway). The llama build is compiled here on purpose:
+      # LlamaBridgeSmokeTest is what answers whether libllama.so executes under this emulator's
+      # ARM binary translation, and it can only ask that with the library in the APK. The
+      # library is a hybrid CPU+Vulkan build now, so it needs the host shader toolchain
+      # (glslc/SPIRV/Vulkan headers) that whisper's build already uses. The script initializes
+      # the llama.cpp submodule itself on a bare checkout.
       # sdkmanager is not on the bare runner's PATH — the emulator action below manages its own
       # SDK, so this workflow never needed it before the llama build did. Same setup step the
       # sync workflows use.
@@ -79,6 +80,19 @@ jobs:
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Install the host shader toolchain for the llama Vulkan build
+        run: |
+          # libllama.so is a hybrid CPU+Vulkan build; the Vulkan backend generates its shaders
+          # on the build host with glslc. Same set of packages whisper's build uses.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq glslc libshaderc-dev
+          git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git /tmp/spirv-headers
+          cmake -S /tmp/spirv-headers -B /tmp/spirv-headers/build -DCMAKE_INSTALL_PREFIX=/usr/local
+          sudo cmake --install /tmp/spirv-headers/build
+          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vulkan-headers
+          cmake -S /tmp/vulkan-headers -B /tmp/vulkan-headers/build -DCMAKE_INSTALL_PREFIX=/usr/local
+          sudo cmake --install /tmp/vulkan-headers/build
 
       - name: Build libllama.so
         run: ./scripts/vox native llama
