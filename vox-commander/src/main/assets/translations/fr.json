@@ -195,8 +195,8 @@
   "debug_logging": "Journalisation de débogage",
   "debug_logging_desc": "Écrit les infos de débogage dans logcat — à laisser désactivé sauf en cas de dépannage",
   "debug_toasts_label": "Afficher les toasts de journal",
-  "cloud_intelligence_title": "Intelligence Cloud (L2 Fallback)",
-  "cloud_intelligence_desc": "Utilise OpenAI pour comprendre les commandes quand les Règles Locales (L1) échouent. Nécessite une clé API.",
+  "cloud_intelligence_title": "Moteurs IA cloud",
+  "cloud_intelligence_desc": "Autorise les moteurs cloud (OpenAI) à interpréter les commandes. Désactivé, l'interprétation reste entièrement sur l'appareil — le modèle local n'est pas affecté.",
   "logging_level": "Niveau de log",
   "verbose_logging": "Logs détaillés",
   "verbose_logging_section": "Journalisation détaillée",
@@ -526,5 +526,6 @@
   "schema_reason_rejected": "refusé : illisible ou vide à l'arrivée",
   "schema_reason_unsigned": "refusé : aucune signature valide ne le couvre",
   "schema_reason_unreachable": "n'a pas pu être lu (%1$s)",
-  "model_download_rejected": "Téléchargement refusé : le fichier ne correspond pas à la somme de contrôle déclarée par le schéma. Il a été supprimé — réessayez."
+  "model_download_rejected": "Téléchargement refusé : le fichier ne correspond pas à la somme de contrôle déclarée par le schéma. Il a été supprimé — réessayez.",
+  "engine_cloud_disabled_suffix": " — activer l'IA cloud"
 }

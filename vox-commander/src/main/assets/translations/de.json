@@ -195,8 +195,8 @@
   "debug_logging": "Debug-Protokollierung",
   "debug_logging_desc": "Debug-Informationen ins Logcat schreiben — nur bei der Fehlersuche aktivieren",
   "debug_toasts_label": "Protokoll-Toasts anzeigen",
-  "cloud_intelligence_title": "Cloud-Intelligenz (L2 Fallback)",
-  "cloud_intelligence_desc": "Verwendet OpenAI, um Befehle zu verstehen, wenn lokale Regeln (L1) fehlschlagen. Erfordert API-Key.",
+  "cloud_intelligence_title": "Cloud-KI-Engines",
+  "cloud_intelligence_desc": "Erlaubt Cloud-Engines (OpenAI), Befehle zu interpretieren. Aus hält die Interpretation vollständig auf dem Gerät — das lokale Modell ist nicht betroffen.",
   "logging_level": "Logging-Level",
   "verbose_logging": "Verbose Logging",
   "verbose_logging_section": "Detailliertes Logging",
@@ -526,5 +526,6 @@
   "schema_reason_rejected": "abgelehnt: nicht lesbar oder leer angekommen",
   "schema_reason_unsigned": "abgelehnt: keine gültige Signatur deckt es ab",
   "schema_reason_unreachable": "konnte nicht gelesen werden (%1$s)",
-  "model_download_rejected": "Dieser Download wurde abgelehnt: Die Datei entspricht nicht der im Schema angegebenen Prüfsumme. Sie wurde gelöscht — bitte erneut versuchen."
+  "model_download_rejected": "Dieser Download wurde abgelehnt: Die Datei entspricht nicht der im Schema angegebenen Prüfsumme. Sie wurde gelöscht — bitte erneut versuchen.",
+  "engine_cloud_disabled_suffix": " — Cloud-KI aktivieren"
 }

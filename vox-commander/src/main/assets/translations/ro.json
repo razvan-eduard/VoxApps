@@ -215,8 +215,8 @@
   "debug_logging": "Jurnalizare depanare",
   "debug_logging_desc": "Scrie informații de depanare în logcat — lasă dezactivat, cu excepția depanării unei probleme",
   "debug_toasts_label": "Afișează notificări pentru jurnale",
-  "cloud_intelligence_title": "Traducător Intenții AI (L2 Fallback)",
-  "cloud_intelligence_desc": "Traduce fraze complexe în comenzi digitale când Regulile Locale (L1) eșuează.",
+  "cloud_intelligence_title": "Motoare AI cloud",
+  "cloud_intelligence_desc": "Permite motoarelor cloud (OpenAI) să interpreteze comenzile. Dezactivat, interpretarea rămâne complet pe dispozitiv — modelul local nu este afectat.",
   "ai_processor_label": "Selectează Motorul de Traducere:",
   "logging_level": "Nivel Logare",
   "verbose_logging": "Log Detaliat",
@@ -526,5 +526,6 @@
   "schema_reason_rejected": "refuzat: nu s-a putut interpreta sau a sosit gol",
   "schema_reason_unsigned": "refuzat: nicio semnătură validă nu îl acoperă",
   "schema_reason_unreachable": "nu a putut fi citit (%1$s)",
-  "model_download_rejected": "Descărcarea a fost refuzată: fișierul nu corespunde sumei de control din schemă. A fost șters — încearcă din nou."
+  "model_download_rejected": "Descărcarea a fost refuzată: fișierul nu corespunde sumei de control din schemă. A fost șters — încearcă din nou.",
+  "engine_cloud_disabled_suffix": " — activează AI cloud"
 }
