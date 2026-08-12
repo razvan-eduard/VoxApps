@@ -138,40 +138,14 @@ class WhisperLib {
 
         fun isReady(): Boolean = isLoaded
 
-        /**
-         * Proactively probes the device for real Vulkan support by creating a Vulkan
-         * instance and enumerating physical devices natively. Returns false on any
-         * device that lacks a usable Vulkan-capable GPU. Safe to call off the main thread.
-         */
-        fun isVulkanSupported(): Boolean {
-            if (!load()) return false
-            return try {
-                isVulkanAvailable()
-            } catch (e: Throwable) {
-                Logger.log("Vulkan probe threw: ${e.message}", LOG_TAG)
-                false
-            }
-        }
-
-        /**
-         * Runs a real GPU compute workload (small matmul) through the ggml-vulkan
-         * backend - the same path whisper inference uses. Returns false if the GPU
-         * produces wrong/non-finite results. WARNING: on a broken GPU this can crash
-         * the *process* natively (uncatchable), so call it only inside an isolated process.
-         */
-        fun isVulkanWorkloadSupported(): Boolean {
-            if (!load()) return false
-            return try {
-                runVulkanSelfTest()
-            } catch (e: Throwable) {
-                Logger.log("Vulkan self-test threw: ${e.message}", LOG_TAG)
-                false
-            }
-        }
+        // The device-capability and self-test probes (isVulkanSupported /
+        // isVulkanWorkloadSupported) are gone: the real GPU compatibility answer comes from
+        // running an actual inference in an isolated process (VulkanProbeService), which is
+        // stronger evidence than a synthetic matmul and cannot half-pass. The native symbols
+        // they bound to still exist in libwhisper.so — unreferenced until the next submodule
+        // bump can remove them under a moving tag.
 
         // JNI Methods - Signature matching libwhisper.so (contains JNI Patch)
-        external fun isVulkanAvailable(): Boolean
-        external fun runVulkanSelfTest(): Boolean
         external fun initContext(modelPath: String, useGpu: Boolean): Long
         external fun freeContext(contextPtr: Long)
         external fun fullTranscribe(contextPtr: Long, numThreads: Int, audioData: FloatArray, language: String?)

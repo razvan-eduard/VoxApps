@@ -271,10 +271,10 @@ class ModelManagementViewModelTest {
     @Test
     fun `deleteModel clears the voice fallback when the deleted model was it`() = runTest {
         val settings = TestDataFactory.createAppSettings(
-            voiceProcessor = Strings.Processors.WHISPER_VULKAN,
+            voiceProcessor = "stt_whisper",
             activeVoiceModelId = "base",
             downloadedModelIds = setOf("base"),
-            defaultVoiceFallbackProcessor = Strings.Processors.WHISPER_VULKAN,
+            defaultVoiceFallbackProcessor = "stt_whisper",
             defaultVoiceFallbackModel = "tiny"
         )
         every { settingsRepo.getSettingsSnapshot() } returns settings
@@ -287,10 +287,10 @@ class ModelManagementViewModelTest {
     @Test
     fun `deleteModel clears voice fallback when no active model available`() = runTest {
         val settings = TestDataFactory.createAppSettings(
-            voiceProcessor = Strings.Processors.WHISPER_VULKAN,
+            voiceProcessor = "stt_whisper",
             activeVoiceModelId = null,
             downloadedModelIds = emptySet(),
-            defaultVoiceFallbackProcessor = Strings.Processors.WHISPER_VULKAN,
+            defaultVoiceFallbackProcessor = "stt_whisper",
             defaultVoiceFallbackModel = "tiny"
         )
         every { settingsRepo.getSettingsSnapshot() } returns settings

@@ -138,6 +138,13 @@ class LocalLlmInterpreter(
     private var handle: Long = 0
     private var loadedModelId: String? = null
     private var loadedEngineKey: String? = null
+    private var loadedGpu: Boolean = false
+    /** Benchmark-only backend forcing: when non-null it overrides the settings-derived GPU
+     *  decision in [setupLlm], so a single benchmark can measure both backends on this one
+     *  singleton (its mutex still the sole serializer) without a second interpreter loading the
+     *  same 2 GB model concurrently. Restored to null after the benchmark; the next production
+     *  call reloads on the user's real setting. */
+    @Volatile private var benchmarkGpuOverride: Boolean? = null
     private var cachedGrammar: String? = null
     private var cachedGrammarKey: String? = null
     @Volatile private var isProcessing = false
@@ -182,10 +189,15 @@ class LocalLlmInterpreter(
     private suspend fun setupLlm(selection: EngineSelection) {
         val modelId = selection.modelId ?: return
         val engineKey = selection.engineKey
+        // The GPU wish is part of what "loaded" means: a toggle flip must reload the model on
+        // the other backend, through exactly the invalidation a model change already takes.
+        val gpuSettings = settingsRepo.getSettingsSnapshot()
+        val wantGpu = benchmarkGpuOverride
+            ?: (gpuSettings.llamaGpuEnabled && !gpuSettings.llamaGpuIncompatible)
 
-        // If model or engine changed, tear down everything and reload
-        if (handle != 0L && (loadedModelId != modelId || loadedEngineKey != engineKey)) {
-            Logger.log("LLM model changed ($loadedModelId -> $modelId), reloading", TAG)
+        // If model, engine or backend changed, tear down everything and reload
+        if (handle != 0L && (loadedModelId != modelId || loadedEngineKey != engineKey || loadedGpu != wantGpu)) {
+            Logger.log("LLM load state changed ($loadedModelId gpu=$loadedGpu -> $modelId gpu=$wantGpu), reloading", TAG)
             try { bridge.freeModel(handle) } catch (_: Exception) {}
             handle = 0
             loadedModelId = null
@@ -228,17 +240,21 @@ class LocalLlmInterpreter(
             return
         }
 
-        Logger.log("Loading LLM model: ${modelFile.absolutePath}", TAG)
+        Logger.log("Loading LLM model: ${modelFile.absolutePath} (gpu=$wantGpu)", TAG)
         val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
         handle = try {
-            bridge.loadModel(modelFile.absolutePath, LLM_CONTEXT_TOKENS, threads)
+            bridge.loadModel(
+                modelFile.absolutePath, LLM_CONTEXT_TOKENS, threads,
+                nGpuLayers = if (wantGpu) -1 else 0
+            )
         } catch (e: Exception) {
-            Logger.log("Model failed to load: ${e.message}", TAG)
+            Logger.log("Model failed to load (gpu=$wantGpu): ${e.message}", TAG)
             0
         }
         if (handle != 0L) {
             loadedModelId = modelId
             loadedEngineKey = engineKey
+            loadedGpu = wantGpu
         }
     }
 
@@ -350,13 +366,16 @@ class LocalLlmInterpreter(
             val grammar = grammarFor(domains) ?: return null
 
             return try {
+                val guardGpu = armGpuCrashCookie(settings)
                 val response = completeCancellable(systemPrompt, userInput, grammar, NLU_MAX_TOKENS)
+                settleGpuCrashCookie(guardGpu, succeeded = response != null)
                 Logger.log("LLM response: $response", TAG)
                 response?.let { NluIntentParser.parse(it) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Logger.log("LLM generation failed: ${e.message}", TAG)
+                settleGpuCrashCookie(guarded = true, succeeded = false)
                 null
             }
             // No per-call teardown: the bridge trims the context back to the shared prompt prefix
@@ -424,22 +443,102 @@ class LocalLlmInterpreter(
             // No system prompt and no grammar: a raw-prompt call carries its own framing per task
             // (satellite LLM hook), and its output is free text the caller post-processes.
             return try {
+                val guardGpu = armGpuCrashCookie(settingsRepo.getSettingsSnapshot())
                 // Raw prompts run in their own KV slot: their framing shares no prefix with the
                 // NLU system prompt, so under one slot every hook call evicted the preloaded NLU
                 // prefix and the next voice command repaid the whole prefill (and vice versa).
-                completeCancellable(
+                val out = completeCancellable(
                     "", promptText, "", maxTokens = 512, temperature = 0.2f,
                     slot = LlamaBridge.SLOT_RAW
                 )
+                settleGpuCrashCookie(guardGpu, succeeded = out != null)
+                out
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Logger.log("LLM rawPrompt generation failed: ${e.message}", TAG)
+                settleGpuCrashCookie(guarded = true, succeeded = false)
                 lastErrorReason = "generation failed: ${e.message}"
                 null
             }
         } finally {
             isProcessing = false
+        }
+    }
+
+    /** One benchmark measurement: the total, and the prompt-eval / decode split from the native
+     *  perf counters. [text] is the raw output (null on failure/timeout); [intent] is parsed only
+     *  for the NLU case. */
+    data class BenchmarkRun(
+        val text: String?,
+        val intent: NluIntent?,
+        val totalMs: Long,
+        val promptEvalMs: Long,
+        val promptTokens: Long,
+        val decodeMs: Long,
+        val decodeTokens: Long
+    )
+
+    /**
+     * Runs one completion on a forced backend and returns its timings — the benchmark's only way
+     * in. Serialized on the same [mutex] as every real call, so it can never race a production
+     * inference into a second concurrent model load. [raw] picks the free-text raw-prompt path
+     * (the receipt-scale case) over the grammar-constrained NLU path.
+     */
+    suspend fun runForBenchmark(prompt: String, forceGpu: Boolean, raw: Boolean): BenchmarkRun? =
+        withContext(Dispatchers.IO) {
+            val selection = activeSelection() ?: return@withContext null
+            mutex.withLock {
+                val previous = benchmarkGpuOverride
+                benchmarkGpuOverride = forceGpu
+                try {
+                    withTimeoutOrNull(RAW_PROMPT_TIMEOUT_MS) {
+                        isProcessing = true
+                        setupLlm(selection)
+                        if (handle == 0L) return@withTimeoutOrNull null
+                        val start = System.currentTimeMillis()
+                        val (text, intent) = if (raw) {
+                            completeCancellable("", prompt, "", maxTokens = 512, temperature = 0.2f, slot = LlamaBridge.SLOT_RAW) to null
+                        } else {
+                            val settings = settingsRepo.getSettingsSnapshot()
+                            val systemPrompt = PromptProvider.getNluSystemPrompt(
+                                "", settings, null, settingsRepo, emptyList(), selection.engineKey
+                            )
+                            val userInput = PromptProvider.formatUserInput(prompt)
+                            val domains = (IntentTaxonomy.Domains.ALL + settings.customDomains).distinct()
+                            val grammar = grammarFor(domains)
+                            val out = grammar?.let { completeCancellable(systemPrompt, userInput, it, NLU_MAX_TOKENS) }
+                            out to out?.let { NluIntentParser.parse(it) }
+                        }
+                        val total = System.currentTimeMillis() - start
+                        val t = bridge.lastTimings(handle) ?: longArrayOf(0, 0, 0, 0)
+                        BenchmarkRun(text, intent, total, t[0], t[1], t[2], t[3])
+                    }
+                } finally {
+                    benchmarkGpuOverride = previous
+                    isProcessing = false
+                }
+            }
+        }
+
+    /**
+     * The GPU crash cookie, llama's half: a native GPU crash mid-decode cannot be caught, so an
+     * unverified GPU inference is journaled to disk before it starts. AppContainer finds a
+     * surviving cookie at next launch, attributes the death through the OS exit record, and
+     * strike-counts toward an incompatible verdict. Verified devices skip the bookkeeping —
+     * the cookie exists to catch the first betrayals, not to tax every call forever.
+     */
+    private fun armGpuCrashCookie(settings: com.voxapps.commander.data.preferences.AppSettings): Boolean {
+        val guard = loadedGpu && !settings.llamaGpuRuntimeVerified
+        if (guard) settingsRepo.setGpuRuntimeAttemptSync(SettingsRepository.GPU_LLAMA, true)
+        return guard
+    }
+
+    private suspend fun settleGpuCrashCookie(guarded: Boolean, succeeded: Boolean) {
+        if (!guarded || !loadedGpu) return
+        settingsRepo.setGpuRuntimeAttemptSync(SettingsRepository.GPU_LLAMA, false)
+        if (succeeded) {
+            settingsRepo.setGpuRuntimeVerified(SettingsRepository.GPU_LLAMA, true)
         }
     }
 

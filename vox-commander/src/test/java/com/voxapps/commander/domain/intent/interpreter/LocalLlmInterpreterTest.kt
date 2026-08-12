@@ -51,8 +51,10 @@ class LocalLlmInterpreterTest {
             """{"action":"play","domain":"audio","logical_subject":"Scorpions","confidence":0.9}"""
         var nextHandle = 1L
 
-        override fun loadModel(path: String, nCtx: Int, nThreads: Int): Long {
+        val loadGpuLayers = Collections.synchronizedList(mutableListOf<Int>())
+        override fun loadModel(path: String, nCtx: Int, nThreads: Int, nGpuLayers: Int): Long {
             loadCalls.add(path)
+            loadGpuLayers.add(nGpuLayers)
             return nextHandle
         }
         override fun freeModel(handle: Long) { freeCount++ }
@@ -68,6 +70,7 @@ class LocalLlmInterpreterTest {
         override fun cancel(handle: Long) {}
         override fun clearMemory(handle: Long) {}
         override fun contextTokenCount(handle: Long): Int = 0
+        override fun lastTimings(handle: Long): LongArray? = null
     }
 
     private lateinit var context: Context
@@ -184,6 +187,37 @@ class LocalLlmInterpreterTest {
         // The command after preload must reuse the loaded model, not load again.
         i.processCommand("play scorpions", null)
         assertEquals(1, bridge.loadCalls.size)
+    }
+
+    @Test
+    fun `flipping the GPU toggle reloads the model on the other backend`() = runTest {
+        val i = interpreter()
+        i.processCommand("play scorpions", null)
+        assertEquals(listOf(0), bridge.loadGpuLayers)
+
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            aiProcessor = "nlu_llm",
+            activeIntentModelId = "qwen3-0.6b-q8"
+        ).copy(llamaGpuEnabled = true)
+        i.processCommand("play scorpions", null)
+
+        // Same model id, different backend: the load-state invalidation must treat the GPU wish
+        // as part of what "loaded" means.
+        assertEquals(2, bridge.loadCalls.size)
+        assertEquals(1, bridge.freeCount)
+        assertEquals(listOf(0, -1), bridge.loadGpuLayers)
+    }
+
+    @Test
+    fun `an incompatible verdict overrides the GPU wish`() = runTest {
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            aiProcessor = "nlu_llm",
+            activeIntentModelId = "qwen3-0.6b-q8"
+        ).copy(llamaGpuEnabled = true, llamaGpuIncompatible = true)
+
+        interpreter().processCommand("play scorpions", null)
+
+        assertEquals(listOf(0), bridge.loadGpuLayers)
     }
 
     @Test

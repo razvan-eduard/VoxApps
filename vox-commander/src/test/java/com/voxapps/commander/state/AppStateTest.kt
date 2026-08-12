@@ -186,11 +186,11 @@ class AppStateTest {
     @Test
     fun `fromAppSettings maps voiceProcessor and voiceLanguage`() {
         val settings = TestDataFactory.createAppSettings(
-            voiceProcessor = Strings.Processors.WHISPER_VULKAN,
+            voiceProcessor = "stt_whisper",
             voiceLanguage = "ro"
         )
         val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
-        assertEquals(Strings.Processors.WHISPER_VULKAN, state.voiceProcessor)
+        assertEquals("stt_whisper", state.voiceProcessor)
         assertEquals("ro", state.voiceLanguage)
     }
 

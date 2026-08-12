@@ -11,6 +11,13 @@ import kotlinx.coroutines.flow.Flow
  */
 interface SettingsRepository {
 
+    companion object {
+        /** Engine ids for the per-engine GPU state — deliberately not schema engine keys: the
+         *  GPU question is about the two native runtimes, not about catalogue entries. */
+        const val GPU_WHISPER = "whisper"
+        const val GPU_LLAMA = "llama"
+    }
+
     /**
      * Reactive snapshot of all persisted settings.
      * Emits a new [AppSettings] whenever any value changes.
@@ -111,11 +118,22 @@ interface SettingsRepository {
     suspend fun setThemeDarkMode(mode: String)
     suspend fun setThemeColored(colored: Boolean)
 
-    // --- VULKAN ---
-    suspend fun setVulkanIncompatible(incompatible: Boolean)
-    suspend fun setVulkanProbeDone(done: Boolean)
-    suspend fun setVulkanRuntimeVerified(verified: Boolean)
-    suspend fun setExperimentalVulkanEnabled(enabled: Boolean)
+    // --- GPU ACCELERATION (per-engine) ---
+    // One setter family for both engines; [engine] is GPU_WHISPER or GPU_LLAMA. The sync cookie
+    // setter mirrors [setVulkanRuntimeAttemptSync]'s contract: committed to disk before an
+    // unverified GPU inference, because a native GPU crash leaves no other evidence behind.
+    suspend fun setGpuEnabled(engine: String, enabled: Boolean)
+    suspend fun setGpuIncompatible(engine: String, incompatible: Boolean)
+    suspend fun setGpuProbeDone(engine: String, done: Boolean)
+    suspend fun setGpuProbeAttempts(engine: String, attempts: Int)
+    suspend fun setGpuRuntimeVerified(engine: String, verified: Boolean)
+    suspend fun setGpuCrashStrikes(engine: String, strikes: Int)
+    fun setGpuRuntimeAttemptSync(engine: String, attempted: Boolean)
+
+    /** Forgets this device's verdict for [engine] — probe outcome, attempt count, strikes,
+     *  runtime verification — the "Test again" action. The enabled flag is untouched: wanting
+     *  GPU and the device having proven it are different facts. */
+    suspend fun clearGpuVerdict(engine: String)
 
     // --- WHISPER ENGINE (DLC) ---
     suspend fun setWhisperSystemEnabled(enabled: Boolean)

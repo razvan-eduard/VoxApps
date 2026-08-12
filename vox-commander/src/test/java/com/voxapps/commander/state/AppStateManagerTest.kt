@@ -107,12 +107,12 @@ class AppStateManagerTest {
             assertEquals(Strings.Processors.GOOGLE, initial.voiceProcessor)
 
             // Update settings flow
-            val newSettings = settingsFlow.value.copy(voiceProcessor = Strings.Processors.WHISPER_VULKAN, vulkanProbeDone = true)
+            val newSettings = settingsFlow.value.copy(voiceProcessor = "stt_whisper", vulkanProbeDone = true)
             every { settingsRepo.getSettingsSnapshot() } returns newSettings
             settingsFlow.value = newSettings
 
             val updated = awaitItem()
-            assertEquals(Strings.Processors.WHISPER_VULKAN, updated.voiceProcessor)
+            assertEquals("stt_whisper", updated.voiceProcessor)
         }
     }
 
@@ -138,7 +138,7 @@ class AppStateManagerTest {
             assertEquals(Strings.Processors.GOOGLE, initial.voiceProcessor)
 
             // Change settings
-            val newSettings = settingsFlow.value.copy(voiceProcessor = Strings.Processors.WHISPER_VULKAN, voiceLanguage = "ro", vulkanProbeDone = true)
+            val newSettings = settingsFlow.value.copy(voiceProcessor = "stt_whisper", voiceLanguage = "ro", vulkanProbeDone = true)
             every { settingsRepo.getSettingsSnapshot() } returns newSettings
             settingsFlow.value = newSettings
 
@@ -146,7 +146,7 @@ class AppStateManagerTest {
             // refreshAll triggers a second emission via runtimeState update
             awaitItem() // consume first emission from settings flow change
             val updated = awaitItem() // consume second emission from refreshAll
-            assertEquals(Strings.Processors.WHISPER_VULKAN, updated.voiceProcessor)
+            assertEquals("stt_whisper", updated.voiceProcessor)
             assertEquals("ro", updated.voiceLanguage)
         }
     }
@@ -195,7 +195,7 @@ class AppStateManagerTest {
             assertTrue(initial.voiceModelReady) // Google is always ready
 
             val newSettings = settingsFlow.value.copy(
-                voiceProcessor = Strings.Processors.WHISPER_VULKAN,
+                voiceProcessor = "stt_whisper",
                 activeVoiceModelId = "base",
                 downloadedModelIds = emptySet(),
                 vulkanProbeDone = true
@@ -215,7 +215,7 @@ class AppStateManagerTest {
             assertTrue(initial.voiceModelReady) // Google is always ready
 
             val newSettings = settingsFlow.value.copy(
-                voiceProcessor = Strings.Processors.WHISPER_VULKAN,
+                voiceProcessor = "stt_whisper",
                 activeVoiceModelId = "base",
                 downloadedModelIds = setOf("base"),
                 vulkanProbeDone = true
@@ -235,7 +235,7 @@ class AppStateManagerTest {
 
             // Perform multiple updates via settings flow
             val newSettings = settingsFlow.value.copy(
-                voiceProcessor = Strings.Processors.WHISPER_VULKAN,
+                voiceProcessor = "stt_whisper",
                 voiceLanguage = "ro",
                 cloudIntelligenceEnabled = false,
                 vulkanProbeDone = true
@@ -244,7 +244,7 @@ class AppStateManagerTest {
             settingsFlow.value = newSettings
 
             val updated = awaitItem()
-            assertEquals(Strings.Processors.WHISPER_VULKAN, updated.voiceProcessor)
+            assertEquals("stt_whisper", updated.voiceProcessor)
             assertEquals("ro", updated.voiceLanguage)
             assertFalse(updated.cloudIntelligenceEnabled)
         }
@@ -304,12 +304,12 @@ class AppStateManagerTest {
         stateManager.uiState.test {
             awaitItem()
 
-            stateManager.setVoiceProcessor(Strings.Processors.WHISPER_VULKAN)
+            stateManager.setVoiceProcessor("stt_whisper")
 
             // setVoiceProcessor launches a coroutine on Dispatchers.Main
             // which calls repo.setVoiceProcessor — verify the call
             testScheduler.advanceUntilIdle()
-            coVerify { settingsRepo.setVoiceProcessor(Strings.Processors.WHISPER_VULKAN) }
+            coVerify { settingsRepo.setVoiceProcessor("stt_whisper") }
         }
     }
 
@@ -385,6 +385,57 @@ class AppStateManagerTest {
 
             testScheduler.advanceUntilIdle()
             coVerify { settingsRepo.clearEngineSelections(setOf(Strings.Processors.GOOGLE)) }
+        }
+    }
+
+    @Test
+    fun `enabling GPU for an engine with a latched incompatible verdict is refused`() = runTest {
+        every { settingsRepo.getSettingsSnapshot() } returns settingsFlow.value.copy(
+            llamaGpuIncompatible = true
+        )
+        stateManager.uiState.test {
+            awaitItem()
+
+            stateManager.setGpuEnabled(SettingsRepository.GPU_LLAMA, true)
+
+            testScheduler.advanceUntilIdle()
+            coVerify(exactly = 0) { settingsRepo.setGpuEnabled(any(), true) }
+        }
+    }
+
+    @Test
+    fun `disabling GPU writes without consulting the verdict`() = runTest {
+        stateManager.uiState.test {
+            awaitItem()
+
+            stateManager.setGpuEnabled(SettingsRepository.GPU_WHISPER, false)
+
+            testScheduler.advanceUntilIdle()
+            coVerify { settingsRepo.setGpuEnabled(SettingsRepository.GPU_WHISPER, false) }
+        }
+    }
+
+    @Test
+    fun `enabling GPU on a compatible engine persists the wish`() = runTest {
+        stateManager.uiState.test {
+            awaitItem()
+
+            stateManager.setGpuEnabled(SettingsRepository.GPU_WHISPER, true)
+
+            testScheduler.advanceUntilIdle()
+            coVerify { settingsRepo.setGpuEnabled(SettingsRepository.GPU_WHISPER, true) }
+        }
+    }
+
+    @Test
+    fun `Test again clears the verdict for exactly that engine`() = runTest {
+        stateManager.uiState.test {
+            awaitItem()
+
+            stateManager.clearGpuVerdict(SettingsRepository.GPU_LLAMA)
+
+            testScheduler.advanceUntilIdle()
+            coVerify { settingsRepo.clearGpuVerdict(SettingsRepository.GPU_LLAMA) }
         }
     }
 

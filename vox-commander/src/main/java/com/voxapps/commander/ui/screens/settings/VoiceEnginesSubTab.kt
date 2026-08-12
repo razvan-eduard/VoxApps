@@ -71,24 +71,19 @@ fun VoiceEnginesSubTab(
     // 1. Processor Selection
     Text(text = languageManager.getString("voice_processor_section"), style = MaterialTheme.typography.titleMedium)
     // Build list of processors: JSON engines (type=voice) + Local/Virtual injections
-        val processors = remember(uiState.availableModels, uiState.isExperimentalVulkanEnabled, uiState.isWhisperSystemEnabled) {
+        val processors = remember(uiState.availableModels, uiState.isWhisperSystemEnabled) {
             val list = RemoteModelRegistry.getEngineKeysByType("voice").toMutableList()
 
             // Filter out Whisper (.bin) engines if Whisper system is not enabled
             if (!uiState.isWhisperSystemEnabled) {
                 list.removeAll { RemoteModelRegistry.getExtension(it) == ".bin" }
             }
-            
-            // The cloud and OS-supplied engines are no longer injected here — they are declared in
-            // virtual_models.json and arrive with every other voice engine. Two screens listing
-            // engines by hand is how one of them came to offer an engine the other did not.
-            //
-            // Experimental Vulkan stays: it is not an engine of its own but stt_whisper asked to run
-            // on the GPU, sharing that engine's models, so declaring it would give it an empty model
-            // list and a claim to be the whisper engine in every by-packaging lookup.
-            if (uiState.isWhisperSystemEnabled && uiState.isExperimentalVulkanEnabled && !list.contains(Strings.Processors.WHISPER_VULKAN)) {
-                list.add(0, Strings.Processors.WHISPER_VULKAN)
-            }
+
+            // Nothing is injected by hand: the cloud and OS-supplied engines are declared in
+            // virtual_models.json and arrive with every other voice engine, and whisper's GPU
+            // mode is a property of the whisper engine (the GPU toggle in Advanced), not a row —
+            // a pseudo-engine here shared the real engine's models but not its selections, so
+            // choosing it silently emptied the model picker.
             list
         }
 
@@ -129,8 +124,6 @@ fun VoiceEnginesSubTab(
                     RemoteModelRegistry.hasCapability(proc, "google_service") &&
                         !uiState.googleServicesEnabled -> false
                     proc == Strings.Processors.GOOGLE -> googleSttAvailable
-                    proc == Strings.Processors.WHISPER_VULKAN ->
-                        uiState.isWhisperSystemEnabled && !settingsRepo.getSettingsSnapshot().vulkanIncompatible
                     else -> true
                 }
             },

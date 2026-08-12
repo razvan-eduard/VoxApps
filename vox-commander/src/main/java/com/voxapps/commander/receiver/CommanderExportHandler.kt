@@ -50,7 +50,11 @@ object CommanderExportHandler {
      *  - Pure caches/device-capability probe results, all auto-regenerated at runtime:
      *    [AppSettings.appCacheJson], [AppSettings.downloadedModelIds],
      *    [AppSettings.vulkanIncompatible], [AppSettings.vulkanProbeDone],
-     *    [AppSettings.vulkanRuntimeAttempt], [AppSettings.vulkanRuntimeVerified].
+     *    [AppSettings.vulkanRuntimeAttempt], [AppSettings.vulkanRuntimeVerified], and the
+     *    per-engine GPU verdict fields (the whisperGpu-/llamaGpu-prefixed probe, strike and
+     *    cookie state) — this device's proof, meaningless on another. The two GPU *enabled*
+     *    flags ride: they are the user's wish, and the restored device re-proves itself before
+     *    honoring it.
      *  - [AppSettings.wakeWordProfileJson]: a trained voice-print blob, out of scope for v1.
      * Everything else (language, engine choices, wake word tuning, TTS, app aliases, domain-app
      * selections, etc.) round-trips.
@@ -79,6 +83,18 @@ object CommanderExportHandler {
             vulkanProbeDone = false,
             vulkanRuntimeAttempt = false,
             vulkanRuntimeVerified = false,
+            whisperGpuIncompatible = false,
+            whisperGpuProbeDone = false,
+            whisperGpuProbeAttempts = 0,
+            whisperGpuRuntimeAttempt = false,
+            whisperGpuRuntimeVerified = false,
+            whisperGpuCrashStrikes = 0,
+            llamaGpuIncompatible = false,
+            llamaGpuProbeDone = false,
+            llamaGpuProbeAttempts = 0,
+            llamaGpuRuntimeAttempt = false,
+            llamaGpuRuntimeVerified = false,
+            llamaGpuCrashStrikes = 0,
             wakeWordProfileJson = null
         )
         return VoxSettingsRoundTrip.toJson(portable)

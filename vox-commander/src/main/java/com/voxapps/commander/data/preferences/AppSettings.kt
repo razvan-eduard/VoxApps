@@ -83,7 +83,30 @@ data class AppSettings(
     val vulkanProbeDone: Boolean = false,
     val vulkanRuntimeAttempt: Boolean = false,
     val vulkanRuntimeVerified: Boolean = false,
-    val experimentalVulkanEnabled: Boolean = false,
+
+    // --- GPU ACCELERATION (per-engine, experimental) ---
+    // One state machine, two engines (whisper STT, llama NLU). The two *enabled* flags are the
+    // user's choice and ride a backup; everything else is this device's verdict — probe outcome,
+    // crash-strike bookkeeping, runtime cookie — and is always excluded from export, like the
+    // legacy vulkan* fields above that the whisper half of this state supersedes.
+    val whisperGpuEnabled: Boolean = false,
+    val llamaGpuEnabled: Boolean = false,
+    val whisperGpuIncompatible: Boolean = false,
+    val whisperGpuProbeDone: Boolean = false,
+    val whisperGpuProbeAttempts: Int = 0,
+    val whisperGpuRuntimeAttempt: Boolean = false,
+    val whisperGpuRuntimeVerified: Boolean = false,
+    val whisperGpuCrashStrikes: Int = 0,
+    val llamaGpuIncompatible: Boolean = false,
+    val llamaGpuProbeDone: Boolean = false,
+    val llamaGpuProbeAttempts: Int = 0,
+    val llamaGpuRuntimeAttempt: Boolean = false,
+    val llamaGpuRuntimeVerified: Boolean = false,
+    val llamaGpuCrashStrikes: Int = 0,
+    /** One-shot guard for the whisper-Vulkan retirement rewrite — see the migration in
+     *  [SettingsRepositoryImpl]. Rides exports like the other migration flags: harmless in both
+     *  directions, and a restored backup should not re-trigger a rewrite already performed. */
+    val gpuStateMigrated: Boolean = false,
 
     // --- WHISPER ENGINE (DLC) ---
     val isWhisperSystemEnabled: Boolean = false,

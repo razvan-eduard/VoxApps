@@ -146,7 +146,17 @@ class SettingsRepositoryImpl(
         val VULKAN_PROBE_DONE = booleanPreferencesKey("vulkan_probe_done")
         val VULKAN_RUNTIME_ATTEMPT = booleanPreferencesKey("vulkan_runtime_attempt")
         val VULKAN_RUNTIME_VERIFIED = booleanPreferencesKey("vulkan_runtime_verified")
-        val EXPERIMENTAL_VULKAN_ENABLED = booleanPreferencesKey("experimental_vulkan_enabled")
+
+        // Per-engine GPU state ("whisper" / "llama") — one key family instead of a second copy
+        // of the vulkan_* block per engine.
+        fun gpuEnabled(engine: String) = booleanPreferencesKey("gpu_${engine}_enabled")
+        fun gpuIncompatible(engine: String) = booleanPreferencesKey("gpu_${engine}_incompatible")
+        fun gpuProbeDone(engine: String) = booleanPreferencesKey("gpu_${engine}_probe_done")
+        fun gpuProbeAttempts(engine: String) = intPreferencesKey("gpu_${engine}_probe_attempts")
+        fun gpuRuntimeAttempt(engine: String) = booleanPreferencesKey("gpu_${engine}_runtime_attempt")
+        fun gpuRuntimeVerified(engine: String) = booleanPreferencesKey("gpu_${engine}_runtime_verified")
+        fun gpuCrashStrikes(engine: String) = intPreferencesKey("gpu_${engine}_crash_strikes")
+        val GPU_STATE_MIGRATED = booleanPreferencesKey("gpu_state_migrated")
 
         // Whisper Engine (DLC)
         val WHISPER_SYSTEM_ENABLED = booleanPreferencesKey("whisper_system_enabled")
@@ -298,7 +308,6 @@ class SettingsRepositoryImpl(
                 all[Strings.Preferences.KEY_VULKAN_PROBE_DONE]?.let { prefs[Keys.VULKAN_PROBE_DONE] = it as Boolean }
                 all[Strings.Preferences.KEY_VULKAN_RUNTIME_ATTEMPT]?.let { prefs[Keys.VULKAN_RUNTIME_ATTEMPT] = it as Boolean }
                 all[Strings.Preferences.KEY_VULKAN_RUNTIME_VERIFIED]?.let { prefs[Keys.VULKAN_RUNTIME_VERIFIED] = it as Boolean }
-                all["experimental_vulkan_enabled"]?.let { prefs[Keys.EXPERIMENTAL_VULKAN_ENABLED] = it as Boolean }
 
                 // Whisper Engine (DLC)
                 all["whisper_system_enabled"]?.let { prefs[Keys.WHISPER_SYSTEM_ENABLED] = it as Boolean }
@@ -398,7 +407,21 @@ class SettingsRepositoryImpl(
             vulkanProbeDone = prefs[Keys.VULKAN_PROBE_DONE] ?: false,
             vulkanRuntimeAttempt = prefs[Keys.VULKAN_RUNTIME_ATTEMPT] ?: false,
             vulkanRuntimeVerified = prefs[Keys.VULKAN_RUNTIME_VERIFIED] ?: false,
-            experimentalVulkanEnabled = prefs[Keys.EXPERIMENTAL_VULKAN_ENABLED] ?: false,
+            whisperGpuEnabled = prefs[Keys.gpuEnabled(SettingsRepository.GPU_WHISPER)] ?: false,
+            llamaGpuEnabled = prefs[Keys.gpuEnabled(SettingsRepository.GPU_LLAMA)] ?: false,
+            whisperGpuIncompatible = prefs[Keys.gpuIncompatible(SettingsRepository.GPU_WHISPER)] ?: false,
+            whisperGpuProbeDone = prefs[Keys.gpuProbeDone(SettingsRepository.GPU_WHISPER)] ?: false,
+            whisperGpuProbeAttempts = prefs[Keys.gpuProbeAttempts(SettingsRepository.GPU_WHISPER)] ?: 0,
+            whisperGpuRuntimeAttempt = prefs[Keys.gpuRuntimeAttempt(SettingsRepository.GPU_WHISPER)] ?: false,
+            whisperGpuRuntimeVerified = prefs[Keys.gpuRuntimeVerified(SettingsRepository.GPU_WHISPER)] ?: false,
+            whisperGpuCrashStrikes = prefs[Keys.gpuCrashStrikes(SettingsRepository.GPU_WHISPER)] ?: 0,
+            llamaGpuIncompatible = prefs[Keys.gpuIncompatible(SettingsRepository.GPU_LLAMA)] ?: false,
+            llamaGpuProbeDone = prefs[Keys.gpuProbeDone(SettingsRepository.GPU_LLAMA)] ?: false,
+            llamaGpuProbeAttempts = prefs[Keys.gpuProbeAttempts(SettingsRepository.GPU_LLAMA)] ?: 0,
+            llamaGpuRuntimeAttempt = prefs[Keys.gpuRuntimeAttempt(SettingsRepository.GPU_LLAMA)] ?: false,
+            llamaGpuRuntimeVerified = prefs[Keys.gpuRuntimeVerified(SettingsRepository.GPU_LLAMA)] ?: false,
+            llamaGpuCrashStrikes = prefs[Keys.gpuCrashStrikes(SettingsRepository.GPU_LLAMA)] ?: 0,
+            gpuStateMigrated = prefs[Keys.GPU_STATE_MIGRATED] ?: false,
 
             isWhisperSystemEnabled = prefs[Keys.WHISPER_SYSTEM_ENABLED] ?: false,
 
@@ -542,7 +565,9 @@ class SettingsRepositoryImpl(
             prefs[Keys.THEME_DARK_MODE] = imported.themeDarkMode
             prefs[Keys.THEME_COLORED] = imported.themeColored
 
-            prefs[Keys.EXPERIMENTAL_VULKAN_ENABLED] = imported.experimentalVulkanEnabled
+            prefs[Keys.gpuEnabled(SettingsRepository.GPU_WHISPER)] = imported.whisperGpuEnabled
+            prefs[Keys.gpuEnabled(SettingsRepository.GPU_LLAMA)] = imported.llamaGpuEnabled
+            prefs[Keys.GPU_STATE_MIGRATED] = imported.gpuStateMigrated
 
             prefs[Keys.WHISPER_SYSTEM_ENABLED] = imported.isWhisperSystemEnabled
 
@@ -662,6 +687,50 @@ class SettingsRepositoryImpl(
         }
     }
 
+    // --- GPU ACCELERATION (per-engine) ---
+    override suspend fun setGpuEnabled(engine: String, enabled: Boolean) {
+        dataStore.edit { it[Keys.gpuEnabled(engine)] = enabled }
+    }
+
+    override suspend fun setGpuIncompatible(engine: String, incompatible: Boolean) {
+        dataStore.edit { it[Keys.gpuIncompatible(engine)] = incompatible }
+    }
+
+    override suspend fun setGpuProbeDone(engine: String, done: Boolean) {
+        dataStore.edit { it[Keys.gpuProbeDone(engine)] = done }
+    }
+
+    override suspend fun setGpuProbeAttempts(engine: String, attempts: Int) {
+        dataStore.edit { it[Keys.gpuProbeAttempts(engine)] = attempts }
+    }
+
+    override suspend fun setGpuRuntimeVerified(engine: String, verified: Boolean) {
+        dataStore.edit { it[Keys.gpuRuntimeVerified(engine)] = verified }
+    }
+
+    override suspend fun setGpuCrashStrikes(engine: String, strikes: Int) {
+        dataStore.edit { it[Keys.gpuCrashStrikes(engine)] = strikes }
+    }
+
+    override fun setGpuRuntimeAttemptSync(engine: String, attempted: Boolean) {
+        // Same contract as setVulkanRuntimeAttemptSync: the whole point of the cookie is to
+        // survive a native crash, so it must be on disk before the GPU work begins.
+        runBlocking {
+            dataStore.edit { it[Keys.gpuRuntimeAttempt(engine)] = attempted }
+        }
+    }
+
+    override suspend fun clearGpuVerdict(engine: String) {
+        dataStore.edit { prefs ->
+            prefs.remove(Keys.gpuIncompatible(engine))
+            prefs.remove(Keys.gpuProbeDone(engine))
+            prefs.remove(Keys.gpuProbeAttempts(engine))
+            prefs.remove(Keys.gpuRuntimeAttempt(engine))
+            prefs.remove(Keys.gpuRuntimeVerified(engine))
+            prefs.remove(Keys.gpuCrashStrikes(engine))
+        }
+    }
+
     // --- API / CLOUD ---
     override suspend fun setEngineApiKey(engineKey: String, key: String?) {
         val name = SecureKeys.forEngine(engineKey)
@@ -759,6 +828,43 @@ class SettingsRepositoryImpl(
                 }
                 Logger.log("Deleted ${orphans.size} retired-format model file(s)", TAG)
             }
+        }
+    }
+
+    /**
+     * Rewrites the retired WHISPER_VULKAN pseudo-processor into the per-engine GPU state.
+     *
+     * One-shot behind [Keys.GPU_STATE_MIGRATED] rather than self-guarding: the legacy vulkan_*
+     * keys are *copied*, not moved — they stay the live source for the code that still reads
+     * them until the shared GPU mechanism replaces it — and a copy that re-ran on every launch
+     * would overwrite the new state with the stale legacy values the moment the new state
+     * becomes the one being written. "WHISPER_VULKAN" is a literal for the same reason the
+     * retired engine keys above are: it names a stored identifier, not a live constant.
+     */
+    suspend fun migrateWhisperVulkanRetirement() {
+        val retiredKey = "WHISPER_VULKAN"
+        dataStore.edit { prefs ->
+            if (prefs[Keys.GPU_STATE_MIGRATED] == true) return@edit
+            val whisper = SettingsRepository.GPU_WHISPER
+            prefs[Keys.gpuIncompatible(whisper)] = prefs[Keys.VULKAN_INCOMPATIBLE] ?: false
+            prefs[Keys.gpuProbeDone(whisper)] = prefs[Keys.VULKAN_PROBE_DONE] ?: false
+            prefs[Keys.gpuRuntimeVerified(whisper)] = prefs[Keys.VULKAN_RUNTIME_VERIFIED] ?: false
+            // GPU-on maps only from the pseudo-processor being *selected* — that was the one
+            // arrangement in which the old design actually ran on the GPU. The old visibility
+            // toggle alone never engaged it.
+            val wasSelected = prefs[Keys.VOICE_PROCESSOR] == retiredKey
+            prefs[Keys.gpuEnabled(whisper)] = wasSelected
+            if (wasSelected) prefs[Keys.VOICE_PROCESSOR] = "stt_whisper"
+            // Selections are stored under the raw processor key, so the pseudo-key may own a
+            // model memory the real engine then lacks.
+            val selections = parseStringMap(prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON])
+            if (retiredKey in selections) {
+                val merged = selections.toMutableMap()
+                merged.getOrPut("stt_whisper") { merged.getValue(retiredKey) }
+                merged.remove(retiredKey)
+                prefs[Keys.ENGINE_MODEL_SELECTIONS_JSON] = gson.toJson(merged)
+            }
+            prefs[Keys.GPU_STATE_MIGRATED] = true
         }
     }
 
@@ -985,22 +1091,6 @@ class SettingsRepositoryImpl(
         dataStore.edit { it[Keys.THEME_COLORED] = colored }
     }
 
-    // --- VULKAN ---
-    override suspend fun setVulkanIncompatible(incompatible: Boolean) {
-        dataStore.edit { it[Keys.VULKAN_INCOMPATIBLE] = incompatible }
-    }
-
-    override suspend fun setVulkanProbeDone(done: Boolean) {
-        dataStore.edit { it[Keys.VULKAN_PROBE_DONE] = done }
-    }
-
-    override suspend fun setVulkanRuntimeVerified(verified: Boolean) {
-        dataStore.edit { it[Keys.VULKAN_RUNTIME_VERIFIED] = verified }
-    }
-
-    override suspend fun setExperimentalVulkanEnabled(enabled: Boolean) {
-        dataStore.edit { it[Keys.EXPERIMENTAL_VULKAN_ENABLED] = enabled }
-    }
 
     // --- WHISPER ENGINE (DLC) ---
     override suspend fun setWhisperSystemEnabled(enabled: Boolean) {
@@ -1299,6 +1389,9 @@ class SettingsRepositoryImpl(
      * readers stop guarding, and this table stays the one place the old spellings are known.
      */
     private fun normalizeEngineKey(raw: String): String = when (raw) {
+        // The retired GPU pseudo-processor: stt_whisper asked to run on the GPU. The engine is
+        // the same; the GPU wish is carried by whisperGpuEnabled now.
+        "WHISPER_VULKAN" -> "stt_whisper"
         "vosk" -> "wake_vosk"
         "porcupine" -> "wake_porcupine"
         "openwakeword" -> "wake_openwakeword"

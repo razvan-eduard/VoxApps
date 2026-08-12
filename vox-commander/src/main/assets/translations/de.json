@@ -440,7 +440,6 @@
   "download_preference_wifi_only": "Nur WLAN",
   "engine_label_google": "Google Spracherkennung",
   "engine_label_openai_gpt": "OpenAI GPT (Cloud)",
-  "engine_label_vulkan_experimental": "Whisper Vulkan (Experimentell)",
   "engine_label_whisper_api": "OpenAI Whisper API",
   "engine_type_label": "Engine: %s",
   "metered_warning_continue": "Trotzdem herunterladen",
@@ -534,5 +533,12 @@
   "settings_section_engines": "Engines & Modelle",
   "settings_section_apps": "Apps & Integrationen",
   "settings_section_system": "System",
-  "settings_section_data": "Daten"
+  "settings_section_data": "Daten",
+  "gpu_whisper_title": "Whisper-GPU-Beschleunigung (Experimentell)",
+  "gpu_llama_title": "LLM-GPU-Beschleunigung (Experimentell)",
+  "gpu_toggle_desc": "Diese Engine auf der GPU ausführen (Vulkan). Beim Aktivieren läuft ein einmaliger Kompatibilitätstest in einem isolierten Prozess; besteht das Gerät ihn nicht, schaltet sich der Schalter selbst aus.",
+  "gpu_verdict_incompatible": "Dieses Gerät hat den GPU-Test nicht bestanden — läuft auf der CPU.",
+  "gpu_verdict_verified": "GPU auf diesem Gerät verifiziert.",
+  "gpu_verdict_probed": "GPU-Test bestanden — wartet auf den ersten echten Einsatz.",
+  "gpu_test_again": "Erneut testen"
 }

@@ -370,7 +370,6 @@
   "vulkan_failed_message": "Your GPU failed the stress test. Switched to NEON (CPU) for stability.",
   "engine_label_google": "Google Speech Recognition",
   "engine_label_whisper_api": "OpenAI Whisper API",
-  "engine_label_vulkan_experimental": "Whisper Vulkan (Experimental)",
   "engine_label_openai_gpt": "OpenAI GPT (Cloud)",
   "available_models_header": "AVAILABLE MODELS",
   "nlu_model_selection_title": "NLU Model Selection",
@@ -534,5 +533,12 @@
   "settings_section_engines": "Engines & Models",
   "settings_section_apps": "Apps & Integrations",
   "settings_section_system": "System",
-  "settings_section_data": "Data"
+  "settings_section_data": "Data",
+  "gpu_whisper_title": "Whisper GPU acceleration (Experimental)",
+  "gpu_llama_title": "LLM GPU acceleration (Experimental)",
+  "gpu_toggle_desc": "Run this engine on the GPU (Vulkan). Enabling runs a one-time compatibility test in a sandboxed process; if the device fails it, the switch turns itself off.",
+  "gpu_verdict_incompatible": "This device failed the GPU test — running on the CPU.",
+  "gpu_verdict_verified": "GPU verified on this device.",
+  "gpu_verdict_probed": "GPU test passed — awaiting first real use.",
+  "gpu_test_again": "Test again"
 }

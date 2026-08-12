@@ -430,11 +430,7 @@ object RemoteModelRegistry {
             if (translated.isNotBlank() && translated != key) return translated
         }
         if (config?.engine_label != null) return config.engine_label
-        return when (engineKey) {
-            // Not a declared engine: it is stt_whisper asked to run on the GPU. See VoiceEnginesSubTab.
-            Strings.Processors.WHISPER_VULKAN -> languageManager.getString("engine_label_vulkan_experimental")
-            else -> engineKey.replace("_", " ").uppercase()
-        }
+        return engineKey.replace("_", " ").uppercase()
     }
 
     fun getModels(engineKey: String): List<AppModel> {

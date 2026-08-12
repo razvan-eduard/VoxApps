@@ -4,7 +4,6 @@ import android.app.Application
 import com.voxapps.commander.data.remote.NativeLibManager
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.model.ImportedModelId
-import com.voxapps.commander.domain.engine.SttEngines
 import com.voxapps.commander.di.AppContainer
 import com.voxapps.commander.service.OAuth2Manager
 import com.voxapps.logging.Logger
@@ -192,7 +191,7 @@ class VoxApplication : Application() {
                     else repo.setActiveVoiceModelId(importedId)
                 }
 
-                val voiceEngine = SttEngines.backingEngineKey(settings.voiceProcessor)
+                val voiceEngine = settings.voiceProcessor
                 adopt(
                     voiceEngine,
                     settings.modelFilterLang.takeIf { RemoteModelRegistry.isPerLanguage(voiceEngine) },
