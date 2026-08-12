@@ -87,7 +87,7 @@ jobs:
           sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1" "build-tools;36.0.0"
 
 
-      - name: Install SPIRV-Headers and Shaderc for whisper Vulkan build
+      - name: Install SPIRV-Headers and Shaderc for the whisper and llama Vulkan builds
         run: |
           # Install glslc (shaderc) from apt
           sudo apt-get update -qq

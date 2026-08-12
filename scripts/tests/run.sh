@@ -543,6 +543,31 @@ else
         "$MODEL_MISSING"
 fi
 
+log_blue "── the llama engine is a hybrid CPU+Vulkan build ──────────"
+# The GPU backend is a single forced flag in the pinned CMakeLists (the shell script is outside
+# the build fingerprint, so a flag living only there would move the bytes without moving the tag).
+if grep -qE '^set\(GGML_VULKAN ON CACHE' vox-commander/src/main/cpp/llama-build/CMakeLists.txt; then
+    ok "llama-build forces GGML_VULKAN ON"
+else
+    bad "llama-build/CMakeLists.txt no longer forces GGML_VULKAN ON — the GPU backend is not compiled in"
+fi
+
+log_blue "── the WHISPER_VULKAN pseudo-engine stays retired ──────────"
+# GPU is a per-engine boolean now, never a fake processor key. The only survivors are the one-shot
+# migration that rewrites the retired stored value and the backup-import remap — both name it as a
+# string literal on purpose. Any reappearance in engine wiring or the UI is the anti-pattern
+# growing back.
+stray=$(grep -rn 'WHISPER_VULKAN' vox-commander/src/main --include='*.kt' \
+    | grep -v 'migrateWhisperVulkanRetirement' \
+    | grep -v 'normalizeEngineKey' \
+    | grep -vE '"WHISPER_VULKAN"' \
+    | grep -vE ':[[:space:]]*(\*|//)' || true)
+if [ -z "$stray" ]; then
+    ok "no WHISPER_VULKAN reference outside the migration and the key remap"
+else
+    bad "WHISPER_VULKAN is referenced as live engine wiring again" "$(printf '%s' "$stray" | head -3)"
+fi
+
 log_blue "── report contract without CI's environment ────────────────"
 # CI exports GH_TOKEN and friends, so a broken \${VAR:-\$(fallback)} in a check script fails only
 # on a developer machine — the environment masks the defect exactly where the report gates a bot.
