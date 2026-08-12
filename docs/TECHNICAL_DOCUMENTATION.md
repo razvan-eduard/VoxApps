@@ -1333,7 +1333,7 @@ All six tasks are dependencies of `preBuild`.
 
 ### Repositories
 
-- **Google Maven** — AndroidX, Compose, LiteRT-LM
+- **Google Maven** — AndroidX, Compose
 - **Maven Central** — OkHttp, Retrofit, Gson, Apache Commons, ONNX Runtime
 - **JitPack** — Vosk, sherpa-onnx, NewPipe Extractor
 - **Picovoice Maven** — Porcupine
@@ -1494,7 +1494,7 @@ command bus but carrying opaque prompt/result payloads instead of structured not
   synchronization of its own; a burst of concurrent callers (confirmed on-device: Expenses' "Force-check
   notifications now" forwarding several matched notifications at once) each saw the model unloaded and
   each triggered a concurrent, memory-heavy model-load call (`Engine(...).initialize()` under
-  LiteRT-LM; the hazard and the `Mutex` that closes it are engine-agnostic) — N full
+  llama.cpp; the hazard and the `Mutex` that closes it are engine-agnostic) — N full
   copies of the model loading into RAM at once, crashing the process and silently dropping every one of
   those requests (nothing ever reached `LlmHookWorker`'s `catch` to send a reply).
 - **Reply** — `LlmHookWorker` applies only generic cleanup (`NluIntentParser.cleanGenericOutput`,
