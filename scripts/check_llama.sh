@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-# Builds libllama.so (llama.cpp + JNI wrapper, CPU backend, static ggml) and deploys it beside the
-# other jniLibs. Same shape as check_whisper.sh minus the Vulkan header plumbing — the CPU-only
-# build needs no host shader compiler, and the suite runs this family of scripts with the Vulkan
-# environment stripped.
+# Builds libllama.so (llama.cpp + JNI wrapper, hybrid CPU+Vulkan, static ggml) and deploys it
+# beside the other jniLibs. Same shape as check_whisper.sh, Vulkan header plumbing included:
+# the shader compiler (glslc) runs on the build host, so the same host lookups apply. The
+# backend actually used is decided per model load (n_gpu_layers through the JNI), not here.
 
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
@@ -15,6 +15,18 @@ WRAPPER_DIR="$PROJECT_ROOT/vox-commander/src/main/cpp/llama-build"
 PROJECT_JNI_DIR="$PROJECT_ROOT/vox-commander/src/main/jniLibs/arm64-v8a"
 BACKUP_DIR="$PROJECT_ROOT/scripts/.llama_backup"
 BUILD_DIR="build-android"
+
+# --- DYNAMIC PATH DETECTION (host shader toolchain, same contract as check_whisper.sh) ---
+# Homebrew where there is one, the tool's own location where there is not, then the usual
+# prefixes; each *_BASE is honoured directly, which is how a CI runner says where to look.
+VULKAN_HEADERS_BASE="${VULKAN_HEADERS_BASE:-$(vox_prefix_for vulkan-headers)}"
+SPIRV_HEADERS_BASE="${SPIRV_HEADERS_BASE:-$(vox_prefix_for spirv-headers)}"
+SHADERC_BASE="${SHADERC_BASE:-$(vox_prefix_for shaderc glslc)}"
+
+VULKAN_INC="$VULKAN_HEADERS_BASE/include"
+SPIRV_INC="$SPIRV_HEADERS_BASE/include"
+SPIRV_CMAKE="$SPIRV_HEADERS_BASE/share/cmake/SPIRV-Headers"
+GLSLC_PATH="$SHADERC_BASE/bin/glslc"
 
 FORCE_REBUILD=false
 MANUAL_UPGRADE=false
@@ -108,12 +120,16 @@ mkdir -p "$WRAPPER_DIR/$BUILD_DIR"
 cd "$WRAPPER_DIR/$BUILD_DIR" || exit 1
 
 if [ ! -f "CMakeCache.txt" ]; then
-    log_info "⚙️ Configuring CPU build (static ggml, no OpenMP)..."
+    log_info "⚙️ Configuring hybrid build (CPU + Vulkan, static ggml, no OpenMP)..."
     if ! cmake .. \
       -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" \
       -DANDROID_ABI=arm64-v8a \
       -DANDROID_PLATFORM=android-33 \
-      -DCMAKE_BUILD_TYPE=Release; then
+      -DCMAKE_BUILD_TYPE=Release \
+      -DVULKAN_HEADERS_DIR="$VULKAN_INC" \
+      -DSPIRV_HEADERS_INC_DIR="$SPIRV_INC" \
+      -DSPIRV_HEADERS_CMAKE_DIR="$SPIRV_CMAKE" \
+      -DVulkan_GLSLC_EXECUTABLE="$GLSLC_PATH"; then
         perform_rollback
     fi
 fi
@@ -141,7 +157,7 @@ if [ -f "$LIB_LLAMA" ] && nm -D "$LIB_LLAMA" | grep -q "Java_com_voxapps_llamacp
     if [ -n "$STRIP_TOOL" ]; then
         "$STRIP_TOOL" --strip-unneeded "$PROJECT_JNI_DIR/libllama.so"
     fi
-    log_info "🎉 build successful and deployed."
+    log_info "🎉 build successful and deployed ($(du -h "$PROJECT_JNI_DIR/libllama.so" | cut -f1) stripped)."
 
     # --- 5. PUBLISH TO GITHUB RELEASES (DLC) ---
     # Only publish when a rebuild actually happened (upgrade or force-rebuild)
