@@ -210,4 +210,21 @@ class LocalLlmInterpreterTest {
         assertEquals("", sys)
         assertEquals("", grammar)
     }
+
+    @Test
+    fun `the system prompt is identical across different commands — the cacheable prefix`() = runTest {
+        val i = interpreter()
+        i.processCommand("play scorpions on spotify", null)
+        i.processCommand("turn on the flashlight", null)
+
+        assertEquals(2, bridge.completeCalls.size)
+        val (sysA, userA, _) = bridge.completeCalls[0]
+        val (sysB, userB, _) = bridge.completeCalls[1]
+        // A prompt that varied with the utterance would diverge early and repay most of the
+        // prefill every call; the static prefix is the whole point of the bridge's KV reuse.
+        assertEquals(sysA, sysB)
+        assertTrue(userA != userB)
+        assertTrue(userA.contains("play scorpions on spotify"))
+        assertTrue(userB.contains("turn on the flashlight"))
+    }
 }

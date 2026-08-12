@@ -6,7 +6,6 @@ import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.LlamaEngineManager
 import com.voxapps.commander.data.remote.ModelDownloader
 import com.voxapps.commander.domain.engine.EngineSelection
-import com.voxapps.commander.domain.intent.model.FastMapRule
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.domain.intent.taxonomy.IntentTaxonomy
 import com.voxapps.commander.utils.NetworkMonitor
@@ -299,8 +298,7 @@ class LocalLlmInterpreter(
         withContext(Dispatchers.IO) {
             mutex.withLock {
                 withTimeoutOrNull(LOCAL_LLM_TIMEOUT_MS) {
-                    val activeRules = fastMapDao.getAllRulesOnce().filter { it.isActive }
-                    doProcessCommand(spokenText, modelFilterLang, activeRules, selection)
+                    doProcessCommand(spokenText, modelFilterLang, selection)
                 }
             }
         }
@@ -308,7 +306,6 @@ class LocalLlmInterpreter(
     private suspend fun doProcessCommand(
         spokenText: String,
         modelFilterLang: String?,
-        fastMapRules: List<FastMapRule>,
         selection: EngineSelection
     ): NluIntent? {
         isProcessing = true
@@ -317,8 +314,17 @@ class LocalLlmInterpreter(
             if (handle == 0L) return null
 
             val settings = settingsRepo.getSettingsSnapshot()
+            // The system prompt is deliberately NOT scoped to the utterance. PromptProvider's
+            // per-utterance domain/app scoping saves prompt tokens, which was the right trade when
+            // every call re-prefilled the whole prompt (the LiteRT engine had no rewind). Under
+            // the bridge's longest-common-prefix KV reuse the trade inverts: a prompt that varies
+            // with the spoken text diverges early and repays most of the prefill per command,
+            // while a stable prompt is prefilled once (preload) and every command pays only its
+            // own "Input:" tail. The prompt still changes — and the cache rebuilds itself from
+            // the divergence point — when its real inputs change: installed apps, custom domains,
+            // search providers, the language hint, or the schema-served template.
             val systemPrompt = PromptProvider.getNluSystemPrompt(
-                spokenText, settings, modelFilterLang, settingsRepo, fastMapRules, selection.engineKey
+                "", settings, modelFilterLang, settingsRepo, emptyList(), selection.engineKey
             )
             val userInput = PromptProvider.formatUserInput(spokenText)
             val domains = (IntentTaxonomy.Domains.ALL + settings.customDomains).distinct()
