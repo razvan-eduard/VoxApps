@@ -530,5 +530,6 @@
   "engine_cloud_disabled_suffix": " — activează AI cloud",
   "engine_model_management": "Gestionare motoare și modele",
   "google_services_title": "Servicii de sistem Google",
-  "google_services_desc": "Permite motoarele bazate pe serviciile de sistem Google (recunoaștere vocală). Pot rula parțial pe dispozitiv, dar sunt operate de Google."
+  "google_services_desc": "Permite motoarele bazate pe serviciile de sistem Google (recunoaștere vocală). Pot rula parțial pe dispozitiv, dar sunt operate de Google.",
+  "model_imported_suffix": " — importat"
 }

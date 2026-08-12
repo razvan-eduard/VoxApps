@@ -37,6 +37,7 @@ fun IntentEnginesSubTab(
     downloadingItem: AppModel?,
     onCancelDownload: () -> Unit,
     onFallbackChanged: () -> Unit = {},
+    onImportIntentModel: () -> Unit = {},
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
@@ -118,7 +119,23 @@ fun IntentEnginesSubTab(
 
         // --- NLU MODEL SELECTION ---
         // Only show if the current engine is a JSON-defined LLM with actual models
-        val nluModels = uiState.availableModels[engineKey] ?: emptyList()
+        val declaredNlu = uiState.availableModels[engineKey] ?: emptyList()
+        // The user's own gguf files, listed first and treated like any other model — same
+        // mechanism as the voice tabs, gated on the engine declaring custom_model_import.
+        // Keyed on the active selection too: importing selects the new import, so the second
+        // import in a row changes neither the declared list nor the trigger — only the selection.
+        val nluModels = remember(declaredNlu, refreshTrigger, uiState.activeIntentModelId) {
+            com.voxapps.commander.domain.engine.EngineSpecs.importedRows(settingsRepo, engineKey) + declaredNlu
+        }
+
+        if (RemoteModelRegistry.supportsCustomImport(engineKey)) {
+            OutlinedButton(
+                onClick = onImportIntentModel,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(languageManager.getString("import_custom_model"))
+            }
+        }
 
         if (nluModels.isNotEmpty()) {
             val selectedModel = remember(uiState.activeIntentModelId, nluModels) {
@@ -137,7 +154,12 @@ fun IntentEnginesSubTab(
                 header = languageManager.getString("available_models_header"),
                 items = nluModels,
                 selectedItem = selectedModel,
-                itemLabel = { "${it.label} (${it.sizeDescription})" },
+                itemLabel = {
+                    // A user's own file is told apart from a schema-declared model at a glance.
+                    val suffix = if (it is com.voxapps.commander.domain.model.ImportedModel)
+                        languageManager.getString("model_imported_suffix") else ""
+                    "${it.label}$suffix (${it.sizeDescription})"
+                },
                 modelIdProvider = { it.id },
                 onItemSelected = { model, isDownloaded ->
                     appStateManager.setActiveIntentModelId(model.id)

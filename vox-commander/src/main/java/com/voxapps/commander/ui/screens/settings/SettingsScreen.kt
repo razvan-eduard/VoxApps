@@ -58,6 +58,7 @@ fun SettingsContent(
     onRequestLocationPermission: () -> Unit = {},
     onRequestBatteryOptimizationPermission: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
+    onImportIntentModel: () -> Unit = {},
     onImportOpenWakeWordModel: () -> Unit = {}
 ) {
         val languageManager = LocalLanguageManager.current
@@ -310,6 +311,7 @@ fun SettingsContent(
                                     },
                                     onFallbackChanged = { appStateManager.refreshAll() },
                                     onImportCustomModel = onImportCustomModel,
+                                    onImportIntentModel = onImportIntentModel,
                                     refreshTrigger = uiState.refreshTrigger
                                 )
                                 2 -> {

@@ -108,6 +108,8 @@ data class AppSettings(
     val schemaStoreMigrated: Boolean = false,
     /** Whether imports made before an import selected itself have been given their selection. */
     val importSelectionMigrated: Boolean = false,
+    /** Whether the single-slot custom-model entries have been rewritten as named imports. */
+    val multiImportMigrated: Boolean = false,
 
     // --- DEFAULT APPS PER DOMAIN ---
     /** Map of domain -> package name. e.g. "audio" -> "com.spotify.music" */
@@ -220,7 +222,21 @@ data class AppSettings(
     fun customModelPathsByLanguage(engineKey: String): Map<String, String> {
         val prefix = "${engineKey}_"
         return customModelPaths
-            .filterKeys { it.startsWith(prefix) && it.length > prefix.length }
+            // Slugged multi-import entries are keyed by their full `custom:` id and answered by
+            // [importsFor]; this legacy accessor must not misread one as a language.
+            .filterKeys { !it.startsWith("custom:") && it.startsWith(prefix) && it.length > prefix.length }
             .mapKeys { (key, _) -> key.removePrefix(prefix) }
     }
+
+    /**
+     * The slugged imports stored for [engineKey] (and [langCode], where the engine keeps one per
+     * language): id -> path, insertion-ordered. Legacy single-slot entries are not returned here —
+     * [getCustomModelPath] still answers those until the one-shot migration rewrites them.
+     */
+    fun importsFor(engineKey: String, langCode: String? = null): Map<String, String> =
+        customModelPaths.filterKeys { key ->
+            com.voxapps.commander.domain.model.ImportedModelId.slugOf(key) != null &&
+                com.voxapps.commander.domain.model.ImportedModelId.engineOf(key) == engineKey &&
+                com.voxapps.commander.domain.model.ImportedModelId.langOf(key) == langCode
+        }
 }

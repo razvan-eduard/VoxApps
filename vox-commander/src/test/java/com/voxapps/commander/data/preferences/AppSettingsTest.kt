@@ -133,4 +133,35 @@ class AppSettingsTest {
 
         assertTrue(settings.customModelPathsByLanguage("stt_vosk").isEmpty())
     }
+
+    @Test
+    fun `importsFor answers slugged ids for the engine and language only`() {
+        val settings = AppSettings(
+            customModelPaths = mapOf(
+                "custom:stt_whisper::model-a" to "/x/a.bin",
+                "custom:stt_whisper::model-b" to "/x/b.bin",
+                "custom:wake_vosk:en:small" to "/x/vosk-en",
+                "stt_whisper" to "/x/legacy.bin"
+            )
+        )
+        assertEquals(
+            setOf("custom:stt_whisper::model-a", "custom:stt_whisper::model-b"),
+            settings.importsFor("stt_whisper").keys
+        )
+        assertEquals(setOf("custom:wake_vosk:en:small"), settings.importsFor("wake_vosk", "en").keys)
+        assertTrue(settings.importsFor("wake_vosk").isEmpty())
+        // The legacy slot stays answerable through the legacy accessor, not through importsFor.
+        assertEquals("/x/legacy.bin", settings.getCustomModelPath("stt_whisper"))
+    }
+
+    @Test
+    fun `customModelPathsByLanguage ignores slugged ids`() {
+        val settings = AppSettings(
+            customModelPaths = mapOf(
+                "wake_vosk_en" to "/x/legacy-en",
+                "custom:wake_vosk:de:small" to "/x/de"
+            )
+        )
+        assertEquals(mapOf("en" to "/x/legacy-en"), settings.customModelPathsByLanguage("wake_vosk"))
+    }
 }

@@ -48,6 +48,7 @@ fun ModelsSettingsTab(
     downloadedColor: Color,
     onFallbackChanged: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
+    onImportIntentModel: () -> Unit = {},
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
@@ -186,6 +187,7 @@ fun ModelsSettingsTab(
                 downloadingItem = downloadingItem,
                 onCancelDownload = onCancelDownload,
                 onFallbackChanged = onFallbackChanged,
+                onImportIntentModel = onImportIntentModel,
                 refreshTrigger = refreshTrigger
             )
         }

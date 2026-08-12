@@ -530,5 +530,6 @@
   "engine_cloud_disabled_suffix": " — enable cloud AI",
   "engine_model_management": "Engine & Model Management",
   "google_services_title": "Google system services",
-  "google_services_desc": "Allow engines backed by Google system services (speech recognition). These can run partly on-device but are Google-operated."
+  "google_services_desc": "Allow engines backed by Google system services (speech recognition). These can run partly on-device but are Google-operated.",
+  "model_imported_suffix": " — imported"
 }

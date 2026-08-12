@@ -119,9 +119,31 @@ class ModelDownloaderTest {
         val outcome = downloader.importCustomModel(uri, "stt_whisper")
 
         assertTrue(outcome is ModelDownloader.ImportOutcome.Accepted)
-        val imported = (outcome as ModelDownloader.ImportOutcome.Accepted).file
-        assertEquals(File(tempDir, "stt_whisper.bin"), imported)
-        assertTrue(imported.exists())
+        val accepted = outcome as ModelDownloader.ImportOutcome.Accepted
+        // Slug-named destination, so a second import lands beside this one instead of over it;
+        // the returned id carries the same slug the filename does.
+        assertEquals(File(tempDir, "stt_whisper_custom_ggml-tiny.bin"), accepted.file)
+        assertTrue(accepted.file.exists())
+        assertEquals("custom:stt_whisper::ggml-tiny", accepted.importId)
+    }
+
+    @Test
+    fun `a second import of the same name lands beside the first, not over it`() {
+        every { RemoteModelRegistry.isArchiveEngine("stt_whisper") } returns false
+        val uri = mockk<android.net.Uri>(relaxed = true)
+        val cursor = mockk<android.database.Cursor>(relaxed = true)
+        every { cursor.moveToFirst() } returns true
+        every { cursor.getString(0) } returns "ggml-tiny.bin"
+        every { context.contentResolver.query(uri, any(), any(), any(), any()) } returns cursor
+        every { context.contentResolver.openInputStream(uri) } answers { "model".byteInputStream() }
+
+        val first = downloader.importCustomModel(uri, "stt_whisper") as ModelDownloader.ImportOutcome.Accepted
+        val second = downloader.importCustomModel(uri, "stt_whisper") as ModelDownloader.ImportOutcome.Accepted
+
+        assertTrue(first.file.exists())
+        assertTrue(second.file.exists())
+        assertEquals(File(tempDir, "stt_whisper_custom_ggml-tiny-2.bin"), second.file)
+        assertEquals("custom:stt_whisper::ggml-tiny-2", second.importId)
     }
 
     @Test

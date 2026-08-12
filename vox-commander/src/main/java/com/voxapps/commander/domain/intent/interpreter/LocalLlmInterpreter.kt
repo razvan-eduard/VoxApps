@@ -203,7 +203,15 @@ class LocalLlmInterpreter(
             }
         }
 
-        val modelFile = modelDownloader.resolveLocalFile(modelId, engineKey)
+        // An imported gguf is selected under its `custom:` id and resolved from the import
+        // store, exactly like the voice engines do; a registry id resolves from the download dir.
+        val modelFile = if (com.voxapps.commander.domain.model.ImportedModelId.isImported(modelId)) {
+            com.voxapps.commander.domain.engine.EngineSpecs.importedModel(
+                settingsRepo, engineKey, langCode = null, importId = modelId
+            )
+        } else {
+            modelDownloader.resolveLocalFile(modelId, engineKey)
+        }
         if (modelFile == null || !modelFile.exists()) {
             Logger.log("LLM model not found for $modelId ($engineKey). Make sure it is downloaded.", TAG)
             return

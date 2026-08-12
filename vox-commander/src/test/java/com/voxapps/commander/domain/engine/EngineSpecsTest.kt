@@ -171,4 +171,28 @@ class EngineSpecsTest {
 
         assertNull(EngineSpecs.importedModel(settingsRepo, "stt_whisper"))
     }
+
+    @Test
+    fun `slugged id grammar round-trips and stays distinct from legacy`() {
+        val slugged = ImportedModelId.of("stt_whisper", null, "my-model")
+        assertEquals("custom:stt_whisper::my-model", slugged)
+        assertEquals("stt_whisper", ImportedModelId.engineOf(slugged))
+        assertEquals(null, ImportedModelId.langOf(slugged))
+        assertEquals("my-model", ImportedModelId.slugOf(slugged))
+
+        val perLang = ImportedModelId.of("wake_vosk", "en", "small")
+        assertEquals("en", ImportedModelId.langOf(perLang))
+        assertEquals("small", ImportedModelId.slugOf(perLang))
+
+        // Legacy two- and three-segment ids keep parsing, with no slug.
+        assertEquals(null, ImportedModelId.slugOf(ImportedModelId.of("stt_whisper")))
+        assertEquals("en", ImportedModelId.langOf(ImportedModelId.of("wake_vosk", "en")))
+        assertEquals(null, ImportedModelId.slugOf(ImportedModelId.of("wake_vosk", "en")))
+    }
+
+    @Test
+    fun `slugFrom sanitizes and never returns empty`() {
+        assertEquals("my-model.q4", ImportedModelId.slugFrom("My Model.Q4.gguf"))
+        assertEquals("model", ImportedModelId.slugFrom("???.bin"))
+    }
 }

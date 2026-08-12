@@ -29,9 +29,11 @@ data class ImportedModel(
 
     companion object {
 
-        /** Built from the file itself, so the label and size describe what is actually there. */
-        fun of(file: File, engineKey: String, langCode: String?): ImportedModel = ImportedModel(
-            id = ImportedModelId.of(engineKey, langCode),
+        /** Built from the file itself, so the label and size describe what is actually there.
+         *  [id] is passed in rather than derived: with several imports per engine the id carries
+         *  the slug, and only the store knows which slug this file was imported under. */
+        fun of(id: String, file: File, engineKey: String, langCode: String?): ImportedModel = ImportedModel(
+            id = id,
             label = file.name,
             sizeDescription = describeSize(file),
             engineType = engineKey,
@@ -58,11 +60,15 @@ data class ImportedModel(
 }
 
 /**
- * The id an imported model is stored and selected under.
+ * The id an imported model is stored and selected under — and, since multi-import, the key its
+ * path is stored under in `CUSTOM_MODEL_PATHS_JSON`, so the two can never disagree.
  *
- * It has to be derivable in both directions: a stored selection is recognised as an import without
- * consulting anything, and the engine it belongs to is read back out of it. The shape mirrors the
- * key `setCustomModelPath` already uses, so the two never disagree about which import is which.
+ * Two generations share the grammar, told apart by segment count after the prefix:
+ *  - legacy (one slot per engine): `custom:engine` / `custom:engine:lang` — still parsed, still
+ *    selectable until the one-shot migration rewrites it;
+ *  - slugged: `custom:engine:<lang-or-empty>:slug` — always four segments, so an empty language
+ *    keeps its position and a slug can never be misread as a language. Slugs are sanitized to
+ *    [a-z0-9._-], which also keeps ':' out of them.
  */
 object ImportedModelId {
 
@@ -71,14 +77,28 @@ object ImportedModelId {
     fun of(engineKey: String, langCode: String? = null): String =
         if (langCode.isNullOrBlank()) "$PREFIX$engineKey" else "$PREFIX$engineKey:$langCode"
 
+    /** The slugged form every new import gets. */
+    fun of(engineKey: String, langCode: String?, slug: String): String =
+        "$PREFIX$engineKey:${langCode.orEmpty()}:$slug"
+
+    /** A filename stem reduced to the id-safe charset; never empty. */
+    fun slugFrom(fileName: String): String =
+        fileName.substringBeforeLast('.').lowercase()
+            .replace(Regex("[^a-z0-9._-]+"), "-").trim('-').ifEmpty { "model" }
+
     fun isImported(modelId: String?): Boolean = modelId?.startsWith(PREFIX) == true
 
+    private fun parts(modelId: String?): List<String>? =
+        modelId?.takeIf { isImported(it) }?.removePrefix(PREFIX)?.split(':')
+
     /** The engine an imported id belongs to, or null when the id is not one. */
-    fun engineOf(modelId: String?): String? =
-        modelId?.takeIf { isImported(it) }?.removePrefix(PREFIX)?.substringBefore(':')
+    fun engineOf(modelId: String?): String? = parts(modelId)?.firstOrNull()
 
     /** The language an imported id was stored for, for the engines that keep one per language. */
     fun langOf(modelId: String?): String? =
-        modelId?.takeIf { isImported(it) }?.removePrefix(PREFIX)?.substringAfter(':', "")
-            ?.takeIf { it.isNotBlank() }
+        parts(modelId)?.getOrNull(1)?.takeIf { it.isNotBlank() }
+
+    /** The slug of a multi-import id, or null on a legacy single-slot id. */
+    fun slugOf(modelId: String?): String? =
+        parts(modelId)?.takeIf { it.size >= 3 }?.get(2)?.takeIf { it.isNotBlank() }
 }

@@ -163,7 +163,15 @@ data class AppState(
                 else -> {
                     // JSON-defined LLM engines
                     if (com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine(settings.aiProcessor)) {
-                        settings.activeIntentModelId != null && settings.isModelDownloaded(settings.activeIntentModelId)
+                        val id = settings.activeIntentModelId
+                        when {
+                            id == null -> false
+                            // An import is ready when its stored path still points at a file.
+                            com.voxapps.commander.domain.model.ImportedModelId.isImported(id) ->
+                                settings.customModelPaths[id]?.let { java.io.File(it).exists() }
+                                    ?: (settings.getCustomModelPath(settings.aiProcessor) != null)
+                            else -> settings.isModelDownloaded(id)
+                        }
                     } else false
                 }
             }

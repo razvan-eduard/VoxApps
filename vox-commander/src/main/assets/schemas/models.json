@@ -1175,7 +1175,8 @@
         "llm"
       ],
       "capabilities": [
-        "local_llm"
+        "local_llm",
+        "custom_model_import"
       ],
       "models": [
         {

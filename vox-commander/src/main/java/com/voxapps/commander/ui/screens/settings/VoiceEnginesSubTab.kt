@@ -218,12 +218,12 @@ fun VoiceEnginesSubTab(
         // What the user imported, listed first and treated like any other model: it is chosen from
         // here, and removed by the same trash icon. It used to live in a card of its own below,
         // outranking whatever this list showed as selected.
-        val imported = EngineSpecs.importedRow(
+        val imported = EngineSpecs.importedRows(
             settingsRepo,
             engineKey,
             modelFilterLang.takeIf { isPerLanguage }
         )
-        listOfNotNull(imported) + declared
+        imported + declared
     }
 
     // --- CUSTOM MODEL IMPORT ---
@@ -273,11 +273,13 @@ fun VoiceEnginesSubTab(
                 // it in ("wake_vosk_custom_de"), and the name the user picked is not kept anywhere.
                 // Marked, too: a downloaded model can be fetched again, this one cannot.
                 if (model is ImportedModel) {
-                    // No "— imported" suffix: the name says it once, and saying it twice was
-                    // what the suffix existed to do back when the name was a directory path.
-                    val name = languageManager.getString("model_imported_name") +
-                        (model.langCode?.let { " (${it.uppercase()})" } ?: "")
-                    "$name (${model.sizeDescription})"
+                    // Named by its own file: with several imports side by side, only the filename
+                    // tells them apart. The generic string survives only for a legacy slugless
+                    // entry whose file kept the invented name from the single-slot era.
+                    val name = model.label.takeUnless { it.startsWith("${model.engineType}_custom") }
+                        ?: (languageManager.getString("model_imported_name") +
+                            (model.langCode?.let { " (${it.uppercase()})" } ?: ""))
+                    "$name${languageManager.getString("model_imported_suffix")} (${model.sizeDescription})"
                 } else {
                     "${model.label} (${model.sizeDescription})"
                 }

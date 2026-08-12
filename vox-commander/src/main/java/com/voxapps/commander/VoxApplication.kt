@@ -145,9 +145,14 @@ class VoxApplication : Application() {
             }
             val s = container.settingsRepository.getSettingsSnapshot()
             val modelId = s.activeIntentModelId
-            if (modelId != null && RemoteModelRegistry.isLlmEngine(s.aiProcessor) &&
+            val llmModelOnDisk = modelId != null && if (ImportedModelId.isImported(modelId)) {
+                com.voxapps.commander.domain.engine.EngineSpecs.importedModel(
+                    container.settingsRepository, s.aiProcessor, null, importId = modelId
+                ) != null
+            } else {
                 container.modelDownloader.resolveLocalFile(modelId, s.aiProcessor)?.exists() == true
-            ) {
+            }
+            if (modelId != null && RemoteModelRegistry.isLlmEngine(s.aiProcessor) && llmModelOnDisk) {
                 Logger.log("Preloading local LLM engine ($modelId / ${s.aiProcessor})", "VoxApplication")
                 container.localLlmInterpreter.preload(s.modelFilterLang.ifEmpty { null })
             } else {
@@ -202,6 +207,48 @@ class VoxApplication : Application() {
                 )
 
                 repo.setImportSelectionMigrated(true)
+            }
+        }
+
+        // Single-slot custom-model entries become named imports: the map key was
+        // `engineKey[_lang]`, it is now the slugged ImportedModelId — same values, no file moves.
+        // Selections naming the legacy slugless id are rewritten to the slugged one so the row a
+        // user had chosen stays chosen. One-shot, same shape as importSelectionMigrated above.
+        if (!snapshot.multiImportMigrated) {
+            CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                val repo = container.settingsRepository
+                val settings = repo.getSettingsSnapshot()
+                val rewrites = mutableMapOf<String, String>() // legacy selection id -> slugged id
+
+                settings.customModelPaths
+                    .filterKeys { !it.startsWith("custom:") }
+                    .forEach { (legacyKey, path) ->
+                        val engineKey: String
+                        val lang: String?
+                        // A legacy key is `engineKey` or `engineKey_lang`; engine keys themselves
+                        // contain '_', so the engine is whichever known engine the key extends.
+                        val known = RemoteModelRegistry.getEngineTypes()
+                            .filter { legacyKey == it || legacyKey.startsWith("${'$'}{it}_") }
+                            .maxByOrNull { it.length }
+                        if (known == null) return@forEach
+                        engineKey = known
+                        lang = legacyKey.removePrefix(engineKey).removePrefix("_").takeIf { it.isNotBlank() }
+                        val slug = ImportedModelId.slugFrom(java.io.File(path).name)
+                        val newId = ImportedModelId.of(engineKey, lang, slug)
+                        repo.putImport(newId, path)
+                        repo.setCustomModelPath(engineKey, "", lang)
+                        rewrites[ImportedModelId.of(engineKey, lang)] = newId
+                        Logger.log("Import for ${'$'}engineKey now named '${'$'}slug'", "VoxApplication")
+                    }
+
+                if (rewrites.isNotEmpty()) {
+                    settings.activeVoiceModelId?.let { rewrites[it] }?.let { repo.setActiveVoiceModelId(it) }
+                    settings.activeWakeModelId?.let { rewrites[it] }?.let { repo.setActiveWakeModelId(it) }
+                    settings.engineModelSelections.forEach { (engine, sel) ->
+                        rewrites[sel]?.let { repo.setEngineModelSelection(engine, it) }
+                    }
+                }
+                repo.setMultiImportMigrated(true)
             }
         }
 

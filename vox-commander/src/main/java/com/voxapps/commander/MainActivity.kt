@@ -116,6 +116,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val customLlmModelLauncher = registerForActivityResult(
+        OpenDocumentAtDownloads()
+    ) { uri: Uri? ->
+        uri?.let {
+            // The intent engine's own key, not the voice processor's: this launcher serves the
+            // NLU model list. Single-file (.gguf), no per-language slots.
+            val engineKey = appContainer.appStateManager.uiState.value.aiProcessor
+            appContainer.modelManagementViewModel.selectCustomModel(it, engineKey, null)
+        }
+    }
+
     private val customWhisperModelLauncher = registerForActivityResult(
         OpenDocumentAtDownloads()
     ) { uri: Uri? ->
@@ -384,6 +395,12 @@ class MainActivity : ComponentActivity() {
                                     registry.getExtension(proc).isBlank() -> customVoskModelLauncher.launch(null)
                                     else -> customWhisperModelLauncher.launch(registry.pickerMimeTypes(proc))
                                 }
+                            },
+                            onImportIntentModel = {
+                                val proc = appContainer.appStateManager.uiState.value.aiProcessor
+                                customLlmModelLauncher.launch(
+                                    com.voxapps.commander.data.remote.RemoteModelRegistry.pickerMimeTypes(proc)
+                                )
                             },
                             onImportOpenWakeWordModel = {
                                 customOpenWakeWordModelLauncher.launch(

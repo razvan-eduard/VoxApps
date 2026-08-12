@@ -46,6 +46,7 @@ fun TopHeaderContainer(
     onRequestLocationPermission: () -> Unit = {},
     onRequestBatteryOptimizationPermission: () -> Unit = {},
     onImportCustomModel: (String?) -> Unit = {},
+    onImportIntentModel: () -> Unit = {},
     onImportOpenWakeWordModel: () -> Unit = {}
 ) {
         val languageManager = LocalLanguageManager.current
@@ -136,6 +137,7 @@ fun TopHeaderContainer(
                         onRequestLocationPermission = onRequestLocationPermission,
                         onRequestBatteryOptimizationPermission = onRequestBatteryOptimizationPermission,
                         onImportCustomModel = onImportCustomModel,
+                        onImportIntentModel = onImportIntentModel,
                         onImportOpenWakeWordModel = onImportOpenWakeWordModel
                     )
                 }
