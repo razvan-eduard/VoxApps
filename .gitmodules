@@ -13,3 +13,6 @@
 [submodule "vendor/makeacopy-upstream"]
 	path = vendor/makeacopy-upstream
 	url = https://github.com/egdels/makeacopy.git
+[submodule "vox-commander/src/main/cpp/llama.cpp"]
+	path = vox-commander/src/main/cpp/llama.cpp
+	url = https://github.com/ggml-org/llama.cpp.git

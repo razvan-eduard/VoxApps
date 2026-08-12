@@ -158,10 +158,6 @@ data class AppState(
 
             // Calculate intentModelReady
             val intentModelReady = when (settings.aiProcessor) {
-                Strings.AiProcessors.GEMINI_NATIVE -> {
-                    !settings.geminiIncompatible
-                }
-                Strings.AiProcessors.GEMINI_CLOUD -> credentials.has(Strings.AiProcessors.GEMINI_CLOUD)
                 Strings.AiProcessors.OPENAI -> true
                 else -> {
                     // JSON-defined LLM engines

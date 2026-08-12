@@ -33,8 +33,8 @@ object CommanderExportHandler {
 
     /**
      * Fields deliberately excluded from [buildExportJson] unless [includeSecrets] is set:
-     *  - Secrets: [AppSettings.engineApiKeys] and the three single-key fields it replaced
-     *    ([AppSettings.apiKey], [AppSettings.geminiApiKey], [AppSettings.picovoiceAccessKey]), plus
+     *  - Secrets: [AppSettings.engineApiKeys] and the single-key fields it replaced
+     *    ([AppSettings.apiKey], [AppSettings.picovoiceAccessKey]), plus
      *    [AppSettings.searchProviderApiKeys]. None of the encrypted ones are carried on [settings]
      *    — they live in the encrypted store and reach this function through [credentials] and
      *    [searchProviderApiKeys], never through the DataStore-backed settings flow. The
@@ -46,8 +46,7 @@ object CommanderExportHandler {
      *  - Pure caches/device-capability probe results, all auto-regenerated at runtime:
      *    [AppSettings.appCacheJson], [AppSettings.downloadedModelIds],
      *    [AppSettings.vulkanIncompatible], [AppSettings.vulkanProbeDone],
-     *    [AppSettings.vulkanRuntimeAttempt], [AppSettings.vulkanRuntimeVerified],
-     *    [AppSettings.geminiIncompatible].
+     *    [AppSettings.vulkanRuntimeAttempt], [AppSettings.vulkanRuntimeVerified].
      *  - [AppSettings.wakeWordProfileJson]: a trained voice-print blob, out of scope for v1.
      * Everything else (language, engine choices, wake word tuning, TTS, app aliases, domain-app
      * selections, etc.) round-trips.
@@ -66,7 +65,6 @@ object CommanderExportHandler {
             // Written alongside the map so a backup taken here still restores on a build that
             // predates per-engine credentials. Costs three fields and removes a one-way door.
             apiKey = if (includeSecrets) credentials.forEngine(Strings.AiProcessors.OPENAI) else null,
-            geminiApiKey = if (includeSecrets) credentials.forEngine(Strings.AiProcessors.GEMINI_CLOUD) else null,
             picovoiceAccessKey = if (includeSecrets) credentials.forEngine(PORCUPINE_ENGINE_KEY) else null,
             searchProviderApiKeys = if (includeSecrets) searchProviderApiKeys else emptyMap(),
             wakeWordModelPath = null,
@@ -77,7 +75,6 @@ object CommanderExportHandler {
             vulkanProbeDone = false,
             vulkanRuntimeAttempt = false,
             vulkanRuntimeVerified = false,
-            geminiIncompatible = false,
             wakeWordProfileJson = null
         )
         return VoxSettingsRoundTrip.toJson(portable)

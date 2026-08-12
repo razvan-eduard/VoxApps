@@ -19,9 +19,7 @@ sealed class RawPromptOutcome {
 
 class LlmHookEngineSelector(
     private val openAiEngine: AssistantEngine,
-    private val geminiCloudEngine: AssistantEngine,
     private val localLlmEngine: AssistantEngine,
-    private val geminiNanoEngine: AssistantEngine,
     private val settingsRepo: SettingsRepository
 ) {
     /**
@@ -32,8 +30,6 @@ class LlmHookEngineSelector(
      */
     private val resolver = AiEngineResolver(
         openAiEngine = openAiEngine,
-        geminiCloudEngine = geminiCloudEngine,
-        geminiNanoEngine = geminiNanoEngine,
         localLlmEngine = localLlmEngine
     )
 
@@ -50,12 +46,6 @@ class LlmHookEngineSelector(
         if (choice.requiresCloud && !snapshot.cloudIntelligenceEnabled) {
             return RawPromptOutcome.Error("Cloud intelligence disabled")
         }
-        // Answered before dispatching rather than relying on GeminiNanoInterpreter.rawPrompt()'s
-        // generic null — on-device inference isn't implemented yet, and this gives the caller a
-        // clearer error than the "request failed" text below.
-        if (processor == Strings.AiProcessors.GEMINI_NATIVE) {
-            return RawPromptOutcome.Error("Gemini Nano on-device is not yet supported for generic LLM requests")
-        }
 
         val text = choice.engine.rawPrompt(promptText, imageUri)
         return if (text != null) RawPromptOutcome.Success(text) else RawPromptOutcome.Error(failureReason(processor))
@@ -64,7 +54,6 @@ class LlmHookEngineSelector(
     private fun failureReason(processor: String): String = when (processor) {
         Strings.AiProcessors.OPENAI ->
             "OpenAI request failed: ${(openAiEngine as? OpenAiInterpreter)?.lastErrorReason ?: "unknown error"}"
-        Strings.AiProcessors.GEMINI_CLOUD -> "Gemini Cloud request failed (check API key)"
         else -> "Local model unavailable (not downloaded or failed to load)"
     }
 }

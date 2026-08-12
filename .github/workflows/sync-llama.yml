@@ -1,0 +1,155 @@
+name: Sync llama.cpp Fork
+
+# vox-commander/src/main/cpp/llama.cpp is vendored unmodified (no local patch, like whisper.cpp).
+# This only checks for a new upstream release tag, compiles it (to prove it still builds against
+# our CMake setup) and opens a PR bumping the submodule pin — it deliberately does NOT call
+# scripts/publish_llama_libs.sh (that step publishes the compiled .so as the production release
+# real users download, and must stay a manual, reviewed action after the PR is merged and someone
+# has sanity-checked actual intent-parsing quality on a device — CI can only verify "it compiles",
+# never "it still answers correctly").
+
+on:
+  schedule:
+    - cron: '0 9 3 * *' # monthly, 3rd 09:00 UTC (a day after sync-whisper, same cadence)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Re-propose a target that was previously declined'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# A native build that hangs must not be lapped by the next run — both would push the same
+# branch. Queued rather than cancelled: these push branches and open PRs, so killing one
+# mid-flight leaves more mess than letting it finish.
+concurrency:
+  group: sync-llama
+  cancel-in-progress: false
+
+jobs:
+  check-and-open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v7
+        with:
+          # Persisted for the branch push, so it is pushed by whoever opens the PR below.
+          token: ${{ secrets.README_PUSH_TOKEN }}
+          submodules: recursive
+          fetch-depth: 0
+
+      # Detection lives in scripts/check_llama_version.sh — the same script a person runs,
+      # answering in --report mode with the keys used below.
+      - name: Determine current pin and latest upstream version
+        id: versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/vox check llama --report >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this target was already proposed
+        if: steps.versions.outputs.has_update == 'true'
+        id: dedup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="chore/sync-llama-${{ steps.versions.outputs.latest_tag }}"
+          EXISTING=$(gh pr list --head "$BRANCH" --state all --json number,state -q '.[0] | select(.) | "\(.number) \(.state)"' || true)
+          if [ -n "$EXISTING" ] && [ "${{ inputs.force }}" = "true" ]; then
+            echo "PR $EXISTING already exists for $BRANCH — re-proposing it (force)"
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$EXISTING" ]; then
+            echo "PR $EXISTING already exists for $BRANCH — nothing to do"
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 17
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-licenses: true
+
+      - name: Install NDK and CMake
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+
+      # The llama build itself is CPU-only and needs none of this — but `assembleDebug` runs
+      # preBuild, which also compiles whisper (autoCompileWhisper), and that build wants the
+      # Vulkan/SPIRV toolchain. Same install as sync-whisper.yml.
+      - name: Install SPIRV-Headers and Shaderc for the whisper Vulkan build
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq glslc libshaderc-dev
+          git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git /tmp/spirv-headers
+          cd /tmp/spirv-headers && cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local && sudo cmake --install build
+          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vulkan-headers
+          cd /tmp/vulkan-headers && cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local && sudo cmake --install build
+
+      - name: Bump submodule to latest tag
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        id: bump
+        run: |
+          LATEST_TAG="${{ steps.versions.outputs.latest_tag }}"
+          BRANCH="chore/sync-llama-$LATEST_TAG"
+          git checkout -b "$BRANCH"
+          cd vox-commander/src/main/cpp/llama.cpp
+          git checkout "$LATEST_TAG"
+          cd -
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Grant execute permission for gradlew
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        run: chmod +x gradlew
+
+      - name: Compile (proves it still builds against our CMake setup)
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        run: ./gradlew :vox-commander:assembleDebug --no-daemon
+
+      - name: Run unit tests
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        run: ./gradlew :vox-commander:testDebugUnitTest --no-daemon
+
+      - name: Commit submodule bump
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add vox-commander/src/main/cpp/llama.cpp
+          git commit -m "chore: bump llama.cpp submodule to ${{ steps.versions.outputs.latest_tag }}"
+          git push origin "${{ steps.bump.outputs.branch }}"
+
+      - name: Open PR
+        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+        env:
+          # A PAT, not GITHUB_TOKEN. GitHub never triggers a workflow from an event caused by
+          # GITHUB_TOKEN — the rule that stops a workflow opening a PR that starts a workflow that
+          # opens a PR. The cost is that a PR opened that way has its required checks *absent*
+          # rather than pending, and a merge is blocked on absent exactly as it is on failing, so
+          # the PR can never become mergeable. Opening it as an account makes CI run on it.
+          GH_TOKEN: ${{ secrets.README_PUSH_TOKEN }}
+        run: |
+          gh pr create \
+            --title "chore: llama.cpp upstream ${{ steps.versions.outputs.latest_tag }} available" \
+            --body "Upstream [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) tagged \`${{ steps.versions.outputs.latest_tag }}\` (we're pinned at \`${{ steps.versions.outputs.current_tag || steps.versions.outputs.current_sha }}\`).
+
+          This PR bumps the submodule pin and confirms the new version **compiles** (CMake build succeeded) and unit tests pass. It does **not** publish anything.
+
+          Before merging, please:
+          1. Install the debug build on a device and sanity-check actual intent-parsing quality/latency — a successful compile says nothing about NLU accuracy.
+          2. Only after merging, run \`./scripts/vox release publish-llama-libs\` yourself to publish the new \`libllama.so\` as the production release (this workflow deliberately never does that automatically)." \
+            --base main \
+            --head "${{ steps.bump.outputs.branch }}"

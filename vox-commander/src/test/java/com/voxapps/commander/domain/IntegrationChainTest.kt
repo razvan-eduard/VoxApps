@@ -32,8 +32,6 @@ class IntegrationChainTest {
     private lateinit var realL1Engine: FastMapEngine
     private lateinit var l2CloudEngine: AssistantEngine
     private lateinit var l3LocalEngine: AssistantEngine
-    private lateinit var geminiNanoEngine: AssistantEngine
-    private lateinit var geminiCloudEngine: AssistantEngine
 
     private lateinit var decisionMap: IntentDecisionMap
 
@@ -52,15 +50,10 @@ class IntegrationChainTest {
         // Keep external AI as mocks
         l2CloudEngine = mockk()
         l3LocalEngine = mockk()
-        geminiNanoEngine = mockk()
-        geminiCloudEngine = mockk()
-
         decisionMap = IntentDecisionMap(
             realL1Engine,
             l2CloudEngine,
             l3LocalEngine,
-            geminiNanoEngine,
-            geminiCloudEngine,
             settingsRepo
         )
 

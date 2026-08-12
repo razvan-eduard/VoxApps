@@ -35,7 +35,6 @@ VISION_SOURCE="$PROJECT_ROOT/vox-vision/src/main/jniLibs/arm64-v8a"
 # loaded), dropped from the APK but never uploaded/downloaded.
 COMMANDER_LIBS=(
     "libonnxruntime.so"
-    "liblitertlm_jni.so"
     "libvosk.so"
     "libsherpa-onnx-jni.so"
 )

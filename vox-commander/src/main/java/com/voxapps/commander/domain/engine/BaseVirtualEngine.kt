@@ -8,8 +8,8 @@ import com.voxapps.logging.Logger
  * It manages nothing on disk, but it still has the three things [VoxEngine] describes — a readiness
  * question, a failure reason and a lifecycle — so it belongs under the same contract rather than
  * beside it. What changes is only what "load" means: instead of opening an artefact, it asks whether
- * the engine could run at all. That question is exactly what the scattered `googleSttAvailable` /
- * `geminiIncompatible` flags answer today, each in its own way, each readable only by whoever
+ * the engine could run at all. That question is exactly what the scattered availability flags
+ * (e.g. `googleSttAvailable`) answer today, each in its own way, each readable only by whoever
  * remembered the flag existed.
  *
  * **A probe is not a request.** [unavailableReason] must not make a real API call: a round-trip at

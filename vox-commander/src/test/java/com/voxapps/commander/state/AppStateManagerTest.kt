@@ -318,10 +318,10 @@ class AppStateManagerTest {
         stateManager.uiState.test {
             awaitItem()
 
-            stateManager.setAiProcessor(Strings.AiProcessors.GEMINI_NATIVE)
+            stateManager.setAiProcessor(Strings.AiProcessors.OPENAI)
 
             testScheduler.advanceUntilIdle()
-            coVerify { settingsRepo.setAiProcessor(Strings.AiProcessors.GEMINI_NATIVE) }
+            coVerify { settingsRepo.setAiProcessor(Strings.AiProcessors.OPENAI) }
         }
     }
 

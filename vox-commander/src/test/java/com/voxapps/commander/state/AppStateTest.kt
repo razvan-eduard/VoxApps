@@ -153,42 +153,6 @@ class AppStateTest {
     }
 
     @Test
-    fun `intentModelReady is true for GeminiNative when not incompatible`() {
-        val settings = TestDataFactory.createSettingsWithGeminiNative(
-            geminiIncompatible = false
-        )
-        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
-        assertTrue(state.intentModelReady)
-    }
-
-    @Test
-    fun `intentModelReady is false for GeminiNative when incompatible`() {
-        val settings = TestDataFactory.createSettingsWithGeminiNative(
-            geminiIncompatible = true
-        )
-        val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
-        assertFalse(state.intentModelReady)
-    }
-
-    @Test
-    fun `intentModelReady is true for GeminiCloud when API key is set`() {
-        val settings = TestDataFactory.createSettingsWithGeminiCloud()
-        val state = AppState.fromAppSettings(
-            settings, Credentials(mapOf(Strings.AiProcessors.GEMINI_CLOUD to "test-key")), context, emptyMap()
-        )
-        assertTrue(state.intentModelReady)
-    }
-
-    @Test
-    fun `intentModelReady is false for GeminiCloud when API key is null`() {
-        val settings = TestDataFactory.createSettingsWithGeminiCloud()
-        val state = AppState.fromAppSettings(
-            settings, Credentials(), context, emptyMap()
-        )
-        assertFalse(state.intentModelReady)
-    }
-
-    @Test
     fun `intentModelReady is true for LLM engine when model is downloaded`() {
         every { RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
         val settings = TestDataFactory.createSettingsWithLlmEngine(
@@ -233,11 +197,11 @@ class AppStateTest {
     @Test
     fun `fromAppSettings maps aiProcessor and cloudIntelligenceEnabled`() {
         val settings = TestDataFactory.createAppSettings(
-            aiProcessor = Strings.AiProcessors.GEMINI_CLOUD,
+            aiProcessor = Strings.AiProcessors.OPENAI,
             cloudIntelligenceEnabled = false
         )
         val state = AppState.fromAppSettings(settings, Credentials(), context, emptyMap())
-        assertEquals(Strings.AiProcessors.GEMINI_CLOUD, state.aiProcessor)
+        assertEquals(Strings.AiProcessors.OPENAI, state.aiProcessor)
         assertFalse(state.cloudIntelligenceEnabled)
     }
 

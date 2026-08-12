@@ -20,9 +20,9 @@ interface SettingsRepository {
     /**
      * Bulk-applies every field of [imported] EXCEPT raw local paths (wakeWordModelPath/
      * customModelPaths) and pure caches/probe results (appCacheJson/
-     * downloadedModelIds/the vulkan flags/geminiIncompatible/wakeWordProfileJson) — those are always
+     * downloadedModelIds/the vulkan flags/wakeWordProfileJson) — those are always
      * left alone since they were never present in an exported snapshot to begin with. Secrets
-     * (apiKey/geminiApiKey/picovoiceAccessKey/searchProviderApiKeys) are applied only where
+     * (apiKey/picovoiceAccessKey/searchProviderApiKeys) are applied only where
      * [imported] actually carries a value (non-null / non-empty) — an export made without
      * `includeSecrets` leaves them at their [AppSettings] defaults, so the current on-device value is
      * preserved rather than cleared; an export made with it overwrites them. Used by Vox Hub's import
@@ -112,9 +112,6 @@ interface SettingsRepository {
 
     // --- WHISPER ENGINE (DLC) ---
     suspend fun setWhisperSystemEnabled(enabled: Boolean)
-
-    // --- GEMINI ---
-    suspend fun setGeminiIncompatible(incompatible: Boolean)
 
     // --- REMOTE REPOSITORY ---
     suspend fun setModelRepoBaseUrl(url: String)

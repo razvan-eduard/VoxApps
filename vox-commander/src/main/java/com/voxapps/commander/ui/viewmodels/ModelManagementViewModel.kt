@@ -261,8 +261,9 @@ class ModelManagementViewModel(
         val voskKey = downloadableVoiceKeys.firstOrNull { RemoteModelRegistry.isArchiveEngine(it) }
         _voskModels.value = voskKey?.let { RemoteModelRegistry.getModels(it) } ?: emptyList()
 
-        // NLU models = every local-LLM-capable engine's models pooled together (there can be more
-        // than one — e.g. nlu_llm for .task models, nlu_llm_litertlm for .litertlm models).
+        // NLU models = every local-LLM-capable engine's models pooled together (the capability,
+        // not a hardcoded key, decides membership — a second engine key would appear here without
+        // a code change).
         _nluModels.value = llmKeys.flatMap { RemoteModelRegistry.getModels(it) }
 
         _isVoskOffline.value = _voskModels.value.isEmpty()
@@ -300,10 +301,9 @@ class ModelManagementViewModel(
         if (localFile?.exists() == true) {
             Logger.log("Model already exists, marking as downloaded: $modelId", TAG)
             viewModelScope.launch { settingsRepo.setModelDownloaded(modelId, true) }
-            // Any engine declaring the "local_llm" capability (there can be more than one — e.g.
-            // nlu_llm for .task models, nlu_llm_litertlm for .litertlm models) routes through the
-            // intent-model path; anything else is a voice engine. Was previously comparing against
-            // only the FIRST llm-typed engine key, silently misrouting every other one into the
+            // Any engine declaring the "local_llm" capability routes through the intent-model
+            // path; anything else is a voice engine. Was previously comparing against only the
+            // FIRST llm-typed engine key, silently misrouting every other one into the
             // voice-model branch.
             if (RemoteModelRegistry.isLlmEngine(engineType)) {
                 appStateManager.setActiveIntentModelId(modelId)

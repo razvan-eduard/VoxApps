@@ -136,8 +136,6 @@ class ShippedSchemaTest {
             Strings.Processors.GOOGLE,
             Strings.Processors.WHISPER_API,
             Strings.AiProcessors.OPENAI,
-            Strings.AiProcessors.GEMINI_CLOUD,
-            Strings.AiProcessors.GEMINI_NATIVE,
             AndroidTtsEngine.ENGINE_KEY
         ).forEach {
             assertTrue("stored processor '$it' is not declared", it in declared)
@@ -152,6 +150,19 @@ class ShippedSchemaTest {
                 assertTrue("engine '$engine' declares '$it', which en.json lacks", strings.containsKey(it))
             }
         }
+    }
+
+    /**
+     * The multimodal capability decides what satellites are told over the capability query
+     * (CapabilityQueryReceiver → isMultimodal) — an engine wrongly declaring it sends images into
+     * a text-only path. OpenAI is the one engine that can take an attachment.
+     */
+    @Test
+    fun `only OpenAI declares the multimodal capability`() {
+        val declared = (assetModels().engines + assetVirtual().engines)
+            .filterValues { "multimodal" in it.capabilities }
+            .keys
+        assertEquals(setOf(Strings.AiProcessors.OPENAI), declared)
     }
 
     /**

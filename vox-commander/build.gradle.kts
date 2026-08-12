@@ -41,9 +41,19 @@ val whisperLibs = listOf(
  */
 val dlcLibs = listOf(
     "libonnxruntime.so",
-    "liblitertlm_jni.so",
     "libvosk.so",
     "libsherpa-onnx-jni.so"
+)
+
+/**
+ * Built into src/main/jniLibs by scripts/check_llama.sh; fetched on demand by LlamaEngineManager.
+ * One library: ggml is linked statically (BUILD_SHARED_LIBS OFF in src/main/cpp/llama-build) and
+ * OpenMP is compiled out, so libllama.so has no non-platform DT_NEEDED at all.
+ * Must stay in step with LlamaEngineManager.LLAMA_LIBS, publish_llama_libs.sh and
+ * check_llama_published.sh.
+ */
+val llamaLibs = listOf(
+    "libllama.so"
 )
 
 /**
@@ -77,8 +87,8 @@ android {
         applicationId = "com.voxapps.commander"
         minSdk = 29
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.22-beta"
+        versionCode = 24
+        versionName = "0.23-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -201,6 +211,8 @@ androidComponents {
         val jniLibs = variant.packaging.jniLibs
         if (variant.buildType == "release") {
             jniLibs.excludes.addAll(whisperLibs.map { "lib/arm64-v8a/$it" })
+            // Same treatment as whisper: built locally, published per-commit, fetched on demand.
+            jniLibs.excludes.addAll(llamaLibs.map { "lib/arm64-v8a/$it" })
             // Never loaded in any mode (see unusedSherpaLibs), so every release drops them.
             jniLibs.excludes.addAll(unusedSherpaLibs.map { "lib/arm64-v8a/$it" })
             if (dlcMode == "full") {
@@ -237,7 +249,17 @@ androidComponents {
             File(projectDir, "src/main/jniLibs/arm64-v8a/$it").exists()
         }
         if (variant.buildType == "release" || whisperLibsOnDisk) {
-            variant.sources.assets?.addGeneratedSourceDirectory(hashWhisperLibs, HashWhisperLibs::assetsDir)
+            variant.sources.assets?.addGeneratedSourceDirectory(hashWhisperLibs, HashEngineLibs::assetsDir)
+        }
+
+        // Same rule for llama, for the same reasons: excluded from every release build, so every
+        // release needs digests to verify its downloads against; debug records them whenever the
+        // compiled library is on disk to hash.
+        val llamaLibsOnDisk = llamaLibs.all {
+            File(projectDir, "src/main/jniLibs/arm64-v8a/$it").exists()
+        }
+        if (variant.buildType == "release" || llamaLibsOnDisk) {
+            variant.sources.assets?.addGeneratedSourceDirectory(hashLlamaLibs, HashEngineLibs::assetsDir)
         }
     }
 }
@@ -363,7 +385,7 @@ val stageDlcLibs = tasks.register<StageDlcLibs>("collectDlcLibs") {
  * — so the recorded digest describes the binary that build expects, not whatever the release happens
  * to hold later.
  */
-abstract class HashWhisperLibs : DefaultTask() {
+abstract class HashEngineLibs : DefaultTask() {
 
     @get:javax.inject.Inject
     abstract val execOps: org.gradle.process.ExecOperations
@@ -383,7 +405,18 @@ abstract class HashWhisperLibs : DefaultTask() {
      * was compiled against.
      */
     @get:Input
-    abstract val whisperCommit: Property<String>
+    abstract val engineCommit: Property<String>
+
+    /** Release tag prefix ("whisper-libs" / "llama-libs"); the tag asked is "<prefix>-<sha12>". */
+    @get:Input
+    abstract val tagPrefix: Property<String>
+
+    /** Asset file names this task writes ("whisper-libs.sha256" / "whisper-libs.commit", etc). */
+    @get:Input
+    abstract val digestAssetName: Property<String>
+
+    @get:Input
+    abstract val commitAssetName: Property<String>
 
     @get:OutputDirectory
     abstract val assetsDir: DirectoryProperty
@@ -426,18 +459,18 @@ abstract class HashWhisperLibs : DefaultTask() {
         val available = libFiles.files.filter { it.isFile }
         val digests = StringBuilder()
 
-        val commit = whisperCommit.get().trim()
-        require(commit.length >= 12) { "Cannot resolve the whisper.cpp commit; got '$commit'." }
-        File(assets, "whisper-libs.commit").writeText(commit + "\n")
+        val commit = engineCommit.get().trim()
+        require(commit.length >= 12) { "Cannot resolve the ${tagPrefix.get()} source commit; got '$commit'." }
+        File(assets, commitAssetName.get()).writeText(commit + "\n")
 
-        val published = publishedDigests("whisper-libs-${commit.take(12)}")
+        val published = publishedDigests("${tagPrefix.get()}-${commit.take(12)}")
 
         for (lib in libs.get()) {
             val fromRelease = published?.get(lib)
             val hex: String
             if (fromRelease != null) {
                 hex = fromRelease.lowercase()
-                logger.lifecycle("whisper digest ${hex.take(12)}… $lib (published release)")
+                logger.lifecycle("${tagPrefix.get()} digest ${hex.take(12)}… $lib (published release)")
             } else {
                 // No published release for this pin — a checkout mid-bump, or a machine without gh.
                 // The local compile is all there is to describe; an install of THIS build that
@@ -445,7 +478,7 @@ abstract class HashWhisperLibs : DefaultTask() {
                 // why the release workflow's whisper-published gate refuses to publish in that state.
                 val source = available.firstOrNull { it.name == lib }
                     ?: throw GradleException(
-                        "$lib is missing from src/main/jniLibs and whisper-libs-${commit.take(12)} " +
+                        "$lib is missing from src/main/jniLibs and ${tagPrefix.get()}-${commit.take(12)} " +
                             "is not published — nothing exists to record a digest of."
                     )
                 val digest = MessageDigest.getInstance("SHA-256")
@@ -459,16 +492,16 @@ abstract class HashWhisperLibs : DefaultTask() {
                 }
                 hex = digest.digest().joinToString("") { "%02x".format(it) }
                 logger.lifecycle(
-                    "whisper digest ${hex.take(12)}… $lib (LOCAL build — no published release for this pin)"
+                    "${tagPrefix.get()} digest ${hex.take(12)}… $lib (LOCAL build — no published release for this pin)"
                 )
             }
             digests.append(hex).append("  ").append(lib).append('\n')
         }
-        File(assets, "whisper-libs.sha256").writeText(digests.toString())
+        File(assets, digestAssetName.get()).writeText(digests.toString())
     }
 }
 
-val hashWhisperLibs = tasks.register<HashWhisperLibs>("recordWhisperDigests") {
+val hashWhisperLibs = tasks.register<HashEngineLibs>("recordWhisperDigests") {
     group = "build"
     description = "Record the published Whisper libraries' SHA-256 digests for the APK to verify downloads against."
     // The published digests are a network answer Gradle cannot track as an input, and a stale cached
@@ -480,7 +513,7 @@ val hashWhisperLibs = tasks.register<HashWhisperLibs>("recordWhisperDigests") {
     // The pin recorded in this commit, which is the same value publish_whisper_libs.sh names the
     // release after. providers.exec rather than a bare command so the configuration cache can track
     // it instead of being invalidated by it.
-    whisperCommit.set(
+    engineCommit.set(
         providers.exec {
             commandLine(
                 "git", "-C", rootDir.absolutePath,
@@ -488,11 +521,38 @@ val hashWhisperLibs = tasks.register<HashWhisperLibs>("recordWhisperDigests") {
             )
         }.standardOutput.asText.map { it.trim() }
     )
+    tagPrefix.set("whisper-libs")
+    digestAssetName.set("whisper-libs.sha256")
+    commitAssetName.set("whisper-libs.commit")
     // The files themselves, not the directory: a directory added to a file collection stays a
     // directory, and every entry would then be filtered out as "not a file".
     libFiles.from(whisperLibs.map { layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/$it") })
     libs.set(whisperLibs)
     assetsDir.set(layout.buildDirectory.dir("generated/whisperDigests"))
+}
+
+val hashLlamaLibs = tasks.register<HashEngineLibs>("recordLlamaDigests") {
+    group = "build"
+    description = "Record the published llama libraries' SHA-256 digests for the APK to verify downloads against."
+    outputs.upToDateWhen { false }
+    dependsOn("autoCompileLlama")
+    // The index, not HEAD: `ls-files -s` answers with the staged gitlink, which equals HEAD's pin
+    // on any committed checkout and still answers on the one checkout HEAD cannot serve — the
+    // commit that introduces the submodule. Output shape: "160000 <sha> 0\t<path>".
+    engineCommit.set(
+        providers.exec {
+            commandLine(
+                "git", "-C", rootDir.absolutePath,
+                "ls-files", "-s", "vox-commander/src/main/cpp/llama.cpp"
+            )
+        }.standardOutput.asText.map { it.trim().split(Regex("\\s+"))[1] }
+    )
+    tagPrefix.set("llama-libs")
+    digestAssetName.set("llama-libs.sha256")
+    commitAssetName.set("llama-libs.commit")
+    libFiles.from(llamaLibs.map { layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/$it") })
+    libs.set(llamaLibs)
+    assetsDir.set(layout.buildDirectory.dir("generated/llamaDigests"))
 }
 
 dependencies {
@@ -538,7 +598,6 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.vosk.android)
     implementation(libs.jsoup)
-    implementation(libs.litertlm.android)
     implementation(libs.androidx.media)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.reorderable)
@@ -546,8 +605,6 @@ dependencies {
     implementation("androidx.browser:browser:1.10.0")
     // Spotify App Remote SDK (local AAR)
     implementation(files("libs/spotify-app-remote.aar"))
-    // Gemini Nano (Google AI Edge) - System LLM SDK
-    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
     // Porcupine Wake Word Engine (Picovoice)
     implementation("ai.picovoice:porcupine-android:4.0.2")
     // OpenWakeWord (fully open-source, ONNX-based wake word detection) — local fork with an RMS
@@ -582,6 +639,10 @@ dependencies {
 
     testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
+    // Reflection-based contract tests (GsonDtoContractTest, CommanderExportHandlerTest) use
+    // kotlin.reflect.full; the retired Google SDKs used to carry kotlin-reflect transitively, so
+    // this was only ever satisfied by accident. Declared where it is actually used.
+    testImplementation(libs.kotlin.reflect)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("app.cash.turbine:turbine:1.2.1")
@@ -603,6 +664,14 @@ val autoCompileWhisper = tasks.register<Exec>("autoCompileWhisper") {
     description = "Check whisper.cpp upstream and rebuild through CMake when it is stale."
     
     commandLine("bash", "${project.rootDir}/scripts/vox", "native", "whisper")
+}
+
+// Runs the llama bash script.
+val autoCompileLlama = tasks.register<Exec>("autoCompileLlama") {
+    group = "build"
+    description = "Check llama.cpp upstream and rebuild through CMake when it is stale."
+
+    commandLine("bash", "${project.rootDir}/scripts/vox", "native", "llama")
 }
 
 // Checks the published Vosk version.
@@ -695,6 +764,7 @@ tasks.named("preBuild") {
     // to reach the same answer.
     if (!skipNativePrep) {
         dependsOn(autoCompileWhisper)
+        dependsOn(autoCompileLlama)
     }
     // Not optional anywhere: the shipped schemas are generated into assets, and the tests that
     // check code against them read the generated copy.

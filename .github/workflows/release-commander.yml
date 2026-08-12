@@ -218,7 +218,7 @@ jobs:
           # A herestring, not `echo | grep -q`: -q closes the pipe at the first match, echo takes
           # SIGPIPE, and under pipefail a *found* asset is then reported as missing — racily, which
           # is worse than reliably.
-          for asset in assets/whisper-libs.sha256 assets/whisper-libs.commit; do
+          for asset in assets/whisper-libs.sha256 assets/whisper-libs.commit assets/llama-libs.sha256 assets/llama-libs.commit; do
             grep -qF "$asset" <<< "$LISTING" \
               || { echo "::error::$asset missing from $APK"; exit 1; }
           done
@@ -387,6 +387,14 @@ jobs:
       - name: The published Whisper runtime matches this source
         if: steps.check_bump.outputs.changed != 'false'
         run: ./scripts/vox check whisper-published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Same gate for the llama runtime: excluded from every release build, downloaded from its
+      # per-commit release, published by hand — so the pin can move without the runtime moving.
+      - name: The published llama runtime matches this source
+        if: steps.check_bump.outputs.changed != 'false'
+        run: ./scripts/vox check llama-published
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

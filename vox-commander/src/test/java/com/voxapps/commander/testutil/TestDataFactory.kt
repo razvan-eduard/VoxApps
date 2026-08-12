@@ -261,8 +261,6 @@ object TestDataFactory {
         defaultVoiceFallbackModel: String? = null,
         vulkanProbeDone: Boolean = true,
         vulkanIncompatible: Boolean = false,
-        geminiIncompatible: Boolean = false,
-        geminiApiKey: String? = null,
         customModelPaths: Map<String, String> = emptyMap(),
         engineModelSelections: Map<String, String> = emptyMap(),
         wakeWordModelPath: String? = null,
@@ -282,8 +280,6 @@ object TestDataFactory {
         defaultVoiceFallbackModel = defaultVoiceFallbackModel,
         vulkanProbeDone = vulkanProbeDone,
         vulkanIncompatible = vulkanIncompatible,
-        geminiIncompatible = geminiIncompatible,
-        geminiApiKey = geminiApiKey,
         customModelPaths = customModelPaths,
         engineModelSelections = engineModelSelections,
         wakeWordModelPath = wakeWordModelPath,
@@ -316,19 +312,4 @@ object TestDataFactory {
         defaultIntentFallbackModel = fallbackModel
     )
 
-    fun createSettingsWithGeminiNative(
-        geminiIncompatible: Boolean = false
-    ) = createAppSettings(
-        aiProcessor = com.voxapps.commander.utils.Strings.AiProcessors.GEMINI_NATIVE,
-        geminiIncompatible = geminiIncompatible
-    )
-
-    /** The Gemini key is not a setting — it lives in the encrypted store and reaches callers as
-     *  [com.voxapps.commander.data.preferences.Credentials], so it is passed there, not here. */
-    fun createSettingsWithGeminiCloud(
-        cloudIntelligenceEnabled: Boolean = true
-    ) = createAppSettings(
-        aiProcessor = com.voxapps.commander.utils.Strings.AiProcessors.GEMINI_CLOUD,
-        cloudIntelligenceEnabled = cloudIntelligenceEnabled
-    )
 }

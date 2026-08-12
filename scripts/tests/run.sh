@@ -27,7 +27,7 @@ FAIL=0
 ok()   { PASS=$((PASS + 1)); printf "  ${GREEN}✓${NC} %s\n" "$1"; }
 bad()  { FAIL=$((FAIL + 1)); printf "  ${RED}✗${NC} %s\n" "$1"; [ -n "${2:-}" ] && printf "      %s\n" "$2"; }
 
-CHECKS=(vosk newpipe-extractor openwakeword opencv ppocr-sdk whisper docquad)
+CHECKS=(vosk newpipe-extractor openwakeword opencv ppocr-sdk whisper llama docquad)
 
 log_blue "── report contract ─────────────────────────────────────────"
 for name in "${CHECKS[@]}"; do
@@ -252,6 +252,55 @@ else
     fi
 fi
 
+log_blue "── the published llama runtime ─────────────────────────────"
+#
+# Same shape as the Whisper gate above: AGP excludes libllama.so from every release build and the
+# app downloads it from a per-commit release published by hand, so the pin can move without the
+# runtime moving with it.
+if grep -q "check llama-published" .github/workflows/release-commander.yml; then
+    ok "the release gates on the published llama runtime matching the pin"
+else
+    bad "release-commander.yml no longer checks the published llama runtime"
+fi
+
+out=$(./scripts/vox check llama-published --report 2>/dev/null)
+if printf '%s\n' "$out" | grep -qE '^published=(true|false)$'; then
+    ok "llama-published states published"
+else
+    bad "llama-published --report gave no verdict" "$(printf '%s' "$out" | head -2)"
+fi
+
+pin=$(git ls-tree HEAD "vox-commander/src/main/cpp/llama.cpp" 2>/dev/null | awk '{print $3}' | cut -c1-12)
+reported=$(printf '%s\n' "$out" | grep '^tag=' | cut -d= -f2)
+if [ -n "$pin" ] && [ "$reported" = "llama-libs-$pin" ]; then
+    ok "the published llama runtime is addressed by the commit it was built from"
+else
+    bad "llama-libs tag does not follow the pin" "pin=$pin reported=$reported"
+fi
+
+if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+    ok "llama-published gate both ways: skipped (no authenticated gh)"
+else
+    if ./scripts/vox check llama-published >/dev/null 2>&1; then
+        ok "the llama gate passes on the real pin"
+    else
+        bad "the llama gate fails on the real pin — is the runtime published?"
+    fi
+    FAKE_PIN="0000000000000000000000000000000000000000"
+    if VOX_LLAMA_PIN=$FAKE_PIN ./scripts/vox check llama-published >/dev/null 2>&1; then
+        bad "the llama gate PASSED for a pin with no release (it proves nothing)"
+    else
+        ok "the llama gate fails for a pin with no release"
+    fi
+    rep=$(VOX_LLAMA_PIN=$FAKE_PIN ./scripts/vox check llama-published --report 2>/dev/null)
+    if printf '%s\n' "$rep" | grep -qx 'published=false'; then
+        ok "and its report says published=false for that pin"
+    else
+        bad "the llama report did not say published=false for a pin with no release" \
+            "$(printf '%s' "$rep" | head -3 | tr '\n' ' ')"
+    fi
+fi
+
 log_blue "── the sync workflows' dedup gate ──────────────────────────"
 #
 # `gh pr list --json ... -q '.[0] | "\(.number) \(.state)"'` renders an empty result as the literal
@@ -305,10 +354,10 @@ for wf in .github/workflows/sync-*.yml; do
     fi
 done
 
-if [ "$SYNC_WF_COUNT" -eq 6 ]; then
-    ok "the dedup and token loops saw all 6 sync workflows"
+if [ "$SYNC_WF_COUNT" -eq 7 ]; then
+    ok "the dedup and token loops saw all 7 sync workflows"
 else
-    bad "the sync loops saw $SYNC_WF_COUNT workflows, expected 6 — coverage shrank silently"
+    bad "the sync loops saw $SYNC_WF_COUNT workflows, expected 7 — coverage shrank silently"
 fi
 
 log_blue "── the release workflows do the same things ────────────────"
@@ -422,11 +471,24 @@ else
     bad "WHISPER_LIBS no longer loads libomp first — libwhisper cannot resolve its dependency"
 fi
 
+LEM="vox-commander/src/main/java/com/voxapps/commander/data/remote/LlamaEngineManager.kt"
+L_KT=$(so_list "$LEM" 'LLAMA_LIBS = listOf(')
+L_GRADLE=$(so_list vox-commander/build.gradle.kts 'val llamaLibs = listOf(')
+L_PUB=$(grep -m1 '^LIBS=' scripts/publish_llama_libs.sh | grep -oE '"[^"]+\.so"' | tr -d '"' | sort)
+L_CHECK=$(grep -m1 '^LIBS=' scripts/check_llama_published.sh | grep -oE '"[^"]+\.so"' | tr -d '"' | sort)
+l_count=$(printf '%s\n' "$L_KT" | grep -c . || true)
+if [ "$l_count" -eq 1 ] && [ "$L_KT" = "$L_GRADLE" ] && [ "$L_KT" = "$L_PUB" ] && [ "$L_KT" = "$L_CHECK" ]; then
+    ok "the llama lib list agrees across its four copies (1 lib)"
+else
+    bad "llama lib list drift across engine/build/publish/gate" \
+        "kt=[${L_KT//$'\n'/ }] gradle=[${L_GRADLE//$'\n'/ }] publish=[${L_PUB//$'\n'/ }] gate=[${L_CHECK//$'\n'/ }]"
+fi
+
 C_GRADLE=$(so_list vox-commander/build.gradle.kts 'val dlcLibs = listOf(')
 C_KT=$(so_list vox-commander/src/main/java/com/voxapps/commander/data/remote/NativeLibManager.kt 'libs = listOf(')
 c_count=$(printf '%s\n' "$C_KT" | grep -c . || true)
-if [ "$c_count" -eq 4 ] && [ "$C_GRADLE" = "$C_KT" ]; then
-    ok "commander's DLC list agrees between build and loader (4 libs)"
+if [ "$c_count" -eq 3 ] && [ "$C_GRADLE" = "$C_KT" ]; then
+    ok "commander's DLC list agrees between build and loader (3 libs)"
 else
     bad "commander dlcLibs and NativeLibManager.libs disagree" \
         "gradle=[${C_GRADLE//$'\n'/ }] kt=[${C_KT//$'\n'/ }]"
@@ -474,7 +536,7 @@ PY
 )
 MODEL_TOTAL=$(printf '%s\n' "$MODEL_HASH_REPORT" | sed -n 1p)
 MODEL_MISSING=$(printf '%s\n' "$MODEL_HASH_REPORT" | sed -n 2p)
-if [ -z "$MODEL_MISSING" ] && [ "${MODEL_TOTAL:-0}" -ge 96 ]; then
+if [ -z "$MODEL_MISSING" ] && [ "${MODEL_TOTAL:-0}" -eq 103 ]; then
     ok "all $MODEL_TOTAL downloadable models declare a sha256"
 else
     bad "downloadable models without a sha256 (of ${MODEL_TOTAL:-?}) — their downloads are unverified" \
@@ -485,7 +547,7 @@ log_blue "── report contract without CI's environment ───────�
 # CI exports GH_TOKEN and friends, so a broken \${VAR:-\$(fallback)} in a check script fails only
 # on a developer machine — the environment masks the defect exactly where the report gates a bot.
 # The contract is therefore pinned on the no-env path explicitly.
-for name in ppocr-sdk whisper; do
+for name in ppocr-sdk whisper llama; do
     out=$(env -u GH_TOKEN -u GITHUB_TOKEN -u GITHUB_REPOSITORY \
               -u VULKAN_HEADERS_BASE -u SPIRV_HEADERS_BASE -u SHADERC_BASE \
               ./scripts/vox check "$name" --report 2>/dev/null)

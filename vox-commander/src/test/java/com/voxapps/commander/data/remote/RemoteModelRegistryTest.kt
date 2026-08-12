@@ -143,7 +143,7 @@ class RemoteModelRegistryTest {
     fun `isArchiveEngine is false for single-file and virtual engines`() {
         mockkObject(RemoteModelRegistry)
         every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
-        every { RemoteModelRegistry.getExtension("nlu_llm") } returns ".task"
+        every { RemoteModelRegistry.getExtension("nlu_llm") } returns ".gguf"
         every { RemoteModelRegistry.getExtension("OPENAI") } returns ""
 
         assertFalse(RemoteModelRegistry.isArchiveEngine("stt_whisper"))

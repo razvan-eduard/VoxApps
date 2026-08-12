@@ -26,8 +26,6 @@ class IntentDecisionMapTest {
     private lateinit var l1Engine: AssistantEngine
     private lateinit var l2CloudEngine: AssistantEngine
     private lateinit var l3LocalEngine: SelectableModelEngine
-    private lateinit var geminiNanoEngine: AssistantEngine
-    private lateinit var geminiCloudEngine: AssistantEngine
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var decisionMap: IntentDecisionMap
 
@@ -42,16 +40,12 @@ class IntentDecisionMapTest {
         l1Engine = mockk()
         l2CloudEngine = mockk()
         l3LocalEngine = mockk()
-        geminiNanoEngine = mockk()
-        geminiCloudEngine = mockk()
         settingsRepo = mockk(relaxed = true)
 
         decisionMap = IntentDecisionMap(
             l1Engine,
             l2CloudEngine,
             l3LocalEngine,
-            geminiNanoEngine,
-            geminiCloudEngine,
             settingsRepo
         )
 
@@ -133,33 +127,10 @@ class IntentDecisionMapTest {
         coEvery { l1Engine.processCommand(any(), any()) } returns null
         coEvery { l2CloudEngine.processCommand(any(), any()) } returns null
         coEvery { l3LocalEngine.processCommand(any(), any()) } returns null
-        coEvery { geminiNanoEngine.processCommand(any(), any()) } returns null
-        coEvery { geminiCloudEngine.processCommand(any(), any()) } returns null
 
         val result = decisionMap.processCommand("bla bla", null)
 
         assertNull(result)
-    }
-
-    @Test
-    fun `when primary is GeminiNative, should call geminiNanoEngine`() = runTest {
-        val command = "play music"
-        val expectedIntent = TestDataFactory.createPlayMusicIntent()
-
-        coEvery { l1Engine.processCommand(command, any()) } returns null
-        coEvery { geminiNanoEngine.processCommand(command, any()) } returns expectedIntent
-
-        val settingsWithGemini = AppSettings(
-            cloudIntelligenceEnabled = true,
-            aiProcessor = Strings.AiProcessors.GEMINI_NATIVE
-        )
-        every { settingsRepo.getSettingsSnapshot() } returns settingsWithGemini
-
-        val result = decisionMap.processCommand(command, null)
-
-        assertNotNull(result)
-        coVerify { geminiNanoEngine.processCommand(command, any()) }
-        coVerify(exactly = 0) { l2CloudEngine.processCommand(any(), any()) }
     }
 
     @Test
@@ -208,97 +179,6 @@ class IntentDecisionMapTest {
         assertNull(result)
         // L2 was called once (as primary), L3 should NOT be called again
         coVerify(exactly = 1) { l2CloudEngine.processCommand(command, any()) }
-    }
-
-    @Test
-    fun `when primary is GEMINI_CLOUD and cloud enabled, should call geminiCloudEngine`() = runTest {
-        val command = "play music"
-        val expectedIntent = TestDataFactory.createPlayMusicIntent()
-
-        coEvery { l1Engine.processCommand(command, any()) } returns null
-        coEvery { geminiCloudEngine.processCommand(command, any()) } returns expectedIntent
-
-        val settings = TestDataFactory.createSettingsWithGeminiCloud()
-        every { settingsRepo.getSettingsSnapshot() } returns settings
-
-        val result = decisionMap.processCommand(command, null)
-
-        assertNotNull(result)
-        coVerify { geminiCloudEngine.processCommand(command, any()) }
-        coVerify(exactly = 0) { l2CloudEngine.processCommand(any(), any()) }
-    }
-
-    @Test
-    fun `when primary is GEMINI_CLOUD and cloud disabled, should skip and use fallback`() = runTest {
-        val command = "play music"
-        val expectedIntent = TestDataFactory.createPlayMusicIntent()
-
-        coEvery { l1Engine.processCommand(command, any()) } returns null
-        coEvery { l3LocalEngine.processCommand(command, any(), any()) } returns expectedIntent
-
-        val settings = TestDataFactory.createAppSettings(
-            aiProcessor = Strings.AiProcessors.GEMINI_CLOUD,
-            cloudIntelligenceEnabled = false,
-            defaultIntentFallbackProcessor = "nlu_llm",
-            defaultIntentFallbackModel = "qwen2.5-1.5b-q8"
-        )
-        every { settingsRepo.getSettingsSnapshot() } returns settings
-
-        mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
-        every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
-
-        val result = decisionMap.processCommand(command, null)
-
-        assertNotNull(result)
-        coVerify(exactly = 0) { geminiCloudEngine.processCommand(any(), any()) }
-        coVerify { l3LocalEngine.processCommand(command, any(), any()) }
-    }
-
-    @Test
-    fun `when L2 fails and fallback is GEMINI_CLOUD, should call geminiCloudEngine in L3`() = runTest {
-        val command = "play music"
-        val expectedIntent = TestDataFactory.createPlayMusicIntent()
-
-        coEvery { l1Engine.processCommand(command, any()) } returns null
-        coEvery { l2CloudEngine.processCommand(command, any()) } returns null
-        coEvery { geminiCloudEngine.processCommand(command, any()) } returns expectedIntent
-
-        val settings = TestDataFactory.createAppSettings(
-            cloudIntelligenceEnabled = true,
-            aiProcessor = Strings.AiProcessors.OPENAI,
-            defaultIntentFallbackProcessor = Strings.AiProcessors.GEMINI_CLOUD,
-            defaultIntentFallbackModel = "gemini-pro"
-        )
-        every { settingsRepo.getSettingsSnapshot() } returns settings
-
-        val result = decisionMap.processCommand(command, null)
-
-        assertNotNull(result)
-        coVerify { l2CloudEngine.processCommand(command, any()) }
-        coVerify { geminiCloudEngine.processCommand(command, any()) }
-    }
-
-    @Test
-    fun `when L2 fails and fallback is GEMINI_NATIVE, should call geminiNanoEngine in L3`() = runTest {
-        val command = "play music"
-        val expectedIntent = TestDataFactory.createPlayMusicIntent()
-
-        coEvery { l1Engine.processCommand(command, any()) } returns null
-        coEvery { l2CloudEngine.processCommand(command, any()) } returns null
-        coEvery { geminiNanoEngine.processCommand(command, any()) } returns expectedIntent
-
-        val settings = TestDataFactory.createAppSettings(
-            cloudIntelligenceEnabled = true,
-            aiProcessor = Strings.AiProcessors.OPENAI,
-            defaultIntentFallbackProcessor = Strings.AiProcessors.GEMINI_NATIVE,
-            defaultIntentFallbackModel = "gemini-nano"
-        )
-        every { settingsRepo.getSettingsSnapshot() } returns settings
-
-        val result = decisionMap.processCommand(command, null)
-
-        assertNotNull(result)
-        coVerify { geminiNanoEngine.processCommand(command, any()) }
     }
 
     @Test
