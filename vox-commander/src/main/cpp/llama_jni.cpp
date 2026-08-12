@@ -110,12 +110,16 @@ extern "C" {
 
 JNIEXPORT jlong JNICALL
 Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeLoadModel(
-        JNIEnv * env, jobject, jstring jpath, jint nCtx, jint nThreads) {
+        JNIEnv * env, jobject, jstring jpath, jint nCtx, jint nThreads, jint nGpuLayers) {
     std::call_once(backend_once, [] { llama_backend_init(); });
 
     const std::string path = jstr(env, jpath);
 
     llama_model_params mparams = llama_model_default_params();
+    // 0 = CPU only, negative = every layer on the GPU. Set explicitly in both directions: the
+    // library compiles the Vulkan backend in unconditionally, and the default must not decide
+    // which silicon runs a model the caller's verdict machinery already ruled on.
+    mparams.n_gpu_layers = (int32_t) nGpuLayers;
     llama_model * model = llama_model_load_from_file(path.c_str(), mparams);
     if (!model) {
         throw_runtime(env, "failed to load model: " + path);
@@ -183,6 +187,7 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeComplete(
     }
     const int slot = (jslot >= 0 && jslot < N_SLOTS) ? (int) jslot : 0;
     h->abort.store(false);
+    llama_perf_context_reset(h->ctx); // timings answer for this call, not the context's lifetime
 
     const std::string prompt = apply_template(h->model, jstr(env, jsys), jstr(env, juser));
     if (prompt.empty()) {
@@ -267,6 +272,23 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeComplete(
     if (cancelled) return nullptr;
     h->cached[slot] = std::move(tokens); // prompt only: the next call's seq_rm drops generated tokens
     return env->NewStringUTF(out.c_str());
+}
+
+// [prompt-eval ms, prompt tokens, decode ms, decoded tokens] for the most recent completion —
+// the benchmark's seam for reporting prefill and decode speed separately.
+JNIEXPORT jlongArray JNICALL
+Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeLastTimings(JNIEnv * env, jobject, jlong handle) {
+    auto * h = reinterpret_cast<LlamaHandle *>(handle);
+    if (!h || !h->ctx) return nullptr;
+    const llama_perf_context_data d = llama_perf_context(h->ctx);
+    const jlong vals[4] = {
+        (jlong) d.t_p_eval_ms, (jlong) d.n_p_eval,
+        (jlong) d.t_eval_ms,   (jlong) d.n_eval,
+    };
+    jlongArray arr = env->NewLongArray(4);
+    if (!arr) return nullptr;
+    env->SetLongArrayRegion(arr, 0, 4, vals);
+    return arr;
 }
 
 JNIEXPORT void JNICALL

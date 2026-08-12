@@ -10,8 +10,11 @@ package com.voxapps.llamacpp
  */
 interface LlamaBridge {
 
-    /** Loads the model and creates its context. Returns an opaque handle; throws on failure. */
-    fun loadModel(path: String, nCtx: Int, nThreads: Int): Long
+    /** Loads the model and creates its context. Returns an opaque handle; throws on failure.
+     *  [nGpuLayers]: 0 runs entirely on the CPU; negative offloads every layer to the GPU
+     *  (Vulkan, compiled into the same library). The caller owns the compatibility verdict —
+     *  this is mechanism, not policy. */
+    fun loadModel(path: String, nCtx: Int, nThreads: Int, nGpuLayers: Int = 0): Long
 
     /** Frees the context and model behind [handle]. The handle is dead afterwards. */
     fun freeModel(handle: Long)
@@ -52,6 +55,11 @@ interface LlamaBridge {
     /** Tokens currently resident in the context — the testability seam for KV-clear assertions. */
     fun contextTokenCount(handle: Long): Int
 
+    /** `[promptEvalMs, promptTokens, decodeMs, decodedTokens]` for the most recent [complete] on
+     *  [handle], or null when nothing has run — prefill and decode speed reported separately,
+     *  which is what the benchmark page needs (prefill is where backends differ most). */
+    fun lastTimings(handle: Long): LongArray?
+
     companion object {
         /** KV slot for grammar-constrained NLU completions — the stable system-prompt prefix. */
         const val SLOT_NLU = 0
@@ -63,8 +71,8 @@ interface LlamaBridge {
 /** The real JNI binding. [LibLlama.load] must have succeeded before any call. */
 object LlamaBridgeImpl : LlamaBridge {
 
-    override fun loadModel(path: String, nCtx: Int, nThreads: Int): Long =
-        nativeLoadModel(path, nCtx, nThreads)
+    override fun loadModel(path: String, nCtx: Int, nThreads: Int, nGpuLayers: Int): Long =
+        nativeLoadModel(path, nCtx, nThreads, nGpuLayers)
 
     override fun freeModel(handle: Long) = nativeFreeModel(handle)
 
@@ -90,7 +98,9 @@ object LlamaBridgeImpl : LlamaBridge {
 
     override fun contextTokenCount(handle: Long): Int = nativeContextTokenCount(handle)
 
-    private external fun nativeLoadModel(path: String, nCtx: Int, nThreads: Int): Long
+    override fun lastTimings(handle: Long): LongArray? = nativeLastTimings(handle)
+
+    private external fun nativeLoadModel(path: String, nCtx: Int, nThreads: Int, nGpuLayers: Int): Long
     private external fun nativeFreeModel(handle: Long)
     private external fun nativeJsonSchemaToGrammar(schemaJson: String): String
     private external fun nativeComplete(
@@ -105,4 +115,5 @@ object LlamaBridgeImpl : LlamaBridge {
     private external fun nativeCancel(handle: Long)
     private external fun nativeClearMemory(handle: Long)
     private external fun nativeContextTokenCount(handle: Long): Int
+    private external fun nativeLastTimings(handle: Long): LongArray?
 }
