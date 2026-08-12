@@ -127,15 +127,22 @@ class VoxApplication : Application() {
             reconcileDownloadedModels()
         }
 
-        // Warm the local on-device LLM in the background (model load + XNNPACK weight-cache
-        // compile), so the first spoken/typed command doesn't pay a 15-25s cold-start cost. Never
+        // Warm the local on-device LLM in the background (model load + the system prompt's
+        // prefill), so the first spoken/typed command doesn't pay the cold-start cost. Never
         // triggers a download — only fires if a local LLM engine is selected AND its model file
         // is already on disk; otherwise setupLlm() would just no-op anyway on first real use.
         // Fire-and-forget like every other startup task here: the splash screen isn't gated on
         // anything in this file (no setKeepOnScreenCondition), so this never delays first paint.
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
-            // The registry is already populated: init() above loads the copies in force, with no
-            // network and nothing async, so the capability checks below cannot race an empty one.
+            // The registry loads on a coroutine of its own, so the capability check below can
+            // race an empty schema cache — in which case isLlmEngine() answers false and the
+            // preload silently never happens (observed on a cold start: the first command then
+            // pays the full model load + prefill, and on a slow device that alone can exhaust
+            // the interpreter's 90s budget). Waiting — bounded — for the registry to hold an
+            // LLM engine is what makes this predicate answer from data.
+            kotlinx.coroutines.withTimeoutOrNull(10_000) {
+                while (RemoteModelRegistry.getLlmEngineKeys().isEmpty()) kotlinx.coroutines.delay(250)
+            }
             val s = container.settingsRepository.getSettingsSnapshot()
             val modelId = s.activeIntentModelId
             if (modelId != null && RemoteModelRegistry.isLlmEngine(s.aiProcessor) &&
@@ -143,6 +150,14 @@ class VoxApplication : Application() {
             ) {
                 Logger.log("Preloading local LLM engine ($modelId / ${s.aiProcessor})", "VoxApplication")
                 container.localLlmInterpreter.preload(s.modelFilterLang.ifEmpty { null })
+            } else {
+                // Said out loud because the failure mode of a warm-up is silence: nothing breaks,
+                // the first command just pays the whole cold start.
+                Logger.log(
+                    "LLM preload skipped (model=$modelId, processor=${s.aiProcessor}, " +
+                        "isLlm=${RemoteModelRegistry.isLlmEngine(s.aiProcessor)})",
+                    "VoxApplication"
+                )
             }
         }
 

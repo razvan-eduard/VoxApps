@@ -583,8 +583,21 @@ class SettingsRepositoryImpl(
         }
     }
 
-    override fun getSettingsSnapshot(): AppSettings =
-        cachedSnapshot ?: runBlocking { settingsFlow.first() }.also { cachedSnapshot = it }
+    override fun getSettingsSnapshot(): AppSettings {
+        // A cached snapshot whose aiProcessor is the empty-string fallback was mapped before the
+        // model registry had loaded (the default engine key is derived from the registry at map
+        // time, and nothing re-maps the flow until a DataStore write). Serving it would silently
+        // drop the cascade's L2 stage — the resolver answers null for "" — so such a snapshot is
+        // re-read once the registry can actually answer.
+        val cached = cachedSnapshot
+        if (cached != null &&
+            !(cached.aiProcessor.isEmpty() &&
+                com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultLlmEngineKey() != null)
+        ) {
+            return cached
+        }
+        return runBlocking { settingsFlow.first() }.also { cachedSnapshot = it }
+    }
 
     /**
      * Read straight from the store rather than from a cache.
