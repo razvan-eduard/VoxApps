@@ -11,8 +11,8 @@ If you want the architecture overview instead of a build-it tutorial, see
 There is **no shared runtime state** between VoxCommander and a satellite. Everything crosses
 process boundaries as JSON inside `Intent` extras over Android's native broadcast/activity
 mechanisms, authenticated by signature-level permissions (not a token, not a server). The contract
-types live in one small library module, `:core:ipc` — no networking, no ViewModels, just DTOs and a
-handful of constants.
+types live in one small library module, `:core:ipc` — no networking, no ViewModels, just DTOs, a
+handful of constants, and the small durable-delivery queue (§7).
 
 ---
 
@@ -148,7 +148,8 @@ Adding the module is not the same as being built and released. In order:
 2. **Release workflow** — copy any `release-<app>.yml` and change the app prefix, the module path and
    the `paths:` filter (`vox-yourapp/build.gradle.kts`). Three places must agree on the prefix: the
    workflow's `on.push.tags` pattern, the `app-prefix` input to `.github/actions/compute-release-tag`,
-   and — if your app downloads DLC native libs — its `NativeLibManager.getReleaseTag()`.
+   and — if your app downloads DLC native libs — the `tagPrefix` it passes to `:core:nativelibs`'
+   `NativeLibs`.
 3. **Add it to the two follower workflows' trigger lists**, by workflow *name*:
    `deploy-fdroid.yml` and `update-readme-releases.yml` each enumerate the six release workflows
    under `workflow_run.workflows`. A new app that is not in those lists releases fine and is simply
@@ -362,9 +363,18 @@ import the constants.
 | `OP_GET_SCHEMA` | `get_schema` | Request-response: return your `VoxSatelliteSchema` |
 | `OP_EXPORT` | `export` | Request-response: return your data as JSON (Vox Hub backup) |
 | `OP_IMPORT` | `import` | Fire/request-response: restore data from JSON (Vox Hub restore) |
+| `OP_SYNC_EXPORT` / `OP_SYNC_MERGE` | `sync_export` / `sync_merge` | Request-response: P2P device-sync delta out / delta in (Vox Hub) |
+| `OP_GET_FIELD_SCHEMA` | `get_field_schema` | Request-response: return your editable-field form schema (VoxConnect Bridge) |
+| `OP_MEDIA_CONTROL` | `media_control` | Request-response: media-session relay, Hub → Commander only |
+
+The sync/media ops carry their parameters in `VoxCommand` fields (`since`/`scopeNames`/`mediaAction`
+— see §4); their full semantics live in
+[`TECHNICAL_DOCUMENTATION.md`](TECHNICAL_DOCUMENTATION.md) and the `VoxIpc` doc comments.
 
 `VoxCommand.exportScope` values (only relevant for `OP_EXPORT`): `EXPORT_SCOPE_SETTINGS = "settings"`,
-`EXPORT_SCOPE_DATA = "data"`, `EXPORT_SCOPE_BOTH = "both"`.
+`EXPORT_SCOPE_DATA = "data"`, `EXPORT_SCOPE_BOTH = "both"`. `VoxCommand.importMode` values (only
+relevant for `OP_IMPORT`): `IMPORT_MODE_FULL_OVERRIDE = "full_override"`, `IMPORT_MODE_MERGE =
+"merge"`, `IMPORT_MODE_ADDITIVE = "additive"` — null defaults to merge on the receiving end.
 
 ### Manifest meta-data keys (capability advertising)
 
@@ -399,6 +409,9 @@ You never write a `<permission>` tag yourself for any of these.
 VoxIpc.VISION_PACKAGE          // "com.voxapps.vision"
 VoxIpc.VISION_ACTIVITY_CLASS   // "com.voxapps.vision.VisionActivity"
 VoxIpc.HUB_PACKAGE             // "com.voxapps.hub"
+VoxIpc.NOTES_PACKAGE           // "com.voxapps.notes"
+VoxIpc.EXPENSES_PACKAGE        // "com.voxapps.expenses"
+VoxIpc.CALENDAR_PACKAGE        // "com.voxapps.calendar"
 VoxAppsDiscovery.COMMANDER_PACKAGE  // "com.voxapps.commander" (different file)
 ```
 
@@ -422,7 +435,14 @@ data class VoxCommand(
     val includeSecrets: Boolean = false,
     val includePhotos: Boolean = false,
     val dateFrom: Long? = null,   // day-scoped OP_READ (Calendar's day-tap summary)
-    val dateTo: Long? = null
+    val dateTo: Long? = null,
+    val since: Long? = null,              // OP_SYNC_EXPORT: only entries changed after this;
+                                          // null/0 = everything (first-ever sync with a peer)
+    val scopeNames: List<String>? = null, // OP_SYNC_EXPORT: category/layer *names* (not ids —
+                                          // ids aren't stable across devices) to restrict to
+    val mediaAction: String? = null,      // OP_MEDIA_CONTROL: "status"/"play"/"pause"/"next"/"prev"
+    val importMode: String? = null        // OP_IMPORT: IMPORT_MODE_FULL_OVERRIDE/MERGE/ADDITIVE;
+                                          // null defaults to "merge" on the receiving end
 )
 
 data class VoxResult(
@@ -459,14 +479,29 @@ data class VoxLlmResult(
     val error: String? = null
 )
 
-data class VoxOcrRequest(val sourcePackage: String, val task: String, val hint: String? = null)
+data class VoxOcrRequest(
+    val sourcePackage: String,
+    val task: String,                    // opaque, caller-owned — echoed back verbatim
+    val hint: String? = null,            // cosmetic free text Vision's UI may show
+    val returnToCallerOnComplete: Boolean = false,  // relaunch the caller's own task when Vision finishes
+    val imageUri: String? = null,        // headless: OCR this existing content:// URI, no camera UI —
+                                         // caller must grantUriPermission(VISION_PACKAGE, ...) first
+    val produceOCR: Boolean = true,      // false = capture/crop only, rawText comes back null
+    val captureMode: String = CAPTURE_MODE_SINGLE   // CAPTURE_MODE_SINGLE | CAPTURE_MODE_BATCH
+                                         // (several shots, one record each) | CAPTURE_MODE_STITCH
+                                         // (several shots, ONE record, live per-shot OCR with a
+                                         // text-continuity check between shots)
+)
 
 data class VoxOcrResult(
     val task: String,
-    val status: String,            // STATUS_SUCCESS | STATUS_ERROR
-    val rawText: String? = null,
-    val imageUri: String? = null,      // full-res
-    val aiImageUri: String? = null,    // separately downscaled copy for LLM attachment, or null
+    val status: String,                  // STATUS_SUCCESS | STATUS_ERROR
+    val rawText: String? = null,         // Stitch: all accepted shots' text already joined into one string;
+                                         // Batch: always null
+    val imageUris: List<String> = emptyList(),  // full-res photo(s) — one element for a single shot,
+                                                // several for Batch/Stitch
+    val rawTexts: List<String> = emptyList(),   // Batch: per-photo OCR text, same index as imageUris
+    val aiImageUri: String? = null,      // separately downscaled copy for LLM attachment, or null
     val error: String? = null
 )
 ```
@@ -844,7 +879,10 @@ production notification-capture flow (see
 [Durable delivery: the pending-request queue](TECHNICAL_DOCUMENTATION.md#durable-delivery-the-pending-request-queue-voxllmrequestqueue)
 for the full "why"). The queue fixes it two ways: it sets `FLAG_INCLUDE_STOPPED_PACKAGES` so the
 broadcast wakes a stopped Commander, and it persists the request first so a periodic worker can retry
-it if no reply ever comes:
+it if no reply ever comes. It also dedupes: there is only ever one pending row per
+(source, target, task), so a capture path that rediscovers the same work — a listener reconnect, a
+manual force-check, a periodic sweep — re-sends the stored row and gets back its existing `requestId`
+instead of minting a duplicate request:
 
 ```kotlin
 // One-time setup: add the entity/DAO to your own @Database, then construct the queue once

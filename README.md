@@ -126,19 +126,22 @@ cd VoxApps
 ./gradlew :<app>:installDebug
 ```
 
-**Submodules.** Commander compiles whisper.cpp from source and Vision needs OpenCV built locally, so
-those two need their vendored upstreams before they will build:
+**Submodules.** Commander compiles whisper.cpp and llama.cpp from source and Vision needs OpenCV
+built locally, so those two need their vendored upstreams before they will build:
 
 ```bash
 git submodule update --init --depth 1 vox-commander/src/main/cpp/whisper.cpp   # Commander
-git submodule update --init --depth 1 vendor/openwakeword-android-kt           # Commander
+git submodule update --init --depth 1 vox-commander/src/main/cpp/llama.cpp     # Commander
 git submodule update --init --depth 1 vendor/opencv                            # Vision
 ```
 
+(`vendor/openwakeword-android-kt` is not needed to build: the fork Commander actually compiles lives
+in `core/wakeword`; the submodule holds pristine upstream for the sync scripts only.)
+
 The first Commander and Vision builds are slow because of those native compiles; later builds reuse
-the output. `-PvoxSkipNativePrep` skips Commander's whisper compile and its three upstream-version
-checks when you only want to know whether the Kotlin compiles. Notes, Expenses, Calendar and Hub
-need no submodules at all.
+the output. `-PvoxSkipNativePrep` skips Commander's whisper.cpp and llama.cpp compiles when you only
+want to know whether the Kotlin compiles; the upstream-version checks are on-demand tasks, attached
+to no build. Notes, Expenses, Calendar and Hub need no submodules at all.
 
 ### Run Tests
 
@@ -282,7 +285,8 @@ companion app now also has its own local Backup & Restore screen, interchangeabl
   model, and a debugging checklist.
 - [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md) — monorepo-wide reference for
   every native/ML dependency that's a binary version-check or vendored/patched/compiled from source at
-  build time (Vosk, NewPipe Extractor, Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk).
+  build time (Vosk, NewPipe Extractor, Whisper.cpp, llama.cpp, OpenWakeWord, OpenCV, PaddleOCR
+  ppocr-sdk).
 
 [↖ Back to top](#readme-top)
 

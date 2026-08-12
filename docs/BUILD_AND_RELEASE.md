@@ -132,15 +132,15 @@ fails the build if the choice is ever ambiguous.
 
 ### Skipping the native prep
 
-`vox-commander`'s `preBuild` compiles whisper.cpp from its submodule — the only script attached to a
-build, and it produces output the app links. The upstream-version checks belong to the weekly sync
-bots and are not wired into any build.
+`vox-commander`'s `preBuild` attaches two compiles — whisper.cpp and llama.cpp, each from its
+submodule — the only scripts attached to a build, and both produce output the app links. The
+upstream-version checks belong to the weekly sync bots and are not wired into any build.
 
 ```
 ./gradlew :vox-commander:assembleDebug -PvoxSkipNativePrep
 ```
 
-skips the whisper compile for a build that only needs to know whether the Kotlin compiles.
+skips the whisper and llama compiles for a build that only needs to know whether the Kotlin compiles.
 Everything downstream of `preBuild` still runs. `copyShippedSchemas` is **not** skippable — the
 schema tests read the assets it generates.
 
@@ -152,8 +152,11 @@ this order:
 | step | what it establishes |
 |---|---|
 | `apksigner verify` | the APK is signed, with the certificate every previous release used |
+| digest assets inside the APK | *(Commander)* `assets/whisper-libs.sha256`/`.commit` and `assets/llama-libs.sha256`/`.commit` are packaged, and the recorded whisper digests equal what the published `whisper-libs` release serves — the digests describe what an install downloads, not what this runner compiled; in `full`, Commander and Vision also require `assets/dlc-libs.sha256` |
+| `vox check smoke <apk> <app-id>` | the APK installs and survives a cold launch on an x86_64 emulator, the arm64-v8a libraries running under the image's ARM binary translation — all six workflows |
 | `vox release sbom <app>` | a CycloneDX SBOM — the resolved dependency graph, plus the vendored sources this app compiles, recorded by the commit each submodule is pinned to |
 | `vox check whisper-published` | *(Commander)* the release the app will fetch its Whisper runtime from exists, so an install cannot 404 on libraries its APK expects ([detail](BUILD_TIME_DEPENDENCIES.md#addressing-the-runtime-by-the-commit-it-was-built-from)) |
+| `vox check llama-published` | *(Commander)* the release the app fetches `libllama.so` from exists, addressed by the llama build fingerprint ([detail](BUILD_TIME_DEPENDENCIES.md#pattern-b-llamacpp-vendored-unmodified-compiled-at-build-time)) |
 | `vox check pairing` | every native library in the APK satisfies what its dependants were built against ([detail](BUILD_TIME_DEPENDENCIES.md#do-the-native-libraries-satisfy-each-other)) |
 | `actions/attest-build-provenance` | signed provenance over the APK, AAB and SBOM, recorded in GitHub's transparency log |
 
@@ -200,7 +203,8 @@ own unprotected `main` accepts.
 
 Both required checks come from `ci.yml`, which has no path filters, so they report on every PR. A
 required check that can fail to *run* blocks a PR permanently instead of gating it, which is why the
-path-filtered workflows (`validate-schemas`, `verify-vendor-patches`) are not required here.
+path-filtered workflows (`validate-schemas`, `verify-schemas`, `verify-vendor-patches`) are not
+required here.
 
 What they cover is `./gradlew test` and `assembleDebug` — the unit tests and a debug build. Release
 packaging, R8 and anything that only appears once the app is installed are outside them.
@@ -211,6 +215,7 @@ packaging, R8 and anything that only appears once the app is installed are outsi
 | --- | --- | --- |
 | `ci.yml` | every push to `main`, every PR | `./gradlew test` for all modules, `assembleDebug` for all six apps, then `vox check pairing` over the six APKs |
 | `validate-schemas.yml` | pushes touching `remote-schemas/**` | validates the shipped schema files |
+| `verify-schemas.yml` | pushes touching `remote-schemas/**` or `scripts/sign_schemas.sh` | verifies the schema manifest signature and every schema hash |
 | `verify-vendor-patches.yml` | pushes touching a vendored fork or its patches | asserts each fork is exactly upstream + `patches/` |
 | CodeQL | GitHub's own setup | `actions`, `c-cpp`, `python` analyses |
 
@@ -317,7 +322,8 @@ the setup needs changing.
 ## Fastlane screenshots
 
 Each app's F-Droid/IzzyOnDroid metadata screenshots live at
-`<app>/fastlane/metadata/android/en-US/images/phoneScreenshots/{1,2,3,...}.png`. Captured
+`<app>/fastlane/metadata/android/en-US/images/phoneScreenshots/` as numbered `.png`/`.jpeg` files,
+some carrying a descriptive suffix (`1.jpeg`, `21_rules_manager_mode_selector.png`). Captured
 manually against the emulator (or, for UI that only exists after real usage — e.g. the expense
 duplicate-review screen — copied in from a physical-device screenshot):
 
@@ -366,9 +372,10 @@ PRs each. Minor and patch updates are **grouped** into one PR per ecosystem (`gr
 `actions-routine`); majors arrive one apiece, deliberately — those are the ones that change
 behaviour. **Nothing auto-merges.** CI runs on Dependabot's PRs like any other, and a person merges.
 
-Six `sync-*.yml` workflows watch vendored native upstreams, **one per day** at 06:00 UTC — vosk
-(Mon), newpipe-extractor (Tue), openwakeword (Wed), opencv (Thu), ppocr-sdk (Fri) — plus whisper
-monthly. They apply the update, try to build it, and open a PR saying whether it compiled. **None of
+Seven `sync-*.yml` workflows watch vendored native upstreams, **one per day** at 06:00 UTC — vosk
+(Mon), newpipe-extractor (Tue), openwakeword (Wed), opencv (Thu), ppocr-sdk (Fri) — plus two
+monthly: whisper (2nd, 09:00 UTC) and llama (3rd, 09:00 UTC, the day after). They apply the
+update, try to build it, and open a PR saying whether it compiled. **None of
 them merges itself**, and a PR you close stays closed. See `BUILD_TIME_DEPENDENCIES.md` for what each
 vendored fork patches, how those patches are kept, and why PaddleOCR is deliberately followed a week
 behind its tip.

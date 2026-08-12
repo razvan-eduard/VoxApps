@@ -89,12 +89,18 @@ VoxApplication.onCreate()
 All wake word engines implement `IWakeWordEngine`:
 
 ```kotlin
-interface IWakeWordEngine {
-    fun startDetection(callback: (String) -> Unit)
-    fun stopDetection()
-    fun isRunning(): Boolean
+interface IWakeWordEngine : VoxEngine {
+    fun startListening(): Boolean
+    fun stopListening()
+    fun stopService()
 }
 ```
+
+Identity and lifecycle come from `VoxEngine`/`BaseVoxEngine` (engine key, `load`/`unload`/`release`,
+observable `EngineState`, the shared load mutex); the interface adds only what listening itself needs.
+The model and the wake phrase arrive together as a `ModelSpec.WakeWordModel` (`modelId`,
+`entryPoint` — null for a keyword built into the engine — `keyword`, `language`), so all three engines
+get both at load time and "the user changed the wake word" is expressed as `load(newSpec)`.
 
 ### Available Engines
 
@@ -123,7 +129,7 @@ All three wake engines are defined in `models.json` (`wake_vosk`, `wake_openwake
 #### Picovoice Porcupine (`PorcupineWakeWordEngine.kt`)
 
 - Uses Picovoice's Porcupine SDK. The 13 built-in keywords (alexa, jarvis, computer, …) are defined as **non-remote models in `models.json`** (`wake_porcupine` engine) — no longer injected in Kotlin. Selecting one sets it as the wake word.
-- Requires a Picovoice Access Key (`picovoiceAccessKey`); the Service tab disables **Start** and shows a warning until the key is entered (driven by the `requires_api_key` capability).
+- Requires a Picovoice Access Key (`picovoiceAccessKey`); the Service page disables **Start** and shows a warning until the key is entered (driven by the `requires_api_key` capability).
 - Also supports custom `.ppn` model files in assets.
 
 #### OpenWakeWord (`OpenWakeWordEngine.kt`)
@@ -146,7 +152,7 @@ The low/medium/high **Wake Word Sensitivity** setting maps to a per-engine thres
 | medium | 0.5 | 0.5 | 0.45 |
 | low | 0.7 (stricter) | 0.3 (less sensitive) | 0.55 |
 
-Sensitivity is baked in at engine `initialize()`, so changing it requires an engine reload. The Service tab shows a **confirmation dialog** on change and, if the service is running, persists the value (awaiting the write and the reactive-state propagation) and then hot-reloads the engine so the new threshold applies immediately.
+Sensitivity is baked in at engine `initialize()`, so changing it requires an engine reload. The Service page shows a **confirmation dialog** on change and, if the service is running, persists the value (awaiting the write and the reactive-state propagation) and then hot-reloads the engine so the new threshold applies immediately.
 
 ### Debounce & Notification
 
@@ -179,25 +185,30 @@ owning the source.
 | `core/wakeword/` | Local Gradle module (`android-library`) — vendored + patched copy of the upstream `:wakeword` module, compiled into `vox-commander`. |
 | `core/wakeword/src/main/kotlin/.../audio/AudioRecorder.kt` | Patched file #1. An RMS silence gate drops buffers below an energy floor *before* the short→float conversion and *before* anything is emitted — so `WakeWordEngine`'s ONNX inference never runs on silence. Layered with an *adaptive* margin above the live ambient noise floor (`:core:audio`'s `AdaptiveNoiseGate`, also shared by the Vosk engine — see below), so the gate keeps closing in a sustained noisy room where a fixed floor alone stops helping. Both the fixed floor (`rmsGate`) and the adaptive margin (`noiseGateMargin`) are derived from the user's Wake Word Sensitivity setting via `WakeWordSensitivity.openWakeWordRmsGate()`/`.noiseGateMargin()`; `0f`/upstream defaults preserve stock behavior. |
 | `core/wakeword/src/main/kotlin/.../WakeWordEngine.kt` | Patched file #2 (the vendored library's own engine class — not to be confused with `vox-commander`'s separate Vosk `WakeWordEngine.kt`). Just forwards `rmsGate`/`noiseGateMargin` through its public constructor to `AudioRecorder`, which is the only place that actually acts on them. |
-| `core/wakeword/patches/0001-rms-silence-gate.patch`, `0002-wakeword-engine-params.patch` | The two patches above, each maintained as a real unified diff (not just "the current file") — regenerate both together with `./scripts/vox patches regen wakeword`. |
+| `core/wakeword/patches/0001-rms-silence-gate.patch`, `0002-wakeword-engine-params.patch`, `0003-audioprocessor-score-logging.patch` | The three patches — the two files above plus `AudioProcessor.kt`'s per-buffer prediction-score logging (scores above 0.05 only, so "near misses" show up in logs without flooding them) — each maintained as a real unified diff (not just "the current file"); regenerate all of them together with `./scripts/vox patches regen wakeword`. |
 | `core/wakeword/NOTICE` / `LICENSE` | Apache 2.0 attribution chain (OpenWakeWord, Google Speech Embedding Model, ONNX Runtime). |
 
 **Keeping it in sync with upstream releases:**
 
 - `scripts/check_openwakeword_version.sh` — local, non-destructive dry-run: checks for a newer upstream
-  tag and whether the stored patch would still `git apply --check` cleanly against it, without touching
-  the working tree either way. Wired into `vox-commander`'s `preBuild` as the `autoCheckOpenWakeWord`
-  Gradle task.
+  tag and whether the stored patches would still `git apply --check` cleanly against it, without touching
+  the working tree either way. Runnable on demand as the `autoCheckOpenWakeWord` Gradle task —
+  deliberately **not** a `preBuild` dependency: "a newer upstream exists" is a maintenance fact, not a
+  build fact, and it is delivered by the scheduled sync workflows. `./gradlew :vox-commander:checkUpstream`
+  runs every upstream check (Vosk, NewPipe, OpenWakeWord, OpenCV, PaddleOCR, whisper) in one command.
 - `.github/workflows/sync-openwakeword.yml` — weekly scheduled (+ manual dispatch) workflow: on a new
   upstream tag, bumps the submodule, fully re-vendors `core/wakeword`'s sources, and tries to `git apply`
   the stored patch. If it applies cleanly *and* the module compiles + unit tests pass, it opens a PR
   that's already ready to review/approve — nothing to hand-merge in the common case. It only surfaces a
   manual-merge PR (with the reject hunk attached) if the patch genuinely conflicts with an upstream
   change to the same lines. Never auto-merges.
-- The same pattern (submodule + scheduled sync workflow, PR-per-update, never auto-merged) is used for
-  Whisper.cpp (`sync-whisper.yml`, monthly — compiles/tests only, deliberately never publishes the
-  production `.so` DLC) and Vosk (`sync-vosk.yml`, weekly — Vosk is a binary Maven/JitPack dependency,
-  not vendored source, so it's a version bump in `gradle/libs.versions.toml` rather than a patch).
+- The same pattern (scheduled sync workflow, PR-per-update, never auto-merged) covers every vendored or
+  pinned dependency: Whisper.cpp (`sync-whisper.yml`, monthly — compiles/tests only, deliberately never
+  publishes the production `.so` DLC), llama.cpp (`sync-llama.yml`, monthly, a day after the whisper
+  run), Vosk (`sync-vosk.yml`, weekly) and NewPipe Extractor (`sync-newpipe-extractor.yml`, weekly) —
+  both binary JitPack dependencies, so their PRs bump `gradle/libs.versions.toml` rather than apply a
+  patch — plus OpenCV (`sync-opencv.yml`, weekly) and the PaddleOCR fork (`sync-ppocr-sdk.yml`, weekly)
+  for the vendored native SDKs.
 
 ---
 
@@ -211,11 +222,12 @@ owning the source.
 - **Models**: Downloaded on-demand from HuggingFace (`ggml-tiny.bin`, `ggml-base.bin`, `ggml-small.bin`)
 - **Release builds**: the two whisper libs are excluded from the APK via variant-scoped
   `jniLibs.excludes` (`androidComponents.onVariants`) and downloaded as real, user-facing DLC
-  (~107 MB, fetched by `WhisperEngineManager` when the user enables Whisper, verified against
+  (~88 MB for libwhisper.so + libomp.so on arm64, fetched by `WhisperEngineManager` when the user
+  enables Whisper, verified against
   digests recorded in the APK as `assets/whisper-libs.sha256`) — the model download above is the
   user-visible part of the same mechanism, and the llama.cpp runtime (libllama.so, ~4 MB, fetched
-  by `LlamaEngineManager` from its per-commit `llama-libs-<sha12>` release when a local LLM engine
-  is selected) follows the same shape. onnxruntime, Vosk, and sherpa-onnx-jni
+  by `LlamaEngineManager` from its fingerprint-addressed `llama-libs-<pin12>` release when a local
+  LLM engine is selected — see [§13](#13-model-management)) follows the same shape. onnxruntime, Vosk, and sherpa-onnx-jni
   aren't DLC in that sense: they're mandatory libraries the app needs to function. In `minimal` DLC
   mode (the default) they ship inside the APK; in `full` mode they're excluded the same way and
   silently fetched once at first launch by `core:nativelibs` (see
@@ -343,13 +355,54 @@ self-describing). This means **any rule — including `SATELLITE OVERRIDE` — m
 `Examples:` is cut before the model ever reads it, and every satellite `create` command then loses its
 category/content extraction with no error anywhere — see the tests in `PromptProviderTest.kt` (`a rule appended after Examples never reaches the model`,
 `the real models json prompt keeps SATELLITE OVERRIDE before the Examples cut`), which read the actual
-repo-root `models.json` and assert the rule survives the cut.
+`remote-schemas/commander/models.json` and assert the rule survives the cut.
 
 **Shared rule vs. per-satellite hint.** `SATELLITE OVERRIDE` (in `models.json`) is intentionally
 domain-agnostic — the universal create/read stripping semantics for *any* companion-app domain — and
 does not need to grow as more satellites are added. Anything domain-*specific* (e.g. Vox Notes' spoken
 `category`) instead belongs in that satellite's own `nluHint` manifest declaration, surfaced via
 `buildSatelliteHints()` — see [§19 Domain-specific NLU hints](#domain-specific-nlu-hints-nluhint).
+
+### Local LLM Engine (llama.cpp)
+
+`LocalLlmInterpreter` runs GGUF models through llama.cpp, vendored as a git submodule at
+`vox-commander/src/main/cpp/llama.cpp` with its Android CMake build config in
+`vox-commander/src/main/cpp/llama-build/` (compiled to `libllama.so` by the `autoCompileLlama`
+Gradle task — see [§18](#18-dependency-graph)). The Kotlin side talks to it through the
+`com.voxapps.llamacpp.LlamaBridge` interface (`LlamaBridgeImpl` binds the JNI in
+`vox-commander/src/main/cpp/llama_jni.cpp`); the release-build runtime download is
+`LlamaEngineManager`'s job ([§13](#13-model-management)).
+
+- **Two KV sequences (slots).** `LlamaBridge.complete` takes a `slot` parameter: `SLOT_NLU` (0) for
+  grammar-constrained NLU completions and `SLOT_RAW` (1) for free-text raw-prompt completions (the
+  satellite LLM hook — [§19](#19-vox-apps-ecosystem-cross-app-contract)). Each slot keeps its own
+  cached prompt prefix in the KV, so the two kinds of call stop evicting each other's resident
+  prompt — under one sequence, every hook call evicted the preloaded NLU prefix and the next voice
+  command repaid the whole prefill (and vice versa). The slots share one KV pool of `n_ctx` cells
+  (4096 — every model in the lineup is served with at least a 4096-token context); when a call plus
+  the *other* slot's resident prefix cannot coexist, the other slot is evicted and repays its
+  prefill on its own next call.
+- **Longest-common-prefix KV reuse.** Per slot, the bridge compares the incoming prompt's tokens
+  against the cached ones, keeps the longest common prefix resident, and decodes only from the
+  divergence point. There is no per-call teardown; the next call trims the context back to the
+  shared prefix.
+- **Stable, unscoped system prompt.** For the local engine the NLU system prompt is deliberately
+  *not* scoped to the utterance (`PromptProvider.getNluSystemPrompt` is called with an empty
+  `spokenText`): per-utterance domain/app scoping saves prompt tokens, but a prompt that varies with
+  the spoken text diverges early and repays most of the prefill per command, while a stable prompt is
+  prefilled once and every command pays only its own `Input:` tail. The prompt still changes — and
+  the cache rebuilds from the divergence point — when its real inputs change (installed apps, custom
+  domains, search providers, the language hint, the schema-served template).
+- **Preload prefill.** `LocalLlmInterpreter.preload()` warms the engine up front — runtime load,
+  model mmap, and one dummy decode that leaves the system prompt's KV prefix resident — so the first
+  real command doesn't pay the full prefill (~25s of prompt evaluation for the ~1900-token NLU
+  prompt on a mid-range phone, measured).
+- **Action-first GBNF grammar.** Every NLU completion is constrained by a GBNF grammar built in
+  Kotlin (`buildNluGrammar`): the `action`/`domain` pair is emitted as a single combined rule —
+  action first, with each action's alternative constrained to the domains that actually declare it
+  (per `IntentTaxonomy.getActionsForDomain`, plus `launch` over every domain) — so the sampler
+  cannot produce an action/domain combination outside the taxonomy, and the remaining `NluIntent`
+  fields are optional keys in a fixed order.
 
 ### NluIntentParser (`NluIntentParser.kt`)
 
@@ -477,7 +530,7 @@ Fallback handler — launches any app by name or package.
 - **Domain mapping** — Deduced from each supported entry's `templateAction` via `template_action_domains` (navigate→maps, search→audio, send→messaging).
 - **URI templates** — Taken from the matched catalog entries (e.g., a browser `VIEW`/`https` → `https://www.youtube.com/watch?v={query}`).
 
-**The probe catalog is data-driven** — see `IntentCatalog` (`domain/intent/registry/IntentCatalog.kt`), which loads `intents.json` (root → assets → filesDir → remote, hot-reloadable like `models.json`; see §17). A compact hardcoded seed is used only if the asset read fails. The behavioral handlers (§6) stay in code; the catalog only feeds them.
+**The probe catalog is data-driven** — see `IntentCatalog` (`domain/intent/registry/IntentCatalog.kt`), which loads `intents.json` (`remote-schemas/commander/` → assets → filesDir → remote, hot-reloadable like `models.json`; see §17). A compact hardcoded seed is used only if the asset read fails. The behavioral handlers (§6) stay in code; the catalog only feeds them.
 
 `AppSelectorDropdown.kt` (the domain-app picker UI used by the Default Apps / App Manager / Rules Manager screens) is now a thin wrapper around the shared `:core:apppicker` card component — it keeps Commander-specific concerns (satellite/domain-aware candidate filtering, Spotify OAuth interception) and delegates all rendering (search, all/user/system filter, checkbox+star list) to the shared module. See [§20 Shared UI Modules](#20-shared-ui-modules-corecalendar-coreapppicker-coredesign-color-picker).
 
@@ -514,8 +567,9 @@ When user says "play Scorpions on YouTube", and alias rule maps "youtube" → `c
 ### Declarative API Integration Engine
 
 Controlling an external app's own service API (search a catalog, start playback via that service's
-*backend*, not just a local intent) is defined entirely in `api_integrations.json` (repo root, copied
-into assets — same convention as `intents.json`/`models.json`) and executed by two generic engines.
+*backend*, not just a local intent) is defined entirely in `api_integrations.json`
+(`remote-schemas/commander/`, copied into `assets/schemas/` by `copyShippedSchemas` — same convention
+as `intents.json`/`models.json`, see §17) and executed by two generic engines.
 Adding a new OAuth-based service (Deezer, Tidal, ...) needs **zero new Kotlin** — just a new entry in
 the JSON, as long as it fits the capability-slot model below.
 
@@ -626,14 +680,19 @@ kept exactly as it was.
 #### Piped API (`PipedSearchHelper.kt`)
 
 - Cloud-based YouTube search via Piped instances
-- Multiple instances with fallback (`PIPED_INSTANCES` list)
+- The instances and regions are declared in `remote-schemas/commander/media_services.json` and parsed
+  by `MediaServiceRegistry` (`domain/media/MediaServiceRegistry.kt`) — no compiled-in instance list.
+  Public Piped instances go down and get replaced regularly; swapping one is a schema edit, not an
+  app release (see [§17 media_services.json](#media_servicesjson)).
+- `PipedSearchHelper` reads `MediaServiceRegistry.endpoints(...)` and falls back across them
 - User selects instance + region in settings
 - `searchAndPlay()` — searches Piped, gets videoId, launches `youtu.be/{id}` in target app
 
 #### NewPipe Extractor (`NewPipeExtractorHelper.kt`)
 
-- On-device YouTube parsing (no external API)
-- Uses `com.github.teamnewpipe:NewPipeExtractor:v0.26.3`
+- On-device YouTube parsing (no external API) — a device-local library, so it stays compiled in
+  rather than schema-declared: it has no endpoint a schema could usefully carry
+- Uses `com.github.teamnewpipe:NewPipeExtractor:v0.26.4`
 - `OkHttpDownloader` — custom `Downloader` implementation using OkHttp
 - `warmUp()` — pre-fetches `base.js` (YouTube's player JavaScript) to cache Rhino JS engine output. First query is slow (5-10s), subsequent queries are fast.
 - `searchAndPlay()` — searches YouTube, gets first video result, launches `youtu.be/{id}`
@@ -713,9 +772,9 @@ interface ITtsEngine {
 
 | Category | Providers |
 |----------|-----------|
-| General | DuckDuckGo (Instant Answer), Wikipedia |
+| General | DuckDuckGo (Instant Answer), Wikipedia, OpenAI |
 | News | Google News, GNews, Currents API, NewsAPI |
-| Knowledge | Wikipedia |
+| Knowledge | Wikipedia, OpenAI |
 | Weather | WeatherAPI, Open-Meteo |
 
 API keys stored encrypted in `EncryptedSharedPreferences` (`searchProviderApiKeys` map).
@@ -736,19 +795,21 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 
 | Group | Fields |
 |-------|--------|
-| API/Cloud | `apiKey` |
+| API/Cloud | `apiKey`, `engineApiKeys` (per-engine key map) |
 | Language | `language`, `voiceLanguage`, `voiceLanguageAutoDetect`, `modelFilterLang` |
-| Voice Engine | `voiceProcessor`, `activeVoiceModelId` |
-| Intent Engine | `aiProcessor`, `activeIntentModelId`, `cloudIntelligenceEnabled` |
+| Voice Engine | `voiceProcessor`, `activeVoiceModelId`, `isWhisperSystemEnabled` |
+| Intent Engine | `aiProcessor`, `activeIntentModelId` |
+| Engine gating | `cloudIntelligenceEnabled` (gates every engine whose schema declares `runtime: "cloud"`), `googleServicesEnabled` (gates every engine declaring the `google_service` capability) — both default off. Switching either off also clears every stored selection it gated back to schema defaults: `AppStateManager.setCloudIntelligenceEnabled()`/`setGoogleServicesEnabled()` compute the gated engine keys from the schema and call `SettingsRepository.clearEngineSelections`. Which engines a gate covers is the schema's call, never a key list in code. |
 | Wake Word | `wakeWord`, `wakeWordEnabled`, `wakeWordModelPath`, `wakeWordEngineType`, `wakeWordSensitivity`, `wakeWordAecEnabled` |
 | Offline Fallback | `offlineFallbackTimeout`, `defaultOfflineModel`, fallback processors/models |
 | Default Apps | `defaultAppPackages`, `domainAppPackages`, `customDomains`, `domainAppFilters` |
+| Downloads | `downloadedModelIds`, `customModelPaths`, `downloadPreference` (`wifi_only` / `wifi_and_metered`) |
 | Media | `spotifyClientId`, `pipedApiUrl`, `pipedRegion`, `youtubeUrlEngine`, `returnAfterActionApps` |
 | TTS | `ttsEnabled`, `ttsEngineType`, `ttsSpeechRate`, `ttsPitch`, `ttsAudioFocusMode`, `piperVoiceModelId` |
 | Aliases | `appAliasRules` |
-| Location | `manualLocationLat`, `manualLocationLon` |
+| Location | `locationHomeTownLat`, `locationHomeTownLon`, `locationCacheTtl`, `locationAlwaysUseHomeTown` |
 | Vulkan | `vulkanIncompatible`, `vulkanProbeDone`, `experimentalVulkanEnabled` |
-| Logging | `logLevel`, `verboseLoggingEnabled` |
+| Logging | `debugLoggingEnabled`, `debugToastsEnabled` |
 
 ### Sync vs Async
 
@@ -762,21 +823,29 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 ### Compose + Material 3
 
 - Single-activity architecture (`MainActivity`)
-- `SettingsContent` — Tabbed settings with 7 tabs
+- `SettingsContent` — a settings menu with per-topic subpages (see below)
 - `ListeningScreen` — Main voice interaction screen with overlay
 - Navigation via Compose Navigation
 
-### Settings Tabs
+### Settings Menu & Pages
 
-| Tab | File | Content |
-|-----|------|---------|
-| General | `GeneralSettingsTab.kt` | Language, wake word toggle, TTS settings |
-| App Manager | `AppManagerTab.kt` | Default apps per domain, media session permission, return-to-previous-app |
-| Services | `ServiceSettingsTab.kt` | Voice engines, intent engines, wake word config, Piped/NewPipe settings |
-| Integrations | `IntegrationsTab.kt` | Spotify OAuth, search providers, API keys |
-| Models | `ModelsSettingsTab.kt` | Model downloads, Whisper/Piper/Vosk model management |
-| Advanced | `AdvancedSettingsTab.kt` | Vulkan, logging, offline fallback, diagnostics |
-| Permissions | `PermissionsSettingsTab.kt` | Runtime permissions management |
+`SettingsContent` (`SettingsScreen.kt`) holds a private `SettingsPage` enum (`MENU`, `GENERAL`,
+`MODELS`, `SERVICE`, `APP_MANAGER`, `INTEGRATIONS`, `PERMISSIONS`, `ADVANCED`, `BACKUP`). The menu
+page is a scrollable column of plain `ListItem` entries separated by full-bleed `SettingsSectionHeader`
+bands from `:core:design` — the same menu shape as the Expenses/Notes settings screens — each entry
+opening one subpage; the top bar shows a back arrow (and `BackHandler` returns to the menu) on every
+page but the menu itself.
+
+| Menu section | Entry (page) | File | Content |
+|---|---|---|---|
+| General | General | `GeneralSettingsTab.kt` | Language, voice-language auto-detect; theme settings render at the end of the page via the shared `ThemeSettingsBody` (`:core:design`) |
+| Engines & Models | AI & Models | `ModelsSettingsTab.kt` | Voice/intent engine selection, model downloads, imports, fallbacks |
+| Engines & Models | Service | `ServiceSettingsTab.kt` | Wake word engine/model config, sensitivity, service start/stop |
+| Apps & Integrations | App Manager | `AppManagerTab.kt` | Default apps per domain, media session permission, return-to-previous-app, external trigger |
+| Apps & Integrations | Integrations | `IntegrationsTab.kt` (+ `PipedSettingsSection`, `SearchSettingsSection` on the same page) | Spotify OAuth, Vox Apps, Piped/NewPipe selection, search providers |
+| System | Permissions | `PermissionsSettingsTab.kt` | Runtime permissions management |
+| System | Advanced | `AdvancedSettingsTab.kt` | Vulkan, offline fallback, the cloud/Google consent toggles (the Google one labeled "Google on-device support", key `google_services_title`), maintenance. The Logging section (the debug-logging and debug-toast switches plus `LogViewerCard`) is deliberately the page's **last** section — the viewer grows without bound. |
+| Data | Backup & Diagnostics | `BenchmarkSettingsTab.kt` + `BackupSettingsSection` | One page for both: the backup card rides as the diagnostics `LazyColumn`'s header, so the page has a single scroll surface |
 
 ### Reusable Components
 
@@ -871,9 +940,17 @@ That last part is worth stating plainly: what is selected is what loads. `Engine
 resolves the selection, so an imported model runs when the imported id is selected and a registry
 model runs when a registry id is — the row in the list and the file in use never disagree.
 
-- **Id scheme** — `ImportedModelId`: `custom:<engineKey>` or `custom:<engineKey>:<langCode>`,
-  mirroring the key `setCustomModelPath` already uses, so a stored selection is recognised as an
+- **Id scheme** — `ImportedModelId`: every new import gets the slugged form
+  `custom:<engineKey>:<lang-or-empty>:<slug>` — always four segments, so an empty language keeps its
+  position and a slug can never be misread as a language. The slug is the filename stem sanitized to
+  `[a-z0-9._-]` (which also keeps `:` out of it). The legacy one-slot forms `custom:<engineKey>` /
+  `custom:<engineKey>:<langCode>` are still parsed and selectable until the one-shot migration
+  (`MULTI_IMPORT_MIGRATED`) rewrites them. The id is also the key the model's path is stored under in
+  `CUSTOM_MODEL_PATHS_JSON`, so the two can never disagree — a stored selection is recognised as an
   import without consulting anything and the engine is read back out of the id.
+- **Offered per declaration** — the import button appears only for engines whose schema declares the
+  `custom_model_import` capability. An imported row is labeled with its filename plus an
+  `" — imported"` suffix (translation key `model_imported_suffix`) and its measured on-disk size.
 - **Selection decides loading** — a selected imported id whose file has gone yields *null* rather
   than silently loading the registry model instead.
 - **Import validation** (`ModelDownloader.importCustomModel`) returns an `ImportOutcome`:
@@ -892,10 +969,24 @@ The green "on-device" indicator is a persisted `downloadedModelIds` flag, not re
 ### Whisper Native Libraries
 
 - Debug builds: `libwhisper.so` and `libomp.so` bundled in APK
-- Release builds: Excluded from APK, downloaded as DLC at runtime (~107 MB, digest-checked
-  against `assets/whisper-libs.sha256`)
+- Release builds: Excluded from APK, downloaded as DLC at runtime (~88 MB for the two arm64 libs,
+  digest-checked against `assets/whisper-libs.sha256`)
 - Vulkan probed at first launch in a separate process, `vulkanIncompatible` flag set if GPU
   doesn't support
+
+### Llama Runtime Library (`LlamaEngineManager`)
+
+`libllama.so` follows the same DLC shape (debug: bundled; release: excluded and downloaded when a
+local LLM engine is selected), with one difference in how the release is addressed: a **build
+fingerprint**, not the submodule commit. `libllama.so`'s bytes come from three inputs — the llama.cpp
+submodule pin, the JNI bridge (`llama_jni.cpp`), and the CMake build config (`llama-build/`) — and
+the published tag must move when any of them does, so `scripts/llama_build_pin.sh` hashes the tree
+state of all three (the submodule gitlink plus both build-input paths) into one 40-hex pin; the
+release tag is `llama-libs-<pin12>`. The publish script, the release-workflow gate, and the Gradle
+digest-recording task all consume that one script, so they can never derive different addresses for
+the same tree. The APK records the pin and the published release's digests as generated assets
+(`assets/llama-libs.commit`, `assets/llama-libs.sha256`); `LlamaEngineManager` downloads from the
+recorded tag's release and verifies each library against the recorded digest.
 
 ---
 
@@ -903,29 +994,30 @@ The green "on-device" indicator is a persisted `downloadedModelIds` flag, not re
 
 ### VoxApplication
 
-Implements `ComponentCallbacks2.onTrimMemory()`:
+Implements `ComponentCallbacks2.onTrimMemory()`. Any trim signal — `TRIM_MEMORY_BACKGROUND`,
+`TRIM_MEMORY_MODERATE`, `TRIM_MEMORY_RUNNING_LOW`, `TRIM_MEMORY_RUNNING_CRITICAL`, or
+`TRIM_MEMORY_UI_HIDDEN` — triggers the same response: release the three heavy native holders via
+`releaseForMemoryPressure()`:
 
-```kotlin
-TRIM_MEMORY_RUNNING_LOW (10) → release Vosk models
-TRIM_MEMORY_RUNNING_CRITICAL (15) → release Whisper models
-TRIM_MEMORY_UI_HIDDEN (20) → release all heavy native models
-```
+- `VoiceManager` (Whisper/Vosk STT contexts)
+- `TtsManager` (Piper's sherpa-onnx model)
+- `LocalLlmInterpreter` (the loaded llama.cpp model)
 
 ### MemoryManagedComponent
 
-Interface implemented by engines that hold native resources:
+The contract for components that may hold heavy native resources:
 
 ```kotlin
 interface MemoryManagedComponent {
-    fun releaseMemory()
-    fun restoreMemory(context: Context)
+    fun releaseForMemoryPressure() { /* no-op by default */ }
 }
 ```
 
-Engines that implement this:
-- `WhisperSttEngine` — releases `whisper_context`
-- `WakeWordEngine` (Vosk) — releases Vosk recognizer
-- `PiperTtsEngine` — releases sherpa-onnx model
+One method, default no-op — lightweight components (API-based engines, system TTS) need to override
+nothing. `VoxEngine` and `AssistantEngine` both extend it, so every engine and interpreter is one.
+A released resource reloads transparently on next use (lazy re-init), and a release is deferred while
+an inference is actively running, so a trim signal never tears down a mid-transcription or
+mid-generation native call.
 
 ---
 
@@ -938,7 +1030,7 @@ After executing a voice command that launches an app (e.g., "play Scorpions on S
 ### Configuration
 
 - Setting: `returnAfterActionApps: List<String>` — list of package names
-- UI: Multi-select app picker in App Manager tab → "Return to previous app after action"
+- UI: Multi-select app picker in the App Manager page → "Return to previous app after action"
 - Stored as JSON in DataStore (`return_after_action_apps_json`)
 
 ### Implementation (`IntentRouter.kt`)
@@ -1093,8 +1185,7 @@ remote-schemas/shared/      read by more than one app
 
 **The folder is the list.** An app's `copyShippedSchemas` Gradle task copies `<its own>/*.json` plus
 `shared/*.json` into `src/main/assets/schemas/`, and nothing names individual files — dropping a JSON
-into a folder ships it, and moving it between folders changes which apps read it. (It replaced a
-per-file `copyModelsJson` task, where adding a schema meant remembering to add it.)
+into a folder ships it, and moving it between folders changes which apps read it.
 
 `SchemaRepo` in `:core:services` holds the arrangement in one place: `DEFAULT_BASE_URL` (the
 repository serving the schemas when nothing else is configured), `FOLDER`, `ASSET_FOLDER`, `SHARED`,
@@ -1106,7 +1197,7 @@ without touching the apps.
 
 These files are fetched and adopted **unattended at every launch** (`useRemoteSchemas` defaults to
 `true`), and they declare engine endpoints — where the app sends speech and the user's own API keys —
-and 97 model download URLs. Whoever can serve that path could redirect all of it at the next launch,
+and 101 model download URLs. Whoever can serve that path could redirect all of it at the next launch,
 with no app update and nothing for a user to accept. The SHA-256 that `RemoteSchema` already used
 compares a download against the *previous download*: it answers "did this change?", never "is this
 genuine?".
@@ -1147,8 +1238,8 @@ which — because the schema itself is signed — inherits that signature's auth
 
 `ModelDownloader` checks it at the one choke point every download passes through, before the artefact
 reaches a native parser, and deletes what does not match. **Absent means unverified and stays
-supported** — 96 URLs still have none, and a download that worked yesterday must work today.
-`./scripts/vox schemas hash-models [engine]` fills the field in by fetching each model once.
+supported** — a download that worked yesterday must work today — though all 101 model URLs carry the
+field. `./scripts/vox schemas hash-models [engine]` fills it in by fetching each model once.
 
 `RemoteSchema` fetches each file from `<repo>/main/remote-schemas/<folder>/<file>` and compares it by
 hash with the copy in force. A copy that differs *and still parses* is written to the app's `filesDir`
@@ -1181,7 +1272,7 @@ schema tests read the generated assets)
 
 ### search_definitions.json
 
-**Location**: Repo root → copied to assets by `copySearchDefinitions` Gradle task (`preBuild` dependency)
+**Location**: `remote-schemas/commander/search_definitions.json` → copied to assets by `copyShippedSchemas`
 
 **Parsed by**: `SearchProviderRegistry` (`domain/search/SearchProviderRegistry.kt`)
 
@@ -1202,7 +1293,7 @@ schema tests read the generated assets)
 
 ### intents.json
 
-**Location**: Repo root → copied to assets by `copyIntentsJson` Gradle task (`preBuild` dependency)
+**Location**: `remote-schemas/commander/intents.json` → copied to assets by `copyShippedSchemas`
 
 **Parsed by**: `IntentCatalog` (`domain/intent/registry/IntentCatalog.kt`) — mirrors `SearchProviderRegistry` (init / fetchRemote / ensureLocalFile / loadFromFilesDir / saveLocalFile, schema-versioned no-downgrade).
 
@@ -1222,9 +1313,9 @@ schema tests read the generated assets)
 
 ### normalization.json
 
-**Location**: `vox-commander/src/main/assets/normalization.json` (not copied from repo root — ships directly in assets)
+**Location**: `remote-schemas/commander/normalization.json` → copied to assets by `copyShippedSchemas`
 
-**Parsed by**: `TextNormalizer` (`domain/voice/TextNormalizer.kt`)
+**Parsed by**: `TextNormalizer` (`domain/voice/TextNormalizer.kt`) — reads the asset copy (`schemas/normalization.json`)
 
 **Purpose**: Corrects STT (Whisper) transcription errors before NLU processing. For example, if Whisper transcribes "Spotify" as "spotif" or "pe spotify" as "pespotify", the normalizer fixes it before the text reaches the intent interpreter.
 
@@ -1261,33 +1352,50 @@ schema tests read the generated assets)
 
 **Loading**: `TextNormalizer.load(context)` reads from assets at startup. Supports `reload()` for testing. Rules are compiled into `Pattern` objects and cached per language.
 
+### virtual_models.json
+
+**Location**: `remote-schemas/commander/virtual_models.json` → copied to assets by `copyShippedSchemas`
+
+**Parsed by**: `RemoteModelRegistry` — merged under the same engine catalogue as `models.json`, so
+one lookup answers for every engine regardless of which file declared it. `models.json` describes
+what can be downloaded and run; `virtual_models.json` describes services that need no file.
+
+**Contents** (`schema_version` 14) — the engines with no downloadable model:
+
+| Engine key | Declaration |
+|---|---|
+| `GOOGLE` | Android's on-device speech recognition — `runtime: "android_local"`, capability `google_service` |
+| `WHISPER_API` | OpenAI's hosted Whisper STT — `runtime: "cloud"`, capability `requires_api_key` |
+| `OPENAI` | OpenAI GPT chat completions — `runtime: "cloud"`, capabilities `requires_api_key`, `multimodal` |
+| `android` | The platform TTS — `runtime: "android_local"` |
+
+The consent toggles (§11) gate these **by declaration, not by name**: `cloudIntelligenceEnabled`
+covers whatever declares `runtime: "cloud"`, `googleServicesEnabled` whatever declares the
+`google_service` capability — so an engine added to this file is gated correctly with no code change.
+
+### media_services.json
+
+**Location**: `remote-schemas/commander/media_services.json` → copied to assets by `copyShippedSchemas`
+
+**Parsed by**: `MediaServiceRegistry` (`domain/media/MediaServiceRegistry.kt`)
+
+**Contents** (`schema_version` 1) — the backends that can answer "play this video": `piped`, with its
+interchangeable `endpoints` (one service, several public hosts, any of which can answer — and any of
+which can go away; replacing one is a schema edit, not an app release), a `probe_url` for connection
+tests, and the region list the settings picker offers; and `newpipe`, declared
+`runtime: "device_builtin"` — a compiled-in library parsing YouTube on-device, with no endpoint a
+schema could carry. `PipedSearchHelper` reads `MediaServiceRegistry.endpoints(...)` (§8).
+
 ### Build Integration
 
-```kotlin
-// app/build.gradle.kts
-val copyModelsJson = tasks.register<Copy>("copyModelsJson") {
-    from("${project.rootDir}/models.json")
-    into("${projectDir}/src/main/assets")
-}
+One `Copy` task ships every schema: `copyShippedSchemas` copies `remote-schemas/commander/*.json`
+plus `remote-schemas/shared/*.json` — and the signed `manifest.json`, so a fresh install has its
+rollback floor — into `vox-commander/src/main/assets/schemas/`. The folder is the list: nothing
+names individual files, so adding a schema means dropping a JSON into the folder.
 
-val copySearchDefinitions = tasks.register<Copy>("copySearchDefinitions") {
-    from("${project.rootDir}/search_definitions.json")
-    into("${projectDir}/src/main/assets")
-}
-
-val copyIntentsJson = tasks.register<Copy>("copyIntentsJson") {
-    from("${project.rootDir}/intents.json")
-    into("${projectDir}/src/main/assets")
-}
-
-tasks.named("preBuild") {
-    dependsOn(copyModelsJson)
-    dependsOn(copySearchDefinitions)
-    dependsOn(copyIntentsJson)
-}
-```
-
-`normalization.json` is not copied from repo root — it lives directly in `vox-commander/src/main/assets/` since it's not hot-reloaded from remote.
+`preBuild` depends on exactly three tasks: `autoCompileWhisper` and `autoCompileLlama` (both skipped
+by `-PvoxSkipNativePrep`, for verification builds that only need the Kotlin to compile) and
+`copyShippedSchemas` (never skipped — the schema tests read the generated asset copies).
 
 ---
 
@@ -1305,9 +1413,9 @@ tasks.named("preBuild") {
 | llama.cpp | (submodule, CMake) | On-device LLM inference (GGUF, GBNF grammar sampling) |
 | Picovoice Porcupine | 4.0.2 | Wake word engine |
 | OpenWakeWord | v0.1.5 (rementia, vendored fork — `:core:wakeword`) | Wake word engine, RMS silence-gate patched |
-| ONNX Runtime | 1.27.0 | ML inference for OpenWakeWord |
+| ONNX Runtime | 1.28.0 | ML inference for OpenWakeWord |
 | Spotify App Remote | (local AAR) | Spotify media control |
-| NewPipe Extractor | v0.26.3 (JitPack) | YouTube search/parsing |
+| NewPipe Extractor | v0.26.4 (JitPack) | YouTube search/parsing |
 | OkHttp | (via libs.versions) | HTTP client |
 | Retrofit | (via libs.versions) | API client |
 | Gson | (via libs.versions) | JSON serialization |
@@ -1322,14 +1430,18 @@ tasks.named("preBuild") {
 
 | Task | Description |
 |------|-------------|
-| `autoCompileWhisper` | Checks whisper.cpp upstream and recompiles via CMake if needed |
-| `autoCheckVosk` | Checks for newer Vosk version on JitPack |
-| `autoCheckOpenWakeWord` | Checks for a newer OpenWakeWord upstream tag and whether both patches would still apply (see [§2 OpenWakeWord Fork & Sync](#openwakeword-fork--sync)) |
-| `copyModelsJson` | Copies `models.json` from repo root to assets |
-| `copySearchDefinitions` | Copies `search_definitions.json` from repo root to assets |
-| `copyIntentsJson` | Copies `intents.json` from repo root to assets |
+| `autoCompileWhisper` | Checks whisper.cpp upstream and recompiles via CMake when stale |
+| `autoCompileLlama` | Checks llama.cpp upstream and recompiles via CMake when stale |
+| `autoCheckVosk` | Checks for a newer Vosk version on JitPack |
+| `autoCheckNewPipeExtractor` | Checks for a newer NewPipeExtractor on JitPack |
+| `autoCheckOpenWakeWord` | Checks for a newer OpenWakeWord upstream tag and whether the patches would still apply (see [§2 OpenWakeWord Fork & Sync](#openwakeword-fork--sync)) |
+| `copyShippedSchemas` | Copies `remote-schemas/commander/*.json`, `remote-schemas/shared/*.json`, and the signed `manifest.json` into `src/main/assets/schemas/` |
+| `checkUpstream` | Runs every upstream check at once (Vosk, NewPipe, OpenWakeWord, OpenCV, PaddleOCR, whisper) |
 
-All six tasks are dependencies of `preBuild`.
+Only the two compile tasks (skipped by `-PvoxSkipNativePrep`) and `copyShippedSchemas`
+(unconditional) are `preBuild` dependencies. The `autoCheck*` tasks and `checkUpstream` are
+on-demand only — upstream movement is a maintenance fact delivered by the scheduled sync workflows
+(§2), not a build fact.
 
 ### Repositories
 
@@ -1489,14 +1601,18 @@ command bus but carrying opaque prompt/result payloads instead of structured not
   single, currently-selected engine, not the triple-brain pipeline). On an OpenAI failure it now
   surfaces the actual HTTP-code-derived reason (`OpenAiInterpreter.lastErrorReason` — bad/revoked key,
   rate limit, or a transient 5xx) instead of a hardcoded "check API key" for every failure.
-- **`LocalLlmInterpreter` serializes every call** (`processCommand`/`rawPrompt`) through a `Mutex` with
-  a generous 90s timeout. It's a process-wide singleton with a check-then-act `setupLlm()` and no
-  synchronization of its own; a burst of concurrent callers (confirmed on-device: Expenses' "Force-check
-  notifications now" forwarding several matched notifications at once) each saw the model unloaded and
-  each triggered a concurrent, memory-heavy model-load call (`Engine(...).initialize()` under
-  llama.cpp; the hazard and the `Mutex` that closes it are engine-agnostic) — N full
-  copies of the model loading into RAM at once, crashing the process and silently dropping every one of
-  those requests (nothing ever reached `LlmHookWorker`'s `catch` to send a reply).
+- **`LocalLlmInterpreter` serializes every call** (`processCommand`/`rawPrompt`) through a `Mutex` —
+  the interactive `processCommand` under a 90s timeout, `rawPrompt` under a 300s budget that covers
+  both the mutex wait *and* the run (a hook call queued behind a long voice command would otherwise
+  time out before its own work started; a burst of queued hooks fails fast as busy instead of
+  stacking up forever). The `Mutex` is the interpreter's only synchronization: it's a process-wide
+  singleton with a check-then-act `setupLlm()`, and without serialization a burst of concurrent
+  callers (e.g. Expenses' "Force-check notifications now" forwarding several matched notifications
+  at once) means N concurrent, memory-heavy model loads. A failed `rawPrompt` records
+  `lastErrorReason` — engine busy (did not finish within the budget), model not available (not
+  downloaded or failed to load), generation failed, or no local model selected — which
+  `LlmHookEngineSelector` reports as `Local engine: <reason>`, symmetric to the OpenAI error path
+  above.
 - **Reply** — `LlmHookWorker` applies only generic cleanup (`NluIntentParser.cleanGenericOutput`,
   stripping markdown/prose fences) to the LLM's raw text, wraps it in a `VoxLlmResult{task, status,
   rawJson}`, and delivers it as an **explicit-intent** broadcast (`ACTION_LLM_RESULT`, targeted at
@@ -1531,6 +1647,13 @@ traced to two compounding causes, both now fixed:
   killed again mid-processing. `VoxLlmRequestQueue` (`core/ipc/src/main/java/com/voxapps/ipc/`) adds
   durability: `enqueueAndSend()` persists a `PendingLlmRequestEntity` row (Room) **before** attempting
   delivery, so a dropped broadcast is recoverable instead of silently lost.
+- **One pending row per request identity.** `enqueueAndSend()` dedupes on (source package, target
+  package, base task): every capture path that can rediscover the same work — a listener reconnect,
+  a manual force-check, a periodic sweep — funnels through here, and a re-enqueue of a task that
+  already has a pending row re-sends the stored row and returns its existing `requestId` instead of
+  minting a fresh one (each rediscovery would otherwise hold its own live row, independently
+  processed and independently answered). Rows past the retry cap dedupe too — an explicit re-enqueue
+  is exactly the manual retry that should reach a dormant row.
 
 ```
 satellite: queue.enqueueAndSend(task, promptText, ...)
@@ -1576,6 +1699,12 @@ interface live once in `:core:ipc`; Room generates the DAO implementation wherev
 `@Database` is compiled — a standard supported pattern for library-module entities, not a
 cross-process shared table). Each app also registers `PendingLlmRequestScheduler.ensureScheduled(this)`
 in its `Application.onCreate()`, alongside its other `WorkManager` schedules.
+
+**Auto-accept is gated on identifiability** — on the notification-capture path, Expenses'
+`LlmResultReceiver` auto-accepts a parsed reply (`autoAcceptNotificationExpenses`) only when it names
+a title or a vendor (after `FieldCleaner` cleaning). A reply naming neither identifies nothing —
+filing it would create an anonymous record the user can only puzzle over — so it goes to the
+pending-review list instead, where approving it is a human call.
 
 ### Collapsed satellite extraction flow (`VoxSatelliteSchema`)
 
@@ -1687,9 +1816,11 @@ single LLM call — never a second call.
   app — deliberately separate from `VoxSatelliteSchema`/`OP_GET_SCHEMA`, since this is global Commander
   engine state, not per-satellite data.
 - **Local-vs-remote declaration.** The same query also reports `RemoteModelRegistry.isLocalEngine(processor)`
-  — the inverse of a small hardcoded cloud set (`Strings.AiProcessors.CLOUD_PROCESSORS =
-  {OPENAI}`; everything else, including any `models.json`-defined downloaded engine, is local by
-  elimination) — alongside `multimodal` in one round-trip
+  — answered from the engine's **declared schema `runtime`** (`local_file`/`android_local`/
+  `device_builtin` → local; `cloud` → not; an unknown key reports false, because "I don't know what
+  this engine is" must not read to the caller as "safe, it stays on the device"). The hardcoded cloud
+  set (`Strings.AiProcessors.CLOUD_PROCESSORS`) survives only as `runtimeOf`'s inference fallback for
+  schemas written before the `runtime` field existed — alongside `multimodal` in one round-trip
   (`VoxCapabilityClient.EngineCapabilities`). Callers use it to tune a prompt to the active engine's
   capability tier rather than assuming one: `VoxCapabilityClient.isLocalEngine()` fails safe to `true`
   on an inconclusive probe (the opposite direction from `isMultimodal()`'s fail-safe-`false`), since
@@ -2309,7 +2440,7 @@ vox-commander/src/main/java/com/voxapps/commander/
 │   ├── components/              # Reusable Compose components
 │   ├── screens/
 │   │   ├── main/                # Listening screen, voice overlay
-│   │   ├── settings/            # 7 settings tabs
+│   │   ├── settings/            # settings menu + its subpages (§12)
 │   │   ├── splash/               # Splash screen
 │   │   └── rules/               # FastMap rule editor
 │   └── theme/                   # Material 3 theme
@@ -2323,15 +2454,15 @@ new satellite app is expected to follow.
 
 ### Shared modules
 
-Twenty-one `:core:*` modules, plus two vendored forks compiled in-tree:
+Twenty-two `:core:*` modules, plus two vendored forks compiled in-tree:
 
 ```
 :core:apppicker      :core:attachments   :core:audio        :core:backup
-:core:calendar       :core:datahygiene   :core:design       :core:ipc
-:core:location       :core:logging       :core:nativelibs   :core:onboarding
-:core:preferences    :core:schema-annotations  :core:schema-processor
-:core:services       :core:testing       :core:textmatch    :core:voxconnect
-:core:wakeword       :core:widget
+:core:calendar       :core:datahygiene   :core:design       :core:identity
+:core:ipc            :core:location      :core:logging      :core:nativelibs
+:core:onboarding     :core:preferences   :core:schema-annotations
+:core:schema-processor  :core:services   :core:testing      :core:textmatch
+:core:voxconnect     :core:wakeword      :core:widget
 
 vendor/ppocr-sdk     PaddleOCR fork (+ 4 patches), compiled into vox-vision
 core/wakeword        OpenWakeWord fork (+ 3 patches), compiled into vox-commander
@@ -2361,13 +2492,49 @@ Before any of this: every push to `main` and every pull request runs `.github/wo
 wake when an app's own `build.gradle.kts` changes, so without this a commit touching shared `core/`
 code and no app's build file would be compiled and tested by nothing until the next release.
 
-CI runs with `-PvoxSkipNativePrep` (skips Commander's whisper compile and its three JitPack version
-checks) and asks for 6 GB of heap, because dexing six apps in one invocation ran D8 out of memory on
-`vox-vision`. The OpenCV build is cached, keyed on the pinned `vendor/opencv` commit plus its build
-script; that one cannot be skipped, since `org.opencv.*` comes from it and two modules import it.
+CI runs with `-PvoxSkipNativePrep` (drops Commander's whisper.cpp and llama.cpp compiles — the
+upstream checks are on-demand tasks and never run in a build, see §18) and asks for 6 GB of heap,
+because dexing six apps in one invocation ran D8 out of memory on `vox-vision`. The OpenCV build is
+cached, keyed on the pinned `vendor/opencv` commit plus its build script; that one cannot be skipped,
+since `org.opencv.*` comes from it and two modules import it. After `assembleDebug`, `ci.yml` also
+compiles the instrumented-test sources (`compileDebugAndroidTestSources`) — those tests only *run* on
+a device, but compiling them on every push is what catches ordinary drift between pushes.
 
 Two narrower checks run on matching paths: `validate-schemas.yml` and `verify-vendor-patches.yml`
 (see [§17](#17-dynamic-json-configuration) and `BUILD_TIME_DEPENDENCIES.md`).
+
+### Weekly device run (`instrumented-tests.yml`)
+
+The only tests that can catch a native-linking regression run on a device;
+`.github/workflows/instrumented-tests.yml` runs Commander's instrumented suite weekly (plus manual
+dispatch) — weekly rather than per-push because the native surface changes rarely and `ci.yml`
+already compiles these sources on every push. It runs on Ubuntu with KVM enabled (GitHub's hosted
+arm64 macOS runners cannot nest a VM, so an arm64 AVD never boots there): an x86_64 Android 11
+`google_apis` image executes the arm64-v8a libraries through the system image's ARM binary
+translation. The job builds `libllama.so` first (`./scripts/vox native llama` — the llama build is
+CPU-only and needs nothing beyond NDK+CMake), because `LlamaBridgeSmokeTest` is what answers whether
+the compiled runtime actually executes. Commander only: translation has a fidelity ceiling
+(vision's OpenCV load crashes the translated process while passing on real arm64), and
+`NativeCrashReproductionTest` is excluded — its tests bring the process down on purpose and are run
+one at a time by hand.
+
+### Commander's release gates (`release-commander.yml`)
+
+Beyond the shared release shape above, Commander's workflow refuses to publish an APK whose DLC
+story cannot hold:
+
+- **In-APK digest assets** — the built release APK must contain all four generated assets
+  (`assets/whisper-libs.sha256`/`.commit`, `assets/llama-libs.sha256`/`.commit`), and the recorded
+  whisper digests must byte-match what the `whisper-libs-<pin12>` release actually serves. Present
+  is not enough: whisper.cpp does not build reproducibly across toolchains, so digests hashed from
+  the runner's own compile would describe binaries no install is ever served — a download would
+  verify-fail on a user's phone and Whisper could never be enabled.
+- **Published-runtime gates** — `./scripts/vox check whisper-published` and
+  `./scripts/vox check llama-published` verify that the runtime release each pin addresses is
+  actually published (the llama one addressed by the build fingerprint from
+  `scripts/llama_build_pin.sh` — see §13). The runtime releases are published by hand, so a pin can
+  move without them; without the gate, the APK would be built against one source while every install
+  downloads another.
 
 ### Triggering a release
 

@@ -29,7 +29,7 @@ Usage: ./scripts/vox <flow> [command] [args...]
 
   check [name...]              Has anything upstream moved? (all, or named ones)
                                  vosk newpipe-extractor openwakeword opencv
-                                 ppocr-sdk whisper docquad
+                                 ppocr-sdk whisper llama docquad
   check pairing <apk...>       Do an APK's native libraries satisfy each other?
   check whisper-published      Does the published Whisper runtime match the pin?
   check llama-published        Does the published llama runtime match the pin?
@@ -42,7 +42,7 @@ Usage: ./scripts/vox <flow> [command] [args...]
   release package              Build Commander's APK as published (stripped + signed)
   release sbom <app>           CycloneDX SBOM, including the vendored native sources
   release publish-libs         Publish whisper .so files as the DLC release
-  release publish-llama-libs   Publish libllama.so as the per-commit release
+  release publish-llama-libs   Publish libllama.so as the pinned llama-libs release
   release readme               Regenerate the README release table
   release fdroid               Regenerate and push F-Droid metadata
 
@@ -152,7 +152,7 @@ case "$FLOW" in
             # bash in POSIX mode and runs it happily, so the difference only appears in CI.
             whisper) exec bash scripts/check_whisper.sh "${@:2}" ;;
             llama)   exec bash scripts/check_llama.sh "${@:2}" ;;
-            *) die "native needs a target: opencv | whisper" ;;
+            *) die "native needs a target: opencv | whisper | llama" ;;
         esac
         ;;
 

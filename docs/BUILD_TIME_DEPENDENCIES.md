@@ -6,13 +6,13 @@
 > *build-time mechanism* — what gets fetched, built, or patched before compilation, and how it stays
 > in sync with upstream — as its own cross-cutting topic.
 
-VoxApps depends on seven native/ML libraries that aren't simple Maven artifacts. Each falls into one of
+VoxApps depends on nine native/ML libraries that aren't simple Maven artifacts. Each falls into one of
 two patterns:
 
 | Pattern | Meaning | Used by |
 |---|---|---|
 | **A — binary dependency, version-check only** | A normal Maven/JitPack artifact; no source vendored, nothing compiled locally. A script just checks whether a newer published version exists. | Vosk, NewPipeExtractor, onnxruntime-android |
-| **B — vendored source, built and/or patched locally** | The actual source (unmodified, or with a small local patch) lives in this repo/is compiled from a submodule at build time, because the upstream binary is broken, unmaintained, or missing a feature we need. | Whisper.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk |
+| **B — vendored source, built and/or patched locally** | The actual source (unmodified, with a small local patch, or ported) lives in this repo/is compiled from a submodule at build time, because the upstream binary is broken, unmaintained, or missing a feature we need. | Whisper.cpp, llama.cpp, OpenWakeWord, OpenCV, PaddleOCR ppocr-sdk, DocQuad SDK |
 
 ## At a glance
 
@@ -26,6 +26,7 @@ two patterns:
 | OpenWakeWord | `core/wakeword` | `vendor/openwakeword-android-kt` (submodule) | `core/wakeword/src/...` | Yes — 3 patches | No (plain Kotlin/ONNX Runtime) | `autoCheckOpenWakeWord` | `sync-openwakeword.yml` (Wed) |
 | OpenCV | `vendor/ppocr-sdk/opencv/` (gitignored output) | `vendor/opencv` (submodule, tag `5.0.0`) | — (build output only, not vendored as source) | No | Yes (CMake, skips only if the built commit matches the pinned submodule commit — see below) | `autoCompileOpenCv` | `sync-opencv.yml` (Thu) |
 | PaddleOCR ppocr-sdk | `vendor/ppocr-sdk` | `vendor/paddleocr-upstream` (submodule, sparse-checked-out) | `vendor/ppocr-sdk/src/...` | Yes — 4 patches | No (plain Kotlin) | none yet | `sync-ppocr-sdk.yml` (Fri) |
+| MakeACopy DocQuad SDK | `vendor/docquad-sdk` (used by `vox-vision`) | `vendor/makeacopy-upstream` (submodule, sparse-checked-out) | `vendor/docquad-sdk/src/...` | No — a from-scratch Kotlin port of 4 upstream Java files (see its `NOTICE`) | No (plain Kotlin) | none | none — `scripts/check_docquad_sdk_version.sh` via `./scripts/vox check docquad`, informational only: a textual patch cannot be dry-run across a language rewrite, so it reports whether the ported files moved upstream and a human decides on a re-port |
 
 `autoCompileOpenCv`'s Gradle task is wired into `preBuild`, but at `vendor/ppocr-sdk`'s own module
 level (it runs automatically whenever that module builds) rather than a root-level task like
@@ -140,13 +141,19 @@ the bridge come from the same artifact and no such constraint applies.
 - `NativeLibManagerInstrumentedTest` (`vox-vision/src/androidTest`, `vox-commander/src/androidTest`) —
   a real on-device instrumented test that calls `NativeLibManager.init()` and asserts `Status.READY`,
   exercising actual native `.so` loading (a JVM unit test can't — the linker only resolves the real
-  files on a real device). Run manually via
-  `./gradlew :vox-vision:connectedDebugAndroidTest :vox-commander:connectedDebugAndroidTest` against a
-  real device/emulator if you want extra confidence on a native/ABI-sensitive bump. Not wired into CI —
-  no GitHub-hosted runner (macOS+HVF, ARM64 Linux+KVM, ARM64 Linux without acceleration, x86_64 Linux
-  cross-arch, macOS same-arch software) can boot a full Android system image within a practical
-  timeout, confirmed via live runs across all five; Firebase Test Lab would work but needs a new
-  GCP/Firebase account + billing, not set up.
+  files on a real device). Runs weekly in CI: `instrumented-tests.yml` (Wednesday 05:00 UTC) boots
+  an x86_64 Android emulator on an ubuntu runner with KVM opened up, executing Commander's
+  arm64-v8a libraries through the system image's ARM binary translation. Before the emulator step
+  it installs the NDK and CMake via `android-actions/setup-android` and runs
+  `./scripts/vox native llama`, so `libllama.so` is in the test APK and `LlamaBridgeSmokeTest` can
+  answer whether it executes under translation. Commander only — translation has a fidelity
+  ceiling, and Vision's OpenCV load crashes the translated process while passing on real arm64, so
+  its connected test runs where real arm64 exists
+  (`ANDROID_SERIAL=<arm64 avd> ./gradlew :vox-vision:connectedDebugAndroidTest`). Every
+  `release-*.yml` also runs an in-job emulator smoke (`vox check smoke`) before anything publishes.
+  Runnable on demand via
+  `./gradlew :vox-vision:connectedDebugAndroidTest :vox-commander:connectedDebugAndroidTest` against
+  a real device/emulator for extra confidence on a native/ABI-sensitive bump.
 
 ---
 
@@ -232,8 +239,8 @@ accepted; a mismatch fails the download.
 `libonnxruntime.so`, `libvosk.so` and `libsherpa-onnx-jni.so` leave the APK
 **only in `full` mode**, which is not the default — see `voxDlc` in
 [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md#how-much-ships-inside-the-apk-voxdlc). The default,
-`minimal`, keeps all four inside a 47MB APK and downloads nothing; `full` produces 24MB and fetches
-them on the splash.
+`minimal`, keeps all three inside a ~36 MB APK and downloads nothing; `full` produces ~24 MB and
+fetches them on the splash.
 
 They are deliberately **not** called "DLC" in that second mode. Unlike Whisper's model download (a
 genuine user choice: pick tiny/base/small in Settings), these are mandatory libraries the app cannot
@@ -276,13 +283,8 @@ above) the same way. It needs no equivalent of `collectDlcLibs`: its DLC librari
 `vox-vision/src/main/jniLibs/` rather than dependency artifacts, so they are on disk for upload
 however the APK is packaged.
 
-It had the same variant-scoping bug, though, and it bit differently: with `-PvoxDlc=full` the
-release exclusion list was also stripping OpenCV and onnxruntime out of **debug** builds, leaving
-them with 5 native libs and no ability to do OCR at all. That is very likely the "AGP silently drops
-arm64-v8a libs before packageDebug" behaviour recorded in `scripts/build_opencv_android.sh`. Both
-apps now configure native packaging through `androidComponents.onVariants`; Vision's debug build
-keeps all 15 libs, and its release still drops to 5 in `full` (16 MB) and keeps all 15 in `minimal`
-(61 MB), unchanged.
+Vision's debug build keeps all 15 libs; its release drops to 5 in `full` (16 MB) and keeps all 15
+in `minimal` (61 MB).
 
 **Known gap (planned, not yet done):** `check_whisper.sh` assumes Vulkan headers
 (`vulkan-headers`/`spirv-headers`/`shaderc`) are already installed via Homebrew
@@ -310,10 +312,20 @@ mechanism, differing only where the engine genuinely differs:
   its `Java_com_voxapps_llamacpp_*` JNI surface (`--exclude-libs,ALL` plus hidden visibility), and
   has no non-platform `DT_NEEDED` at all. `scripts/check_native_pairing.py` holds this property.
 - **Distribution:** excluded from every release APK by `androidComponents.onVariants`; published
-  by hand as the per-commit release `llama-libs-<sha12>` (`scripts/publish_llama_libs.sh`,
+  by hand as the release `llama-libs-<pin12>` (`scripts/publish_llama_libs.sh`,
   `./scripts/vox release publish-llama-libs`); fetched on demand by `LlamaEngineManager` when a
   local LLM engine is selected, verified against `assets/llama-libs.sha256` recorded into the APK
   by `recordLlamaDigests`, never over a metered connection.
+- **The address is a build fingerprint, not the submodule commit.** The pin is
+  `scripts/llama_build_pin.sh`: a git hash over the tree state of the llama.cpp submodule gitlink,
+  `vox-commander/src/main/cpp/llama_jni.cpp` and `vox-commander/src/main/cpp/llama-build/`, the
+  tag taking its first 12 hex digits. Published releases are immutable, and `libllama.so`'s bytes
+  come from the submodule *and* the JNI bridge *and* the CMake config, so the address must move
+  when any of them does — a pin over the submodule alone cannot represent a bridge or build-config
+  change, and "same tag, different bytes" is not representable at all. One script owns the
+  computation; `publish_llama_libs.sh`, `check_llama_published.sh`, `recordLlamaDigests` and
+  `scripts/tests/run.sh` all consume it, so no two of them can derive different addresses for the
+  same tree. Whisper's tag is keyed to its submodule commit alone.
 - **Gate:** `./scripts/vox check llama-published` — the release named by the pin must exist and
   hold `libllama.so`; wired into `release-commander.yml` beside the whisper gate, negative-testable
   via `VOX_LLAMA_PIN`.
@@ -383,8 +395,7 @@ to `dlopen` on modern Android (missing Bionic libc symbol `__sfp_handle_exceptio
     `vendor/ppocr-sdk/opencv/.built-commit` on success, and only skips a rebuild if that marker matches
     the submodule's *current* pinned commit — so bumping the submodule and rerunning this script
     reliably triggers a real rebuild, rather than silently reusing stale output just because the
-    output files happen to already exist (an actual bug this session found and fixed — the original
-    check only asked "does output exist," never "is it for the right version").
+    output files happen to already exist.
 - **`autoCompileOpenCv`** Gradle task (`vendor/ppocr-sdk/build.gradle.kts`) runs this on `preBuild`.
 - **`vendor/ppocr-sdk/opencv/`** is the build's output directory — **gitignored** (it's regenerated,
   not source this repo maintains).
@@ -511,6 +522,7 @@ one morning, each triggering its own CI run.
 | Thursday | `sync-opencv` |
 | Friday | `sync-ppocr-sdk` |
 | 2nd of the month, 09:00 | `sync-whisper` |
+| 3rd of the month, 09:00 | `sync-llama` |
 
 Each has a `concurrency` group with `cancel-in-progress: false`, so a hung native build cannot be
 lapped by the next run pushing the same branch, and an in-flight run is never killed mid-push.
@@ -543,10 +555,9 @@ runs it on any push or PR that touches a vendored tree, its patches, or the scri
 ./scripts/vox patches verify wakeword     # one of them
 ```
 
-This exists because the invariant was silently false. Three adaptations lived only as edited bytes in
-the vendored copies and would have been discarded by the next re-vendor: ppocr's OpenCV 5 geometry
-API (`0002`), its manual resize (`0003`) and library name (`0004`), plus wakeword's score logging
-(`0003`). Only one of them would have failed a build afterwards — the rest would have shipped.
+An edit recorded by no patch is discarded at the next re-vendor, and losing one rarely fails a
+build — most adaptations surface only at runtime, as an intermittent native crash or an engine that
+never initialises — which is why the invariant is checked rather than assumed.
 
 If the check fails and the change was deliberate, capture it: write the diff as
 `patches/000N-<name>.patch`, then run that module's regen script to normalise and verify it.
@@ -630,7 +641,7 @@ Which libraries, and whether they are optional:
 |---|---|---|
 | Commander | onnxruntime, vosk, sherpa-onnx (33 MB) | **No.** onnxruntime backs OpenWakeWord, vosk the Vosk engines, sherpa Piper. Anyone using a wake word needs one on first launch. |
 | Commander | whisper (~107 MB, ggml and the Vulkan backend linked in) | **Yes** — only with Whisper STT, Vulkan variant only where supported. Fetched elsewhere, never bundled. |
-| Commander | llama.cpp (~4 MB libllama.so, ggml linked in, CPU backend) | **Yes** — only when a local LLM engine is selected. Fetched from its per-commit `llama-libs-<sha12>` release, never bundled. |
+| Commander | llama.cpp (~4 MB libllama.so, ggml linked in, CPU backend) | **Yes** — only when a local LLM engine is selected. Fetched from its `llama-libs-<pin12>` release, the pin a build fingerprint over the submodule, JNI bridge and CMake config (`scripts/llama_build_pin.sh`), never bundled. |
 | Vision | onnxruntime + the OpenCV set (43 MB) | **No.** Vision is an OCR app and these are what OCR needs. |
 
 ## Do the native libraries satisfy each other?
@@ -672,9 +683,7 @@ Where it runs:
 - **`check_whisper.sh`**'s Homebrew dependency detection (Vulkan headers) doesn't yet install Homebrew
   or the required formulae if missing — see the Whisper.cpp section above. Deliberately deferred.
 
-All six dependencies now have a scheduled sync workflow, and the one identified staleness-detection
-bug (OpenCV's build script skipping a rebuild purely because output existed, regardless of whether it
-matched the pinned commit) has been fixed — see the OpenCV section above.
+Every buildable dependency has a scheduled sync workflow — seven `sync-*.yml`, one per upstream.
 
 ---
 
@@ -688,7 +697,7 @@ rather than a file:
 ./scripts/vox check [name]           has anything upstream moved?
 ./scripts/vox patches verify [mod]   is a vendored fork upstream + its patches?
 ./scripts/vox patches regen <mod>    regenerate a fork's patches
-./scripts/vox native opencv|whisper  the two build-time compiles
+./scripts/vox native opencv|whisper|llama   the three build-time compiles
 ./scripts/vox release package        the APK as published
 ```
 
@@ -696,19 +705,23 @@ Full command set:
 
 ```
 ./scripts/vox check [name]           has anything upstream moved?
+./scripts/vox check pairing <apk>    do an APK's native libraries satisfy each other
+./scripts/vox check whisper-published   does the published Whisper runtime match the pin?
+./scripts/vox check llama-published  does the published llama runtime match the pin?
+./scripts/vox check smoke <apk> <app-id>   does the APK survive a cold launch on the adb device?
 ./scripts/vox patches verify [mod]   is a vendored fork upstream + its patches?
 ./scripts/vox patches regen <mod>    regenerate a fork's patches
 ./scripts/vox release package        the APK as published (honours voxDlc)
 ./scripts/vox release publish-libs   publish whisper .so as the DLC release
+./scripts/vox release publish-llama-libs   publish libllama.so as the pinned llama-libs release
 ./scripts/vox release readme         regenerate the README release table
 ./scripts/vox release fdroid         regenerate and push F-Droid metadata
-./scripts/vox native opencv|whisper  the two build-time compiles
+./scripts/vox release sbom <app>     CycloneDX SBOM, including the vendored native sources
+./scripts/vox native opencv|whisper|llama   the three build-time compiles
 ./scripts/vox schemas validate       validate the shipped schema JSON
 ./scripts/vox schemas sign|verify    sign the schema manifest, or check it
 ./scripts/vox schemas keygen         create a signing keypair (once, ever)
 ./scripts/vox schemas hash-models    record each model's sha256 by fetching it once
-./scripts/vox check pairing <apk>    do an APK's native libraries satisfy each other
-./scripts/vox release sbom <app>     CycloneDX SBOM, including the vendored native sources
 ./scripts/vox test                   test this machinery
 ```
 
@@ -721,7 +734,7 @@ and a workflow.
 
 ### The automation has tests
 
-Nineteen scripts and fifteen workflows gate every release, and the contracts between them break
+Thirty scripts and twenty workflows gate every release, and the contracts between them break
 silently: a script that stops emitting its report, a workflow that stops reading it, a vendored fork
 that drifts from its patches. Nothing about that surfaces in an Android build.
 
