@@ -83,13 +83,19 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   The same tab also has a Media Session permission switch (needed to control playback in apps like
   Spotify), a "Return to previous app after action" app list, and the External Trigger toggle mentioned
   above.
-- **Settings** — 8 tabs: General, AI & Models (Voice Engines + Intent Engines sub-tabs), Service (Wake
-  Word + TTS sub-tabs), App Manager, Integrations (Spotify, discovered Vox Apps with per-app contract
-  test, Piped/YouTube media, Search provider config), Permissions, Advanced (debug log viewer, engine
-  benchmark, download preferences), and Theme (dark/light/system + a colored-surface option, shared with
-  the companion apps).
+- **Settings** — a menu of entries grouped under section bands (General / Engines & Models / Apps &
+  Integrations / System / Data), each opening its own page: General (language, schema-repository
+  options, and Theme — dark/light/system + a colored-surface option shared with the companion apps),
+  AI & Models (Voice Engines + Intent Engines sub-tabs), Service (Wake Word + TTS sub-tabs), App
+  Manager, Integrations (Spotify, discovered Vox Apps with per-app contract test, Piped/YouTube media,
+  Search provider config), Permissions, Advanced (engine benchmark, download preference, the Engine &
+  Model Management card — including two privacy gates, both **off by default**, "Cloud AI engines" and
+  "Google on-device support", each restricting whatever engines the schema declares as cloud/Google-
+  backed and, when switched off, clearing every engine/model selection it gated back to schema
+  defaults; plus delete-unused-models cleanup — system maintenance, tutorial replay, and Logging
+  last), and Backup & Diagnostics (one page: the backup card above the diagnostics list).
 
-  <img width="388" height="850" alt="Settings: the 8-tab structure" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/25_settings_tabs.png" />
+  <img width="388" height="850" alt="Settings: the menu page" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/25_settings_tabs.png" />
 
 - **Media control** — search/play/pause/next/prev for Spotify, YouTube, or whatever's assigned as your
   audio default; **navigation** via Waze or Google Maps deep links; **messaging** through whichever app
@@ -108,9 +114,10 @@ ecosystem plugs into, though it works completely on its own with no companion ap
 
   <img width="388" height="850" alt="Location settings — Home town, cache duration, Always use this location" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/26_location_hometown_cache.png" />
 
-- **Bring your own model** — any engine that reads a model file accepts one you supply, listed as a
-  row beside the downloadable ones: chosen the same way, deleted by the same trash icon, and shown
-  with its real size. The file picker is filtered to the kind that engine expects, vendor archives are
+- **Bring your own model** — any engine that reads a model file accepts files you supply — import as
+  many as you like; each appears as its own row under its filename beside the downloadable ones,
+  selected the same way, deleted by the same affordance, and shown with its real size. The file
+  picker is filtered to the kind that engine expects, vendor archives are
   unpacked for you, and a file that isn't what the engine needs is refused *with the reason* rather
   than failing later — after which you're offered the deletion of the archive it came from. For
   engines that keep a model per language (Vosk), the language is asked at import.
@@ -120,7 +127,7 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   the official repository is only adopted if it carries a valid signature; the app ships a public key
   and refuses anything else. Point the app at your own fork and your schemas are still used — marked
   *unverified*, since only the maintainer can sign. The bundled copies are always one tap away.
-- **Backup & Restore** (Settings → Backup tab) — back up FastMap rules and portable settings to a
+- **Backup & Restore** (Settings → Backup & Diagnostics) — back up FastMap rules and portable settings to a
   file you pick, or restore from one, using the same zip format Vox Hub's own export/import produces;
   restoring offers a choice of **Full override**, **Merge**, or **Additive** reconciliation (see
   [Vox Hub](#vox-hub) below for the full explanation, shared by every app in the family).
