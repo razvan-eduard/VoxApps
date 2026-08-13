@@ -23,17 +23,12 @@ for arg in "$@"; do
     esac
 done
 
-# --- DYNAMIC PATH DETECTION ---
-# Homebrew where there is one, the tool's own location where there is not, then the usual prefixes.
-# These are also honoured directly, which is how a runner or an unusual layout says where to look.
-VULKAN_HEADERS_BASE="${VULKAN_HEADERS_BASE:-$(vox_prefix_for vulkan-headers)}"
-SPIRV_HEADERS_BASE="${SPIRV_HEADERS_BASE:-$(vox_prefix_for spirv-headers)}"
-SHADERC_BASE="${SHADERC_BASE:-$(vox_prefix_for shaderc glslc)}"
-
-VULKAN_INC="$VULKAN_HEADERS_BASE/include"
-SPIRV_INC="$SPIRV_HEADERS_BASE/include"
-SPIRV_CMAKE="$SPIRV_HEADERS_BASE/share/cmake/SPIRV-Headers"
-GLSLC_PATH="$SHADERC_BASE/bin/glslc"
+# --- OPENCL BUILD INPUTS (repo-pinned, no host packages) ---
+# Same contract as check_llama.sh: headers and the ICD import stub come from pinned submodules,
+# the stub is cross-compiled once per build tree and never shipped.
+OPENCL_HEADERS_DIR="$PROJECT_ROOT/vendor/OpenCL-Headers"
+OPENCL_ICD_DIR="$PROJECT_ROOT/vendor/OpenCL-ICD-Loader"
+OPENCL_STAGE_DIR="$WHISPER_DIR/$BUILD_DIR-opencl-stub"
 
 # --- ROLLBACK FUNCTION ---
 perform_rollback() {
@@ -120,17 +115,30 @@ fi
 mkdir -p "$WHISPER_DIR/$BUILD_DIR"
 cd "$WHISPER_DIR/$BUILD_DIR" || exit 1
 
+# --- OPENCL IMPORT STUB (once per build tree) ---
+OPENCL_STUB_LIB="$OPENCL_STAGE_DIR/libOpenCL.so"
+if [ ! -f "$OPENCL_STUB_LIB" ]; then
+    log_info "⚙️ Building the OpenCL ICD loader (link stub, arm64)..."
+    cmake -S "$OPENCL_ICD_DIR" -B "$OPENCL_STAGE_DIR" \
+      -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" \
+      -DANDROID_ABI=arm64-v8a \
+      -DANDROID_PLATFORM=android-33 \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DOPENCL_ICD_LOADER_HEADERS_DIR="$OPENCL_HEADERS_DIR" \
+      -DBUILD_TESTING=OFF
+    cmake --build "$OPENCL_STAGE_DIR" --config Release -j 8
+    [ -f "$OPENCL_STUB_LIB" ] || { log_error "❌ ICD loader stub did not produce libOpenCL.so"; exit 1; }
+fi
+
 if [ ! -f "CMakeCache.txt" ]; then
-    log_info "⚙️ Configuring Hybrid Build (GPU/Vulkan support)..."
+    log_info "⚙️ Configuring Hybrid Build (GPU/OpenCL support)..."
     if ! cmake ../.. \
       -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" \
       -DANDROID_ABI=arm64-v8a \
       -DANDROID_PLATFORM=android-33 \
       -DCMAKE_BUILD_TYPE=Release \
-      -DVULKAN_HEADERS_DIR="$VULKAN_INC" \
-      -DSPIRV_HEADERS_INC_DIR="$SPIRV_INC" \
-      -DSPIRV_HEADERS_CMAKE_DIR="$SPIRV_CMAKE" \
-      -DVulkan_GLSLC_EXECUTABLE="$GLSLC_PATH"; then
+      -DOpenCL_INCLUDE_DIR="$OPENCL_HEADERS_DIR" \
+      -DOpenCL_LIBRARY="$OPENCL_STUB_LIB"; then
         perform_rollback
     fi
 fi

@@ -29,6 +29,9 @@ from collections import defaultdict
 PLATFORM = {
     "libc.so", "libm.so", "libdl.so", "liblog.so", "libandroid.so", "libz.so",
     "libGLESv2.so", "libGLESv3.so", "libEGL.so", "libOpenSLES.so", "libvulkan.so",
+    # The vendor OpenCL driver: the GPU backends link it, the manifest declares it
+    # (uses-native-library, optional), and the device provides it or the engine stays on CPU.
+    "libOpenCL.so",
     "libnativewindow.so", "libjnigraphics.so", "libmediandk.so", "libcamera2ndk.so",
     "libaaudio.so", "libneuralnetworks.so", "ld-android.so", "libstdc++.so",
 }

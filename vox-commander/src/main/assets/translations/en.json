@@ -536,11 +536,13 @@
   "settings_section_data": "Data",
   "gpu_whisper_title": "Whisper GPU acceleration (Experimental)",
   "gpu_llama_title": "LLM GPU acceleration (Experimental)",
-  "gpu_toggle_desc": "Run this engine on the GPU (Vulkan). Enabling runs a one-time compatibility test in a sandboxed process; if the device fails it, the switch turns itself off.",
+  "gpu_toggle_desc": "Run this engine on the GPU (OpenCL). Enabling runs a one-time compatibility test in a sandboxed process; if the device fails it, the switch turns itself off.",
   "gpu_verdict_incompatible": "This device failed the GPU test — running on the CPU.",
   "gpu_verdict_verified": "GPU verified on this device.",
   "gpu_verdict_probed": "GPU test passed — awaiting first real use.",
   "gpu_test_deferred_title": "Test deferred",
   "gpu_test_deferred_message": "No model is loaded for this engine yet, so there is nothing to test against. The compatibility test will run automatically the next time a model is loaded, and this switch will turn itself off if the device fails it.",
+  "gpu_no_backend_title": "No GPU available",
+  "gpu_no_backend_message": "This build has no GPU backend for this engine, or the device reports no usable GPU, so there is nothing to accelerate with. The engine keeps running on the CPU and the switch has been turned back off. No verdict was recorded against this device.",
   "gpu_test_again": "Test again"
 }

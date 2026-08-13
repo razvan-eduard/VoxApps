@@ -7,118 +7,12 @@
 #include "ggml.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
-#include "ggml-vulkan.h"
 
 #define LOG_TAG "LibWhisper"
 
-// Runs a tiny matrix multiplication on the ggml-vulkan backend. This exercises the
-// actual GPU compute/shader path that whisper inference relies on, catching devices
-// where the backend initializes but real GPU workloads crash or produce garbage.
-// NOTE: On a broken GPU this may crash the *process* natively (uncatchable), which is
-// why callers must run it in an isolated process.
-static bool ggml_vulkan_self_test() {
-    ggml_backend_t backend = ggml_backend_vk_init(0);
-    if (backend == nullptr) {
-        return false;
-    }
-
-    bool ok = false;
-    const int n = 4;
-
-    ggml_init_params ip{};
-    ip.mem_size = ggml_tensor_overhead() * 8 + ggml_graph_overhead() + 1024;
-    ip.mem_buffer = nullptr;
-    ip.no_alloc = true;
-
-    ggml_context* ctx = ggml_init(ip);
-    if (ctx != nullptr) {
-        ggml_tensor* a = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, n, n);
-        ggml_tensor* b = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, n, n);
-        ggml_tensor* c = ggml_mul_mat(ctx, a, b);
-
-        ggml_cgraph* gf = ggml_new_graph(ctx);
-        ggml_build_forward_expand(gf, c);
-
-        ggml_backend_buffer_t buf = ggml_backend_alloc_ctx_tensors(ctx, backend);
-        if (buf != nullptr) {
-            std::vector<float> av(n * n, 1.0f);
-            std::vector<float> bv(n * n, 2.0f);
-            ggml_backend_tensor_set(a, av.data(), 0, av.size() * sizeof(float));
-            ggml_backend_tensor_set(b, bv.data(), 0, bv.size() * sizeof(float));
-
-            const ggml_status st = ggml_backend_graph_compute(backend, gf);
-            if (st == GGML_STATUS_SUCCESS) {
-                std::vector<float> cv(n * n, 0.0f);
-                ggml_backend_tensor_get(c, cv.data(), 0, cv.size() * sizeof(float));
-                // result[i,j] = sum_k a[k,i]*b[k,j] = n * (1*2) = 8
-                const float expected = static_cast<float>(n) * 2.0f;
-                ok = std::isfinite(cv[0]) && std::fabs(cv[0] - expected) < 1e-2f;
-                __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG,
-                                    "Vulkan self-test: out[0]=%f expected=%f ok=%d", cv[0], expected, ok);
-            } else {
-                __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "Vulkan self-test: compute status=%d", st);
-            }
-            ggml_backend_buffer_free(buf);
-        }
-        ggml_free(ctx);
-    }
-
-    ggml_backend_free(backend);
-    return ok;
-}
-
-extern "C"
-JNIEXPORT jboolean JNICALL
-Java_com_whispercpp_whisper_WhisperLib_00024Companion_runVulkanSelfTest(
-        JNIEnv* env,
-        jobject /* this */) {
-    try {
-        const bool ok = ggml_vulkan_self_test();
-        __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "runVulkanSelfTest result=%d", ok);
-        return ok ? JNI_TRUE : JNI_FALSE;
-    } catch (const std::exception& e) {
-        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "runVulkanSelfTest exception '%s'", e.what());
-        return JNI_FALSE;
-    } catch (...) {
-        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "runVulkanSelfTest unknown exception");
-        return JNI_FALSE;
-    }
-}
-
-extern "C"
-JNIEXPORT jboolean JNICALL
-Java_com_whispercpp_whisper_WhisperLib_00024Companion_isVulkanAvailable(
-        JNIEnv* env,
-        jobject /* this */) {
-
-    // Probe the *ggml-vulkan* backend (exactly what whisper uses de for GPU inference),
-    // not just raw Vulkan presence. A device can expose a Vulkan driver while still
-    // being unusable by ggml-vulkan (missing features / driver bugs), so we must
-    // initialize the real backend to know whether GPU transcription will work.
-    try {
-        const int deviceCount = ggml_backend_vk_get_device_count();
-        if (deviceCount <= 0) {
-            __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "Vulkan probe: ggml device count = 0");
-            return JNI_FALSE;
-        }
-
-        ggml_backend_t backend = ggml_backend_vk_init(0);
-        const bool usable = (backend != nullptr);
-        if (backend != nullptr) {
-            ggml_backend_free(backend);
-        }
-
-        __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG,
-                            "Vulkan probe: ggml deviceCount=%d backendInit=%d", deviceCount, usable);
-        return usable ? JNI_TRUE : JNI_FALSE;
-    } catch (const std::exception& e) {
-        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Vulkan probe: exception '%s'", e.what());
-        return JNI_FALSE;
-    } catch (...) {
-        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Vulkan probe: unknown exception");
-        return JNI_FALSE;
-    }
-}
+// The GPU micro-test that lived here is gone: no Kotlin caller bound it, and the
+// isolated probe process answers the same question with a real model on the real
+// inference path, which is the only answer worth persisting.
 
 extern "C"
 JNIEXPORT jlong JNICALL

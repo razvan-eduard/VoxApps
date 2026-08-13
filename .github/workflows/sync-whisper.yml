@@ -2,7 +2,7 @@ name: Sync whisper.cpp Fork
 
 # vox-commander/src/main/cpp/whisper.cpp is vendored unmodified (no local patch, unlike
 # core/wakeword). This only checks for a new upstream stable tag, compiles it (to prove it still
-# builds against our CMake/Vulkan setup) and opens a PR bumping the submodule pin — it deliberately
+# builds against our CMake/OpenCL setup) and opens a PR bumping the submodule pin — it deliberately
 # does NOT call scripts/publish_whisper_libs.sh (that step publishes the compiled .so files as the
 # production DLC release real users download, and must stay a manual, reviewed action after the PR
 # is merged and someone has sanity-checked actual transcription quality on a device — CI can only
@@ -89,15 +89,11 @@ jobs:
           sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
 
 
-      - name: Install SPIRV-Headers and Shaderc for whisper Vulkan build
-        if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
+      - name: Check out the OpenCL build inputs
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq glslc libshaderc-dev
-          git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git /tmp/spirv-headers
-          cd /tmp/spirv-headers && cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local && sudo cmake --install build
-          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vulkan-headers
-          cd /tmp/vulkan-headers && cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local && sudo cmake --install build
+          # The OpenCL backend's headers and ICD link stub are pinned submodules; kernel
+          # embedding needs only python3, which the runner already has.
+          git submodule update --init vendor/OpenCL-Headers vendor/OpenCL-ICD-Loader
 
       - name: Bump submodule to latest tag
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
@@ -115,7 +111,7 @@ jobs:
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: chmod +x gradlew
 
-      - name: Compile (proves it still builds against our CMake/Vulkan setup)
+      - name: Compile (proves it still builds against our CMake/OpenCL setup)
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: ./gradlew :vox-commander:assembleDebug --no-daemon
 
@@ -146,7 +142,7 @@ jobs:
             --title "chore: whisper.cpp upstream ${{ steps.versions.outputs.latest_tag }} available" \
             --body "Upstream [ggerganov/whisper.cpp](https://github.com/ggerganov/whisper.cpp) tagged \`${{ steps.versions.outputs.latest_tag }}\` (we're pinned at \`${{ steps.versions.outputs.current_tag || steps.versions.outputs.current_sha }}\`).
 
-          This PR bumps the submodule pin and confirms the new version **compiles** (CMake/Vulkan build succeeded) and unit tests pass. It does **not** publish anything.
+          This PR bumps the submodule pin and confirms the new version **compiles** (CMake/OpenCL build succeeded) and unit tests pass. It does **not** publish anything.
 
           Before merging, please:
           1. Install the debug build on a device and sanity-check actual transcription quality/latency — a successful compile says nothing about STT accuracy.

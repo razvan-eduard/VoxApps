@@ -3,31 +3,19 @@ project(whisper_android)
 
 set(CMAKE_CXX_STANDARD 17)
 
-# --- VULKAN & SPIRV, FORCED ---
-# Let programs (glslc) be found on the Mac host
+# --- OPENCL INPUTS ---
+# Kernel embedding runs python on the build host while everything else cross-compiles, so
+# program lookup must escape the NDK sysroot. Headers and the import stub arrive as -D inputs
+# from check_whisper.sh, both sourced from repo-pinned submodules.
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 
-if (VULKAN_HEADERS_DIR AND SPIRV_HEADERS_INC_DIR)
-    set(INC_FLAGS "-I${VULKAN_HEADERS_DIR} -I${SPIRV_HEADERS_INC_DIR}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${INC_FLAGS}" CACHE STRING "" FORCE)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${INC_FLAGS}" CACHE STRING "" FORCE)
-    
-    # Standard variables for the sub-modules
-    set(Vulkan_INCLUDE_DIR "${VULKAN_HEADERS_DIR}" CACHE PATH "" FORCE)
-    include_directories("${VULKAN_HEADERS_DIR}" "${SPIRV_HEADERS_INC_DIR}")
-endif()
-
-if (SPIRV_HEADERS_CMAKE_DIR)
-    set(SPIRV-Headers_DIR "${SPIRV_HEADERS_CMAKE_DIR}" CACHE PATH "" FORCE)
-endif()
-
-# Force the path to the shader compiler
-if (Vulkan_GLSLC_EXECUTABLE)
-    set(Vulkan_GLSLC_EXECUTABLE "${Vulkan_GLSLC_EXECUTABLE}" CACHE FILEPATH "" FORCE)
-endif()
-
-# Whisper configuration
-set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+# Whisper configuration. OpenCL over Vulkan for the same reason as the llama build: the Adreno
+# Vulkan driver aborts creating compute pipelines (a real device probe crash), while the OpenCL
+# stack is the one Qualcomm maintains for this hardware, with the Adreno-tuned kernels on.
+set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
+set(GGML_OPENCL ON CACHE BOOL "" FORCE)
+set(GGML_OPENCL_USE_ADRENO_KERNELS ON CACHE BOOL "" FORCE)
+set(GGML_OPENCL_EMBED_KERNELS ON CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -65,7 +53,9 @@ target_link_libraries(
     whisper_final
     PRIVATE
     whisper
-    ggml-vulkan
+    # No per-backend entry: ggml's umbrella target links and defines its compiled-in backends
+    # itself, same as the llama build — naming one here breaks the link whenever the backend
+    # selection changes, which is exactly how the Vulkan entry died.
     ggml-base
     ${log-lib}
     ${android-lib}

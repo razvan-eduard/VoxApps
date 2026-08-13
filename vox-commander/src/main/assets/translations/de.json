@@ -536,11 +536,13 @@
   "settings_section_data": "Daten",
   "gpu_whisper_title": "Whisper-GPU-Beschleunigung (Experimentell)",
   "gpu_llama_title": "LLM-GPU-Beschleunigung (Experimentell)",
-  "gpu_toggle_desc": "Diese Engine auf der GPU ausführen (Vulkan). Beim Aktivieren läuft ein einmaliger Kompatibilitätstest in einem isolierten Prozess; besteht das Gerät ihn nicht, schaltet sich der Schalter selbst aus.",
+  "gpu_toggle_desc": "Diese Engine auf der GPU ausführen (OpenCL). Beim Aktivieren läuft ein einmaliger Kompatibilitätstest in einem isolierten Prozess; besteht das Gerät ihn nicht, schaltet sich der Schalter selbst aus.",
   "gpu_verdict_incompatible": "Dieses Gerät hat den GPU-Test nicht bestanden — läuft auf der CPU.",
   "gpu_verdict_verified": "GPU auf diesem Gerät verifiziert.",
   "gpu_verdict_probed": "GPU-Test bestanden — wartet auf den ersten echten Einsatz.",
   "gpu_test_deferred_title": "Test verschoben",
   "gpu_test_deferred_message": "Für diese Engine ist noch kein Modell geladen, es gibt also nichts, wogegen getestet werden kann. Der Kompatibilitätstest läuft automatisch beim nächsten Laden eines Modells, und dieser Schalter schaltet sich selbst aus, wenn das Gerät ihn nicht besteht.",
+  "gpu_no_backend_title": "Keine GPU verfügbar",
+  "gpu_no_backend_message": "Dieser Build hat kein GPU-Backend für diese Engine, oder das Gerät meldet keine nutzbare GPU, es gibt also nichts zum Beschleunigen. Die Engine läuft weiter auf der CPU, und der Schalter wurde wieder ausgeschaltet. Für dieses Gerät wurde kein Urteil gespeichert.",
   "gpu_test_again": "Erneut testen"
 }

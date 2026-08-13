@@ -1,10 +1,13 @@
 #!/bin/bash
 set -e
 
-# Builds libllama.so (llama.cpp + JNI wrapper, hybrid CPU+Vulkan, static ggml) and deploys it
-# beside the other jniLibs. Same shape as check_whisper.sh, Vulkan header plumbing included:
-# the shader compiler (glslc) runs on the build host, so the same host lookups apply. The
-# backend actually used is decided per model load (n_gpu_layers through the JNI), not here.
+# Builds libllama.so (llama.cpp + JNI wrapper, hybrid CPU+OpenCL, static ggml) and deploys it
+# beside the other jniLibs. Same shape as check_whisper.sh. The GPU inputs are repo-pinned
+# submodules, not host packages: the Khronos headers compile in, and the ICD loader is
+# cross-compiled once per build tree purely as the import library ggml links against — the .so
+# it produces is never shipped, the device's own vendor libOpenCL.so resolves at runtime
+# (declared via uses-native-library). How much runs on the GPU is decided per model load
+# (n_gpu_layers through the JNI), not here.
 
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
@@ -16,17 +19,10 @@ PROJECT_JNI_DIR="$PROJECT_ROOT/vox-commander/src/main/jniLibs/arm64-v8a"
 BACKUP_DIR="$PROJECT_ROOT/scripts/.llama_backup"
 BUILD_DIR="build-android"
 
-# --- DYNAMIC PATH DETECTION (host shader toolchain, same contract as check_whisper.sh) ---
-# Homebrew where there is one, the tool's own location where there is not, then the usual
-# prefixes; each *_BASE is honoured directly, which is how a CI runner says where to look.
-VULKAN_HEADERS_BASE="${VULKAN_HEADERS_BASE:-$(vox_prefix_for vulkan-headers)}"
-SPIRV_HEADERS_BASE="${SPIRV_HEADERS_BASE:-$(vox_prefix_for spirv-headers)}"
-SHADERC_BASE="${SHADERC_BASE:-$(vox_prefix_for shaderc glslc)}"
-
-VULKAN_INC="$VULKAN_HEADERS_BASE/include"
-SPIRV_INC="$SPIRV_HEADERS_BASE/include"
-SPIRV_CMAKE="$SPIRV_HEADERS_BASE/share/cmake/SPIRV-Headers"
-GLSLC_PATH="$SHADERC_BASE/bin/glslc"
+# --- OPENCL BUILD INPUTS (repo-pinned, no host packages) ---
+OPENCL_HEADERS_DIR="$PROJECT_ROOT/vendor/OpenCL-Headers"
+OPENCL_ICD_DIR="$PROJECT_ROOT/vendor/OpenCL-ICD-Loader"
+OPENCL_STAGE_DIR="$WRAPPER_DIR/$BUILD_DIR-opencl-stub"
 
 FORCE_REBUILD=false
 MANUAL_UPGRADE=false
@@ -119,17 +115,33 @@ fi
 mkdir -p "$WRAPPER_DIR/$BUILD_DIR"
 cd "$WRAPPER_DIR/$BUILD_DIR" || exit 1
 
+# --- 3a. OPENCL IMPORT STUB (once per build tree) ---
+# find_package(OpenCL) inside ggml wants a library file to exist at configure time, so the ICD
+# loader is cross-compiled first into its own tree. It is an import library only: never deployed,
+# never hashed, never shipped — the device's vendor driver is what actually answers at runtime.
+OPENCL_STUB_LIB="$OPENCL_STAGE_DIR/libOpenCL.so"
+if [ ! -f "$OPENCL_STUB_LIB" ]; then
+    log_info "⚙️ Building the OpenCL ICD loader (link stub, arm64)..."
+    cmake -S "$OPENCL_ICD_DIR" -B "$OPENCL_STAGE_DIR" \
+      -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" \
+      -DANDROID_ABI=arm64-v8a \
+      -DANDROID_PLATFORM=android-33 \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DOPENCL_ICD_LOADER_HEADERS_DIR="$OPENCL_HEADERS_DIR" \
+      -DBUILD_TESTING=OFF
+    cmake --build "$OPENCL_STAGE_DIR" --config Release -j 8
+    [ -f "$OPENCL_STUB_LIB" ] || { log_error "❌ ICD loader stub did not produce libOpenCL.so"; exit 1; }
+fi
+
 if [ ! -f "CMakeCache.txt" ]; then
-    log_info "⚙️ Configuring hybrid build (CPU + Vulkan, static ggml, no OpenMP)..."
+    log_info "⚙️ Configuring hybrid build (CPU + OpenCL/Adreno, static ggml, no OpenMP)..."
     if ! cmake .. \
       -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" \
       -DANDROID_ABI=arm64-v8a \
       -DANDROID_PLATFORM=android-33 \
       -DCMAKE_BUILD_TYPE=Release \
-      -DVULKAN_HEADERS_DIR="$VULKAN_INC" \
-      -DSPIRV_HEADERS_INC_DIR="$SPIRV_INC" \
-      -DSPIRV_HEADERS_CMAKE_DIR="$SPIRV_CMAKE" \
-      -DVulkan_GLSLC_EXECUTABLE="$GLSLC_PATH"; then
+      -DOpenCL_INCLUDE_DIR="$OPENCL_HEADERS_DIR" \
+      -DOpenCL_LIBRARY="$OPENCL_STUB_LIB"; then
         perform_rollback
     fi
 fi
