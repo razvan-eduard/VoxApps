@@ -1,8 +1,10 @@
 // JNI bridge for the local LLM engine (llama.cpp, CPU backend, static ggml).
 //
-// Threading contract: NOT thread-safe by design. LocalLlmInterpreter's Kotlin-side Mutex is the
-// sole serializer for every call that touches a handle; no native locking is added so the two
-// never disagree about who owns the context.
+// Threading contract: LocalLlmInterpreter's Kotlin-side Mutex serializes the calls that touch a
+// handle. Native locking covers only what that Mutex cannot: the model is also released on memory
+// pressure, which arrives whenever the platform decides and not through the call path the Mutex
+// guards. A handle therefore carries a retirement gate — free marks it retiring, asks any running
+// generation to abort, and waits for it to leave before tearing the context down.
 //
 // Cancellation: cancel() flips a per-handle atomic that both the per-token loop and ggml's abort
 // callback observe, so a cancel lands mid-graph-eval, not just between tokens. A cancelled
@@ -12,6 +14,7 @@
 #include <android/log.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -44,6 +47,42 @@ struct LlamaHandle {
     std::vector<llama_token> cached[N_SLOTS];
     std::atomic<bool> abort{false};
     int n_batch = 0;
+
+    // Retirement gate. Freeing a handle is not the caller's decision alone: Android trims memory
+    // whenever it likes, so the release can land while a generation is still running on another
+    // thread. Cancelling only asks that thread to stop — it has to be given the chance to notice,
+    // or the context is torn down under a call still reading from it.
+    std::mutex gate;
+    std::condition_variable idle;
+    int  in_flight = 0;     // guarded by gate
+    bool retiring  = false; // guarded by gate
+};
+
+/**
+ * Marks a handle busy for as long as a native call is using it, and refuses one that is already
+ * being retired. Every entry point that touches the model or the context takes one; free waits for
+ * the count to reach zero before tearing anything down.
+ */
+struct HandleUse {
+    LlamaHandle * h;
+    bool ok = false;
+
+    explicit HandleUse(LlamaHandle * handle) : h(handle) {
+        if (!h) return;
+        std::lock_guard<std::mutex> lock(h->gate);
+        if (h->retiring) return;
+        h->in_flight++;
+        ok = true;
+    }
+
+    ~HandleUse() {
+        if (!ok) return;
+        std::lock_guard<std::mutex> lock(h->gate);
+        if (--h->in_flight == 0) h->idle.notify_all();
+    }
+
+    HandleUse(const HandleUse &) = delete;
+    HandleUse & operator=(const HandleUse &) = delete;
 };
 
 std::once_flag backend_once;
@@ -130,6 +169,13 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeLoadModel(
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = (uint32_t) nCtx;
     cparams.n_seq_max = N_SLOTS;
+    // Without this the context is divided evenly between the sequences — n_ctx / n_seq_max cells
+    // each — so asking for two slots silently halves what any single call can hold. The slots exist
+    // to keep two prompt kinds resident, not to partition capacity: a short classification and a
+    // receipt-sized document have nothing in common except that whichever runs should have the
+    // whole pool available to it. Unified, they share it and the eviction check below is what keeps
+    // them from overlapping.
+    cparams.kv_unified = true;
     cparams.n_threads = nThreads;
     cparams.n_threads_batch = nThreads;
 
@@ -155,6 +201,16 @@ JNIEXPORT void JNICALL
 Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeFreeModel(JNIEnv *, jobject, jlong handle) {
     auto * h = reinterpret_cast<LlamaHandle *>(handle);
     if (!h) return;
+    {
+        std::unique_lock<std::mutex> lock(h->gate);
+        if (h->retiring) return;   // a concurrent free already owns the teardown
+        h->retiring = true;
+        // Ask any running generation to stop, then wait for it to actually leave. Setting the flag
+        // without waiting is what let the teardown run underneath a call still copying from the
+        // context; the abort callback and the per-token loop both poll this.
+        h->abort.store(true);
+        h->idle.wait(lock, [h] { return h->in_flight == 0; });
+    }
     if (h->ctx) llama_free(h->ctx);
     if (h->model) llama_model_free(h->model);
     delete h;
@@ -182,6 +238,8 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeComplete(
         jstring jsys, jstring juser, jstring jgrammar, jint maxTokens, jfloat temperature,
         jint jslot) {
     auto * h = reinterpret_cast<LlamaHandle *>(handle);
+    HandleUse use(h);
+    if (h && !use.ok) return nullptr;   // being retired; the caller reads this as a cancellation
     if (!h) {
         throw_runtime(env, "complete() on a freed handle");
         return nullptr;
@@ -197,8 +255,14 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeComplete(
     }
 
     std::vector<llama_token> tokens = common_tokenize(h->vocab, prompt, /*add_special*/ true, /*parse_special*/ true);
-    if (tokens.empty() || (int) tokens.size() >= (int) llama_n_ctx(h->ctx) - maxTokens) {
-        throw_runtime(env, "prompt does not fit the context (" + std::to_string(tokens.size()) + " tokens)");
+    // Against the per-sequence capacity, which is what a single call actually gets — not the
+    // context total. Measuring the total is how an oversized prompt used to pass this check and
+    // then fail inside llama_decode with nothing said about why.
+    const int capacity = (int) llama_n_ctx_seq(h->ctx);
+    if (tokens.empty() || (int) tokens.size() >= capacity - maxTokens) {
+        throw_runtime(env, "prompt does not fit the context (" + std::to_string(tokens.size()) +
+                           " tokens, capacity " + std::to_string(capacity) +
+                           ", reserving " + std::to_string(maxTokens) + " for the reply)");
         return nullptr;
     }
 
@@ -280,7 +344,8 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeComplete(
 JNIEXPORT jlongArray JNICALL
 Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeLastTimings(JNIEnv * env, jobject, jlong handle) {
     auto * h = reinterpret_cast<LlamaHandle *>(handle);
-    if (!h || !h->ctx) return nullptr;
+    HandleUse use(h);
+    if (!use.ok || !h->ctx) return nullptr;
     const llama_perf_context_data d = llama_perf_context(h->ctx);
     const jlong vals[4] = {
         (jlong) d.t_p_eval_ms, (jlong) d.n_p_eval,
@@ -326,7 +391,8 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeCancel(JNIEnv *, jobject, jlong 
 JNIEXPORT void JNICALL
 Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeClearMemory(JNIEnv *, jobject, jlong handle) {
     auto * h = reinterpret_cast<LlamaHandle *>(handle);
-    if (!h || !h->ctx) return;
+    HandleUse use(h);
+    if (!use.ok || !h->ctx) return;
     llama_memory_clear(llama_get_memory(h->ctx), /*data*/ true);
     for (auto & c : h->cached) c.clear();
 }
@@ -334,7 +400,8 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeClearMemory(JNIEnv *, jobject, j
 JNIEXPORT jint JNICALL
 Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeContextTokenCount(JNIEnv *, jobject, jlong handle) {
     auto * h = reinterpret_cast<LlamaHandle *>(handle);
-    if (!h || !h->ctx) return 0;
+    HandleUse use(h);
+    if (!use.ok || !h->ctx) return 0;
     jint total = 0;
     for (int slot = 0; slot < N_SLOTS; slot++) {
         total += (jint) (llama_memory_seq_pos_max(llama_get_memory(h->ctx), (llama_seq_id) slot) + 1);
