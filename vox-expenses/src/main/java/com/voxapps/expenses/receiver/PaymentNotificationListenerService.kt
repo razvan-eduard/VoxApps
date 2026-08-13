@@ -124,7 +124,17 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         } else {
             null
         }
-        Logger.d(TAG, "Captured notification from ${sbn.packageName}, forwarding for LLM triage (knownBankName=$knownBankName)")
+        // Deterministic field resolution before any model is involved — see NotificationPreParse.
+        // For the bank, the notification's own text outranks the starred app's label: the label is
+        // per-app while the text is per-transaction, and a wallet app relays cards from many banks
+        // under one label. The label stays as the fallback for bank apps whose prose never names
+        // themselves.
+        val preParse = com.voxapps.expenses.domain.llm.NotificationPreParse.parse(
+            title, text, com.voxapps.expenses.data.FieldVocabularies.vocabularies(applicationContext)
+        )
+        val bankName = preParse.bank ?: knownBankName
+        Logger.d(TAG, "Captured notification from ${sbn.packageName}, forwarding for LLM triage " +
+            "(bank=$bankName preAmount=${preParse.amount != null} preVendor=${preParse.vendor != null})")
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val isLocalEngine = VoxCapabilityClient.isLocalEngine(applicationContext)
         val promptText = NotificationExpenseParsePromptBuilder.build(
@@ -133,27 +143,35 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             existingCategories = existingCategories,
             defaultCurrency = settings.defaultCurrency,
             languageCode = settings.language,
-            knownBankName = knownBankName,
-            isLocalEngine = isLocalEngine
+            knownBankName = bankName,
+            isLocalEngine = isLocalEngine,
+            preParsedAmount = preParse.amount,
+            preParsedVendor = preParse.vendor
         )
         val encodedKey = Base64.encodeToString(sbn.key.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         // knownBankName rides along the same way rather than trusting the LLM to echo it back
         // verbatim in its JSON reply — that's what the "bank" field being empty on a successfully
         // created expense turned out to trace back to (see LlmResultReceiver). Empty segment (not
         // omitted — taskParts.getOrNull(2) must stay index-stable) when there's no known bank.
-        val encodedBank = knownBankName?.let { Base64.encodeToString(it.toByteArray(Charsets.UTF_8), Base64.NO_WRAP) }.orEmpty()
+        val encodedBank = bankName?.let { Base64.encodeToString(it.toByteArray(Charsets.UTF_8), Base64.NO_WRAP) }.orEmpty()
         // enqueueAndSend persists this request (and appends its own trailing requestId segment to
         // the task string, after encodedBank) before attempting delivery. The flag alone isn't
         // enough here — not because it fails to wake a stopped app (it does; see
         // VoxAppsDiscovery.ping) but because this send is fire-and-forget: nothing tells us the
         // reply never came. See VoxLlmRequestQueue's doc comment.
-        container.pendingLlmRequestQueue.enqueueAndSend(
+        val requestId = container.pendingLlmRequestQueue.enqueueAndSend(
             context = applicationContext,
             sourcePackage = packageName,
             task = "${LlmTasks.NOTIFICATION_EXPENSE_PARSE}:$encodedKey:$encodedBank",
             promptText = promptText,
             targetPackage = COMMANDER_PACKAGE,
             data = listOfNotNull(title, text)
+        )
+        // Suppressed fields must survive the round trip — absent from the reply by design, they are
+        // reunited with it by request id, same as the scan path's date/total.
+        container.scanPreParseRepository.put(
+            requestId,
+            com.voxapps.expenses.domain.llm.ScanPreParse(total = preParse.amount, vendor = preParse.vendor)
         )
     }
 

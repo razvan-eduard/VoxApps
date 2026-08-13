@@ -49,6 +49,7 @@ class ExpensesApplication : Application() {
         // repository's, which is how a moved endpoint gets corrected without an app release.
         SchemaRepo.appFolder = "expenses"
         ExternalServiceConfig.init(this)
+        com.voxapps.expenses.data.FieldVocabularies.init(this)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             // The repository this app follows, and whether it is asked at all — its own settings,
             // so an install can follow a fork here and not in Commander.

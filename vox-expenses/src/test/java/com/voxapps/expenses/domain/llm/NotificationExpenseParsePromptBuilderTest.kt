@@ -159,4 +159,47 @@ class NotificationExpenseParsePromptBuilderTest {
         assertTrue(prompt.contains("does not disqualify it on its own"))
         assertTrue(prompt.contains("\"totalAmount\""))
     }
+
+    @Test
+    fun `a pre-resolved amount is neither asked for nor in the shape`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build(
+            notificationTitle = "LAZAR IONUT PFA",
+            notificationText = "63,00 RON with ING Card",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en",
+            preParsedAmount = 63.0
+        )
+        assertFalse(prompt.contains(""""totalAmount": 12.5"""))
+        assertTrue(prompt.contains("do NOT"))
+        // isPayment stays the model's judgement even with the amount known.
+        assertTrue(prompt.contains("isPayment"))
+    }
+
+    @Test
+    fun `a pre-resolved vendor is neither asked for nor in the shape`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build(
+            notificationTitle = "LAZAR IONUT PFA",
+            notificationText = "63,00 RON with ING Card",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en",
+            preParsedVendor = "LAZAR IONUT PFA"
+        )
+        assertFalse(prompt.contains(""""vendor": "...""""))
+    }
+
+    @Test
+    fun `without pre-resolution the prompt still asks for both`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build(
+            notificationTitle = "Revolut",
+            notificationText = "You spent 45,20 RON",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en"
+        )
+        assertTrue(prompt.contains(""""totalAmount": 12.5"""))
+        assertTrue(prompt.contains(""""vendor": "...""""))
+    }
+
 }

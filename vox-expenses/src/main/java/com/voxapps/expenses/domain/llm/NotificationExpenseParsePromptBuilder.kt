@@ -29,7 +29,12 @@ object NotificationExpenseParsePromptBuilder {
         // Defaults to the small-model-tuned variant (see EXAMPLE_VENDOR_PLACEHOLDER's doc) since a
         // failed/timed-out capability probe (see VoxCapabilityClient.EngineCapabilities.local) should
         // pick the more defensive prompt, not assume a capable remote model that isn't actually there.
-        isLocalEngine: Boolean = true
+        isLocalEngine: Boolean = true,
+        // Fields already resolved deterministically (see NotificationPreParse) are removed from the
+        // model's job entirely — same discipline as the scan prompt's date/total bypass: a field
+        // the reply must not carry is a field the model cannot invert.
+        preParsedAmount: Double? = null,
+        preParsedVendor: String? = null
     ): String {
         val categoriesLine = if (existingCategories.isEmpty()) {
             "No categories exist yet."
@@ -105,6 +110,31 @@ object NotificationExpenseParsePromptBuilder {
             ""
         }
 
+        // The same never-ask discipline as the bank, per pre-resolved field.
+        val vendorClause: String
+        val vendorJsonField: String
+        if (preParsedVendor != null) {
+            vendorClause = """. The vendor is already known with certainty — do NOT extract,
+            guess, or include a vendor"""
+            vendorJsonField = ""
+        } else {
+            vendorClause = """, the vendor/merchant/counterparty name if this specific notification's own
+            text names one$antiCopyClause"""
+            vendorJsonField = """, "vendor": "..."""" + ""
+        }
+        val amountClause: String
+        val amountJsonField: String
+        if (preParsedAmount != null) {
+            amountClause = """. The transaction amount is already known with certainty — do NOT
+            extract, guess, or include an amount. Still decide isPayment from the content"""
+            amountJsonField = ""
+        } else {
+            amountClause = """ and the transaction amount as "totalAmount" (this is required
+            whenever isPayment is true — if you can't find a clear amount, treat it as not a payment
+            instead)"""
+            amountJsonField = """, "totalAmount": 12.5"""
+        }
+
         return """
             The following is the title and body text of a notification from an app the user has
             marked as a possible source of payment notifications (e.g. a banking or payment app).
@@ -131,10 +161,7 @@ object NotificationExpenseParsePromptBuilder {
             title — read both carefully before deciding$seeExample1.
             $bankLine
             If it DOES describe a real transaction, extract it into a structured expense record: infer
-            a short title, the vendor/merchant/counterparty name if this specific notification's own
-            text names one$antiCopyClause and the transaction amount as "totalAmount" (this is required
-            whenever isPayment is true — if you can't find a clear amount, treat it as not a payment
-            instead). Use "$defaultCurrency" as the currency
+            a short title$vendorClause$amountClause. Use "$defaultCurrency" as the currency
             unless a different one is clearly stated. Also decide "direction": "outgoing" if money left
             the account (a purchase, a payment sent, a transfer sent), or "incoming" if money arrived
             instead (a refund, a transfer received, a salary deposit, an account top-up). Also suggest a
@@ -143,8 +170,8 @@ object NotificationExpenseParsePromptBuilder {
             character-for-character — never invent a new spelling, translation, capitalization, or
             diacritics for it. Only suggest a new category name if none of the existing ones fit.
             Respond in the "$languageCode" language. Return ONLY a JSON object, no prose, no markdown,
-            of the shape {"isPayment": true, "title": "...", "totalAmount": 12.5, "currency": "...",
-            "vendor": "...", "direction": "outgoing", "category": "..."$bankJsonField} when it is a
+            of the shape {"isPayment": true, "title": "..."$amountJsonField, "currency": "..."$vendorJsonField,
+            "direction": "outgoing", "category": "..."$bankJsonField} when it is a
             transaction, or {"isPayment": false} when it is not.
 
             $examples

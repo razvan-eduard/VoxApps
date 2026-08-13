@@ -21,16 +21,19 @@ object NotificationExpenseParseResultParser {
         val direction: TransactionDirection = TransactionDirection.OUTGOING
     )
 
-    fun parse(json: String): Parsed? = try {
+    /** [presetAmount] is a deterministically pre-resolved amount the prompt told the model not to
+     *  produce (see NotificationPreParse) — the reply lacking one is then by design, not a failed
+     *  parse, and the preset value is the record's amount. */
+    fun parse(json: String, presetAmount: Double? = null): Parsed? = try {
         val o = JSONObject(json)
         if (!o.optBoolean("isPayment", false)) {
             null
         } else {
-            val totalAmount = if (o.has("totalAmount") && !o.isNull("totalAmount")) {
+            val totalAmount = presetAmount ?: (if (o.has("totalAmount") && !o.isNull("totalAmount")) {
                 o.optDouble("totalAmount").takeIf { !it.isNaN() }
             } else {
                 null
-            } ?: return null
+            } ?: return null)
 
             Parsed(
                 title = o.optCleanString("title").dropIfExamplePlaceholder(),
