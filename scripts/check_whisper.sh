@@ -24,10 +24,10 @@ for arg in "$@"; do
 done
 
 # --- OPENCL BUILD INPUTS (repo-pinned, no host packages) ---
-# Same contract as check_llama.sh: headers and the ICD import stub come from pinned submodules,
-# the stub is cross-compiled once per build tree and never shipped.
+# Same contract as check_llama.sh: the headers come from a pinned submodule and the import
+# library is the static dlopen shim, built once per build tree and never shipped.
 OPENCL_HEADERS_DIR="$PROJECT_ROOT/vendor/OpenCL-Headers"
-OPENCL_ICD_DIR="$PROJECT_ROOT/vendor/OpenCL-ICD-Loader"
+OPENCL_SHIM_DIR="$PROJECT_ROOT/vox-commander/src/main/cpp/opencl-shim"
 OPENCL_STAGE_DIR="$WHISPER_DIR/$BUILD_DIR-opencl-stub"
 
 # --- ROLLBACK FUNCTION ---
@@ -116,18 +116,20 @@ mkdir -p "$WHISPER_DIR/$BUILD_DIR"
 cd "$WHISPER_DIR/$BUILD_DIR" || exit 1
 
 # --- OPENCL IMPORT STUB (once per build tree) ---
-OPENCL_STUB_LIB="$OPENCL_STAGE_DIR/libOpenCL.so"
+OPENCL_STUB_LIB="$OPENCL_STAGE_DIR/libOpenCL.a"
 if [ ! -f "$OPENCL_STUB_LIB" ]; then
-    log_info "⚙️ Building the OpenCL ICD loader (link stub, arm64)..."
-    cmake -S "$OPENCL_ICD_DIR" -B "$OPENCL_STAGE_DIR" \
+    log_info "⚙️ Building the OpenCL dlopen shim (static import library, arm64)..."
+    # Static, not the real loader: a linked loader lands in DT_NEEDED and a device without the
+    # vendor driver then refuses to load the engine library itself. The shim resolves the driver
+    # with dlopen at first use and reports zero platforms when there is none.
+    cmake -S "$OPENCL_SHIM_DIR" -B "$OPENCL_STAGE_DIR" \
       -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" \
       -DANDROID_ABI=arm64-v8a \
       -DANDROID_PLATFORM=android-33 \
       -DCMAKE_BUILD_TYPE=Release \
-      -DOPENCL_ICD_LOADER_HEADERS_DIR="$OPENCL_HEADERS_DIR" \
-      -DBUILD_TESTING=OFF
+      -DOPENCL_HEADERS_DIR="$OPENCL_HEADERS_DIR"
     cmake --build "$OPENCL_STAGE_DIR" --config Release -j 8
-    [ -f "$OPENCL_STUB_LIB" ] || { log_error "❌ ICD loader stub did not produce libOpenCL.so"; exit 1; }
+    [ -f "$OPENCL_STUB_LIB" ] || { log_error "❌ shim build did not produce libOpenCL.a"; exit 1; }
 fi
 
 if [ ! -f "CMakeCache.txt" ]; then

@@ -3,10 +3,10 @@ set -e
 
 # Builds libllama.so (llama.cpp + JNI wrapper, hybrid CPU+OpenCL, static ggml) and deploys it
 # beside the other jniLibs. Same shape as check_whisper.sh. The GPU inputs are repo-pinned
-# submodules, not host packages: the Khronos headers compile in, and the ICD loader is
-# cross-compiled once per build tree purely as the import library ggml links against — the .so
-# it produces is never shipped, the device's own vendor libOpenCL.so resolves at runtime
-# (declared via uses-native-library). How much runs on the GPU is decided per model load
+# submodules, not host packages: the Khronos headers compile in, and the import library ggml links
+# against is a static dlopen shim built once per build tree — nothing OpenCL lands in the
+# final library's DT_NEEDED, and the device's own vendor libOpenCL.so is resolved at first
+# use (declared via uses-native-library), or reported absent as zero platforms. How much runs on the GPU is decided per model load
 # (n_gpu_layers through the JNI), not here.
 
 # shellcheck source=scripts/lib/common.sh
@@ -21,7 +21,7 @@ BUILD_DIR="build-android"
 
 # --- OPENCL BUILD INPUTS (repo-pinned, no host packages) ---
 OPENCL_HEADERS_DIR="$PROJECT_ROOT/vendor/OpenCL-Headers"
-OPENCL_ICD_DIR="$PROJECT_ROOT/vendor/OpenCL-ICD-Loader"
+OPENCL_SHIM_DIR="$PROJECT_ROOT/vox-commander/src/main/cpp/opencl-shim"
 OPENCL_STAGE_DIR="$WRAPPER_DIR/$BUILD_DIR-opencl-stub"
 
 FORCE_REBUILD=false
@@ -119,18 +119,20 @@ cd "$WRAPPER_DIR/$BUILD_DIR" || exit 1
 # find_package(OpenCL) inside ggml wants a library file to exist at configure time, so the ICD
 # loader is cross-compiled first into its own tree. It is an import library only: never deployed,
 # never hashed, never shipped — the device's vendor driver is what actually answers at runtime.
-OPENCL_STUB_LIB="$OPENCL_STAGE_DIR/libOpenCL.so"
+OPENCL_STUB_LIB="$OPENCL_STAGE_DIR/libOpenCL.a"
 if [ ! -f "$OPENCL_STUB_LIB" ]; then
-    log_info "⚙️ Building the OpenCL ICD loader (link stub, arm64)..."
-    cmake -S "$OPENCL_ICD_DIR" -B "$OPENCL_STAGE_DIR" \
+    log_info "⚙️ Building the OpenCL dlopen shim (static import library, arm64)..."
+    # Static, not the real loader: a linked loader lands in DT_NEEDED and a device without the
+    # vendor driver then refuses to load the engine library itself. The shim resolves the driver
+    # with dlopen at first use and reports zero platforms when there is none.
+    cmake -S "$OPENCL_SHIM_DIR" -B "$OPENCL_STAGE_DIR" \
       -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" \
       -DANDROID_ABI=arm64-v8a \
       -DANDROID_PLATFORM=android-33 \
       -DCMAKE_BUILD_TYPE=Release \
-      -DOPENCL_ICD_LOADER_HEADERS_DIR="$OPENCL_HEADERS_DIR" \
-      -DBUILD_TESTING=OFF
+      -DOPENCL_HEADERS_DIR="$OPENCL_HEADERS_DIR"
     cmake --build "$OPENCL_STAGE_DIR" --config Release -j 8
-    [ -f "$OPENCL_STUB_LIB" ] || { log_error "❌ ICD loader stub did not produce libOpenCL.so"; exit 1; }
+    [ -f "$OPENCL_STUB_LIB" ] || { log_error "❌ shim build did not produce libOpenCL.a"; exit 1; }
 fi
 
 if [ ! -f "CMakeCache.txt" ]; then
