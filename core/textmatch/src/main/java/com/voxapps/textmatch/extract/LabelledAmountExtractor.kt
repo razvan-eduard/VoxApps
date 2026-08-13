@@ -53,6 +53,13 @@ object LabelledAmountExtractor {
                 foundAt++
                 ahead++
                 if (lines[foundAt].isBlank()) continue
+                // A look-ahead line must be a value cell, not prose that happens to contain
+                // digits. A tabular column break puts the label's figure alone on the next line;
+                // a sentence between them ("…conform Legii 225/2016…") is running text whose
+                // numbers are citations, dates and durations — none of them the label's value.
+                // The label's own line is exempt: it names the value, so prose around it is
+                // expected.
+                if (!isValueCell(lines[foundAt])) break
                 amounts = amountsIn(lines[foundAt])
             }
 
@@ -61,6 +68,18 @@ object LabelledAmountExtractor {
             }
         }
         return out
+    }
+
+    /**
+     * True when a line is essentially a figure and nothing else — what a column break leaves
+     * behind. Judged by residue: with every amount, separator and currency marker removed, a
+     * value cell has almost no letters left, while a sentence keeps its words.
+     */
+    private fun isValueCell(line: String): Boolean {
+        val withoutRates = percentRegex.replace(line, " ")
+        val residue = amountRegex.replace(withoutRates, " ")
+        val letters = residue.count { it.isLetter() }
+        return letters <= 4
     }
 
     private fun amountsIn(line: String): List<Pair<Double, String>> {

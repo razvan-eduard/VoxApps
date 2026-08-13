@@ -101,6 +101,30 @@ class LabelledAmountExtractorTest {
     }
 
     @Test
+    fun `prose between a label and its value is not a value cell`() {
+        // The exact shape a real scan produced: OCR interleaved legal boilerplate between the
+        // label and its figure, and the statute number in it ("Legii 225/2016") was harvested as
+        // the amount — outscoring the genuine total. A look-ahead line must be a bare figure.
+        val text = """
+            Total Factura
+            intarziere. Serviciul poate fi suspendat. Conform Legii 225/2016,
+            Sold Anterior
+            44.42
+            Total de Plata
+            66.63
+        """.trimIndent()
+
+        val found = LabelledAmountExtractor.find(text, totals)
+        assertEquals(listOf(66.63), found.map { it.value })
+    }
+
+    @Test
+    fun `a value cell with a currency marker still qualifies`() {
+        val text = "Total de Plata\n66.63 RON"
+        assertEquals(66.63, LabelledAmountExtractor.find(text, totals).single().value, 0.001)
+    }
+
+    @Test
     fun `lookAhead zero requires label and value to share a line`() {
         val text = "Total de Plata\n66.63"
         assertTrue(LabelledAmountExtractor.find(text, totals, lookAhead = 0).isEmpty())
