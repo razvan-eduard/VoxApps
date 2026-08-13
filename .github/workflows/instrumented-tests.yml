@@ -83,9 +83,10 @@ jobs:
 
       - name: Check out the OpenCL build inputs
         run: |
-          # The OpenCL backend's headers and ICD link stub are pinned submodules; kernel
+          # The OpenCL headers are a pinned submodule (the import library is an in-repo dlopen
+          # shim); kernel
           # embedding needs only python3, which the runner already has.
-          git submodule update --init vendor/OpenCL-Headers vendor/OpenCL-ICD-Loader
+          git submodule update --init vendor/OpenCL-Headers
 
       - name: Build libllama.so
         run: ./scripts/vox native llama
