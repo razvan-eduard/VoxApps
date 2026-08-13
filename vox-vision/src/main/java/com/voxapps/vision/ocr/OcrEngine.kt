@@ -15,7 +15,9 @@ class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
 
     suspend fun recognize(bitmap: Bitmap): String {
         val result = paddleOcr.recognize(bitmap)
-        return result.results.joinToString("\n") { it.text }
+        // Row order, not detector order: the raw result list follows detection, which scatters a
+        // printed row into fragments the moment a photo is skewed or the document is tabular.
+        return RowClusterer.toText(result.results)
     }
 
     suspend fun release() = paddleOcr.release()
