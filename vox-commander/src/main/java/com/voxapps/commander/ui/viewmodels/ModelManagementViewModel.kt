@@ -83,10 +83,10 @@ class ModelManagementViewModel(
 
     fun dismissVulkanError() { _showVulkanError.value = false }
 
-    val vulkanTestState = appStateManager.vulkanTestState
-    val vulkanTestPassed = appStateManager.vulkanTestPassed
+    val gpuTestState = appStateManager.gpuTestState
+    val gpuTestPassed = appStateManager.gpuTestPassed
 
-    fun dismissVulkanTestResult() { appStateManager.dismissVulkanTestResult() }
+    fun dismissGpuTestResult() { appStateManager.dismissGpuTestResult() }
 
     // --- DOWNLOAD TRACKING ---
     private var progressJob: Job? = null

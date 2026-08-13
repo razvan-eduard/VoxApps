@@ -140,7 +140,7 @@ class WhisperLib {
 
         // The device-capability and self-test probes (isVulkanSupported /
         // isVulkanWorkloadSupported) are gone: the real GPU compatibility answer comes from
-        // running an actual inference in an isolated process (VulkanProbeService), which is
+        // running an actual inference in an isolated process (GpuProbeService), which is
         // stronger evidence than a synthetic matmul and cannot half-pass. The native symbols
         // they bound to still exist in libwhisper.so — unreferenced until the next submodule
         // bump can remove them under a moving tag.

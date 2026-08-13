@@ -34,7 +34,7 @@ import com.voxapps.commander.ui.components.AppScanModal
 import com.voxapps.commander.ui.components.ModelNotPresentMessage
 import com.voxapps.commander.ui.components.TopHeaderContainer
 import com.voxapps.commander.ui.components.TopHeaderMode
-import com.voxapps.commander.ui.components.VulkanTestModal
+import com.voxapps.commander.ui.components.GpuTestModal
 import com.voxapps.commander.ui.viewmodels.MainViewModel
 import com.voxapps.commander.utils.NetworkMonitor
 import com.voxapps.commander.utils.Strings
@@ -289,10 +289,10 @@ fun MainScreen(
         )
 
         // --- VULKAN TEST MODAL ---
-        VulkanTestModal(
-            vulkanTestState = appStateManager.vulkanTestState.collectAsStateWithLifecycle().value,
-            vulkanTestPassed = appStateManager.vulkanTestPassed.collectAsStateWithLifecycle().value,
-            onDismiss = { appStateManager.dismissVulkanTestResult() }
+        GpuTestModal(
+            gpuTestState = appStateManager.gpuTestState.collectAsStateWithLifecycle().value,
+            gpuTestPassed = appStateManager.gpuTestPassed.collectAsStateWithLifecycle().value,
+            onDismiss = { appStateManager.dismissGpuTestResult() }
 
         )
 

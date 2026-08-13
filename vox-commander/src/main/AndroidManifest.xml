@@ -117,10 +117,10 @@
         <!-- Runs the Vulkan GPU self-test in an isolated process so a native GPU crash
              cannot take down the main app. -->
         <service
-            android:name=".domain.diagnostic.VulkanProbeService"
+            android:name=".domain.diagnostic.GpuProbeService"
             android:enabled="true"
             android:exported="false"
-            android:process=":vulkanprobe" />
+            android:process=":gpuprobe" />
 
         <!-- BroadcastReceiver for download completion in background -->
         <receiver
