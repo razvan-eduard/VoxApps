@@ -137,17 +137,26 @@ object ContinuityMatcher {
         else -> Strictness.MEDIUM
     }
 
+    // Both trims cut the ORIGINAL text at word boundaries and keep every character between the
+    // surviving words verbatim. Rebuilding from split words joined with spaces — the previous
+    // form — flattened newlines out of whatever it touched, and the matched run is always
+    // dropped from a fresh shot, so every stitched shot after the first lost its line structure.
+    // Once OCR emits reading-order rows, those newlines are the row boundaries every consumer
+    // depends on; a trim's job is to remove words at an edge, not to reformat the document.
+    private val wordRun = Regex("\\S+")
+
     private fun dropLastWords(text: String, count: Int): String {
         if (count <= 0) return text
-        val words = text.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
-        if (count >= words.size) return ""
-        return words.dropLast(count).joinToString(" ")
+        val spans = wordRun.findAll(text).toList()
+        if (count >= spans.size) return ""
+        return text.substring(0, spans[spans.size - count].range.first).trimEnd()
     }
 
     private fun dropFirstWords(text: String, count: Int): String {
         if (count <= 0) return text
-        val words = text.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
-        return words.drop(count).joinToString(" ")
+        val spans = wordRun.findAll(text).toList()
+        if (count >= spans.size) return ""
+        return text.substring(spans[count].range.first)
     }
 
     /** [previousTrimmed] is [previousKeptText] with its trailing noise (if any) dropped — this can
