@@ -210,16 +210,25 @@ androidComponents {
     onVariants { variant ->
         val jniLibs = variant.packaging.jniLibs
         if (variant.buildType == "release") {
+            // Whisper is the one payload always fetched on demand: ~88MB an optional engine that
+            // most installs never enable, and the F-Droid trust story for an explicit "download
+            // this extra engine" action is defensible in a way a silent core download is not.
             jniLibs.excludes.addAll(whisperLibs.map { "lib/arm64-v8a/$it" })
-            // Same treatment as whisper: built locally, published per-commit, fetched on demand.
-            jniLibs.excludes.addAll(llamaLibs.map { "lib/arm64-v8a/$it" })
             // Never loaded in any mode (see unusedSherpaLibs), so every release drops them.
             jniLibs.excludes.addAll(unusedSherpaLibs.map { "lib/arm64-v8a/$it" })
             if (dlcMode == "full") {
+                // The lean variant: the local LLM runtime rides out to a release asset and the app
+                // fetches it on first use, keeping the APK small for a direct-download channel.
+                jniLibs.excludes.addAll(llamaLibs.map { "lib/arm64-v8a/$it" })
                 // Excluding a path drops every artifact's copy of it, so the two libonnxruntime.so
                 // sources cannot collide here and no pickFirst is needed.
                 jniLibs.excludes.addAll(dlcLibs.map { "lib/arm64-v8a/$it" })
             } else {
+                // The default (and the from-source F-Droid build): the LLM runtime — the one
+                // engine an install cannot do without and the one whose download kept failing —
+                // is compiled from source into the APK. LlamaEngineManager finds it in
+                // nativeLibraryDir and never downloads. Costs ~39MB, buys an offline-ready engine
+                // and closes the runtime-download trust gap for the core.
                 jniLibs.pickFirsts.add(onnxRuntimePath)
             }
         } else {
