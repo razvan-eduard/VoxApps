@@ -60,7 +60,7 @@ class BenchmarkEngine(
         // is reached. Nothing loads them at startup — they are downloaded on demand and loaded when
         // Whisper is actually used — so calling it cold threw an UnsatisfiedLinkError that took the
         // whole app down from a settings button. The other two callers (WhisperCppSttEngine,
-        // VulkanProbeService) already load first; this one didn't.
+        // GpuProbeService) already load first; this one didn't.
         val whisperLibDir = com.voxapps.commander.data.remote.WhisperEngineManager.libDir(context).absolutePath
         diagInfo.append(
             if (WhisperLib.load(whisperLibDir)) WhisperLib.getSystemInfo()

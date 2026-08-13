@@ -52,7 +52,7 @@ data class NativeLibStatus(
     val category: String = ""
 )
 
-enum class VulkanTestState {
+enum class GpuTestState {
     IDLE,
     RUNNING,
     RESULT
@@ -118,11 +118,11 @@ class AppStateManager private constructor(
     val nativeLibsStatus: StateFlow<List<NativeLibStatus>> = _nativeLibsStatus.asStateFlow()
 
     // --- VULKAN TEST STATE ---
-    private val _vulkanTestState = MutableStateFlow(VulkanTestState.IDLE)
-    val vulkanTestState: StateFlow<VulkanTestState> = _vulkanTestState.asStateFlow()
+    private val _gpuTestState = MutableStateFlow(GpuTestState.IDLE)
+    val gpuTestState: StateFlow<GpuTestState> = _gpuTestState.asStateFlow()
 
-    private val _vulkanTestPassed = MutableStateFlow<Boolean?>(null)
-    val vulkanTestPassed: StateFlow<Boolean?> = _vulkanTestPassed.asStateFlow()
+    private val _gpuTestPassed = MutableStateFlow<Boolean?>(null)
+    val gpuTestPassed: StateFlow<Boolean?> = _gpuTestPassed.asStateFlow()
 
     /** Which engine the running/most recent GPU test is about — the modal's label. */
     private val _gpuTestEngine = MutableStateFlow<String?>(null)
@@ -134,6 +134,14 @@ class AppStateManager private constructor(
      * loaded there is nothing to answer with — and the switch staying on with no verdict behind it
      * is the part worth saying out loud rather than leaving the user to infer.
      */
+    /** The engine whose switch went back off because the build carries no GPU backend. */
+    private val _gpuNoBackend = MutableStateFlow<String?>(null)
+    val gpuNoBackend: StateFlow<String?> = _gpuNoBackend.asStateFlow()
+
+    fun dismissGpuNoBackend() {
+        _gpuNoBackend.value = null
+    }
+
     private val _gpuTestDeferred = MutableStateFlow<String?>(null)
     val gpuTestDeferred: StateFlow<String?> = _gpuTestDeferred.asStateFlow()
 
@@ -587,7 +595,7 @@ class AppStateManager private constructor(
             Triple("libwhisper.so", "Core Whisper STT Engine", WhisperCppSttEngine.ENGINE_KEY),
             Triple("libomp.so", "OpenMP Multi-threading", WhisperCppSttEngine.ENGINE_KEY),
             // Vulkan is a capability, not a file — the backend is inside libwhisper.so, and whether
-            // it can be used is decided by VulkanProbeService running real GPU work in its own
+            // it can be used is decided by GpuProbeService running real GPU work in its own
             // process. Answered by the probe's verdict rather than by looking for a library.
             Triple(VULKAN_CAPABILITY_WHISPER, "Whisper GPU Acceleration", WhisperCppSttEngine.ENGINE_KEY),
             Triple("libvosk.so", "Vosk Voice Engine", VoskSttEngine.ENGINE_KEY),
@@ -712,8 +720,8 @@ class AppStateManager private constructor(
     }
 
     private fun startGpuTest(engine: String) {
-        _vulkanTestState.value = VulkanTestState.RUNNING
-        _vulkanTestPassed.value = null
+        _gpuTestState.value = GpuTestState.RUNNING
+        _gpuTestPassed.value = null
         _gpuTestEngine.value = engine
 
         scope.launch {
@@ -725,28 +733,28 @@ class AppStateManager private constructor(
                 // still guard the first real GPU use, and that use is where the verdict will
                 // come from instead.
                 Logger.log("GPU test for $engine deferred — no model loaded to test against", "GpuTest")
-                _vulkanTestState.value = VulkanTestState.IDLE
+                _gpuTestState.value = GpuTestState.IDLE
                 _gpuTestEngine.value = null
                 _gpuTestDeferred.value = engine
                 return@launch
             }
             Logger.log("Starting GPU compatibility test for $engine with model: $modelPath", "GpuTest")
-            com.voxapps.commander.domain.diagnostic.VulkanProbe(
+            com.voxapps.commander.domain.diagnostic.GpuProbe(
                 context = context,
                 modelPath = modelPath,
                 engine = engine
             ) { outcome ->
                 when (outcome) {
-                    com.voxapps.commander.domain.diagnostic.VulkanProbe.Outcome.COMPATIBLE -> {
+                    com.voxapps.commander.domain.diagnostic.GpuProbe.Outcome.COMPATIBLE -> {
                         Logger.log("GPU test for $engine PASSED", "GpuTest")
-                        _vulkanTestState.value = VulkanTestState.RESULT
-                        _vulkanTestPassed.value = true
+                        _gpuTestState.value = GpuTestState.RESULT
+                        _gpuTestPassed.value = true
                         scope.launch { repo.setGpuProbeDone(engine, true) }
                     }
-                    com.voxapps.commander.domain.diagnostic.VulkanProbe.Outcome.INCOMPATIBLE -> {
+                    com.voxapps.commander.domain.diagnostic.GpuProbe.Outcome.INCOMPATIBLE -> {
                         Logger.log("GPU test for $engine FAILED — staying on the CPU", "GpuTest")
-                        _vulkanTestState.value = VulkanTestState.RESULT
-                        _vulkanTestPassed.value = false
+                        _gpuTestState.value = GpuTestState.RESULT
+                        _gpuTestPassed.value = false
                         scope.launch {
                             repo.setGpuIncompatible(engine, true)
                             repo.setGpuProbeDone(engine, true)
@@ -755,12 +763,23 @@ class AppStateManager private constructor(
                             repo.setGpuEnabled(engine, false)
                         }
                     }
-                    com.voxapps.commander.domain.diagnostic.VulkanProbe.Outcome.UNDECIDED -> {
+                    com.voxapps.commander.domain.diagnostic.GpuProbe.Outcome.NO_GPU_BACKEND -> {
+                        // No verdict is recorded and no strike is counted: nothing was learned
+                        // about this device. The switch goes back off because there is nothing
+                        // behind it, and a build that later carries a backend probes afresh.
+                        Logger.log("GPU test for $engine found no GPU backend — staying on the CPU", "GpuTest")
+                        _gpuTestState.value = GpuTestState.IDLE
+                        _gpuTestPassed.value = null
+                        _gpuTestEngine.value = null
+                        scope.launch { repo.setGpuEnabled(engine, false) }
+                        _gpuNoBackend.value = engine
+                    }
+                    com.voxapps.commander.domain.diagnostic.GpuProbe.Outcome.UNDECIDED -> {
                         // Persist the attempt and stop: no automatic re-fire. The user can flip
                         // the toggle again (until the attempt budget runs out) or Test again.
                         Logger.log("GPU test for $engine UNDECIDED", "GpuTest")
-                        _vulkanTestState.value = VulkanTestState.IDLE
-                        _vulkanTestPassed.value = null
+                        _gpuTestState.value = GpuTestState.IDLE
+                        _gpuTestPassed.value = null
                         _gpuTestEngine.value = null
                         scope.launch {
                             val s = repo.getSettingsSnapshot()
@@ -773,9 +792,9 @@ class AppStateManager private constructor(
         }
     }
 
-    fun dismissVulkanTestResult() {
-        _vulkanTestState.value = VulkanTestState.IDLE
-        _vulkanTestPassed.value = null
+    fun dismissGpuTestResult() {
+        _gpuTestState.value = GpuTestState.IDLE
+        _gpuTestPassed.value = null
         _gpuTestEngine.value = null
     }
 

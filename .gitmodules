@@ -16,3 +16,9 @@
 [submodule "vox-commander/src/main/cpp/llama.cpp"]
 	path = vox-commander/src/main/cpp/llama.cpp
 	url = https://github.com/ggml-org/llama.cpp.git
+[submodule "vendor/OpenCL-Headers"]
+	path = vendor/OpenCL-Headers
+	url = https://github.com/KhronosGroup/OpenCL-Headers.git
+[submodule "vendor/OpenCL-ICD-Loader"]
+	path = vendor/OpenCL-ICD-Loader
+	url = https://github.com/KhronosGroup/OpenCL-ICD-Loader.git

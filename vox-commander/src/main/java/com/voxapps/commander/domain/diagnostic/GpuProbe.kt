@@ -18,7 +18,7 @@ import com.voxapps.commander.utils.Strings
 
 /**
  * Orchestrates a one-shot, isolated GPU compatibility test for one engine (whisper or llama —
- * see [SettingsRepository.GPU_WHISPER]/[GPU_LLAMA]). Binds to [VulkanProbeService] (separate
+ * see [SettingsRepository.GPU_WHISPER]/[GPU_LLAMA]). Binds to [GpuProbeService] (separate
  * process) and asks it to run a real GPU inference, reporting the outcome via [onResult]:
  *
  *  - result ok=true            -> COMPATIBLE
@@ -34,13 +34,18 @@ import com.voxapps.commander.utils.Strings
  *
  * The probe persists nothing itself; the caller decides what to store based on [Outcome].
  */
-class VulkanProbe(
+class GpuProbe(
     private val context: Context,
     private val modelPath: String,
     private val engine: String = SettingsRepository.GPU_WHISPER,
     private val onResult: (Outcome) -> Unit
 ) {
-    enum class Outcome { COMPATIBLE, INCOMPATIBLE, UNDECIDED }
+    /**
+     * [NO_GPU_BACKEND] is not a judgement on the device: the build carries no GPU backend, or the
+     * backend finds no device, so the workload ran on the CPU and answered correctly. Folding that
+     * into [COMPATIBLE] would record a verified GPU for work no GPU touched.
+     */
+    enum class Outcome { COMPATIBLE, INCOMPATIBLE, UNDECIDED, NO_GPU_BACKEND }
 
     private val handler = Handler(Looper.getMainLooper())
     private var finished = false
@@ -48,9 +53,14 @@ class VulkanProbe(
 
     private val replyMessenger = Messenger(object : Handler(Looper.getMainLooper()) {
         override fun handleMessage(msg: Message) {
-            if (msg.what == VulkanProbeService.MSG_RESULT) {
+            if (msg.what == GpuProbeService.MSG_RESULT) {
                 gotResult = true
-                finish(if (msg.arg1 == 1) Outcome.COMPATIBLE else Outcome.INCOMPATIBLE, "result")
+                val outcome = when (msg.arg1) {
+                    GpuProbeService.RESULT_OK -> Outcome.COMPATIBLE
+                    GpuProbeService.RESULT_NO_GPU -> Outcome.NO_GPU_BACKEND
+                    else -> Outcome.INCOMPATIBLE
+                }
+                finish(outcome, "result")
             }
         }
     })
@@ -58,7 +68,7 @@ class VulkanProbe(
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             try {
-                val m = Message.obtain(null, VulkanProbeService.MSG_RUN_TEST)
+                val m = Message.obtain(null, GpuProbeService.MSG_RUN_TEST)
                 m.replyTo = replyMessenger
                 Messenger(service).send(m)
             } catch (e: Exception) {
@@ -84,7 +94,7 @@ class VulkanProbe(
         return try {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             val record = am.getHistoricalProcessExitReasons(context.packageName, 0, 8)
-                .firstOrNull { it.processName.endsWith(":vulkanprobe") }
+                .firstOrNull { it.processName.endsWith(":gpuprobe") }
                 ?: return Outcome.INCOMPATIBLE
             when (record.reason) {
                 ApplicationExitInfo.REASON_CRASH_NATIVE,
@@ -99,12 +109,12 @@ class VulkanProbe(
 
     fun start() {
         try {
-            val intent = Intent(context, VulkanProbeService::class.java)
-            intent.putExtra(VulkanProbeService.EXTRA_MODEL_PATH, modelPath)
-            intent.putExtra(VulkanProbeService.EXTRA_ENGINE, engine)
+            val intent = Intent(context, GpuProbeService::class.java)
+            intent.putExtra(GpuProbeService.EXTRA_MODEL_PATH, modelPath)
+            intent.putExtra(GpuProbeService.EXTRA_ENGINE, engine)
             val bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
             if (!bound) {
-                Logger.log("Could not bind VulkanProbeService", TAG)
+                Logger.log("Could not bind GpuProbeService", TAG)
                 finish(Outcome.UNDECIDED, "bind-failed")
                 return
             }

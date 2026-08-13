@@ -26,7 +26,7 @@ import kotlin.concurrent.thread
  * attributes it, keeping the main app crash-free. Which engine is probed rides in
  * [EXTRA_ENGINE] ([SettingsRepository.GPU_WHISPER] / [SettingsRepository.GPU_LLAMA]).
  */
-class VulkanProbeService : Service() {
+class GpuProbeService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val messenger = Messenger(IncomingHandler())
@@ -44,14 +44,14 @@ class VulkanProbeService : Service() {
             when (msg.what) {
                 MSG_RUN_TEST -> {
                     val reply = msg.replyTo
-                    thread(name = "vulkan-inference-test") {
+                    thread(name = "gpu-inference-test") {
                         // May crash this (isolated) process natively on broken GPUs.
-                        val ok = if (engine == SettingsRepository.GPU_LLAMA) {
+                        val code = if (engine == SettingsRepository.GPU_LLAMA) {
                             runLlamaInferenceTest()
                         } else {
-                            runFullInferenceTest()
+                            if (runFullInferenceTest()) RESULT_OK else RESULT_FAILED
                         }
-                        sendResult(reply, ok)
+                        sendResult(reply, code)
                     }
                 }
                 else -> super.handleMessage(msg)
@@ -108,11 +108,11 @@ class VulkanProbeService : Service() {
      * shader compilation, matmul, grammar-constrained sampling — ran on this device's GPU and
      * produced a correct result; a plausible-looking wrong answer fails, same as a crash.
      */
-    private fun runLlamaInferenceTest(): Boolean {
+    private fun runLlamaInferenceTest(): Int {
         val path = modelPath
         if (path == null || !File(path).exists()) {
             Logger.log("Llama probe model invalid or not found: $path", TAG)
-            return false
+            return RESULT_FAILED
         }
         return try {
             // Same no-repair contract as the whisper branch: this process answers whether the
@@ -120,7 +120,14 @@ class VulkanProbeService : Service() {
             val libDir = com.voxapps.commander.data.remote.LlamaEngineManager(this).libDir
             if (!LibLlama.load(libDir)) {
                 Logger.log("llama native library failed to load — cannot probe", TAG)
-                return false
+                return RESULT_FAILED
+            }
+            // Asked before the workload, because the workload cannot answer it. A build with no
+            // GPU backend, or a device the backend finds no GPU on, runs the whole thing on the
+            // CPU and returns the right answer — indistinguishable from success by result alone.
+            if (LlamaBridgeImpl.gpuMemory() == null) {
+                Logger.log("No GPU device reported — nothing to probe", TAG)
+                return RESULT_NO_GPU
             }
             val handle = LlamaBridgeImpl.loadModel(path, nCtx = 512, nThreads = 2, nGpuLayers = -1)
             try {
@@ -133,22 +140,22 @@ class VulkanProbeService : Service() {
                     temperature = 0.1f
                 )
                 Logger.log("Llama GPU probe output: $out", TAG)
-                out == "XOK"
+                if (out == "XOK") RESULT_OK else RESULT_FAILED
             } finally {
                 LlamaBridgeImpl.freeModel(handle)
             }
         } catch (e: Throwable) {
             Logger.log("Llama GPU probe failed: ${e.message}", TAG)
-            false
+            RESULT_FAILED
         }
     }
 
-    private fun sendResult(reply: Messenger?, ok: Boolean) {
+    private fun sendResult(reply: Messenger?, code: Int) {
         try {
             val m = Message.obtain(null, MSG_RESULT)
-            m.arg1 = if (ok) 1 else 0
+            m.arg1 = code
             reply?.send(m)
-            Logger.log("Self-test finished in isolated process: ok=$ok", TAG)
+            Logger.log("Self-test finished in isolated process: code=$code", TAG)
         } catch (e: RemoteException) {
             Logger.log("Failed to send self-test result: ${e.message}", TAG)
         }
@@ -156,9 +163,20 @@ class VulkanProbeService : Service() {
     }
 
     companion object {
-        const val TAG = "VulkanProbeService"
+        const val TAG = "GpuProbeService"
         const val MSG_RUN_TEST = 1
         const val MSG_RESULT = 2
+
+        /** A real GPU ran the workload and produced the right answer. */
+        const val RESULT_OK = 1
+        /** The workload ran but failed, or the process died carrying it. */
+        const val RESULT_FAILED = 0
+        /**
+         * There is no GPU device to test. Distinct from a failure because the workload does not
+         * crash and does not answer wrongly — it quietly runs on the CPU and looks like a pass,
+         * which would hand out a verified verdict for work no GPU touched.
+         */
+        const val RESULT_NO_GPU = 2
         const val EXTRA_MODEL_PATH = "model_path"
         const val EXTRA_ENGINE = "engine"
     }

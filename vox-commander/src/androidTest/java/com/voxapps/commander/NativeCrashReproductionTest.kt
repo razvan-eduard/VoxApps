@@ -52,9 +52,9 @@ import java.io.File
  *    - Root cause: ggml backend registry using unsupported CPU instruction on Honor N39
  *
  * 3. **Vulkan probe SIGSEGV** (tombstone_00-07):
- *    - Signal 11 (SIGSEGV) in com.voxapps.commander:vulkanprobe process
+ *    - Signal 11 (SIGSEGV) in com.voxapps.commander:gpuprobe process
  *    - In Vulkan inference during whisper_init_with_params
- *    - Root cause: GPU driver incompatibility, already handled by VulkanProbeService isolation
+ *    - Root cause: GPU driver incompatibility, already handled by GpuProbeService isolation
  */
 @RunWith(AndroidJUnit4::class)
 class NativeCrashReproductionTest {
@@ -189,7 +189,7 @@ class NativeCrashReproductionTest {
     // ================================================================
 
     /**
-     * Verifies that VulkanProbeService runs in a separate process (:vulkanprobe)
+     * Verifies that GpuProbeService runs in a separate process (:gpuprobe)
      * so that a SIGSEGV during GPU inference doesn't kill the main app process.
      *
      * This is a non-crash test — it verifies the isolation mechanism works.
@@ -198,22 +198,22 @@ class NativeCrashReproductionTest {
     fun `vulkan_probeService_isIsolatedProcess`() {
         val pm = context.packageManager
         val serviceInfo = pm.getServiceInfo(
-            android.content.ComponentName(context, com.voxapps.commander.domain.diagnostic.VulkanProbeService::class.java),
+            android.content.ComponentName(context, com.voxapps.commander.domain.diagnostic.GpuProbeService::class.java),
             android.content.pm.PackageManager.GET_META_DATA
         )
 
-        assertNotNull("VulkanProbeService should be registered", serviceInfo)
+        assertNotNull("GpuProbeService should be registered", serviceInfo)
 
-        // Check if the service declares android:process=":vulkanprobe"
-        // The process name should contain "vulkanprobe"
+        // Check if the service declares android:process=":gpuprobe"
+        // The process name should contain "gpuprobe"
         val processName = serviceInfo.processName
-        android.util.Log.i("NativeCrashTest", "VulkanProbeService process: $processName")
+        android.util.Log.i("NativeCrashTest", "GpuProbeService process: $processName")
 
-        // If processName is set to :vulkanprobe, the service runs in a separate process
+        // If processName is set to :gpuprobe, the service runs in a separate process
         // and a crash there won't kill the main app
         assertTrue(
-            "VulkanProbeService should run in isolated process (:vulkanprobe), got: $processName",
-            processName != null && processName.contains("vulkanprobe")
+            "GpuProbeService should run in isolated process (:gpuprobe), got: $processName",
+            processName != null && processName.contains("gpuprobe")
         )
     }
 

@@ -17,19 +17,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.voxapps.commander.state.VulkanTestState
+import com.voxapps.commander.state.GpuTestState
 
 @Composable
-fun VulkanTestModal(
-    vulkanTestState: VulkanTestState,
-    vulkanTestPassed: Boolean?,
+fun GpuTestModal(
+    gpuTestState: GpuTestState,
+    gpuTestPassed: Boolean?,
     onDismiss: () -> Unit,
 ) {
     val languageManager = com.voxapps.commander.ui.LocalLanguageManager.current
-    if (vulkanTestState == VulkanTestState.IDLE) return
+    if (gpuTestState == GpuTestState.IDLE) return
 
-    val isRunning = vulkanTestState == VulkanTestState.RUNNING
-    val isResult = vulkanTestState == VulkanTestState.RESULT
+    val isRunning = gpuTestState == GpuTestState.RUNNING
+    val isResult = gpuTestState == GpuTestState.RESULT
 
     Dialog(
         onDismissRequest = { if (!isRunning) onDismiss() },
@@ -81,8 +81,8 @@ fun VulkanTestModal(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    } else if (isResult && vulkanTestPassed != null) {
-                        val isSuccess = vulkanTestPassed
+                    } else if (isResult && gpuTestPassed != null) {
+                        val isSuccess = gpuTestPassed
                         val themeColor = if (isSuccess) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
                         
                         Box(

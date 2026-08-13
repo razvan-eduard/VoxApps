@@ -52,6 +52,7 @@ fun AdvancedSettingsTab(
     val systemInfo by appStateManager.systemInfo.collectAsStateWithLifecycle()
     val logs by Logger.verboseLogs.collectAsStateWithLifecycle()
     val gpuTestDeferred by appStateManager.gpuTestDeferred.collectAsStateWithLifecycle()
+    val gpuNoBackend by appStateManager.gpuNoBackend.collectAsStateWithLifecycle()
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())
 
     val appContainer = remember { (context.applicationContext as com.voxapps.commander.VoxApplication).container }
@@ -447,6 +448,23 @@ fun AdvancedSettingsTab(
 
     }
 
+    // --- GPU NO-BACKEND DIALOG ---
+    // The probe ran and found nothing to test: no GPU backend in the build, or no usable device.
+    // Said out loud because the switch snapping back off with no verdict line would otherwise
+    // look like a silent malfunction.
+    if (gpuNoBackend != null) {
+        AlertDialog(
+            onDismissRequest = { appStateManager.dismissGpuNoBackend() },
+            title = { Text(languageManager.getString("gpu_no_backend_title")) },
+            text = { Text(languageManager.getString("gpu_no_backend_message")) },
+            confirmButton = {
+                TextButton(onClick = { appStateManager.dismissGpuNoBackend() }) {
+                    Text(languageManager.getString("ok"))
+                }
+            }
+        )
+    }
+
     // --- GPU TEST DEFERRED DIALOG ---
     // Enabling the switch normally answers the compatibility question on the spot. With no model
     // loaded for that engine there is nothing to answer it with, so say when the answer will come
@@ -614,18 +632,19 @@ private fun GpuAccelerationRow(
             else -> null
         }
         if (verdict != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // Stacked rather than sharing a row: a verdict runs to a full sentence, and beside it
+            // the button was squeezed to a column of single letters.
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     verdict,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (incompatible) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                TextButton(onClick = { appStateManager.clearGpuVerdict(engine) }) {
+                TextButton(
+                    onClick = { appStateManager.clearGpuVerdict(engine) },
+                    modifier = Modifier.align(Alignment.End)
+                ) {
                     Text(languageManager.getString("gpu_test_again"))
                 }
             }
