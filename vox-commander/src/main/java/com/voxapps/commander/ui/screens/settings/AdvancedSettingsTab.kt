@@ -51,6 +51,7 @@ fun AdvancedSettingsTab(
     val benchmarkResults by appStateManager.benchmarkResults.collectAsStateWithLifecycle()
     val systemInfo by appStateManager.systemInfo.collectAsStateWithLifecycle()
     val logs by Logger.verboseLogs.collectAsStateWithLifecycle()
+    val gpuTestDeferred by appStateManager.gpuTestDeferred.collectAsStateWithLifecycle()
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())
 
     val appContainer = remember { (context.applicationContext as com.voxapps.commander.VoxApplication).container }
@@ -444,6 +445,23 @@ fun AdvancedSettingsTab(
             }
         }
 
+    }
+
+    // --- GPU TEST DEFERRED DIALOG ---
+    // Enabling the switch normally answers the compatibility question on the spot. With no model
+    // loaded for that engine there is nothing to answer it with, so say when the answer will come
+    // rather than leaving a switch on with no verdict behind it.
+    if (gpuTestDeferred != null) {
+        AlertDialog(
+            onDismissRequest = { appStateManager.dismissGpuTestDeferred() },
+            title = { Text(languageManager.getString("gpu_test_deferred_title")) },
+            text = { Text(languageManager.getString("gpu_test_deferred_message")) },
+            confirmButton = {
+                TextButton(onClick = { appStateManager.dismissGpuTestDeferred() }) {
+                    Text(languageManager.getString("ok"))
+                }
+            }
+        )
     }
 
     // --- RESTART DIALOG ---

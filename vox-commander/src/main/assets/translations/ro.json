@@ -540,5 +540,7 @@
   "gpu_verdict_incompatible": "Acest dispozitiv a picat testul GPU — rulează pe CPU.",
   "gpu_verdict_verified": "GPU verificat pe acest dispozitiv.",
   "gpu_verdict_probed": "Test GPU trecut — așteaptă prima utilizare reală.",
+  "gpu_test_deferred_title": "Test amânat",
+  "gpu_test_deferred_message": "Niciun model nu este încărcat pentru acest motor, deci nu există cu ce să se testeze. Testul de compatibilitate va rula automat la următoarea încărcare a unui model, iar acest comutator se va opri singur dacă dispozitivul nu îl trece.",
   "gpu_test_again": "Testează din nou"
 }

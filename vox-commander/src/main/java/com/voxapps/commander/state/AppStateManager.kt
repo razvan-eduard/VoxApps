@@ -128,6 +128,19 @@ class AppStateManager private constructor(
     private val _gpuTestEngine = MutableStateFlow<String?>(null)
     val gpuTestEngine: StateFlow<String?> = _gpuTestEngine.asStateFlow()
 
+    /**
+     * The engine whose GPU test could not run because that engine has no model to test against,
+     * or null. A test needs a real workload on real weights to mean anything, so with nothing
+     * loaded there is nothing to answer with — and the switch staying on with no verdict behind it
+     * is the part worth saying out loud rather than leaving the user to infer.
+     */
+    private val _gpuTestDeferred = MutableStateFlow<String?>(null)
+    val gpuTestDeferred: StateFlow<String?> = _gpuTestDeferred.asStateFlow()
+
+    fun dismissGpuTestDeferred() {
+        _gpuTestDeferred.value = null
+    }
+
     // --- APP SCAN STATE ---
     private val _appScanState = MutableStateFlow<AppScanState>(AppScanState.Idle)
     val appScanState: StateFlow<AppScanState> = _appScanState.asStateFlow()
@@ -708,9 +721,13 @@ class AppStateManager private constructor(
             if (modelPath == null) {
                 // Nothing to probe with. Not a verdict: the engine's own tiered load and the
                 // crash cookie still guard the first real GPU use.
-                Logger.log("GPU test for $engine skipped — no probe model available", "GpuTest")
+                // Deferred, not decided: the engine's own tiered load and the crash cookie
+                // still guard the first real GPU use, and that use is where the verdict will
+                // come from instead.
+                Logger.log("GPU test for $engine deferred — no model loaded to test against", "GpuTest")
                 _vulkanTestState.value = VulkanTestState.IDLE
                 _gpuTestEngine.value = null
+                _gpuTestDeferred.value = engine
                 return@launch
             }
             Logger.log("Starting GPU compatibility test for $engine with model: $modelPath", "GpuTest")

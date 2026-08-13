@@ -540,5 +540,7 @@
   "gpu_verdict_incompatible": "Dieses Gerät hat den GPU-Test nicht bestanden — läuft auf der CPU.",
   "gpu_verdict_verified": "GPU auf diesem Gerät verifiziert.",
   "gpu_verdict_probed": "GPU-Test bestanden — wartet auf den ersten echten Einsatz.",
+  "gpu_test_deferred_title": "Test verschoben",
+  "gpu_test_deferred_message": "Für diese Engine ist noch kein Modell geladen, es gibt also nichts, wogegen getestet werden kann. Der Kompatibilitätstest läuft automatisch beim nächsten Laden eines Modells, und dieser Schalter schaltet sich selbst aus, wenn das Gerät ihn nicht besteht.",
   "gpu_test_again": "Erneut testen"
 }
