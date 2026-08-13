@@ -221,6 +221,15 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/speak_widget_info" />
         </receiver>
+
+        <!-- The vendor OpenCL driver the GPU backend links against. Being listed in the
+             platform's public.libraries.txt is not enough on its own: an app's linker namespace
+             resolves a vendor library only when the app declares it here. Optional, because the
+             library is a GPU-vendor component — a device without it must still install and run
+             on the CPU. -->
+        <uses-native-library
+            android:name="libOpenCL.so"
+            android:required="false" />
     </application>
 
 </manifest>
