@@ -37,6 +37,7 @@ object ExpenseScanCleanupRequestSender {
         val settings = container.settingsRepository.getSnapshot()
 
         val preParsed = DateTimeRegexParser.parse(rawText)
+        val preParsedTotal = ReceiptTotalRegexParser.parse(rawText).total
 
         val taskWithMeta = when {
             imageName != null && retryOfExpenseId != null -> "${LlmTasks.EXPENSE_SCAN_CLEANUP}:$imageName:$retryOfExpenseId"
@@ -50,11 +51,12 @@ object ExpenseScanCleanupRequestSender {
             settings.defaultCurrency,
             settings.language,
             preParsedDate = preParsed.date,
-            preParsedTime = preParsed.time
+            preParsedTime = preParsed.time,
+            preParsedTotal = preParsedTotal
         )
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for scan cleanup (retryOfExpenseId=$retryOfExpenseId, multimodal=${attachmentUri != null})")
-        container.pendingLlmRequestQueue.enqueueAndSend(
+        val requestId = container.pendingLlmRequestQueue.enqueueAndSend(
             context = context,
             sourcePackage = context.packageName,
             task = taskWithMeta,
@@ -62,6 +64,7 @@ object ExpenseScanCleanupRequestSender {
             targetPackage = COMMANDER_PACKAGE,
             attachmentUri = attachmentUri
         )
+        rememberPreParse(container, requestId, preParsed, preParsedTotal)
     }
 
     /**
@@ -126,6 +129,7 @@ object ExpenseScanCleanupRequestSender {
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val settings = container.settingsRepository.getSnapshot()
         val preParsed = DateTimeRegexParser.parse(rawText)
+        val preParsedTotal = ReceiptTotalRegexParser.parse(rawText).total
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             rawText,
@@ -133,19 +137,38 @@ object ExpenseScanCleanupRequestSender {
             settings.defaultCurrency,
             settings.language,
             preParsedDate = preParsed.date,
-            preParsedTime = preParsed.time
+            preParsedTime = preParsed.time,
+            preParsedTotal = preParsedTotal
         )
 
         val taskWithMeta = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending:${groupId.orEmpty()}:${fileNames.joinToString(",")}"
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for pending scan create (pages=${fileNames.size})")
-        container.pendingLlmRequestQueue.enqueueAndSend(
+        val requestId = container.pendingLlmRequestQueue.enqueueAndSend(
             context = context,
             sourcePackage = context.packageName,
             task = taskWithMeta,
             promptText = promptText,
             targetPackage = COMMANDER_PACKAGE,
             attachmentUri = attachmentUri
+        )
+        rememberPreParse(container, requestId, preParsed, preParsedTotal)
+    }
+
+    /**
+     * Holds what regex already established until the reply comes back. A field the prompt told the
+     * model to skip is absent from that reply by design, so the value has to survive the round trip
+     * somewhere; without this the record falls back as though nothing had been found.
+     */
+    private suspend fun rememberPreParse(
+        container: ExpensesContainer,
+        requestId: String,
+        preParsed: DateTimeRegexParser.Result,
+        preParsedTotal: Double?
+    ) {
+        container.scanPreParseRepository.put(
+            requestId,
+            ScanPreParse(date = preParsed.date, time = preParsed.time, total = preParsedTotal)
         )
     }
 }

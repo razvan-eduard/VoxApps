@@ -25,6 +25,7 @@ import com.voxapps.expenses.domain.llm.ExpenseDeduplicationRequestSender
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationResultParser
 import com.voxapps.expenses.domain.llm.ExpenseSummary
 import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
+import com.voxapps.expenses.domain.llm.ScanPreParse
 import com.voxapps.expenses.domain.location.resolveCurrentCityName
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
@@ -90,11 +91,20 @@ class LlmResultReceiver : BroadcastReceiver() {
             LlmTasks.EXPENSE_PARSE, LlmTasks.EXPENSE_SCAN_CLEANUP -> {
                 val rawJson = result.rawJson
                 val isSuccess = result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null
-                val parsed = if (isSuccess) ExpenseParseResultParser.parse(rawJson) else null
-                
+
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        // Whatever this scan's text yielded deterministically before it was sent.
+                        // Read first, because the reply is only complete together with it: fields
+                        // covered here were suppressed in the prompt, so their absence from the
+                        // reply is by design rather than a failure to find them.
+                        val preParse = container.scanPreParseRepository.take(requestId)
+                        val parsed = if (isSuccess) {
+                            ExpenseParseResultParser
+                                .parse(rawJson!!, requireTotalAmount = preParse?.total == null)
+                                ?.withPreParse(preParse)
+                        } else null
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
                         if (parsed != null && retryOfExpenseId != null) {
                             // Retry succeeded: update the existing stub row in place rather than
@@ -127,7 +137,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                             // Recovery flow: LLM failed but we have a physical receipt image.
                             // Create a "stub" record so the user doesn't lose the photo and open it.
                             Logger.w(TAG, "LLM failed for scan, entering recovery mode for $storedImageName. Error: ${result.error}")
-                            val id = createStubExpense(container, storedImageName)
+                            val id = createStubExpense(container, storedImageName, preParse)
                             withContext(Dispatchers.Main) {
                                 val errorMsg = result.error ?: "Unknown parsing error"
                                 Toast.makeText(context, "${container.languageManager.getString("manual_review_required")} ($errorMsg)", Toast.LENGTH_LONG).show()
@@ -140,7 +150,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                             // once the id is known (mirrors the success path's linking, just off the
                             // failure branch instead).
                             Logger.w(TAG, "LLM failed for pending scan, entering recovery mode for ${pendingFileNames.size} page(s). Error: ${result.error}")
-                            val id = createStubExpense(container, imageName = null)
+                            val id = createStubExpense(container, imageName = null, preParse = preParse)
                             linkPendingScanAttachments(container, id, pendingFileNames, pendingGroupId)
                             withContext(Dispatchers.Main) {
                                 val errorMsg = result.error ?: "Unknown parsing error"
@@ -576,20 +586,40 @@ class LlmResultReceiver : BroadcastReceiver() {
         }
     }
 
+    /**
+     * Overlays what regex established onto what the model returned. The total is authoritative
+     * here — it was read from the document's own printed digits and the model was told not to
+     * produce it — while date and time only fill gaps, since a reply that still carries them was
+     * asked for them and had the whole document to weigh.
+     */
+    private fun ExpenseParseResultParser.Parsed.withPreParse(
+        preParse: ScanPreParse?
+    ): ExpenseParseResultParser.Parsed {
+        if (preParse == null) return this
+        return copy(
+            totalAmount = preParse.total ?: totalAmount,
+            date = date ?: preParse.date,
+            time = time ?: preParse.time
+        )
+    }
+
     private suspend fun createStubExpense(
         container: ExpensesContainer,
-        imageName: String?
+        imageName: String?,
+        preParse: ScanPreParse? = null
     ): Long {
         val settings = container.settingsRepository.getSnapshot()
-        // Stub: 0.0 amount is valid but needs manual entry.
+        // A record still carries whatever was established without the model: a scan whose
+        // structuring failed is exactly when the deterministically-read total is the only amount
+        // there is, and a stub left at zero is a record that says nothing was on the document.
         return container.expensesRepository.addExpense(
             title = container.languageManager.getString("manual_review_required"),
-            totalAmount = 0.0,
+            totalAmount = preParse?.total ?: 0.0,
             currencyCode = settings.defaultCurrency,
             vendor = null,
             bank = null,
             location = null,
-            dateTime = System.currentTimeMillis(),
+            dateTime = mergeDateTime(preParse?.date, preParse?.time),
             comments = "LLM parsing failed for this scan.",
             categoryId = null,
             imageName = imageName,
