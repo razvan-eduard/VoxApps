@@ -13,6 +13,7 @@ import com.voxapps.expenses.domain.limits.SpendingLimitAlertRepository
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationRepository
 import com.voxapps.expenses.domain.llm.PendingCategoryMergeRepository
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
+import com.voxapps.expenses.domain.llm.ScanPreParseRepository
 import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.SessionManager
@@ -54,6 +55,7 @@ class ExpensesContainer(context: Context) {
     val pendingCategoryMergeRepository = PendingCategoryMergeRepository(appContext)
     val expenseDeduplicationRepository = ExpenseDeduplicationRepository(appContext)
     val pendingNotificationExpenseRepository = PendingNotificationExpenseRepository(appContext)
+    val scanPreParseRepository = ScanPreParseRepository(appContext)
     val exchangeRateRepository = ExchangeRateRepository(appContext)
     val spendingLimitAlertRepository = SpendingLimitAlertRepository(appContext)
 

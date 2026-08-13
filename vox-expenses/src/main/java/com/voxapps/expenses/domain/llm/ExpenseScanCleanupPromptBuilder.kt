@@ -14,7 +14,8 @@ object ExpenseScanCleanupPromptBuilder {
         defaultCurrency: String,
         languageCode: String,
         preParsedDate: String? = null,
-        preParsedTime: String? = null
+        preParsedTime: String? = null,
+        preParsedTotal: Double? = null
     ): String {
         val categoriesLine = if (existingCategories.isEmpty()) {
             "No categories exist yet."
@@ -25,11 +26,21 @@ object ExpenseScanCleanupPromptBuilder {
         // Branch 1: We already have deterministic metadata from local Regex.
         // We DON'T even mention searching for date/time to the LLM to prevent hallucinations.
         val bypassMetadata = preParsedDate != null && preParsedTime != null
-        
+        // The document's own printed total, already read deterministically. Worth taking off the
+        // model for the same reason as the metadata above and one more: a total is printed in plain
+        // digits, so a transcription slip there is a silently wrong amount rather than a visibly
+        // wrong word, and it is the one field a reader is least likely to re-check.
+        val bypassTotal = preParsedTotal != null
+        val extractOnlyLine = if (bypassTotal) {
+            "EXTRACT ONLY the vendor name, bank (if printed), and line items."
+        } else {
+            "EXTRACT ONLY the vendor name, bank (if printed), total amount, and line items."
+        }
+
         val instructionBlock = if (bypassMetadata) {
             """
-            EXTRACT ONLY the vendor name, bank (if printed), total amount, and line items.
-            CRITICAL: DO NOT search for, extract, or guess the transaction date or time. 
+            $extractOnlyLine
+            CRITICAL: DO NOT search for, extract, or guess the transaction date or time.
             I already have them. Return ONLY the structural data requested below.
             """.trimIndent()
         } else {
@@ -54,6 +65,36 @@ object ExpenseScanCleanupPromptBuilder {
             should still be read as a single item, not two.
             """.trimIndent()
         val ocrTextBlock = "\n\nOCR text: $rawText"
+
+        // The rule only has to be stated when the field is still the model's job; when it is not,
+        // restating it would invite the model to produce the field anyway.
+        val totalAmountRule = if (bypassTotal) {
+            """
+            CRITICAL: DO NOT search for, extract, guess, or compute the total amount. I already have
+            it. Omit "totalAmount" entirely. Still list the line items as instructed above.
+            """.trimIndent()
+        } else {
+            """
+            For "totalAmount": ALWAYS prefer the receipt's own printed/stated total (the actual total
+            amount charged, however labeled — "Total", "Total de plată", "TOTAL LEI", etc.) over any
+            arithmetic of your own — printed OCR text for a total is far more reliable than your own
+            addition, and the printed items list is sometimes incomplete or misread even when the total
+            itself is read correctly. Only compute totalAmount as the sum of the line items' subtotals
+            if the receipt genuinely shows no total anywhere. Only return null for totalAmount if the
+            receipt shows neither a total nor any items with prices at all.
+            (The line-item DISTRIBUTIVE/CUMULATIVE rule above is separate and does not override this —
+            always prefer the printed total here.)
+            """.trimIndent()
+        }
+        val totalAmountField = if (bypassTotal) "" else "\"totalAmount\": 12.5, "
+        // The line-item rule is scoped against the total only while a total is still being asked
+        // for; with none requested there is no rule below to point at.
+        val unitPriceScopeLine = if (bypassTotal) {
+            "This rule governs each line item's \"unitPrice\" ONLY."
+        } else {
+            "This rule governs each line item's \"unitPrice\" ONLY — it does not apply to \"totalAmount\" (see the\n" +
+                "            rule for that field below, which always prefers the receipt's own printed total)."
+        }
 
         return """
             $framingParagraph
@@ -93,18 +134,9 @@ object ExpenseScanCleanupPromptBuilder {
                 must reconstruct the printed line amount). Only do this when no distributive per-unit price is
                 printed at all for that line.
             ${DistributiveCumulativeRule.INVARIANT}
-            This rule governs each line item's "unitPrice" ONLY — it does not apply to "totalAmount" (see the
-            rule for that field below, which always prefers the receipt's own printed total).
+            $unitPriceScopeLine
 
-            For "totalAmount": ALWAYS prefer the receipt's own printed/stated total (the actual total
-            amount charged, however labeled — "Total", "Total de plată", "TOTAL LEI", etc.) over any
-            arithmetic of your own — printed OCR text for a total is far more reliable than your own
-            addition, and the printed items list is sometimes incomplete or misread even when the total
-            itself is read correctly. Only compute totalAmount as the sum of the line items' subtotals
-            if the receipt genuinely shows no total anywhere. Only return null for totalAmount if the
-            receipt shows neither a total nor any items with prices at all.
-            (The line-item DISTRIBUTIVE/CUMULATIVE rule above is separate and does not override this —
-            always prefer the printed total here.)
+            $totalAmountRule
 
             Use "$defaultCurrency" as the currency unless a different one is clearly printed on the
             receipt. Also suggest a category for this expense based on its content. $categoriesLine
@@ -121,7 +153,7 @@ object ExpenseScanCleanupPromptBuilder {
             or "incoming" only if it is clearly a refund, credit note, or reimbursement document instead.
 
             Respond in the "$languageCode" language.
-            Return ONLY a JSON object of the shape {"title": "...", "totalAmount": 12.5, "currency": "...",
+            Return ONLY a JSON object of the shape {"title": "...", $totalAmountField"currency": "...",
             "vendor": "...", "bank": "...", "location": "...", "category": "...", "date": "YYYY-MM-DD",
             "time": "HH:mm", "direction": "outgoing", "items": [{"name": "...", "quantity": 1,
             "unitPrice": 12.5, "netAmount": null, "vatAmount": null, "grossAmount": null}]}, no prose,

@@ -102,4 +102,38 @@ class ExpenseScanCleanupPromptBuilderTest {
         assertTrue(prompt.contains("extracted via OCR from a receipt"))
         assertTrue(prompt.contains("OCR text: TOTAL 12.50"))
     }
+
+    @Test
+    fun `a known total is neither asked for nor described`() {
+        val prompt = ExpenseScanCleanupPromptBuilder.build(
+            rawText = "Total de Plata 66.63",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en",
+            preParsedTotal = 66.63
+        )
+
+        // Absent from the requested shape, so the field is not produced at all — and absent from
+        // the rules, since restating how to find it would invite producing it anyway.
+        assertFalse(prompt.contains("\"totalAmount\": 12.5"))
+        assertFalse(prompt.contains("ALWAYS prefer the receipt's own printed/stated total"))
+        assertTrue(prompt.contains("DO NOT search for, extract, guess, or compute the total amount"))
+        // The items are still wanted: only the total was established without the model.
+        assertTrue(prompt.contains("\"items\""))
+    }
+
+    @Test
+    fun `an unknown total stays the model's job`() {
+        val prompt = ExpenseScanCleanupPromptBuilder.build(
+            rawText = "Paine 3.50",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en",
+            preParsedTotal = null
+        )
+
+        assertTrue(prompt.contains("\"totalAmount\""))
+        assertTrue(prompt.contains("ALWAYS prefer the receipt's own printed/stated total"))
+        assertFalse(prompt.contains("DO NOT search for, extract, guess, or compute the total amount"))
+    }
 }
