@@ -328,8 +328,8 @@ class MainActivity : ComponentActivity() {
                 if (showVulkanError) {
                     AlertDialog(
                         onDismissRequest = { appContainer.modelManagementViewModel.dismissVulkanError() },
-                        title = { Text(appContainer.languageManager.getString("vulkan_incompatible_title")) },
-                        text = { Text(appContainer.languageManager.getString("vulkan_incompatible_msg")) },
+                        title = { Text(appContainer.languageManager.getString("gpu_incompatible_title")) },
+                        text = { Text(appContainer.languageManager.getString("gpu_incompatible_msg")) },
                         confirmButton = {
                             TextButton(onClick = { appContainer.modelManagementViewModel.dismissVulkanError() }) {
                                 Text(appContainer.languageManager.getString("ok"))

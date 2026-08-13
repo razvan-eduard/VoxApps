@@ -128,7 +128,7 @@ class GpuProbe(
     private fun finish(outcome: Outcome, reason: String) {
         if (finished) return
         finished = true
-        Logger.log("Vulkan self-test done: outcome=$outcome reason=$reason", TAG)
+        Logger.log("GPU self-test done: outcome=$outcome reason=$reason", TAG)
         unbind()
         onResult(outcome)
     }
