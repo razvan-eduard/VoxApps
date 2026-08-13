@@ -71,6 +71,10 @@ class LocalLlmInterpreterTest {
         override fun clearMemory(handle: Long) {}
         override fun contextTokenCount(handle: Long): Int = 0
         override fun lastTimings(handle: Long): LongArray? = null
+        /** Null = "no GPU device / cannot say", which the interpreter treats as no capacity
+         *  objection — the fake stays out of the way unless a test sets it. */
+        var gpuMemoryBytes: LongArray? = null
+        override fun gpuMemory(): LongArray? = gpuMemoryBytes
     }
 
     private lateinit var context: Context
@@ -206,6 +210,39 @@ class LocalLlmInterpreterTest {
         assertEquals(2, bridge.loadCalls.size)
         assertEquals(1, bridge.freeCount)
         assertEquals(listOf(0, -1), bridge.loadGpuLayers)
+    }
+
+    @Test
+    fun `a model larger than the GPU budget stays on the CPU`() = runTest {
+        // 10MB of free GPU against a model the fake reports as far bigger: the wish is granted
+        // only where there is room, and the refusal is a CPU load, never a failed one.
+        bridge.gpuMemoryBytes = longArrayOf(10L * 1024 * 1024, 10L * 1024 * 1024)
+        modelFile.writeBytes(ByteArray(20 * 1024 * 1024))
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            aiProcessor = "nlu_llm",
+            activeIntentModelId = "qwen3-0.6b-q8"
+        ).copy(llamaGpuEnabled = true)
+
+        val i = interpreter()
+        i.processCommand("play scorpions", null)
+
+        assertEquals(listOf(0), bridge.loadGpuLayers)
+        assertTrue(i.lastGpuSkipReason!!.contains("larger than"))
+    }
+
+    @Test
+    fun `a model that fits is offloaded`() = runTest {
+        bridge.gpuMemoryBytes = longArrayOf(4L * 1024 * 1024 * 1024, 4L * 1024 * 1024 * 1024)
+        every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
+            aiProcessor = "nlu_llm",
+            activeIntentModelId = "qwen3-0.6b-q8"
+        ).copy(llamaGpuEnabled = true)
+
+        val i = interpreter()
+        i.processCommand("play scorpions", null)
+
+        assertEquals(listOf(-1), bridge.loadGpuLayers)
+        assertNull(i.lastGpuSkipReason)
     }
 
     @Test

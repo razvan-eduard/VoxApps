@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "llama.h"
+#include "ggml-backend.h"
 #include "common.h"
 #include "json-schema-to-grammar.h"
 #include <nlohmann/json.hpp>
@@ -289,6 +290,31 @@ Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeLastTimings(JNIEnv * env, jobjec
     if (!arr) return nullptr;
     env->SetLongArrayRegion(arr, 0, 4, vals);
     return arr;
+}
+
+// [free, total] bytes on the first GPU device ggml reports, or null when there is none. Answers
+// a question the compatibility probe deliberately does not: the probe says whether GPU inference
+// *works* on this device — one small model, one sentinel, no opinion about size — while this says
+// whether a *particular* model has room. A driver that runs a 1MB model perfectly will still fault
+// on a 2GB one, and the two facts belong to different questions.
+//
+// On a unified-memory phone GPU the budget is a share of system RAM and the figure is advisory,
+// not a guarantee: treat it as the input to a warning, never as permission.
+JNIEXPORT jlongArray JNICALL
+Java_com_voxapps_llamacpp_LlamaBridgeImpl_nativeGpuMemory(JNIEnv * env, jobject) {
+    std::call_once(backend_once, [] { llama_backend_init(); });
+    for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        if (ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_GPU) continue;
+        size_t free_bytes = 0, total_bytes = 0;
+        ggml_backend_dev_memory(dev, &free_bytes, &total_bytes);
+        const jlong vals[2] = { (jlong) free_bytes, (jlong) total_bytes };
+        jlongArray arr = env->NewLongArray(2);
+        if (!arr) return nullptr;
+        env->SetLongArrayRegion(arr, 0, 2, vals);
+        return arr;
+    }
+    return nullptr;
 }
 
 JNIEXPORT void JNICALL
