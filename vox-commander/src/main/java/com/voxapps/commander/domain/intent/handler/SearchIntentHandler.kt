@@ -37,8 +37,19 @@ class SearchIntentHandler(
     }
 
     override fun execute(context: Context, intent: NluIntent, resolvedApp: AppRegistry.AppEntry?): Boolean {
-        val query = intent.logicalSubject ?: return false
         val category = intent.category ?: "general"
+        // A missing subject is a normal parse, not a broken one: the prompt instructs the model to
+        // null a subject that merely restates the category, so every category-shaped question
+        // ("what's the news", "what's the weather") arrives without one by design. Rejecting those
+        // discarded a perfectly good intent over a field some providers never read at all — the
+        // location-backed ones are parameterised by coordinates and ignore the query string.
+        //
+        // So the query is always derived, never demanded, and from data alone: the categories and
+        // their providers are declared in the search schema, so nothing here may branch on a
+        // particular category or a particular provider's flags — a category added to that file
+        // must behave like the ones already in it.
+        val query = intent.logicalSubject
+            ?: (intent.contextWords + category).filter { it.isNotBlank() }.distinct().joinToString(" ")
 
         Logger.log("SearchIntentHandler: query='$query', category='$category'", TAG)
 
