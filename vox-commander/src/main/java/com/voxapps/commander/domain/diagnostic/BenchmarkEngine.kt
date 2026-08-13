@@ -101,7 +101,7 @@ class BenchmarkEngine(
                 runSingleWhisperBenchmark(model, forceGpu = false, dummyAudio)
                 if (settingsRepo.getSettingsSnapshot().whisperGpuIncompatible) {
                     appStateManager.updateBenchmarkResult(BenchmarkResult(
-                        engine = "Whisper Vulkan",
+                        engine = "Whisper GPU",
                         model = model.label,
                         inferenceTimeMs = 0,
                         rtf = 0f,
@@ -191,7 +191,7 @@ class BenchmarkEngine(
     }
 
     private suspend fun runSingleWhisperBenchmark(model: AppModel, forceGpu: Boolean, audioData: ByteArray) {
-        val label = if (forceGpu) "Whisper Vulkan" else "Whisper NEON"
+        val label = if (forceGpu) "Whisper GPU" else "Whisper NEON"
         try {
             val engine = WhisperCppSttEngine(context, settingsRepo, gpuOverride = forceGpu)
             val spec = com.voxapps.commander.domain.engine.EngineSpecs.build(

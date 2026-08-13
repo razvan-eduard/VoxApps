@@ -288,7 +288,7 @@ fun MainScreen(
             onImportOpenWakeWordModel = onImportOpenWakeWordModel
         )
 
-        // --- VULKAN TEST MODAL ---
+        // --- GPU TEST MODAL ---
         GpuTestModal(
             gpuTestState = appStateManager.gpuTestState.collectAsStateWithLifecycle().value,
             gpuTestPassed = appStateManager.gpuTestPassed.collectAsStateWithLifecycle().value,

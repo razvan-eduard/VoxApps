@@ -65,7 +65,7 @@ fun GpuTestModal(
                         )
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
-                            text = languageManager.getString("testing_vulkan_compatibility"),
+                            text = languageManager.getString("testing_gpu_compatibility"),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -77,7 +77,7 @@ fun GpuTestModal(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = languageManager.getString("vulkan_test_timeout"),
+                            text = languageManager.getString("gpu_test_timeout"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -102,7 +102,7 @@ fun GpuTestModal(
                         Spacer(modifier = Modifier.height(24.dp))
                         
                         Text(
-                            text = if (isSuccess) languageManager.getString("vulkan_ready") else languageManager.getString("incompatible_device"),
+                            text = if (isSuccess) languageManager.getString("gpu_ready") else languageManager.getString("incompatible_device"),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = themeColor
@@ -112,9 +112,9 @@ fun GpuTestModal(
                         
                         Text(
                             text = if (isSuccess) {
-                                languageManager.getString("vulkan_ready_message")
+                                languageManager.getString("gpu_ready_message")
                             } else {
-                                languageManager.getString("vulkan_failed_message")
+                                languageManager.getString("gpu_failed_message")
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center
