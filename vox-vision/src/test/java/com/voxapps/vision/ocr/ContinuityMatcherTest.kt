@@ -144,4 +144,61 @@ class ContinuityMatcherTest {
         assertEquals("Sunca Praga 5.59 B Salata cu pui si legume 7.09 B", alignment?.previousTrimmed)
         assertEquals("Ritter Sport 12.29 A", alignment?.nextTrimmed)
     }
+
+    // --- Stitched, row-ordered text ---
+    // OCR now emits reading-order rows (see RowClusterer), so in stitch mode the newlines ARE the
+    // row boundaries of one long receipt photographed as overlapping close-ups. The seam trims
+    // must remove words at the seam without reformatting what survives — flattening the kept rows
+    // to one line would undo the row assembly for every shot after the first.
+
+    @Test
+    fun `stitching row-ordered shots keeps every surviving newline`() {
+        val previous = "Paine 2 3.50\nLapte 1 5.20\nOua 10 12.00"
+        val next = "Lapte 1 5.20\nOua 10 12.00\nCafea 1 15.00\nTotal 35.70"
+
+        val stitch = ContinuityMatcher.alignForStitch(previous, next, ContinuityMatcher.Strictness.MEDIUM)!!
+
+        assertEquals("Paine 2 3.50\nLapte 1 5.20\nOua 10 12.00", stitch.previousTrimmed)
+        // The six overlapping words are dropped from the next shot; its remaining rows keep their
+        // own line structure.
+        assertEquals("Cafea 1 15.00\nTotal 35.70", stitch.nextTrimmed)
+    }
+
+    @Test
+    fun `a row bisected at the frame edge is trimmed away without touching other rows`() {
+        // The next shot's camera edge cut a row in half, so its text begins with a garbled
+        // fragment before the genuine overlap. That fragment is poison; the rows after the seam
+        // keep their newlines.
+        val previous = "Lapte 1 5.20\nOua 10 12.00\nCafea 1 15.00"
+        val next = "aea 1 t5\nOua 10 12.00\nCafea 1 15.00\nZahar 2 4.40\nTotal 36.60"
+
+        val stitch = ContinuityMatcher.alignForStitch(previous, next, ContinuityMatcher.Strictness.MEDIUM)!!
+
+        assertEquals("Zahar 2 4.40\nTotal 36.60", stitch.nextTrimmed)
+    }
+
+    @Test
+    fun `trailing noise on the previous shot is trimmed without flattening its kept rows`() {
+        // The previous shot's bottom edge bisected a row ("Cafea 1 1..." read as garbage); the next
+        // shot reveals the true seam. The previous shot's kept rows must stay rows.
+        val previous = "Paine 2 3.50\nLapte 1 5.20\nOua 10 12.00\nCfa x 1e"
+        val next = "Lapte 1 5.20\nOua 10 12.00\nCafea 1 15.00\nTotal 35.70"
+
+        val stitch = ContinuityMatcher.alignForStitch(previous, next, ContinuityMatcher.Strictness.MEDIUM)!!
+
+        assertEquals("Paine 2 3.50\nLapte 1 5.20\nOua 10 12.00", stitch.previousTrimmed)
+        assertEquals("Cafea 1 15.00\nTotal 35.70", stitch.nextTrimmed)
+    }
+
+    @Test
+    fun `single-column rows match across shots whether or not neighbours merged`() {
+        // Row clustering is geometry-driven, and two shots of the same rows can disagree about
+        // merging vertical neighbours when skew puts them right at the threshold. In a single
+        // column that disagreement only moves a newline — the word sequence is identical — so the
+        // word-based matcher still finds the seam.
+        val previous = "SC EXEMPLU SRL\nBon fiscal\nPaine 3.50 Lapte 5.20 Oua 12.00"
+        val next = "Paine 3.50\nLapte 5.20\nOua 12.00\nTotal 20.70"
+        assertTrue(ContinuityMatcher.isContinuous(previous, next, ContinuityMatcher.Strictness.MEDIUM))
+    }
+
 }
