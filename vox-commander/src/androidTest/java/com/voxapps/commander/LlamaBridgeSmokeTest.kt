@@ -87,6 +87,16 @@ class LlamaBridgeSmokeTest {
 
             LlamaBridgeImpl.clearMemory(handle)
             assertEquals("clearMemory left tokens resident", 0, LlamaBridgeImpl.contextTokenCount(handle))
+
+            // The capacity query the offload decision depends on. Null is a legitimate answer
+            // (no GPU device), but a *thrown* one is not: the symbol has to bind, or the
+            // interpreter's fail-open turns the whole capacity check into a silent no-op — which
+            // is exactly how it shipped inert once.
+            val mem = LlamaBridgeImpl.gpuMemory()
+            if (mem != null) {
+                assertEquals("gpuMemory should report free and total", 2, mem.size)
+                assertTrue("total GPU memory should be positive when reported", mem[1] >= 0)
+            }
         } finally {
             LlamaBridgeImpl.freeModel(handle)
         }
