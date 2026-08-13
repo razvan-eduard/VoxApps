@@ -32,6 +32,10 @@ private const val LOCAL_LLM_TIMEOUT_MS = 90_000L
  *  prompt's full prefill; this covers the queue wait and the run together. */
 private const val RAW_PROMPT_TIMEOUT_MS = 300_000L
 
+/** Weights are not the whole GPU cost — the KV cache and compute buffers are allocated there too,
+ *  so a model is only offloaded when the device reports room for rather more than the file. */
+private const val GPU_MEMORY_HEADROOM = 1.4
+
 /** Total context budget (input + output) — the NLU system prompt alone exceeds 1900 tokens, and
  *  every model in the lineup is served with at least a 4096-token context. */
 private const val LLM_CONTEXT_TOKENS = 4096
@@ -145,6 +149,11 @@ class LocalLlmInterpreter(
      *  same 2 GB model concurrently. Restored to null after the benchmark; the next production
      *  call reloads on the user's real setting. */
     @Volatile private var benchmarkGpuOverride: Boolean? = null
+
+    /** Why the GPU was not used despite being asked for, or null when it was — surfaced as the
+     *  warning the settings screen shows beside the toggle. */
+    @Volatile var lastGpuSkipReason: String? = null
+        private set
     private var cachedGrammar: String? = null
     private var cachedGrammarKey: String? = null
     @Volatile private var isProcessing = false
@@ -240,21 +249,42 @@ class LocalLlmInterpreter(
             return
         }
 
-        Logger.log("Loading LLM model: ${modelFile.absolutePath} (gpu=$wantGpu)", TAG)
+        // Capacity is a different question from compatibility. The probe already answered "does
+        // GPU inference work here" with a fixture; this asks "does *this* model have room", and a
+        // model that does not fit is a warning, not an attempt — offloading one that overruns the
+        // driver's budget faults the GPU, and the driver's own fault reporting is where a device
+        // was observed taking the process down with it.
+        val gpuFits = !wantGpu || modelFitsOnGpu(modelFile.length())
+        val useGpu = wantGpu && gpuFits
+        if (wantGpu && !gpuFits) {
+            lastGpuSkipReason = "model is larger than the GPU's reported budget — running on the CPU"
+            Logger.log("GPU skipped: $lastGpuSkipReason", TAG)
+        } else if (useGpu) {
+            lastGpuSkipReason = null
+        }
+
+        Logger.log("Loading LLM model: ${modelFile.absolutePath} (gpu=$useGpu)", TAG)
         val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
+        // The cookie covers the *load*, not only inference: allocating a multi-gigabyte model is
+        // where a GPU actually runs out, and a load that takes the process down leaves no other
+        // evidence behind. Cleared as soon as the load returns; inference arms it again.
+        val guardLoad = useGpu && !gpuSettings.llamaGpuRuntimeVerified
+        if (guardLoad) settingsRepo.setGpuRuntimeAttemptSync(SettingsRepository.GPU_LLAMA, true)
         handle = try {
             bridge.loadModel(
                 modelFile.absolutePath, LLM_CONTEXT_TOKENS, threads,
-                nGpuLayers = if (wantGpu) -1 else 0
+                nGpuLayers = if (useGpu) -1 else 0
             )
         } catch (e: Exception) {
-            Logger.log("Model failed to load (gpu=$wantGpu): ${e.message}", TAG)
+            Logger.log("Model failed to load (gpu=$useGpu): ${e.message}", TAG)
             0
+        } finally {
+            if (guardLoad) settingsRepo.setGpuRuntimeAttemptSync(SettingsRepository.GPU_LLAMA, false)
         }
         if (handle != 0L) {
             loadedModelId = modelId
             loadedEngineKey = engineKey
-            loadedGpu = wantGpu
+            loadedGpu = useGpu
         }
     }
 
@@ -520,6 +550,23 @@ class LocalLlmInterpreter(
                 }
             }
         }
+
+    /**
+     * Whether the GPU's reported budget has room for a model of [modelBytes], with headroom for
+     * the context and compute buffers on top of the weights. A device that reports nothing is
+     * given the benefit of the doubt — refusing on missing information would ground every GPU
+     * whose driver declines to answer.
+     */
+    private fun modelFitsOnGpu(modelBytes: Long): Boolean {
+        val mem = runCatching { bridge.gpuMemory() }.getOrNull() ?: return true
+        val free = mem.getOrNull(0) ?: return true
+        if (free <= 0L) return true
+        // Weights are not the whole cost: the KV cache and compute buffers live on the device too.
+        val needed = (modelBytes * GPU_MEMORY_HEADROOM).toLong()
+        val fits = needed <= free
+        Logger.log("GPU capacity: model ${modelBytes / 1048576}MB needs ~${needed / 1048576}MB, free ${free / 1048576}MB -> fits=$fits", TAG)
+        return fits
+    }
 
     /**
      * The GPU crash cookie, llama's half: a native GPU crash mid-decode cannot be caught, so an

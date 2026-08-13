@@ -677,17 +677,20 @@ class AppStateManager private constructor(
                 .takeIf { it.exists() }?.absolutePath
         }
         SettingsRepository.GPU_LLAMA -> withContext(Dispatchers.IO) {
+            // A fixture, not a model choice: the probe asks whether GPU inference works on this
+            // device, so the weights only have to exercise the pipeline. It ships in the APK —
+            // a test that needed the network to answer "does my GPU work" would be unavailable
+            // exactly when the engine it guards is (the runtime is bundled for the same reason),
+            // and 1MB is the whole cost. Copied out because the native loader takes a path.
             val target = java.io.File(context.cacheDir, GPU_PROBE_LLAMA_MODEL)
             if (target.exists() && target.length() > 0) return@withContext target.absolutePath
-            if (com.voxapps.commander.utils.NetworkMonitor.isMetered) return@withContext null
             try {
-                val url = com.voxapps.identity.VoxRepo.RELEASE_DOWNLOAD_BASE + "nlu-assets/" + GPU_PROBE_LLAMA_MODEL
-                java.net.URL(url).openStream().use { input ->
+                context.assets.open(GPU_PROBE_LLAMA_MODEL).use { input ->
                     target.outputStream().use { input.copyTo(it) }
                 }
                 target.takeIf { it.length() > 0 }?.absolutePath
             } catch (e: Exception) {
-                Logger.log("GPU probe model download failed: ${e.message}", "GpuTest")
+                Logger.log("GPU probe fixture unavailable: ${e.message}", "GpuTest")
                 target.delete()
                 null
             }
@@ -781,8 +784,9 @@ class AppStateManager private constructor(
         /** UNDECIDED probe outcomes stop re-arming after this many attempts — the engines' own
          *  guarded first use takes over. */
         const val MAX_GPU_PROBE_ATTEMPTS = 3
-        /** The tiny real gguf the llama GPU probe decodes — published beside the NLU models. */
-        const val GPU_PROBE_LLAMA_MODEL = "stories260K.gguf"
+        /** The tiny real gguf the llama GPU probe decodes, bundled as an APK asset so the test
+         *  never depends on the network. */
+        const val GPU_PROBE_LLAMA_MODEL = "gpu_probe_model.gguf"
 
         /**
          * Names the Vulkan row in the native-component list. Not a file name: the backend is linked

@@ -55,6 +55,15 @@ interface LlamaBridge {
     /** Tokens currently resident in the context — the testability seam for KV-clear assertions. */
     fun contextTokenCount(handle: Long): Int
 
+    /**
+     * `[freeBytes, totalBytes]` for the GPU ggml would offload to, or null when the build sees no
+     * GPU device. Separate from the compatibility probe by design: the probe answers whether GPU
+     * inference works at all here, this answers whether a given model has room. On a unified-memory
+     * phone GPU the number is advisory — a share of system RAM, not a reservation — so it belongs
+     * in a warning, not a guarantee.
+     */
+    fun gpuMemory(): LongArray?
+
     /** `[promptEvalMs, promptTokens, decodeMs, decodedTokens]` for the most recent [complete] on
      *  [handle], or null when nothing has run — prefill and decode speed reported separately,
      *  which is what the benchmark page needs (prefill is where backends differ most). */
@@ -100,6 +109,8 @@ object LlamaBridgeImpl : LlamaBridge {
 
     override fun lastTimings(handle: Long): LongArray? = nativeLastTimings(handle)
 
+    override fun gpuMemory(): LongArray? = nativeGpuMemory()
+
     private external fun nativeLoadModel(path: String, nCtx: Int, nThreads: Int, nGpuLayers: Int): Long
     private external fun nativeFreeModel(handle: Long)
     private external fun nativeJsonSchemaToGrammar(schemaJson: String): String
@@ -116,4 +127,5 @@ object LlamaBridgeImpl : LlamaBridge {
     private external fun nativeClearMemory(handle: Long)
     private external fun nativeContextTokenCount(handle: Long): Int
     private external fun nativeLastTimings(handle: Long): LongArray?
+    private external fun nativeGpuMemory(): LongArray?
 }
