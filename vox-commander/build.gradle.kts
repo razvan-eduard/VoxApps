@@ -22,6 +22,11 @@ plugins {
 val dlcMode = (project.findProperty("voxDlc") as String?) ?: "minimal"
 require(dlcMode in setOf("minimal", "full")) { "voxDlc must be 'minimal' or 'full', got '$dlcMode'" }
 
+/** Drops the native compiles for a build that only needs to know whether the Kotlin compiles.
+ *  Declared here because both the preBuild wiring and the digest tasks consult it, and the digest
+ *  tasks are registered earlier in this file. */
+val skipNativePrep = providers.gradleProperty("voxSkipNativePrep").isPresent
+
 /**
  * Built into src/main/jniLibs; fetched on demand by WhisperEngineManager.
  *
@@ -517,8 +522,11 @@ val hashWhisperLibs = tasks.register<HashEngineLibs>("recordWhisperDigests") {
     // set is exactly the defect this task exists to prevent. It costs two API calls; always run it.
     outputs.upToDateWhen { false }
     // By name: autoCompileWhisper is registered further down this file. The local libraries are the
-    // fallback when no release exists for the pin, so they must exist before this runs.
-    dependsOn("autoCompileWhisper")
+    // fallback when no release exists for the pin, so they must exist before this runs — except
+    // under -PvoxSkipNativePrep, which exists precisely to answer a question that does not need
+    // them. Without this guard the flag does not skip anything: this task is wired into asset
+    // generation, so it runs on every build and drags the compile back in behind it.
+    if (!skipNativePrep) dependsOn("autoCompileWhisper")
     // The pin recorded in this commit, which is the same value publish_whisper_libs.sh names the
     // release after. providers.exec rather than a bare command so the configuration cache can track
     // it instead of being invalidated by it.
@@ -544,7 +552,7 @@ val hashLlamaLibs = tasks.register<HashEngineLibs>("recordLlamaDigests") {
     group = "build"
     description = "Record the published llama libraries' SHA-256 digests for the APK to verify downloads against."
     outputs.upToDateWhen { false }
-    dependsOn("autoCompileLlama")
+    if (!skipNativePrep) dependsOn("autoCompileLlama")
     // The build fingerprint, not the submodule gitlink: libllama.so is submodule + JNI bridge +
     // CMake config, and the published tag must move when any of them does. One script owns the
     // computation so this task, the publish script, and the release gate can never derive
@@ -750,7 +758,6 @@ tasks.register<Exec>("checkUpstream") {
 // They remain runnable on demand, which is how a maintenance task should be reached:
 //     ./gradlew :vox-commander:autoCheckVosk
 //     ./scripts/check_openwakeword_version.sh
-val skipNativePrep = providers.gradleProperty("voxSkipNativePrep").isPresent
 
 // `assembleRelease` now produces exactly the APK that ships. It used to not: the DLC libs were
 // stripped out of the built zip afterwards by a script that then re-signed it, so a locally built
