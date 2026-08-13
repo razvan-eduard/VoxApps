@@ -3,39 +3,28 @@ project(llama_android)
 
 set(CMAKE_CXX_STANDARD 17)
 
-# --- VULKAN & SPIRV, FORCED (same preamble as the whisper CMakeLists) ---
-# The shader compiler (glslc) runs on the build host while everything else cross-compiles, so
-# program lookup must escape the NDK sysroot. The three -D inputs arrive from check_llama.sh;
-# they are forced into the cache here — semantic build inputs live in this file because this
-# file is inside the build-fingerprint pin (scripts/llama_build_pin.sh) and the shell script
-# is not.
+# --- OPENCL INPUTS ---
+# Kernel embedding runs python on the build host while everything else cross-compiles, so
+# program lookup must escape the NDK sysroot. The two -D inputs (headers, import stub) arrive
+# from check_llama.sh; semantic build inputs live in this file because this file is inside the
+# build-fingerprint pin (scripts/llama_build_pin.sh) and the shell script is not.
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-
-if (VULKAN_HEADERS_DIR AND SPIRV_HEADERS_INC_DIR)
-    set(INC_FLAGS "-I${VULKAN_HEADERS_DIR} -I${SPIRV_HEADERS_INC_DIR}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${INC_FLAGS}" CACHE STRING "" FORCE)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${INC_FLAGS}" CACHE STRING "" FORCE)
-    set(Vulkan_INCLUDE_DIR "${VULKAN_HEADERS_DIR}" CACHE PATH "" FORCE)
-    include_directories("${VULKAN_HEADERS_DIR}" "${SPIRV_HEADERS_INC_DIR}")
-endif()
-
-if (SPIRV_HEADERS_CMAKE_DIR)
-    set(SPIRV-Headers_DIR "${SPIRV_HEADERS_CMAKE_DIR}" CACHE PATH "" FORCE)
-endif()
-
-if (Vulkan_GLSLC_EXECUTABLE)
-    set(Vulkan_GLSLC_EXECUTABLE "${Vulkan_GLSLC_EXECUTABLE}" CACHE FILEPATH "" FORCE)
-endif()
 
 # A project of its own, not an add_subdirectory in the whisper CMakeLists: both submodules vendor
 # ggml under identical target names (ggml, ggml-base, ggml-cpu), so one configure holding both
 # trees collides. Each engine statically links its own ggml copy into its own .so — the property
 # scripts/check_native_pairing.py asserts (zero strongly-undefined symbols).
 #
-# Hybrid CPU+Vulkan in the one library, chosen per model load (n_gpu_layers) — whisper's model.
-# ggml's umbrella target links and defines compiled-in backends itself, so the link line below
-# needs no ggml-vulkan entry.
+# Hybrid CPU+OpenCL in the one library; how much runs on the GPU is chosen per model load
+# (n_gpu_layers). OpenCL over Vulkan because the Adreno Vulkan driver aborts creating compute
+# pipelines, while the OpenCL stack is the one Qualcomm maintains for exactly this hardware —
+# with the Adreno-tuned kernels turned on. ggml's umbrella target links and defines compiled-in
+# backends itself, so the link line below needs no ggml-opencl entry.
 set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
+set(GGML_OPENCL ON CACHE BOOL "" FORCE)
+set(GGML_OPENCL_USE_ADRENO_KERNELS ON CACHE BOOL "" FORCE)
+# Kernels embedded into the binary: one deployable .so, nothing to stage beside it.
+set(GGML_OPENCL_EMBED_KERNELS ON CACHE BOOL "" FORCE)
 # No OpenMP: llama's own threadpool serves, and the single-lib set avoids a cross-release
 # dependency on the libomp.so that whisper's tag happens to publish.
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)

@@ -536,11 +536,13 @@
   "settings_section_data": "Données",
   "gpu_whisper_title": "Accélération GPU Whisper (expérimental)",
   "gpu_llama_title": "Accélération GPU LLM (expérimental)",
-  "gpu_toggle_desc": "Exécuter ce moteur sur le GPU (Vulkan). L'activation lance un test de compatibilité unique dans un processus isolé ; si l'appareil échoue, l'interrupteur se désactive de lui-même.",
+  "gpu_toggle_desc": "Exécuter ce moteur sur le GPU (OpenCL). L'activation lance un test de compatibilité unique dans un processus isolé ; si l'appareil échoue, l'interrupteur se désactive de lui-même.",
   "gpu_verdict_incompatible": "Cet appareil a échoué au test GPU — exécution sur le CPU.",
   "gpu_verdict_verified": "GPU vérifié sur cet appareil.",
   "gpu_verdict_probed": "Test GPU réussi — en attente de la première utilisation réelle.",
   "gpu_test_deferred_title": "Test différé",
   "gpu_test_deferred_message": "Aucun modèle n'est chargé pour ce moteur, il n'y a donc rien à tester. Le test de compatibilité s'exécutera automatiquement au prochain chargement d'un modèle, et cet interrupteur se désactivera de lui-même si l'appareil échoue.",
+  "gpu_no_backend_title": "Aucun GPU disponible",
+  "gpu_no_backend_message": "Cette version n'a pas de backend GPU pour ce moteur, ou l'appareil ne signale aucun GPU utilisable, il n'y a donc rien pour accélérer. Le moteur continue de fonctionner sur le CPU et l'interrupteur a été désactivé. Aucun verdict n'a été enregistré pour cet appareil.",
   "gpu_test_again": "Tester à nouveau"
 }

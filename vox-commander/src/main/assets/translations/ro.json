@@ -536,11 +536,13 @@
   "settings_section_data": "Date",
   "gpu_whisper_title": "Accelerare GPU Whisper (Experimental)",
   "gpu_llama_title": "Accelerare GPU LLM (Experimental)",
-  "gpu_toggle_desc": "Rulează acest motor pe GPU (Vulkan). Activarea pornește un test de compatibilitate unic într-un proces izolat; dacă dispozitivul îl pică, comutatorul se oprește singur.",
+  "gpu_toggle_desc": "Rulează acest motor pe GPU (OpenCL). Activarea rulează un test de compatibilitate unic într-un proces izolat; dacă dispozitivul nu îl trece, comutatorul se oprește singur.",
   "gpu_verdict_incompatible": "Acest dispozitiv a picat testul GPU — rulează pe CPU.",
   "gpu_verdict_verified": "GPU verificat pe acest dispozitiv.",
   "gpu_verdict_probed": "Test GPU trecut — așteaptă prima utilizare reală.",
   "gpu_test_deferred_title": "Test amânat",
   "gpu_test_deferred_message": "Niciun model nu este încărcat pentru acest motor, deci nu există cu ce să se testeze. Testul de compatibilitate va rula automat la următoarea încărcare a unui model, iar acest comutator se va opri singur dacă dispozitivul nu îl trece.",
+  "gpu_no_backend_title": "Niciun GPU disponibil",
+  "gpu_no_backend_message": "Această versiune nu are backend GPU pentru acest motor, sau dispozitivul nu raportează niciun GPU utilizabil, deci nu există cu ce accelera. Motorul rulează în continuare pe CPU, iar comutatorul a fost oprit la loc. Nu s-a înregistrat niciun verdict pentru acest dispozitiv.",
   "gpu_test_again": "Testează din nou"
 }

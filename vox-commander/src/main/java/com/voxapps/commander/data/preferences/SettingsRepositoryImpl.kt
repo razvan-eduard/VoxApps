@@ -149,13 +149,21 @@ class SettingsRepositoryImpl(
 
         // Per-engine GPU state ("whisper" / "llama") — one key family instead of a second copy
         // of the vulkan_* block per engine.
+        //
+        // Verdict keys carry the backend in their name because a verdict is about a backend, not
+        // about GPUs in general: a device that crashes Vulkan's compute pipelines runs OpenCL
+        // fine, and an un-scoped "incompatible" recorded under the first would permanently deny
+        // the second. Un-suffixed keys from the Vulkan era are simply orphaned — the honest state
+        // for a new backend is "never probed". Only the enabled flag stays backend-free: it is
+        // the user's wish, not a finding about the hardware.
+        private const val GPU_BACKEND = "opencl"
         fun gpuEnabled(engine: String) = booleanPreferencesKey("gpu_${engine}_enabled")
-        fun gpuIncompatible(engine: String) = booleanPreferencesKey("gpu_${engine}_incompatible")
-        fun gpuProbeDone(engine: String) = booleanPreferencesKey("gpu_${engine}_probe_done")
-        fun gpuProbeAttempts(engine: String) = intPreferencesKey("gpu_${engine}_probe_attempts")
-        fun gpuRuntimeAttempt(engine: String) = booleanPreferencesKey("gpu_${engine}_runtime_attempt")
-        fun gpuRuntimeVerified(engine: String) = booleanPreferencesKey("gpu_${engine}_runtime_verified")
-        fun gpuCrashStrikes(engine: String) = intPreferencesKey("gpu_${engine}_crash_strikes")
+        fun gpuIncompatible(engine: String) = booleanPreferencesKey("gpu_${engine}_${GPU_BACKEND}_incompatible")
+        fun gpuProbeDone(engine: String) = booleanPreferencesKey("gpu_${engine}_${GPU_BACKEND}_probe_done")
+        fun gpuProbeAttempts(engine: String) = intPreferencesKey("gpu_${engine}_${GPU_BACKEND}_probe_attempts")
+        fun gpuRuntimeAttempt(engine: String) = booleanPreferencesKey("gpu_${engine}_${GPU_BACKEND}_runtime_attempt")
+        fun gpuRuntimeVerified(engine: String) = booleanPreferencesKey("gpu_${engine}_${GPU_BACKEND}_runtime_verified")
+        fun gpuCrashStrikes(engine: String) = intPreferencesKey("gpu_${engine}_${GPU_BACKEND}_crash_strikes")
         val GPU_STATE_MIGRATED = booleanPreferencesKey("gpu_state_migrated")
 
         // Whisper Engine (DLC)
