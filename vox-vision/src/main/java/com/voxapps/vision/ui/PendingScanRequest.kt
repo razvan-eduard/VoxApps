@@ -13,5 +13,8 @@ data class PendingScanRequest(
     val returnToCallerOnComplete: Boolean = false,
     val imageUri: String? = null,
     val produceOCR: Boolean = true,
-    val captureMode: String = com.voxapps.ipc.VoxOcrRequest.CAPTURE_MODE_SINGLE
+    val captureMode: String = com.voxapps.ipc.VoxOcrRequest.CAPTURE_MODE_SINGLE,
+    /** The caller declared a tabular document — see [com.voxapps.ipc.VoxOcrRequest.tableMode].
+     *  Advisory until the table structurer exists; reading-order rows are the answer either way. */
+    val tableMode: Boolean = false
 )

@@ -23,10 +23,11 @@ fun rememberVisionCaptureLauncher(
     baseTask: String,
     hint: String?,
     produceOCR: Boolean,
-    captureMode: String = VoxOcrRequest.CAPTURE_MODE_SINGLE
+    captureMode: String = VoxOcrRequest.CAPTURE_MODE_SINGLE,
+    tableMode: Boolean = false
 ): () -> Unit {
     val context = LocalContext.current
     return {
-        VisionAttachmentCapture.launch(context, baseTask, hint, produceOCR, captureMode = captureMode)
+        VisionAttachmentCapture.launch(context, baseTask, hint, produceOCR, captureMode = captureMode, tableMode = tableMode)
     }
 }

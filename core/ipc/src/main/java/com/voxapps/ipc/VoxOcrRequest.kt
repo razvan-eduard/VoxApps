@@ -54,7 +54,14 @@ data class VoxOcrRequest(
     //   parallel [VoxOcrResult.rawTexts] — no further OCR needed by the caller.
     // Meaningless combined with [imageUri] (the headless, no-camera path) — only applies to a live
     // camera session. Defaults to [CAPTURE_MODE_SINGLE] so every existing caller is unaffected.
-    val captureMode: String = CAPTURE_MODE_SINGLE
+    val captureMode: String = CAPTURE_MODE_SINGLE,
+    // The caller declares that its documents are tabular and it wants the recognized text
+    // organized as table rows when Vision can manage it. A request property rather than a
+    // per-satellite rule inside Vision: Vision serves any satellite, so what kind of document a
+    // scan is about is the caller's knowledge, not the hub's. Advisory — a Vision without the
+    // table models, or a document with no recognizable table, still answers with plain
+    // reading-order text. Defaults false so every existing caller is unaffected.
+    val tableMode: Boolean = false
 ) {
     fun toJson(): String {
         val o = JSONObject()
@@ -65,6 +72,7 @@ data class VoxOcrRequest(
         imageUri?.let { o.put("imageUri", it) }
         o.put("produceOCR", produceOCR)
         o.put("captureMode", captureMode)
+        o.put("tableMode", tableMode)
         return o.toString()
     }
 
@@ -86,7 +94,8 @@ data class VoxOcrRequest(
                     returnToCallerOnComplete = o.optBoolean("returnToCallerOnComplete", false),
                     imageUri = o.optStringOrNull("imageUri"),
                     produceOCR = o.optBoolean("produceOCR", true),
-                    captureMode = o.optString("captureMode").takeIf { it.isNotBlank() } ?: CAPTURE_MODE_SINGLE
+                    captureMode = o.optString("captureMode").takeIf { it.isNotBlank() } ?: CAPTURE_MODE_SINGLE,
+                    tableMode = o.optBoolean("tableMode", false)
                 )
             } catch (e: Exception) {
                 null
