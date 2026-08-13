@@ -17,7 +17,9 @@ JNI_DIR="$PROJECT_ROOT/vox-commander/src/main/jniLibs/arm64-v8a"
 # Scoped to the commit rather than to the app version because many app versions share one whisper
 # build. Published releases are permanent — a tag's assets are never deleted or replaced — so every
 # address an installed APK carries keeps resolving.
-WHISPER_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse "HEAD:vox-commander/src/main/cpp/whisper.cpp")
+# The build fingerprint (submodule + wrapper + CMake config + OpenCL shim), not the submodule
+# commit: the tag must move whenever the bytes can. Same script the APK records its pin with.
+WHISPER_COMMIT=$("$PROJECT_ROOT/scripts/whisper_build_pin.sh")
 TAG="whisper-libs-${WHISPER_COMMIT:0:12}"
 
 # --verify: after publishing (or when everything already matches), download each asset over the

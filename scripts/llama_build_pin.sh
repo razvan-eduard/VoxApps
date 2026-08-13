@@ -18,4 +18,5 @@ git ls-files -s -- \
     vox-commander/src/main/cpp/llama.cpp \
     vox-commander/src/main/cpp/llama_jni.cpp \
     vox-commander/src/main/cpp/llama-build \
+    vox-commander/src/main/cpp/opencl-shim \
     | awk '{print $2}' | git hash-object --stdin
