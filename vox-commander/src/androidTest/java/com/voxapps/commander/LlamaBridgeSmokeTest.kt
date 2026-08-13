@@ -57,24 +57,6 @@ class LlamaBridgeSmokeTest {
 
             assertTrue("nothing resident after a completion", LlamaBridgeImpl.contextTokenCount(handle) > 0)
 
-            // A prompt past half the context must still decode. Asking for more than one KV
-            // sequence divides the context between them unless the pool is unified, which silently
-            // halves what any single call can hold — and the size guard, measuring the context
-            // total rather than what a sequence actually gets, let such a prompt through to fail
-            // inside the decode with nothing said about why. Sized past half and well inside the
-            // whole, so it passes only when the pool is shared.
-            val longPrompt = (1..120).joinToString(" ") { "the little dog ran home" }
-            val longOut = LlamaBridgeImpl.complete(
-                handle,
-                systemPrompt = "",
-                userText = longPrompt,
-                grammarGbnf = "root ::= \"XOK\"",
-                maxTokens = 4,
-                temperature = 0.1f,
-                slot = com.voxapps.llamacpp.LlamaBridge.SLOT_RAW
-            )
-            assertEquals("a prompt past half the context failed to decode", "XOK", longOut)
-
             // Slot isolation: a raw-slot completion must not evict slot 0's resident prefix, and
             // a constrained completion must still answer correctly after alternating. The token
             // count strictly growing across the raw call is the eviction check — under one
@@ -102,6 +84,27 @@ class LlamaBridgeSmokeTest {
                 temperature = 0.1f
             )
             assertEquals("constrained output wrong after slot alternation", "XOK", outAfterAlternation)
+
+            // A prompt past half the context must still decode. Asking for more than one KV
+            // sequence divides the context between them unless the pool is unified, which silently
+            // halves what any single call can hold — and the size guard, measuring the context
+            // total rather than what a sequence actually gets, let such a prompt through to fail
+            // inside the decode with nothing said about why. Sized past half and well inside the
+            // whole, so it passes only when the pool is shared.
+            // 40 repetitions, not more: the test model's tiny vocabulary tokenizes prose at
+            // nearly two tokens per word, so the count is chosen against measured tokens (~370
+            // here) — past the 256 a divided pool would allow, safely under the 512 whole.
+            val longPrompt = (1..40).joinToString(" ") { "the little dog ran home" }
+            val longOut = LlamaBridgeImpl.complete(
+                handle,
+                systemPrompt = "",
+                userText = longPrompt,
+                grammarGbnf = "root ::= \"XOK\"",
+                maxTokens = 4,
+                temperature = 0.1f,
+                slot = com.voxapps.llamacpp.LlamaBridge.SLOT_RAW
+            )
+            assertEquals("a prompt past half the context failed to decode", "XOK", longOut)
 
             LlamaBridgeImpl.clearMemory(handle)
             assertEquals("clearMemory left tokens resident", 0, LlamaBridgeImpl.contextTokenCount(handle))
