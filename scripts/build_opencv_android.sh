@@ -90,6 +90,9 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
+# -ffile-prefix-map + --build-id=none keep the build host out of the shipped libraries — the
+# absolute source path is otherwise baked into every OpenCV assert string (.rodata, survives
+# a strip), same as the whisper/llama builds.
 echo "Configuring OpenCV (arm64-v8a, core+imgproc+imgcodecs+java, +geometry+flann as transitive deps)..."
 cmake -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
@@ -111,6 +114,9 @@ cmake -G Ninja \
     -DBUILD_opencv_stitching=OFF \
     -DWITH_OPENCL=OFF -DWITH_IPP=OFF \
     -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+    -DCMAKE_C_FLAGS="-ffile-prefix-map=$PROJECT_ROOT=." \
+    -DCMAKE_CXX_FLAGS="-ffile-prefix-map=$PROJECT_ROOT=." \
+    -DCMAKE_SHARED_LINKER_FLAGS="-Wl,--build-id=none" \
     "$OPENCV_DIR"
 
 echo "Building gen_opencv_java_source (JNI codegen) first..."

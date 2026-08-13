@@ -25,6 +25,11 @@ class LlamaEngineManager(
     companion object {
         private const val TAG = "LlamaEngineManager"
 
+        /** A transient CDN hiccup (HTTP/2 REFUSED_STREAM) aborts one attempt; a fresh connection
+         *  clears it. Bounded so a genuinely unreachable release still fails in finite time. */
+        private const val MAX_DOWNLOAD_ATTEMPTS = 4
+        private const val DOWNLOAD_BACKOFF_MS = 800L
+
         /**
          * One directory, named the same for every build; [libDir] is the only place any code
          * derives this path from, so the downloader and the loaders cannot disagree on it.
@@ -197,50 +202,60 @@ class LlamaEngineManager(
             }
 
             val url = baseUrl + libName
-            Logger.log("Downloading $libName from $url", TAG)
-
             val tempFile = File(libDir, "$libName.tmp")
 
-            try {
-                val request = okhttp3.Request.Builder().url(url).build()
-                httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Logger.log("Failed to download $libName: HTTP ${response.code}", TAG)
-                        return@withContext false
-                    }
-
-                    response.body?.byteStream()?.use { input ->
-                        tempFile.outputStream().use { output ->
-                            input.copyTo(output)
+            // Retry with backoff. GitHub's asset CDN answers a fresh request over a new
+            // connection, so a transient HTTP/2 stream reset (REFUSED_STREAM) that aborts one
+            // attempt clears on the next — a single fail-fast attempt stranded the whole runtime
+            // on one hiccup. A 404 or a digest mismatch is definitive, not transient: those stop
+            // immediately rather than burning the budget. Same shape as core:nativelibs' loader.
+            var settled = false
+            for (attempt in 1..MAX_DOWNLOAD_ATTEMPTS) {
+                Logger.log("Downloading $libName from $url (attempt $attempt/$MAX_DOWNLOAD_ATTEMPTS)", TAG)
+                try {
+                    val request = okhttp3.Request.Builder().url(url).build()
+                    httpClient.newCall(request).execute().use { response ->
+                        if (response.code == 404) {
+                            Logger.log("$libName not found at $url — not retrying", TAG)
+                            return@withContext false
                         }
+                        if (!response.isSuccessful) error("HTTP ${response.code}")
+                        response.body?.byteStream()?.use { input ->
+                            tempFile.outputStream().use { output -> input.copyTo(output) }
+                        } ?: error("empty response body")
                     }
-                }
 
-                if (want != null) {
-                    val actual = sha256Of(tempFile)
-                    if (actual != want) {
-                        Logger.log("$libName failed verification: expected $want, got $actual", TAG)
+                    if (want != null) {
+                        val actual = sha256Of(tempFile)
+                        if (actual != want) {
+                            // A truncated transfer fails this too, so it is a retryable attempt,
+                            // not a hard stop.
+                            tempFile.delete()
+                            error("sha256 mismatch: expected $want, got $actual")
+                        }
+                    } else {
+                        Logger.log("No recorded digest for $libName — downloaded without verification", TAG)
+                    }
+
+                    if (tempFile.length() <= 0 || !tempFile.renameTo(targetFile)) {
                         tempFile.delete()
-                        return@withContext false
+                        error("could not finalise the download")
                     }
-                } else {
-                    Logger.log("No recorded digest for $libName — downloaded without verification", TAG)
-                }
 
-                if (tempFile.length() <= 0 || !tempFile.renameTo(targetFile)) {
-                    Logger.log("Could not finalise $libName", TAG)
+                    Logger.log("Downloaded $libName (${targetFile.length()} bytes)", TAG)
+                    downloadedCount++
+                    onProgress(downloadedCount.toFloat() / totalFiles)
+                    settled = true
+                    break
+                } catch (e: Exception) {
+                    Logger.log("Error downloading $libName (attempt $attempt): ${e.message}", TAG)
                     tempFile.delete()
-                    return@withContext false
+                    if (attempt < MAX_DOWNLOAD_ATTEMPTS) {
+                        kotlinx.coroutines.delay(DOWNLOAD_BACKOFF_MS * attempt)
+                    }
                 }
-
-                Logger.log("Downloaded $libName (${targetFile.length()} bytes)", TAG)
-                downloadedCount++
-                onProgress(downloadedCount.toFloat() / totalFiles)
-            } catch (e: Exception) {
-                Logger.log("Error downloading $libName: ${e.message}", TAG)
-                tempFile.delete()
-                return@withContext false
             }
+            if (!settled) return@withContext false
         }
 
         // Written last, so it is only ever present beside a complete set.
