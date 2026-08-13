@@ -543,6 +543,21 @@ else
         "$MODEL_MISSING"
 fi
 
+log_blue "── the LLM runtime ships inside the default APK ───────────"
+# The local LLM is the one engine an install cannot do without, so the default (and F-Droid)
+# build compiles it in: no first-run download to fail, and nothing executed that this build did
+# not produce. The lean `full` variant still strips it out to a release asset. Asserted as
+# placement, not prose: the llama exclusion must live inside the full-mode branch, never beside
+# whisper's unconditional one.
+llama_excl_line=$(grep -n 'jniLibs.excludes.addAll(llamaLibs' vox-commander/build.gradle.kts | cut -d: -f1)
+full_branch_line=$(grep -n 'if (dlcMode == "full")' vox-commander/build.gradle.kts | head -1 | cut -d: -f1)
+if [ -n "$llama_excl_line" ] && [ -n "$full_branch_line" ] && [ "$llama_excl_line" -gt "$full_branch_line" ]; then
+    ok "libllama.so is excluded only by the lean (full) variant"
+else
+    bad "the llama exclusion is not inside the full-mode branch — the default APK may ship without its LLM runtime" \
+        "exclude=$llama_excl_line full-branch=$full_branch_line"
+fi
+
 log_blue "── the llama engine is a hybrid CPU+Vulkan build ──────────"
 # The GPU backend is a single forced flag in the pinned CMakeLists (the shell script is outside
 # the build fingerprint, so a flag living only there would move the bytes without moving the tag).
