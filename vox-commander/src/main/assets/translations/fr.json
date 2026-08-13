@@ -540,5 +540,7 @@
   "gpu_verdict_incompatible": "Cet appareil a échoué au test GPU — exécution sur le CPU.",
   "gpu_verdict_verified": "GPU vérifié sur cet appareil.",
   "gpu_verdict_probed": "Test GPU réussi — en attente de la première utilisation réelle.",
+  "gpu_test_deferred_title": "Test différé",
+  "gpu_test_deferred_message": "Aucun modèle n'est chargé pour ce moteur, il n'y a donc rien à tester. Le test de compatibilité s'exécutera automatiquement au prochain chargement d'un modèle, et cet interrupteur se désactivera de lui-même si l'appareil échoue.",
   "gpu_test_again": "Tester à nouveau"
 }
