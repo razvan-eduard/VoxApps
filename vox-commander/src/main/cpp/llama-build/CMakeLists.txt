@@ -35,7 +35,7 @@ endif()
 # Hybrid CPU+Vulkan in the one library, chosen per model load (n_gpu_layers) — whisper's model.
 # ggml's umbrella target links and defines compiled-in backends itself, so the link line below
 # needs no ggml-vulkan entry.
-set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
 # No OpenMP: llama's own threadpool serves, and the single-lib set avoids a cross-release
 # dependency on the libomp.so that whisper's tag happens to publish.
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
