@@ -29,4 +29,5 @@
 # compile error and not a unit-test failure: the release build simply reads an empty schema and
 # refuses it, which is exactly how this was found (on a device, from a log line).
 -keep class com.voxapps.expenses.data.ExternalServicesSchema { *; }
+-keep class com.voxapps.expenses.data.VocabulariesSchema { *; }
 -keep class com.voxapps.expenses.data.ExternalService { *; }

@@ -17,9 +17,11 @@ data class ScanPreParse(
     val date: String? = null,
     val time: String? = null,
     val total: Double? = null,
+    /** Notification captures resolve a vendor deterministically too — see NotificationPreParse. */
+    val vendor: String? = null,
     val storedAt: Long = 0L
 ) {
-    val isEmpty: Boolean get() = date == null && time == null && total == null
+    val isEmpty: Boolean get() = date == null && time == null && total == null && vendor == null
 }
 
 /**
@@ -84,6 +86,7 @@ class ScanPreParseRepository(context: Context) {
             entry.date?.let { o.put("date", it) }
             entry.time?.let { o.put("time", it) }
             entry.total?.let { o.put("total", it) }
+            entry.vendor?.let { o.put("vendor", it) }
             o.put("storedAt", entry.storedAt)
             array.put(o)
         }
@@ -101,6 +104,7 @@ class ScanPreParseRepository(context: Context) {
                     date = if (o.has("date")) o.optString("date") else null,
                     time = if (o.has("time")) o.optString("time") else null,
                     total = if (o.has("total")) o.optDouble("total") else null,
+                    vendor = if (o.has("vendor")) o.optString("vendor") else null,
                     storedAt = o.optLong("storedAt")
                 )
             }.toMap()

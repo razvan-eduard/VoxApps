@@ -253,12 +253,8 @@ class LlmResultReceiver : BroadcastReceiver() {
                     try { String(android.util.Base64.decode(it, android.util.Base64.NO_WRAP), Charsets.UTF_8) } catch (e: Exception) { null }
                 }
                 val rawJson = result.rawJson
-                val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
-                    NotificationExpenseParseResultParser.parse(rawJson)
-                } else {
-                    Logger.w(TAG, "Notification expense parse failed: ${result.error}")
-                    null
-                }
+                val isParseSuccess = result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null
+                if (!isParseSuccess) Logger.w(TAG, "Notification expense parse failed: ${result.error}")
                 // A STATUS_ERROR reply (OpenAI/network/etc. failure on Commander's side — see
                 // OpenAiInterpreter.lastErrorReason for the specific cause carried in result.error)
                 // is transient, unlike a STATUS_SUCCESS reply this receiver simply doesn't recognize
@@ -280,6 +276,17 @@ class LlmResultReceiver : BroadcastReceiver() {
                         if (notificationKey != null) {
                             ProcessedNotificationKeysStore(context.applicationContext).markProcessed(notificationKey)
                         }
+                        // Reunite the reply with what was resolved before it was asked —
+                        // suppressed fields are absent from the JSON by design (see
+                        // NotificationPreParse), and the deterministic value outranks anything
+                        // the model produced anyway: it was read from the notification's own
+                        // characters. In here rather than at the branch top because the store
+                        // read is a suspend, and onReceive's synchronous part must stay off IO.
+                        val preParse = if (isParseSuccess) container.scanPreParseRepository.take(requestId) else null
+                        val parsed = if (isParseSuccess) {
+                            NotificationExpenseParseResultParser.parse(rawJson!!, presetAmount = preParse?.total)
+                                ?.let { p -> if (preParse?.vendor != null) p.copy(vendor = preParse.vendor) else p }
+                        } else null
                         if (parsed == null) return@launch
 
                         val settings = container.settingsRepository.getSnapshot()
