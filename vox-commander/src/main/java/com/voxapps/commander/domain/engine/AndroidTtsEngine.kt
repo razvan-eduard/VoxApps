@@ -22,8 +22,12 @@ class AndroidTtsEngine(private val appContext: Context) : BaseVoxEngine(), ITtsE
 
     override val engineKey: String = ENGINE_KEY
 
-    private var tts: TextToSpeech? = null
-    private var ready = false
+    // Written from the platform's init callback and from a cancelled load, read from whatever
+    // thread asks for speech. The pair carries an invariant speak() depends on — `ready` true
+    // means [tts] is a live connection — so they are only ever written together, under the
+    // init lock in onLoad.
+    @Volatile private var tts: TextToSpeech? = null
+    @Volatile private var ready = false
     private var speechRate: Float = 1.0f
     private var pitch: Float = 1.0f
 
@@ -57,53 +61,92 @@ class AndroidTtsEngine(private val appContext: Context) : BaseVoxEngine(), ITtsE
         tts?.shutdown()
         tts = null
 
-        tts = TextToSpeech(appContext.applicationContext) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val locale = localeForLanguage(language)
-                val setResult = tts?.setLanguage(locale)
-                if (setResult == TextToSpeech.LANG_MISSING_DATA || setResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Logger.log("TTS language '$language' not supported (result=$setResult), falling back to default", TAG)
-                    tts?.setLanguage(Locale.getDefault())
-                }
-                tts?.setSpeechRate(speechRate)
-                tts?.setPitch(pitch)
+        // Three threads meet on this connection: the caller, the binder thread the platform
+        // delivers the init callback on — which can arrive before the constructor has even
+        // returned — and whichever thread cancels the load. [initLock] is what makes that
+        // meeting orderly, and [settle] is the single place the connection is configured and
+        // the caller answered: whichever of publication and the callback arrives second runs
+        // it, and a cancellation resolves the load before either can. Configuring through the
+        // instance handed to [settle] rather than through the field is the point — a callback
+        // for an abandoned connection must never report readiness, or it leaves the engine
+        // claiming to be ready with no service behind it and every later speak() no-ops.
+        val initLock = Any()
+        var instance: TextToSpeech? = null
+        var pendingStatus: Int? = null
+        var resolved = false
 
-                tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {}
+        fun settle(status: Int, engine: TextToSpeech) {
+            if (resolved) return
+            resolved = true
 
-                    override fun onDone(utteranceId: String?) {
-                        Logger.log("TTS utterance done: $utteranceId", TAG)
-                        // Remove under the lock, then invoke the callback OUTSIDE the lock
-                        // so user code never runs while holding ttsLock.
-                        val cb = utteranceId?.let { id -> synchronized(ttsLock) { utteranceCallbacks.remove(id) } }
-                        cb?.invoke()
-                        queueNextSentence()
-                    }
-
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        Logger.log("TTS error for utterance: $utteranceId", TAG)
-                        val cb = utteranceId?.let { id -> synchronized(ttsLock) { utteranceCallbacks.remove(id) } }
-                        cb?.invoke()
-                        queueNextSentence()
-                    }
-                })
-
-                ready = true
-                Logger.log("Android TTS initialized for language '$language'", TAG)
-                if (cont.isActive) cont.resume(true)
-            } else {
+            if (status != TextToSpeech.SUCCESS) {
                 Logger.log("Android TTS init failed with status=$status", TAG)
+                engine.shutdown()
                 if (cont.isActive) cont.resume(false)
+                return
             }
+
+            val locale = localeForLanguage(language)
+            val setResult = engine.setLanguage(locale)
+            if (setResult == TextToSpeech.LANG_MISSING_DATA || setResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Logger.log("TTS language '$language' not supported (result=$setResult), falling back to default", TAG)
+                engine.setLanguage(Locale.getDefault())
+            }
+            engine.setSpeechRate(speechRate)
+            engine.setPitch(pitch)
+
+            engine.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {}
+
+                override fun onDone(utteranceId: String?) {
+                    Logger.log("TTS utterance done: $utteranceId", TAG)
+                    // Remove under the lock, then invoke the callback OUTSIDE the lock
+                    // so user code never runs while holding ttsLock.
+                    val cb = utteranceId?.let { id -> synchronized(ttsLock) { utteranceCallbacks.remove(id) } }
+                    cb?.invoke()
+                    queueNextSentence()
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) {
+                    Logger.log("TTS error for utterance: $utteranceId", TAG)
+                    val cb = utteranceId?.let { id -> synchronized(ttsLock) { utteranceCallbacks.remove(id) } }
+                    cb?.invoke()
+                    queueNextSentence()
+                }
+            })
+
+            tts = engine
+            ready = true
+            Logger.log("Android TTS initialized for language '$language'", TAG)
+            if (cont.isActive) cont.resume(true)
+        }
+
+        val created = TextToSpeech(appContext.applicationContext) { status ->
+            synchronized(initLock) {
+                val published = instance
+                // The callback beat the constructor's return; publication below settles it.
+                if (published == null) pendingStatus = status else settle(status, published)
+            }
+        }
+        synchronized(initLock) {
+            instance = created
+            pendingStatus?.let { settle(it, created) }
         }
 
         cont.invokeOnCancellation {
             // The caller gave up while the service was still connecting; do not leave the
-            // connection dangling.
-            tts?.shutdown()
-            tts = null
-            ready = false
+            // connection dangling, and resolve the load so a callback still in flight cannot
+            // configure or claim readiness for a connection nobody owns any more.
+            synchronized(initLock) {
+                resolved = true
+                if (tts === created) {
+                    tts = null
+                    ready = false
+                }
+                created.stop()
+                created.shutdown()
+            }
         }
     }
 
@@ -175,9 +218,19 @@ class AndroidTtsEngine(private val appContext: Context) : BaseVoxEngine(), ITtsE
             val result = tts?.speak(sentence, mode, null, chunkId)
             if (result != TextToSpeech.SUCCESS) {
                 Logger.log("TTS speak chunk $idx failed with result=$result", TAG)
-                failedCallback = utteranceCallbacks.remove(chunkId)
+                // A chunk that never entered the queue produces no progress callback, so the
+                // chain that would have spoken the rest stops here. Release the whole utterance
+                // rather than only the chunk: the completion callback rides on the last sentence,
+                // so failing on any earlier one would otherwise leave every caller waiting on a
+                // callback the platform will never deliver — speaking state that never clears.
+                utteranceCallbacks.remove(chunkId)
+                failedCallback = currentOnDone
+                currentOnDone = null
+                pendingSentences = emptyList()
+                currentSentenceIdx = 0
+            } else {
+                currentSentenceIdx++
             }
-            currentSentenceIdx++
         }
         // Invoke outside the lock so user code never runs while holding ttsLock.
         failedCallback?.invoke()
