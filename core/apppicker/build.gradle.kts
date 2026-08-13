@@ -9,6 +9,7 @@ android {
 
     defaultConfig {
         minSdk = 29
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -27,4 +28,12 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation("androidx.compose.foundation:foundation")
+
+    // The card's state lives inside the composable — star, selection and default are each held as
+    // pending state and applied together — so the behaviour is only observable by driving the UI.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.junit)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

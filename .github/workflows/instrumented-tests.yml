@@ -106,7 +106,7 @@ jobs:
           disable-animations: true
           # One line: the action runs each script line as its own `sh -c`, so a continuation or
           # an `if` block would land as separate commands.
-          script: ./gradlew :vox-commander:connectedDebugAndroidTest --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP" -Pandroid.testInstrumentationRunnerArguments.notClass=com.voxapps.commander.NativeCrashReproductionTest
+          script: ./gradlew :vox-commander:connectedDebugAndroidTest :core:apppicker:connectedDebugAndroidTest --no-daemon -PvoxSkipNativePrep "$GRADLE_HEAP" -Pandroid.testInstrumentationRunnerArguments.notClass=com.voxapps.commander.NativeCrashReproductionTest
 
       - name: Publish test results
         if: always()
