@@ -32,6 +32,15 @@ set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
+# --- MACHINE-INDEPENDENT BUILD (no build-host identity in the binary) ---
+# Same reason as the llama build: ggml's GGML_ASSERT bakes __FILE__ into .rodata, so the absolute
+# build path survives a strip. -ffile-prefix-map neutralises the prefix in __FILE__ and debug
+# info; --build-id=none drops the linker's per-build hash. Set before the submodule so it covers
+# whisper's and ggml's own sources.
+get_filename_component(VOX_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../.." ABSOLUTE)
+add_compile_options("-ffile-prefix-map=${VOX_REPO_ROOT}=.")
+add_link_options("-Wl,--build-id=none")
+
 add_subdirectory(whisper.cpp)
 
 add_library(

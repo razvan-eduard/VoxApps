@@ -48,6 +48,17 @@ set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 
+# --- MACHINE-INDEPENDENT BUILD (no build-host identity in the binary) ---
+# ggml asserts everywhere, and every GGML_ASSERT bakes __FILE__ into .rodata as a string the
+# running code points at — so the absolute build path survives a strip (it is not debug info).
+# -ffile-prefix-map rewrites the prefix the compiler embeds in __FILE__ and debug info to a
+# neutral, repo-relative one; --build-id=none drops the linker's per-build hash. Set BEFORE the
+# submodule is added so it covers ggml's and llama's own sources, not just the JNI wrapper. This
+# lives in the pinned CMakeLists (the build fingerprint), so a change here moves the tag.
+get_filename_component(VOX_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../.." ABSOLUTE)
+add_compile_options("-ffile-prefix-map=${VOX_REPO_ROOT}=.")
+add_link_options("-Wl,--build-id=none")
+
 add_subdirectory(../llama.cpp llama.cpp)
 
 add_library(
