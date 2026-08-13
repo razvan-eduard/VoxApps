@@ -91,15 +91,15 @@ fun ExpensesScreen(
     // doesn't exist anymore now that capture itself isn't per-shot).
     val scanSingle = rememberVisionCaptureLauncher(
         baseTask = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", hint = null, produceOCR = true,
-        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE
+        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE, tableMode = true
     )
     val scanStitch = rememberVisionCaptureLauncher(
         baseTask = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", hint = null, produceOCR = true,
-        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH
+        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH, tableMode = true
     )
     val scanBatch = rememberVisionCaptureLauncher(
         baseTask = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", hint = null, produceOCR = true,
-        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
+        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH, tableMode = true
     )
     fun gatedScan(action: () -> Unit) {
         if (visionInstalled && commanderInstalled) {

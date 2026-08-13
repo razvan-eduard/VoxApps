@@ -1208,15 +1208,15 @@ private fun ExpenseAttachmentsSection(
     // "keep shooting" loop too, so these calls are just "launch and forget."
     val takePhotoSingle = rememberVisionCaptureLauncher(
         baseTask = "${LlmTasks.EXPENSE_ATTACHMENT_CAPTURE}:$expenseId", hint = null, produceOCR = true,
-        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE
+        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE, tableMode = true
     )
     val takePhotoStitch = rememberVisionCaptureLauncher(
         baseTask = "${LlmTasks.EXPENSE_ATTACHMENT_CAPTURE}:$expenseId", hint = null, produceOCR = true,
-        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH
+        captureMode = VoxOcrRequest.CAPTURE_MODE_STITCH, tableMode = true
     )
     val takePhotoBatch = rememberVisionCaptureLauncher(
         baseTask = "${LlmTasks.EXPENSE_ATTACHMENT_CAPTURE}:$expenseId", hint = null, produceOCR = true,
-        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
+        captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH, tableMode = true
     )
     // Zero attachments yet: offer single + stitch — either one triggers the "first attachment
     // updates the record" auto-flow above (a stitch group here is genuinely one document, one JSON —

@@ -156,7 +156,7 @@ private suspend fun runWidgetScan(context: Context, captureMode: String) {
         !VoxAppsDiscovery.isCommanderInstalled(context) ->
             showRequirementToast(context, languageManager.getString("commander_required_message"))
         else -> VisionAttachmentCapture.launch(
-            context, "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", null, produceOCR = true, captureMode = captureMode
+            context, "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", null, produceOCR = true, captureMode = captureMode, tableMode = true
         )
     }
 }

@@ -23,7 +23,8 @@ object VisionAttachmentCapture {
         task: String,
         hint: String?,
         produceOCR: Boolean,
-        captureMode: String = VoxOcrRequest.CAPTURE_MODE_SINGLE
+        captureMode: String = VoxOcrRequest.CAPTURE_MODE_SINGLE,
+        tableMode: Boolean = false
     ) {
         val payload = VoxOcrRequest(
             sourcePackage = context.packageName,
@@ -31,7 +32,8 @@ object VisionAttachmentCapture {
             hint = hint,
             returnToCallerOnComplete = true,
             produceOCR = produceOCR,
-            captureMode = captureMode
+            captureMode = captureMode,
+            tableMode = tableMode
         ).toJson()
         context.startActivity(
             Intent().apply {

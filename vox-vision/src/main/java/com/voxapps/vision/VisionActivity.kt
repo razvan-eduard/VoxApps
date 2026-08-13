@@ -87,7 +87,8 @@ class VisionActivity : ComponentActivity() {
                 returnToCallerOnComplete = request.returnToCallerOnComplete,
                 imageUri = request.imageUri,
                 produceOCR = request.produceOCR,
-                captureMode = request.captureMode
+                captureMode = request.captureMode,
+                tableMode = request.tableMode
             )
         }
 

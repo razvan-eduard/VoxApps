@@ -119,4 +119,22 @@ class VoxOcrRequestTest {
         assertNull(VoxOcrRequest.fromJson("""{"task":"x"}"""))
         assertNull(VoxOcrRequest.fromJson("""{"sourcePackage":"x"}"""))
     }
+
+    @Test
+    fun `tableMode survives the round trip`() {
+        val req = VoxOcrRequest(
+            sourcePackage = "com.voxapps.expenses",
+            task = "EXPENSE_SCAN_CLEANUP:pending-create",
+            tableMode = true
+        )
+        assertEquals(true, VoxOcrRequest.fromJson(req.toJson())!!.tableMode)
+    }
+
+    @Test
+    fun `a payload from before the field reads as tableMode false`() {
+        // Backward compatibility: an older satellite's JSON simply lacks the key.
+        val legacy = """{"sourcePackage":"com.voxapps.notes","task":"NOTE_SCAN"}"""
+        assertEquals(false, VoxOcrRequest.fromJson(legacy)!!.tableMode)
+    }
+
 }

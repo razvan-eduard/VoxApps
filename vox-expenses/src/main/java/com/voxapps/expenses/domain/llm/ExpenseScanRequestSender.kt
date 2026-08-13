@@ -58,7 +58,8 @@ object ExpenseScanRequestSender {
             task = task,
             hint = "Rescanning attached photo",
             returnToCallerOnComplete = true,
-            imageUri = imageUri.toString()
+            imageUri = imageUri.toString(),
+            tableMode = true
         ).toJson()
 
         Logger.d(TAG, "Launching Vision for a headless OCR request (task=$task)")
