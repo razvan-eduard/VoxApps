@@ -65,6 +65,7 @@ class ToDoRepositoryTest {
 
     private fun buildRepository(lists: List<ToDoList> = emptyList()): ToDoRepository {
         every { listDao.observeAll() } returns flowOf(lists)
+        every { entryDao.observeAllListItems() } returns flowOf(emptyList())
         coEvery { listDao.getAll() } returns lists
         return ToDoRepository(listDao, entryDao, calendarRepository)
     }
