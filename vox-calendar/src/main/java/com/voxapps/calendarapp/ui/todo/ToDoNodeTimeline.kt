@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -31,6 +35,7 @@ import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DragHandle
@@ -40,12 +45,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -61,6 +68,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.calendarapp.data.CalendarAttachments
 import com.voxapps.calendarapp.data.ToDoItem
 import com.voxapps.calendarapp.ui.LocalLanguageManager
 import com.voxapps.calendarapp.ui.nothingElseTodayEmojis
@@ -94,7 +103,9 @@ private val UP_NEXT_LABEL_COLUMN_WIDTH = 22.dp
 // a slot this wide, and the connector lines are centered on the same axis — so the bigger "next" node
 // doesn't drift off the line the way it would if its own (larger) width shifted its center.
 private val NODE_SLOT_SIZE = NODE_SIZE_NEXT
-private val NODE_BORDER_WIDTH = 1.5.dp
+// 0.4x the emphasized border: every node/pill is outlined in its glow color, the starred/next
+// one just presses harder.
+private val NODE_BORDER_WIDTH = 1.2.dp
 private val NODE_BORDER_WIDTH_NEXT = 3.dp
 private val LINE_HEIGHT = 20.dp
 private val LINE_WIDTH = 3.dp
@@ -185,6 +196,11 @@ private fun isPastItem(item: ToDoItem, isNext: Boolean, now: Long = System.curre
 /** The color a task/node's own [colorArgb] should be darkened to for its glow — a tinted, non-neon
  *  shadow rather than the flat saturated fill color itself (which read as too harsh/neon at full
  *  shadow opacity). */
+/** Outline for a node/pill: its own TONE pressed much darker — enough contrast to read as a real
+ *  border on all four done/important tone fills (the raw-color glow was near-invisible on them). */
+internal fun toneBorderColor(tone: Color): Color =
+    Color(red = tone.red * 0.45f, green = tone.green * 0.45f, blue = tone.blue * 0.45f, alpha = 1f)
+
 private fun glowColorFor(colorArgb: Long): Color {
     val c = Color(colorArgb.toInt())
     return Color(red = c.red * 0.7f, green = c.green * 0.7f, blue = c.blue * 0.7f, alpha = 0.9f)
@@ -198,7 +214,29 @@ private fun contrastingTextColor(background: Color): Color =
 /** Blends [color] toward its own luminance-gray by [amount] (0 = unchanged, 1 = fully gray) — the
  *  "washed out" look for past/done items, on top of (not instead of) their row's own alpha reduction,
  *  so a faded item reads as genuinely behind-us rather than just a dimmer copy of the same hue. */
-private fun desaturate(color: Color, amount: Float = 0.55f): Color {
+/** The four tones a task renders in — done x important told apart at a glance: plain = the item's
+ *  color; important = the same hue pressed deeper; done = washed toward gray; done+important =
+ *  the deep tone washed toward gray (darker gray than plain done). */
+internal fun itemTone(colorArgb: Long, done: Boolean, important: Boolean): Color {
+    val base = Color(colorArgb.toInt())
+    val deepened = if (important) {
+        Color(red = base.red * 0.78f, green = base.green * 0.78f, blue = base.blue * 0.78f, alpha = base.alpha)
+    } else {
+        base
+    }
+    if (!done) return deepened
+    // Done washes hard toward a whitish gray — barely a memory of the hue.
+    val wash = 0.78f
+    val target = 0.84f
+    return Color(
+        red = deepened.red * (1 - wash) + target * wash,
+        green = deepened.green * (1 - wash) + target * wash,
+        blue = deepened.blue * (1 - wash) + target * wash,
+        alpha = deepened.alpha
+    )
+}
+
+internal fun desaturate(color: Color, amount: Float = 0.55f): Color {
     val gray = color.luminance()
     return Color(
         red = color.red + (gray - color.red) * amount,
@@ -228,6 +266,11 @@ fun ToDoNodeTimeline(
     onAddAtStart: () -> Unit,
     onAddAtEnd: () -> Unit,
     modifier: Modifier = Modifier,
+    // Inline editor (spec: no modal): the item whose editor is open renders IN its own row — the
+    // node circle stays (and keeps owning the done toggle), the pill is replaced by the card.
+    editingItemId: Long? = null,
+    editor: (@Composable (item: ToDoItem) -> Unit)? = null,
+    animateEditor: Boolean = false,
     itemRowContent: @Composable (index: Int, item: ToDoItem, node: @Composable () -> Unit) -> Unit = { _, item, node ->
         DefaultTimelineRow(item, node, isEditing, onTaskClick, isNext = item.id == computeNextItemId(items))
     }
@@ -275,15 +318,28 @@ fun ToDoNodeTimeline(
                 }
             }
             val isNext = item.id == nextItemId
-            itemRowContent(index, item) {
-                TimelineNode(
-                    colorArgb = item.colorArgb,
-                    done = item.done,
-                    emphasized = isNext,
-                    isImportant = item.isImportant,
-                    ghosted = !isEditing && isPastItem(item, isNext, now),
-                    onClick = { if (!isEditing) onToggleDone(item) }
-                )
+            Box(modifier = if (animateEditor) Modifier.animateContentSize() else Modifier) {
+                if (editor != null && item.id == editingItemId) {
+                    InlineEditorRow(
+                        item = item,
+                        onToggleDone = onToggleDone,
+                        leadingOffset = UP_NEXT_LABEL_COLUMN_WIDTH,
+                        editor = editor,
+                        hasItemAbove = index > 0,
+                        hasItemBelow = index < displayItems.lastIndex
+                    )
+                } else {
+                    itemRowContent(index, item) {
+                        TimelineNode(
+                            colorArgb = item.colorArgb,
+                            done = item.done,
+                            emphasized = isNext,
+                            isImportant = item.isImportant,
+                            ghosted = !isEditing && isPastItem(item, isNext, now),
+                            onClick = { if (!isEditing) onToggleDone(item) }
+                        )
+                    }
+                }
             }
         }
         if (nowSplitterIndex == displayItems.size) {
@@ -435,17 +491,28 @@ fun TaskChip(
     ghosted: Boolean = false
 ) {
     val languageManager = LocalLanguageManager.current
-    val background = if (ghosted) desaturate(Color(item.colorArgb.toInt())) else Color(item.colorArgb.toInt())
+    // Same per-entry observation CalendarScreen's agenda row uses — a to-do item IS a CalendarEntry,
+    // so attachment presence comes straight from the shared attachments table. Chip-internal so every
+    // surface that renders a chip (both timelines, the calendar grid) gets the paperclip for free.
+    val context = LocalContext.current
+    val hasAttachments by remember(item.id) {
+        (context.applicationContext as CalendarApplication).container.attachmentDao
+            .observeFor(CalendarAttachments.RECORD_TYPE, item.id)
+    }.collectAsState(initial = emptyList())
+    val tone = itemTone(item.colorArgb, item.done, item.isImportant)
+    val background = if (ghosted && !item.done) desaturate(tone) else tone
     val textColor = contrastingTextColor(background)
     val isEmpty = item.text.isEmpty()
     val elevation = if (emphasized) GLOW_ELEVATION_NEXT else GLOW_ELEVATION
-    val borderWidth = if (emphasized) NODE_BORDER_WIDTH_NEXT else NODE_BORDER_WIDTH
+    // Outline weight belongs to IMPORTANCE alone — "up next" keeps its glow/size emphasis but must
+    // never borrow the important items' thick contour.
+    val borderWidth = if (item.isImportant) NODE_BORDER_WIDTH_NEXT else NODE_BORDER_WIDTH
     Box(
         modifier = modifier
             .shadow(elevation, RoundedCornerShape(50), ambientColor = glowColorFor(item.colorArgb), spotColor = glowColorFor(item.colorArgb))
             .clip(RoundedCornerShape(50))
             .background(background)
-            .border(borderWidth, glowColorFor(item.colorArgb), RoundedCornerShape(50))
+            .border(borderWidth, toneBorderColor(background), RoundedCornerShape(50))
             .then(if (clickable) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
@@ -466,9 +533,10 @@ fun TaskChip(
                     else -> MaterialTheme.typography.bodyMedium
                 }
             )
-            if (item.done) {
+            // Done shows on the NODE alone — a second check in the pill said the same thing twice.
+            if (hasAttachments.isNotEmpty()) {
                 Spacer(Modifier.width(4.dp))
-                Icon(Icons.Filled.Check, contentDescription = null, tint = DONE_CHECK_COLOR, modifier = Modifier.size(14.dp))
+                Icon(Icons.Filled.AttachFile, contentDescription = null, tint = textColor, modifier = Modifier.size(12.dp))
             }
         }
     }
@@ -492,11 +560,12 @@ fun TimelineNode(
     ghosted: Boolean = false,
     isImportant: Boolean = false
 ) {
-    val color = if (ghosted) desaturate(Color(colorArgb.toInt())) else Color(colorArgb.toInt())
+    val tone = itemTone(colorArgb, done, isImportant)
+    val color = if (ghosted && !done) desaturate(tone) else tone
     val baseSize = if (emphasized) NODE_SIZE_NEXT else NODE_SIZE
     val size = if (isImportant) baseSize * IMPORTANT_NODE_SCALE else baseSize
     val elevation = if (emphasized) GLOW_ELEVATION_NEXT else GLOW_ELEVATION
-    val borderWidth = if (emphasized) NODE_BORDER_WIDTH_NEXT else NODE_BORDER_WIDTH
+    val borderWidth = if (isImportant) NODE_BORDER_WIDTH_NEXT else NODE_BORDER_WIDTH
     val shape = if (isImportant) StarShape else CircleShape
     Box(modifier = Modifier.size(NODE_SLOT_SIZE), contentAlignment = Alignment.Center) {
         if (emphasized) {
@@ -508,12 +577,28 @@ fun TimelineNode(
                 .size(size)
                 .clip(shape)
                 .background(color)
-                .border(borderWidth, glowColorFor(colorArgb), shape)
+                .border(borderWidth, toneBorderColor(color), shape)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
             if (done) {
-                Icon(Icons.Filled.Check, contentDescription = null, tint = DONE_CHECK_COLOR, modifier = Modifier.size(14.dp))
+                // Done must read at a glance: near-node-sized bold check on a light backing disc,
+                // not a thin 14dp glyph swallowed by the washed fill.
+                val checkScale = if (isImportant) 0.85f else 0.7f
+                Box(
+                    modifier = Modifier
+                        .size(size * if (isImportant) 0.9f else 0.8f)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.85f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = DONE_CHECK_COLOR,
+                        modifier = Modifier.size(size * checkScale)
+                    )
+                }
             }
         }
     }
@@ -611,6 +696,52 @@ private fun GhostAddRow(onClick: () -> Unit, leadingOffset: Dp = 0.dp) {
     }
 }
 
+/**
+ * The open item's row while its inline editor is expanded: the node circle stays on the timeline
+ * axis, vertically CENTERED on the card, and a solid item-colored line runs the row's full height
+ * behind it so the timeline's vertical line is never interrupted by the taller card.
+ */
+@Composable
+private fun InlineEditorRow(
+    item: ToDoItem,
+    onToggleDone: (ToDoItem) -> Unit,
+    editor: @Composable (ToDoItem) -> Unit,
+    leadingOffset: Dp = 0.dp,
+    hasItemAbove: Boolean = true,
+    hasItemBelow: Boolean = true
+) {
+    val lineColor = Color(item.colorArgb.toInt()).copy(alpha = 0.6f)
+    // The through-line is DRAWN rather than laid out (drawBehind) — the editor card contains lazy
+    // content (the attachments strip), and a SubcomposeLayout child inside an IntrinsicSize parent
+    // is a runtime crash. First/last item: the line STOPS at the node instead of running past it.
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val axisX = leadingOffset.toPx() + NODE_SLOT_SIZE.toPx() / 2f
+                val centerY = size.height / 2f
+                val stroke = LINE_WIDTH.toPx()
+                if (hasItemAbove) {
+                    drawLine(lineColor, Offset(axisX, 0f), Offset(axisX, centerY), stroke)
+                }
+                if (hasItemBelow) {
+                    drawLine(lineColor, Offset(axisX, centerY), Offset(axisX, size.height), stroke)
+                }
+            }
+    ) {
+        Spacer(Modifier.width(leadingOffset))
+        TimelineNode(
+            colorArgb = item.colorArgb,
+            done = item.done,
+            isImportant = item.isImportant,
+            onClick = { onToggleDone(item) }
+        )
+        Spacer(Modifier.width(10.dp))
+        Box(modifier = Modifier.weight(1f).padding(vertical = 4.dp)) { editor(item) }
+    }
+}
+
 /** [leadingOffset]: see [GhostAddRow] — same axis-shift for the view-mode timeline's reserved marker
  *  column. */
 @Composable
@@ -643,7 +774,14 @@ fun ToDoNodeTimelineEditable(
     onReorderCommitted: (List<ToDoItem>) -> Unit,
     onDeleteItem: (ToDoItem) -> Unit,
     onQuickEditDate: (ToDoItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    editingItemId: Long? = null,
+    editor: (@Composable (item: ToDoItem) -> Unit)? = null,
+    // Starting a drag on ANY row saves-and-closes the open inline editor (spec) — the host passes
+    // its close callback here; the editor itself commits on dispose.
+    onCloseEditor: () -> Unit = {},
+    // Editor expand/collapse animates only when the theme menu's animations toggle allows it.
+    animateEditor: Boolean = false
 ) {
     val haptics = LocalHapticFeedback.current
     var localItems by remember(items) { mutableStateOf(items) }
@@ -668,7 +806,19 @@ fun ToDoNodeTimelineEditable(
         haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
     }
 
-    LazyColumn(state = lazyListState, modifier = modifier.heightIn(max = 360.dp)) {
+    // Ghost-adding opens the new node's editor immediately — jump the (bounded-height) list to it
+    // so the editor is on screen, not below the fold. Item i sits at lazy index 1 + 2*i (a ghost
+    // row precedes the first item and one follows every item).
+    LaunchedEffect(editingItemId, localItems.size) {
+        val index = localItems.indexOfFirst { it.id == editingItemId }
+        // Land on the ghost "+" row ABOVE the editor, not the editor itself — the surrounding nodes
+        // and insert points must stay in sight and usable exactly as when no editor is open.
+        if (index >= 0) lazyListState.animateScrollToItem((2 * index).coerceAtLeast(0))
+    }
+    // The tall inline editor would leave no room for its neighbors under the resting cap — give the
+    // viewport enough height while one is open that the ghost rows around it stay reachable.
+    val maxTimelineHeight = if (editingItemId != null && localItems.any { it.id == editingItemId }) 560.dp else 360.dp
+    LazyColumn(state = lazyListState, modifier = modifier.heightIn(max = maxTimelineHeight)) {
         // A ghost "+" slot sits before the first item, between every pair, and after the last one —
         // one more insert point than there are items — so a task can be added at any position, not
         // just appended. Each slot's onClick carries the exact index to insert at.
@@ -680,23 +830,40 @@ fun ToDoNodeTimelineEditable(
         }
         localItems.forEachIndexed { index, item ->
             item(key = item.id) {
+                // ONE ReorderableItem hosts both faces (pill and inline editor) so the drag handle
+                // survives the swap: starting a drag closes the editor (the row collapses back to a
+                // pill mid-gesture) without the handle leaving composition and killing the drag.
+                val isEditingThis = editor != null && item.id == editingItemId
                 ReorderableItem(reorderableState, key = item.id) { isDragging ->
                     val elevation by animateDpAsState(if (isDragging) 8.dp else 0.dp, label = "todoDragElevation")
                     val isNext = item.id == nextItemId
-                    val ghosted = isPastItem(item, isNext)
+                    val ghosted = !isEditingThis && isPastItem(item, isNext)
+                    val lineColor = Color(item.colorArgb.toInt()).copy(alpha = 0.6f)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().alpha(if (ghosted) PAST_ITEM_ALPHA else 1f)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .alpha(if (ghosted) PAST_ITEM_ALPHA else 1f)
+                            .then(if (animateEditor) Modifier.animateContentSize() else Modifier)
+                            // Edit mode always has ghost "+" nodes at both ends, so the line runs
+                            // the editor row's full height in both directions (view mode stops it).
+                            .then(if (isEditingThis) Modifier.drawBehind {
+                                val axisX = NODE_SLOT_SIZE.toPx() / 2f
+                                drawLine(lineColor, Offset(axisX, 0f), Offset(axisX, size.height), LINE_WIDTH.toPx())
+                            } else Modifier)
                     ) {
                         TimelineNode(
                             colorArgb = item.colorArgb,
                             done = item.done,
-                            emphasized = isNext,
+                            emphasized = !isEditingThis && isNext,
                             ghosted = ghosted,
                             isImportant = item.isImportant,
                             onClick = { onToggleDone(item) }
                         )
                         Spacer(Modifier.width(10.dp))
+                        if (isEditingThis) {
+                            Box(modifier = Modifier.weight(1f).padding(vertical = 4.dp)) { editor!!(item) }
+                        } else {
                         TaskChip(
                             item = item,
                             clickable = true,
@@ -713,6 +880,7 @@ fun ToDoNodeTimelineEditable(
                             emphasized = isNext,
                             onClick = { onQuickEditDate(item) }
                         )
+                        }
                         // Own fixed-width slot (rather than sitting flush after the variable-width
                         // time label) so every row's handle lands on the same x — a consistent rail
                         // immediately beside the list's color-picker column, not just "whatever's left
@@ -726,6 +894,7 @@ fun ToDoNodeTimelineEditable(
                                     .longPressDraggableHandle(
                                         onDragStarted = {
                                             haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                            onCloseEditor()
                                             draggingItemId = item.id
                                         },
                                         onDragStopped = {

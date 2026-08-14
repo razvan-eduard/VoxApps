@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,7 +25,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.voxapps.location.AndroidLiveLocationProvider
@@ -51,6 +54,10 @@ private const val MIN_QUERY_LENGTH = 3
  * it (expenses caches like commander; calendar resolves fresh every time) so this component stays
  * policy-free. Null hides the icon. Tapping it with no location permission granted asks for it
  * first (coarse+fine), then resolves on grant.
+ *
+ * [inline] swaps the boxed OutlinedTextField for a bare single-line text field (the label becomes
+ * its placeholder) — for hosts whose surrounding fields are already chrome-free, like a dialog
+ * whose title edits inline. Search, suggestions, and the GPS icon behave identically.
  */
 @Composable
 fun VoxLocationPickerField(
@@ -60,6 +67,7 @@ fun VoxLocationPickerField(
     modifier: Modifier = Modifier,
     onPlacePicked: ((VoxPlace) -> Unit)? = null,
     gpsLock: (suspend () -> String?)? = null,
+    inline: Boolean = false,
     userAgent: String = VOX_NOMINATIM_USER_AGENT
 ) {
     val context = LocalContext.current
@@ -105,40 +113,66 @@ fun VoxLocationPickerField(
         searching = false
     }
 
-    Column(modifier = modifier) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { onValueChange(it) },
-            label = { Text(label) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            trailingIcon = {
-                when {
-                    searching || gpsBusy -> CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+    val trailing: @Composable () -> Unit = {
+        when {
+            searching || gpsBusy -> CircularProgressIndicator(
+                modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+            )
+            gpsLock != null -> IconButton(onClick = {
+                if (AndroidLiveLocationProvider.hasLocationPermission(context)) {
+                    runGpsLock()
+                } else {
+                    permissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        )
                     )
-                    gpsLock != null -> IconButton(onClick = {
-                        if (AndroidLiveLocationProvider.hasLocationPermission(context)) {
-                            runGpsLock()
-                        } else {
-                            permissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                    Manifest.permission.ACCESS_FINE_LOCATION
-                                )
+                }
+            }) {
+                Icon(
+                    Icons.Filled.MyLocation,
+                    contentDescription = label,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+
+    Column(modifier = modifier) {
+        if (inline) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = { onValueChange(it) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    decorationBox = { inner ->
+                        if (value.isEmpty()) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }) {
-                        Icon(
-                            Icons.Filled.MyLocation,
-                            contentDescription = label,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+                        inner()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                trailing()
             }
-        )
+        } else {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { onValueChange(it) },
+                label = { Text(label) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = trailing
+            )
+        }
         suggestions.forEach { place ->
             Column(
                 modifier = Modifier

@@ -109,7 +109,7 @@
   "entry_layer": "Calendrier",
   "entry_subscribed_read_only_note": "Cette entrée provient d'un calendrier en ligne abonné, elle est donc en lecture seule — vous pouvez tout de même définir un rappel ci-dessous.",
   "attachments": "Pièces jointes",
-  "attachment_choose_gallery": "Choisir depuis la galerie",
+  "attachment_choose_gallery": "Depuis la galerie",
   "attachment_take_photo": "Prendre une photo",
   "entry_when": "Quand",
   "entry_due": "Échéance",
@@ -287,5 +287,6 @@
   "weekday_thu": "Je",
   "weekday_fri": "Ve",
   "weekday_sat": "Sa",
-  "weekday_sun": "Di"
+  "weekday_sun": "Di",
+  "todo_clear_location": "Effacer le lieu"
 }

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -75,6 +76,7 @@ import com.voxapps.attachments.ui.AttachmentsSection
 import com.voxapps.attachments.ui.GroupDeleteConfig
 import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
+import com.voxapps.attachments.ui.rememberVisionInstalled
 import com.voxapps.design.SpeedDialAction
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.ipc.VoxOcrRequest
@@ -341,16 +343,24 @@ private fun NoteAttachmentsHost(noteId: Long, stateManager: NotesStateManager) {
         baseTask = "${LlmTasks.NOTE_ATTACHMENT_CAPTURE}:$noteId", hint = null, produceOCR = false,
         captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
     )
-    val captureActions = if (items.isEmpty()) {
-        listOf(
-            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
-            SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch"), takePhotoStitch)
-        )
-    } else {
-        listOf(
-            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
-            SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch"), takePhotoBatch)
-        )
+    // Attaching a photo never requires Vision: plain system camera always first, Vision's
+    // cropped-document modes (crop-rectangle icon) only while Vision is installed.
+    val visionInstalled = rememberVisionInstalled()
+    val takeStandardPhoto = rememberCameraCaptureLauncher(NotesAttachments.FILE_PROVIDER_AUTHORITY) { uri ->
+        handlePickedUris(listOf(uri))
+    }
+    val captureActions = listOf(
+        SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("attachment_take_photo"), takeStandardPhoto)
+    )
+    val visionActions = buildList {
+        if (visionInstalled) {
+            add(SpeedDialAction(Icons.Filled.Crop, languageManager.getString("capture_mode_single"), takePhotoSingle))
+            if (items.isEmpty()) {
+                add(SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch"), takePhotoStitch))
+            } else {
+                add(SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch"), takePhotoBatch))
+            }
+        }
     }
     AttachmentsSection(
         title = languageManager.getString("attachments"),
@@ -358,6 +368,7 @@ private fun NoteAttachmentsHost(noteId: Long, stateManager: NotesStateManager) {
         canAdd = items.count { it.removable } < 10,
         onPickFromGallery = { pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
         captureActions = captureActions,
+        visionActions = visionActions,
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->

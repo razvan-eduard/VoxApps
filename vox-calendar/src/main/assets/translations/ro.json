@@ -109,7 +109,7 @@
   "entry_layer": "Calendar",
   "entry_subscribed_read_only_note": "Această intrare provine dintr-un calendar online la care ești abonat, deci este doar pentru vizualizare — poți totuși seta un memento mai jos.",
   "attachments": "Atașamente",
-  "attachment_choose_gallery": "Alege din galerie",
+  "attachment_choose_gallery": "Din galerie",
   "attachment_take_photo": "Fă o poză",
   "entry_when": "Când",
   "entry_due": "Termen",
@@ -287,5 +287,6 @@
   "weekday_thu": "Jo",
   "weekday_fri": "Vi",
   "weekday_sat": "Sâ",
-  "weekday_sun": "Du"
+  "weekday_sun": "Du",
+  "todo_clear_location": "Șterge locația"
 }

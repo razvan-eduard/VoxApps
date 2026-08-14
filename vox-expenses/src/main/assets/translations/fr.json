@@ -106,7 +106,7 @@
   "possible_duplicate_items_warning": "Doublons possibles — les articles en rouge ont des noms similaires, veuillez vérifier",
   "lineitems_suggestion_apply_n": "Ajouter %1$d",
   "attachments": "Pièces jointes",
-  "attachment_choose_gallery": "Choisir depuis la galerie",
+  "attachment_choose_gallery": "Depuis la galerie",
   "attachment_take_photo": "Prendre une photo",
   "scan_receipt": "Scanner un reçu",
   "commander_required_message": "Cette fonctionnalité nécessite que Vox Commander soit installé et configuré",

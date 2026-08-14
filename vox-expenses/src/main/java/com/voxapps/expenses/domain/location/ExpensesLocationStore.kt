@@ -5,14 +5,9 @@ import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.location.CachedCoordinate
 import com.voxapps.location.HomeTown
 import com.voxapps.location.LocationCacheTtl
+import com.voxapps.location.PrefsCachedFix
 import com.voxapps.location.VoxLocationResolver
 import com.voxapps.location.VoxLocationStore
-
-private const val PREFS_NAME = "location_cache"
-private const val KEY_LAT = "last_lat"
-private const val KEY_LON = "last_lon"
-private const val KEY_TIMESTAMP = "last_timestamp"
-private const val KEY_NAME = "last_name"
 
 /**
  * Adapts [ExpensesSettingsRepository] (Home Town / cache TTL / always-use — real user preferences)
@@ -26,17 +21,9 @@ class ExpensesLocationStore(
     private val settingsRepo: ExpensesSettingsRepository
 ) : VoxLocationStore {
 
-    private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
+    private val cachedFix = PrefsCachedFix(context)
 
-    override fun getCachedLocationSync(): CachedCoordinate? {
-        if (!prefs.contains(KEY_LAT) || !prefs.contains(KEY_LON)) return null
-        return CachedCoordinate(
-            lat = prefs.getFloat(KEY_LAT, 0f).toDouble(),
-            lon = prefs.getFloat(KEY_LON, 0f).toDouble(),
-            timestampMillis = prefs.getLong(KEY_TIMESTAMP, 0L),
-            resolvedName = prefs.getString(KEY_NAME, null)
-        )
-    }
+    override fun getCachedLocationSync(): CachedCoordinate? = cachedFix.get()
 
     override fun getCacheTtlSync(): LocationCacheTtl =
         LocationCacheTtl.entries.find { it.name == settingsRepo.getSnapshot().locationCacheTtl } ?: LocationCacheTtl.ONE_DAY
@@ -50,20 +37,7 @@ class ExpensesLocationStore(
 
     override fun getAlwaysUseHomeTownSync(): Boolean = settingsRepo.getSnapshot().locationAlwaysUseHomeTown
 
-    override suspend fun setCachedLocation(coord: CachedCoordinate?) {
-        if (coord == null) {
-            prefs.edit().clear().apply()
-            return
-        }
-        prefs.edit()
-            .putFloat(KEY_LAT, coord.lat.toFloat())
-            .putFloat(KEY_LON, coord.lon.toFloat())
-            .putLong(KEY_TIMESTAMP, coord.timestampMillis)
-            .apply {
-                if (coord.resolvedName != null) putString(KEY_NAME, coord.resolvedName) else remove(KEY_NAME)
-            }
-            .apply()
-    }
+    override suspend fun setCachedLocation(coord: CachedCoordinate?) = cachedFix.set(coord)
 
     override suspend fun setCacheTtl(ttl: LocationCacheTtl) = settingsRepo.setLocationCacheTtl(ttl.name)
 
