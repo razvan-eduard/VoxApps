@@ -155,44 +155,6 @@ fun CategoriesSettingsTab(
 
         HorizontalDivider()
 
-        // --- Merchant category memory ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("merchant_category_memory_label"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("merchant_category_memory_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = settings.merchantCategoryMemoryEnabled,
-                onCheckedChange = { stateManager.setMerchantCategoryMemoryEnabled(it) }
-            )
-        }
-
-        val merchantMemoryAlpha = if (settings.merchantCategoryMemoryEnabled) 1f else 0.4f
-        Column(modifier = Modifier.alpha(merchantMemoryAlpha), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(languageManager.getString("merchant_category_memory_threshold_label"), style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val thresholdOptions = listOf(
-                    ExpensesSettings.MERCHANT_MEMORY_THRESHOLD_1,
-                    ExpensesSettings.MERCHANT_MEMORY_THRESHOLD_3,
-                    ExpensesSettings.MERCHANT_MEMORY_THRESHOLD_5,
-                    ExpensesSettings.MERCHANT_MEMORY_THRESHOLD_10
-                )
-                thresholdOptions.forEach { count ->
-                    FilterChip(
-                        selected = settings.merchantCategoryMemoryThreshold == count,
-                        onClick = { stateManager.setMerchantCategoryMemoryThreshold(count) },
-                        label = { Text(String.format(languageManager.getString("merchant_category_memory_threshold_times"), count)) }
-                    )
-                }
-            }
-        }
-
-        HorizontalDivider()
-
         // --- Auto-Merge Categories (manual trigger) ---
         Text(languageManager.getString("auto_merge_categories_button"), style = MaterialTheme.typography.labelLarge)
         Text(

@@ -80,7 +80,14 @@ data class CalendarSettings(
     val notificationsLength: String = LENGTH_SHORT,
     val notificationsChannelVersion: Int = 1,
     val todoBleedToCalendar: Boolean = true,
-    val animationsEnabled: Boolean = true
+    val animationsEnabled: Boolean = true,
+    /** Off by default — when on, manual edit-saves teach word-level spelling corrections (see
+     *  :core:fieldmemory) applied to future LLM-captured entries. Calendar has no suggestion
+     *  surface, so corrections here apply directly (exact tier only). */
+    val fieldCorrectionMemoryEnabled: Boolean = false,
+    /** Consecutive identical corrections before one becomes active: [CORRECTION_SPEED_INSTANT]/
+     *  [CORRECTION_SPEED_FAST]/[CORRECTION_SPEED_MEDIUM]/[CORRECTION_SPEED_SLOW]. */
+    val fieldCorrectionThreshold: Int = CORRECTION_SPEED_MEDIUM
 ) {
     companion object {
         const val TIMEOUT_30M = 30
@@ -103,5 +110,10 @@ data class CalendarSettings(
         const val LENGTH_SHORT = "SHORT"
         const val LENGTH_MEDIUM = "MEDIUM"
         const val LENGTH_LONG = "LONG"
+
+        const val CORRECTION_SPEED_INSTANT = 1
+        const val CORRECTION_SPEED_FAST = 2
+        const val CORRECTION_SPEED_MEDIUM = 3
+        const val CORRECTION_SPEED_SLOW = 5
     }
 }

@@ -67,7 +67,7 @@ object ExportImportUtil {
         val counts = mutableMapOf<String, Int>()
         for (key in listOf(
             "notes", "expenses", "categories", "spendingLimits", "events", "layers",
-            "merchantCategoryMemory", "fastMapRules", "todoLists", "todoItems", "duplicateRules"
+            "merchantCategoryMemory", "remapRules", "learnedFieldCorrections", "fastMapRules", "todoLists", "todoItems", "duplicateRules"
         )) {
             data.optJSONArray(key)?.let { if (it.length() > 0) counts[key] = it.length() }
         }

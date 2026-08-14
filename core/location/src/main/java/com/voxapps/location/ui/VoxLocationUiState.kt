@@ -42,6 +42,7 @@ data class VoxLocationStrings(
     val alwaysUseToggleDescription: String = "Skip GPS entirely and always use Home town below. Clears any cached location.",
     val homeTownTitle: String = "Home town",
     val homeTownDescription: String = "Used when GPS is unavailable and no cached location exists, or when \"Always use this location\" is on.",
+    val homeTownSearchLabel: String = "Search a place",
     val latitudeLabel: String = "Latitude",
     val longitudeLabel: String = "Longitude",
     val clearButton: String = "Clear",

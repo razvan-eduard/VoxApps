@@ -1,6 +1,7 @@
 package com.voxapps.calendarapp.ui.todo
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,7 +51,13 @@ import kotlinx.coroutines.launch
 fun ToDoListsScreen(
     toDoRepository: ToDoRepository,
     defaultLayer: CalendarLayer,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    // Widget deep-links: a list id to open flipped to its edit face, and a "create a new list in
+    // edit mode" request — each paired with a trigger counter so repeating the same request fires
+    // again (same counter convention as CalendarActivity's editEntryTrigger).
+    openListEditId: Long? = null,
+    openListEditTrigger: Int = 0,
+    quickAddListTrigger: Int = 0
 ) {
     val languageManager = LocalLanguageManager.current
     val scope = rememberCoroutineScope()
@@ -61,6 +69,21 @@ fun ToDoListsScreen(
     // relative dispatch order isn't guaranteed to close the card before leaving the screen.
     var editingListId by remember { mutableStateOf<Long?>(null) }
 
+    LaunchedEffect(openListEditTrigger) {
+        if (openListEditTrigger > 0 && openListEditId != null) {
+            editingListId = openListEditId
+            lists.indexOfFirst { it.id == openListEditId }.takeIf { it >= 0 }
+                ?.let { listState.animateScrollToItem(it) }
+        }
+    }
+    LaunchedEffect(quickAddListTrigger) {
+        if (quickAddListTrigger > 0) {
+            val id = toDoRepository.createList("", defaultLayer.id)
+            editingListId = id
+            listState.animateScrollToItem(0)
+        }
+    }
+
     BackHandler {
         if (editingListId != null) editingListId = null else onBack()
     }
@@ -68,7 +91,14 @@ fun ToDoListsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(languageManager.getString("todo_lists_title")) },
+                // Tapping the heading itself commits whatever card is open back to view mode —
+                // edits persist as they're made, so "save and exit" is exactly closing the flip.
+                title = {
+                    Text(
+                        languageManager.getString("todo_lists_title"),
+                        modifier = Modifier.clickable { editingListId = null }
+                    )
+                },
                 // Only shown while a card is flipped to its edit face — closes that card back to view
                 // mode. Returning all the way to Calendar is a peer "flip" action (below), not a
                 // "back" pop, so there's no navigationIcon for it once no card is being edited.

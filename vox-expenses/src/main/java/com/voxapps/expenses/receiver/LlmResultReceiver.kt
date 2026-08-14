@@ -338,7 +338,15 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 currencyCode = parsed.currency ?: settings.defaultCurrency,
                                 vendor = cleanVendor,
                                 bank = cleanBank,
-                                location = null,
+                                // Same GPS-derived prefill the voice/scan path uses — a payment
+                                // notification fires where the card was used, so the current city
+                                // is exactly as meaningful here. Notification text itself carries
+                                // no address, so there is no parsed value to prefer over it.
+                                location = if (settings.locationPrefillEnabled) {
+                                    com.voxapps.expenses.domain.location.resolveCurrentCityName(
+                                        context.applicationContext, container.settingsRepository
+                                    )
+                                } else null,
                                 comments = null,
                                 dateTime = System.currentTimeMillis(),
                                 spokenCategory = cleanCategory,
@@ -347,8 +355,9 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 direction = parsed.direction,
                                 nearDuplicateCheckEnabled = localModeActive && !settings.automaticProtectionReviewOnly,
                                 nearDuplicateConfig = settings.toNearDuplicateConfig(),
-                                merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
-                                merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold,
+                                correctionsEnabled = settings.fieldCorrectionMemoryEnabled,
+                                correctionsThreshold = settings.fieldCorrectionThreshold,
+                                correctionsApplyMode = settings.fieldCorrectionApplyMode,
                                 source = ExpenseSource.NOTIFICATION
                             )
                             // An auto-created record is NOT a confirmation — the model's output is
@@ -527,8 +536,9 @@ class LlmResultReceiver : BroadcastReceiver() {
             direction = parsed.direction,
             nearDuplicateCheckEnabled = localModeActive && !settings.automaticProtectionReviewOnly,
             nearDuplicateConfig = settings.toNearDuplicateConfig(),
-            merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
-            merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold,
+            correctionsEnabled = settings.fieldCorrectionMemoryEnabled,
+            correctionsThreshold = settings.fieldCorrectionThreshold,
+            correctionsApplyMode = settings.fieldCorrectionApplyMode,
             // This one helper handles both voice and scan tasks — imageName is only ever non-null for
             // a scan (the receipt photo), never for voice, so it's already the exact signal needed.
             source = if (imageName != null) ExpenseSource.SCAN else ExpenseSource.VOICE

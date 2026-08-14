@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -96,6 +98,10 @@ import com.voxapps.attachments.ui.GroupDeleteConfig
 import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.design.PaperTapField
+import com.voxapps.design.openLocationInMaps
+import com.voxapps.location.EphemeralLocationStore
+import com.voxapps.location.VoxLocationResolver
+import com.voxapps.location.ui.VoxLocationPickerField
 import com.voxapps.design.SpeedDialAction
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.design.picklist.Picklist
@@ -271,6 +277,7 @@ fun EntryEditScreen(
     fun saveEntry(entry: CalendarEntry, entryTags: List<String>) {
         val effectiveReminderOffsets = reminderOffsets.toList()
         if (existing != null) {
+            stateManager.recordFieldCorrections(existing.entry, entry)
             stateManager.updateEntry(entry, entryTags, effectiveReminderOffsets)
         } else {
             stateManager.addEntry(
@@ -469,12 +476,58 @@ fun EntryEditScreen(
                         minLines = 2,
                         enabled = !isReadOnly
                     )
-                    PaperField(
-                        label = languageManager.getString("entry_location"),
-                        value = location,
-                        onValueChange = { location = it },
-                        enabled = !isReadOnly
-                    )
+                    // A filled location is a LINK first: tapping it opens the saved text as a place
+                    // search in whichever maps/nav app the user picks from the chooser; the pencil
+                    // switches back to text entry. Blank (or mid-edit) it's the plain field.
+                    var locationEditing by remember { mutableStateOf(false) }
+                    if (location.isNotBlank() && !locationEditing) {
+                        PaperTapField(
+                            label = languageManager.getString("entry_location"),
+                            value = location,
+                            onClick = { openLocationInMaps(context, location) },
+                            trailingIcon = {
+                                if (!isReadOnly) {
+                                    IconButton(onClick = { locationEditing = true }, modifier = Modifier.size(24.dp)) {
+                                        Icon(
+                                            Icons.Filled.Edit,
+                                            contentDescription = languageManager.getString("entry_location"),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        )
+                    } else {
+                        // Search-first entry (OpenStreetMap place search + GPS lock) — the GPS
+                        // lambda resolves a FRESH fix through a store that remembers nothing:
+                        // calendar keeps no location cache by design, unlike expenses/commander.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            VoxLocationPickerField(
+                                value = location,
+                                onValueChange = { if (!isReadOnly) location = it },
+                                label = languageManager.getString("entry_location"),
+                                gpsLock = if (isReadOnly) null else {
+                                    {
+                                        VoxLocationResolver.create(
+                                            context, EphemeralLocationStore(), needsReverseGeocode = true
+                                        ).resolveLocation()?.displayName
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (locationEditing) {
+                                IconButton(onClick = { locationEditing = false }, modifier = Modifier.size(24.dp)) {
+                                    Icon(
+                                        Icons.Filled.Check,
+                                        contentDescription = languageManager.getString("apply"),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                     if (isReadOnly) {
                         Text(
                             text = "${languageManager.getString("entry_layer")}: ${currentLayer.name}",

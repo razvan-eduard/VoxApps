@@ -43,6 +43,31 @@ object FuzzyNameMatcher {
         return levenshtein(normA, normB) <= threshold(normA.length, normB.length)
     }
 
+    /**
+     * [namesMatch] with a caller-chosen strictness instead of the single fixed threshold.
+     * Level 0 (or below) is exact normalized equality only; 1 allows small edit distances; 2 is
+     * [namesMatch]'s behavior (containment plus the 30% threshold); 3 accepts matches up to 45%
+     * of the longer length — progressively easier matches, never a different kind of matching.
+     */
+    fun namesMatchLeveled(a: String, b: String, level: Int): Boolean {
+        val normA = normalize(a)
+        val normB = normalize(b)
+        if (normA.isEmpty() || normB.isEmpty()) return false
+        if (normA == normB) return true
+        if (level <= 0) return false
+        if (level >= 2 && normA.length >= MIN_CONTAINMENT_LENGTH && normB.length >= MIN_CONTAINMENT_LENGTH &&
+            (normA.contains(normB) || normB.contains(normA))
+        ) {
+            return true
+        }
+        val ratio = when (level) {
+            1 -> 0.15
+            2 -> 0.3
+            else -> 0.45
+        }
+        return levenshtein(normA, normB) <= maxOf(1, (maxOf(normA.length, normB.length) * ratio).toInt())
+    }
+
     fun resolve(spokenName: String?, candidates: List<Candidate>, defaultId: Long?): Resolved {
         val spoken = spokenName?.trim()?.takeIf { it.isNotEmpty() }
         if (spoken != null) {

@@ -176,17 +176,26 @@ data class ExpensesSettings(
      *  the seeded default rules' own intent, "same amount+title" OR "same amount+vendor") or only if
      *  EVERY enabled rule matches ([RULE_SET_AND], for a stricter "all these signals together" check). */
     val duplicateRuleSetGlobalCombinator: String = RULE_SET_OR,
-    /** Off by default — new, override-the-LLM behavior a user must opt into, same posture as
-     *  [autoAcceptDuplicateMerges]. When on, [com.voxapps.expenses.data.ExpensesRepository.addParsedExpense]
-     *  checks [com.voxapps.expenses.data.MerchantCategoryMemoryDao] BEFORE running category
-     *  resolution at all — see that function's doc comment for the exact precedence. */
-    val merchantCategoryMemoryEnabled: Boolean = false,
-    /** How many consecutive manual assignments to the same category (for one vendor) before that
-     *  category auto-applies to future captures for that vendor. Defaults to 3 — 1 is aggressive (a
-     *  single correction could be a one-off exception, e.g. a gift bought at a usually-groceries
-     *  store, not a real pattern), while 3 requires a genuinely consistent pattern before the app
-     *  starts overriding the LLM/default outright. */
-    val merchantCategoryMemoryThreshold: Int = MERCHANT_MEMORY_DEFAULT_THRESHOLD,
+    /** Off by default — whether repeated field edits draft DISABLED re-map rule proposals (see
+     *  [com.voxapps.expenses.data.RemapPatternSighting]). Never affects rule application: enabled
+     *  rules always apply. Stored under the absorbed merchant-memory's key, so an existing
+     *  install keeps its choice. */
+    val remapProposalsEnabled: Boolean = false,
+    /** In how many distinct records the same field must be renamed X→Y before a rule proposal is
+     *  drafted — the learning-speed selector, same scale as [fieldCorrectionThreshold]. */
+    val remapLearningSpeed: Int = CORRECTION_SPEED_MEDIUM,
+    /** Off by default — same opt-in posture as [remapLearningEnabled]. When on, manual
+     *  edit-saves teach word-level spelling corrections (see :core:fieldmemory) that apply to
+     *  future captured records' text fields. */
+    val fieldCorrectionMemoryEnabled: Boolean = false,
+    /** Consecutive identical corrections before one becomes active — the learning-speed selector:
+     *  [CORRECTION_SPEED_INSTANT]/[CORRECTION_SPEED_FAST]/[CORRECTION_SPEED_MEDIUM]/
+     *  [CORRECTION_SPEED_SLOW]. */
+    val fieldCorrectionThreshold: Int = CORRECTION_SPEED_MEDIUM,
+    /** [CORRECTION_APPLY_SUGGEST] surfaces exact-tier corrections as tappable suggestions on the
+     *  created record; [CORRECTION_APPLY_AUTO] rewrites them silently at creation. Fuzzy-tier
+     *  resemblance hits are always suggestions, in both modes. */
+    val fieldCorrectionApplyMode: String = CORRECTION_APPLY_SUGGEST,
     /** Whether the home-screen widget's day-cards draw an outline border, and its
      *  thickness/color if so — mirrors vox-calendar's identical field. Border on by default
      *  (matches prior hardcoded behavior); color defaults to the first shared preset in
@@ -248,11 +257,13 @@ data class ExpensesSettings(
         const val RULE_SET_OR = "OR"
         const val RULE_SET_AND = "AND"
 
-        const val MERCHANT_MEMORY_THRESHOLD_1 = 1
-        const val MERCHANT_MEMORY_THRESHOLD_3 = 3
-        const val MERCHANT_MEMORY_THRESHOLD_5 = 5
-        const val MERCHANT_MEMORY_THRESHOLD_10 = 10
-        const val MERCHANT_MEMORY_DEFAULT_THRESHOLD = MERCHANT_MEMORY_THRESHOLD_3
+        const val CORRECTION_SPEED_INSTANT = 1
+        const val CORRECTION_SPEED_FAST = 2
+        const val CORRECTION_SPEED_MEDIUM = 3
+        const val CORRECTION_SPEED_SLOW = 5
+
+        const val CORRECTION_APPLY_SUGGEST = "SUGGEST"
+        const val CORRECTION_APPLY_AUTO = "AUTO"
 
         const val THICKNESS_THIN = 1
         const val THICKNESS_MEDIUM = 2

@@ -76,8 +76,11 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val AUTOMATIC_PROTECTION_REVIEW_ONLY = booleanPreferencesKey("automatic_protection_review_only")
         val NEAR_DUPLICATE_TIME_WINDOW_MINUTES = intPreferencesKey("near_duplicate_time_window_minutes")
         val DUPLICATE_RULE_SET_GLOBAL_COMBINATOR = stringPreferencesKey("duplicate_rule_set_global_combinator")
-        val MERCHANT_CATEGORY_MEMORY_ENABLED = booleanPreferencesKey("merchant_category_memory_enabled")
-        val MERCHANT_CATEGORY_MEMORY_THRESHOLD = intPreferencesKey("merchant_category_memory_threshold")
+        val REMAP_PROPOSALS_ENABLED = booleanPreferencesKey("merchant_category_memory_enabled")
+        val REMAP_LEARNING_SPEED = intPreferencesKey("remap_learning_speed")
+        val FIELD_CORRECTION_MEMORY_ENABLED = booleanPreferencesKey("field_correction_memory_enabled")
+        val FIELD_CORRECTION_MEMORY_THRESHOLD = intPreferencesKey("field_correction_memory_threshold")
+        val FIELD_CORRECTION_APPLY_MODE = stringPreferencesKey("field_correction_apply_mode")
         val WIDGET_BORDER_ENABLED = booleanPreferencesKey("widget_border_enabled")
         val WIDGET_BORDER_THICKNESS_DP = intPreferencesKey("widget_border_thickness_dp")
         val WIDGET_BORDER_COLOR_ARGB = longPreferencesKey("widget_border_color_argb")
@@ -146,9 +149,14 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
                 ?: ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES,
             duplicateRuleSetGlobalCombinator = prefs[Keys.DUPLICATE_RULE_SET_GLOBAL_COMBINATOR]
                 ?: ExpensesSettings.RULE_SET_OR,
-            merchantCategoryMemoryEnabled = prefs[Keys.MERCHANT_CATEGORY_MEMORY_ENABLED] ?: false,
-            merchantCategoryMemoryThreshold = prefs[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD]
-                ?: ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD,
+            remapProposalsEnabled = prefs[Keys.REMAP_PROPOSALS_ENABLED] ?: false,
+            remapLearningSpeed = prefs[Keys.REMAP_LEARNING_SPEED]
+                ?: ExpensesSettings.CORRECTION_SPEED_MEDIUM,
+            fieldCorrectionMemoryEnabled = prefs[Keys.FIELD_CORRECTION_MEMORY_ENABLED] ?: false,
+            fieldCorrectionThreshold = prefs[Keys.FIELD_CORRECTION_MEMORY_THRESHOLD]
+                ?: ExpensesSettings.CORRECTION_SPEED_MEDIUM,
+            fieldCorrectionApplyMode = prefs[Keys.FIELD_CORRECTION_APPLY_MODE]
+                ?: ExpensesSettings.CORRECTION_APPLY_SUGGEST,
             widgetBorderEnabled = prefs[Keys.WIDGET_BORDER_ENABLED] ?: true,
             widgetBorderThicknessDp = prefs[Keys.WIDGET_BORDER_THICKNESS_DP] ?: ExpensesSettings.THICKNESS_MEDIUM,
             widgetBorderColorArgb = prefs[Keys.WIDGET_BORDER_COLOR_ARGB] ?: VoxColorPalette.presets.first(),
@@ -375,12 +383,24 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.DUPLICATE_RULE_SET_GLOBAL_COMBINATOR] = combinator }
     }
 
-    override suspend fun setMerchantCategoryMemoryEnabled(enabled: Boolean) {
-        dataStore.edit { it[Keys.MERCHANT_CATEGORY_MEMORY_ENABLED] = enabled }
+    override suspend fun setRemapProposalsEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.REMAP_PROPOSALS_ENABLED] = enabled }
     }
 
-    override suspend fun setMerchantCategoryMemoryThreshold(count: Int) {
-        dataStore.edit { it[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD] = count }
+    override suspend fun setRemapLearningSpeed(count: Int) {
+        dataStore.edit { it[Keys.REMAP_LEARNING_SPEED] = count }
+    }
+
+    override suspend fun setFieldCorrectionMemoryEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.FIELD_CORRECTION_MEMORY_ENABLED] = enabled }
+    }
+
+    override suspend fun setFieldCorrectionThreshold(count: Int) {
+        dataStore.edit { it[Keys.FIELD_CORRECTION_MEMORY_THRESHOLD] = count }
+    }
+
+    override suspend fun setFieldCorrectionApplyMode(mode: String) {
+        dataStore.edit { it[Keys.FIELD_CORRECTION_APPLY_MODE] = mode }
     }
 
     override suspend fun setWidgetBorderEnabled(enabled: Boolean) {
@@ -500,8 +520,11 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.AUTOMATIC_PROTECTION_REVIEW_ONLY] = settings.automaticProtectionReviewOnly
             prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES] = settings.nearDuplicateTimeWindowMinutes
             prefs[Keys.DUPLICATE_RULE_SET_GLOBAL_COMBINATOR] = settings.duplicateRuleSetGlobalCombinator
-            prefs[Keys.MERCHANT_CATEGORY_MEMORY_ENABLED] = settings.merchantCategoryMemoryEnabled
-            prefs[Keys.MERCHANT_CATEGORY_MEMORY_THRESHOLD] = settings.merchantCategoryMemoryThreshold
+            prefs[Keys.REMAP_PROPOSALS_ENABLED] = settings.remapProposalsEnabled
+            prefs[Keys.REMAP_LEARNING_SPEED] = settings.remapLearningSpeed
+            prefs[Keys.FIELD_CORRECTION_MEMORY_ENABLED] = settings.fieldCorrectionMemoryEnabled
+            prefs[Keys.FIELD_CORRECTION_MEMORY_THRESHOLD] = settings.fieldCorrectionThreshold
+            prefs[Keys.FIELD_CORRECTION_APPLY_MODE] = settings.fieldCorrectionApplyMode
             prefs[Keys.WIDGET_BORDER_ENABLED] = settings.widgetBorderEnabled
             prefs[Keys.WIDGET_BORDER_THICKNESS_DP] = settings.widgetBorderThicknessDp
             prefs[Keys.WIDGET_BORDER_COLOR_ARGB] = settings.widgetBorderColorArgb

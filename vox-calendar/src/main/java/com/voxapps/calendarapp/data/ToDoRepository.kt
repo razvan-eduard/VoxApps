@@ -29,6 +29,12 @@ class ToDoRepository(
         entryDao.observeForList(listId).map { entries -> entries.map { it.toToDoItem() } }
             .distinctUntilChanged()
 
+    /** Every list's items keyed by list id, one stream — see [CalendarEntryDao.observeAllListItems]. */
+    val allItems: Flow<Map<Long, List<ToDoItem>>> =
+        entryDao.observeAllListItems()
+            .map { entries -> entries.map { it.toToDoItem() }.groupBy { it.listId } }
+            .distinctUntilChanged()
+
     suspend fun createList(title: String, layerId: Long): Long {
         val now = System.currentTimeMillis()
         val existingColors = lists.first().map { it.colorArgb }
@@ -105,6 +111,15 @@ class ToDoRepository(
     suspend fun updateItemImportant(item: ToDoItem, isImportant: Boolean) {
         val entry = entryDao.getById(item.id) ?: return
         entryDao.update(entry.copy(isImportant = isImportant, updatedAt = System.currentTimeMillis()))
+    }
+
+    /** A single item by id, or null when it doesn't exist or isn't a to-do row. */
+    suspend fun getItem(id: Long): ToDoItem? =
+        entryDao.getById(id)?.takeIf { it.listId != null }?.toToDoItem()
+
+    suspend fun updateItemLocation(item: ToDoItem, location: String?) {
+        val entry = entryDao.getById(item.id) ?: return
+        entryDao.update(entry.copy(location = location?.trim()?.takeIf { it.isNotEmpty() }, updatedAt = System.currentTimeMillis()))
     }
 
     suspend fun toggleDone(item: ToDoItem) {
@@ -212,6 +227,7 @@ fun CalendarEntry.toToDoItem(): ToDoItem = ToDoItem(
     done = completed,
     isImportant = isImportant,
     comments = comments,
+    location = location,
     createdAt = createdAt,
     updatedAt = updatedAt
 )

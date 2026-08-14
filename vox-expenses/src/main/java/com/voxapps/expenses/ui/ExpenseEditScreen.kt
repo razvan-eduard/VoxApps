@@ -95,6 +95,7 @@ import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.design.PaperTapField
 import com.voxapps.design.SpeedDialAction
+import com.voxapps.location.ui.VoxLocationPickerField
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.design.picklist.Picklist
@@ -295,14 +296,11 @@ fun ExpenseEditScreen(
     var pendingAttachments by remember { mutableStateOf<List<String>>(emptyList()) }
 
     fun saveExpense(expense: Expense, lineItems: List<ExpenseLineItem>) {
-        // A genuine manual category change — covers both "edited an existing expense's category"
-        // and "picked a category on a brand-new manual entry" (the pre-edit value is null for a new
-        // expense, so picking anything counts as a change). Never fires from voice/scan/notification
-        // capture, since those paths never route through this screen at creation time.
-        if (expense.categoryId != existing?.expense?.categoryId) {
-            stateManager.recordManualCategoryChange(expense.vendor, expense.categoryId)
-        }
         if (existing != null) {
+            // Genuine manual edits only — voice/scan/notification capture never routes through
+            // this screen, so these observers see exactly what a human changed by hand.
+            stateManager.recordFieldEditPatterns(existing, expense)
+            stateManager.recordFieldCorrections(existing, expense, lineItems)
             stateManager.updateExpense(expense, lineItems)
             // Whatever the rescan suggested is now moot either way — applied suggestions are
             // already reflected in `expense`, and anything left un-applied shouldn't linger past
@@ -548,12 +546,22 @@ fun ExpenseEditScreen(
                             { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "bank" }) { bank = suggested } }
                         }
                     )
-                    PaperField(
-                        label = languageManager.getString("expense_location"),
+                    // Search-first entry (OpenStreetMap place search + GPS lock). The GPS lambda
+                    // routes through resolveCurrentCityName — live fix, then the TTL'd cache,
+                    // then Home Town, the exact chain commander uses; the rescan suggestion chip
+                    // keeps its slot above the field.
+                    pendingSuggestion?.location?.takeIf { it != location && "location" !in dismissedSuggestionFields }?.let { suggested ->
+                        FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "location" }) { location = suggested }
+                    }
+                    VoxLocationPickerField(
                         value = location,
                         onValueChange = { location = it },
-                        suggestion = pendingSuggestion?.location?.takeIf { it != location && "location" !in dismissedSuggestionFields }?.let { suggested ->
-                            { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "location" }) { location = suggested } }
+                        label = languageManager.getString("expense_location"),
+                        gpsLock = {
+                            com.voxapps.expenses.domain.location.resolveCurrentCityName(
+                                context.applicationContext,
+                                (context.applicationContext as com.voxapps.expenses.ExpensesApplication).container.settingsRepository
+                            )
                         }
                     )
                     PaperTapField(
@@ -642,7 +650,10 @@ fun ExpenseEditScreen(
                         value = comments,
                         onValueChange = { comments = it },
                         singleLine = false,
-                        minLines = 2
+                        minLines = 2,
+                        suggestion = pendingSuggestion?.comments?.takeIf { it != comments && "comments" !in dismissedSuggestionFields }?.let { suggested ->
+                            { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "comments" }) { comments = suggested } }
+                        }
                     )
 
                     val amountColor = if (totalMismatch) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary

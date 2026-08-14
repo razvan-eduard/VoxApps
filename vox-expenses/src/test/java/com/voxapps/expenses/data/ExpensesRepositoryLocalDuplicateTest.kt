@@ -1,5 +1,7 @@
 package com.voxapps.expenses.data
 
+import android.content.Context
+
 import com.voxapps.datahygiene.RuleCombinator
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import io.mockk.coEvery
@@ -36,8 +38,8 @@ class ExpensesRepositoryLocalDuplicateTest {
         coEvery { duplicateRuleDao.getAll() } returns listOf(titleAndAmountRule)
         repository = ExpensesRepository(
             expenseDao, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
-            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), duplicateRuleDao,
-            mockk(relaxed = true)
+            mockk(relaxed = true), mockk(relaxed = true), mockk<Context>(), mockk(relaxed = true),
+            duplicateRuleDao, mockk(relaxed = true), mockk(relaxed = true)
         )
     }
 

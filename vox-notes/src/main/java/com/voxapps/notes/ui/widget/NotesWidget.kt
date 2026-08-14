@@ -3,6 +3,9 @@ package com.voxapps.notes.ui.widget
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
@@ -53,13 +56,13 @@ import com.voxapps.notes.domain.llm.ScanRequestSender
 import com.voxapps.notes.domain.localization.LanguageManager
 import com.voxapps.notes.state.NotesUiState
 import com.voxapps.notes.ui.CategoryColors
-import kotlinx.coroutines.flow.filterNot
-import kotlinx.coroutines.flow.first
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import com.voxapps.widget.VoxWidgetScaffold
+import com.voxapps.widget.WidgetScanRow
 import com.voxapps.widget.WidgetDayFormats
 import com.voxapps.widget.DaySeparatorStyle
 import com.voxapps.widget.DaySeparatorLabel
@@ -79,36 +82,36 @@ class NotesWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val container = (context.applicationContext as NotesApplication).container
 
-        val uiState = container.notesStateManager.uiState
-            .filterNot { it is NotesUiState.Loading }
-            .first()
-
-        val recentNotes = if (uiState is NotesUiState.Unlocked) {
-            container.notesRepository.notesWithCategory.first()
-        } else {
-            emptyList()
-        }
-        val attachedNoteIds = container.attachmentDao
-            .getRecordIdsWithAttachments(NotesAttachments.RECORD_TYPE).toSet()
-
         val addIntent = Intent(context, NotesActivity::class.java).apply {
             putExtra(NotesActivity.EXTRA_QUICK_ADD, true)
         }
         val openAppIntent = Intent(context, NotesActivity::class.java)
-        // Read the live flow, not getSnapshot() — that cached value is updated by its own
-        // independent collector, racing against the collector that triggers this very redraw
-        // (NotesContainer's combine()). A direct flow read has no such race (see CalendarWidget's
-        // identical fix for the full reasoning).
-        val locale = Locale.forLanguageTag(container.settingsRepository.settingsFlow.first().language)
         val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
             VoxAppsDiscovery.isCommanderInstalled(context)
 
+        // Every dynamic value is collected INSIDE the composition, never read into a val out here:
+        // provideGlance runs once per Glance session, while an updateAll() on a live session only
+        // RECOMPOSES the content lambda — data captured out here would be redrawn verbatim forever,
+        // which is exactly how the widget used to freeze one change behind until the session was
+        // rebuilt by a process death or launcher restart. As composition state, each flow emission
+        // recomposes with fresh data and Glance republishes the RemoteViews (mirrors
+        // ExpensesWidget/CalendarWidget's identical fix).
         provideContent {
+            val uiState by container.notesStateManager.uiState.collectAsState()
+            val allNotes by container.notesRepository.notesWithCategory.collectAsState(initial = emptyList())
+            val attachedNoteIds by remember {
+                container.attachmentDao.observeRecordIdsWithAttachments(NotesAttachments.RECORD_TYPE)
+            }.collectAsState(initial = emptyList())
+            val settingsSnapshot by container.settingsRepository.settingsFlow
+                .collectAsState(initial = container.settingsRepository.getSnapshot())
+            val locale = Locale.forLanguageTag(settingsSnapshot.language)
+            val recentNotes = if (uiState is NotesUiState.Unlocked) allNotes else emptyList()
+
             GlanceTheme {
                 NotesWidgetContent(
                     locked = uiState is NotesUiState.Locked,
                     notes = recentNotes,
-                    attachedNoteIds = attachedNoteIds,
+                    attachedNoteIds = attachedNoteIds.toSet(),
                     languageManager = container.languageManager,
                     addIntent = addIntent,
                     openAppIntent = openAppIntent,
@@ -161,96 +164,24 @@ private fun NotesWidgetContent(
     locale: Locale,
     scanEnabled: Boolean
 ) {
-    Column(
-        modifier = GlanceModifier
-            .fillMaxSize()
-            .background(GlanceTheme.colors.surface)
-            .padding(12.dp)
+    VoxWidgetScaffold(
+        title = languageManager.getString("widget_app_name"),
+        openAppAction = actionStartActivity(openAppIntent),
+        addButtonText = languageManager.getString("widget_add_button"),
+        addAction = actionStartActivity(addIntent),
+        locked = locked,
+        lockedText = languageManager.getString("locked_title"),
+        scan = WidgetScanRow(
+            enabled = scanEnabled,
+            singleAction = actionRunCallback<NotesWidgetScanSingleAction>(),
+            stitchAction = actionRunCallback<NotesWidgetScanStitchAction>(),
+            batchAction = actionRunCallback<NotesWidgetScanBatchAction>(),
+            singleDescription = languageManager.getString("capture_mode_single"),
+            stitchDescription = languageManager.getString("capture_mode_stitch"),
+            batchDescription = languageManager.getString("capture_mode_batch")
+        )
     ) {
-        Row(
-            modifier = GlanceModifier
-                .fillMaxWidth()
-                .clickable(actionStartActivity(openAppIntent)),
-            verticalAlignment = Alignment.Vertical.CenterVertically
-        ) {
-            Text(
-                text = languageManager.getString("widget_app_name"),
-                style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = GlanceTheme.colors.onSurface)
-            )
-            Spacer(modifier = GlanceModifier.defaultWeight())
-            val disabledTint = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant)
-            val singleTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFE53935))) else disabledTint
-            val stitchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFFFBC02D))) else disabledTint
-            val batchTint = if (scanEnabled) ColorFilter.tint(ColorProvider(Color(0xFF43A047))) else disabledTint
-            Image(
-                provider = ImageProvider(R.drawable.ic_scan),
-                contentDescription = languageManager.getString("capture_mode_single"),
-                colorFilter = singleTint,
-                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanSingleAction>())
-            )
-            Spacer(modifier = GlanceModifier.width(6.dp))
-            Image(
-                provider = ImageProvider(R.drawable.ic_stitch),
-                contentDescription = languageManager.getString("capture_mode_stitch"),
-                colorFilter = stitchTint,
-                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanStitchAction>())
-            )
-            Spacer(modifier = GlanceModifier.width(6.dp))
-            Image(
-                provider = ImageProvider(R.drawable.ic_batch),
-                contentDescription = languageManager.getString("capture_mode_batch"),
-                colorFilter = batchTint,
-                modifier = GlanceModifier.size(25.dp).clickable(actionRunCallback<NotesWidgetScanBatchAction>())
-            )
-        }
-
-        Spacer(modifier = GlanceModifier.height(8.dp))
-
-        Box(modifier = GlanceModifier.defaultWeight()) {
-            if (locked) {
-                Text(
-                    text = languageManager.getString("locked_title"),
-                    style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant)
-                )
-            } else {
-                RecentNotesList(notes, attachedNoteIds, languageManager, locale)
-            }
-        }
-
-        WidgetAddButton(text = languageManager.getString("widget_add_button"), addIntent = addIntent)
-    }
-}
-
-/** Full-width, bordered "+ X" button pinned to the widget's bottom edge — the manual add entry
- * point. Glance has no dedicated border modifier, so the border is a slightly larger, differently
- * colored outer Box behind a slightly inset, differently colored inner Box. */
-@Composable
-private fun WidgetAddButton(text: String, addIntent: Intent) {
-    Box(
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            .cornerRadius(10.dp)
-            .background(GlanceTheme.colors.primary)
-            .clickable(actionStartActivity(addIntent))
-    ) {
-        Box(
-            modifier = GlanceModifier
-                .fillMaxWidth()
-                .padding(1.5.dp)
-                .cornerRadius(9.dp)
-                .background(GlanceTheme.colors.primaryContainer)
-        ) {
-            Text(
-                text = text,
-                style = TextStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = GlanceTheme.colors.onPrimaryContainer,
-                    textAlign = TextAlign.Center
-                ),
-                modifier = GlanceModifier.fillMaxWidth().padding(vertical = 10.dp)
-            )
-        }
+        RecentNotesList(notes, attachedNoteIds, languageManager, locale)
     }
 }
 

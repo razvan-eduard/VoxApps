@@ -19,6 +19,7 @@ data class ToDoItem(
     val done: Boolean = false,
     val isImportant: Boolean = false,
     val comments: String? = null,
+    val location: String? = null,
     val createdAt: Long,
     val updatedAt: Long
 )

@@ -10,15 +10,18 @@ import androidx.room.migration.Migration
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentSource
+import com.voxapps.fieldmemory.LearnedFieldCorrection
+import com.voxapps.fieldmemory.LearnedFieldCorrectionDao
 import com.voxapps.ipc.PendingLlmRequestDao
 import com.voxapps.ipc.PendingLlmRequestEntity
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class,
-        ExpenseTombstone::class, MerchantCategoryMemory::class, PendingLlmRequestEntity::class,
-        AttachmentEntity::class, DuplicateRuleEntity::class, PendingFieldSuggestion::class],
-    version = 18,
+        ExpenseTombstone::class, PendingLlmRequestEntity::class,
+        AttachmentEntity::class, DuplicateRuleEntity::class, PendingFieldSuggestion::class,
+        LearnedFieldCorrection::class, RemapRuleEntity::class, RemapPatternSighting::class],
+    version = 22,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -27,11 +30,13 @@ abstract class ExpensesDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun expenseLineItemDao(): ExpenseLineItemDao
     abstract fun spendingLimitDao(): SpendingLimitDao
-    abstract fun merchantCategoryMemoryDao(): MerchantCategoryMemoryDao
+    abstract fun remapRuleDao(): RemapRuleDao
+    abstract fun remapPatternSightingDao(): RemapPatternSightingDao
     abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
     abstract fun attachmentDao(): AttachmentDao
     abstract fun duplicateRuleDao(): DuplicateRuleDao
     abstract fun pendingFieldSuggestionDao(): PendingFieldSuggestionDao
+    abstract fun learnedFieldCorrectionDao(): LearnedFieldCorrectionDao
 
     companion object {
         @Volatile private var instance: ExpensesDatabase? = null
@@ -263,6 +268,111 @@ abstract class ExpensesDatabase : RoomDatabase() {
             }
         }
 
+        // Backs the word-level correction memory (see LearnedFieldCorrection in :core:fieldmemory);
+        // pending_field_suggestions gains a comments column because a correction can target the
+        // comments field, which the rescan flow never suggested for.
+        private val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS learned_field_corrections (" +
+                        "garbageKey TEXT NOT NULL PRIMARY KEY, " +
+                        "fix TEXT NOT NULL, " +
+                        "consecutiveCount INTEGER NOT NULL, " +
+                        "quarantined INTEGER NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)"
+                )
+                db.execSQL("ALTER TABLE pending_field_suggestions ADD COLUMN comments TEXT")
+            }
+        }
+
+        // The re-map rule engine's table (see RemapRuleEntity) absorbs merchant_category_memory:
+        // every learned vendor→category row becomes a LEARNED rule with match={vendor} and
+        // set={categoryId}, count carried, so nothing the user taught is forgotten. The row
+        // transform runs in Kotlin with org.json doing the encoding — vendorKey is free text, and
+        // JSON-escaping it in SQL string functions is exactly the kind of almost-right that
+        // corrupts one row in a thousand.
+        private val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS remap_rules (" +
+                        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "name TEXT NOT NULL, " +
+                        "matchJson TEXT NOT NULL, " +
+                        "setJson TEXT NOT NULL, " +
+                        "origin TEXT NOT NULL, " +
+                        "consecutiveCount INTEGER NOT NULL, " +
+                        "enabled INTEGER NOT NULL, " +
+                        "sortOrder INTEGER NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)"
+                )
+                val cursor = db.query("SELECT vendorKey, categoryId, consecutiveCount, updatedAt FROM merchant_category_memory")
+                cursor.use {
+                    while (it.moveToNext()) {
+                        val vendorKey = it.getString(0)
+                        val match = org.json.JSONObject().put("vendor", vendorKey).toString()
+                        val set = org.json.JSONObject().put("categoryId", it.getLong(1).toString()).toString()
+                        db.execSQL(
+                            "INSERT INTO remap_rules (name, matchJson, setJson, origin, consecutiveCount, enabled, sortOrder, updatedAt) " +
+                                "VALUES (?, ?, ?, 'LEARNED', ?, 1, 0, ?)",
+                            arrayOf(vendorKey, match, set, it.getInt(2), it.getLong(3))
+                        )
+                    }
+                }
+                db.execSQL("DROP TABLE merchant_category_memory")
+            }
+        }
+
+        // Per-match-field fuzziness for re-map rules (see RemapRuleEntity.fuzzJson) — every
+        // existing rule backfills to '{}', i.e. exact matching, the only behavior that existed.
+        private val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE remap_rules ADD COLUMN fuzzJson TEXT NOT NULL DEFAULT '{}'")
+            }
+        }
+
+        // The learner becomes proposals-only (see RemapPatternSighting): auto-activating LEARNED
+        // rules are gone, so the streak column goes with them. Rules that had reached activation
+        // under the old default threshold convert to plain USER rules — what the user taught keeps
+        // working; sub-threshold streaks never answered anything and are dropped. Table rebuilt
+        // (SQLite can't drop a column here), also shedding the v21 DEFAULT clause so the table
+        // matches the entity declaration exactly.
+        private val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS remap_rules_new (" +
+                        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "name TEXT NOT NULL, " +
+                        "matchJson TEXT NOT NULL, " +
+                        "setJson TEXT NOT NULL, " +
+                        "origin TEXT NOT NULL, " +
+                        "enabled INTEGER NOT NULL, " +
+                        "sortOrder INTEGER NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL, " +
+                        "fuzzJson TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "INSERT INTO remap_rules_new (id, name, matchJson, setJson, origin, enabled, sortOrder, updatedAt, fuzzJson) " +
+                        "SELECT id, name, matchJson, setJson, 'USER', enabled, sortOrder, updatedAt, fuzzJson " +
+                        "FROM remap_rules WHERE origin = 'USER' OR consecutiveCount >= 3"
+                )
+                db.execSQL("DROP TABLE remap_rules")
+                db.execSQL("ALTER TABLE remap_rules_new RENAME TO remap_rules")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS remap_pattern_sightings (" +
+                        "patternKey TEXT NOT NULL, " +
+                        "recordId INTEGER NOT NULL, " +
+                        "fieldId TEXT NOT NULL, " +
+                        "beforeText TEXT NOT NULL, " +
+                        "afterText TEXT NOT NULL, " +
+                        "setFieldId TEXT NOT NULL, " +
+                        "setValue TEXT NOT NULL, " +
+                        "companionsJson TEXT NOT NULL, " +
+                        "createdAt INTEGER NOT NULL, " +
+                        "PRIMARY KEY(patternKey, recordId))"
+                )
+            }
+        }
+
         fun get(context: Context): ExpensesDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
         }
@@ -272,7 +382,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
                 // A brand-new install never runs a Migration (Room creates the full current schema
                 // directly from the @Entity annotations) — this seeds the same default rules for that
                 // path too, so a fresh install and an upgraded one both start with working duplicate

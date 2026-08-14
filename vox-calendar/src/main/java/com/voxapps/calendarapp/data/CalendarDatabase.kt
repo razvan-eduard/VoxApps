@@ -9,6 +9,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.fieldmemory.LearnedFieldCorrection
+import com.voxapps.fieldmemory.LearnedFieldCorrectionDao
 import com.voxapps.ipc.PendingLlmRequestDao
 import com.voxapps.ipc.PendingLlmRequestEntity
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
@@ -16,8 +18,8 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 @Database(
     entities = [CalendarLayer::class, CalendarEntry::class, CalendarEntryTag::class, CalendarEntryTombstone::class,
         PendingLlmRequestEntity::class, AttachmentEntity::class, CalendarReminder::class,
-        ToDoList::class],
-    version = 11,
+        ToDoList::class, LearnedFieldCorrection::class],
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(CalendarConverters::class)
@@ -29,6 +31,7 @@ abstract class CalendarDatabase : RoomDatabase() {
     abstract fun attachmentDao(): AttachmentDao
     abstract fun calendarReminderDao(): CalendarReminderDao
     abstract fun toDoListDao(): ToDoListDao
+    abstract fun learnedFieldCorrectionDao(): LearnedFieldCorrectionDao
 
     companion object {
         @Volatile private var instance: CalendarDatabase? = null
@@ -191,6 +194,21 @@ abstract class CalendarDatabase : RoomDatabase() {
             }
         }
 
+        // Backs the word-level correction memory (see LearnedFieldCorrection in :core:fieldmemory) —
+        // same entity, this app's own private table.
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS learned_field_corrections (" +
+                        "garbageKey TEXT NOT NULL PRIMARY KEY, " +
+                        "fix TEXT NOT NULL, " +
+                        "consecutiveCount INTEGER NOT NULL, " +
+                        "quarantined INTEGER NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)"
+                )
+            }
+        }
+
         /** Room backed by SQLCipher; passphrase comes from the Keystore-backed store. */
         fun get(context: Context): CalendarDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
@@ -203,7 +221,7 @@ abstract class CalendarDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, CalendarDatabase::class.java, "vox-calendar.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                 .build()
         }
     }

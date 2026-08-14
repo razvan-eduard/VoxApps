@@ -23,7 +23,9 @@ import com.voxapps.expenses.data.ExchangeRateApiKeyStore
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesRepository
-import com.voxapps.expenses.data.MerchantCategoryMemory
+import com.voxapps.expenses.data.ExpenseRemapFields
+import com.voxapps.expenses.data.RemapRuleEntity
+import com.voxapps.expenses.data.RemapRuleJson
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
@@ -85,7 +87,7 @@ class ExpensesExportImportHandler(
             val categories = expensesRepo.categories.first()
             val spendingLimits = expensesRepo.spendingLimits.first()
             val expensesWithDetails = expensesRepo.expensesWithDetails.first()
-            val merchantCategoryMemory = expensesRepo.merchantCategoryMemorySnapshot()
+            val remapRules = expensesRepo.remapRulesSnapshot()
             json.put("categories", JSONArray(categories.map { it.toJson() }))
             json.put("spendingLimits", JSONArray(spendingLimits.map { it.toJson() }))
             val allAttachmentFileNames = mutableListOf<String>()
@@ -99,7 +101,17 @@ class ExpensesExportImportHandler(
                     }
                 )
             )
-            json.put("merchantCategoryMemory", JSONArray(merchantCategoryMemory.map { it.toJson() }))
+            json.put("remapRules", JSONArray(remapRules.map { it.toJson() }))
+            json.put(
+                "learnedFieldCorrections",
+                JSONArray(
+                    expensesRepo.learnedFieldCorrectionsSnapshot().map { c ->
+                        JSONObject().put("garbageKey", c.garbageKey).put("fix", c.fix)
+                            .put("consecutiveCount", c.consecutiveCount)
+                            .put("quarantined", c.quarantined).put("updatedAt", c.updatedAt)
+                    }
+                )
+            )
             val duplicateRules = duplicateRuleDao.getAll()
             json.put("duplicateRules", JSONArray(duplicateRules.map { it.toJson() }))
 
@@ -208,16 +220,77 @@ class ExpensesExportImportHandler(
         val importedIdToLocalId = categoryMerge.idMap
         val categoriesCreated = categoryMerge.created
 
-        // Upserted by vendorKey, not replace-by-snapshot like spendingLimits/expenses below — wiping
-        // locally learned mappings on every restore would un-learn correction streaks built up on
-        // this device since the backup was taken.
+        // Merged by (origin, matchJson), not replace-by-snapshot — wiping locally learned rules on
+        // every restore would un-learn streaks built up on this device since the backup was taken.
+        // Category ids inside setJson are the exporting device's; remapped through the same id map
+        // the expense rows use, and an entry whose category didn't survive the trip is dropped from
+        // the set rather than imported dangling.
+        fun remapSetCategoryIds(setJson: String): String? {
+            val set = RemapRuleJson.decode(setJson).toMutableMap()
+            set[ExpenseRemapFields.ID_CATEGORY_ID]?.let { imported ->
+                val local = imported.toLongOrNull()?.let { importedIdToLocalId[it] }
+                if (local == null) set.remove(ExpenseRemapFields.ID_CATEGORY_ID)
+                else set[ExpenseRemapFields.ID_CATEGORY_ID] = local.toString()
+            }
+            return if (set.isEmpty()) null else RemapRuleJson.encode(set)
+        }
+        val importedRemapRules = root.optJSONArray("remapRules") ?: JSONArray()
+        for (i in 0 until importedRemapRules.length()) {
+            val r = importedRemapRules.getJSONObject(i)
+            val matchJson = r.optString("matchJson").takeIf { it.isNotBlank() } ?: continue
+            val setJson = remapSetCategoryIds(r.optString("setJson")) ?: continue
+            // A backup from the auto-learning era carries LEARNED rows with a streak count: ones
+            // that had reached activation convert to plain USER rules (the v21→v22 migration's
+            // conversion); the rest never answered anything and are skipped.
+            val origin = r.optString("origin", RemapRuleEntity.ORIGIN_USER)
+            if (origin == "LEARNED" && r.optInt("consecutiveCount", 0) < 3) continue
+            expensesRepo.mergeRemapRule(
+                RemapRuleEntity(
+                    name = r.optString("name"),
+                    matchJson = matchJson,
+                    setJson = setJson,
+                    origin = if (origin == "LEARNED") RemapRuleEntity.ORIGIN_USER else origin,
+                    enabled = r.optBoolean("enabled", true),
+                    sortOrder = r.optInt("sortOrder", 0),
+                    updatedAt = r.optLong("updatedAt", System.currentTimeMillis()),
+                    fuzzJson = r.optString("fuzzJson", "{}")
+                )
+            )
+        }
+        // Back-compat: a backup from before the re-map engine carries merchantCategoryMemory rows —
+        // the same conversion, activated streaks only.
         val importedMerchantMemory = root.optJSONArray("merchantCategoryMemory") ?: JSONArray()
         for (i in 0 until importedMerchantMemory.length()) {
             val m = importedMerchantMemory.getJSONObject(i)
             val vendorKey = m.optString("vendorKey").takeIf { it.isNotBlank() } ?: continue
             val localCategoryId = importedIdToLocalId[m.optLong("categoryId")] ?: continue
-            expensesRepo.upsertMerchantCategoryMemory(
-                vendorKey, localCategoryId, m.optInt("consecutiveCount", 1), m.optLong("updatedAt", System.currentTimeMillis())
+            if (m.optInt("consecutiveCount", 0) < 3) continue
+            expensesRepo.mergeRemapRule(
+                RemapRuleEntity(
+                    name = vendorKey,
+                    matchJson = RemapRuleJson.encode(mapOf(ExpenseRemapFields.ID_VENDOR to vendorKey)),
+                    setJson = RemapRuleJson.encode(mapOf(ExpenseRemapFields.ID_CATEGORY_ID to localCategoryId.toString())),
+                    origin = RemapRuleEntity.ORIGIN_USER,
+                    updatedAt = m.optLong("updatedAt", System.currentTimeMillis())
+                )
+            )
+        }
+
+        // Same upsert-not-replace stance as merchantCategoryMemory above — restore keeps the higher
+        // confirmation count, and quarantine survives the merge in both directions.
+        val importedCorrections = root.optJSONArray("learnedFieldCorrections") ?: JSONArray()
+        for (i in 0 until importedCorrections.length()) {
+            val c = importedCorrections.getJSONObject(i)
+            val key = c.optString("garbageKey").takeIf { it.isNotBlank() } ?: continue
+            val fix = c.optString("fix").takeIf { it.isNotBlank() } ?: continue
+            expensesRepo.restoreLearnedFieldCorrection(
+                com.voxapps.fieldmemory.LearnedFieldCorrection(
+                    garbageKey = key,
+                    fix = fix,
+                    consecutiveCount = c.optInt("consecutiveCount", 1),
+                    quarantined = c.optBoolean("quarantined", false),
+                    updatedAt = c.optLong("updatedAt", System.currentTimeMillis())
+                )
             )
         }
 
@@ -414,10 +487,14 @@ private fun DuplicateRuleEntity.toJson(): JSONObject = JSONObject().apply {
     put("fuzzyMatchEnabled", fuzzyMatchEnabled)
 }
 
-private fun MerchantCategoryMemory.toJson(): JSONObject = JSONObject().apply {
-    put("vendorKey", vendorKey)
-    put("categoryId", categoryId)
-    put("consecutiveCount", consecutiveCount)
+private fun RemapRuleEntity.toJson(): JSONObject = JSONObject().apply {
+    put("name", name)
+    put("matchJson", matchJson)
+    put("setJson", setJson)
+    put("origin", origin)
+    put("fuzzJson", fuzzJson)
+    put("enabled", enabled)
+    put("sortOrder", sortOrder)
     put("updatedAt", updatedAt)
 }
 

@@ -43,7 +43,8 @@ class CalendarStateManager(
     private val settingsRepo: CalendarSettingsRepository,
     private val calendarRepo: CalendarRepository,
     private val sessionManager: SessionManager,
-    private val attachmentDao: AttachmentDao
+    private val attachmentDao: AttachmentDao,
+    private val fieldCorrectionMemory: com.voxapps.fieldmemory.FieldCorrectionMemory
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -271,6 +272,22 @@ class CalendarStateManager(
     fun updateEntry(entry: CalendarEntry, tags: List<String>, reminderOffsetsMinutes: List<Int> = emptyList()) {
         scope.launch { calendarRepo.updateEntry(entry, tags, reminderOffsetsMinutes) }
     }
+
+    /** Gate lives here (not in the memory) — mirrors vox-expenses' recordFieldCorrections
+     *  convention. Tags are deliberately absent: tag edits are set add/remove operations, and
+     *  pairing two tag lists positionally would teach from unrelated pairs. */
+    fun recordFieldCorrections(old: CalendarEntry, new: CalendarEntry) {
+        if (!settingsRepo.getSnapshot().fieldCorrectionMemoryEnabled) return
+        scope.launch {
+            fieldCorrectionMemory.learn(
+                listOf(old.title, old.description, old.location),
+                listOf(new.title, new.description, new.location)
+            )
+        }
+    }
+
+    fun setFieldCorrectionMemoryEnabled(enabled: Boolean) = scope.launch { settingsRepo.setFieldCorrectionMemoryEnabled(enabled) }
+    fun setFieldCorrectionThreshold(count: Int) = scope.launch { settingsRepo.setFieldCorrectionThreshold(count) }
 
     fun deleteEntry(entry: CalendarEntry) { scope.launch { calendarRepo.deleteEntry(entry) } }
 

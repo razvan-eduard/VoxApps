@@ -36,6 +36,7 @@ data class PendingFieldSuggestion(
     val category: String? = null,
     val location: String? = null,
     val dateTime: Long? = null,
+    val comments: String? = null,
     val itemsJson: String? = null,
     // The attachment group (see AttachmentEntity.groupId) whose rescan produced this suggestion, if
     // any — null for a rescan of a single ungrouped attachment, or a suggestion from a non-scan
