@@ -15,11 +15,7 @@ package com.voxapps.textmatch.extract
  */
 object LabelledAmountExtractor {
 
-    /**
-     * A figure with an optional thousands run and an optional fractional part, in either separator
-     * convention. Bare integers qualify — not every document prints minor units.
-     */
-    private val amountRegex = Regex("""\d{1,3}(?:[ .,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?""")
+    private val amountRegex = AmountText.pattern
 
     /** A figure carrying a percent sign is a rate, never an amount. */
     private val percentRegex = Regex("""\d+(?:[.,]\d+)?\s*%""")
@@ -85,31 +81,9 @@ object LabelledAmountExtractor {
     private fun amountsIn(line: String): List<Pair<Double, String>> {
         val withoutRates = percentRegex.replace(line, " ")
         return amountRegex.findAll(withoutRates)
-            .mapNotNull { m -> normalize(m.value)?.let { it to m.value } }
+            .mapNotNull { m -> AmountText.normalize(m.value)?.let { it to m.value } }
             .filter { it.first > 0.0 }
             .toList()
     }
 
-    /**
-     * Resolves a printed figure without assuming a locale. With both separators present the
-     * rightmost is the decimal one; with only one present it is decimal only when one or two digits
-     * follow it, which is what separates the thousands run "1.234" from the amount "12.34".
-     */
-    private fun normalize(raw: String): Double? {
-        val cleaned = raw.replace(" ", "")
-        val lastDot = cleaned.lastIndexOf('.')
-        val lastComma = cleaned.lastIndexOf(',')
-        val decimalAt = maxOf(lastDot, lastComma)
-
-        val normalized = when {
-            lastDot >= 0 && lastComma >= 0 ->
-                cleaned.substring(0, decimalAt).replace(Regex("""[.,]"""), "") +
-                    "." + cleaned.substring(decimalAt + 1)
-            decimalAt >= 0 && cleaned.length - decimalAt - 1 in 1..2 ->
-                cleaned.substring(0, decimalAt) + "." + cleaned.substring(decimalAt + 1)
-            else -> cleaned.replace(Regex("""[.,]"""), "")
-        }
-
-        return normalized.toDoubleOrNull()?.takeIf { it.isFinite() }
-    }
 }

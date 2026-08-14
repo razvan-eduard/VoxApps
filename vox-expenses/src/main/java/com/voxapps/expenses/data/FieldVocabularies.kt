@@ -52,15 +52,12 @@ object FieldVocabularies {
         )
     }
 
-    /** Both lists present, and mutually exclusive under the classifier's own normalization. */
+    /** Both lists present, and mutually exclusive under the classifier's OWN tokenization —
+     *  [VocabularyClassifier.termKey], not a re-implementation that could drift from it. */
     fun areUsable(value: VocabulariesSchema): Boolean {
         if (value.legalForms.isEmpty() || value.banks.isEmpty()) return false
-        val legal = value.legalForms.map(::normalize).toSet()
-        val banks = value.banks.map(::normalize).toSet()
+        val legal = value.legalForms.map(VocabularyClassifier::termKey).toSet()
+        val banks = value.banks.map(VocabularyClassifier::termKey).toSet()
         return legal.intersect(banks).isEmpty()
     }
-
-    /** Mirrors [VocabularyClassifier]'s tokenization: case- and punctuation-insensitive. */
-    private fun normalize(term: String): String =
-        term.lowercase().replace(Regex("""[^\p{L}\p{N}]+"""), "")
 }

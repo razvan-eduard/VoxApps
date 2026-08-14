@@ -88,6 +88,14 @@ object VocabularyClassifier {
         return out
     }
 
+    /**
+     * A term's identity under THIS classifier's own tokenization — the single source callers must
+     * use for questions like "do these two vocabularies collide". A validator that re-implements
+     * the tokenization is a mirror, and a mirror drifts; two terms collide exactly when this
+     * returns the same key for both ("S.R.L." and "srl" do).
+     */
+    fun termKey(term: String): String = tokenize(term).joinToString(" ")
+
     private fun containsSequence(haystack: List<String>, needle: List<String>): Boolean {
         if (needle.size > haystack.size) return false
         for (start in 0..haystack.size - needle.size) {

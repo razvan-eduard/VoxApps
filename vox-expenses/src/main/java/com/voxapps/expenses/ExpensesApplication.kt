@@ -1,6 +1,9 @@
 package com.voxapps.expenses
 
 import android.app.Application
+import com.voxapps.ipc.PendingLlmRequestScheduler
+import com.voxapps.ipc.VoxLlmQueueHost
+import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.domain.limits.SpendingLimitScheduler
 import com.voxapps.expenses.domain.llm.CategoryAutoMergeScheduler
@@ -8,7 +11,6 @@ import com.voxapps.expenses.domain.llm.ExpenseDeduplicationScheduler
 import com.voxapps.expenses.domain.llm.ExpenseParsePromptBuilder
 import com.voxapps.expenses.domain.llm.GeneratedParsedSchema
 import com.voxapps.expenses.domain.llm.LlmTasks
-import com.voxapps.expenses.domain.llm.PendingLlmRequestScheduler
 import com.voxapps.expenses.domain.widget.WidgetMidnightRefreshScheduler
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxSatelliteSchema
@@ -26,9 +28,13 @@ import com.voxapps.services.SchemaCatalog
 import com.voxapps.services.SchemaRepo
 import com.voxapps.expenses.data.ExternalServiceConfig
 
-class ExpensesApplication : Application() {
+class ExpensesApplication : Application(), VoxLlmQueueHost {
     lateinit var container: ExpensesContainer
         private set
+
+    override val voxLlmRequestQueue: VoxLlmRequestQueue
+        get() = container.pendingLlmRequestQueue
+
 
     override fun onCreate() {
         super.onCreate()

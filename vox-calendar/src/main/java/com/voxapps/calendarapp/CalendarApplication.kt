@@ -1,11 +1,13 @@
 package com.voxapps.calendarapp
 
 import android.app.Application
+import com.voxapps.ipc.PendingLlmRequestScheduler
+import com.voxapps.ipc.VoxLlmQueueHost
+import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarEventParsePromptBuilder
 import com.voxapps.calendarapp.domain.llm.GeneratedParsedSchema
 import com.voxapps.calendarapp.domain.llm.LlmTasks
-import com.voxapps.calendarapp.domain.llm.PendingLlmRequestScheduler
 import com.voxapps.calendarapp.domain.subscription.CalendarSubscriptionSyncScheduler
 import com.voxapps.calendarapp.domain.widget.WidgetMidnightRefreshScheduler
 import com.voxapps.ipc.VoxDataTransferClient
@@ -21,9 +23,13 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 
-class CalendarApplication : Application() {
+class CalendarApplication : Application(), VoxLlmQueueHost {
     lateinit var container: CalendarContainer
         private set
+
+    override val voxLlmRequestQueue: VoxLlmRequestQueue
+        get() = container.pendingLlmRequestQueue
+
 
     override fun onCreate() {
         super.onCreate()
