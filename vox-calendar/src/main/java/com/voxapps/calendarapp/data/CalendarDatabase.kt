@@ -19,7 +19,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
     entities = [CalendarLayer::class, CalendarEntry::class, CalendarEntryTag::class, CalendarEntryTombstone::class,
         PendingLlmRequestEntity::class, AttachmentEntity::class, CalendarReminder::class,
         ToDoList::class, LearnedFieldCorrection::class],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 @TypeConverters(CalendarConverters::class)
@@ -209,6 +209,16 @@ abstract class CalendarDatabase : RoomDatabase() {
             }
         }
 
+        // Custom-weekday recurrence for entries and routine to-do lists (see WeekdayMask,
+        // CalendarEntry.recurrenceDaysMask, ToDoList.routineDaysMask).
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE calendar_entries ADD COLUMN recurrenceDaysMask INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE todo_lists ADD COLUMN routineDaysMask INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE todo_lists ADD COLUMN routineLastResetDay INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         /** Room backed by SQLCipher; passphrase comes from the Keystore-backed store. */
         fun get(context: Context): CalendarDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
@@ -221,7 +231,7 @@ abstract class CalendarDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, CalendarDatabase::class.java, "vox-calendar.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                 .build()
         }
     }

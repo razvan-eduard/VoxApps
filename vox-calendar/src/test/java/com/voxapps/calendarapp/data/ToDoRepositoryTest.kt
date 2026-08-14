@@ -29,9 +29,17 @@ class ToDoRepositoryTest {
 
     private val now = 1_000_000L
 
-    private fun list(id: Long, title: String, layerId: Long = 1L, colorArgb: Long = 111L) = ToDoList(
+    private fun list(
+        id: Long,
+        title: String,
+        layerId: Long = 1L,
+        colorArgb: Long = 111L,
+        routineDaysMask: Int = 0,
+        routineLastResetDay: Long = 0
+    ) = ToDoList(
         id = id, uid = "list-uid-$id", title = title, colorArgb = colorArgb, layerId = layerId,
-        createdAt = now, updatedAt = now
+        createdAt = now, updatedAt = now,
+        routineDaysMask = routineDaysMask, routineLastResetDay = routineLastResetDay
     )
 
     private fun entry(
@@ -254,5 +262,101 @@ class ToDoRepositoryTest {
         repository.addParsedItem("Groceries", "Buy bread", dueMillis = 12_345L, defaultLayerId = null)
 
         coVerify(exactly = 1) { calendarRepository.updateEntry(match { it.id == 42L && it.startMillis == 12_345L }, emptyList(), emptyList()) }
+    }
+
+    // --- routine-list midnight reset (ToDoList.routineDaysMask) ---
+
+    @Test
+    fun `resetRoutinesForToday clears undated done items and stamps the day for an active routine`() = runTest {
+        // 2026-03-02 is a Monday; the list's mask contains Monday.
+        val today = java.time.LocalDate.of(2026, 3, 2)
+        val routine = list(1L, "Morning", routineDaysMask = WeekdayMask.bit(java.time.DayOfWeek.MONDAY))
+        repository = buildRepository(lists = listOf(routine))
+        coEvery { entryDao.clearCompletedUndatedForList(1L, any()) } just Runs
+        coEvery { listDao.update(any()) } just Runs
+
+        val didReset = repository.resetRoutinesForToday(today)
+
+        assertEquals(true, didReset)
+        coVerify(exactly = 1) { entryDao.clearCompletedUndatedForList(1L, any()) }
+        coVerify(exactly = 1) {
+            listDao.update(match { it.id == 1L && it.routineLastResetDay == today.toEpochDay() })
+        }
+    }
+
+    @Test
+    fun `resetRoutinesForToday skips a routine whose mask excludes today`() = runTest {
+        // Monday reset day, Tuesday-only routine.
+        val today = java.time.LocalDate.of(2026, 3, 2)
+        val routine = list(1L, "Tuesdays", routineDaysMask = WeekdayMask.bit(java.time.DayOfWeek.TUESDAY))
+        repository = buildRepository(lists = listOf(routine))
+
+        val didReset = repository.resetRoutinesForToday(today)
+
+        assertEquals(false, didReset)
+        coVerify(exactly = 0) { entryDao.clearCompletedUndatedForList(any(), any()) }
+        coVerify(exactly = 0) { listDao.update(any()) }
+    }
+
+    @Test
+    fun `resetRoutinesForToday is idempotent per day via routineLastResetDay`() = runTest {
+        val today = java.time.LocalDate.of(2026, 3, 2)
+        val alreadyReset = list(
+            1L, "Morning",
+            routineDaysMask = WeekdayMask.ALL,
+            routineLastResetDay = today.toEpochDay()
+        )
+        repository = buildRepository(lists = listOf(alreadyReset))
+
+        val didReset = repository.resetRoutinesForToday(today)
+
+        assertEquals(false, didReset)
+        coVerify(exactly = 0) { entryDao.clearCompletedUndatedForList(any(), any()) }
+    }
+
+    @Test
+    fun `resetRoutinesForToday never touches a non-routine list`() = runTest {
+        val today = java.time.LocalDate.of(2026, 3, 2)
+        repository = buildRepository(lists = listOf(list(1L, "Groceries")))
+
+        val didReset = repository.resetRoutinesForToday(today)
+
+        assertEquals(false, didReset)
+        coVerify(exactly = 0) { entryDao.clearCompletedUndatedForList(any(), any()) }
+    }
+
+    @Test
+    fun `updateListRoutineDays clamps the mask to the seven weekday bits`() = runTest {
+        val target = list(1L, "Morning")
+        repository = buildRepository(lists = listOf(target))
+        coEvery { listDao.update(any()) } just Runs
+
+        repository.updateListRoutineDays(target, 0xFFFF)
+
+        coVerify { listDao.update(match { it.routineDaysMask == WeekdayMask.ALL }) }
+    }
+
+    @Test
+    fun `switching a routine on mid-day stamps today so the first reset is tomorrow`() = runTest {
+        val today = java.time.LocalDate.of(2026, 3, 2)
+        val target = list(1L, "Morning")
+        repository = buildRepository(lists = listOf(target))
+        coEvery { listDao.update(any()) } just Runs
+
+        repository.updateListRoutineDays(target, WeekdayMask.ALL, today)
+
+        coVerify { listDao.update(match { it.routineLastResetDay == today.toEpochDay() }) }
+    }
+
+    @Test
+    fun `re-picking days on an already-on routine keeps its reset stamp`() = runTest {
+        val today = java.time.LocalDate.of(2026, 3, 2)
+        val target = list(1L, "Morning", routineDaysMask = WeekdayMask.ALL, routineLastResetDay = 500L)
+        repository = buildRepository(lists = listOf(target))
+        coEvery { listDao.update(any()) } just Runs
+
+        repository.updateListRoutineDays(target, WeekdayMask.bit(java.time.DayOfWeek.MONDAY), today)
+
+        coVerify { listDao.update(match { it.routineLastResetDay == 500L }) }
     }
 }

@@ -277,5 +277,15 @@
   "todo_widget_add_button": "+ To-Do",
   "todo_widget_pick_list": "Choisir une liste to-do",
   "todo_widget_list_missing": "Cette liste n'existe plus. Retirez le widget et ajoutez-le à nouveau.",
-  "todo_set_location": "Définir le lieu"
+  "todo_set_location": "Définir le lieu",
+  "entry_recurrence_days": "Les jours",
+  "todo_routine_label": "Routine quotidienne",
+  "todo_routine_hint": "Se décoche à minuit les jours choisis",
+  "weekday_mon": "Lu",
+  "weekday_tue": "Ma",
+  "weekday_wed": "Me",
+  "weekday_thu": "Je",
+  "weekday_fri": "Ve",
+  "weekday_sat": "Sa",
+  "weekday_sun": "Di"
 }

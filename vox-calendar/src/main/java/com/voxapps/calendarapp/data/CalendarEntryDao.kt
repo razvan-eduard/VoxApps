@@ -45,6 +45,11 @@ interface CalendarEntryDao {
     @Query("SELECT * FROM calendar_entries WHERE listId IS NOT NULL ORDER BY listId, position ASC")
     fun observeAllListItems(): Flow<List<CalendarEntry>>
 
+    /** The routine-list midnight reset (see [ToDoList.routineDaysMask]): every UNDATED done item of
+     *  the list becomes checkable again. Dated items are one-shot deadlines and keep their state. */
+    @Query("UPDATE calendar_entries SET completed = 0, updatedAt = :now WHERE listId = :listId AND completed != 0 AND startMillis IS NULL")
+    suspend fun clearCompletedUndatedForList(listId: Long, now: Long)
+
     @Insert
     suspend fun insert(entry: CalendarEntry): Long
 

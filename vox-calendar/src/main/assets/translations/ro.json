@@ -277,5 +277,15 @@
   "todo_widget_add_button": "+ To-Do",
   "todo_widget_pick_list": "Alege o listă to-do",
   "todo_widget_list_missing": "Această listă nu mai există. Șterge widgetul și adaugă-l din nou.",
-  "todo_set_location": "Setează locația"
+  "todo_set_location": "Setează locația",
+  "entry_recurrence_days": "În zilele",
+  "todo_routine_label": "Rutină zilnică",
+  "todo_routine_hint": "Se debifează la miezul nopții în zilele alese",
+  "weekday_mon": "Lu",
+  "weekday_tue": "Ma",
+  "weekday_wed": "Mi",
+  "weekday_thu": "Jo",
+  "weekday_fri": "Vi",
+  "weekday_sat": "Sâ",
+  "weekday_sun": "Du"
 }

@@ -137,6 +137,7 @@ private fun CalendarEntry.toSyncJson(layerName: String?, tags: List<String>): JS
     put("recurrenceFrequency", recurrenceFrequency.name)
     put("recurrenceInterval", recurrenceInterval)
     put("recurrenceUntilMillis", recurrenceUntilMillis)
+    put("recurrenceDaysMask", recurrenceDaysMask)
     put("layerName", layerName)
     put("tags", JSONArray(tags))
     put("createdAt", createdAt)
@@ -163,6 +164,7 @@ private fun JSONObject.toCalendarEntry(layerId: Long): CalendarEntry = CalendarE
     } else {
         null
     },
+    recurrenceDaysMask = optInt("recurrenceDaysMask", 0),
     layerId = layerId,
     createdAt = optLong("createdAt"),
     updatedAt = optLong(SyncDeltaKeys.UPDATED_AT)

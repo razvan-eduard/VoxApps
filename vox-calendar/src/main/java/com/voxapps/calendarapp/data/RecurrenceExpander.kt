@@ -44,6 +44,14 @@ object RecurrenceExpander {
         val until = entry.recurrenceUntilMillis
         val interval = entry.recurrenceInterval.coerceAtLeast(1)
 
+        val daysMask = entry.recurrenceDaysMask and WeekdayMask.ALL
+        if (entry.recurrenceFrequency == RecurrenceFrequency.WEEKLY && daysMask != 0) {
+            return expandWeeklyByDays(
+                entryStart, startMillis, durationMillis, daysMask, interval, until,
+                windowStartMillis, windowEndMillis, windowStart
+            )
+        }
+
         // Skip ahead analytically to roughly the first occurrence index that could fall in-or-after
         // the window (with one step of slack for rounding), rather than iterating one-by-one from the
         // original start — a DAILY entry created years ago, viewed in a far-future window, would
@@ -85,6 +93,51 @@ object RecurrenceExpander {
             val occEndMillis = durationMillis?.let { occStartMillis + it }
             if (occurrenceOverlapsWindow(occStartMillis, occEndMillis, windowStartMillis, windowEndMillis)) {
                 occurrences.add(Occurrence(occStartMillis, occEndMillis))
+            }
+            index++
+        }
+        return occurrences
+    }
+
+    /**
+     * WEEKLY with an explicit weekday set ([WeekdayMask]): each active week (per [interval], anchored
+     * to the start date's week) yields one occurrence per masked weekday, at the start's time-of-day.
+     * Candidates ascend — days ascend within a week, weeks ascend across iterations — so the first
+     * candidate past the window (or past `until`) ends the scan. Masked days earlier in the start's
+     * own week than the start itself never fire (the series can't begin before its start date).
+     */
+    private fun expandWeeklyByDays(
+        entryStart: ZonedDateTime,
+        startMillis: Long,
+        durationMillis: Long?,
+        daysMask: Int,
+        interval: Int,
+        until: Long?,
+        windowStartMillis: Long,
+        windowEndMillis: Long,
+        windowStart: ZonedDateTime
+    ): List<Occurrence> {
+        var index = (ChronoUnit.WEEKS.between(entryStart, windowStart) / interval).coerceAtLeast(0L) - 1
+        val occurrences = mutableListOf<Occurrence>()
+        var iterations = 0
+        while (iterations < MAX_ITERATIONS) {
+            iterations++
+            if (index < 0) {
+                index++
+                continue
+            }
+            val weekBase = entryStart.plusWeeks(index * interval)
+            for (day in java.time.DayOfWeek.entries) {
+                if (!WeekdayMask.contains(daysMask, day)) continue
+                val occurrenceStart = weekBase.plusDays((day.value - weekBase.dayOfWeek.value).toLong())
+                val occStartMillis = occurrenceStart.toInstant().toEpochMilli()
+                if (occStartMillis < startMillis) continue
+                if (occStartMillis > windowEndMillis) return occurrences
+                if (until != null && occStartMillis > until) return occurrences
+                val occEndMillis = durationMillis?.let { occStartMillis + it }
+                if (occurrenceOverlapsWindow(occStartMillis, occEndMillis, windowStartMillis, windowEndMillis)) {
+                    occurrences.add(Occurrence(occStartMillis, occEndMillis))
+                }
             }
             index++
         }

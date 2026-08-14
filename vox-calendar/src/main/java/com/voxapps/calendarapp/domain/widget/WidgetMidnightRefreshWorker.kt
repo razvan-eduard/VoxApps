@@ -18,6 +18,10 @@ class WidgetMidnightRefreshWorker(
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
+        // The new day may re-open routine lists (see ToDoList.routineDaysMask) — reset before the
+        // widget refreshes below so they redraw with the cleared checkmarks.
+        (applicationContext as com.voxapps.calendarapp.CalendarApplication)
+            .container.toDoRepository.resetRoutinesForToday()
         CalendarWidget().updateAll(applicationContext)
         com.voxapps.calendarapp.ui.widget.ToDoListsWidget().updateAll(applicationContext)
         com.voxapps.calendarapp.ui.widget.ToDoListWidget().updateAll(applicationContext)
