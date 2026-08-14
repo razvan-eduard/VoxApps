@@ -11,6 +11,7 @@ import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParsePromptBuilder
+import com.voxapps.expenses.domain.llm.toJsonValue
 import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
 import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.logging.Logger
@@ -133,8 +134,17 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             title, text, com.voxapps.expenses.data.FieldVocabularies.vocabularies(applicationContext)
         )
         val bankName = preParse.bank ?: knownBankName
+        // The template axis: reduce the message to its template's byte-shape and ask the memory
+        // whether a human has already said what this exact sentence means. A hit suppresses
+        // direction from the model the same way the other resolved fields are suppressed.
+        val skeleton = com.voxapps.textmatch.extract.TemplateSkeleton.of(
+            title, text, listOfNotNull(preParse.vendor, preParse.bank)
+        )
+        val templateHash = com.voxapps.textmatch.extract.TemplateSkeleton.hash(skeleton)
+        val inheritedDirection = container.templateDirectionMemory.lookup(templateHash)
         Logger.d(TAG, "Captured notification from ${sbn.packageName}, forwarding for LLM triage " +
-            "(bank=$bankName preAmount=${preParse.amount != null} preVendor=${preParse.vendor != null})")
+            "(bank=$bankName preAmount=${preParse.amount != null} preVendor=${preParse.vendor != null}" +
+            " templateDirection=${inheritedDirection ?: "-"})")
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val isLocalEngine = VoxCapabilityClient.isLocalEngine(applicationContext)
         val promptText = NotificationExpenseParsePromptBuilder.build(
@@ -146,7 +156,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             knownBankName = bankName,
             isLocalEngine = isLocalEngine,
             preParsedAmount = preParse.amount,
-            preParsedVendor = preParse.vendor
+            preParsedVendor = preParse.vendor,
+            preParsedDirection = inheritedDirection?.toJsonValue()
         )
         val encodedKey = Base64.encodeToString(sbn.key.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         // knownBankName rides along the same way rather than trusting the LLM to echo it back
@@ -171,7 +182,12 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // reunited with it by request id, same as the scan path's date/total.
         container.scanPreParseRepository.put(
             requestId,
-            com.voxapps.expenses.domain.llm.ScanPreParse(total = preParse.amount, vendor = preParse.vendor)
+            com.voxapps.expenses.domain.llm.ScanPreParse(
+                total = preParse.amount,
+                vendor = preParse.vendor,
+                direction = inheritedDirection?.toJsonValue(),
+                templateHash = templateHash
+            )
         )
     }
 

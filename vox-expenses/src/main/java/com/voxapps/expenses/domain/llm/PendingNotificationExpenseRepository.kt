@@ -23,7 +23,10 @@ data class PendingNotificationExpense(
     /** Set deterministically when the notification came from a starred (banking) source app —
      *  see [com.voxapps.expenses.receiver.PaymentNotificationListenerService]. */
     val bank: String? = null,
-    val direction: TransactionDirection = TransactionDirection.OUTGOING
+    val direction: TransactionDirection = TransactionDirection.OUTGOING,
+    /** The notification's template identity — approving this entry confirms the direction against
+     *  it; see [TemplateDirectionMemory]. */
+    val templateHash: String? = null
 )
 
 /**
@@ -80,6 +83,7 @@ class PendingNotificationExpenseRepository(context: Context) {
             e.bank?.let { o.put("bank", it) }
             o.put("direction", e.direction.toJsonValue())
             o.put("capturedAt", e.capturedAt)
+            e.templateHash?.let { o.put("templateHash", it) }
             array.put(o)
         }
         return array.toString()
@@ -98,7 +102,8 @@ class PendingNotificationExpenseRepository(context: Context) {
                 category = if (o.has("category")) o.optString("category") else null,
                 bank = if (o.has("bank")) o.optString("bank") else null,
                 direction = o.optTransactionDirection(),
-                capturedAt = o.optLong("capturedAt")
+                capturedAt = o.optLong("capturedAt"),
+                templateHash = if (o.has("templateHash")) o.optString("templateHash") else null
             )
         }
     } catch (e: Exception) {

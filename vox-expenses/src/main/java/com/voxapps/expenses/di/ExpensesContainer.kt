@@ -56,6 +56,7 @@ class ExpensesContainer(context: Context) {
     val expenseDeduplicationRepository = ExpenseDeduplicationRepository(appContext)
     val pendingNotificationExpenseRepository = PendingNotificationExpenseRepository(appContext)
     val scanPreParseRepository = ScanPreParseRepository(appContext)
+    val templateDirectionMemory = com.voxapps.expenses.domain.llm.TemplateDirectionMemory(appContext)
     val exchangeRateRepository = ExchangeRateRepository(appContext)
     val spendingLimitAlertRepository = SpendingLimitAlertRepository(appContext)
 
@@ -70,6 +71,7 @@ class ExpensesContainer(context: Context) {
         pendingNotificationExpenseRepository,
         spendingLimitAlertRepository,
         pendingLlmRequestQueue,
+        templateDirectionMemory,
         attachmentDao,
         duplicateRuleDao,
         appContext

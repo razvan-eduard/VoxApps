@@ -205,4 +205,34 @@ class NotificationExpenseParsePromptBuilderTest {
         assertTrue(prompt.contains(""""vendor": "...""""))
     }
 
+
+    @Test
+    fun `an inherited direction is neither asked for nor in the shape`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build(
+            notificationTitle = "LAZAR IONUT PFA",
+            notificationText = "63,00 RON with ING Card",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en",
+            preParsedDirection = "outgoing"
+        )
+        assertFalse(prompt.contains(""""direction": "outgoing""""))
+        assertFalse(prompt.contains("""decide "direction""""))
+        assertTrue(prompt.contains("do NOT decide or include a direction"))
+        // isPayment stays the model's gate regardless.
+        assertTrue(prompt.contains("isPayment"))
+    }
+
+    @Test
+    fun `without an inherited direction the model is still asked`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build(
+            notificationTitle = "Revolut",
+            notificationText = "You spent 45,20 RON",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en"
+        )
+        assertTrue(prompt.contains(""""direction": "outgoing""""))
+    }
+
 }
