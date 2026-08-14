@@ -25,6 +25,9 @@ data class ScanPreParse(
     /** The notification's template identity, carried so the reply side can seed the memory's
      *  record links — transport, not a resolved field. */
     val templateHash: String? = null,
+    /** True when the template is confirmed to produce real transactions — the reply is then
+     *  parsed without the isPayment gate, which was suppressed from the prompt. */
+    val isPaymentKnown: Boolean = false,
     val storedAt: Long = 0L
 ) {
     val isEmpty: Boolean
@@ -97,6 +100,7 @@ class ScanPreParseRepository(context: Context) {
             entry.vendor?.let { o.put("vendor", it) }
             entry.direction?.let { o.put("direction", it) }
             entry.templateHash?.let { o.put("templateHash", it) }
+            if (entry.isPaymentKnown) o.put("isPaymentKnown", true)
             o.put("storedAt", entry.storedAt)
             array.put(o)
         }
@@ -117,6 +121,7 @@ class ScanPreParseRepository(context: Context) {
                     vendor = if (o.has("vendor")) o.optString("vendor") else null,
                     direction = if (o.has("direction")) o.optString("direction") else null,
                     templateHash = if (o.has("templateHash")) o.optString("templateHash") else null,
+                    isPaymentKnown = o.optBoolean("isPaymentKnown", false),
                     storedAt = o.optLong("storedAt")
                 )
             }.toMap()

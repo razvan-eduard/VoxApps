@@ -154,9 +154,10 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         )
         val templateHash = com.voxapps.textmatch.extract.TemplateSkeleton.hash(skeleton)
         val inheritedDirection = container.templateDirectionMemory.lookup(templateHash)
+        val paymentKnown = container.templateDirectionMemory.lookupIsPayment(templateHash)
         Logger.d(TAG, "Captured notification from ${sbn.packageName}, forwarding for LLM triage " +
             "(bank=$bankName preAmount=${preParse.amount != null} preVendor=${preParse.vendor != null}" +
-            " templateDirection=${inheritedDirection ?: "-"})")
+            " templateDirection=${inheritedDirection ?: "-"} paymentKnown=$paymentKnown)")
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val isLocalEngine = VoxCapabilityClient.isLocalEngine(applicationContext)
         val promptText = NotificationExpenseParsePromptBuilder.build(
@@ -169,7 +170,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             isLocalEngine = isLocalEngine,
             preParsedAmount = preParse.amount,
             preParsedVendor = preParse.vendor,
-            preParsedDirection = inheritedDirection?.toJsonValue()
+            preParsedDirection = inheritedDirection?.toJsonValue(),
+            preKnownPayment = paymentKnown
         )
         val encodedKey = Base64.encodeToString(sbn.key.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         // knownBankName rides along the same way rather than trusting the LLM to echo it back
@@ -198,7 +200,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
                 total = preParse.amount,
                 vendor = preParse.vendor,
                 direction = inheritedDirection?.toJsonValue(),
-                templateHash = templateHash
+                templateHash = templateHash,
+                isPaymentKnown = paymentKnown
             )
         )
     }

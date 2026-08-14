@@ -37,7 +37,11 @@ object NotificationExpenseParsePromptBuilder {
         preParsedVendor: String? = null,
         // "outgoing"/"incoming" inherited from the template memory — a human already classified
         // this exact template, so the model is not asked to.
-        preParsedDirection: String? = null
+        preParsedDirection: String? = null,
+        // The template memory has two unanimous human confirmations that messages shaped exactly
+        // like this one are real transactions — so the is-this-a-payment triage is not asked,
+        // and the {"isPayment": false} escape is not offered.
+        preKnownPayment: Boolean = false
     ): String {
         val categoriesLine = if (existingCategories.isEmpty()) {
             "No categories exist yet."
@@ -158,22 +162,18 @@ object NotificationExpenseParsePromptBuilder {
             directionJsonField = """, "direction": "outgoing""""
         }
 
-        // A pre-resolved field must vanish from the examples too: an example output carrying a key
-        // the instructions forbid is an invitation to copy it — the exact few-shot leakage this
-        // prompt already guards against elsewhere.
-        val exampleFields = buildList {
-            if (preParsedAmount != null) add("totalAmount")
-            if (preParsedVendor != null) { add("vendor"); add("title") }
-            if (preParsedDirection != null) add("direction")
-        }
-        val cleanedExamples = exampleFields.fold(examples) { acc, field ->
-            acc.replace(Regex(""",?\s*"$field":\s*(?:"[^"]*"|[0-9.]+)"""), "")
-        }
-
-        return """
-            The following is the title and body text of a notification from an app the user has
-            marked as a possible source of payment notifications (e.g. a banking or payment app).
-
+        // The triage paragraphs exist to filter marketing and balance noise. When the template
+        // memory already knows this exact message shape is a transaction — two unanimous human
+        // confirmations — asking the model to re-decide reintroduces the failure the memory
+        // exists to remove: the unassisted model rejected 9 of 10 verbless purchases as
+        // non-payments in a 30-post baseline.
+        val triageBlock = if (preKnownPayment) {
+            """
+            This notification is known with certainty to describe a real, completed transaction —
+            the user has confirmed messages of exactly this shape before. Do NOT question that and
+            never claim otherwise; extract the requested fields."""
+        } else {
+            """
             There are two kinds of records this app tracks: OUTGOING transactions (a purchase, payment,
             or transfer where money leaves the user's account) and INCOMING transactions (a refund, an
             incoming transfer, a salary deposit, or an account top-up where money arrives). Both kinds
@@ -193,7 +193,36 @@ object NotificationExpenseParsePromptBuilder {
             a notification as "not a transaction" when there is no distinct transaction amount or
             counterparty at all, i.e. the ENTIRE notification content is just a balance figure and
             nothing else. The merchant/counterparty name is often only in the notification TEXT, not the
-            title — read both carefully before deciding$seeExample1.
+            title — read both carefully before deciding$seeExample1."""
+        }
+
+        // A pre-resolved field must vanish from the examples too: an example output carrying a key
+        // the instructions forbid is an invitation to copy it — the exact few-shot leakage this
+        // prompt already guards against elsewhere.
+        val exampleFields = buildList {
+            if (preParsedAmount != null) add("totalAmount")
+            if (preParsedVendor != null) { add("vendor"); add("title") }
+            if (preParsedDirection != null) add("direction")
+        }
+        var cleanedExamples = exampleFields.fold(examples) { acc, field ->
+            acc.replace(Regex(""",?\s*"$field":\s*(?:"[^"]*"|[0-9.]+)"""), "")
+        }
+        if (preKnownPayment) {
+            // Example 3's entire output is {"isPayment": false} — an example of the forbidden
+            // answer. It goes, and the remaining examples stop carrying the settled key.
+            cleanedExamples = cleanedExamples
+                .replace(Regex("""Example 3[^\n]*\n(?:[^\n]*\n)*?[^\n]*\{"isPayment": false\}[^\n]*"""), "")
+                .replace(Regex(""""isPayment":\s*(?:true|false),?\s*"""), "")
+        }
+
+        val isPaymentJsonField = if (preKnownPayment) "" else """"isPayment": true, """
+        val notPaymentAlternative = if (preKnownPayment) "" else """ when it is a
+            transaction, or {"isPayment": false} when it is not"""
+
+        return """
+            The following is the title and body text of a notification from an app the user has
+            marked as a possible source of payment notifications (e.g. a banking or payment app).
+$triageBlock
             $bankLine
             If it DOES describe a real transaction, extract it into a structured expense record: infer
             a short title$vendorClause$amountClause. Use "$defaultCurrency" as the currency
@@ -203,8 +232,7 @@ object NotificationExpenseParsePromptBuilder {
             character-for-character — never invent a new spelling, translation, capitalization, or
             diacritics for it. Only suggest a new category name if none of the existing ones fit.
             Respond in the "$languageCode" language. Return ONLY a JSON object, no prose, no markdown,
-            of the shape {"isPayment": true, $titleJsonField"currency": "..."$amountJsonField$vendorJsonField$directionJsonField, "category": "..."$bankJsonField} when it is a
-            transaction, or {"isPayment": false} when it is not.
+            of the shape {$isPaymentJsonField$titleJsonField"currency": "..."$amountJsonField$vendorJsonField$directionJsonField, "category": "..."$bankJsonField}$notPaymentAlternative.
 
             $cleanedExamples
 

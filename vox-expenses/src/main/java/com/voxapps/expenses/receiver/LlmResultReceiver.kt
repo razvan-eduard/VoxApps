@@ -284,7 +284,11 @@ class LlmResultReceiver : BroadcastReceiver() {
                         // read is a suspend, and onReceive's synchronous part must stay off IO.
                         val preParse = if (isParseSuccess) container.scanPreParseRepository.take(requestId) else null
                         val parsed = if (isParseSuccess) {
-                            NotificationExpenseParseResultParser.parse(rawJson!!, presetAmount = preParse?.total)
+                            NotificationExpenseParseResultParser.parse(
+                                rawJson!!,
+                                presetAmount = preParse?.total,
+                                presetIsPayment = preParse?.isPaymentKnown == true
+                            )
                                 ?.let { p ->
                                     val vendor = preParse?.vendor ?: return@let p
                                     // Title composed, not modelled: with the vendor suppressed

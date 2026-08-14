@@ -95,4 +95,23 @@ class NotificationPreParseTest {
         assertEquals("LIDL", NotificationPreParse.composeTitle(" LIDL ", "  "))
     }
 
+
+    @Test
+    fun `a preset payment parses a reply that never carried the gate field`() {
+        val parsed = NotificationExpenseParseResultParser.parse(
+            """{"currency":"RON","category":"Groceries"}""",
+            presetAmount = 63.0,
+            presetIsPayment = true
+        )
+        org.junit.Assert.assertNotNull(parsed)
+        assertEquals(63.0, parsed!!.totalAmount, 0.001)
+    }
+
+    @Test
+    fun `without the preset the gate still rejects`() {
+        org.junit.Assert.assertNull(
+            NotificationExpenseParseResultParser.parse("""{"currency":"RON"}""", presetAmount = 63.0)
+        )
+    }
+
 }

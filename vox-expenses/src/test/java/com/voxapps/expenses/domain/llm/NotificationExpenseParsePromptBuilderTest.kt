@@ -235,4 +235,36 @@ class NotificationExpenseParsePromptBuilderTest {
         assertTrue(prompt.contains(""""direction": "outgoing""""))
     }
 
+
+    @Test
+    fun `a confirmed-payment template is neither triaged nor offered the escape`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build(
+            notificationTitle = "LAZAR IONUT PFA",
+            notificationText = "63,00 RON with ING Card",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en",
+            preKnownPayment = true
+        )
+        assertFalse(prompt.contains("""respond with exactly"""))
+        assertFalse(prompt.contains(""""isPayment": false"""))
+        assertFalse(prompt.contains(""""isPayment": true"""))
+        assertTrue(prompt.contains("known with certainty to describe a real, completed transaction"))
+        // The category is still the model's job.
+        assertTrue(prompt.contains(""""category""""))
+    }
+
+    @Test
+    fun `without the template confirmation the triage stays`() {
+        val prompt = NotificationExpenseParsePromptBuilder.build(
+            notificationTitle = "Revolut",
+            notificationText = "You spent 45,20 RON",
+            existingCategories = emptyList(),
+            defaultCurrency = "RON",
+            languageCode = "en"
+        )
+        assertTrue(prompt.contains(""""isPayment": false"""))
+        assertTrue(prompt.contains(""""isPayment": true"""))
+    }
+
 }
