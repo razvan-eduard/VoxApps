@@ -370,6 +370,7 @@ class ExpensesStateManager(
             // its template never got at creation; see TemplateDirectionMemory.
             templateDirectionMemory.linkedTemplate(expense.id)?.let {
                 templateDirectionMemory.confirm(it, expense.direction)
+                Logger.d("TemplateMemory", "edit-save confirmed ${expense.direction} for template $it (record ${expense.id})")
             }
         }
     }
@@ -506,6 +507,7 @@ class ExpensesStateManager(
             )
             // Approval is the human confirmation the template memory feeds on.
             templateDirectionMemory.confirm(entry.templateHash, entry.direction)
+            if (entry.templateHash != null) Logger.d("TemplateMemory", "approve confirmed ${entry.direction} for template ${entry.templateHash}")
             pendingNotificationExpenseRepo.removePending(setOf(entry.id))
             maybeRequestScopedDuplicateCheck(context, settings.duplicateCheckModeAutomatic, id, settings.toNearDuplicateConfig())
         }
