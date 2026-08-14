@@ -34,7 +34,10 @@ object NotificationExpenseParsePromptBuilder {
         // model's job entirely — same discipline as the scan prompt's date/total bypass: a field
         // the reply must not carry is a field the model cannot invert.
         preParsedAmount: Double? = null,
-        preParsedVendor: String? = null
+        preParsedVendor: String? = null,
+        // "outgoing"/"incoming" inherited from the template memory — a human already classified
+        // this exact template, so the model is not asked to.
+        preParsedDirection: String? = null
     ): String {
         val categoriesLine = if (existingCategories.isEmpty()) {
             "No categories exist yet."
@@ -142,6 +145,31 @@ object NotificationExpenseParsePromptBuilder {
             amountJsonField = """, "totalAmount": 12.5"""
         }
 
+        val directionClause: String
+        val directionJsonField: String
+        if (preParsedDirection != null) {
+            directionClause = """ The direction of this transaction is already known with
+            certainty — do NOT decide or include a direction."""
+            directionJsonField = ""
+        } else {
+            directionClause = """ Also decide "direction": "outgoing" if money left
+            the account (a purchase, a payment sent, a transfer sent), or "incoming" if money arrived
+            instead (a refund, a transfer received, a salary deposit, an account top-up)."""
+            directionJsonField = """, "direction": "outgoing""""
+        }
+
+        // A pre-resolved field must vanish from the examples too: an example output carrying a key
+        // the instructions forbid is an invitation to copy it — the exact few-shot leakage this
+        // prompt already guards against elsewhere.
+        val exampleFields = buildList {
+            if (preParsedAmount != null) add("totalAmount")
+            if (preParsedVendor != null) { add("vendor"); add("title") }
+            if (preParsedDirection != null) add("direction")
+        }
+        val cleanedExamples = exampleFields.fold(examples) { acc, field ->
+            acc.replace(Regex(""",?\s*"$field":\s*(?:"[^"]*"|[0-9.]+)"""), "")
+        }
+
         return """
             The following is the title and body text of a notification from an app the user has
             marked as a possible source of payment notifications (e.g. a banking or payment app).
@@ -169,19 +197,16 @@ object NotificationExpenseParsePromptBuilder {
             $bankLine
             If it DOES describe a real transaction, extract it into a structured expense record: infer
             a short title$vendorClause$amountClause. Use "$defaultCurrency" as the currency
-            unless a different one is clearly stated. Also decide "direction": "outgoing" if money left
-            the account (a purchase, a payment sent, a transfer sent), or "incoming" if money arrived
-            instead (a refund, a transfer received, a salary deposit, an account top-up). Also suggest a
+            unless a different one is clearly stated.$directionClause Also suggest a
             category based on the content.
             $categoriesLine If one of the existing categories fits, copy that name verbatim,
             character-for-character — never invent a new spelling, translation, capitalization, or
             diacritics for it. Only suggest a new category name if none of the existing ones fit.
             Respond in the "$languageCode" language. Return ONLY a JSON object, no prose, no markdown,
-            of the shape {"isPayment": true, $titleJsonField"currency": "..."$amountJsonField$vendorJsonField,
-            "direction": "outgoing", "category": "..."$bankJsonField} when it is a
+            of the shape {"isPayment": true, $titleJsonField"currency": "..."$amountJsonField$vendorJsonField$directionJsonField, "category": "..."$bankJsonField} when it is a
             transaction, or {"isPayment": false} when it is not.
 
-            $examples
+            $cleanedExamples
 
             Now classify this actual notification the same way:
             Notification title: ${notificationTitle.orEmpty()}

@@ -19,9 +19,17 @@ data class ScanPreParse(
     val total: Double? = null,
     /** Notification captures resolve a vendor deterministically too — see NotificationPreParse. */
     val vendor: String? = null,
+    /** A direction inherited from the template memory ("outgoing"/"incoming"), suppressed from
+     *  the prompt the same way — see TemplateDirectionMemory. */
+    val direction: String? = null,
+    /** The notification's template identity, carried so the reply side can seed the memory's
+     *  record links — transport, not a resolved field. */
+    val templateHash: String? = null,
     val storedAt: Long = 0L
 ) {
-    val isEmpty: Boolean get() = date == null && time == null && total == null && vendor == null
+    val isEmpty: Boolean
+        get() = date == null && time == null && total == null && vendor == null &&
+            direction == null && templateHash == null
 }
 
 /**
@@ -87,6 +95,8 @@ class ScanPreParseRepository(context: Context) {
             entry.time?.let { o.put("time", it) }
             entry.total?.let { o.put("total", it) }
             entry.vendor?.let { o.put("vendor", it) }
+            entry.direction?.let { o.put("direction", it) }
+            entry.templateHash?.let { o.put("templateHash", it) }
             o.put("storedAt", entry.storedAt)
             array.put(o)
         }
@@ -105,6 +115,8 @@ class ScanPreParseRepository(context: Context) {
                     time = if (o.has("time")) o.optString("time") else null,
                     total = if (o.has("total")) o.optDouble("total") else null,
                     vendor = if (o.has("vendor")) o.optString("vendor") else null,
+                    direction = if (o.has("direction")) o.optString("direction") else null,
+                    templateHash = if (o.has("templateHash")) o.optString("templateHash") else null,
                     storedAt = o.optLong("storedAt")
                 )
             }.toMap()

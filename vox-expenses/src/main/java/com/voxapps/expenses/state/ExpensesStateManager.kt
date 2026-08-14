@@ -60,6 +60,7 @@ class ExpensesStateManager(
     private val pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
     private val spendingLimitAlertRepo: SpendingLimitAlertRepository,
     private val pendingLlmRequestQueue: VoxLlmRequestQueue,
+    private val templateDirectionMemory: com.voxapps.expenses.domain.llm.TemplateDirectionMemory,
     private val attachmentDao: AttachmentDao,
     private val duplicateRuleDao: DuplicateRuleDao,
     appContext: Context
@@ -363,7 +364,14 @@ class ExpensesStateManager(
      *  [markManuallyEdited] doc for why this always passes true, unlike [LlmResultReceiver]'s
      *  LLM-driven retry-cleanup update. */
     fun updateExpense(expense: Expense, items: List<ExpenseLineItem>) {
-        scope.launch { expensesRepo.updateExpense(expense, items, markManuallyEdited = true) }
+        scope.launch {
+            expensesRepo.updateExpense(expense, items, markManuallyEdited = true)
+            // Saving an auto-created notification record from the editor is the human confirmation
+            // its template never got at creation; see TemplateDirectionMemory.
+            templateDirectionMemory.linkedTemplate(expense.id)?.let {
+                templateDirectionMemory.confirm(it, expense.direction)
+            }
+        }
     }
 
     fun deleteExpense(expense: Expense) { scope.launch { expensesRepo.deleteExpense(expense) } }
@@ -496,6 +504,8 @@ class ExpensesStateManager(
                 merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold,
                 source = ExpenseSource.NOTIFICATION
             )
+            // Approval is the human confirmation the template memory feeds on.
+            templateDirectionMemory.confirm(entry.templateHash, entry.direction)
             pendingNotificationExpenseRepo.removePending(setOf(entry.id))
             maybeRequestScopedDuplicateCheck(context, settings.duplicateCheckModeAutomatic, id, settings.toNearDuplicateConfig())
         }

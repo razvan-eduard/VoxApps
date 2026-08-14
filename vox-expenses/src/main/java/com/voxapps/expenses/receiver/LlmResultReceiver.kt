@@ -296,6 +296,15 @@ class LlmResultReceiver : BroadcastReceiver() {
                                             .composeTitle(vendor, p.category)
                                     )
                                 }
+                                ?.let { p ->
+                                    // A direction inherited from the template memory outranks the
+                                    // model's: a human classified this exact template, twice.
+                                    when (preParse?.direction?.lowercase()) {
+                                        "incoming" -> p.copy(direction = com.voxapps.expenses.data.TransactionDirection.INCOMING)
+                                        "outgoing" -> p.copy(direction = com.voxapps.expenses.data.TransactionDirection.OUTGOING)
+                                        else -> p
+                                    }
+                                }
                         } else null
                         if (parsed == null) return@launch
 
@@ -338,6 +347,12 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold,
                                 source = ExpenseSource.NOTIFICATION
                             )
+                            // An auto-created record is NOT a confirmation — the model's output is
+                            // unreviewed. The link lets a later human edit-save of this record act
+                            // as one; see TemplateDirectionMemory.
+                            preParse?.templateHash?.let { hash ->
+                                if (newExpenseId > 0) container.templateDirectionMemory.linkRecord(newExpenseId, hash)
+                            }
                             stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
                             maybeRequestScopedDuplicateCheck(context, container, settings.duplicateCheckModeAutomatic, newExpenseId, settings.toNearDuplicateConfig())
                             // See the EXPENSE_PARSE branch's comment above — same
@@ -358,7 +373,8 @@ class LlmResultReceiver : BroadcastReceiver() {
                                     category = cleanCategory,
                                     bank = cleanBank,
                                     direction = parsed.direction,
-                                    capturedAt = System.currentTimeMillis()
+                                    capturedAt = System.currentTimeMillis(),
+                                    templateHash = preParse?.templateHash
                                 )
                             )
                         }
