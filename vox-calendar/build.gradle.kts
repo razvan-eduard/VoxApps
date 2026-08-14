@@ -78,6 +78,7 @@ android {
 dependencies {
     implementation(libs.gson)
     implementation(project(":core:design"))
+    implementation(project(":core:location"))
     implementation(project(":core:calendar"))
     implementation(project(":core:ipc"))
     implementation(project(":core:backup"))
@@ -86,6 +87,7 @@ dependencies {
     implementation(project(":core:widget"))
     implementation(project(":core:preferences"))
     implementation(project(":core:datahygiene"))
+    implementation(project(":core:fieldmemory"))
     implementation(project(":core:textmatch"))
     implementation(project(":core:schema-annotations"))
     ksp(project(":core:schema-processor"))

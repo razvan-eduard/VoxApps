@@ -266,5 +266,16 @@
   "todo_bleed_to_calendar_desc": "Dacă task-urile din to-do cu dată/oră apar și în grila standard Lună/Săptămână/Zi/An. Reminderele funcționează oricum, indiferent de setare.",
   "animations_enabled": "Animații",
   "animations_enabled_desc": "Animații decorative de tranziție, precum rotația dintre Calendar și Listele to-do.",
-  "locked_message": "Calendarul este blocat. Deblochează aplicația."
+  "locked_message": "Calendarul este blocat. Deblochează aplicația.",
+  "field_correction_memory_label": "Reține corecturile de scriere",
+  "field_correction_memory_desc": "Când corectezi un cuvânt greșit la editarea unei intrări, corectura este reținută și aplicată capturilor viitoare",
+  "field_correction_speed_label": "Viteza de învățare",
+  "field_correction_speed_instant": "Instant",
+  "field_correction_speed_fast": "Rapidă",
+  "field_correction_speed_medium": "Medie",
+  "field_correction_speed_slow": "Lentă",
+  "todo_widget_add_button": "+ To-Do",
+  "todo_widget_pick_list": "Alege o listă to-do",
+  "todo_widget_list_missing": "Această listă nu mai există. Șterge widgetul și adaugă-l din nou.",
+  "todo_set_location": "Setează locația"
 }

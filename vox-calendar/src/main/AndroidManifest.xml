@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Android 13+ suppresses toasts/notifications from backgrounded apps unless allowed — needed
          once a headless voice/LLM-created event wants to surface a toast. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -129,6 +131,38 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/calendar_widget_info" />
         </receiver>
+
+        <!-- To-do widgets: all lists, and one configured list (the configure activity below picks
+             which; first APPWIDGET_CONFIGURE flow in the suite). -->
+        <receiver
+            android:name=".ui.widget.ToDoListsWidgetReceiver"
+            android:exported="false"
+            android:label="@string/todo_lists_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/todo_lists_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".ui.widget.ToDoListWidgetReceiver"
+            android:exported="false"
+            android:label="@string/todo_list_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/todo_list_widget_info" />
+        </receiver>
+        <activity
+            android:name=".ui.widget.ToDoListWidgetConfigureActivity"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
 
         <!-- Entry reminders: fires on both an exact-alarm broadcast (explicit intent from
              ReminderScheduler, no intent-filter needed) and BOOT_COMPLETED (reschedules every

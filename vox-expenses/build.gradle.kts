@@ -86,6 +86,7 @@ dependencies {
     implementation(project(":core:services"))
     implementation(project(":core:preferences"))
     implementation(project(":core:datahygiene"))
+    implementation(project(":core:fieldmemory"))
     implementation(project(":core:schema-annotations"))
     ksp(project(":core:schema-processor"))
     implementation(project(":core:textmatch"))

@@ -106,4 +106,22 @@ class FuzzyNameMatcherTest {
     fun `namesMatch rejects blank input`() {
         assertFalse(FuzzyNameMatcher.namesMatch("", "Example Store"))
     }
+
+    @Test
+    fun `leveled level 0 is exact normalized equality only`() {
+        assertTrue(FuzzyNameMatcher.namesMatchLeveled(" LIDL ", "lidl", 0))
+        assertFalse(FuzzyNameMatcher.namesMatchLeveled("Lidll", "lidl", 0))
+    }
+
+    @Test
+    fun `leveled levels get progressively easier`() {
+        // One edit in a five-letter word: within 15% is impossible, but the floor of 1 admits it.
+        assertTrue(FuzzyNameMatcher.namesMatchLeveled("Lidll", "lidl", 1))
+        // Containment only unlocks at level 2.
+        assertFalse(FuzzyNameMatcher.namesMatchLeveled("Lidl Supermarket", "lidl", 1))
+        assertTrue(FuzzyNameMatcher.namesMatchLeveled("Lidl Supermarket", "lidl", 2))
+        // Four edits in a nine-letter pair: beyond 30%, within 45%.
+        assertFalse(FuzzyNameMatcher.namesMatchLeveled("kaufhalle", "kaufland", 2))
+        assertTrue(FuzzyNameMatcher.namesMatchLeveled("kaufhalle", "kaufland", 3))
+    }
 }

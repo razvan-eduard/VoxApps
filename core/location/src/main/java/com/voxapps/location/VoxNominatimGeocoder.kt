@@ -19,6 +19,21 @@ const val VOX_NOMINATIM_USER_AGENT = VoxRepo.USER_AGENT
  * may be blocked). Public (not just used internally by [VoxLocationResolver]) so a settings
  * card's manual refresh button can resolve a display name directly.
  */
+/** The pieces of a reverse-geocoded address a caller can ask for — one getter, a parts parameter,
+ *  instead of one method per combination. Parts render in this order, comma-joined, each silently
+ *  absent when the address doesn't carry it: "Ploiești, PH, RO" with everything, "Ploiești" with
+ *  [CITY] alone. */
+enum class LocationPart { CITY, SUBDIVISION, COUNTRY }
+
+/** One forward-search hit. [shortName] is the suite's location format ("Ploiești, PH, RO");
+ *  [fullName] is Nominatim's own display line, kept for disambiguating similar hits in a picker. */
+data class VoxPlace(
+    val shortName: String,
+    val fullName: String,
+    val lat: Double,
+    val lon: Double
+)
+
 class VoxNominatimGeocoder(private val userAgent: String = VOX_NOMINATIM_USER_AGENT) {
 
     private val httpClient by lazy {
@@ -28,7 +43,11 @@ class VoxNominatimGeocoder(private val userAgent: String = VOX_NOMINATIM_USER_AG
             .build()
     }
 
-    fun reverseGeocode(lat: Double, lon: Double): String? = try {
+    fun reverseGeocode(
+        lat: Double,
+        lon: Double,
+        parts: Set<LocationPart> = setOf(LocationPart.CITY, LocationPart.SUBDIVISION, LocationPart.COUNTRY)
+    ): String? = try {
         val url = "https://nominatim.openstreetmap.org/reverse" +
             "?format=json&lat=$lat&lon=$lon&zoom=10&addressdetails=1"
         val request = Request.Builder()
@@ -55,18 +74,75 @@ class VoxNominatimGeocoder(private val userAgent: String = VOX_NOMINATIM_USER_AG
                 Logger.w(TAG, "Reverse geocoding returned no address for ${'$'}lat, ${'$'}lon")
                 return null
             }
-            val name = address.optStringOrNull("city")
-                ?: address.optStringOrNull("town")
-                ?: address.optStringOrNull("village")
-                ?: address.optStringOrNull("municipality")
-                ?: address.optStringOrNull("county")
-            if (name == null) Logger.w(TAG, "No place name in the address for ${'$'}lat, ${'$'}lon")
-            name
+            val resolved = listOfNotNull(
+                if (LocationPart.CITY in parts) cityName(address) else null,
+                if (LocationPart.SUBDIVISION in parts) subdivisionCode(address) else null,
+                if (LocationPart.COUNTRY in parts) address.optStringOrNull("country_code")?.uppercase() else null
+            )
+            if (resolved.isEmpty()) {
+                Logger.w(TAG, "None of the requested parts in the address for ${'$'}lat, ${'$'}lon")
+                return null
+            }
+            resolved.joinToString(", ")
         }
     } catch (e: Exception) {
         Logger.w(TAG, "Reverse geocoding failed", e)
         null
     }
+
+    /**
+     * Forward geocoding — free-text place search. Callers MUST rate-limit themselves to
+     * Nominatim's policy (max one request per second); the picker composable debounces for this.
+     */
+    fun search(query: String, limit: Int = 5): List<VoxPlace> = try {
+        val url = "https://nominatim.openstreetmap.org/search" +
+            "?format=json&q=${android.net.Uri.encode(query)}&limit=$limit&addressdetails=1"
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", userAgent)
+            .get()
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                Logger.w(TAG, "Place search refused: HTTP ${'$'}{response.code}")
+                return emptyList()
+            }
+            val body = response.body?.string() ?: return emptyList()
+            val results = org.json.JSONArray(body)
+            (0 until results.length()).mapNotNull { i ->
+                val o = results.optJSONObject(i) ?: return@mapNotNull null
+                val lat = o.optString("lat").toDoubleOrNull() ?: return@mapNotNull null
+                val lon = o.optString("lon").toDoubleOrNull() ?: return@mapNotNull null
+                val address = o.optJSONObject("address") ?: JSONObject()
+                val name = o.optStringOrNull("name") ?: cityName(address) ?: return@mapNotNull null
+                val short = listOfNotNull(
+                    name,
+                    subdivisionCode(address),
+                    address.optStringOrNull("country_code")?.uppercase()
+                ).joinToString(", ")
+                VoxPlace(shortName = short, fullName = o.optString("display_name"), lat = lat, lon = lon)
+            }.distinctBy { it.shortName to it.fullName }
+        }
+    } catch (e: Exception) {
+        Logger.w(TAG, "Place search failed", e)
+        emptyList()
+    }
+
+    private fun cityName(address: JSONObject): String? =
+        address.optStringOrNull("city")
+            ?: address.optStringOrNull("town")
+            ?: address.optStringOrNull("village")
+            ?: address.optStringOrNull("municipality")
+            ?: address.optStringOrNull("county")
+
+    /** The short subdivision code ("PH" for Prahova, "CA" for California) from the ISO3166-2 keys
+     *  Nominatim attaches per admin level. Counties/states arrive at level 4 for most countries;
+     *  the fallback levels cover the ones that structure their subdivisions a step away. */
+    private fun subdivisionCode(address: JSONObject): String? =
+        listOf("ISO3166-2-lvl4", "ISO3166-2-lvl3", "ISO3166-2-lvl5", "ISO3166-2-lvl6")
+            .firstNotNullOfOrNull { address.optStringOrNull(it) }
+            ?.substringAfter('-', "")
+            ?.takeIf { it.isNotEmpty() }
 
     private fun JSONObject.optStringOrNull(key: String): String? =
         if (has(key) && !isNull(key)) optString(key) else null

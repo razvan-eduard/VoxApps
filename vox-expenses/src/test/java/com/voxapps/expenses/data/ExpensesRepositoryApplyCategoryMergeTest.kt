@@ -1,5 +1,7 @@
 package com.voxapps.expenses.data
 
+import android.content.Context
+
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -27,8 +29,8 @@ class ExpensesRepositoryApplyCategoryMergeTest {
         lineItemDao = mockk(relaxed = true)
         spendingLimitDao = mockk(relaxed = true)
         repository = ExpensesRepository(
-            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
-            mockk(relaxed = true)
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true), mockk<Context>(), mockk(relaxed = true),
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true)
         )
         coEvery { categoryDao.observeAll() } returns flowOf(listOf(food, groceries, transport))
         coEvery { categoryDao.getAll() } returns listOf(food, groceries, transport)

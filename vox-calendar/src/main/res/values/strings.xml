@@ -6,4 +6,6 @@
     <!-- Widget-picker label — read by Android's "add widget" UI before the app's own
          LanguageManager-driven UI is ever shown, so this stays a plain Android string resource. -->
     <string name="calendar_widget_label">Vox Calendar</string>
+    <string name="todo_lists_widget_label">Vox To-Do Lists</string>
+    <string name="todo_list_widget_label">Vox To-Do List</string>
 </resources>

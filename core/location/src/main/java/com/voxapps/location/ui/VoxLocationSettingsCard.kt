@@ -230,6 +230,19 @@ private fun HomeTownEditor(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        // Search-first: picking a place fills the coordinate fields below, which stay editable —
+        // typed numbers remain the source of truth the card commits.
+        var searchText by remember { mutableStateOf("") }
+        VoxLocationPickerField(
+            value = searchText,
+            onValueChange = { searchText = it },
+            label = strings.homeTownSearchLabel,
+            onPlacePicked = { place ->
+                latText = place.lat.toString()
+                lonText = place.lon.toString()
+                searchText = place.shortName
+            }
+        )
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = latText,

@@ -37,8 +37,8 @@ class ExpensesRepositoryDuplicateCheckTest {
         every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
         coEvery { duplicateRuleDao.getAll() } returns emptyList()
         repository = ExpensesRepository(
-            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk<Context>(), mockk(relaxed = true), duplicateRuleDao,
-            mockk(relaxed = true)
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true), mockk<Context>(), mockk(relaxed = true),
+            duplicateRuleDao, mockk(relaxed = true), mockk(relaxed = true)
         )
     }
 

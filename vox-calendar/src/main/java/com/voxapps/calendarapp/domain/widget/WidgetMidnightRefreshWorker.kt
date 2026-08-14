@@ -19,6 +19,8 @@ class WidgetMidnightRefreshWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         CalendarWidget().updateAll(applicationContext)
+        com.voxapps.calendarapp.ui.widget.ToDoListsWidget().updateAll(applicationContext)
+        com.voxapps.calendarapp.ui.widget.ToDoListWidget().updateAll(applicationContext)
         return Result.success()
     }
 }

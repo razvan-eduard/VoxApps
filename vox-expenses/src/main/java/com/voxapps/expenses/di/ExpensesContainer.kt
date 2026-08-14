@@ -38,16 +38,19 @@ class ExpensesContainer(context: Context) {
     private val database = ExpensesDatabase.get(appContext)
     val attachmentDao = database.attachmentDao()
     val duplicateRuleDao = database.duplicateRuleDao()
+    val fieldCorrectionMemory = com.voxapps.fieldmemory.FieldCorrectionMemory(database.learnedFieldCorrectionDao())
     val expensesRepository = ExpensesRepository(
         database.expenseDao(),
         database.categoryDao(),
         database.expenseLineItemDao(),
         database.spendingLimitDao(),
-        database.merchantCategoryMemoryDao(),
+        database.remapRuleDao(),
+        database.remapPatternSightingDao(),
         appContext,
         attachmentDao,
         duplicateRuleDao,
-        database.pendingFieldSuggestionDao()
+        database.pendingFieldSuggestionDao(),
+        fieldCorrectionMemory
     )
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())

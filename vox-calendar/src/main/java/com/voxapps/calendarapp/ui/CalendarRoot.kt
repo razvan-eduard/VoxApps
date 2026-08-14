@@ -60,7 +60,13 @@ fun CalendarRoot(
     // the tapped entry's id, editEntryTrigger is the counter that forces re-firing even when the
     // same record is tapped twice in a row (two equal ids wouldn't look like a state change).
     editEntryId: Long = -1L,
-    editEntryTrigger: Int = 0
+    editEntryTrigger: Int = 0,
+    // The to-do widgets' deep-links — same trigger-counter shape as above: open a specific list
+    // flipped to its edit face, or create a fresh list in edit mode (the all-lists widget's "+").
+    openToDoListId: Long = -1L,
+    openToDoListTrigger: Int = 0,
+    todoQuickAddTrigger: Int = 0,
+    openToDoListsTrigger: Int = 0
 ) {
     val settings by container.settingsRepository.settingsFlow.collectAsStateWithLifecycle(
         initialValue = CalendarSettings()
@@ -91,6 +97,18 @@ fun CalendarRoot(
                     if (quickAddTrigger > 0) editTarget = EditTarget.New
                 }
 
+                // The to-do widgets' taps: both flip to the to-do screen; ToDoListsScreen receives
+                // the forwarded triggers and does the list-specific part (open in edit / create).
+                LaunchedEffect(openToDoListTrigger) {
+                    if (openToDoListTrigger > 0) showToDoLists = true
+                }
+                LaunchedEffect(todoQuickAddTrigger) {
+                    if (todoQuickAddTrigger > 0) showToDoLists = true
+                }
+                LaunchedEffect(openToDoListsTrigger) {
+                    if (openToDoListsTrigger > 0) showToDoLists = true
+                }
+
                 // Widget record-row tap — waits for the first Unlocked state (immediately if already
                 // unlocked, or after the user authenticates if not) rather than a one-shot snapshot,
                 // so tapping a record while locked still opens it once the user unlocks.
@@ -99,7 +117,14 @@ fun CalendarRoot(
                         val unlocked = container.calendarStateManager.uiState
                             .filterIsInstance<CalendarUiState.Unlocked>()
                             .first()
-                        unlocked.entries.firstOrNull { it.entry.id == editEntryId }?.let {
+                        // The unlocked state's entries exclude dateless to-do rows at the query
+                        // level (see CalendarEntryDao's doc) — a widget tap on an undated node
+                        // must still open it, so fall back to fetching the row directly. To-do
+                        // rows carry no tags, so the bare wrapper is the complete picture.
+                        val target = unlocked.entries.firstOrNull { it.entry.id == editEntryId }
+                            ?: container.calendarRepository.getEntryById(editEntryId)
+                                ?.let { CalendarEntryWithTags(entry = it) }
+                        target?.let {
                             editTarget = if (it.entry.listId != null) EditTarget.ExistingTodo(it) else EditTarget.Existing(it)
                         }
                     }
@@ -192,7 +217,10 @@ fun CalendarRoot(
                                             ToDoListsScreen(
                                                 toDoRepository = container.toDoRepository,
                                                 defaultLayer = defaultLayer,
-                                                onBack = { showToDoLists = false }
+                                                onBack = { showToDoLists = false },
+                                                openListEditId = openToDoListId.takeIf { it >= 0 },
+                                                openListEditTrigger = openToDoListTrigger,
+                                                quickAddListTrigger = todoQuickAddTrigger
                                             )
                                         }
                                     }

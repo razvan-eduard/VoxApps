@@ -60,7 +60,8 @@ class ExpensesExportImportHandlerTest {
         coEvery { expensesRepo.expensesSnapshot() } returns emptyList()
         coEvery { expensesRepo.deleteExpenseById(any()) } just Runs
         coEvery { expensesRepo.deleteSpendingLimit(any()) } just Runs
-        coEvery { expensesRepo.merchantCategoryMemorySnapshot() } returns emptyList()
+        coEvery { expensesRepo.remapRulesSnapshot() } returns emptyList()
+        coEvery { expensesRepo.learnedFieldCorrectionsSnapshot() } returns emptyList()
         every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
         coEvery { duplicateRuleDao.getAll() } returns emptyList()
     }

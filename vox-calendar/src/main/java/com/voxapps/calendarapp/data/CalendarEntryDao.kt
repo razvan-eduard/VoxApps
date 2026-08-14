@@ -40,6 +40,11 @@ interface CalendarEntryDao {
     @Query("SELECT * FROM calendar_entries WHERE listId = :listId ORDER BY position ASC")
     suspend fun getForList(listId: Long): List<CalendarEntry>
 
+    /** Every to-do row of every list in one stream — for the to-do widgets, whose composition
+     *  can't collect a per-list flow for a list count it only learns while composing. */
+    @Query("SELECT * FROM calendar_entries WHERE listId IS NOT NULL ORDER BY listId, position ASC")
+    fun observeAllListItems(): Flow<List<CalendarEntry>>
+
     @Insert
     suspend fun insert(entry: CalendarEntry): Long
 

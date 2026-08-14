@@ -49,7 +49,7 @@ enum class VoxImportMode {
 /**
  * The "restore a full-table snapshot" idiom shared by Notes/Expenses/Calendar/Commander's imports.
  * Deliberately does NOT cover merge-by-name-insert-only (categories/layers/todoLists),
- * merge-by-name-with-field-update (DuplicateRuleEntity), or upsert-by-key (MerchantCategoryMemory)
+ * merge-by-name-with-field-update (DuplicateRuleEntity), or upsert-by-key (learned memories)
  * — those are genuinely different strategies, always additive regardless of [VoxImportMode], and
  * stay hand-written per app.
  */

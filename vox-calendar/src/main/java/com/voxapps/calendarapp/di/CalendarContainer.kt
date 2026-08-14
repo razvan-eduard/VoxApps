@@ -33,6 +33,7 @@ class CalendarContainer(context: Context) {
     private val database = CalendarDatabase.get(appContext)
     val attachmentDao = database.attachmentDao()
     val toDoListDao = database.toDoListDao()
+    val fieldCorrectionMemory = com.voxapps.fieldmemory.FieldCorrectionMemory(database.learnedFieldCorrectionDao())
     val calendarRepository = CalendarRepository(
         database.calendarEntryDao(),
         database.calendarLayerDao(),
@@ -52,7 +53,8 @@ class CalendarContainer(context: Context) {
         settingsRepository,
         calendarRepository,
         sessionManager,
-        attachmentDao
+        attachmentDao,
+        fieldCorrectionMemory
     )
 
     /**
@@ -96,6 +98,10 @@ class CalendarContainer(context: Context) {
             ) { _, entries, _, _ -> entries.size }.conflate().collect { entryCount ->
                 Logger.d("CalendarContainer", "Widget refresh triggered (entriesWithTags size=$entryCount)")
                 CalendarWidget().updateAll(appContext)
+                // The to-do widgets collect their own flows in-composition; this wakes any of
+                // their sessions a dead process left behind, same as for CalendarWidget.
+                com.voxapps.calendarapp.ui.widget.ToDoListsWidget().updateAll(appContext)
+                com.voxapps.calendarapp.ui.widget.ToDoListWidget().updateAll(appContext)
             }
         }
     }

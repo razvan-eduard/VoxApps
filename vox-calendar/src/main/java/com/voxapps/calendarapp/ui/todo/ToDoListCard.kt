@@ -50,6 +50,7 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -75,6 +78,10 @@ import com.voxapps.calendarapp.ui.LocalLanguageManager
 import com.voxapps.design.color.VoxColorPalette
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.design.color.VoxCustomColorDialog
+import com.voxapps.design.openLocationInMaps
+import com.voxapps.location.EphemeralLocationStore
+import com.voxapps.location.VoxLocationResolver
+import com.voxapps.location.ui.VoxLocationPickerField
 import com.voxapps.design.showRequirementToast
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
@@ -257,10 +264,23 @@ private fun ToDoListEditFace(
     // fresh `list`, and a `remember` living further down was observed re-collapsing as a result.
     var listColorExpanded by remember(list.id) { mutableStateOf(false) }
 
-    fun commitAndClose() {
+    fun commitTitle() {
         val trimmed = title.trim()
         if (trimmed.isNotEmpty() && trimmed != list.title) scope.launch { toDoRepository.renameList(list, trimmed) }
+    }
+
+    fun commitAndClose() {
+        commitTitle()
         onDone()
+    }
+
+    // The edit face can be flipped away by MORE than its own ✓ — the screen's header tap, the top
+    // bar's back arrow, the system back — and a title typed but not yet committed must survive
+    // every one of them. Committing on dispose covers them all; [scope] is the CARD's (not this
+    // face's), so it is still alive to run the write after the flip. The ✓ path commits the same
+    // value first, making this a no-op there.
+    DisposableEffect(list.id) {
+        onDispose { commitTitle() }
     }
 
     Column(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -314,7 +334,13 @@ private fun ToDoListEditFace(
                 onToggleDone = { item -> scope.launch { toDoRepository.toggleDone(item) } },
                 onTaskClick = { item -> editingTask = item },
                 onAddAt = { position ->
-                    scope.launch { toDoRepository.addItem(list.id, "", atPosition = position) }
+                    scope.launch {
+                        // A fresh node goes straight into its edit dialog with the title focused —
+                        // adding and then hunting for the blank chip to name it was two taps for
+                        // what is one intention.
+                        val newId = toDoRepository.addItem(list.id, "", atPosition = position)
+                        toDoRepository.getItem(newId)?.let { editingTask = it }
+                    }
                 },
                 onReorderCommitted = { ordered -> scope.launch { toDoRepository.reorderItems(ordered) } },
                 onDeleteItem = { item -> scope.launch { toDoRepository.deleteItem(item) } },
@@ -402,6 +428,7 @@ fun TaskEditDialog(
     onDismiss: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
     var text by remember(item.id) { mutableStateOf(item.text) }
     var dueMillis by remember(item.id) { mutableStateOf(item.dueMillis) }
     var color by remember(item.id) { mutableStateOf(item.colorArgb) }
@@ -417,6 +444,15 @@ fun TaskEditDialog(
     // Flow round-trip recomposes the dialog's content with a fresh `item`, and a `remember` living
     // inside VoxColorSwatchPicker itself was observed re-collapsing as a result.
     var colorExpanded by remember(item.id) { mutableStateOf(false) }
+    var itemLocation by remember(item.id) { mutableStateOf(item.location.orEmpty()) }
+    var locationEditing by remember(item.id) { mutableStateOf(false) }
+    val locationFocus = remember { FocusRequester() }
+    LaunchedEffect(locationEditing) { if (locationEditing) locationFocus.requestFocus() }
+    // A blank item is one the ghost-add just created for this dialog: land the cursor in the title
+    // with the keyboard up, so naming it is typing, not a third tap. An existing item opens without
+    // stealing focus — this dialog is also how color/date/done get tweaked.
+    val titleFocus = remember { FocusRequester() }
+    LaunchedEffect(item.id) { if (item.text.isEmpty()) titleFocus.requestFocus() }
 
     LaunchedEffect(item.id) { reminderOffsets = toDoRepository.getReminderOffsetsForItem(item) }
 
@@ -436,6 +472,8 @@ fun TaskEditDialog(
         if (dueMillis != item.dueMillis) scope.launch { toDoRepository.setItemDueDate(item, dueMillis, list) }
         if (important != item.isImportant) scope.launch { toDoRepository.updateItemImportant(item, important) }
         if (done != item.done) scope.launch { toDoRepository.toggleDone(item) }
+        val trimmedLocation = itemLocation.trim().takeIf { it.isNotEmpty() }
+        if (trimmedLocation != item.location) scope.launch { toDoRepository.updateItemLocation(item, trimmedLocation) }
     }
 
     // The quick date/time picker and this dialog's own form are mutually exclusive rather than
@@ -464,7 +502,7 @@ fun TaskEditDialog(
                             }
                             inner()
                         },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).focusRequester(titleFocus)
                     )
                     // Mandatory-field marker — only while blank, since that's the only state where
                     // leaving it that way actually does something (the item gets dropped on commit,
@@ -532,6 +570,41 @@ fun TaskEditDialog(
                             IconButton(onClick = { dueMillis = null }) {
                                 Icon(Icons.Filled.Close, contentDescription = languageManager.getString("todo_clear_due_date"))
                             }
+                        }
+                    }
+                    // A filled location is a LINK first — tapping it opens the saved text as a place
+                    // search in whichever maps/nav app the user picks; the pencil switches back to
+                    // text entry. Mirrors EntryEditScreen's location field.
+                    when {
+                        locationEditing -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Search-first entry (OpenStreetMap place search + GPS lock) — the
+                            // GPS lambda resolves a FRESH fix through a store that remembers
+                            // nothing: calendar keeps no location cache by design.
+                            VoxLocationPickerField(
+                                value = itemLocation,
+                                onValueChange = { itemLocation = it },
+                                label = languageManager.getString("entry_location"),
+                                gpsLock = {
+                                    VoxLocationResolver.create(
+                                        context, EphemeralLocationStore(), needsReverseGeocode = true
+                                    ).resolveLocation()?.displayName
+                                },
+                                modifier = Modifier.weight(1f).focusRequester(locationFocus)
+                            )
+                            IconButton(onClick = { locationEditing = false }) {
+                                Icon(Icons.Filled.Check, contentDescription = languageManager.getString("apply"))
+                            }
+                        }
+                        itemLocation.isNotBlank() -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { openLocationInMaps(context, itemLocation) }) {
+                                Text(itemLocation, maxLines = 1)
+                            }
+                            IconButton(onClick = { locationEditing = true }) {
+                                Icon(Icons.Filled.Edit, contentDescription = languageManager.getString("entry_location"))
+                            }
+                        }
+                        else -> TextButton(onClick = { locationEditing = true }) {
+                            Text(languageManager.getString("todo_set_location"))
                         }
                     }
                     if (dueMillis != null) {

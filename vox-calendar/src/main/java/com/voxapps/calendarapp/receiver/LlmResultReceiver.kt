@@ -165,10 +165,18 @@ class LlmResultReceiver : BroadcastReceiver() {
         parsed: CalendarEventParseResultParser.Parsed
     ) {
         val settings = container.settingsRepository.getSnapshot()
+        // Learned spelling corrections apply only on this LLM-capture path — subscribed-calendar
+        // sync and manual entry are not garble sources. Exact tier only: this app has no
+        // suggestion surface for the fuzzy tier to speak through.
+        val corrections =
+            if (settings.fieldCorrectionMemoryEnabled) container.fieldCorrectionMemory.activeCorrections(settings.fieldCorrectionThreshold)
+            else emptyMap()
         // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard.
         container.calendarRepository.addParsedEntry(
             type = parsed.calendarType,
-            title = FieldCleaner.cleanRequired(parsed.title, parsed.title, "title", "CalendarEntry"),
+            title = com.voxapps.textmatch.extract.FieldCorrections.apply(
+                FieldCleaner.cleanRequired(parsed.title, parsed.title, "title", "CalendarEntry"), corrections
+            ) ?: parsed.title,
             description = null,
             location = null,
             // Non-null enforced by CalendarEventParseResultParser.parse() for EVENT/TASK kinds.
@@ -187,9 +195,14 @@ class LlmResultReceiver : BroadcastReceiver() {
         parsed: CalendarEventParseResultParser.Parsed
     ) {
         val settings = container.settingsRepository.getSnapshot()
+        val corrections =
+            if (settings.fieldCorrectionMemoryEnabled) container.fieldCorrectionMemory.activeCorrections(settings.fieldCorrectionThreshold)
+            else emptyMap()
         container.toDoRepository.addParsedItem(
             spokenListName = parsed.listName,
-            text = FieldCleaner.cleanRequired(parsed.title, parsed.title, "text", "ToDoItem"),
+            text = com.voxapps.textmatch.extract.FieldCorrections.apply(
+                FieldCleaner.cleanRequired(parsed.title, parsed.title, "text", "ToDoItem"), corrections
+            ) ?: parsed.title,
             dueMillis = parsed.startMillis,
             defaultLayerId = settings.defaultLayerId
         )

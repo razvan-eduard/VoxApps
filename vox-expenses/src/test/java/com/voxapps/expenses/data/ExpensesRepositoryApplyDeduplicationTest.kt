@@ -1,5 +1,7 @@
 package com.voxapps.expenses.data
 
+import android.content.Context
+
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import io.mockk.coEvery
@@ -26,8 +28,8 @@ class ExpensesRepositoryApplyDeduplicationTest {
         spendingLimitDao = mockk(relaxed = true)
         attachmentDao = mockk(relaxed = true)
         repository = ExpensesRepository(
-            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true), attachmentDao, mockk(relaxed = true),
-            mockk(relaxed = true)
+            expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true), mockk<Context>(), attachmentDao,
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true)
         )
     }
 

@@ -266,5 +266,16 @@
   "todo_bleed_to_calendar_desc": "Ob To-do-Aufgaben mit Fälligkeitsdatum/-zeit auch im normalen Monats-/Wochen-/Tages-/Jahresraster erscheinen. Erinnerungen funktionieren in jedem Fall weiter.",
   "animations_enabled": "Animationen",
   "animations_enabled_desc": "Dekorative Übergangsanimationen, wie der Flip zwischen Kalender und To-do-Listen.",
-  "locked_message": "Der Kalender ist gesperrt. Entsperre die App."
+  "locked_message": "Der Kalender ist gesperrt. Entsperre die App.",
+  "field_correction_memory_label": "Rechtschreibkorrekturen merken",
+  "field_correction_memory_desc": "Wenn du ein fehlerhaftes Wort beim Bearbeiten korrigierst, wird die Korrektur gemerkt und auf künftige Erfassungen angewendet",
+  "field_correction_speed_label": "Lerngeschwindigkeit",
+  "field_correction_speed_instant": "Sofort",
+  "field_correction_speed_fast": "Schnell",
+  "field_correction_speed_medium": "Mittel",
+  "field_correction_speed_slow": "Langsam",
+  "todo_widget_add_button": "+ To-Do",
+  "todo_widget_pick_list": "To-Do-Liste wählen",
+  "todo_widget_list_missing": "Diese Liste existiert nicht mehr. Widget entfernen und neu hinzufügen.",
+  "todo_set_location": "Ort festlegen"
 }

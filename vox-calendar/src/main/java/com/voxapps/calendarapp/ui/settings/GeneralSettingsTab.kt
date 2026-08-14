@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.state.CalendarStateManager
@@ -126,6 +127,42 @@ fun GeneralSettingsTab(
                 checked = settings.todoBleedToCalendar,
                 onCheckedChange = { stateManager.setTodoBleedToCalendar(it) }
             )
+        }
+
+        HorizontalDivider()
+
+        // --- Field correction memory ---
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("field_correction_memory_label"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("field_correction_memory_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.fieldCorrectionMemoryEnabled,
+                onCheckedChange = { stateManager.setFieldCorrectionMemoryEnabled(it) }
+            )
+        }
+        val correctionAlpha = if (settings.fieldCorrectionMemoryEnabled) 1f else 0.4f
+        Column(modifier = Modifier.alpha(correctionAlpha), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(languageManager.getString("field_correction_speed_label"), style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    CalendarSettings.CORRECTION_SPEED_INSTANT to "field_correction_speed_instant",
+                    CalendarSettings.CORRECTION_SPEED_FAST to "field_correction_speed_fast",
+                    CalendarSettings.CORRECTION_SPEED_MEDIUM to "field_correction_speed_medium",
+                    CalendarSettings.CORRECTION_SPEED_SLOW to "field_correction_speed_slow"
+                ).forEach { (count, labelKey) ->
+                    FilterChip(
+                        selected = settings.fieldCorrectionThreshold == count,
+                        onClick = { stateManager.setFieldCorrectionThreshold(count) },
+                        label = { Text(languageManager.getString(labelKey)) }
+                    )
+                }
+            }
         }
     }
 }

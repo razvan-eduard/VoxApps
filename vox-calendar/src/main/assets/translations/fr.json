@@ -266,5 +266,16 @@
   "todo_bleed_to_calendar_desc": "Indique si les tâches à faire avec une date/heure d'échéance apparaissent aussi dans la grille standard Mois/Semaine/Jour/Année. Les rappels continuent de fonctionner dans tous les cas.",
   "animations_enabled": "Animations",
   "animations_enabled_desc": "Animations de transition décoratives, comme le retournement entre Calendrier et Listes de tâches.",
-  "locked_message": "Le calendrier est verrouillé. Déverrouillez l'application."
+  "locked_message": "Le calendrier est verrouillé. Déverrouillez l'application.",
+  "field_correction_memory_label": "Mémoriser les corrections d'orthographe",
+  "field_correction_memory_desc": "Quand vous corrigez un mot altéré lors de l'édition, la correction est mémorisée puis appliquée aux captures futures",
+  "field_correction_speed_label": "Vitesse d'apprentissage",
+  "field_correction_speed_instant": "Instantanée",
+  "field_correction_speed_fast": "Rapide",
+  "field_correction_speed_medium": "Moyenne",
+  "field_correction_speed_slow": "Lente",
+  "todo_widget_add_button": "+ To-Do",
+  "todo_widget_pick_list": "Choisir une liste to-do",
+  "todo_widget_list_missing": "Cette liste n'existe plus. Retirez le widget et ajoutez-le à nouveau.",
+  "todo_set_location": "Définir le lieu"
 }

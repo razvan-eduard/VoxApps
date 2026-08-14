@@ -28,6 +28,10 @@ class CalendarActivity : FragmentActivity() {
     // A separate counter (not just editEntryId itself): tapping the SAME record twice in a row
     // must still re-trigger the effect, but two equal Long values wouldn't look like a change.
     private val editEntryTrigger = mutableIntStateOf(0)
+    private val openToDoListId = mutableLongStateOf(-1L)
+    private val openToDoListTrigger = mutableIntStateOf(0)
+    private val todoQuickAddTrigger = mutableIntStateOf(0)
+    private val openToDoListsTrigger = mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,7 +42,11 @@ class CalendarActivity : FragmentActivity() {
                 onUnlockRequest = ::promptUnlock,
                 quickAddTrigger = quickAddTrigger.intValue,
                 editEntryId = editEntryId.longValue,
-                editEntryTrigger = editEntryTrigger.intValue
+                editEntryTrigger = editEntryTrigger.intValue,
+                openToDoListId = openToDoListId.longValue,
+                openToDoListTrigger = openToDoListTrigger.intValue,
+                todoQuickAddTrigger = todoQuickAddTrigger.intValue,
+                openToDoListsTrigger = openToDoListsTrigger.intValue
             )
         }
     }
@@ -56,6 +64,13 @@ class CalendarActivity : FragmentActivity() {
             editEntryId.longValue = id
             editEntryTrigger.intValue++
         }
+        val todoListId = intent?.getLongExtra(EXTRA_OPEN_TODO_LIST_ID, -1L) ?: -1L
+        if (todoListId >= 0) {
+            openToDoListId.longValue = todoListId
+            openToDoListTrigger.intValue++
+        }
+        if (intent?.getBooleanExtra(EXTRA_TODO_QUICK_ADD, false) == true) todoQuickAddTrigger.intValue++
+        if (intent?.getBooleanExtra(EXTRA_OPEN_TODO_LISTS, false) == true) openToDoListsTrigger.intValue++
     }
 
     override fun onResume() {
@@ -83,5 +98,13 @@ class CalendarActivity : FragmentActivity() {
         const val EXTRA_QUICK_ADD = "com.voxapps.calendarapp.EXTRA_QUICK_ADD"
         /** Set by CalendarWidget's record rows — jump straight to that entry's edit screen. */
         const val EXTRA_EDIT_ENTRY_ID = "com.voxapps.calendarapp.EXTRA_EDIT_ENTRY_ID"
+        /** Set by the to-do widgets' list titles/cards — open the to-do screen with that list
+         *  flipped to its edit face. */
+        const val EXTRA_OPEN_TODO_LIST_ID = "com.voxapps.calendarapp.EXTRA_OPEN_TODO_LIST_ID"
+        /** Set by the all-lists to-do widget's "+" button — open the to-do screen and create a
+         *  fresh list straight in edit mode, same as its FAB. */
+        const val EXTRA_TODO_QUICK_ADD = "com.voxapps.calendarapp.EXTRA_TODO_QUICK_ADD"
+        /** Set by the to-do widgets' headers — just open the to-do lists screen. */
+        const val EXTRA_OPEN_TODO_LISTS = "com.voxapps.calendarapp.EXTRA_OPEN_TODO_LISTS"
     }
 }

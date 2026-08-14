@@ -266,5 +266,16 @@
   "todo_bleed_to_calendar_desc": "Whether to-do items with a due date/time also show up on the standard Month/Week/Day/Year grid. Reminders keep working either way.",
   "animations_enabled": "Animations",
   "animations_enabled_desc": "Decorative transition animations, like the flip between Calendar and To-do lists.",
-  "locked_message": "The calendar is locked. Unlock the app."
+  "locked_message": "The calendar is locked. Unlock the app.",
+  "field_correction_memory_label": "Remember spelling corrections",
+  "field_correction_memory_desc": "When you fix a garbled word while editing an entry, remember the fix and apply it to future captures",
+  "field_correction_speed_label": "Learning speed",
+  "field_correction_speed_instant": "Instant",
+  "field_correction_speed_fast": "Fast",
+  "field_correction_speed_medium": "Medium",
+  "field_correction_speed_slow": "Slow",
+  "todo_widget_add_button": "+ To-Do",
+  "todo_widget_pick_list": "Choose a to-do list",
+  "todo_widget_list_missing": "This list no longer exists. Remove the widget and add it again.",
+  "todo_set_location": "Set location"
 }

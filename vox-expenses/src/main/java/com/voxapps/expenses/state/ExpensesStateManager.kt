@@ -16,6 +16,7 @@ import com.voxapps.expenses.data.PendingFieldSuggestion
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesRepository
+import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.NearDuplicateConfig
@@ -193,8 +194,8 @@ class ExpensesStateManager(
     fun upsertDuplicateRule(rule: DuplicateRuleEntity) { scope.launch { duplicateRuleDao.upsert(rule) } }
     fun deleteDuplicateRule(rule: DuplicateRuleEntity) { scope.launch { duplicateRuleDao.delete(rule) } }
     fun setDuplicateRuleEnabled(id: Long, enabled: Boolean) { scope.launch { duplicateRuleDao.setEnabled(id, enabled) } }
-    fun setMerchantCategoryMemoryEnabled(enabled: Boolean) { scope.launch { settingsRepo.setMerchantCategoryMemoryEnabled(enabled) } }
-    fun setMerchantCategoryMemoryThreshold(count: Int) { scope.launch { settingsRepo.setMerchantCategoryMemoryThreshold(count) } }
+    fun setRemapProposalsEnabled(enabled: Boolean) { scope.launch { settingsRepo.setRemapProposalsEnabled(enabled) } }
+    fun setRemapLearningSpeed(count: Int) { scope.launch { settingsRepo.setRemapLearningSpeed(count) } }
     fun setWidgetBorderEnabled(enabled: Boolean) { scope.launch { settingsRepo.setWidgetBorderEnabled(enabled) } }
     fun setWidgetBorderThicknessDp(thicknessDp: Int) { scope.launch { settingsRepo.setWidgetBorderThicknessDp(thicknessDp) } }
     fun setWidgetBorderColorArgb(colorArgb: Long) { scope.launch { settingsRepo.setWidgetBorderColorArgb(colorArgb) } }
@@ -247,12 +248,34 @@ class ExpensesStateManager(
     }
 
     /** Gate lives here (not in the repository) — mirrors the "repository has zero settings
-     *  dependency" convention; [ExpensesRepository.recordManualCategoryChange] itself is
+     *  dependency" convention; [ExpensesRepository.recordRemapPatternSightings] itself is
      *  unconditional. */
-    fun recordManualCategoryChange(vendor: String?, categoryId: Long?) {
-        if (!settingsRepo.getSnapshot().merchantCategoryMemoryEnabled) return
-        scope.launch { expensesRepo.recordManualCategoryChange(vendor, categoryId) }
+    fun recordFieldEditPatterns(old: ExpenseWithDetails, new: Expense) {
+        val settings = settingsRepo.getSnapshot()
+        if (!settings.remapProposalsEnabled) return
+        scope.launch { expensesRepo.recordRemapPatternSightings(old, new, settings.remapLearningSpeed) }
     }
+
+    val remapRules: Flow<List<com.voxapps.expenses.data.RemapRuleEntity>> get() = expensesRepo.observeRemapRules()
+    fun upsertRemapRule(rule: com.voxapps.expenses.data.RemapRuleEntity) = scope.launch { expensesRepo.upsertRemapRule(rule) }
+    fun deleteRemapRule(rule: com.voxapps.expenses.data.RemapRuleEntity) = scope.launch { expensesRepo.deleteRemapRule(rule) }
+    fun setRemapRuleEnabled(rule: com.voxapps.expenses.data.RemapRuleEntity, enabled: Boolean) =
+        scope.launch { expensesRepo.upsertRemapRule(rule.copy(enabled = enabled)) }
+
+    fun reorderRemapRules(orderedIds: List<Long>) = scope.launch { expensesRepo.reorderRemapRules(orderedIds) }
+    fun setAllRemapRulesEnabled(enabled: Boolean) = scope.launch { expensesRepo.setAllRemapRulesEnabled(enabled) }
+    fun deleteAllRemapRules() = scope.launch { expensesRepo.deleteAllRemapRules() }
+
+    /** Same gate convention as [recordFieldEditPatterns];
+     *  [ExpensesRepository.recordFieldCorrections] itself is unconditional. */
+    fun recordFieldCorrections(old: ExpenseWithDetails, new: Expense, newItems: List<ExpenseLineItem>) {
+        if (!settingsRepo.getSnapshot().fieldCorrectionMemoryEnabled) return
+        scope.launch { expensesRepo.recordFieldCorrections(old, new, newItems) }
+    }
+
+    fun setFieldCorrectionMemoryEnabled(enabled: Boolean) = scope.launch { settingsRepo.setFieldCorrectionMemoryEnabled(enabled) }
+    fun setFieldCorrectionThreshold(count: Int) = scope.launch { settingsRepo.setFieldCorrectionThreshold(count) }
+    fun setFieldCorrectionApplyMode(mode: String) = scope.launch { settingsRepo.setFieldCorrectionApplyMode(mode) }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
     fun setThemeColored(colored: Boolean) { scope.launch { settingsRepo.setThemeColored(colored) } }
     fun setOnboardingCompleted(completed: Boolean) { scope.launch { settingsRepo.setOnboardingCompleted(completed) } }
@@ -501,8 +524,9 @@ class ExpensesStateManager(
                 direction = entry.direction,
                 nearDuplicateCheckEnabled = settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_AI,
                 nearDuplicateConfig = settings.toNearDuplicateConfig(),
-                merchantMemoryEnabled = settings.merchantCategoryMemoryEnabled,
-                merchantMemoryThreshold = settings.merchantCategoryMemoryThreshold,
+                correctionsEnabled = settings.fieldCorrectionMemoryEnabled,
+                correctionsThreshold = settings.fieldCorrectionThreshold,
+                correctionsApplyMode = settings.fieldCorrectionApplyMode,
                 source = ExpenseSource.NOTIFICATION
             )
             // Approval is the human confirmation the template memory feeds on.

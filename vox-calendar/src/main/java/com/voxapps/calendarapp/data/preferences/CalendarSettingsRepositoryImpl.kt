@@ -61,6 +61,8 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val NOTIFICATIONS_LENGTH = stringPreferencesKey("notifications_length")
         val NOTIFICATIONS_CHANNEL_VERSION = intPreferencesKey("notifications_channel_version")
         val TODO_BLEED_TO_CALENDAR = booleanPreferencesKey("todo_bleed_to_calendar")
+        val FIELD_CORRECTION_MEMORY_ENABLED = booleanPreferencesKey("field_correction_memory_enabled")
+        val FIELD_CORRECTION_MEMORY_THRESHOLD = intPreferencesKey("field_correction_memory_threshold")
         val ANIMATIONS_ENABLED = booleanPreferencesKey("animations_enabled")
     }
 
@@ -99,6 +101,9 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             notificationsLength = prefs[Keys.NOTIFICATIONS_LENGTH] ?: CalendarSettings.LENGTH_SHORT,
             notificationsChannelVersion = prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] ?: 1,
             todoBleedToCalendar = prefs[Keys.TODO_BLEED_TO_CALENDAR] ?: true,
+            fieldCorrectionMemoryEnabled = prefs[Keys.FIELD_CORRECTION_MEMORY_ENABLED] ?: false,
+            fieldCorrectionThreshold = prefs[Keys.FIELD_CORRECTION_MEMORY_THRESHOLD]
+                ?: CalendarSettings.CORRECTION_SPEED_MEDIUM,
             animationsEnabled = prefs[Keys.ANIMATIONS_ENABLED] ?: true
         )
     }
@@ -236,6 +241,14 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         dataStore.edit { it[Keys.TODO_BLEED_TO_CALENDAR] = enabled }
     }
 
+    override suspend fun setFieldCorrectionMemoryEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.FIELD_CORRECTION_MEMORY_ENABLED] = enabled }
+    }
+
+    override suspend fun setFieldCorrectionThreshold(count: Int) {
+        dataStore.edit { it[Keys.FIELD_CORRECTION_MEMORY_THRESHOLD] = count }
+    }
+
     override suspend fun setAnimationsEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.ANIMATIONS_ENABLED] = enabled }
     }
@@ -282,6 +295,8 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             prefs[Keys.NOTIFICATIONS_LENGTH] = settings.notificationsLength
             prefs[Keys.NOTIFICATIONS_CHANNEL_VERSION] = settings.notificationsChannelVersion
             prefs[Keys.TODO_BLEED_TO_CALENDAR] = settings.todoBleedToCalendar
+            prefs[Keys.FIELD_CORRECTION_MEMORY_ENABLED] = settings.fieldCorrectionMemoryEnabled
+            prefs[Keys.FIELD_CORRECTION_MEMORY_THRESHOLD] = settings.fieldCorrectionThreshold
             prefs[Keys.ANIMATIONS_ENABLED] = settings.animationsEnabled
             prefs[Keys.BACKUP_INCLUDE_SETTINGS] = settings.backupIncludeSettings
             prefs[Keys.BACKUP_INCLUDE_DATA] = settings.backupIncludeData

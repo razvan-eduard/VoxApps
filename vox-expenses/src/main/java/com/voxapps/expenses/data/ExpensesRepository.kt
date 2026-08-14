@@ -6,13 +6,17 @@ import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
 import com.voxapps.datahygiene.DuplicateChecker
+import com.voxapps.datahygiene.RemapValueKey
 import com.voxapps.datahygiene.RuleBasedDuplicateChecker
 import com.voxapps.datahygiene.RuleCombinator
 import com.voxapps.datahygiene.findDuplicate
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.DuplicateGroup
+import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
+import com.voxapps.fieldmemory.FieldCorrectionMemory
 import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
+import com.voxapps.textmatch.extract.FieldCorrections
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -41,11 +45,13 @@ class ExpensesRepository(
     private val categoryDao: CategoryDao,
     private val lineItemDao: ExpenseLineItemDao,
     private val spendingLimitDao: SpendingLimitDao,
-    private val merchantCategoryMemoryDao: MerchantCategoryMemoryDao,
+    private val remapRuleDao: RemapRuleDao,
+    private val remapPatternSightingDao: RemapPatternSightingDao,
     private val appContext: Context,
     private val attachmentDao: AttachmentDao,
     private val duplicateRuleDao: DuplicateRuleDao,
-    private val pendingFieldSuggestionDao: PendingFieldSuggestionDao
+    private val pendingFieldSuggestionDao: PendingFieldSuggestionDao,
+    private val fieldCorrectionMemory: FieldCorrectionMemory
 ) {
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
     val expensesWithDetails: Flow<List<ExpenseWithDetails>> =
@@ -108,33 +114,141 @@ class ExpensesRepository(
      *  `precedingColor` param. */
     suspend fun mostRecentCategoryColor(): Long? = expenseDao.getMostRecentCategoryColor()
 
-    // --- Merchant category memory (see MerchantCategoryMemory) ---
+    // --- Re-map rules (see RemapRuleEntity; the engine lives in :core:datahygiene) ---
 
-    /** Called only for a GENUINE manual category change (see ExpenseEditScreen's save path) — never
-     *  for an unchanged re-save. Unconditional/pure: the caller (ExpensesStateManager) is responsible
-     *  for gating this on ExpensesSettings.merchantCategoryMemoryEnabled, matching the established
-     *  convention that this repository never reads settings itself. */
-    suspend fun recordManualCategoryChange(vendor: String?, categoryId: Long?) {
-        val vendorKey = MerchantVendorKey.normalize(vendor) ?: return
-        if (categoryId == null) {
-            merchantCategoryMemoryDao.delete(vendorKey)
-            return
+    /**
+     * The edit-pattern learner: called for every genuine manual edit-save (see ExpenseEditScreen's
+     * save path), it records one sighting per changed non-numeric field — "in this record, [field]
+     * was renamed from X to Y" — with every OTHER changed field of the same save carried as a
+     * companion. One record contributes at most one sighting per pattern, however often it is
+     * re-saved (REPLACE on the (pattern, record) key). When [threshold] distinct records exhibit
+     * the exact same (field, X→Y) pair, a DISABLED rule is drafted: trigger = the field with X,
+     * set = the field with Y, plus every companion that was edited to the same value in ALL
+     * sightings (an inconsistent companion is a guess and stays out). The proposal never acts
+     * until the user enables it in the rules list. Unconditional/pure: the caller
+     * (ExpensesStateManager) gates on ExpensesSettings.remapProposalsEnabled.
+     */
+    suspend fun recordRemapPatternSightings(old: ExpenseWithDetails, new: Expense, threshold: Int) {
+        val cats = categoryDao.getAll()
+        fun catName(id: Long?): String? = id?.let { cid -> cats.firstOrNull { it.id == cid }?.name }
+
+        // A PATTERN needs a real value on both sides — filling an empty field or clearing one is
+        // not a rename and identifies nothing. A COMPANION only needs a changed, non-blank result:
+        // setting the category on a previously uncategorized record during the same session is
+        // exactly the habit a proposal should carry, so `before` stays nullable here and the
+        // pattern loop below skips null-before edits without discarding them as companions.
+        data class Edit(val before: String?, val after: String, val setFieldId: String, val setValue: String)
+        val edits = mutableMapOf<String, Edit>()
+        fun note(fieldId: String, before: String?, after: String?) {
+            val b = before?.trim().takeUnless { it.isNullOrEmpty() }
+            val a = after?.trim().takeUnless { it.isNullOrEmpty() } ?: return
+            if (b == a) return
+            edits[fieldId] = Edit(b, a, fieldId, a)
         }
-        val existing = merchantCategoryMemoryDao.get(vendorKey)
-        val newCount = if (existing?.categoryId == categoryId) existing.consecutiveCount + 1 else 1
-        merchantCategoryMemoryDao.upsert(MerchantCategoryMemory(vendorKey, categoryId, newCount, System.currentTimeMillis()))
+        note(ExpenseRemapFields.ID_TITLE, old.expense.title, new.title)
+        note(ExpenseRemapFields.ID_VENDOR, old.expense.vendor, new.vendor)
+        note(ExpenseRemapFields.ID_BANK, old.expense.bank, new.bank)
+        note(ExpenseRemapFields.ID_LOCATION, old.expense.location, new.location)
+        note(ExpenseRemapFields.ID_COMMENTS, old.expense.comments, new.comments)
+        val oldCat = catName(old.expense.categoryId)
+        val newCat = catName(new.categoryId)
+        if (newCat != null && oldCat != newCat) {
+            // Category triggers on the NAME (all a pre-resolution draft has) but sets the ID.
+            edits[ExpenseRemapFields.ID_CATEGORY] =
+                Edit(oldCat, newCat, ExpenseRemapFields.ID_CATEGORY_ID, new.categoryId.toString())
+        }
+        if (edits.isEmpty()) return
+
+        val now = System.currentTimeMillis()
+        for ((fieldId, edit) in edits) {
+            val before = edit.before ?: continue
+            val beforeKey = RemapValueKey.normalize(before) ?: continue
+            val patternKey = "$fieldId\u0000$beforeKey\u0000${edit.after}"
+            val companions = edits.filterKeys { it != fieldId }.map { (_, c) -> c.setFieldId to c.setValue }.toMap()
+            remapPatternSightingDao.upsert(
+                RemapPatternSighting(
+                    patternKey = patternKey, recordId = new.id, fieldId = fieldId,
+                    beforeText = before, afterText = edit.after,
+                    setFieldId = edit.setFieldId, setValue = edit.setValue,
+                    companionsJson = RemapRuleJson.encode(companions), createdAt = now
+                )
+            )
+            val sightings = remapPatternSightingDao.getForPattern(patternKey)
+            if (sightings.size < threshold) continue
+
+            val matchJson = RemapRuleJson.encode(mapOf(fieldId to beforeKey))
+            if (remapRuleDao.getByMatch(matchJson) == null) {
+                // Companions survive only when every sighting edited them to the same value.
+                val consistent = sightings
+                    .map { RemapRuleJson.decode(it.companionsJson) }
+                    .reduce { acc, m -> acc.filter { (k, v) -> m[k] == v } }
+                val set = mapOf(edit.setFieldId to edit.setValue) + consistent
+                remapRuleDao.upsert(
+                    RemapRuleEntity(
+                        name = "${edit.before} → ${edit.after}",
+                        matchJson = matchJson,
+                        setJson = RemapRuleJson.encode(set),
+                        origin = RemapRuleEntity.ORIGIN_PROPOSED,
+                        enabled = false,
+                        sortOrder = remapRuleDao.getAll().size,
+                        updatedAt = now
+                    )
+                )
+            }
+            remapPatternSightingDao.deleteForPattern(patternKey)
+        }
     }
 
-    suspend fun getLearnedCategoryId(vendor: String?, threshold: Int): Long? {
-        val vendorKey = MerchantVendorKey.normalize(vendor) ?: return null
-        return merchantCategoryMemoryDao.getLearnedCategoryId(vendorKey, threshold)
+    suspend fun remapRulesSnapshot(): List<RemapRuleEntity> = remapRuleDao.getAll()
+
+    /** Restore-side merge by matchJson — an imported rule updates the existing row for the same
+     *  trigger (the update-in-place the duplicate-rules restore does), or inserts fresh. */
+    suspend fun mergeRemapRule(rule: RemapRuleEntity) {
+        val existing = remapRuleDao.getByMatch(rule.matchJson)
+        if (existing == null) {
+            remapRuleDao.upsert(rule.copy(id = 0))
+        } else {
+            remapRuleDao.update(
+                existing.copy(name = rule.name, setJson = rule.setJson, fuzzJson = rule.fuzzJson, enabled = rule.enabled, sortOrder = rule.sortOrder, updatedAt = rule.updatedAt)
+            )
+        }
     }
 
-    suspend fun merchantCategoryMemorySnapshot(): List<MerchantCategoryMemory> = merchantCategoryMemoryDao.getAll()
+    fun observeRemapRules(): Flow<List<RemapRuleEntity>> = remapRuleDao.observeAll()
 
-    suspend fun upsertMerchantCategoryMemory(vendorKey: String, categoryId: Long, consecutiveCount: Int, updatedAt: Long) {
-        merchantCategoryMemoryDao.upsert(MerchantCategoryMemory(vendorKey, categoryId, consecutiveCount, updatedAt))
+    suspend fun upsertRemapRule(rule: RemapRuleEntity) = remapRuleDao.upsert(rule)
+
+    suspend fun deleteRemapRule(rule: RemapRuleEntity) = remapRuleDao.delete(rule)
+
+    suspend fun reorderRemapRules(orderedIds: List<Long>) {
+        orderedIds.forEachIndexed { index, id -> remapRuleDao.setSortOrder(id, index) }
     }
+
+    suspend fun setAllRemapRulesEnabled(enabled: Boolean) = remapRuleDao.setAllEnabled(enabled)
+
+    suspend fun deleteAllRemapRules() = remapRuleDao.deleteAll()
+
+    /** Called only for a genuine manual edit-save (see ExpenseEditScreen's save path) — the diff
+     *  rules in FieldCorrections decide what, if anything, the edit teaches. Unconditional/pure:
+     *  the caller (ExpensesStateManager) gates on ExpensesSettings.fieldCorrectionMemoryEnabled,
+     *  matching the convention that this repository never reads settings itself. */
+    suspend fun recordFieldCorrections(old: ExpenseWithDetails, new: Expense, newItems: List<ExpenseLineItem>) {
+        val oldItems = old.items.sortedBy { it.position }
+        val oldFields = mutableListOf(old.expense.title, old.expense.vendor, old.expense.bank, old.expense.location, old.expense.comments)
+        val newFields = mutableListOf(new.title, new.vendor, new.bank, new.location, new.comments)
+        // Item lists pair by position, and only when no item was added or removed — a shifted list
+        // pairs unrelated names, which is exactly the mislabel the equal-size rule removes.
+        if (oldItems.size == newItems.size) {
+            oldFields += oldItems.map { it.name }
+            newFields += newItems.map { it.name }
+        }
+        fieldCorrectionMemory.learn(oldFields, newFields)
+    }
+
+    suspend fun learnedFieldCorrectionsSnapshot() = fieldCorrectionMemory.snapshot()
+
+    suspend fun restoreLearnedFieldCorrection(row: com.voxapps.fieldmemory.LearnedFieldCorrection) =
+        fieldCorrectionMemory.restore(row)
 
     // --- Peer-to-peer sync (see :core:datahygiene's SyncMerge and ExpensesSyncHandler) ---
 
@@ -390,21 +504,60 @@ class ExpensesRepository(
         nearDuplicateConfig: NearDuplicateConfig = NearDuplicateConfig(
             timeWindowMillis = TimeUnit.MINUTES.toMillis(ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES.toLong())
         ),
-        merchantMemoryEnabled: Boolean = false,
-        merchantMemoryThreshold: Int = ExpensesSettings.MERCHANT_MEMORY_DEFAULT_THRESHOLD,
+        correctionsEnabled: Boolean = false,
+        correctionsThreshold: Int = ExpensesSettings.CORRECTION_SPEED_MEDIUM,
+        correctionsApplyMode: String = ExpensesSettings.CORRECTION_APPLY_SUGGEST,
         source: ExpenseSource = ExpenseSource.VOICE
     ): Long {
+        // Learned spelling corrections run before anything reads the text fields, so a learned
+        // merchant mapping keyed on the clean vendor spelling still fires on a garbled arrival.
+        // Exact-tier corrections rewrite silently only in AUTO mode; in SUGGEST mode, and for
+        // fuzzy-tier resemblance hits in EITHER mode, the corrected text is offered as a tappable
+        // suggestion on the created record instead (see FieldCorrections' two-tier doc).
+        var effTitle = title; var effVendor = vendor; var effBank = bank
+        var effLocation = location; var effComments = comments; var effItems = items
+        var suggested: List<String?>? = null
+        var suggestedItems: List<ExpenseLineItem>? = null
+        if (correctionsEnabled) {
+            val corrections = fieldCorrectionMemory.activeCorrections(correctionsThreshold)
+            if (corrections.isNotEmpty()) {
+                val exact = listOf(title, vendor, bank, location, comments)
+                    .map { FieldCorrections.apply(it, corrections) }
+                val exactItems = items.map { it.copy(name = FieldCorrections.apply(it.name, corrections) ?: it.name) }
+                if (correctionsApplyMode == ExpensesSettings.CORRECTION_APPLY_AUTO) {
+                    effTitle = exact[0]; effVendor = exact[1]; effBank = exact[2]
+                    effLocation = exact[3]; effComments = exact[4]; effItems = exactItems
+                }
+                suggested = exact.map { f ->
+                    FieldCorrections.applyHits(f, FieldCorrections.fuzzyCandidates(f, corrections))
+                }
+                suggestedItems = exactItems.map { item ->
+                    item.copy(name = FieldCorrections.applyHits(item.name, FieldCorrections.fuzzyCandidates(item.name, corrections)) ?: item.name)
+                }
+            }
+        }
+
         val cats = categoryDao.getAll()
 
-        // A learned merchant mapping is a total short-circuit — it overrides whatever the LLM/spoken
-        // category or configured default would otherwise suggest, checked BEFORE resolution runs at
-        // all, not as a tie-break afterward. Falls through to normal resolution if the mapping points
-        // at a category that's since been deleted.
+        // Re-map rules run on the corrected text (spelling repair first, value semantics second)
+        // and BEFORE category resolution: a rule-set category is a total short-circuit overriding
+        // whatever the LLM/spoken category or configured default would suggest. An enabled rule is
+        // standing intent and always applies — proposals sit disabled until the user enables them.
+        // A rule pointing at a since-deleted category declines in the setter and resolution
+        // proceeds normally.
         var resolved: FuzzyNameMatcher.Resolved? = null
-        if (merchantMemoryEnabled) {
-            val learnedId = getLearnedCategoryId(vendor, merchantMemoryThreshold)
-            val learnedCategory = learnedId?.let { id -> cats.firstOrNull { it.id == id } }
-            if (learnedCategory != null) resolved = FuzzyNameMatcher.Resolved(learnedCategory.id, learnedCategory.name)
+        run {
+            val active = remapRuleDao.getAll().filter { it.enabled }.map { it.toRemapRule() }
+            if (active.isNotEmpty()) {
+                val draft = ExpenseRemapFields.engine(cats).apply(
+                    ExpenseRemapFields.Draft(effTitle, effVendor, effBank, effLocation, effComments, spokenCategory), active
+                )
+                effTitle = draft.title; effVendor = draft.vendor; effBank = draft.bank
+                effLocation = draft.location; effComments = draft.comments
+                draft.categoryId?.let { id -> cats.firstOrNull { it.id == id } }?.let {
+                    resolved = FuzzyNameMatcher.Resolved(it.id, it.name)
+                }
+            }
         }
         if (resolved == null) {
             resolved = FuzzyNameMatcher.resolve(
@@ -421,13 +574,39 @@ class ExpensesRepository(
             if (id > 0) resolved = FuzzyNameMatcher.Resolved(id, spoken)
         }
 
-        return addExpense(
-            title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, resolved.id, items, imageName,
+        val newId = addExpense(
+            effTitle, totalAmount, currencyCode, effVendor, effBank, effLocation, dateTime, effComments, resolved.id, effItems, imageName,
             direction = direction,
             nearDuplicateCheckEnabled = nearDuplicateCheckEnabled,
             nearDuplicateConfig = nearDuplicateConfig,
             source = source
         )
+
+        // Whatever correction text was NOT written into the row (all of it in SUGGEST mode, the
+        // fuzzy tier in AUTO mode) becomes a per-field suggestion. Upserted with REPLACE, so a
+        // later receipt rescan's suggestion overwrites this one — newest wins, same lifecycle.
+        if (newId > 0 && suggested != null) {
+            val inserted = listOf(effTitle, effVendor, effBank, effLocation, effComments)
+            val diff = suggested.mapIndexed { i, s -> s?.takeIf { it != inserted[i] } }
+            val itemsDiffer = suggestedItems != null && suggestedItems.map { it.name } != effItems.map { it.name }
+            if (diff.any { it != null } || itemsDiffer) {
+                pendingFieldSuggestionDao.upsert(
+                    PendingFieldSuggestion(
+                        expenseId = newId,
+                        title = diff[0], vendor = diff[1], bank = diff[2],
+                        location = diff[3], comments = diff[4],
+                        itemsJson = if (itemsDiffer) PendingLineItemsJson.encode(
+                            suggestedItems.map {
+                                ExpenseParseResultParser.ParsedItem(
+                                    it.name, it.quantity, it.unitPrice, it.netAmount, it.vatAmount, it.grossAmount
+                                )
+                            }
+                        ) else null
+                    )
+                )
+            }
+        }
+        return newId
     }
 
     suspend fun addCategory(name: String, colorArgb: Long, position: Int, createdAt: Long): Long {
@@ -443,7 +622,17 @@ class ExpensesRepository(
     suspend fun deleteCategory(category: Category) {
         expenseDao.clearCategory(category.id)
         spendingLimitDao.clearCategory(category.id)
-        merchantCategoryMemoryDao.clearCategory(category.id)
+        // Referential cleanup mirroring the old memory's clearCategory: rules lose the set-entry
+        // pointing at the deleted category, and a rule with nothing left to set is deleted — every
+        // LEARNED rule is, since category is all it ever sets; an authored rule that also rewrites
+        // other fields survives minus its category entry.
+        for (rule in remapRuleDao.getAll()) {
+            val set = RemapRuleJson.decode(rule.setJson)
+            if (set[ExpenseRemapFields.ID_CATEGORY_ID] != category.id.toString()) continue
+            val remaining = set - ExpenseRemapFields.ID_CATEGORY_ID
+            if (remaining.isEmpty()) remapRuleDao.delete(rule)
+            else remapRuleDao.update(rule.copy(setJson = RemapRuleJson.encode(remaining), updatedAt = System.currentTimeMillis()))
+        }
         categoryDao.delete(category)
     }
 

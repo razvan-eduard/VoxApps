@@ -135,7 +135,7 @@ private val StarShape = GenericShape { size, _ ->
  *  [ToDoItem.dueMillis], or — once every dated item's time has already passed (or none have a date at
  *  all) — simply the first not-done item in list order. Used to render one item slightly larger/bolder
  *  than the rest so it's obvious what to do next. */
-private fun computeNextItemId(items: List<ToDoItem>, now: Long = System.currentTimeMillis()): Long? {
+internal fun computeNextItemId(items: List<ToDoItem>, now: Long = System.currentTimeMillis()): Long? {
     val upcoming = items
         .filter { !it.done && it.dueMillis != null && it.dueMillis >= now }
         .minByOrNull { it.dueMillis!! }
@@ -338,7 +338,7 @@ private fun NothingElseTodayLabel(nowMillis: Long) {
  *  [ToDoItem.dueMillis]) is filled by the dated items in chronological order, while every undated
  *  slot keeps its original item untouched — i.e. only the dated items move, and only among
  *  themselves. */
-private fun sortedByDateKeepingUndatedInPlace(items: List<ToDoItem>): List<ToDoItem> {
+internal fun sortedByDateKeepingUndatedInPlace(items: List<ToDoItem>): List<ToDoItem> {
     val datedSorted = items.filter { it.dueMillis != null }.sortedBy { it.dueMillis }
     var datedCursor = 0
     return items.map { item -> if (item.dueMillis != null) datedSorted[datedCursor++] else item }

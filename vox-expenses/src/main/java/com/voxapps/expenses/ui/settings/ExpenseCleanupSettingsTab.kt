@@ -169,6 +169,80 @@ fun ExpenseCleanupSettingsTab(
             }
         }
 
+        // --- Field correction memory ---
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(languageManager.getString("field_correction_memory_label"), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            languageManager.getString("field_correction_memory_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.fieldCorrectionMemoryEnabled,
+                        onCheckedChange = { stateManager.setFieldCorrectionMemoryEnabled(it) }
+                    )
+                }
+                val correctionAlpha = if (settings.fieldCorrectionMemoryEnabled) 1f else 0.4f
+                Column(modifier = Modifier.alpha(correctionAlpha), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(languageManager.getString("field_correction_speed_label"), style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            ExpensesSettings.CORRECTION_SPEED_INSTANT to "field_correction_speed_instant",
+                            ExpensesSettings.CORRECTION_SPEED_FAST to "field_correction_speed_fast",
+                            ExpensesSettings.CORRECTION_SPEED_MEDIUM to "field_correction_speed_medium",
+                            ExpensesSettings.CORRECTION_SPEED_SLOW to "field_correction_speed_slow"
+                        ).forEach { (count, labelKey) ->
+                            FilterChip(
+                                selected = settings.fieldCorrectionThreshold == count,
+                                onClick = { stateManager.setFieldCorrectionThreshold(count) },
+                                label = { Text(languageManager.getString(labelKey)) }
+                            )
+                        }
+                    }
+                    Text(languageManager.getString("field_correction_apply_mode_label"), style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            ExpensesSettings.CORRECTION_APPLY_SUGGEST to "field_correction_apply_suggest",
+                            ExpensesSettings.CORRECTION_APPLY_AUTO to "field_correction_apply_auto"
+                        ).forEach { (mode, labelKey) ->
+                            FilterChip(
+                                selected = settings.fieldCorrectionApplyMode == mode,
+                                onClick = { stateManager.setFieldCorrectionApplyMode(mode) },
+                                label = { Text(languageManager.getString(labelKey)) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Re-map rules: authoring, learning controls, and the rule list in one card ---
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val remapRules by stateManager.remapRules.collectAsStateWithLifecycle(initialValue = emptyList())
+                val cleanupUiState by stateManager.uiState.collectAsStateWithLifecycle()
+                val remapCategories =
+                    (cleanupUiState as? com.voxapps.expenses.state.ExpensesUiState.Unlocked)?.categories ?: emptyList()
+                RemapRulesSection(
+                    rules = remapRules,
+                    categories = remapCategories,
+                    settings = settings,
+                    onSetProposalsEnabled = { stateManager.setRemapProposalsEnabled(it) },
+                    onSetLearningSpeed = { stateManager.setRemapLearningSpeed(it) },
+                    onUpsertRule = { stateManager.upsertRemapRule(it) },
+                    onDeleteRule = { stateManager.deleteRemapRule(it) },
+                    onDeleteAllRules = { stateManager.deleteAllRemapRules() },
+                    onToggleAllRules = { stateManager.setAllRemapRulesEnabled(it) },
+                    onReorderRules = { stateManager.reorderRemapRules(it) },
+                    languageManager = languageManager
+                )
+            }
+        }
+
         // --- Trigger: automatic (insert-time) protection ---
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

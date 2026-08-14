@@ -1,5 +1,6 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.location.LocationPart
 import com.voxapps.location.VoxNominatimGeocoder
 import com.voxapps.location.CachedCoordinate
 import kotlinx.coroutines.Dispatchers
@@ -112,7 +113,12 @@ private fun CommanderLocationSettingsSection(
         if (current.displayName != null) return@LaunchedEffect
 
         val name = withContext(Dispatchers.IO) {
-            runCatching { VoxNominatimGeocoder().reverseGeocode(current.lat, current.lon) }.getOrNull()
+            runCatching {
+                VoxNominatimGeocoder().reverseGeocode(
+                    current.lat, current.lon,
+                    parts = setOf(LocationPart.CITY, LocationPart.SUBDIVISION, LocationPart.COUNTRY)
+                )
+            }.getOrNull()
         } ?: return@LaunchedEffect
 
         lastLocation = current.copy(displayName = name)
