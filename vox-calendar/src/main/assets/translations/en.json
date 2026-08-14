@@ -109,7 +109,7 @@
   "entry_layer": "Calendar",
   "entry_subscribed_read_only_note": "This entry is from a subscribed online calendar, so it's view-only — you can still set a reminder for it below.",
   "attachments": "Attachments",
-  "attachment_choose_gallery": "Choose from gallery",
+  "attachment_choose_gallery": "From gallery",
   "attachment_take_photo": "Take photo",
   "entry_when": "When",
   "entry_due": "Due",
@@ -287,5 +287,6 @@
   "weekday_thu": "Th",
   "weekday_fri": "Fr",
   "weekday_sat": "Sa",
-  "weekday_sun": "Su"
+  "weekday_sun": "Su",
+  "todo_clear_location": "Clear location"
 }

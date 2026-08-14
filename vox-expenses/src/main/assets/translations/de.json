@@ -106,7 +106,7 @@
   "possible_duplicate_items_warning": "Mögliche Duplikate — rot markierte Positionen haben ähnliche Namen, bitte überprüfen",
   "lineitems_suggestion_apply_n": "%1$d hinzufügen",
   "attachments": "Anhänge",
-  "attachment_choose_gallery": "Aus Galerie wählen",
+  "attachment_choose_gallery": "Aus der Galerie",
   "attachment_take_photo": "Foto aufnehmen",
   "scan_receipt": "Beleg scannen",
   "commander_required_message": "Diese Funktion erfordert, dass Vox Commander installiert und konfiguriert ist",

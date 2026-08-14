@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.AlertDialogDefaults
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -123,6 +126,11 @@ fun AttachmentsSection(
     captureActions: List<SpeedDialAction>,
     galleryLabel: String,
     cancelLabel: String,
+    // Vision-powered capture modes, rendered inside a labeled outline so the user can tell at a
+    // glance which options come from Vox Vision and which are plain phone features. Empty (the
+    // default, and what callers pass when Vision isn't installed) hides the whole group.
+    visionActions: List<SpeedDialAction> = emptyList(),
+    visionLabel: String = "Vision",
     onRemove: (AttachmentUiItem) -> Unit,
     modifier: Modifier = Modifier,
     // Rescan/retry now lives exclusively in the zoom-view (see below), not the thumbnail strip — a
@@ -298,7 +306,45 @@ fun AttachmentsSection(
             title = { Text(title) },
             text = {
                 Column {
-                    TextButton(onClick = { showChooser = false; onPickFromGallery() }) { Text(galleryLabel) }
+                    TextButton(onClick = { showChooser = false; onPickFromGallery() }) {
+                        Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(galleryLabel)
+                    }
+                    if (visionActions.isNotEmpty()) {
+                        // The Vision group: a small outline whose top border the "Vision" label cuts
+                        // through (same labeled-frame treatment as the remap editor's fields) — the
+                        // visual fence between Vision features and the phone's own.
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                visionActions.forEach { action ->
+                                    TextButton(onClick = { showChooser = false; action.onClick() }) {
+                                        Icon(action.icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(action.label)
+                                    }
+                                }
+                            }
+                            Text(
+                                visionLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .offset(x = 12.dp, y = (-8).dp)
+                                    .background(AlertDialogDefaults.containerColor)
+                                    .padding(horizontal = 4.dp)
+                            )
+                        }
+                    }
                     captureActions.forEach { action ->
                         TextButton(onClick = { showChooser = false; action.onClick() }) {
                             Icon(action.icon, contentDescription = null, modifier = Modifier.size(18.dp))

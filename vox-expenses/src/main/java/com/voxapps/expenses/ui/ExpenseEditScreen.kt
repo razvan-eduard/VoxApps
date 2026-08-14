@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -92,10 +93,12 @@ import com.voxapps.attachments.ui.AttachmentUiItem
 import com.voxapps.attachments.ui.AttachmentsSection
 import com.voxapps.attachments.ui.GroupDeleteConfig
 import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
+import com.voxapps.attachments.ui.rememberVisionInstalled
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.design.PaperTapField
+import com.voxapps.design.openLocationInMaps
 import com.voxapps.design.SpeedDialAction
-import com.voxapps.location.ui.VoxLocationPickerField
+import com.voxapps.location.ui.VoxLocationField
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.design.picklist.Picklist
@@ -553,16 +556,18 @@ fun ExpenseEditScreen(
                     pendingSuggestion?.location?.takeIf { it != location && "location" !in dismissedSuggestionFields }?.let { suggested ->
                         FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "location" }) { location = suggested }
                     }
-                    VoxLocationPickerField(
+                    VoxLocationField(
                         value = location,
                         onValueChange = { location = it },
                         label = languageManager.getString("expense_location"),
+                        clearContentDescription = languageManager.getString("cancel"),
                         gpsLock = {
                             com.voxapps.expenses.domain.location.resolveCurrentCityName(
                                 context.applicationContext,
                                 (context.applicationContext as com.voxapps.expenses.ExpensesApplication).container.settingsRepository
                             )
-                        }
+                        },
+                        onOpenLocation = { openLocationInMaps(context, it) }
                     )
                     PaperTapField(
                         label = languageManager.getString("expense_date"),
@@ -1235,16 +1240,25 @@ private fun ExpenseAttachmentsSection(
     // batch — a single addition just stages passively (no auto-rescan, matches today's behavior for
     // an n-th photo), while batch gives each new photo its own independent rescan suggestion, never
     // combined with the existing data (see the same receiver branch's batch sub-path).
-    val captureActions = if (items.isEmpty()) {
-        listOf(
-            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
-            SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch"), takePhotoStitch)
-        )
-    } else {
-        listOf(
-            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
-            SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch"), takePhotoBatch)
-        )
+    // Attaching a photo never requires Vision: the plain system camera is always first (it goes
+    // through the same path as a gallery pick, rescan gate included), and Vision's cropped-document
+    // modes (crop-rectangle icon) appear only while Vision is installed.
+    val visionInstalled = rememberVisionInstalled()
+    val takeStandardPhoto = rememberCameraCaptureLauncher(ExpensesAttachments.FILE_PROVIDER_AUTHORITY) { uri ->
+        handlePickedUris(listOf(uri))
+    }
+    val captureActions = listOf(
+        SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("attachment_take_photo"), takeStandardPhoto)
+    )
+    val visionActions = buildList {
+        if (visionInstalled) {
+            add(SpeedDialAction(Icons.Filled.Crop, languageManager.getString("capture_mode_single"), takePhotoSingle))
+            if (items.isEmpty()) {
+                add(SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch"), takePhotoStitch))
+            } else {
+                add(SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch"), takePhotoBatch))
+            }
+        }
     }
     val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> handlePickedUris(uris) }
 
@@ -1258,6 +1272,7 @@ private fun ExpenseAttachmentsSection(
             pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         },
         captureActions = captureActions,
+        visionActions = visionActions,
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item -> pendingRemoveAttachment = item },

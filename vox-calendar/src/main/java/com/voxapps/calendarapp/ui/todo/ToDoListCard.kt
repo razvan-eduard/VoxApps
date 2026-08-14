@@ -1,6 +1,10 @@
 package com.voxapps.calendarapp.ui.todo
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -30,8 +35,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DocumentScanner
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventRepeat
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -51,6 +54,7 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,8 +65,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -70,12 +76,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
+import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.data.WeekdayMask
 import com.voxapps.calendarapp.data.ToDoItem
 import com.voxapps.calendarapp.data.ToDoList
 import com.voxapps.calendarapp.data.ToDoRepository
-import com.voxapps.calendarapp.domain.llm.LlmTasks
+import com.voxapps.calendarapp.ui.EntryAttachmentsSection
 import com.voxapps.calendarapp.ui.WeekdayPickerRow
 import com.voxapps.calendarapp.ui.weekdayLabelKey
 import com.voxapps.calendarapp.ui.LocalLanguageManager
@@ -85,11 +91,7 @@ import com.voxapps.design.color.VoxCustomColorDialog
 import com.voxapps.design.openLocationInMaps
 import com.voxapps.location.EphemeralLocationStore
 import com.voxapps.location.VoxLocationResolver
-import com.voxapps.location.ui.VoxLocationPickerField
-import com.voxapps.design.showRequirementToast
-import com.voxapps.ipc.VoxAppsDiscovery
-import com.voxapps.ipc.VoxIpc
-import com.voxapps.ipc.VoxOcrRequest
+import com.voxapps.location.ui.VoxLocationField
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -144,22 +146,47 @@ fun ToDoListCard(
     isEditing: Boolean,
     onEditingChange: (Boolean) -> Unit,
     onDeleteList: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // Widget deep-link: open this item's inline editor (trigger-counter convention, see
+    // CalendarActivity's editEntryTrigger).
+    openTaskId: Long = -1L,
+    openTaskTrigger: Int = 0
 ) {
     val scope = rememberCoroutineScope()
+    val cardContext = LocalContext.current
+    // Editor expand/collapse animation honors the theme menu's animations toggle.
+    val cardSettings by (cardContext.applicationContext as CalendarApplication).container
+        .settingsRepository.settingsFlow.collectAsState(initial = null)
+    val animateEditor = cardSettings?.animationsEnabled == true
+    // One open inline editor per card, shared by both faces — opening another node saves and closes
+    // the already-open one (the editor commits on dispose).
+    var editingTaskId by remember(list.id) { mutableStateOf<Long?>(null) }
+    LaunchedEffect(openTaskTrigger) {
+        if (openTaskTrigger > 0 && openTaskId >= 0) editingTaskId = openTaskId
+    }
     val rotation by animateFloatAsState(if (isEditing) 180f else 0f, animationSpec = tween(450), label = "todoCardFlip")
     val density = LocalDensity.current
-    // Same darkening used for node/chip glows elsewhere in this file — a tinted-darker version of
-    // the list's own color reads as "this card, but active" rather than an unrelated accent color.
-    val editBorderColor = remember(list.colorArgb) {
-        val c = Color(list.colorArgb.toInt())
-        Color(red = c.red * 0.55f, green = c.green * 0.55f, blue = c.blue * 0.55f)
-    }
+    // The exact same contour-vs-fill derivation every pill and node uses (toneBorderColor) — one
+    // contrast rule across cards, pills, stars, and circles.
+    val editBorderColor = remember(list.colorArgb) { toneBorderColor(Color(list.colorArgb.toInt())) }
+    // The whole card's edit-mode contour breathes exactly like an open inline item editor —
+    // "this card has pending edits" — and stills when the card flips back. Same animations gate.
+    val cardPulseAlpha: Float = if (isEditing && animateEditor) {
+        val pulse = rememberInfiniteTransition(label = "cardPendingPulse")
+        val alpha by pulse.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+            label = "cardPendingPulseAlpha"
+        )
+        alpha
+    } else 1f
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (isEditing) Modifier.border(2.dp, editBorderColor, CardDefaults.shape) else Modifier)
+            // Every card wears its border in both faces — the edit face is the one that breathes.
+            .border(2.dp, editBorderColor.copy(alpha = if (isEditing) cardPulseAlpha else 1f), CardDefaults.shape)
             .graphicsLayer {
                 rotationY = rotation
                 cameraDistance = 12f * density.density
@@ -173,7 +200,10 @@ fun ToDoListCard(
                 toDoRepository = toDoRepository,
                 scope = scope,
                 onToggleDone = { item -> scope.launch { toDoRepository.toggleDone(item) } },
-                onEnterEdit = { onEditingChange(true) }
+                onEnterEdit = { onEditingChange(true) },
+                editingTaskId = editingTaskId,
+                onEditTask = { editingTaskId = it },
+                animateEditor = animateEditor
             )
         } else {
             Box(Modifier.graphicsLayer { rotationY = 180f }) {
@@ -183,7 +213,10 @@ fun ToDoListCard(
                     toDoRepository = toDoRepository,
                     scope = scope,
                     onDone = { onEditingChange(false) },
-                    onDeleteList = onDeleteList
+                    onDeleteList = onDeleteList,
+                    editingTaskId = editingTaskId,
+                    onEditTask = { editingTaskId = it },
+                    animateEditor = animateEditor
                 )
             }
         }
@@ -197,13 +230,12 @@ private fun ToDoListViewFace(
     toDoRepository: ToDoRepository,
     scope: CoroutineScope,
     onToggleDone: (ToDoItem) -> Unit,
-    onEnterEdit: () -> Unit
+    onEnterEdit: () -> Unit,
+    editingTaskId: Long?,
+    onEditTask: (Long?) -> Unit,
+    animateEditor: Boolean
 ) {
     val languageManager = LocalLanguageManager.current
-    // Tapping a task's chip opens its edit dialog directly, without flipping the whole card into its
-    // full edit face first — the chip's own clickable (see DefaultTimelineRow) intercepts that tap
-    // before it can bubble up to this Column's own tap-anywhere-to-flip handler below.
-    var editingTask by remember { mutableStateOf<ToDoItem?>(null) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -223,21 +255,24 @@ private fun ToDoListViewFace(
                 items = items,
                 isEditing = false,
                 onToggleDone = onToggleDone,
-                onTaskClick = { item -> editingTask = item },
+                // Tapping a chip opens the item's INLINE editor right below its row — the timeline
+                // shifts down around it rather than a modal covering the list.
+                onTaskClick = { item -> onEditTask(item.id) },
                 onAddAtStart = {},
-                onAddAtEnd = {}
+                onAddAtEnd = {},
+                animateEditor = animateEditor,
+                editingItemId = editingTaskId,
+                editor = { item ->
+                    TaskEditInlineCard(
+                        item = item,
+                        list = list,
+                        toDoRepository = toDoRepository,
+                        scope = scope,
+                        onClose = { onEditTask(null) }
+                    )
+                }
             )
         }
-    }
-
-    editingTask?.let { task ->
-        TaskEditDialog(
-            item = task,
-            list = list,
-            toDoRepository = toDoRepository,
-            scope = scope,
-            onDismiss = { editingTask = null }
-        )
     }
 }
 
@@ -248,21 +283,16 @@ private fun ToDoListEditFace(
     toDoRepository: ToDoRepository,
     scope: CoroutineScope,
     onDone: () -> Unit,
-    onDeleteList: () -> Unit
+    onDeleteList: () -> Unit,
+    editingTaskId: Long?,
+    onEditTask: (Long?) -> Unit,
+    animateEditor: Boolean
 ) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     var title by remember(list.id) { mutableStateOf(list.title) }
-    var editingTask by remember { mutableStateOf<ToDoItem?>(null) }
     var quickEditItem by remember { mutableStateOf<ToDoItem?>(null) }
     var showDeleteListConfirm by remember { mutableStateOf(false) }
-    // List.id is baked into the task string so the eventual LlmResultReceiver branch already knows
-    // the target list — no fuzzy list-name matching needed for a scan launched from here, unlike
-    // voice (see LlmTasks.TODO_SCAN_CLEANUP's doc comment).
-    val scanTodo = rememberVisionCaptureLauncher(
-        baseTask = "${LlmTasks.TODO_SCAN_CLEANUP}:${list.id}", hint = null, produceOCR = true,
-        captureMode = VoxOcrRequest.CAPTURE_MODE_SINGLE
-    )
     // Hoisted here (rather than inside VerticalColorStrip) so it survives the Room Flow round-trip
     // that updateListColor triggers on every tap — that write recomposes this whole subtree with a
     // fresh `list`, and a `remember` living further down was observed re-collapsing as a result.
@@ -324,22 +354,6 @@ private fun ToDoListEditFace(
                     }
                 )
             }
-            IconButton(
-                onClick = {
-                    val visionInstalled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE)
-                    val commanderInstalled = VoxAppsDiscovery.isCommanderInstalled(context)
-                    if (visionInstalled && commanderInstalled) {
-                        scanTodo()
-                    } else {
-                        showRequirementToast(
-                            context,
-                            languageManager.getString(if (!visionInstalled) "vision_required_message" else "commander_required_message")
-                        )
-                    }
-                }
-            ) {
-                Icon(Icons.Filled.DocumentScanner, contentDescription = languageManager.getString("capture_mode_single"))
-            }
             Box(modifier = Modifier.width(EDIT_FACE_RIGHT_COLUMN_WIDTH), contentAlignment = Alignment.Center) {
                 IconButton(onClick = { showDeleteListConfirm = true }, modifier = Modifier.size(EDIT_FACE_RIGHT_COLUMN_WIDTH)) {
                     Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
@@ -367,20 +381,32 @@ private fun ToDoListEditFace(
             ToDoNodeTimelineEditable(
                 items = items,
                 onToggleDone = { item -> scope.launch { toDoRepository.toggleDone(item) } },
-                onTaskClick = { item -> editingTask = item },
+                onTaskClick = { item -> onEditTask(item.id) },
                 onAddAt = { position ->
                     scope.launch {
-                        // A fresh node goes straight into its edit dialog with the title focused —
+                        // A fresh node goes straight into its inline editor with the title focused —
                         // adding and then hunting for the blank chip to name it was two taps for
                         // what is one intention.
                         val newId = toDoRepository.addItem(list.id, "", atPosition = position)
-                        toDoRepository.getItem(newId)?.let { editingTask = it }
+                        onEditTask(newId)
                     }
                 },
                 onReorderCommitted = { ordered -> scope.launch { toDoRepository.reorderItems(ordered) } },
                 onDeleteItem = { item -> scope.launch { toDoRepository.deleteItem(item) } },
                 onQuickEditDate = { item -> quickEditItem = item },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                onCloseEditor = { onEditTask(null) },
+                animateEditor = animateEditor,
+                editingItemId = editingTaskId,
+                editor = { item ->
+                    TaskEditInlineCard(
+                        item = item,
+                        list = list,
+                        toDoRepository = toDoRepository,
+                        scope = scope,
+                        onClose = { onEditTask(null) }
+                    )
+                }
             )
             Box(modifier = Modifier.width(EDIT_FACE_RIGHT_COLUMN_WIDTH), contentAlignment = Alignment.Center) {
                 // The same picker every other colour choice uses, stood on its side: this card is
@@ -403,16 +429,6 @@ private fun ToDoListEditFace(
                 )
             }
         }
-    }
-
-    editingTask?.let { task ->
-        TaskEditDialog(
-            item = task,
-            list = list,
-            toDoRepository = toDoRepository,
-            scope = scope,
-            onDismiss = { editingTask = null }
-        )
     }
 
     quickEditItem?.let { item ->
@@ -455,19 +471,18 @@ private val VERTICAL_SWATCH_PEEK_ALPHAS = listOf(0.75f, 0.5f, 0.3f)
  *  calendar-grid entry turns out to be to-do-flavored ([com.voxapps.calendarapp.data.CalendarEntry
  *  .listId] != null) — same dialog, same edit surface, whichever screen it was opened from. */
 @Composable
-fun TaskEditDialog(
+fun TaskEditInlineCard(
     item: ToDoItem,
     list: ToDoList,
     toDoRepository: ToDoRepository,
     scope: CoroutineScope,
-    onDismiss: () -> Unit
+    onClose: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     var text by remember(item.id) { mutableStateOf(item.text) }
     var dueMillis by remember(item.id) { mutableStateOf(item.dueMillis) }
     var color by remember(item.id) { mutableStateOf(item.colorArgb) }
-    var done by remember(item.id) { mutableStateOf(item.done) }
     var important by remember(item.id) { mutableStateOf(item.isImportant) }
     var reminderOffsets by remember(item.id) { mutableStateOf<List<Int>>(emptyList()) }
     var showQuickDateEdit by remember { mutableStateOf(false) }
@@ -480,9 +495,12 @@ fun TaskEditDialog(
     // inside VoxColorSwatchPicker itself was observed re-collapsing as a result.
     var colorExpanded by remember(item.id) { mutableStateOf(false) }
     var itemLocation by remember(item.id) { mutableStateOf(item.location.orEmpty()) }
-    var locationEditing by remember(item.id) { mutableStateOf(false) }
-    val locationFocus = remember { FocusRequester() }
-    LaunchedEffect(locationEditing) { if (locationEditing) locationFocus.requestFocus() }
+    val container = remember { (context.applicationContext as CalendarApplication).container }
+    val stateManager = container.calendarStateManager
+    // Explicit paths (done circle, Cancel, Apply) mark themselves so the dispose-time safety commit
+    // below doesn't run a second time — commit() diffs against a snapshot that may not have
+    // round-tripped yet, and a double toggleDone would flip the flag straight back.
+    var closedExplicitly by remember(item.id) { mutableStateOf(false) }
     // A blank item is one the ghost-add just created for this dialog: land the cursor in the title
     // with the keyboard up, so naming it is typing, not a third tap. An existing item opens without
     // stealing focus — this dialog is also how color/date/done get tweaked.
@@ -506,26 +524,64 @@ fun TaskEditDialog(
         if (color != item.colorArgb) scope.launch { toDoRepository.updateItemColor(item, color) }
         if (dueMillis != item.dueMillis) scope.launch { toDoRepository.setItemDueDate(item, dueMillis, list) }
         if (important != item.isImportant) scope.launch { toDoRepository.updateItemImportant(item, important) }
-        if (done != item.done) scope.launch { toDoRepository.toggleDone(item) }
         val trimmedLocation = itemLocation.trim().takeIf { it.isNotEmpty() }
         if (trimmedLocation != item.location) scope.launch { toDoRepository.updateItemLocation(item, trimmedLocation) }
     }
 
-    // The quick date/time picker and this dialog's own form are mutually exclusive rather than
-    // stacked — two near-identical AlertDialog cards on top of each other (both showing the same
-    // date, both with a purple Cancel/Apply pair) read as "the window opened twice" rather than as
-    // a deliberate two-step flow, so tapping the date/time button swaps to the picker instead of
-    // layering it on top.
-    if (!showQuickDateEdit) {
-        AlertDialog(
-            onDismissRequest = { commit(); onDismiss() },
-            title = {
+    // The inline card can leave composition by MORE than its own buttons — tapping another node
+    // (spec: the open one saves, the other opens), flipping the card face, scrolling it out of the
+    // lazy edit timeline — and typed edits must survive all of them.
+    DisposableEffect(item.id) {
+        onDispose { if (!closedExplicitly) commit() }
+    }
+
+    // The card sits IN the node's row, in place of the pill — its contour is the node's own color,
+    // so it reads as that node, expanded. Done lives on the node circle beside it, not in here;
+    // flipping it grays the card the way the timeline grays a done node (desaturated contour,
+    // gray-leaning darker wash) so the palette edit visibly "takes".
+    val itemToneColor = itemTone(item.colorArgb, item.done, item.isImportant)
+    val contourColor = toneBorderColor(itemToneColor)
+    // While the editor is open its contour breathes — "this node has unsaved state" — and stills
+    // the moment it closes (saving closes it). Honors the theme menu's animations toggle.
+    val settings by container.settingsRepository.settingsFlow.collectAsState(initial = null)
+    val pulseAlpha: Float = if (settings?.animationsEnabled == true) {
+        val pulse = rememberInfiniteTransition(label = "pendingPulse")
+        val alpha by pulse.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+            label = "pendingPulseAlpha"
+        )
+        alpha
+    } else 1f
+
+    val washColor = if (item.done) {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+    } else {
+        itemToneColor.copy(alpha = 0.12f)
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            // A toned-out wash of the contour color — still clearly "this node", text stays legible.
+            .background(washColor)
+            .border(2.dp, contourColor.copy(alpha = contourColor.alpha * pulseAlpha), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     BasicTextField(
                         value = text,
                         onValueChange = { text = it },
                         singleLine = true,
-                        textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        textStyle = MaterialTheme.typography.titleLarge.copy(
+                            color = if (item.done) {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
+                        ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         decorationBox = { inner ->
                             if (text.isEmpty()) {
@@ -545,9 +601,22 @@ fun TaskEditDialog(
                     if (text.isEmpty()) {
                         Text("*", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.error)
                     }
+                    // Cancel is the small ✕ in the card's top-right corner — the only control up
+                    // here: the title needs no save affordance of its own, it commits with every
+                    // other field (done shows on the node beside the card).
+                    IconButton(
+                        onClick = { closedExplicitly = true; onClose() },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = languageManager.getString("cancel"),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
-            },
-            text = {
+                Spacer(Modifier.height(8.dp))
                 Column {
                     VoxColorSwatchPicker(
                         selectedColor = color,
@@ -565,19 +634,6 @@ fun TaskEditDialog(
                         customColorSaturationLabel = languageManager.getString("todo_color_saturation"),
                         customColorBrightnessLabel = languageManager.getString("todo_color_brightness")
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable { done = !done }
-                    ) {
-                        Icon(
-                            if (done) Icons.Filled.CheckCircle else Icons.Filled.CheckCircleOutline,
-                            contentDescription = null,
-                            tint = DONE_CHECK_COLOR
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(languageManager.getString("todo_done"), modifier = Modifier.weight(1f))
-                    }
                     Spacer(Modifier.height(12.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -607,41 +663,25 @@ fun TaskEditDialog(
                             }
                         }
                     }
-                    // A filled location is a LINK first — tapping it opens the saved text as a place
-                    // search in whichever maps/nav app the user picks; the pencil switches back to
-                    // text entry. Mirrors EntryEditScreen's location field.
-                    when {
-                        locationEditing -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Search-first entry (OpenStreetMap place search + GPS lock) — the
-                            // GPS lambda resolves a FRESH fix through a store that remembers
-                            // nothing: calendar keeps no location cache by design.
-                            VoxLocationPickerField(
-                                value = itemLocation,
-                                onValueChange = { itemLocation = it },
-                                label = languageManager.getString("entry_location"),
-                                gpsLock = {
-                                    VoxLocationResolver.create(
-                                        context, EphemeralLocationStore(), needsReverseGeocode = true
-                                    ).resolveLocation()?.displayName
-                                },
-                                modifier = Modifier.weight(1f).focusRequester(locationFocus)
-                            )
-                            IconButton(onClick = { locationEditing = false }) {
-                                Icon(Icons.Filled.Check, contentDescription = languageManager.getString("apply"))
-                            }
-                        }
-                        itemLocation.isNotBlank() -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = { openLocationInMaps(context, itemLocation) }) {
-                                Text(itemLocation, maxLines = 1)
-                            }
-                            IconButton(onClick = { locationEditing = true }) {
-                                Icon(Icons.Filled.Edit, contentDescription = languageManager.getString("entry_location"))
-                            }
-                        }
-                        else -> TextButton(onClick = { locationEditing = true }) {
-                            Text(languageManager.getString("todo_set_location"))
-                        }
-                    }
+                    VoxLocationField(
+                        value = itemLocation,
+                        onValueChange = { itemLocation = it },
+                        label = languageManager.getString("todo_set_location"),
+                        clearContentDescription = languageManager.getString("todo_clear_location"),
+                        // Search-first entry (OpenStreetMap place search + GPS lock) — the GPS
+                        // lambda resolves a FRESH fix through a store that remembers nothing:
+                        // calendar keeps no location cache by design.
+                        gpsLock = {
+                            VoxLocationResolver.create(
+                                context, EphemeralLocationStore(), needsReverseGeocode = true
+                            ).resolveLocation()?.displayName
+                        },
+                        onOpenLocation = { openLocationInMaps(context, it) }
+                    )
+                    // A to-do item IS a CalendarEntry row, so the entry attachment section
+                    // (shared :core:attachments UI) works on it unchanged — shown as its own card,
+                    // no separate expander icon.
+                    EntryAttachmentsSection(item.id, stateManager, singleCaptureOnly = true)
                     if (dueMillis != null) {
                         if (!remindersExpanded) {
                             TextButton(onClick = { remindersExpanded = true }) {
@@ -674,14 +714,17 @@ fun TaskEditDialog(
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { commit(); onDismiss() }) { Text(languageManager.getString("apply")) }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
+        // Apply is the one bold ✓ in the bottom-right corner.
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            IconButton(onClick = { closedExplicitly = true; commit(); onClose() }) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = languageManager.getString("apply"),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(30.dp)
+                )
             }
-        )
+        }
     }
 
     if (showQuickDateEdit) {

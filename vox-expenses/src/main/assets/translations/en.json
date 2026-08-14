@@ -171,7 +171,7 @@
   "possible_duplicate_items_warning": "Possible duplicates — items highlighted in red have similar names, please check them",
   "lineitems_suggestion_apply_n": "Add %1$d",
   "attachments": "Attachments",
-  "attachment_choose_gallery": "Choose from gallery",
+  "attachment_choose_gallery": "From gallery",
   "attachment_take_photo": "Take photo",
   "scan_receipt": "Scan receipt",
   "commander_required_message": "This feature requires Vox Commander to be installed and configured",

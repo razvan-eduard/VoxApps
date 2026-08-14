@@ -87,7 +87,11 @@ class CalendarContainer(context: Context) {
                 // them, so the widget's paperclip indicator would otherwise only catch up on the
                 // next unrelated refresh (a settings change, the midnight worker, or the OS's 30-min
                 // floor) instead of promptly.
-                attachmentDao.observeRecordIdsWithAttachments(CalendarAttachments.RECORD_TYPE)
+                attachmentDao.observeRecordIdsWithAttachments(CalendarAttachments.RECORD_TYPE),
+                // entriesWithTags excludes dateless to-do rows at the query level, so toggling an
+                // undated checklist item never re-emits it — without this source the to-do widgets
+                // slept through exactly the writes they exist to show.
+                toDoRepository.allItems
             // conflate(): each emission drives a Glance updateAll() — an IPC round-trip to the
             // launcher — and a bulk import or a P2P sync merge emits once per record, so the
             // widget would be redrawn N times to show one final state. Conflating drops the
@@ -95,7 +99,7 @@ class CalendarContainer(context: Context) {
             // refresh rate is bounded by how fast updateAll() completes rather than by how fast
             // rows are written. No debounce: nothing here is latency-sensitive enough to justify
             // delaying the common single-change case.
-            ) { _, entries, _, _ -> entries.size }.conflate().collect { entryCount ->
+            ) { _, entries, _, _, _ -> entries.size }.conflate().collect { entryCount ->
                 Logger.d("CalendarContainer", "Widget refresh triggered (entriesWithTags size=$entryCount)")
                 CalendarWidget().updateAll(appContext)
                 // The to-do widgets collect their own flows in-composition; this wakes any of

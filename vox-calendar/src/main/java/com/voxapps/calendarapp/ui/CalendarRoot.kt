@@ -22,7 +22,6 @@ import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.state.CalendarUiState
 import com.voxapps.calendarapp.ui.onboarding.CalendarOnboardingFlow
 import com.voxapps.calendarapp.ui.settings.SettingsScreen
-import com.voxapps.calendarapp.ui.todo.TaskEditDialog
 import com.voxapps.calendarapp.ui.todo.ToDoListsScreen
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.Color
@@ -37,9 +36,6 @@ import kotlinx.coroutines.flow.first
 private sealed interface EditTarget {
     data object New : EditTarget
     data class Existing(val entry: CalendarEntryWithTags) : EditTarget
-    /** A tapped grid entry that's to-do-flavored ([com.voxapps.calendarapp.data.CalendarEntry.listId]
-     *  != null) — opens [TaskEditDialog] instead of [com.voxapps.calendarapp.ui.EntryEditScreen]. */
-    data class ExistingTodo(val entry: CalendarEntryWithTags) : EditTarget
 }
 
 /**
@@ -90,6 +86,11 @@ fun CalendarRoot(
                 var showSettings by remember { mutableStateOf(false) }
                 var showToDoLists by remember { mutableStateOf(false) }
                 var editTarget by remember { mutableStateOf<EditTarget?>(null) }
+                // A to-do node tapped anywhere (widget row, calendar grid) opens INLINE in its
+                // list's card on the to-do screen — these route that request through ToDoListsScreen.
+                var todoOpenListId by remember { mutableStateOf<Long?>(null) }
+                var todoOpenItemId by remember { mutableStateOf(-1L) }
+                var todoOpenTrigger by remember { mutableStateOf(0) }
 
                 // Widget "Add" tap — set even while locked; once CalendarUiState transitions to
                 // Unlocked the `when` below picks EntryEditScreen up automatically, no extra wiring.
@@ -125,16 +126,18 @@ fun CalendarRoot(
                             ?: container.calendarRepository.getEntryById(editEntryId)
                                 ?.let { CalendarEntryWithTags(entry = it) }
                         target?.let {
-                            editTarget = if (it.entry.listId != null) EditTarget.ExistingTodo(it) else EditTarget.Existing(it)
+                            val listId = it.entry.listId
+                            if (listId != null) {
+                                todoOpenListId = listId
+                                todoOpenItemId = it.entry.id
+                                todoOpenTrigger++
+                                showToDoLists = true
+                            } else {
+                                editTarget = EditTarget.Existing(it)
+                            }
                         }
                     }
                 }
-
-                // Owning ToDoList lookup for a to-do-flavored grid tap (see EditTarget.ExistingTodo) —
-                // observed here (not fetched suspend-style) since it's already a cheap, already-loaded
-                // Flow the to-do lists screen itself observes.
-                val toDoLists by container.toDoRepository.lists.collectAsStateWithLifecycle(initialValue = emptyList())
-                val todoEditScope = rememberCoroutineScope()
 
                 when (val state = ui) {
                     is CalendarUiState.Loading -> Unit
@@ -143,22 +146,6 @@ fun CalendarRoot(
                         val target = editTarget
                         val defaultLayer = state.layers.firstOrNull { it.isDefault } ?: state.layers.firstOrNull()
                         when {
-                            target is EditTarget.ExistingTodo -> {
-                                val list = toDoLists.firstOrNull { it.id == target.entry.entry.listId }
-                                if (list != null) {
-                                    TaskEditDialog(
-                                        item = target.entry.entry.toToDoItem(),
-                                        list = list,
-                                        toDoRepository = container.toDoRepository,
-                                        scope = todoEditScope,
-                                        onDismiss = { editTarget = null }
-                                    )
-                                } else {
-                                    // List not loaded yet, or deleted concurrently — nothing sane to
-                                    // show without list context, so just close rather than crash.
-                                    LaunchedEffect(target) { editTarget = null }
-                                }
-                            }
                             target != null && defaultLayer != null -> EntryEditScreen(
                                 existing = (target as? EditTarget.Existing)?.entry,
                                 defaultLayer = defaultLayer,
@@ -198,10 +185,14 @@ fun CalendarRoot(
                                             stateManager = container.calendarStateManager,
                                             onAddEntry = { editTarget = EditTarget.New },
                                             onEditEntry = { item ->
-                                                editTarget = if (item.entryWithTags.entry.listId != null) {
-                                                    EditTarget.ExistingTodo(item.entryWithTags)
+                                                val listId = item.entryWithTags.entry.listId
+                                                if (listId != null) {
+                                                    todoOpenListId = listId
+                                                    todoOpenItemId = item.entryWithTags.entry.id
+                                                    todoOpenTrigger++
+                                                    showToDoLists = true
                                                 } else {
-                                                    EditTarget.Existing(item.entryWithTags)
+                                                    editTarget = EditTarget.Existing(item.entryWithTags)
                                                 }
                                             },
                                             onOpenSettings = { showSettings = true },
@@ -218,9 +209,13 @@ fun CalendarRoot(
                                                 toDoRepository = container.toDoRepository,
                                                 defaultLayer = defaultLayer,
                                                 onBack = { showToDoLists = false },
+                                                onOpenSettings = { showSettings = true },
                                                 openListEditId = openToDoListId.takeIf { it >= 0 },
                                                 openListEditTrigger = openToDoListTrigger,
-                                                quickAddListTrigger = todoQuickAddTrigger
+                                                quickAddListTrigger = todoQuickAddTrigger,
+                                                openTaskListId = todoOpenListId,
+                                                openTaskItemId = todoOpenItemId,
+                                                openTaskTrigger = todoOpenTrigger
                                             )
                                         }
                                     }

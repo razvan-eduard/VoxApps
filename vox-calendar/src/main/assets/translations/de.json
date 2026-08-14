@@ -109,7 +109,7 @@
   "entry_layer": "Kalender",
   "entry_subscribed_read_only_note": "Dieser Eintrag stammt aus einem abonnierten Online-Kalender und ist daher nur ansichtbar — du kannst unten trotzdem eine Erinnerung dafür festlegen.",
   "attachments": "Anhänge",
-  "attachment_choose_gallery": "Aus Galerie wählen",
+  "attachment_choose_gallery": "Aus der Galerie",
   "attachment_take_photo": "Foto aufnehmen",
   "entry_when": "Wann",
   "entry_due": "Fällig",
@@ -287,5 +287,6 @@
   "weekday_thu": "Do",
   "weekday_fri": "Fr",
   "weekday_sat": "Sa",
-  "weekday_sun": "So"
+  "weekday_sun": "So",
+  "todo_clear_location": "Ort entfernen"
 }

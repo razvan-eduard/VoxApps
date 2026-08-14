@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
@@ -96,12 +98,13 @@ import com.voxapps.attachments.ui.AttachmentUiItem
 import com.voxapps.attachments.ui.AttachmentsSection
 import com.voxapps.attachments.ui.GroupDeleteConfig
 import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
+import com.voxapps.attachments.ui.rememberVisionInstalled
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.design.PaperTapField
 import com.voxapps.design.openLocationInMaps
 import com.voxapps.location.EphemeralLocationStore
 import com.voxapps.location.VoxLocationResolver
-import com.voxapps.location.ui.VoxLocationPickerField
+import com.voxapps.location.ui.VoxLocationField
 import com.voxapps.design.SpeedDialAction
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.design.picklist.Picklist
@@ -133,6 +136,9 @@ import java.time.ZonedDateTime
 import java.util.Date
 import java.util.UUID
 import com.voxapps.design.VoxSemanticColors
+
+/** Same green the remap editor uses for an active field ("this collapsed thing is armed"). */
+private val RECURRENCE_DAYS_GLOW = androidx.compose.ui.graphics.Color(0xFF4CAF50)
 
 private val OffenseRed = Color(0xFFD32F2F)
 
@@ -480,58 +486,24 @@ fun EntryEditScreen(
                         minLines = 2,
                         enabled = !isReadOnly
                     )
-                    // A filled location is a LINK first: tapping it opens the saved text as a place
-                    // search in whichever maps/nav app the user picks from the chooser; the pencil
-                    // switches back to text entry. Blank (or mid-edit) it's the plain field.
-                    var locationEditing by remember { mutableStateOf(false) }
-                    if (location.isNotBlank() && !locationEditing) {
-                        PaperTapField(
-                            label = languageManager.getString("entry_location"),
-                            value = location,
-                            onClick = { openLocationInMaps(context, location) },
-                            trailingIcon = {
-                                if (!isReadOnly) {
-                                    IconButton(onClick = { locationEditing = true }, modifier = Modifier.size(24.dp)) {
-                                        Icon(
-                                            Icons.Filled.Edit,
-                                            contentDescription = languageManager.getString("entry_location"),
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
+                    // The suite's one location control (see VoxLocationField): retracted glyph,
+                    // inline OSM search on expand, filled text opens as a maps link. The GPS lambda
+                    // resolves a FRESH fix through a store that remembers nothing — calendar keeps
+                    // no location cache by design, unlike expenses/commander.
+                    VoxLocationField(
+                        value = location,
+                        onValueChange = { if (!isReadOnly) location = it },
+                        label = languageManager.getString("entry_location"),
+                        clearContentDescription = languageManager.getString("todo_clear_location"),
+                        gpsLock = if (isReadOnly) null else {
+                            {
+                                VoxLocationResolver.create(
+                                    context, EphemeralLocationStore(), needsReverseGeocode = true
+                                ).resolveLocation()?.displayName
                             }
-                        )
-                    } else {
-                        // Search-first entry (OpenStreetMap place search + GPS lock) — the GPS
-                        // lambda resolves a FRESH fix through a store that remembers nothing:
-                        // calendar keeps no location cache by design, unlike expenses/commander.
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            VoxLocationPickerField(
-                                value = location,
-                                onValueChange = { if (!isReadOnly) location = it },
-                                label = languageManager.getString("entry_location"),
-                                gpsLock = if (isReadOnly) null else {
-                                    {
-                                        VoxLocationResolver.create(
-                                            context, EphemeralLocationStore(), needsReverseGeocode = true
-                                        ).resolveLocation()?.displayName
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (locationEditing) {
-                                IconButton(onClick = { locationEditing = false }, modifier = Modifier.size(24.dp)) {
-                                    Icon(
-                                        Icons.Filled.Check,
-                                        contentDescription = languageManager.getString("apply"),
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
+                        },
+                        onOpenLocation = { openLocationInMaps(context, it) }
+                    )
                     if (isReadOnly) {
                         Text(
                             text = "${languageManager.getString("entry_layer")}: ${currentLayer.name}",
@@ -680,11 +652,24 @@ fun EntryEditScreen(
                             if (freq == RecurrenceFrequency.NONE) recurrenceUntilMillis = null
                         },
                         anchor = { value, onClick ->
+                            // Green glow whenever an explicit weekday set is active — the collapsed
+                            // field otherwise reads plain "Weekly" and hides that days were chosen.
+                            val daysActive = recurrence == RecurrenceFrequency.WEEKLY && recurrenceDaysMask != 0
                             PaperTapField(
                                 label = languageManager.getString("entry_recurrence"),
                                 value = value,
                                 onClick = onClick,
                                 enabled = !isReadOnly,
+                                modifier = if (daysActive) {
+                                    Modifier.shadow(
+                                        8.dp,
+                                        RoundedCornerShape(4.dp),
+                                        ambientColor = RECURRENCE_DAYS_GLOW,
+                                        spotColor = RECURRENCE_DAYS_GLOW
+                                    )
+                                } else {
+                                    Modifier
+                                },
                                 trailingIcon = {
                                     Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                 }
@@ -1068,7 +1053,13 @@ private fun TimeOnlyPickerDialog(
 /** Manually-added photo attachments on this entry (see :core:attachments) — no scan-sourced photo
  *  concept here to unify with (unlike Expenses), so this is manual-only. */
 @Composable
-private fun EntryAttachmentsSection(entryId: Long, stateManager: CalendarStateManager) {
+internal fun EntryAttachmentsSection(
+    entryId: Long,
+    stateManager: CalendarStateManager,
+    // To-do items take exactly ONE capture path — a single cropped photo (produceOCR is already
+    // false for every calendar attachment; this additionally drops the stitch/batch modes).
+    singleCaptureOnly: Boolean = false
+) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val entities by stateManager.observeAttachments(entryId).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -1096,6 +1087,13 @@ private fun EntryAttachmentsSection(entryId: Long, stateManager: CalendarStateMa
         }
     }
     val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> handlePickedUris(uris) }
+    // The plain system camera — always offered: not everyone installs Vision, and a photo
+    // attachment must never require it. Vision's cropped document capture appears BESIDE it
+    // (crop-rectangle icon) only while Vision is actually installed.
+    val visionInstalled = rememberVisionInstalled()
+    val takeStandardPhoto = rememberCameraCaptureLauncher(CalendarAttachments.FILE_PROVIDER_AUTHORITY) { uri ->
+        handlePickedUris(listOf(uri))
+    }
     // Zero attachments yet: single + stitch (a stitch group is one document, whole-group delete
     // only — see AttachmentUiItem.groupSource). Already has attachments: single + batch, each new
     // photo independent (Calendar never runs OCR/LLM on attachments at all — see LlmTasks.
@@ -1113,16 +1111,20 @@ private fun EntryAttachmentsSection(entryId: Long, stateManager: CalendarStateMa
         baseTask = "${LlmTasks.CALENDAR_ATTACHMENT_CAPTURE}:$entryId", hint = null, produceOCR = false,
         captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH
     )
-    val captureActions = if (items.isEmpty()) {
-        listOf(
-            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
-            SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch"), takePhotoStitch)
-        )
-    } else {
-        listOf(
-            SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single"), takePhotoSingle),
-            SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch"), takePhotoBatch)
-        )
+    val captureActions = listOf(
+        SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("attachment_take_photo"), takeStandardPhoto)
+    )
+    val visionActions = buildList {
+        if (visionInstalled) {
+            add(SpeedDialAction(Icons.Filled.Crop, languageManager.getString("capture_mode_single"), takePhotoSingle))
+            if (!singleCaptureOnly) {
+                if (items.isEmpty()) {
+                    add(SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch"), takePhotoStitch))
+                } else {
+                    add(SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch"), takePhotoBatch))
+                }
+            }
+        }
     }
     AttachmentsSection(
         title = languageManager.getString("attachments"),
@@ -1130,6 +1132,7 @@ private fun EntryAttachmentsSection(entryId: Long, stateManager: CalendarStateMa
         canAdd = items.size < 10,
         onPickFromGallery = { pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
         captureActions = captureActions,
+        visionActions = visionActions,
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
         cancelLabel = languageManager.getString("cancel"),
         onRemove = { item ->

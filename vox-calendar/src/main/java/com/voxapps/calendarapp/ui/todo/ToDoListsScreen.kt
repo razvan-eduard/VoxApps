@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButton
@@ -37,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.ToDoRepository
 import com.voxapps.calendarapp.ui.LocalLanguageManager
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -52,12 +54,18 @@ fun ToDoListsScreen(
     toDoRepository: ToDoRepository,
     defaultLayer: CalendarLayer,
     onBack: () -> Unit,
+    onOpenSettings: () -> Unit,
     // Widget deep-links: a list id to open flipped to its edit face, and a "create a new list in
     // edit mode" request — each paired with a trigger counter so repeating the same request fires
     // again (same counter convention as CalendarActivity's editEntryTrigger).
     openListEditId: Long? = null,
     openListEditTrigger: Int = 0,
-    quickAddListTrigger: Int = 0
+    quickAddListTrigger: Int = 0,
+    // A widget/grid tap on a single node: scroll its list's card into view and open that item's
+    // INLINE editor (no modal) — same trigger-counter convention as the list deep-links above.
+    openTaskListId: Long? = null,
+    openTaskItemId: Long = -1L,
+    openTaskTrigger: Int = 0
 ) {
     val languageManager = LocalLanguageManager.current
     val scope = rememberCoroutineScope()
@@ -73,6 +81,15 @@ fun ToDoListsScreen(
         if (openListEditTrigger > 0 && openListEditId != null) {
             editingListId = openListEditId
             lists.indexOfFirst { it.id == openListEditId }.takeIf { it >= 0 }
+                ?.let { listState.animateScrollToItem(it) }
+        }
+    }
+    LaunchedEffect(openTaskTrigger) {
+        if (openTaskTrigger > 0 && openTaskListId != null) {
+            // The lists Flow may not have emitted yet on a cold open — read the repository directly
+            // so the scroll target is the real row set, not the initial empty value.
+            val loaded = toDoRepository.lists.first()
+            loaded.indexOfFirst { it.id == openTaskListId }.takeIf { it >= 0 }
                 ?.let { listState.animateScrollToItem(it) }
         }
     }
@@ -116,12 +133,21 @@ fun ToDoListsScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("todo_back_to_calendar"))
                     }
+                    // The gear never leaves: flipping between Calendar and To-do swaps the OTHER
+                    // header action (which grid you jump to), settings stays reachable from both.
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
+                    }
                 }
             )
         },
         floatingActionButton = {
+            // While a card is flipped to its edit face the FAB shrinks out of the way — the big
+            // centered button was overlapping the card being edited; the list also gains bottom
+            // padding (below) so the card can always scroll fully clear of it.
+            val editingOpen = editingListId != null
             FloatingActionButton(
-                modifier = Modifier.size(64.dp),
+                modifier = Modifier.size(if (editingOpen) 40.dp else 64.dp),
                 onClick = {
                     scope.launch {
                         val id = toDoRepository.createList("", defaultLayer.id)
@@ -130,7 +156,11 @@ fun ToDoListsScreen(
                     }
                 }
             ) {
-                Icon(Icons.Filled.Add, contentDescription = languageManager.getString("todo_add_list"), modifier = Modifier.size(32.dp))
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = languageManager.getString("todo_add_list"),
+                    modifier = Modifier.size(if (editingOpen) 20.dp else 32.dp)
+                )
             }
         },
         floatingActionButtonPosition = FabPosition.Center
@@ -143,7 +173,9 @@ fun ToDoListsScreen(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
+                // Bottom clearance sized past the FAB for EVERY card, both faces — a long card in
+                // read mode could scroll under the button just as easily as an edit face.
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 112.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(lists, key = { it.id }) { list ->
@@ -154,7 +186,9 @@ fun ToDoListsScreen(
                         toDoRepository = toDoRepository,
                         isEditing = list.id == editingListId,
                         onEditingChange = { editing -> editingListId = if (editing) list.id else null },
-                        onDeleteList = { scope.launch { toDoRepository.deleteList(list) } }
+                        onDeleteList = { scope.launch { toDoRepository.deleteList(list) } },
+                        openTaskId = if (list.id == openTaskListId) openTaskItemId else -1L,
+                        openTaskTrigger = if (list.id == openTaskListId) openTaskTrigger else 0
                     )
                 }
             }

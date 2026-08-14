@@ -11,6 +11,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.GlanceTheme
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -38,11 +40,14 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.voxapps.calendarapp.CalendarActivity
+import com.voxapps.calendarapp.R
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.data.ToDoItem
 import com.voxapps.calendarapp.data.ToDoList
 import com.voxapps.calendarapp.state.CalendarUiState
+import com.voxapps.calendarapp.ui.todo.itemTone
 import com.voxapps.calendarapp.ui.todo.sortedByDateKeepingUndatedInPlace
+import com.voxapps.calendarapp.ui.todo.toneBorderColor
 import com.voxapps.widget.VoxWidgetScaffold
 import com.voxapps.widget.WidgetDayFormats
 import java.text.DateFormat
@@ -79,6 +84,9 @@ class ToDoListsWidget : GlanceAppWidget() {
             val uiState by container.calendarStateManager.uiState.collectAsState()
             val lists by container.toDoRepository.lists.collectAsState(initial = emptyList())
             val itemsByList by container.toDoRepository.allItems.collectAsState(initial = emptyMap())
+            val attachedIds by container.attachmentDao
+                .observeRecordIdsWithAttachments(com.voxapps.calendarapp.data.CalendarAttachments.RECORD_TYPE)
+                .collectAsState(initial = emptyList())
             val languageManager = container.languageManager
 
             GlanceTheme {
@@ -133,7 +141,7 @@ class ToDoListsWidget : GlanceAppWidget() {
                                             style = TextStyle(fontSize = 12.sp, color = GlanceTheme.colors.onSurfaceVariant)
                                         )
                                     } else {
-                                        ToDoItemRows(items, context, languageManager.getString("todo_new_item_hint"))
+                                        ToDoItemRows(items, context, languageManager.getString("todo_new_item_hint"), attachedIds.toSet())
                                     }
                                 }
                                 Spacer(modifier = GlanceModifier.height(8.dp))
@@ -157,6 +165,9 @@ class ToDoListWidget : GlanceAppWidget() {
             val uiState by container.calendarStateManager.uiState.collectAsState()
             val lists by container.toDoRepository.lists.collectAsState(initial = emptyList())
             val itemsByList by container.toDoRepository.allItems.collectAsState(initial = emptyMap())
+            val attachedIds by container.attachmentDao
+                .observeRecordIdsWithAttachments(com.voxapps.calendarapp.data.CalendarAttachments.RECORD_TYPE)
+                .collectAsState(initial = emptyList())
             val languageManager = container.languageManager
             val list = lists.firstOrNull { it.id == configuredListId }
 
@@ -190,7 +201,7 @@ class ToDoListWidget : GlanceAppWidget() {
                                 LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
                                     items(sortedByDateKeepingUndatedInPlace(items), itemId = { it.id }) { item ->
                                         Column {
-                                            ToDoItemRow(item, context, languageManager.getString("todo_new_item_hint"))
+                                            ToDoItemRow(item, context, languageManager.getString("todo_new_item_hint"), hasAttachments = item.id in attachedIds)
                                             Spacer(modifier = GlanceModifier.height(2.dp))
                                         }
                                     }
@@ -207,9 +218,9 @@ class ToDoListWidget : GlanceAppWidget() {
 /** The non-lazy rows a list card holds — used by the all-lists widget, where each CARD is the lazy
  *  item (mirrors the in-app screen: one card per list, rows inside). */
 @Composable
-private fun ToDoItemRows(items: List<ToDoItem>, context: Context, blankItemHint: String) {
+private fun ToDoItemRows(items: List<ToDoItem>, context: Context, blankItemHint: String, attachedIds: Set<Long>) {
     sortedByDateKeepingUndatedInPlace(items).forEach { item ->
-        ToDoItemRow(item, context, blankItemHint)
+        ToDoItemRow(item, context, blankItemHint, hasAttachments = item.id in attachedIds)
         Spacer(modifier = GlanceModifier.height(2.dp))
     }
 }
@@ -218,12 +229,17 @@ private fun ToDoItemRows(items: List<ToDoItem>, context: Context, blankItemHint:
  *  timeline row, minus what RemoteViews can't draw (glow, star shape, connectors). Tapping opens
  *  the item's edit dialog via the entry-edit deep-link CalendarWidget's rows already use. */
 @Composable
-private fun ToDoItemRow(item: ToDoItem, context: Context, blankItemHint: String) {
+private fun ToDoItemRow(item: ToDoItem, context: Context, blankItemHint: String, hasAttachments: Boolean) {
     val editIntent = Intent(context, CalendarActivity::class.java).apply {
         putExtra(CalendarActivity.EXTRA_EDIT_ENTRY_ID, item.id)
     }
-    val itemColor = Color(item.colorArgb.toInt())
-    val textColor = if (itemColor.luminance() > 0.5f) Color(0xFF1A1A1A) else Color.White
+    // The app's own tone/contour rules (see ToDoNodeTimeline.itemTone/toneBorderColor), replicated
+    // as far as Glance allows: star node for important, tone-outlined circle otherwise, done check
+    // ON the node (never in the text), pill filled with the four-tone color. A pill outline is the
+    // one piece Glance can't do — wrapping the Text loses it in translation (see comment below).
+    val tone = itemTone(item.colorArgb, item.done, item.isImportant)
+    val outline = toneBorderColor(tone)
+    val textColor = if (tone.luminance() > 0.5f) Color(0xFF1A1A1A) else Color.White
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
@@ -231,14 +247,51 @@ private fun ToDoItemRow(item: ToDoItem, context: Context, blankItemHint: String)
             .clickable(actionStartActivity(editIntent)),
         verticalAlignment = Alignment.Vertical.CenterVertically
     ) {
-        Box(modifier = GlanceModifier.size(10.dp).cornerRadius(5.dp).background(itemColor)) {}
+        Box(modifier = GlanceModifier.size(16.dp), contentAlignment = Alignment.Center) {
+            if (item.isImportant) {
+                // Star-on-star fakes the thick important contour: outline-colored star behind a
+                // slightly smaller tone-colored one.
+                Image(
+                    provider = ImageProvider(R.drawable.ic_widget_star),
+                    contentDescription = null,
+                    colorFilter = androidx.glance.ColorFilter.tint(ColorProvider(outline)),
+                    modifier = GlanceModifier.size(16.dp)
+                )
+                Image(
+                    provider = ImageProvider(R.drawable.ic_widget_star),
+                    contentDescription = null,
+                    colorFilter = androidx.glance.ColorFilter.tint(ColorProvider(tone)),
+                    modifier = GlanceModifier.size(11.dp)
+                )
+            } else {
+                Box(
+                    modifier = GlanceModifier.size(13.dp).cornerRadius(7.dp).background(outline),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(modifier = GlanceModifier.size(11.dp).cornerRadius(6.dp).background(tone)) {}
+                }
+            }
+            if (item.done) {
+                Box(
+                    modifier = GlanceModifier.size(11.dp).cornerRadius(6.dp).background(Color.White.copy(alpha = 0.85f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(R.drawable.ic_widget_check),
+                        contentDescription = null,
+                        colorFilter = androidx.glance.ColorFilter.tint(ColorProvider(Color(0xFF2E7D32))),
+                        modifier = GlanceModifier.size(9.dp)
+                    )
+                }
+            }
+        }
         Spacer(modifier = GlanceModifier.width(6.dp))
         // Pill styling applied directly on Text's own modifier — see CalendarWidget's to-do rows
         // for why a wrapping Box renders the pill but loses the text in Glance's translation.
         Text(
             text = buildString {
                 append(item.text.ifBlank { blankItemHint })
-                if (item.done) append(" ✓")
+                if (hasAttachments) append(" 📎")
             },
             maxLines = 1,
             style = TextStyle(
@@ -249,7 +302,7 @@ private fun ToDoItemRow(item: ToDoItem, context: Context, blankItemHint: String)
             modifier = GlanceModifier
                 .defaultWeight()
                 .cornerRadius(50.dp)
-                .background(itemColor)
+                .background(tone)
                 .padding(horizontal = 10.dp, vertical = 3.dp)
         )
         val due = item.dueMillis
