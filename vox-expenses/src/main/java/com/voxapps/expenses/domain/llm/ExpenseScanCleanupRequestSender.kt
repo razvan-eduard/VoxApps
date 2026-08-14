@@ -37,7 +37,9 @@ object ExpenseScanCleanupRequestSender {
         val settings = container.settingsRepository.getSnapshot()
 
         val preParsed = DateTimeRegexParser.parse(rawText)
-        val preParsedTotal = ReceiptTotalRegexParser.parse(rawText).total
+        val totals = ReceiptTotalRegexParser.parse(rawText)
+        val preParsedTotal = totals.total
+        val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
 
         val taskWithMeta = when {
             imageName != null && retryOfExpenseId != null -> "${LlmTasks.EXPENSE_SCAN_CLEANUP}:$imageName:$retryOfExpenseId"
@@ -52,7 +54,8 @@ object ExpenseScanCleanupRequestSender {
             settings.language,
             preParsedDate = preParsed.date,
             preParsedTime = preParsed.time,
-            preParsedTotal = preParsedTotal
+            preParsedTotal = preParsedTotal,
+            bypassItems = preParsedItems != null
         )
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for scan cleanup (retryOfExpenseId=$retryOfExpenseId, multimodal=${attachmentUri != null})")
@@ -64,7 +67,7 @@ object ExpenseScanCleanupRequestSender {
             targetPackage = COMMANDER_PACKAGE,
             attachmentUri = attachmentUri
         )
-        rememberPreParse(container, requestId, preParsed, preParsedTotal)
+        rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems)
     }
 
     /**
@@ -86,7 +89,9 @@ object ExpenseScanCleanupRequestSender {
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val settings = container.settingsRepository.getSnapshot()
         val preParsed = DateTimeRegexParser.parse(rawText)
-        val preParsedTotal = ReceiptTotalRegexParser.parse(rawText).total
+        val totals = ReceiptTotalRegexParser.parse(rawText)
+        val preParsedTotal = totals.total
+        val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             rawText,
@@ -95,7 +100,8 @@ object ExpenseScanCleanupRequestSender {
             settings.language,
             preParsedDate = preParsed.date,
             preParsedTime = preParsed.time,
-            preParsedTotal = preParsedTotal
+            preParsedTotal = preParsedTotal,
+            bypassItems = preParsedItems != null
         )
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for line-items rescan (expenseId=$expenseId)")
@@ -107,7 +113,7 @@ object ExpenseScanCleanupRequestSender {
             targetPackage = COMMANDER_PACKAGE,
             attachmentUri = attachmentUri
         )
-        rememberPreParse(container, requestId, preParsed, preParsedTotal)
+        rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems)
     }
 
     /**
@@ -132,7 +138,9 @@ object ExpenseScanCleanupRequestSender {
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val settings = container.settingsRepository.getSnapshot()
         val preParsed = DateTimeRegexParser.parse(rawText)
-        val preParsedTotal = ReceiptTotalRegexParser.parse(rawText).total
+        val totals = ReceiptTotalRegexParser.parse(rawText)
+        val preParsedTotal = totals.total
+        val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             rawText,
@@ -141,7 +149,8 @@ object ExpenseScanCleanupRequestSender {
             settings.language,
             preParsedDate = preParsed.date,
             preParsedTime = preParsed.time,
-            preParsedTotal = preParsedTotal
+            preParsedTotal = preParsedTotal,
+            bypassItems = preParsedItems != null
         )
 
         val taskWithMeta = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending:${groupId.orEmpty()}:${fileNames.joinToString(",")}"
@@ -155,7 +164,7 @@ object ExpenseScanCleanupRequestSender {
             targetPackage = COMMANDER_PACKAGE,
             attachmentUri = attachmentUri
         )
-        rememberPreParse(container, requestId, preParsed, preParsedTotal)
+        rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems)
     }
 
     /**
@@ -167,11 +176,20 @@ object ExpenseScanCleanupRequestSender {
         container: ExpensesContainer,
         requestId: String,
         preParsed: DateTimeRegexParser.Result,
-        preParsedTotal: Double?
+        preParsedTotal: Double?,
+        totals: ReceiptTotalRegexParser.Result,
+        preParsedItems: List<TableItemsPreParse.Item>?
     ) {
         container.scanPreParseRepository.put(
             requestId,
-            ScanPreParse(date = preParsed.date, time = preParsed.time, total = preParsedTotal)
+            ScanPreParse(
+                date = preParsed.date,
+                time = preParsed.time,
+                total = preParsedTotal,
+                itemsJson = preParsedItems?.let { TableItemsPreParse.toJson(it) },
+                previousBalance = totals.previousBalance,
+                totalToPay = totals.totalToPay
+            )
         )
     }
 }

@@ -27,8 +27,38 @@ object ReceiptTotalRegexParser {
         "montant", "de plata", "de plată", "amount due", "balance due"
     )
 
-    data class Result(val total: Double?)
+    /** Labels naming an INVOICE's own total — when present it beats the largest-wins rule, since
+     *  the largest figure on an invoice routinely includes a carried-over balance. */
+    private val invoiceTotalLabels = listOf(
+        "total factura", "total factură", "invoice total", "total invoice",
+        "rechnungsbetrag", "total facture"
+    )
 
-    fun parse(text: String): Result =
-        Result(LabelledAmountExtractor.find(text, totalLabels).maxOfOrNull { it.value })
+    /** Labels naming a balance carried from before this document. */
+    private val previousBalanceLabels = listOf(
+        "sold anterior", "sold precedent", "previous balance", "saldo anterior",
+        "restanta", "restanță", "restante", "restanțe", "overdue"
+    )
+
+    data class Result(
+        val total: Double?,
+        /** The invoice's own printed total, when the document labels one. */
+        val invoiceTotal: Double? = null,
+        val previousBalance: Double? = null,
+        /** The pay-this figure when it exceeds the invoice's own total (old balance included). */
+        val totalToPay: Double? = null
+    )
+
+    fun parse(text: String): Result {
+        val largest = LabelledAmountExtractor.find(text, totalLabels).maxOfOrNull { it.value }
+        val invoiceTotal = LabelledAmountExtractor.find(text, invoiceTotalLabels).maxOfOrNull { it.value }
+        val previousBalance = LabelledAmountExtractor.find(text, previousBalanceLabels).maxOfOrNull { it.value }
+        val totalToPay = if (invoiceTotal != null && largest != null && largest > invoiceTotal) largest else null
+        return Result(
+            total = invoiceTotal ?: largest,
+            invoiceTotal = invoiceTotal,
+            previousBalance = previousBalance,
+            totalToPay = totalToPay
+        )
+    }
 }

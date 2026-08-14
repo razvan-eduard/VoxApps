@@ -51,6 +51,11 @@ data class Expense(
     val uid: String = UUID.randomUUID().toString(),
     val title: String? = null,
     val totalAmount: Double,
+    // Invoice-only extras (see ReceiptTotalRegexParser): a balance carried from before this
+    // document, and the pay-this figure when it exceeds [totalAmount]. Null on every non-invoice
+    // record; [totalAmount] itself is always THIS document's own total.
+    val previousBalanceAmount: Double? = null,
+    val totalToPayAmount: Double? = null,
     val currencyCode: String,
     val vendor: String? = null,
     val bank: String? = null,

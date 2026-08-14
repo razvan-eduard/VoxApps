@@ -22,11 +22,14 @@ object RowClusterer {
     private const val MIN_OVERLAP_RATIO = 0.5f
 
     /** The recognized text in reading order, one printed row per line. */
-    fun toText(results: List<OCRResult>): String = toTextFromCells(results.map { r ->
+    fun toText(results: List<OCRResult>): String = toTextFromCells(cellsOf(results))
+
+    /** Shared box->Cell mapping so [TableReconstructor] sees the exact same geometry. */
+    fun cellsOf(results: List<OCRResult>): List<Cell> = results.map { r ->
         val ys = r.box.points.map { it.y }
         val xs = r.box.points.map { it.x }
-        Cell(r.text, xs.min(), ys.min(), ys.max())
-    })
+        Cell(r.text, xs.min(), ys.min(), ys.max(), xs.max())
+    }
 
     /** The geometry core, on plain numbers — what the tests drive directly. */
     fun toTextFromCells(cells: List<Cell>): String =
@@ -34,7 +37,7 @@ object RowClusterer {
             row.sortedBy { it.xLeft }.joinToString(" ") { it.text }
         }
 
-    class Cell(val text: String, val xLeft: Float, val yTop: Float, val yBottom: Float) {
+    class Cell(val text: String, val xLeft: Float, val yTop: Float, val yBottom: Float, val xRight: Float = xLeft) {
         internal val height get() = yBottom - yTop
     }
 

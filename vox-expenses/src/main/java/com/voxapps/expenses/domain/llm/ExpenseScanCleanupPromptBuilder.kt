@@ -15,7 +15,8 @@ object ExpenseScanCleanupPromptBuilder {
         languageCode: String,
         preParsedDate: String? = null,
         preParsedTime: String? = null,
-        preParsedTotal: Double? = null
+        preParsedTotal: Double? = null,
+        bypassItems: Boolean = false
     ): String {
         val categoriesLine = if (existingCategories.isEmpty()) {
             "No categories exist yet."
@@ -87,6 +88,13 @@ object ExpenseScanCleanupPromptBuilder {
             """.trimIndent()
         }
         val totalAmountField = if (bypassTotal) "" else "\"totalAmount\": 12.5, "
+        val itemsOverride = if (bypassItems) {
+            "\n\nCRITICAL OVERRIDE — LINE ITEMS: DO NOT search for, extract, or list any line items." +
+                "\nI already read them from the document deterministically and they check out against" +
+                "\nthe printed total. Ignore every line-item instruction above and return \"items\": []."
+        } else {
+            ""
+        }
         // The line-item rule is scoped against the total only while a total is still being asked
         // for; with none requested there is no rule below to point at.
         val unitPriceScopeLine = if (bypassTotal) {
@@ -158,6 +166,6 @@ object ExpenseScanCleanupPromptBuilder {
             "time": "HH:mm", "direction": "outgoing", "items": [{"name": "...", "quantity": 1,
             "unitPrice": 12.5, "netAmount": null, "vatAmount": null, "grossAmount": null}]}, no prose,
             no markdown. Omit/null "bank" and "location" if not printed — never guess either.$ocrTextBlock
-        """.trimIndent()
+        """.trimIndent() + itemsOverride
     }
 }
