@@ -60,6 +60,20 @@ class TemplateDirectionMemory(context: Context) {
         else TransactionDirection.OUTGOING
     }
 
+    /**
+     * Whether [templateHash] is known to produce real transactions. Every confirmation already
+     * answers this — approving or edit-saving a record IS a human saying the template's messages
+     * are payments — so the same counter serves, and a direction quarantine does not block it:
+     * a template whose direction is disputed is still certainly a transaction template. The
+     * asymmetry is deliberate and permanent: nothing ever teaches isPayment=false — a dismissal
+     * can mean "duplicate" or "don't track this", so it fails the transcription bar.
+     */
+    suspend fun lookupIsPayment(templateHash: String?): Boolean {
+        if (templateHash == null) return false
+        val e = templates()[templateHash] ?: return false
+        return e.confirmations >= MIN_CONFIRMATIONS
+    }
+
     /** A human confirmed [direction] for [templateHash]. Unanimity grows the count; disagreement
      *  quarantines the template permanently. */
     suspend fun confirm(templateHash: String?, direction: TransactionDirection) {
@@ -69,8 +83,10 @@ class TemplateDirectionMemory(context: Context) {
             val existing = map[templateHash]
             map[templateHash] = when {
                 existing == null -> Entry(direction.toJsonValue(), 1, false)
-                existing.conflicted -> existing
-                existing.direction != direction.toJsonValue() -> existing.copy(conflicted = true)
+                // A quarantined template still counts confirmations: the human keeps saying
+                // "this is a payment" even while the direction stays disputed.
+                existing.conflicted -> existing.copy(confirmations = existing.confirmations + 1)
+                existing.direction != direction.toJsonValue() -> existing.copy(conflicted = true, confirmations = existing.confirmations + 1)
                 else -> existing.copy(confirmations = existing.confirmations + 1)
             }
             prefs[Keys.TEMPLATES] = encodeTemplates(map)

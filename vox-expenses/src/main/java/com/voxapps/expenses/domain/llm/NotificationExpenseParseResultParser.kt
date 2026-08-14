@@ -24,9 +24,12 @@ object NotificationExpenseParseResultParser {
     /** [presetAmount] is a deterministically pre-resolved amount the prompt told the model not to
      *  produce (see NotificationPreParse) — the reply lacking one is then by design, not a failed
      *  parse, and the preset value is the record's amount. */
-    fun parse(json: String, presetAmount: Double? = null): Parsed? = try {
+    /** [presetIsPayment]: the template memory confirmed this shape is a transaction and the
+     *  prompt neither asked the question nor offered the escape — a reply without the field is
+     *  then by design, not a rejection. */
+    fun parse(json: String, presetAmount: Double? = null, presetIsPayment: Boolean = false): Parsed? = try {
         val o = JSONObject(json)
-        if (!o.optBoolean("isPayment", false)) {
+        if (!presetIsPayment && !o.optBoolean("isPayment", false)) {
             null
         } else {
             val totalAmount = presetAmount ?: (if (o.has("totalAmount") && !o.isNull("totalAmount")) {
