@@ -87,4 +87,12 @@ class NotificationPreParseTest {
         val r = NotificationPreParse.parse("Shop", "45,20 RON — total 45,20 RON", vocabularies)
         assertEquals(45.20, r.amount!!, 0.001)
     }
+
+    @Test
+    fun `a composed title is vendor plus the model's category`() {
+        assertEquals("LIDL Groceries", NotificationPreParse.composeTitle("LIDL", "Groceries"))
+        assertEquals("LAZAR IONUT PFA", NotificationPreParse.composeTitle("LAZAR IONUT PFA", null))
+        assertEquals("LIDL", NotificationPreParse.composeTitle(" LIDL ", "  "))
+    }
+
 }

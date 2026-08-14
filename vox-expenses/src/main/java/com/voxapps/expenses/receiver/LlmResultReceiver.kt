@@ -285,7 +285,17 @@ class LlmResultReceiver : BroadcastReceiver() {
                         val preParse = if (isParseSuccess) container.scanPreParseRepository.take(requestId) else null
                         val parsed = if (isParseSuccess) {
                             NotificationExpenseParseResultParser.parse(rawJson!!, presetAmount = preParse?.total)
-                                ?.let { p -> if (preParse?.vendor != null) p.copy(vendor = preParse.vendor) else p }
+                                ?.let { p ->
+                                    val vendor = preParse?.vendor ?: return@let p
+                                    // Title composed, not modelled: with the vendor suppressed
+                                    // from the prompt, a model-invented title names whatever text
+                                    // remained (the card, the bank) — see NotificationPreParse.
+                                    p.copy(
+                                        vendor = vendor,
+                                        title = com.voxapps.expenses.domain.llm.NotificationPreParse
+                                            .composeTitle(vendor, p.category)
+                                    )
+                                }
                         } else null
                         if (parsed == null) return@launch
 

@@ -68,6 +68,16 @@ object NotificationPreParse {
         return Result(amount = singleMarkedAmount(fields), vendor = vendor, bank = bank)
     }
 
+    /**
+     * The title for a record whose vendor was resolved deterministically: the vendor, plus the
+     * model's category when it offered one — "LIDL Groceries", not the card the model would
+     * otherwise have titled it after. The vendor is what identifies the expense; the category is
+     * the one word of context the model still contributes.
+     */
+    fun composeTitle(vendor: String, category: String?): String =
+        listOfNotNull(vendor.trim().ifBlank { null }, category?.trim()?.ifBlank { null })
+            .joinToString(" ")
+
     private fun looksLikeName(field: String): Boolean {
         val withoutAmounts = markedAmount.replace(field, " ")
         val tokens = withoutAmounts.split(Regex("""\s+""")).filter { it.isNotBlank() }

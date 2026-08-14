@@ -113,14 +113,21 @@ object NotificationExpenseParsePromptBuilder {
         // The same never-ask discipline as the bank, per pre-resolved field.
         val vendorClause: String
         val vendorJsonField: String
+        val titleJsonField: String
         if (preParsedVendor != null) {
+            // With the vendor certain, the title stops being the model's job too: a title invented
+            // from the remaining text names whatever is left in it — observed as a record titled
+            // after the card — while the vendor plus the model's own category is the title a person
+            // would write. Composed at record creation, not asked for.
             vendorClause = """. The vendor is already known with certainty — do NOT extract,
-            guess, or include a vendor"""
+            guess, or include a vendor, and do NOT include a title"""
             vendorJsonField = ""
+            titleJsonField = ""
         } else {
             vendorClause = """, the vendor/merchant/counterparty name if this specific notification's own
             text names one$antiCopyClause"""
             vendorJsonField = """, "vendor": "..."""" + ""
+            titleJsonField = """"title": "...", """
         }
         val amountClause: String
         val amountJsonField: String
@@ -170,7 +177,7 @@ object NotificationExpenseParsePromptBuilder {
             character-for-character — never invent a new spelling, translation, capitalization, or
             diacritics for it. Only suggest a new category name if none of the existing ones fit.
             Respond in the "$languageCode" language. Return ONLY a JSON object, no prose, no markdown,
-            of the shape {"isPayment": true, "title": "..."$amountJsonField, "currency": "..."$vendorJsonField,
+            of the shape {"isPayment": true, $titleJsonField"currency": "..."$amountJsonField$vendorJsonField,
             "direction": "outgoing", "category": "..."$bankJsonField} when it is a
             transaction, or {"isPayment": false} when it is not.
 
