@@ -103,9 +103,18 @@ class TemplateDirectionMemory(context: Context) {
         }
     }
 
-    /** The template behind [recordId], if the record came from a notification. */
-    suspend fun linkedTemplate(recordId: Long): String? =
-        decodeLinks(dataStore.data.map { it[Keys.RECORD_LINKS] }.first())[recordId]?.hash
+    /** The template behind [recordId], if the record came from a notification. The link is removed
+     *  as it is read: one record is one human judgement, however many times it is re-saved, so a
+     *  single record can never supply both confirmations a template needs. */
+    suspend fun consumeLink(recordId: Long): String? {
+        var hash: String? = null
+        dataStore.edit { prefs ->
+            val links = decodeLinks(prefs[Keys.RECORD_LINKS]).toMutableMap()
+            hash = links.remove(recordId)?.hash
+            prefs[Keys.RECORD_LINKS] = encodeLinks(pruneLinks(links))
+        }
+        return hash
+    }
 
     private data class Link(val hash: String, val at: Long)
 

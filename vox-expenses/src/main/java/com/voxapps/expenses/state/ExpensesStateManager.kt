@@ -368,7 +368,7 @@ class ExpensesStateManager(
             expensesRepo.updateExpense(expense, items, markManuallyEdited = true)
             // Saving an auto-created notification record from the editor is the human confirmation
             // its template never got at creation; see TemplateDirectionMemory.
-            templateDirectionMemory.linkedTemplate(expense.id)?.let {
+            templateDirectionMemory.consumeLink(expense.id)?.let {
                 templateDirectionMemory.confirm(it, expense.direction)
                 Logger.d("TemplateMemory", "edit-save confirmed ${expense.direction} for template $it (record ${expense.id})")
             }
