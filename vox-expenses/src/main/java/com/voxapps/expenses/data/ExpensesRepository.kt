@@ -323,12 +323,16 @@ class ExpensesRepository(
         // Only Hub import passes true — preserving the flag from the source device's row, since it
         // was already a genuine human edit there. Every other caller creates a brand-new record no
         // one has touched yet.
-        manuallyEdited: Boolean = false
+        manuallyEdited: Boolean = false,
+        previousBalanceAmount: Double? = null,
+        totalToPayAmount: Double? = null
     ): Long {
         return try {
             val candidate = Expense(
                 title = title?.trim()?.takeIf { it.isNotEmpty() },
                 totalAmount = totalAmount,
+                previousBalanceAmount = previousBalanceAmount,
+                totalToPayAmount = totalToPayAmount,
                 currencyCode = currencyCode,
                 vendor = vendor?.trim()?.takeIf { it.isNotEmpty() },
                 bank = bank?.trim()?.takeIf { it.isNotEmpty() },
@@ -507,7 +511,9 @@ class ExpensesRepository(
         correctionsEnabled: Boolean = false,
         correctionsThreshold: Int = ExpensesSettings.CORRECTION_SPEED_MEDIUM,
         correctionsApplyMode: String = ExpensesSettings.CORRECTION_APPLY_SUGGEST,
-        source: ExpenseSource = ExpenseSource.VOICE
+        source: ExpenseSource = ExpenseSource.VOICE,
+        previousBalanceAmount: Double? = null,
+        totalToPayAmount: Double? = null
     ): Long {
         // Learned spelling corrections run before anything reads the text fields, so a learned
         // merchant mapping keyed on the clean vendor spelling still fires on a garbled arrival.
@@ -579,7 +585,9 @@ class ExpensesRepository(
             direction = direction,
             nearDuplicateCheckEnabled = nearDuplicateCheckEnabled,
             nearDuplicateConfig = nearDuplicateConfig,
-            source = source
+            source = source,
+            previousBalanceAmount = previousBalanceAmount,
+            totalToPayAmount = totalToPayAmount
         )
 
         // Whatever correction text was NOT written into the row (all of it in SUGGEST mode, the

@@ -28,11 +28,17 @@ data class ScanPreParse(
     /** True when the template is confirmed to produce real transactions — the reply is then
      *  parsed without the isPayment gate, which was suppressed from the prompt. */
     val isPaymentKnown: Boolean = false,
+    /** Deterministically-read line items (see [TableItemsPreParse]) as its compact JSON. */
+    val itemsJson: String? = null,
+    /** An invoice's carried balance / pay-this figures (see [ReceiptTotalRegexParser]). */
+    val previousBalance: Double? = null,
+    val totalToPay: Double? = null,
     val storedAt: Long = 0L
 ) {
     val isEmpty: Boolean
         get() = date == null && time == null && total == null && vendor == null &&
-            direction == null && templateHash == null
+            direction == null && templateHash == null && itemsJson == null &&
+            previousBalance == null && totalToPay == null
 }
 
 /**
@@ -101,6 +107,9 @@ class ScanPreParseRepository(context: Context) {
             entry.direction?.let { o.put("direction", it) }
             entry.templateHash?.let { o.put("templateHash", it) }
             if (entry.isPaymentKnown) o.put("isPaymentKnown", true)
+            entry.itemsJson?.let { o.put("itemsJson", it) }
+            entry.previousBalance?.let { o.put("previousBalance", it) }
+            entry.totalToPay?.let { o.put("totalToPay", it) }
             o.put("storedAt", entry.storedAt)
             array.put(o)
         }
@@ -122,6 +131,9 @@ class ScanPreParseRepository(context: Context) {
                     direction = if (o.has("direction")) o.optString("direction") else null,
                     templateHash = if (o.has("templateHash")) o.optString("templateHash") else null,
                     isPaymentKnown = o.optBoolean("isPaymentKnown", false),
+                    itemsJson = if (o.has("itemsJson")) o.optString("itemsJson") else null,
+                    previousBalance = if (o.has("previousBalance")) o.optDouble("previousBalance") else null,
+                    totalToPay = if (o.has("totalToPay")) o.optDouble("totalToPay") else null,
                     storedAt = o.optLong("storedAt")
                 )
             }.toMap()

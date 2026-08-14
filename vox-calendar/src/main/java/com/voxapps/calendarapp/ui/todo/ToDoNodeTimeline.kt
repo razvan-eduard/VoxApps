@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.runtime.LaunchedEffect
@@ -817,7 +818,9 @@ fun ToDoNodeTimelineEditable(
     }
     // The tall inline editor would leave no room for its neighbors under the resting cap — give the
     // viewport enough height while one is open that the ghost rows around it stay reachable.
-    val maxTimelineHeight = if (editingItemId != null && localItems.any { it.id == editingItemId }) 560.dp else 360.dp
+    // The edit face owns the screen while it's open — cap near full height so editing isn't done
+    // through a letterbox (was a fixed 360dp).
+    val maxTimelineHeight = (LocalConfiguration.current.screenHeightDp - 240).dp.coerceIn(360.dp, 720.dp)
     LazyColumn(state = lazyListState, modifier = modifier.heightIn(max = maxTimelineHeight)) {
         // A ghost "+" slot sits before the first item, between every pair, and after the last one —
         // one more insert point than there are items — so a task can be added at any position, not
@@ -844,7 +847,7 @@ fun ToDoNodeTimelineEditable(
                         modifier = Modifier
                             .fillMaxWidth()
                             .alpha(if (ghosted) PAST_ITEM_ALPHA else 1f)
-                            .then(if (animateEditor) Modifier.animateContentSize() else Modifier)
+                            .then(if (animateEditor) Modifier.animateContentSize(tween(300)) else Modifier)
                             // Edit mode always has ghost "+" nodes at both ends, so the line runs
                             // the editor row's full height in both directions (view mode stops it).
                             .then(if (isEditingThis) Modifier.drawBehind {
@@ -926,7 +929,7 @@ fun ToDoNodeTimelineEditable(
                 }
             } else {
                 item(key = "ghost-${index + 1}") {
-                    Column {
+                    Column(modifier = Modifier.animateItem(placementSpec = tween(300))) {
                         DottedConnector()
                         GhostAddRow(onClick = { onAddAt(index + 1) })
                         if (!isLastRealItem) DottedConnector()

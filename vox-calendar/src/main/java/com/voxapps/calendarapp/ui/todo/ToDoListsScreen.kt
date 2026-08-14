@@ -101,6 +101,13 @@ fun ToDoListsScreen(
         }
     }
 
+    // A card flipped to edit anywhere below (or scrolled past) the fold snaps into view — the
+    // edit face is about to take most of the screen, so it should start ON the screen.
+    LaunchedEffect(editingListId) {
+        val id = editingListId ?: return@LaunchedEffect
+        lists.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let { listState.animateScrollToItem(it) }
+    }
+
     BackHandler {
         if (editingListId != null) editingListId = null else onBack()
     }

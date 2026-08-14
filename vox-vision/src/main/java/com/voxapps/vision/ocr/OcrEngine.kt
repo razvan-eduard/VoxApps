@@ -13,11 +13,17 @@ import com.paddle.ocr.PaddleOCRConfig
  */
 class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
 
-    suspend fun recognize(bitmap: Bitmap): String {
+    suspend fun recognize(bitmap: Bitmap, tableMode: Boolean = false): String {
         val result = paddleOcr.recognize(bitmap)
+        val cells = RowClusterer.cellsOf(result.results)
         // Row order, not detector order: the raw result list follows detection, which scatters a
         // printed row into fragments the moment a photo is skewed or the document is tabular.
-        return RowClusterer.toText(result.results)
+        // A declared-tabular document first tries the column-aware reconstruction; anything short
+        // of a confident table falls back to plain reading order.
+        if (tableMode) {
+            TableReconstructor.toText(cells)?.let { return it }
+        }
+        return RowClusterer.toTextFromCells(cells)
     }
 
     suspend fun release() = paddleOcr.release()

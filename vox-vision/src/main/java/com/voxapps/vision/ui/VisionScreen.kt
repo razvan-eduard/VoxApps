@@ -821,6 +821,7 @@ fun VisionScreen(
                         produceOCR = pendingRequestState.value?.let {
                             effectiveProduceOCR(it.captureMode, it.produceOCR)
                         } ?: true,
+                        tableMode = pendingRequestState.value?.tableMode == true,
                         onRecognizing = { recognizing ->
                             if (recognizing) {
                                 isRecognizing = true
@@ -1054,6 +1055,7 @@ fun VisionScreen(
                                         context, scope, cameraController, container, flashMode, fixedRotationDegrees,
                                         produceOCR = effectiveProduceOCR(effectivePendingRequest.captureMode, effectivePendingRequest.produceOCR),
                                         skipCrop = effectivePendingRequest.captureMode == VoxOcrRequest.CAPTURE_MODE_STITCH,
+                                        tableMode = effectivePendingRequest.tableMode,
                                         onRecognizing = { recognizing ->
                                             isRecognizing = recognizing
                                             if (!recognizing) capturedFrameBitmap = null
@@ -1199,7 +1201,7 @@ private fun HeadlessOcrScreen(
 
     LaunchedEffect(pendingRequest) {
         val (text, imageUri, aiImageUri) = try {
-            recognizeExistingImage(context, container, android.net.Uri.parse(pendingRequest.imageUri), pendingRequest.produceOCR)
+            recognizeExistingImage(context, container, android.net.Uri.parse(pendingRequest.imageUri), pendingRequest.produceOCR, tableMode = pendingRequest.tableMode)
         } catch (t: Throwable) {
             Logger.e("VisionScreen", "Headless OCR failed", t)
             Triple("", null, null)
@@ -1294,7 +1296,8 @@ private suspend fun finishRecognition(
     container: VisionContainer,
     bitmap: android.graphics.Bitmap,
     produceOCR: Boolean = true,
-    skipCrop: Boolean = false
+    skipCrop: Boolean = false,
+    tableMode: Boolean = false
 ): Triple<String, String?, String?> {
     val zone = currentZoneOrDefault(container)
     val engine = container.ocrEngineForZone(zone)
@@ -1355,7 +1358,7 @@ private suspend fun finishRecognition(
     // same dispatcher instance don't redispatch, so engine.recognize()'s own internal
     // withContext(Dispatchers.IO) stays on this exact thread too.
     val text = if (produceOCR) {
-        withContext(Dispatchers.IO) { nativeCvLock.withLock { engine.recognize(cropped) } }
+        withContext(Dispatchers.IO) { nativeCvLock.withLock { engine.recognize(cropped, tableMode) } }
     } else {
         ""
     }
@@ -1370,13 +1373,14 @@ private suspend fun recognizeExistingImage(
     container: VisionContainer,
     sourceUri: android.net.Uri,
     produceOCR: Boolean = true,
-    skipCrop: Boolean = false
+    skipCrop: Boolean = false,
+    tableMode: Boolean = false
 ): Triple<String, String?, String?> {
     val bitmap = withContext(Dispatchers.IO) {
         context.contentResolver.openInputStream(sourceUri)?.use { BitmapFactory.decodeStream(it) }
     } ?: throw IllegalStateException("Could not decode image at $sourceUri")
     try {
-        return finishRecognition(context, container, bitmap, produceOCR, skipCrop)
+        return finishRecognition(context, container, bitmap, produceOCR, skipCrop, tableMode)
     } finally {
         // Unlike captureAndRecognize's bitmap (which stays alive on screen as the frozen-frame
         // overlay), nothing outside this function ever holds a reference to this one — safe to
@@ -1401,6 +1405,7 @@ private fun captureAndRecognize(
     fixedRotationDegrees: Int,
     produceOCR: Boolean = true,
     skipCrop: Boolean = false,
+    tableMode: Boolean = false,
     onRecognizing: (Boolean) -> Unit,
     onCaptured: (android.graphics.Bitmap) -> Unit = {},
     onResult: (String, String?, String?) -> Unit
@@ -1427,7 +1432,7 @@ private fun captureAndRecognize(
                 onCaptured(bitmap)
                 scope.launch {
                     try {
-                        val (text, imageUri, aiImageUri) = finishRecognition(context, container, bitmap, produceOCR, skipCrop)
+                        val (text, imageUri, aiImageUri) = finishRecognition(context, container, bitmap, produceOCR, skipCrop, tableMode)
                         onResult(text, imageUri, aiImageUri)
                     } catch (t: Throwable) {
                         Logger.e("VisionScreen", "Recognition failed", t)

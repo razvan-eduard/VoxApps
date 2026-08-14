@@ -112,7 +112,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                             // the original stub).
                             updateExpenseFromRetry(context.applicationContext, container, parsed, retryOfExpenseId)
                         } else if (parsed != null) {
-                            val newId = createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName)
+                            val newId = createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName, preParse)
                             if (isPendingScanCreate && newId > 0) {
                                 linkPendingScanAttachments(container, newId, pendingFileNames, pendingGroupId)
                             }
@@ -488,7 +488,8 @@ class LlmResultReceiver : BroadcastReceiver() {
         appContext: Context,
         container: ExpensesContainer,
         parsed: ExpenseParseResultParser.Parsed,
-        imageName: String?
+        imageName: String?,
+        preParse: ScanPreParse? = null
     ): Long {
         val settings: ExpensesSettings = container.settingsRepository.getSnapshot()
         val items = parsed.items.map {
@@ -541,7 +542,9 @@ class LlmResultReceiver : BroadcastReceiver() {
             correctionsApplyMode = settings.fieldCorrectionApplyMode,
             // This one helper handles both voice and scan tasks — imageName is only ever non-null for
             // a scan (the receipt photo), never for voice, so it's already the exact signal needed.
-            source = if (imageName != null) ExpenseSource.SCAN else ExpenseSource.VOICE
+            source = if (imageName != null) ExpenseSource.SCAN else ExpenseSource.VOICE,
+            previousBalanceAmount = preParse?.previousBalance,
+            totalToPayAmount = preParse?.totalToPay
         )
         stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
 
@@ -647,10 +650,15 @@ class LlmResultReceiver : BroadcastReceiver() {
         preParse: ScanPreParse?
     ): ExpenseParseResultParser.Parsed {
         if (preParse == null) return this
+        // Deterministically-read items (validated against the printed total at pre-parse time)
+        // replace whatever the model returned — it was told to return none.
+        val preItems = com.voxapps.expenses.domain.llm.TableItemsPreParse.fromJson(preParse.itemsJson)
+            ?.map { ExpenseParseResultParser.ParsedItem(name = it.name, quantity = it.quantity, unitPrice = it.unitPrice) }
         return copy(
             totalAmount = preParse.total ?: totalAmount,
             date = date ?: preParse.date,
-            time = time ?: preParse.time
+            time = time ?: preParse.time,
+            items = preItems ?: items
         )
     }
 

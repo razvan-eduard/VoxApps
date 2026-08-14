@@ -164,6 +164,11 @@ fun ToDoListCard(
     LaunchedEffect(openTaskTrigger) {
         if (openTaskTrigger > 0 && openTaskId >= 0) editingTaskId = openTaskId
     }
+    // Saving/closing the LIST (header ✓, header tap, back) also saves and closes the open item
+    // editor: dropping the id removes the editor from composition, and its dispose-commit runs.
+    LaunchedEffect(isEditing) {
+        if (!isEditing) editingTaskId = null
+    }
     val rotation by animateFloatAsState(if (isEditing) 180f else 0f, animationSpec = tween(450), label = "todoCardFlip")
     val density = LocalDensity.current
     // The exact same contour-vs-fill derivation every pill and node uses (toneBorderColor) — one
@@ -714,8 +719,20 @@ fun TaskEditInlineCard(
                         }
                     }
                 }
-        // Apply is the one bold ✓ in the bottom-right corner.
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        // Delete lives bottom-LEFT, far from apply; the bold ✓ stays bottom-right.
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = {
+                closedExplicitly = true
+                scope.launch { toDoRepository.deleteItem(item) }
+                onClose()
+            }) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = languageManager.getString("delete"),
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+            Spacer(Modifier.weight(1f))
             IconButton(onClick = { closedExplicitly = true; commit(); onClose() }) {
                 Icon(
                     Icons.Filled.Check,
