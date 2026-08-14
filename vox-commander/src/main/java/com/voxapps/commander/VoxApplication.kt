@@ -31,7 +31,20 @@ class VoxApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        
+
+        // Android runs Application.onCreate in EVERY process of the app, and the GPU probe's
+        // isolated :gpuprobe process exists to run four lines of native self-test and die —
+        // observed doing so after fetching six remote schemas, rebuilding every registry, and
+        // loading a gigabyte of LLM it never used, all inside a 5-second lifetime. Worse than
+        // waste: a second process holding a model-sized allocation is itself memory pressure,
+        // the exact condition the main process's engines then get released for. A secondary
+        // process gets a logger and nothing else; everything it genuinely needs (library dir,
+        // model path, engine name) arrives through its binding intent.
+        if (!isMainProcess()) {
+            Logger.initialize(this, "VoxCommander")
+            return
+        }
+
         // Initialize Logger early — same shape as every other Vox app's Application class now.
         val snapshot = container.settingsRepository.getSettingsSnapshot()
         Logger.initialize(this, "VoxCommander")
@@ -325,4 +338,9 @@ class VoxApplication : Application() {
             }
         }
     }
+
+    /** True in the process the app's components run in — Application.getProcessName() names the
+     *  current one, and secondary processes carry a ":suffix" (e.g. ":gpuprobe"). */
+    private fun isMainProcess(): Boolean = getProcessName() == packageName
+
 }

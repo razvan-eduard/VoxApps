@@ -373,13 +373,13 @@ class LlmResultReceiver : BroadcastReceiver() {
                 val rawJson = result.rawJson
                 // requireTotalAmount=false: a photo with no clearly printed total shouldn't discard
                 // genuinely-found line items (or other fields) along with it.
-                val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
+                val rawParsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
                     ExpenseParseResultParser.parse(rawJson, requireTotalAmount = false)
                 } else {
                     Logger.w(TAG, "Line-items rescan failed: ${result.error}")
                     null
                 }
-                if (parsed == null && rawJson != null) {
+                if (rawParsed == null && rawJson != null) {
                     Logger.w(TAG, "Line-items rescan: reply didn't parse as valid JSON: $rawJson")
                 } else if (rawJson != null) {
                     // Full reply, not just the parsed item count — lets a mismatch between what the
@@ -392,6 +392,10 @@ class LlmResultReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        // The deterministic pre-parse reunites with the reply here, off the main
+                        // thread — the suggestion should carry the printed total and date even
+                        // when the model was told not to look for them.
+                        val parsed = rawParsed?.withPreParse(container.scanPreParseRepository.take(requestId))
                         val existing = expenseId?.let { container.expensesRepository.getExpenseById(it) }
                         if (existing == null) {
                             Logger.w(TAG, "Line-items rescan target expense $expenseId no longer exists")

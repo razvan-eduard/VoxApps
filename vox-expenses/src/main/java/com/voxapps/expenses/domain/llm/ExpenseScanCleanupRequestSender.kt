@@ -86,6 +86,7 @@ object ExpenseScanCleanupRequestSender {
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val settings = container.settingsRepository.getSnapshot()
         val preParsed = DateTimeRegexParser.parse(rawText)
+        val preParsedTotal = ReceiptTotalRegexParser.parse(rawText).total
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             rawText,
@@ -93,11 +94,12 @@ object ExpenseScanCleanupRequestSender {
             settings.defaultCurrency,
             settings.language,
             preParsedDate = preParsed.date,
-            preParsedTime = preParsed.time
+            preParsedTime = preParsed.time,
+            preParsedTotal = preParsedTotal
         )
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for line-items rescan (expenseId=$expenseId)")
-        container.pendingLlmRequestQueue.enqueueAndSend(
+        val requestId = container.pendingLlmRequestQueue.enqueueAndSend(
             context = context,
             sourcePackage = context.packageName,
             task = "${LlmTasks.EXPENSE_LINEITEMS_RESCAN}:$expenseId:${sourceGroupId.orEmpty()}",
@@ -105,6 +107,7 @@ object ExpenseScanCleanupRequestSender {
             targetPackage = COMMANDER_PACKAGE,
             attachmentUri = attachmentUri
         )
+        rememberPreParse(container, requestId, preParsed, preParsedTotal)
     }
 
     /**
