@@ -288,5 +288,8 @@
   "weekday_fri": "Fr",
   "weekday_sat": "Sa",
   "weekday_sun": "So",
-  "todo_clear_location": "Ort entfernen"
+  "todo_clear_location": "Ort entfernen",
+  "todo_delete_item_message": "Das Element und seine Anhänge werden aus der Liste entfernt.",
+  "entry_new_event_hint": "Neuer Termin",
+  "entry_new_task_hint": "Neue Aufgabe"
 }

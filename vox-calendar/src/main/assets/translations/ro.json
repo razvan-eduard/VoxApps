@@ -288,5 +288,8 @@
   "weekday_fri": "Vi",
   "weekday_sat": "Sâ",
   "weekday_sun": "Du",
-  "todo_clear_location": "Șterge locația"
+  "todo_clear_location": "Șterge locația",
+  "todo_delete_item_message": "Elementul și atașamentele lui sunt eliminate din listă.",
+  "entry_new_event_hint": "Eveniment nou",
+  "entry_new_task_hint": "Sarcină nouă"
 }

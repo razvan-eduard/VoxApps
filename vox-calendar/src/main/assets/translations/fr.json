@@ -288,5 +288,8 @@
   "weekday_fri": "Ve",
   "weekday_sat": "Sa",
   "weekday_sun": "Di",
-  "todo_clear_location": "Effacer le lieu"
+  "todo_clear_location": "Effacer le lieu",
+  "todo_delete_item_message": "L'élément et ses pièces jointes sont retirés de la liste.",
+  "entry_new_event_hint": "Nouvel événement",
+  "entry_new_task_hint": "Nouvelle tâche"
 }
