@@ -187,6 +187,9 @@ class NotificationExpenseParsePromptBuilderTest {
             preParsedVendor = "LAZAR IONUT PFA"
         )
         assertFalse(prompt.contains(""""vendor": "...""""))
+        // With the vendor certain the title is composed at record creation, never asked for —
+        // a model-invented title names whatever text remained (observed: the card).
+        assertFalse(prompt.contains(""""title": "...""""))
     }
 
     @Test
