@@ -106,7 +106,18 @@ class PaymentNotificationListenerService : NotificationListenerService() {
 
         val extras = sbn.notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        val collapsedText = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        // The expanded body supersedes the collapsed line when it extends it — the standard
+        // relationship between the two — and the ticker rides separately: it is often the ONLY
+        // place some apps put the transaction verb at all (Google Wallet's "View your purchase"),
+        // and it was previously never read.
+        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+        val text = when {
+            bigText.isNullOrBlank() -> collapsedText
+            collapsedText.isNullOrBlank() || bigText.contains(collapsedText) -> bigText
+            else -> "$collapsedText\n$bigText"
+        }
+        val ticker = sbn.notification.tickerText?.toString()?.takeIf { it.isNotBlank() && it != title && it != text }
         if (title.isNullOrBlank() && text.isNullOrBlank()) return
 
         // Deterministic, not a guess: the user explicitly starred this exact package as a bank app.
@@ -130,15 +141,16 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // per-app while the text is per-transaction, and a wallet app relays cards from many banks
         // under one label. The label stays as the fallback for bank apps whose prose never names
         // themselves.
+        val fullText = listOfNotNull(text, ticker).joinToString("\n").ifBlank { null }
         val preParse = com.voxapps.expenses.domain.llm.NotificationPreParse.parse(
-            title, text, com.voxapps.expenses.data.FieldVocabularies.vocabularies(applicationContext)
+            title, fullText, com.voxapps.expenses.data.FieldVocabularies.vocabularies(applicationContext)
         )
         val bankName = preParse.bank ?: knownBankName
         // The template axis: reduce the message to its template's byte-shape and ask the memory
         // whether a human has already said what this exact sentence means. A hit suppresses
         // direction from the model the same way the other resolved fields are suppressed.
         val skeleton = com.voxapps.textmatch.extract.TemplateSkeleton.of(
-            title, text, listOfNotNull(preParse.vendor, preParse.bank)
+            title, fullText, listOfNotNull(preParse.vendor, preParse.bank)
         )
         val templateHash = com.voxapps.textmatch.extract.TemplateSkeleton.hash(skeleton)
         val inheritedDirection = container.templateDirectionMemory.lookup(templateHash)
@@ -149,7 +161,7 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val isLocalEngine = VoxCapabilityClient.isLocalEngine(applicationContext)
         val promptText = NotificationExpenseParsePromptBuilder.build(
             notificationTitle = title,
-            notificationText = text,
+            notificationText = fullText,
             existingCategories = existingCategories,
             defaultCurrency = settings.defaultCurrency,
             languageCode = settings.language,
@@ -176,7 +188,7 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             task = "${LlmTasks.NOTIFICATION_EXPENSE_PARSE}:$encodedKey:$encodedBank",
             promptText = promptText,
             targetPackage = COMMANDER_PACKAGE,
-            data = listOfNotNull(title, text)
+            data = listOfNotNull(title, fullText)
         )
         // Suppressed fields must survive the round trip — absent from the reply by design, they are
         // reunited with it by request id, same as the scan path's date/total.
