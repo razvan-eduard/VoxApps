@@ -166,8 +166,12 @@ fun ToDoListCard(
     }
     // Saving/closing the LIST (header ✓, header tap, back) also saves and closes the open item
     // editor: dropping the id removes the editor from composition, and its dispose-commit runs.
+    // TRANSITION-only — running on first composition (isEditing starts false) would null the id a
+    // widget/grid deep-link just set.
+    var wasEditing by remember(list.id) { mutableStateOf(isEditing) }
     LaunchedEffect(isEditing) {
-        if (!isEditing) editingTaskId = null
+        if (wasEditing && !isEditing) editingTaskId = null
+        wasEditing = isEditing
     }
     val rotation by animateFloatAsState(if (isEditing) 180f else 0f, animationSpec = tween(450), label = "todoCardFlip")
     val density = LocalDensity.current
@@ -506,6 +510,7 @@ fun TaskEditInlineCard(
     // below doesn't run a second time — commit() diffs against a snapshot that may not have
     // round-tripped yet, and a double toggleDone would flip the flag straight back.
     var closedExplicitly by remember(item.id) { mutableStateOf(false) }
+    var showDeleteItemConfirm by remember(item.id) { mutableStateOf(false) }
     // A blank item is one the ghost-add just created for this dialog: land the cursor in the title
     // with the keyboard up, so naming it is typing, not a third tap. An existing item opens without
     // stealing focus — this dialog is also how color/date/done get tweaked.
@@ -591,7 +596,7 @@ fun TaskEditInlineCard(
                         decorationBox = { inner ->
                             if (text.isEmpty()) {
                                 Text(
-                                    languageManager.getString("todo_new_item_hint"),
+                                    languageManager.getString("todo_new_item_hint") + "…",
                                     style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -600,12 +605,6 @@ fun TaskEditInlineCard(
                         },
                         modifier = Modifier.weight(1f).focusRequester(titleFocus)
                     )
-                    // Mandatory-field marker — only while blank, since that's the only state where
-                    // leaving it that way actually does something (the item gets dropped on commit,
-                    // see commit()'s doc comment).
-                    if (text.isEmpty()) {
-                        Text("*", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.error)
-                    }
                     // Cancel is the small ✕ in the card's top-right corner — the only control up
                     // here: the title needs no save affordance of its own, it commits with every
                     // other field (done shows on the node beside the card).
@@ -719,29 +718,56 @@ fun TaskEditInlineCard(
                         }
                     }
                 }
-        // Delete lives bottom-LEFT, far from apply; the bold ✓ stays bottom-right.
+        // Delete lives bottom-LEFT, far from apply; the bold ✓ stays bottom-right. A never-saved
+        // (still nameless) item has nothing to delete — abandoning it drops it on its own.
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = {
-                closedExplicitly = true
-                scope.launch { toDoRepository.deleteItem(item) }
-                onClose()
-            }) {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = languageManager.getString("delete"),
-                    tint = MaterialTheme.colorScheme.error
-                )
+            if (item.text.isNotEmpty()) {
+                IconButton(onClick = { showDeleteItemConfirm = true }) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = languageManager.getString("delete"),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { closedExplicitly = true; commit(); onClose() }) {
+            IconButton(
+                onClick = { closedExplicitly = true; commit(); onClose() },
+                enabled = text.isNotBlank()
+            ) {
                 Icon(
                     Icons.Filled.Check,
                     contentDescription = languageManager.getString("apply"),
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = if (text.isNotBlank()) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    },
                     modifier = Modifier.size(30.dp)
                 )
             }
         }
+    }
+
+    if (showDeleteItemConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteItemConfirm = false },
+            title = { Text(languageManager.getString("todo_delete_item_title")) },
+            text = { Text(languageManager.getString("todo_delete_item_message")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteItemConfirm = false
+                    closedExplicitly = true
+                    scope.launch { toDoRepository.deleteItem(item) }
+                    onClose()
+                }) {
+                    Text(languageManager.getString("delete"), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteItemConfirm = false }) { Text(languageManager.getString("cancel")) }
+            }
+        )
     }
 
     if (showQuickDateEdit) {

@@ -288,5 +288,8 @@
   "weekday_fri": "Fr",
   "weekday_sat": "Sa",
   "weekday_sun": "Su",
-  "todo_clear_location": "Clear location"
+  "todo_clear_location": "Clear location",
+  "todo_delete_item_message": "The item and its attachments are removed from the list.",
+  "entry_new_event_hint": "New Event",
+  "entry_new_task_hint": "New Task"
 }
