@@ -558,14 +558,21 @@ else
         "exclude=$llama_excl_line full-branch=$full_branch_line"
 fi
 
-log_blue "── the llama engine is a hybrid CPU+Vulkan build ──────────"
-# The GPU backend is a single forced flag in the pinned CMakeLists (the shell script is outside
-# the build fingerprint, so a flag living only there would move the bytes without moving the tag).
-if grep -qE '^set\(GGML_VULKAN ON CACHE' vox-commander/src/main/cpp/llama-build/CMakeLists.txt; then
-    ok "llama-build forces GGML_VULKAN ON"
-else
-    bad "llama-build/CMakeLists.txt no longer forces GGML_VULKAN ON — the GPU backend is not compiled in"
-fi
+log_blue "── both engines are hybrid CPU+OpenCL builds ──────────"
+# The GPU backend is forced flags in the pinned CMakeLists files (the shell scripts are outside
+# the build fingerprints, so a flag living only there would move the bytes without moving the
+# tag). OpenCL, never Vulkan: the Adreno Vulkan driver aborts creating compute pipelines at
+# backend registration — before any toggle or probe can intervene — which is why the Vulkan
+# backend was reverted. Vulkan reappearing in either build config is that crash shipping again.
+for cmake in vox-commander/src/main/cpp/llama-build/CMakeLists.txt vox-commander/src/main/cpp/CMakeLists.txt; do
+    if grep -qE '^set\(GGML_OPENCL ON CACHE' "$cmake" \
+        && grep -qE '^set\(GGML_OPENCL_USE_ADRENO_KERNELS ON CACHE' "$cmake" \
+        && ! grep -qE '^set\(GGML_VULKAN ON CACHE' "$cmake"; then
+        ok "$(basename "$(dirname "$cmake")")/CMakeLists.txt forces OpenCL+Adreno, Vulkan stays off"
+    else
+        bad "$cmake does not force GGML_OPENCL(+ADRENO_KERNELS) with Vulkan off — the working GPU backend is not compiled in, or the Adreno-fatal one is back"
+    fi
+done
 
 log_blue "── the WHISPER_VULKAN pseudo-engine stays retired ──────────"
 # GPU is a per-engine boolean now, never a fake processor key. The only survivors are the one-shot
