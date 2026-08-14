@@ -58,6 +58,49 @@ class ToDoRepository(
         listDao.update(list.copy(colorArgb = colorArgb, updatedAt = System.currentTimeMillis()))
     }
 
+    suspend fun updateListRoutineDays(
+        list: ToDoList,
+        daysMask: Int,
+        today: java.time.LocalDate = java.time.LocalDate.now()
+    ) {
+        val clamped = daysMask and WeekdayMask.ALL
+        // A routine switched on mid-day starts with TOMORROW's midnight — stamping today as already
+        // reset keeps the very next wake from wiping checkmarks made earlier the same day.
+        val lastResetDay = if (list.routineDaysMask == 0 && clamped != 0) {
+            today.toEpochDay()
+        } else {
+            list.routineLastResetDay
+        }
+        listDao.update(
+            list.copy(
+                routineDaysMask = clamped,
+                routineLastResetDay = lastResetDay,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    /**
+     * The routine-list midnight reset (see [ToDoList.routineDaysMask]): for every routine list whose
+     * mask contains [today]'s weekday and that hasn't reset today yet, clear every undated item's
+     * done flag. Idempotent per local day via [ToDoList.routineLastResetDay], so the midnight worker
+     * and the on-resume catch-up can both call it freely — whichever runs first does the work.
+     * Returns true when at least one list was reset (callers refresh widgets on that).
+     */
+    suspend fun resetRoutinesForToday(today: java.time.LocalDate = java.time.LocalDate.now()): Boolean {
+        val epochDay = today.toEpochDay()
+        var anyReset = false
+        listDao.getAll().forEach { list ->
+            if (list.routineDaysMask == 0) return@forEach
+            if (!WeekdayMask.contains(list.routineDaysMask, today.dayOfWeek)) return@forEach
+            if (list.routineLastResetDay >= epochDay) return@forEach
+            entryDao.clearCompletedUndatedForList(list.id, System.currentTimeMillis())
+            listDao.update(list.copy(routineLastResetDay = epochDay, updatedAt = System.currentTimeMillis()))
+            anyReset = true
+        }
+        return anyReset
+    }
+
     /** Deletes every item's underlying [CalendarEntry] row via [calendarRepository] (so reminders,
      *  tombstones, and attachments are cleaned up the same way any entry delete is), then the list
      *  itself. */

@@ -140,7 +140,9 @@ class CalendarExportImportHandler(
                         colorArgb = l.optLong("colorArgb"),
                         layerId = importedIdToLocalId[l.optLong("layerId")] ?: defaultLocalLayerId ?: 0,
                         createdAt = l.optLong("createdAt", now),
-                        updatedAt = l.optLong("updatedAt", now)
+                        updatedAt = l.optLong("updatedAt", now),
+                        routineDaysMask = l.optInt("routineDaysMask", 0),
+                        routineLastResetDay = l.optLong("routineLastResetDay", 0)
                     )
                 )
             }
@@ -182,6 +184,7 @@ class CalendarExportImportHandler(
                 } else {
                     null
                 },
+                recurrenceDaysMask = e.optInt("recurrenceDaysMask", 0),
                 layerId = layerId,
                 tags = tags,
                 reminderOffsetsMinutes = reminders,
@@ -294,6 +297,8 @@ private fun ToDoList.toJson(): JSONObject = JSONObject().apply {
     put("layerId", layerId)
     put("createdAt", createdAt)
     put("updatedAt", updatedAt)
+    put("routineDaysMask", routineDaysMask)
+    put("routineLastResetDay", routineLastResetDay)
 }
 
 private fun CalendarEntryWithTags.toJson(
@@ -314,6 +319,7 @@ private fun CalendarEntryWithTags.toJson(
     put("recurrenceFrequency", e.recurrenceFrequency.name)
     put("recurrenceInterval", e.recurrenceInterval)
     put("recurrenceUntilMillis", e.recurrenceUntilMillis)
+    put("recurrenceDaysMask", e.recurrenceDaysMask)
     put("layerId", e.layerId)
     put("isImportant", e.isImportant)
     put("comments", e.comments)

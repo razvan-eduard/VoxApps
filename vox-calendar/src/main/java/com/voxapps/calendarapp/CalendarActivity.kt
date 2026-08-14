@@ -6,7 +6,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import com.voxapps.calendarapp.di.CalendarContainer
+import kotlinx.coroutines.launch
 import com.voxapps.calendarapp.security.BiometricGate
 import com.voxapps.calendarapp.ui.CalendarRoot
 
@@ -77,6 +79,9 @@ class CalendarActivity : FragmentActivity() {
         super.onResume()
         // Re-lock if the session window expired while we were backgrounded (return from Recent Apps).
         container.calendarStateManager.recheckLock()
+        // Doze can slide the midnight worker hours past midnight — catching up here makes "open the
+        // app in the morning" always show today's routines unchecked, whichever wake ran first.
+        lifecycleScope.launch { container.toDoRepository.resetRoutinesForToday() }
     }
 
     private fun promptUnlock() {

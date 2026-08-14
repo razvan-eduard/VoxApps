@@ -241,6 +241,7 @@ class CalendarStateManager(
         recurrenceFrequency: RecurrenceFrequency,
         recurrenceInterval: Int = 1,
         recurrenceUntilMillis: Long?,
+        recurrenceDaysMask: Int = 0,
         layerId: Long,
         tags: List<String>,
         reminderOffsetsMinutes: List<Int> = emptyList(),
@@ -261,6 +262,7 @@ class CalendarStateManager(
                     recurrenceFrequency = recurrenceFrequency,
                     recurrenceInterval = recurrenceInterval,
                     recurrenceUntilMillis = recurrenceUntilMillis,
+                    recurrenceDaysMask = recurrenceDaysMask,
                     layerId = layerId,
                     tags = tags,
                     reminderOffsetsMinutes = reminderOffsetsMinutes

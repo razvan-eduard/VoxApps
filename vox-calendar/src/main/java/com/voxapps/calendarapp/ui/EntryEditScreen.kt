@@ -115,6 +115,7 @@ import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.CalendarLayerKind
 import com.voxapps.calendarapp.data.RecurrenceFrequency
+import com.voxapps.calendarapp.data.WeekdayMask
 import com.voxapps.calendarapp.data.ReminderOffsetsCodec
 import com.voxapps.calendarapp.domain.localization.LanguageManager
 import com.voxapps.calendarapp.domain.reminders.ReminderScheduler
@@ -224,6 +225,7 @@ fun EntryEditScreen(
     var recurrence by remember { mutableStateOf(existing?.entry?.recurrenceFrequency ?: RecurrenceFrequency.NONE) }
     var recurrenceInterval by remember { mutableStateOf(existing?.entry?.recurrenceInterval ?: 1) }
     var recurrenceUntilMillis by remember { mutableStateOf(existing?.entry?.recurrenceUntilMillis) }
+    var recurrenceDaysMask by remember { mutableStateOf(existing?.entry?.recurrenceDaysMask ?: 0) }
     val tags = remember { mutableStateListOf<String>().apply { addAll(existing?.tagNames ?: emptyList()) } }
     var tagInput by remember { mutableStateOf("") }
     var tagMenuExpanded by remember { mutableStateOf(false) }
@@ -295,6 +297,7 @@ fun EntryEditScreen(
                 recurrenceFrequency = entry.recurrenceFrequency,
                 recurrenceInterval = entry.recurrenceInterval,
                 recurrenceUntilMillis = entry.recurrenceUntilMillis,
+                recurrenceDaysMask = entry.recurrenceDaysMask,
                 layerId = entry.layerId,
                 tags = entryTags,
                 reminderOffsetsMinutes = effectiveReminderOffsets,
@@ -348,6 +351,7 @@ fun EntryEditScreen(
             recurrenceFrequency = recurrence,
             recurrenceInterval = recurrenceInterval,
             recurrenceUntilMillis = recurrenceUntilMillis,
+            recurrenceDaysMask = if (recurrence == RecurrenceFrequency.WEEKLY) recurrenceDaysMask else 0,
             layerId = selectedLayerId
         )
         when (val decision = CalendarEntrySanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
@@ -710,6 +714,19 @@ fun EntryEditScreen(
                             }
                             Text(languageManager.getString(recurrenceIntervalUnitKey(recurrence)))
                         }
+                    }
+                    if (recurrence == RecurrenceFrequency.WEEKLY) {
+                        Text(
+                            languageManager.getString("entry_recurrence_days"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        WeekdayPickerRow(
+                            mask = recurrenceDaysMask,
+                            onToggle = { day -> recurrenceDaysMask = WeekdayMask.toggled(recurrenceDaysMask, day) },
+                            labels = { day -> languageManager.getString(weekdayLabelKey(day)) },
+                            enabled = !isReadOnly
+                        )
                     }
                     if (recurrence != RecurrenceFrequency.NONE) {
                         PaperTapField(

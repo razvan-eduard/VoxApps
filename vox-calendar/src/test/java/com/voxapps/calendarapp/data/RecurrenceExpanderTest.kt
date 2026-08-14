@@ -18,7 +18,8 @@ class RecurrenceExpanderTest {
         start: LocalDate,
         frequency: RecurrenceFrequency = RecurrenceFrequency.NONE,
         untilMillis: Long? = null,
-        interval: Int = 1
+        interval: Int = 1,
+        daysMask: Int = 0
     ) = CalendarEntry(
         id = 1,
         uid = "uid",
@@ -29,6 +30,7 @@ class RecurrenceExpanderTest {
         recurrenceFrequency = frequency,
         recurrenceInterval = interval,
         recurrenceUntilMillis = untilMillis,
+        recurrenceDaysMask = daysMask,
         createdAt = 0L,
         updatedAt = 0L
     )
@@ -172,6 +174,109 @@ class RecurrenceExpanderTest {
         assertEquals(
             e.startMillis,
             RecurrenceExpander.nextOccurrenceOnOrAfter(e, millis(LocalDate.of(2026, 1, 1)), zone)?.startMillis
+        )
+    }
+
+    // --- WEEKLY with an explicit weekday set (recurrenceDaysMask, see WeekdayMask) ---
+
+    private fun mask(vararg days: java.time.DayOfWeek): Int =
+        days.fold(0) { acc, d -> acc or WeekdayMask.bit(d) }
+
+    @Test
+    fun `weekly with Mon-Fri mask yields five occurrences per week`() {
+        // 2026-03-02 is a Monday.
+        val e = entry(LocalDate.of(2026, 3, 2), RecurrenceFrequency.WEEKLY, daysMask = mask(
+            java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY,
+            java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY
+        ))
+        val occurrences = RecurrenceExpander.expand(
+            e, millis(LocalDate.of(2026, 3, 2)), millis(LocalDate.of(2026, 3, 8)), zone
+        )
+        assertEquals(5, occurrences.size)
+        assertEquals(millis(LocalDate.of(2026, 3, 2)), occurrences[0].startMillis)
+        assertEquals(millis(LocalDate.of(2026, 3, 6)), occurrences[4].startMillis)
+    }
+
+    @Test
+    fun `masked days earlier in the start week than the start itself never fire`() {
+        // Start Wednesday 2026-03-04 with a Mon+Wed mask: that week's Monday precedes the series.
+        val e = entry(LocalDate.of(2026, 3, 4), RecurrenceFrequency.WEEKLY, daysMask = mask(
+            java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.WEDNESDAY
+        ))
+        val occurrences = RecurrenceExpander.expand(
+            e, millis(LocalDate.of(2026, 3, 1)), millis(LocalDate.of(2026, 3, 14)), zone
+        )
+        assertEquals(
+            listOf(
+                millis(LocalDate.of(2026, 3, 4)),
+                millis(LocalDate.of(2026, 3, 9)),
+                millis(LocalDate.of(2026, 3, 11))
+            ),
+            occurrences.map { it.startMillis }
+        )
+    }
+
+    @Test
+    fun `masked weekly honors the every-N-weeks interval`() {
+        // Monday start, Mon+Fri mask, every 2 weeks: week of Mar 2, then week of Mar 16.
+        val e = entry(
+            LocalDate.of(2026, 3, 2), RecurrenceFrequency.WEEKLY, interval = 2,
+            daysMask = mask(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.FRIDAY)
+        )
+        val occurrences = RecurrenceExpander.expand(
+            e, millis(LocalDate.of(2026, 3, 1)), millis(LocalDate.of(2026, 3, 22)), zone
+        )
+        assertEquals(
+            listOf(
+                millis(LocalDate.of(2026, 3, 2)), millis(LocalDate.of(2026, 3, 6)),
+                millis(LocalDate.of(2026, 3, 16)), millis(LocalDate.of(2026, 3, 20))
+            ),
+            occurrences.map { it.startMillis }
+        )
+    }
+
+    @Test
+    fun `masked weekly stops at the until date mid-week`() {
+        val e = entry(
+            LocalDate.of(2026, 3, 2), RecurrenceFrequency.WEEKLY,
+            untilMillis = millis(LocalDate.of(2026, 3, 10)),
+            daysMask = mask(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.WEDNESDAY)
+        )
+        val occurrences = RecurrenceExpander.expand(
+            e, millis(LocalDate.of(2026, 3, 1)), millis(LocalDate.of(2026, 3, 31)), zone
+        )
+        assertEquals(
+            listOf(
+                millis(LocalDate.of(2026, 3, 2)), millis(LocalDate.of(2026, 3, 4)),
+                millis(LocalDate.of(2026, 3, 9))
+            ),
+            occurrences.map { it.startMillis }
+        )
+    }
+
+    @Test
+    fun `masked weekly viewed in a far-future window skips ahead without losing days`() {
+        val e = entry(LocalDate.of(2020, 1, 6), RecurrenceFrequency.WEEKLY, daysMask = mask(
+            java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.THURSDAY
+        ))
+        val occurrences = RecurrenceExpander.expand(
+            e, millis(LocalDate.of(2026, 3, 2)), millis(LocalDate.of(2026, 3, 8)), zone
+        )
+        assertEquals(
+            listOf(millis(LocalDate.of(2026, 3, 3)), millis(LocalDate.of(2026, 3, 5))),
+            occurrences.map { it.startMillis }
+        )
+    }
+
+    @Test
+    fun `zero mask keeps the original single-weekday weekly behavior`() {
+        val e = entry(LocalDate.of(2026, 3, 2), RecurrenceFrequency.WEEKLY, daysMask = 0)
+        val occurrences = RecurrenceExpander.expand(
+            e, millis(LocalDate.of(2026, 3, 1)), millis(LocalDate.of(2026, 3, 15)), zone
+        )
+        assertEquals(
+            listOf(millis(LocalDate.of(2026, 3, 2)), millis(LocalDate.of(2026, 3, 9))),
+            occurrences.map { it.startMillis }
         )
     }
 }

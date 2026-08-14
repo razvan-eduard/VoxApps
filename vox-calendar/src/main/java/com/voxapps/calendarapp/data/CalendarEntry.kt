@@ -23,7 +23,9 @@ enum class RecurrenceFrequency { NONE, DAILY, WEEKLY, MONTHLY, YEARLY }
  * always has one. [completed] only has meaning for [CalendarEntryType.TASK] and to-do items.
  * [recurrenceInterval] is the step count between occurrences (e.g. 2 + WEEKLY = every 2 weeks); 1 is
  * the original every-single-period behavior and is the default for rows created before this field
- * existed.
+ * existed. [recurrenceDaysMask] (see [WeekdayMask]) narrows a WEEKLY recurrence to an explicit set
+ * of weekdays (e.g. Mon–Fri); 0 keeps the original single-weekday-of-the-start-date behavior and is
+ * ignored for every other frequency.
  *
  * [listId]/[position]/[isImportant]/[comments]/[colorArgb] are the to-do-specific fields (null/default
  * for a plain Event/Task): a row with [listId] != null is a checklist item belonging to that
@@ -55,6 +57,7 @@ data class CalendarEntry(
     val recurrenceFrequency: RecurrenceFrequency = RecurrenceFrequency.NONE,
     val recurrenceInterval: Int = 1,
     val recurrenceUntilMillis: Long? = null,
+    val recurrenceDaysMask: Int = 0,
     @ColumnInfo(name = "layerId") val layerId: Long,
     val isImportant: Boolean = false,
     val comments: String? = null,

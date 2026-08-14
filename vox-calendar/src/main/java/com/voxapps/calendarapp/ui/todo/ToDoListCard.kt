@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EventRepeat
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -70,10 +71,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
+import com.voxapps.calendarapp.data.WeekdayMask
 import com.voxapps.calendarapp.data.ToDoItem
 import com.voxapps.calendarapp.data.ToDoList
 import com.voxapps.calendarapp.data.ToDoRepository
 import com.voxapps.calendarapp.domain.llm.LlmTasks
+import com.voxapps.calendarapp.ui.WeekdayPickerRow
+import com.voxapps.calendarapp.ui.weekdayLabelKey
 import com.voxapps.calendarapp.ui.LocalLanguageManager
 import com.voxapps.design.color.VoxColorPalette
 import com.voxapps.design.color.VoxColorSwatchPicker
@@ -263,6 +267,9 @@ private fun ToDoListEditFace(
     // that updateListColor triggers on every tap — that write recomposes this whole subtree with a
     // fresh `list`, and a `remember` living further down was observed re-collapsing as a result.
     var listColorExpanded by remember(list.id) { mutableStateOf(false) }
+    // Same retracted-until-tapped convention as the color strip: the routine lives behind one
+    // header icon (gray = not a routine), and its day chips only occupy the card while open.
+    var routineExpanded by remember(list.id) { mutableStateOf(false) }
 
     fun commitTitle() {
         val trimmed = title.trim()
@@ -306,6 +313,17 @@ private fun ToDoListEditFace(
                 },
                 modifier = Modifier.weight(1f)
             )
+            IconButton(onClick = { routineExpanded = !routineExpanded }) {
+                Icon(
+                    Icons.Filled.EventRepeat,
+                    contentDescription = languageManager.getString("todo_routine_label"),
+                    tint = if (list.routineDaysMask != 0) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
             IconButton(
                 onClick = {
                     val visionInstalled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE)
@@ -327,6 +345,23 @@ private fun ToDoListEditFace(
                     Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
                 }
             }
+        }
+        if (routineExpanded) {
+            Text(
+                languageManager.getString("todo_routine_hint"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            WeekdayPickerRow(
+                mask = list.routineDaysMask,
+                onToggle = { day ->
+                    scope.launch {
+                        toDoRepository.updateListRoutineDays(list, WeekdayMask.toggled(list.routineDaysMask, day))
+                    }
+                },
+                labels = { day -> languageManager.getString(weekdayLabelKey(day)) },
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
         }
         Row(modifier = Modifier.fillMaxWidth()) {
             ToDoNodeTimelineEditable(

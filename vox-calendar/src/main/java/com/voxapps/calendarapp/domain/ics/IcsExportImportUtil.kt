@@ -5,6 +5,7 @@ import biweekly.ICalendar
 import biweekly.component.VEvent
 import biweekly.component.VTodo
 import biweekly.property.Status
+import biweekly.util.DayOfWeek
 import biweekly.util.Frequency
 import biweekly.util.ICalDate
 import biweekly.util.Recurrence
@@ -14,6 +15,7 @@ import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.CalendarRepository
 import com.voxapps.calendarapp.data.RecurrenceFrequency
+import com.voxapps.calendarapp.data.WeekdayMask
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.Date
@@ -32,6 +34,7 @@ data class ParsedIcsEntry(
     val recurrenceFrequency: RecurrenceFrequency,
     val recurrenceInterval: Int,
     val recurrenceUntilMillis: Long?,
+    val recurrenceDaysMask: Int = 0,
     val layerName: String?,
     val tags: List<String>
 )
@@ -126,6 +129,7 @@ object IcsExportImportUtil {
                         recurrenceFrequency = frequencyOf(event.recurrenceRule?.value),
                         recurrenceInterval = event.recurrenceRule?.value?.interval ?: 1,
                         recurrenceUntilMillis = event.recurrenceRule?.value?.until?.time,
+                        recurrenceDaysMask = daysMaskOf(event.recurrenceRule?.value),
                         layerName = categories.firstOrNull(),
                         tags = categories.drop(1)
                     )
@@ -149,6 +153,7 @@ object IcsExportImportUtil {
                         recurrenceFrequency = frequencyOf(todo.recurrenceRule?.value),
                         recurrenceInterval = todo.recurrenceRule?.value?.interval ?: 1,
                         recurrenceUntilMillis = todo.recurrenceRule?.value?.until?.time,
+                        recurrenceDaysMask = daysMaskOf(todo.recurrenceRule?.value),
                         layerName = categories.firstOrNull(),
                         tags = categories.drop(1)
                     )
@@ -182,6 +187,7 @@ object IcsExportImportUtil {
                 recurrenceFrequency = entry.recurrenceFrequency,
                 recurrenceInterval = entry.recurrenceInterval,
                 recurrenceUntilMillis = entry.recurrenceUntilMillis,
+                recurrenceDaysMask = entry.recurrenceDaysMask,
                 layerId = targetLayerId,
                 tags = entry.tags
             )
@@ -190,8 +196,9 @@ object IcsExportImportUtil {
 
     private fun toIcalDate(millis: Long, allDay: Boolean): ICalDate = ICalDate(Date(millis), !allDay)
 
-    /** Only FREQ, INTERVAL and UNTIL are round-tripped — anything else (BYDAY, COUNT, ...) is dropped
-     *  rather than attempting a full RRULE engine, per the deliberately-minimal recurrence model. */
+    /** FREQ, INTERVAL, UNTIL, and (for WEEKLY) BYDAY are round-tripped — anything else (COUNT,
+     *  BYMONTHDAY, ...) is dropped rather than attempting a full RRULE engine, per the
+     *  deliberately-minimal recurrence model. */
     private fun applyRecurrence(entry: CalendarEntry): Recurrence? {
         val frequency = when (entry.recurrenceFrequency) {
             RecurrenceFrequency.NONE -> return null
@@ -203,7 +210,45 @@ object IcsExportImportUtil {
         val builder = Recurrence.Builder(frequency)
         if (entry.recurrenceInterval > 1) builder.interval(entry.recurrenceInterval)
         entry.recurrenceUntilMillis?.let { builder.until(Date(it)) }
+        if (entry.recurrenceFrequency == RecurrenceFrequency.WEEKLY) {
+            val mask = entry.recurrenceDaysMask and WeekdayMask.ALL
+            java.time.DayOfWeek.entries.forEach { day ->
+                if (WeekdayMask.contains(mask, day)) builder.byDay(icalDayOf(day))
+            }
+        }
         return builder.build()
+    }
+
+    /** BYDAY (WEEKLY only) back into a [WeekdayMask]-encoded set; prefixed BYDAY parts ("2MO", the
+     *  nth-weekday-of-month form) don't fit the weekly model and are skipped. */
+    private fun daysMaskOf(recurrence: Recurrence?): Int {
+        if (recurrence == null || recurrence.frequency != Frequency.WEEKLY) return 0
+        var mask = 0
+        recurrence.byDay.forEach { byDay ->
+            if (byDay.num != null && byDay.num != 0) return@forEach
+            val day = when (byDay.day) {
+                DayOfWeek.MONDAY -> java.time.DayOfWeek.MONDAY
+                DayOfWeek.TUESDAY -> java.time.DayOfWeek.TUESDAY
+                DayOfWeek.WEDNESDAY -> java.time.DayOfWeek.WEDNESDAY
+                DayOfWeek.THURSDAY -> java.time.DayOfWeek.THURSDAY
+                DayOfWeek.FRIDAY -> java.time.DayOfWeek.FRIDAY
+                DayOfWeek.SATURDAY -> java.time.DayOfWeek.SATURDAY
+                DayOfWeek.SUNDAY -> java.time.DayOfWeek.SUNDAY
+                else -> null
+            } ?: return@forEach
+            mask = mask or WeekdayMask.bit(day)
+        }
+        return mask
+    }
+
+    private fun icalDayOf(day: java.time.DayOfWeek): DayOfWeek = when (day) {
+        java.time.DayOfWeek.MONDAY -> DayOfWeek.MONDAY
+        java.time.DayOfWeek.TUESDAY -> DayOfWeek.TUESDAY
+        java.time.DayOfWeek.WEDNESDAY -> DayOfWeek.WEDNESDAY
+        java.time.DayOfWeek.THURSDAY -> DayOfWeek.THURSDAY
+        java.time.DayOfWeek.FRIDAY -> DayOfWeek.FRIDAY
+        java.time.DayOfWeek.SATURDAY -> DayOfWeek.SATURDAY
+        java.time.DayOfWeek.SUNDAY -> DayOfWeek.SUNDAY
     }
 
     private fun frequencyOf(recurrence: Recurrence?): RecurrenceFrequency = when (recurrence?.frequency) {
