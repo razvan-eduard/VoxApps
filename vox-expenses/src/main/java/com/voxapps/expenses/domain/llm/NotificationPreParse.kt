@@ -29,12 +29,7 @@ object NotificationPreParse {
     /** A vendor candidate longer than this many tokens is prose, not a name. */
     private const val MAX_VENDOR_TOKENS = 5
 
-    /** A figure with a currency marker directly beside it, either side, either spelling. */
-    private val markedAmount = Regex(
-        """(?:(?:RON|LEI|EUR|USD|GBP|CHF|[€$£])\s?(\d{1,3}(?:[ .,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?))""" +
-            """|(?:(\d{1,3}(?:[ .,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s?(?:RON|LEI|EUR|USD|GBP|CHF|[€$£]))""",
-        RegexOption.IGNORE_CASE
-    )
+
 
     fun parse(
         title: String?,
@@ -79,35 +74,19 @@ object NotificationPreParse {
             .joinToString(" ")
 
     private fun looksLikeName(field: String): Boolean {
-        val withoutAmounts = markedAmount.replace(field, " ")
+        var withoutAmounts = field
+        com.voxapps.textmatch.extract.CurrencyMarkedAmounts.find(field).forEach {
+            withoutAmounts = withoutAmounts.replace(it.raw, " ")
+        }
         val tokens = withoutAmounts.split(Regex("""\s+""")).filter { it.isNotBlank() }
         return tokens.isNotEmpty() && tokens.size <= MAX_VENDOR_TOKENS
     }
 
     private fun singleMarkedAmount(fields: List<String>): Double? {
-        val values = fields.flatMap { field ->
-            markedAmount.findAll(field).mapNotNull { m ->
-                normalize(m.groupValues[1].ifEmpty { m.groupValues[2] })
-            }.toList()
-        }.distinct()
+        // The finding of marked figures is core machinery; the certainty policy — exactly one
+        // distinct value or nothing — is this parser's own.
+        val values = fields.flatMap { f -> com.voxapps.textmatch.extract.CurrencyMarkedAmounts.find(f) }
+            .map { it.value }.distinct()
         return values.singleOrNull()?.takeIf { it > 0.0 }
-    }
-
-    /** Same locale-free resolution as the amount extractor's: rightmost separator is decimal when
-     *  both appear; a single one is decimal only with one or two digits after it. */
-    private fun normalize(raw: String): Double? {
-        val cleaned = raw.replace(" ", "")
-        val lastDot = cleaned.lastIndexOf('.')
-        val lastComma = cleaned.lastIndexOf(',')
-        val decimalAt = maxOf(lastDot, lastComma)
-        val normalized = when {
-            lastDot >= 0 && lastComma >= 0 ->
-                cleaned.substring(0, decimalAt).replace(Regex("""[.,]"""), "") +
-                    "." + cleaned.substring(decimalAt + 1)
-            decimalAt >= 0 && cleaned.length - decimalAt - 1 in 1..2 ->
-                cleaned.substring(0, decimalAt) + "." + cleaned.substring(decimalAt + 1)
-            else -> cleaned.replace(Regex("""[.,]"""), "")
-        }
-        return normalized.toDoubleOrNull()?.takeIf { it.isFinite() }
     }
 }

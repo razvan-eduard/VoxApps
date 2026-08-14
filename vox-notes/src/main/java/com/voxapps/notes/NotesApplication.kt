@@ -1,10 +1,12 @@
 package com.voxapps.notes
 
 import android.app.Application
+import com.voxapps.ipc.PendingLlmRequestScheduler
+import com.voxapps.ipc.VoxLlmQueueHost
+import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.logging.Logger
 import com.voxapps.notes.di.NotesContainer
 import com.voxapps.notes.domain.llm.CategoryAutoMergeScheduler
-import com.voxapps.notes.domain.llm.PendingLlmRequestScheduler
 import com.voxapps.notes.domain.widget.WidgetMidnightRefreshScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,9 +16,13 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 
-class NotesApplication : Application() {
+class NotesApplication : Application(), VoxLlmQueueHost {
     lateinit var container: NotesContainer
         private set
+
+    override val voxLlmRequestQueue: VoxLlmRequestQueue
+        get() = container.pendingLlmRequestQueue
+
 
     override fun onCreate() {
         super.onCreate()
