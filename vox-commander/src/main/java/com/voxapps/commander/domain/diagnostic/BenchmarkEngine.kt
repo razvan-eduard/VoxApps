@@ -31,7 +31,7 @@ class BenchmarkEngine(
     private val appStateManager: AppStateManager,
     private val modelDownloader: ModelDownloader,
     private val fastMapDao: FastMapDao,
-    private val localLlmInterpreter: LocalLlmInterpreter? = null
+    private val localLlmEngine: com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine? = null
 ) {
     companion object {
         private const val TAG = "BenchmarkEngine"
@@ -147,12 +147,13 @@ class BenchmarkEngine(
         // --- 6. GOOGLE STT (Initialization-only — intent-based, no direct API) ---
         runGoogleBenchmark()
 
-        // --- 7. LOCAL LLM INTENT BENCHMARK (llama.cpp) ---
-        // Reuse the shared LocalLlmInterpreter from AppContainer to avoid a native crash — two
-        // separate Engine instances loading the same model concurrently is the exact hazard
-        // LocalLlmInterpreter's Mutex exists to prevent (see its own doc comment).
+        // --- 7. LOCAL LLM INTENT BENCHMARK ---
+        // Reuse the shared interpreter from AppContainer to avoid a native crash — two separate
+        // engine instances loading the same model concurrently is the exact hazard each
+        // interpreter's Mutex exists to prevent (see their own doc comments). Which interpreter
+        // that is follows the selected engine's backend.
         diagInfo.append("--- LOCAL LLM DIAGNOSTICS ---\n")
-        if (localLlmInterpreter != null) {
+        if (localLlmEngine != null) {
             val activeModelId = snapshot.activeIntentModelId
             // The interpreter resolves its model file with the *active processor's* key, so this
             // only measures anything when that processor is actually a local LLM. With a cloud
@@ -168,7 +169,7 @@ class BenchmarkEngine(
                     .find { it.id == activeModelId }
                 val modelLabel = activeModel?.label ?: activeModelId
                 diagInfo.append("Model: $activeModelId | Label: $modelLabel (active)\n")
-                runLocalLlmBenchmark(modelLabel, localLlmInterpreter, snapshot.llamaGpuIncompatible, diagInfo)
+                runLocalLlmBenchmark(modelLabel, localLlmEngine, snapshot.llamaGpuIncompatible, diagInfo)
             } else if (!processorIsLocalLlm) {
                 diagInfo.append("NLU Model: skipped — active processor '${snapshot.aiProcessor}' is not a local LLM\n")
             } else {
@@ -275,12 +276,22 @@ class BenchmarkEngine(
      * the same multi-GB model. The prompt-eval / decode split — where the backends differ most —
      * is written to the detailed report; the table row carries the total.
      */
+    /**
+     * The CPU/GPU pair and its per-stage token timings come from llama.cpp's own instrumentation,
+     * so an engine on another backend is measured the only way it can be: one CPU row per case,
+     * timed end to end. Reporting a GPU row it has no path for would be an invented measurement.
+     */
     private suspend fun runLocalLlmBenchmark(
         modelLabel: String,
-        interpreter: LocalLlmInterpreter,
+        engine: com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine,
         gpuIncompatible: Boolean,
         diagInfo: StringBuilder
     ) {
+        val interpreter = engine as? LocalLlmInterpreter
+        if (interpreter == null) {
+            runPlainLocalLlmBenchmark(modelLabel, engine, diagInfo)
+            return
+        }
         // The interactive NLU command, then a receipt-scale raw prompt — the heaviest thing the
         // engine actually parses (Vision stitches multi-photo OCR into thousands of tokens), and
         // the case that makes or breaks the 3B on this hardware.
@@ -328,6 +339,44 @@ class BenchmarkEngine(
                         inferenceTimeMs = 0, rtf = 0f, isSuccess = false, error = e.message
                     ))
                 }
+            }
+        }
+    }
+
+    /**
+     * The same two cases against an engine that exposes no per-stage instrumentation: wall-clock
+     * only, CPU only. Success is the same question — did the NLU case produce a valid intent, did
+     * the receipt case produce any text at all.
+     */
+    private suspend fun runPlainLocalLlmBenchmark(
+        modelLabel: String,
+        engine: com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine,
+        diagInfo: StringBuilder
+    ) {
+        val cases = listOf(
+            Triple("NLU", INTENT_TEST_COMMAND, false),
+            Triple("Receipt", syntheticReceiptPrompt(), true)
+        )
+        for ((caseName, prompt, raw) in cases) {
+            try {
+                val started = System.currentTimeMillis()
+                val ok = if (raw) {
+                    !engine.rawPrompt(prompt).isNullOrBlank()
+                } else {
+                    validateIntentPayload(engine.processCommand(prompt)).isSuccess
+                }
+                val elapsed = System.currentTimeMillis() - started
+                diagInfo.append("LLM CPU/$caseName: total=${elapsed}ms\n")
+                appStateManager.updateBenchmarkResult(BenchmarkResult(
+                    engine = "Local LLM (CPU/$caseName)", model = modelLabel,
+                    inferenceTimeMs = elapsed, rtf = 0f,
+                    isSuccess = ok, error = if (ok) null else "invalid/empty output"
+                ))
+            } catch (e: Exception) {
+                appStateManager.updateBenchmarkResult(BenchmarkResult(
+                    engine = "Local LLM (CPU/$caseName)", model = modelLabel,
+                    inferenceTimeMs = 0, rtf = 0f, isSuccess = false, error = e.message
+                ))
             }
         }
     }

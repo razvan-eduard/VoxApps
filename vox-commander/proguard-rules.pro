@@ -30,6 +30,12 @@
 # above, so a renamed LlamaBridgeImpl fails with UnsatisfiedLinkError at first local-LLM use.
 -keep class com.voxapps.llamacpp.** { *; }
 
+# LiteRT-LM: the SDK's own NativeLibraryLoader resolves liblitertlm_jni.so by literal name, and its
+# JNI counterpart looks its Kotlin types up the same way — the same by-name linking as the bridges
+# above, with the same UnsatisfiedLinkError at first use if R8 renames them.
+-keep class com.google.ai.edge.litertlm.** { *; }
+-dontwarn com.google.ai.edge.litertlm.**
+
 # Sherpa-ONNX / ONNX Runtime
 # The onnxruntime-android AAR's actual Java package is ai.onnxruntime.* (com.microsoft.onnxruntime
 # is just the Maven groupId, not a real package here) -- this rule targeted the wrong name entirely,

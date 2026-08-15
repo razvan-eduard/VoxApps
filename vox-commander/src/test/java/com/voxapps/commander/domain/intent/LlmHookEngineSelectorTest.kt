@@ -14,11 +14,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine
 
 class LlmHookEngineSelectorTest {
 
     private lateinit var openAiEngine: AssistantEngine
-    private lateinit var localLlmEngine: AssistantEngine
+    private lateinit var localLlmEngine: LocalLlmEngine
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var selector: LlmHookEngineSelector
 
@@ -27,7 +28,7 @@ class LlmHookEngineSelectorTest {
         openAiEngine = mockk()
         localLlmEngine = mockk()
         settingsRepo = mockk()
-        selector = LlmHookEngineSelector(openAiEngine, localLlmEngine, settingsRepo)
+        selector = LlmHookEngineSelector(openAiEngine, listOf(localLlmEngine), settingsRepo)
     }
 
     private fun settingsWith(processor: String, cloudEnabled: Boolean = true) =
@@ -74,6 +75,7 @@ class LlmHookEngineSelectorTest {
     fun `routes to local LLM when aiProcessor is a JSON-defined llm engine key`() = runTest {
         mockkObject(RemoteModelRegistry)
         every { RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { RemoteModelRegistry.backendOf(any()) } returns null
         every { settingsRepo.getSettingsSnapshot() } returns settingsWith("nlu_llm")
         coEvery { localLlmEngine.rawPrompt("hi") } returns "local answer"
 
@@ -85,14 +87,15 @@ class LlmHookEngineSelectorTest {
 
     @Test
     fun `local LLM unavailable produces a descriptive error`() = runTest {
-        // localLlmEngine here is a bare AssistantEngine mock, not a real LocalLlmInterpreter, so
-        // the selector's cast for lastErrorReason can't find a specific cause — the generic
-        // unavailable fallback is correct here. The specific causes (busy/timeout, model missing,
-        // generation failure) live on LocalLlmInterpreter, exercised by that class's own tests.
+        // An engine that recorded no reason for answering null falls back to the generic
+        // unavailable text. The specific causes (busy/timeout, model missing, generation failure)
+        // are each interpreter's own to record, and are exercised by their own tests.
         mockkObject(RemoteModelRegistry)
         every { RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { RemoteModelRegistry.backendOf(any()) } returns null
         every { settingsRepo.getSettingsSnapshot() } returns settingsWith("nlu_llm")
         coEvery { localLlmEngine.rawPrompt(any()) } returns null
+        every { localLlmEngine.lastErrorReason } returns null
 
         val outcome = selector.run("hi")
 
@@ -107,6 +110,7 @@ class LlmHookEngineSelectorTest {
     fun `unknown or unset processor produces a no-engine error`() = runTest {
         mockkObject(RemoteModelRegistry)
         every { RemoteModelRegistry.isLlmEngine("nothing_configured") } returns false
+        every { RemoteModelRegistry.backendOf(any()) } returns null
         every { settingsRepo.getSettingsSnapshot() } returns settingsWith("nothing_configured")
 
         val outcome = selector.run("hi")

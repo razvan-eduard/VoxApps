@@ -19,7 +19,7 @@ sealed class RawPromptOutcome {
 
 class LlmHookEngineSelector(
     private val openAiEngine: AssistantEngine,
-    private val localLlmEngine: AssistantEngine,
+    private val localLlmEngines: List<com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine>,
     private val settingsRepo: SettingsRepository
 ) {
     /**
@@ -30,7 +30,7 @@ class LlmHookEngineSelector(
      */
     private val resolver = AiEngineResolver(
         openAiEngine = openAiEngine,
-        localLlmEngine = localLlmEngine
+        localLlmEngines = localLlmEngines
     )
 
     suspend fun run(promptText: String, imageUri: String? = null): RawPromptOutcome {
@@ -57,8 +57,11 @@ class LlmHookEngineSelector(
         // Same pattern as the OpenAI arm: the engine records why it answered null, so a busy
         // engine (queued hooks, a slow cold prefill) is reported as busy — a transient the
         // caller's queue retries — instead of being blamed on the model's presence.
+        // The engine that actually served the request is the one that knows why it failed —
+        // asking any other would report a stale reason, or none.
         else -> "Local engine: ${
-            (localLlmEngine as? com.voxapps.commander.domain.intent.interpreter.LocalLlmInterpreter)
+            (resolver.resolve(processor)?.engine
+                as? com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine)
                 ?.lastErrorReason ?: "unavailable (not downloaded or failed to load)"
         }"
     }

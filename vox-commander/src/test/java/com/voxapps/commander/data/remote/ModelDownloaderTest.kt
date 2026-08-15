@@ -269,6 +269,40 @@ class ModelDownloaderTest {
         assertFalse(unused.exists())
     }
 
+    /**
+     * The per-engine selection map is what the picker restores when an engine is switched back, so
+     * a model named there is a standing choice rather than an unused download. Resolving only
+     * against the *active* engine meant that with more than one on-device LLM engine available,
+     * switching engines and running a cleanup deleted a gigabyte-class model the user had chosen.
+     */
+    @Test
+    fun `deleteUnusedModels keeps the model chosen under an inactive engine`() = runBlocking {
+        every { RemoteModelRegistry.getExtension("stt_whisper") } returns ".bin"
+        every { RemoteModelRegistry.getExtension("nlu_llm") } returns ".gguf"
+        every { RemoteModelRegistry.getExtension("nlu_llm_task") } returns ".task"
+        every { RemoteModelRegistry.getEngineTypes() } returns
+            listOf("stt_whisper", "wake_vosk", "nlu_llm", "nlu_llm_task")
+
+        val otherEnginesPick = downloader.resolveLocalFile("qwen2.5-1.5b-q8-ekv4096", "nlu_llm_task")!!
+        otherEnginesPick.writeText("chosen under the engine that is not active")
+        val unused = downloader.resolveLocalFile("tiny", "stt_whisper")!!
+        unused.writeText("unused")
+
+        val settings = TestDataFactory.createAppSettings(
+            aiProcessor = "nlu_llm",
+            activeIntentModelId = "qwen",
+            downloadedModelIds = setOf("tiny", "qwen2.5-1.5b-q8-ekv4096"),
+            engineModelSelections = mapOf("nlu_llm_task" to "qwen2.5-1.5b-q8-ekv4096")
+        )
+        val settingsRepo = mockk<SettingsRepository>(relaxed = true)
+        every { settingsRepo.getSettingsSnapshot() } returns settings
+
+        downloader.deleteUnusedModels(settingsRepo, null, "qwen", null, null)
+
+        assertTrue("the other engine's chosen model was deleted", otherEnginesPick.exists())
+        assertFalse(unused.exists())
+    }
+
     @Test
     fun `deleteUnusedModels cleans up downloads directory`() = runBlocking {
         // In unit tests, DIRECTORY_DOWNLOADS is null so downloadsDir == rootDir == tempDir

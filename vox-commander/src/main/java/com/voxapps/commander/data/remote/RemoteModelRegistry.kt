@@ -50,6 +50,9 @@ data class RemoteEngineConfig(
     val runtime: String? = null,
     /** See [EntryPoint]. Nullable for the same reason, and because virtual engines have no file. */
     val entry: EntryPoint? = null,
+    /** Which on-device implementation serves this engine — see [backendOf]. Only `local_llm`
+     *  engines carry it; everything else leaves it null. */
+    val backend: String? = null,
     /** How long a call to this engine may take, when the engine knows better than the user's
      *  general setting — see [com.voxapps.commander.domain.engine.CloudDeadline]. Null means the
      *  setting decides. */
@@ -376,6 +379,19 @@ object RemoteModelRegistry {
         if (engineKey in Strings.AiProcessors.CLOUD_PROCESSORS) return EngineRuntime.CLOUD
         return null
     }
+
+    /**
+     * Which on-device implementation runs this engine's models — the value an interpreter matches
+     * with its own `backendId`.
+     *
+     * Only meaningful for `local_llm` engines, and only because there is more than one of them: the
+     * model *format* is the engine's business (its extension), while the *runtime that reads it* is
+     * this. Null for every other engine, and for a schema written before the field existed — which
+     * a user pointing `modelRepoBaseUrl` at their own repo can legitimately still be serving, so
+     * the caller decides what an unlabelled engine means rather than being told it is unknown.
+     */
+    fun backendOf(engineKey: String): String? =
+        cachedSchema?.engines?.get(engineKey)?.backend?.takeIf { it.isNotBlank() }
 
     /**
      * The call budget this engine declares for itself, or null to let the user's setting decide.

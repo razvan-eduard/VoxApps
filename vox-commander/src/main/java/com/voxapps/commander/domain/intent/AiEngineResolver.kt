@@ -3,6 +3,7 @@ package com.voxapps.commander.domain.intent
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.engine.EngineSelection
 import com.voxapps.commander.domain.intent.interpreter.AssistantEngine
+import com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine
 import com.voxapps.commander.domain.intent.interpreter.SelectableModelEngine
 import com.voxapps.commander.domain.intent.model.NluIntent
 import com.voxapps.commander.utils.Strings
@@ -22,7 +23,9 @@ import com.voxapps.commander.utils.Strings
  */
 class AiEngineResolver(
     private val openAiEngine: AssistantEngine,
-    private val localLlmEngine: AssistantEngine
+    /** Every on-device LLM implementation, matched to a key by its declared backend. Ordered: the
+     *  first is what an engine whose schema names no backend resolves to. */
+    private val localLlmEngines: List<LocalLlmEngine>
 ) {
     /** @property requiresCloud whether this engine is gated on `cloudIntelligenceEnabled`. */
     data class Choice(val engine: AssistantEngine, val requiresCloud: Boolean)
@@ -39,7 +42,16 @@ class AiEngineResolver(
             Choice(openAiEngine, requiresCloud = RemoteModelRegistry.runtimeOf(processor) == com.voxapps.commander.data.remote.EngineRuntime.CLOUD)
         // Everything else is a model id from models.json rather than one of the built-in keys above.
         else -> if (RemoteModelRegistry.isLlmEngine(processor)) {
-            Choice(localLlmEngine, requiresCloud = RemoteModelRegistry.runtimeOf(processor) == com.voxapps.commander.data.remote.EngineRuntime.CLOUD)
+            // Which on-device implementation runs it is the schema's `backend` field, for the same
+            // reason requiresCloud is: the engines are data. An engine that names no backend —
+            // every one of them, in a schema written before there was more than one implementation
+            // — resolves to the first, which is what it resolved to when there was only one.
+            val backend = RemoteModelRegistry.backendOf(processor)
+            val engine = backend?.let { named -> localLlmEngines.firstOrNull { it.backendId == named } }
+                ?: localLlmEngines.firstOrNull()
+            engine?.let {
+                Choice(it, requiresCloud = RemoteModelRegistry.runtimeOf(processor) == com.voxapps.commander.data.remote.EngineRuntime.CLOUD)
+            }
         } else {
             null
         }
@@ -76,9 +88,9 @@ class AiEngineResolver(
      * A resolved level of the cascade: which engine, running which model.
      *
      * Two calls are the same work when both fields match — same instance *and* same selection. That
-     * is what a level has to compare against the one before it, not engine identity alone: every
-     * on-device LLM key resolves to the same interpreter, so identity alone cannot tell "the same
-     * model again, which just failed" from "a different model, which is the whole point".
+     * is what a level has to compare against the one before it, not engine identity alone: on-device
+     * LLM keys sharing a backend resolve to the same interpreter, so identity alone cannot tell "the
+     * same model again, which just failed" from "a different model, which is the whole point".
      */
     data class Call(val engine: AssistantEngine, val selection: EngineSelection?) {
         suspend fun invoke(spokenText: String, modelFilterLang: String?): NluIntent? =

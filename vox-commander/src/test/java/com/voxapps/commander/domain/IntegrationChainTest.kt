@@ -18,6 +18,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
+import com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine
 
 /**
  * TRUE Integration Test: Verifies the interaction between REAL components.
@@ -31,7 +32,7 @@ class IntegrationChainTest {
 
     private lateinit var realL1Engine: FastMapEngine
     private lateinit var l2CloudEngine: AssistantEngine
-    private lateinit var l3LocalEngine: AssistantEngine
+    private lateinit var l3LocalEngine: LocalLlmEngine
 
     private lateinit var decisionMap: IntentDecisionMap
 
@@ -53,7 +54,7 @@ class IntegrationChainTest {
         decisionMap = IntentDecisionMap(
             realL1Engine,
             l2CloudEngine,
-            l3LocalEngine,
+            listOf(l3LocalEngine),
             settingsRepo
         )
 

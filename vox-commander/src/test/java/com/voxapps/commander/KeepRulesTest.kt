@@ -23,6 +23,7 @@ class KeepRulesTest {
         val required = listOf(
             "com.whispercpp.whisper.WhisperLib",
             "com.voxapps.llamacpp",
+            "com.google.ai.edge.litertlm",
             "ai.onnxruntime",
             "com.k2fsa.sherpa.onnx"
         )

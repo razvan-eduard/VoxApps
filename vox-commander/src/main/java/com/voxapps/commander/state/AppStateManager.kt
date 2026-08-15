@@ -588,6 +588,13 @@ class AppStateManager private constructor(
         // to, matching neither the schema's keys nor the stored processor values nor anything else.
         // These are engine keys, so the screen can name each group from the registry.
         val localLlmEngine = "nlu_llm" // schema key; served by LocalLlmInterpreter
+        // The LiteRT engines share one library, so the row is filed under the first of them —
+        // naming both would report the same file twice.
+        val liteRtEngine = com.voxapps.commander.data.remote.RemoteModelRegistry.getLlmEngineKeys()
+            .firstOrNull {
+                com.voxapps.commander.data.remote.RemoteModelRegistry.backendOf(it) ==
+                    com.voxapps.commander.domain.intent.interpreter.LiteRtLlmInterpreter.BACKEND_ID
+            }
         val soFiles = listOf(
             // ggml has no row of its own: it is linked into libwhisper.so and libllama.so rather
             // than shipped beside them, so a row per ggml file would report libraries that are
@@ -601,6 +608,11 @@ class AppStateManager private constructor(
             Triple("libvosk.so", "Vosk Voice Engine", VoskSttEngine.ENGINE_KEY),
             Triple("libllama.so", "llama.cpp LLM Engine", localLlmEngine),
             Triple(VULKAN_CAPABILITY_LLAMA, "LLM GPU Acceleration", localLlmEngine)
+        ) + listOfNotNull(
+            // Only when the schema actually declares a LiteRT engine: the library ships inside the
+            // APK, so a row for it on a build whose schema has no such engine would report a file
+            // nothing can use.
+            liteRtEngine?.let { Triple("liblitertlm_jni.so", "LiteRT-LM LLM Engine", it) }
         )
 
         val statusList = soFiles.map { (name, desc, category) ->

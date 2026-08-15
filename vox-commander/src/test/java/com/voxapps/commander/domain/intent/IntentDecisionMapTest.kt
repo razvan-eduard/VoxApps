@@ -19,13 +19,14 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
+import com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class IntentDecisionMapTest {
 
     private lateinit var l1Engine: AssistantEngine
     private lateinit var l2CloudEngine: AssistantEngine
-    private lateinit var l3LocalEngine: SelectableModelEngine
+    private lateinit var l3LocalEngine: LocalLlmEngine
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var decisionMap: IntentDecisionMap
 
@@ -45,7 +46,7 @@ class IntentDecisionMapTest {
         decisionMap = IntentDecisionMap(
             l1Engine,
             l2CloudEngine,
-            l3LocalEngine,
+            listOf(l3LocalEngine),
             settingsRepo
         )
 
@@ -113,6 +114,7 @@ class IntentDecisionMapTest {
         // Mock RemoteModelRegistry.isLlmEngine
         mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
         every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.backendOf(any()) } returns null
 
         val result = decisionMap.processCommand(command, null)
 
@@ -151,6 +153,7 @@ class IntentDecisionMapTest {
 
         mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
         every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.backendOf(any()) } returns null
 
         val result = decisionMap.processCommand(command, null)
 
@@ -196,6 +199,7 @@ class IntentDecisionMapTest {
 
         mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
         every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.backendOf(any()) } returns null
 
         val result = decisionMap.processCommand(command, null)
 
@@ -232,6 +236,7 @@ class IntentDecisionMapTest {
 
         mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
         every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.backendOf(any()) } returns null
 
         val result = decisionMap.processCommand(command, null)
 
@@ -255,6 +260,7 @@ class IntentDecisionMapTest {
 
         mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
         every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.backendOf(any()) } returns null
 
         every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
             cloudIntelligenceEnabled = true,
@@ -290,6 +296,7 @@ class IntentDecisionMapTest {
 
         mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
         every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.backendOf(any()) } returns null
 
         every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
             aiProcessor = "nlu_llm",
@@ -319,6 +326,7 @@ class IntentDecisionMapTest {
 
         mockkObject(com.voxapps.commander.data.remote.RemoteModelRegistry)
         every { com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine("nlu_llm") } returns true
+        every { com.voxapps.commander.data.remote.RemoteModelRegistry.backendOf(any()) } returns null
 
         every { settingsRepo.getSettingsSnapshot() } returns TestDataFactory.createAppSettings(
             aiProcessor = Strings.AiProcessors.OPENAI,

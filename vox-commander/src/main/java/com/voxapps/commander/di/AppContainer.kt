@@ -60,13 +60,49 @@ class AppContainer(context: Context) {
     // --- INTENT ENGINES ---
     private val l1Engine = FastMapEngine(fastMapDao)
     private val l2Engine = OpenAiInterpreter(appContext, settingsRepository, fastMapDao)
-    val localLlmInterpreter = LocalLlmInterpreter(appContext, settingsRepository, modelDownloader, fastMapDao)
-    val masterIntentEngine = IntentDecisionMap(l1Engine, l2Engine, localLlmInterpreter, settingsRepository)
+    val localLlmInterpreter = LocalLlmInterpreter(
+        appContext,
+        settingsRepository,
+        modelDownloader,
+        fastMapDao,
+        peers = { localLlmEngines }
+    )
+    val liteRtInterpreter = com.voxapps.commander.domain.intent.interpreter.LiteRtLlmInterpreter(
+        appContext,
+        settingsRepository,
+        modelDownloader,
+        fastMapDao,
+        peers = { localLlmEngines }
+    )
+
+    /**
+     * Every on-device LLM implementation, in resolution order — an engine whose schema entry names
+     * no backend gets the first, which is the one it got when there was only one. Each is told about
+     * the others so the one about to load a model can ask them to let theirs go first: two
+     * gigabyte-class models resident at once is what the eviction exists to prevent.
+     */
+    val localLlmEngines: List<com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine> by lazy {
+        listOf(localLlmInterpreter, liteRtInterpreter)
+    }
+
+    val masterIntentEngine = IntentDecisionMap(l1Engine, l2Engine, localLlmEngines, settingsRepository)
     val llmHookEngineSelector = com.voxapps.commander.domain.intent.LlmHookEngineSelector(
         openAiEngine = l2Engine,
-        localLlmEngine = localLlmInterpreter,
+        localLlmEngines = localLlmEngines,
         settingsRepo = settingsRepository
     )
+
+    /**
+     * The on-device engine the current selection routes to, or null when the selection is not an
+     * on-device LLM at all. One place to ask, so the warm-up, the benchmark and the diagnostics rows
+     * cannot disagree about which engine "the local LLM" means.
+     */
+    fun selectedLocalLlmEngine(): com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine? {
+        val processor = settingsRepository.getSettingsSnapshot().aiProcessor
+        if (!com.voxapps.commander.data.remote.RemoteModelRegistry.isLlmEngine(processor)) return null
+        val backend = com.voxapps.commander.data.remote.RemoteModelRegistry.backendOf(processor)
+        return localLlmEngines.firstOrNull { it.backendId == backend } ?: localLlmEngines.firstOrNull()
+    }
     val intentRouter = IntentRouter(appContext, settingsRepository)
 
     // --- VIEW MODELS ---
@@ -93,7 +129,6 @@ class AppContainer(context: Context) {
         kotlinx.coroutines.runBlocking {
             settingsRepositoryImpl.migrateFromSharedPreferencesIfNeeded()
             settingsRepositoryImpl.migrateGoogleLlmRemoval()
-            settingsRepositoryImpl.migrateLiteRtRemoval()
             settingsRepositoryImpl.migrateWhisperVulkanRetirement()
             // Try loading from cache (fast path). If cache empty, splash screen will scan.
             // One read, reused below — this used to call getSettingsSnapshot() twice in a row, and

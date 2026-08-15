@@ -146,8 +146,11 @@ class LocalLlmInterpreter(
     private val modelDownloader: ModelDownloader,
     private val fastMapDao: FastMapDao,
     private val bridge: LlamaBridge = LlamaBridgeImpl,
-    private val libManager: LlamaEngineManager = LlamaEngineManager(context)
-) : SelectableModelEngine {
+    private val libManager: LlamaEngineManager = LlamaEngineManager(context),
+    /** The other on-device LLM engines — asked to release their models before this one loads, so
+     *  two gigabyte-class models are never resident at once. A peer serving a request declines. */
+    private val peers: () -> List<LocalLlmEngine> = { emptyList() }
+) : LocalLlmEngine {
 
     private val TAG = Strings.Tags.LOCAL_LLM_INTERPRETER
     private var handle: Long = 0
@@ -172,8 +175,10 @@ class LocalLlmInterpreter(
     /** Why the most recent [rawPrompt] returned null — read by the LLM-hook error path the same
      *  way OpenAiInterpreter.lastErrorReason is, so a reply can say what actually went wrong
      *  instead of blaming the model's presence for every failure shape. */
-    @Volatile var lastErrorReason: String? = null
+    @Volatile override var lastErrorReason: String? = null
         private set
+
+    override val backendId: String = BACKEND_ID
 
     /** Serializes every call that touches [handle] — this class is a single process-wide singleton
      *  (see AppContainer), and [setupLlm]'s `if (handle != 0L) return` is a check-then-act with no
@@ -274,6 +279,11 @@ class LocalLlmInterpreter(
             lastGpuSkipReason = null
         }
 
+        // Only the engine about to hold a model in RAM asks the others to let theirs go, and only
+        // on the path that actually loads one — a warm engine returned above without disturbing
+        // anyone. A peer serving a request refuses, so nothing is pulled mid-call.
+        peers().forEach { if (it !== this) it.releaseForMemoryPressure() }
+
         Logger.log("Loading LLM model: ${modelFile.absolutePath} (gpu=$useGpu)", TAG)
         val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
         // The cookie covers the *load*, not only inference: allocating a multi-gigabyte model is
@@ -330,7 +340,7 @@ class LocalLlmInterpreter(
      * prefill forever half-done and wiped: every command restarted it from token zero inside a
      * window it could never fit.
      */
-    suspend fun preload(modelFilterLang: String? = null): Boolean =
+    override suspend fun preload(modelFilterLang: String?): Boolean =
         withContext(Dispatchers.IO) {
             val selection = activeSelection() ?: return@withContext false
             mutex.withLock {
@@ -640,5 +650,10 @@ class LocalLlmInterpreter(
         handle = 0
         loadedModelId = null
         loadedEngineKey = null
+    }
+
+    companion object {
+        /** The `backend` value in models.json that routes an engine key here. */
+        const val BACKEND_ID = "llamacpp"
     }
 }
