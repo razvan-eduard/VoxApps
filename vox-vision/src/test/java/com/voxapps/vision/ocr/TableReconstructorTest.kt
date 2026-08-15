@@ -73,6 +73,42 @@ class TableReconstructorTest {
     }
 
     @Test
+    fun `a tall wrapped description box never swallows its neighbor rows`() {
+        // A wrapped description arrives from the detector as ONE tall box spanning three printed
+        // rows; the numbers of three separate items sit beside it. v2's unclamped overlap anchor
+        // glued all of it into a single row — the exact "only one row was created" regression.
+        nextY = 0f
+        val cells = mutableListOf<RowClusterer.Cell>()
+        cells += row(0f to "FACTURA", 200f to "Serie:", 260f to "FPHB")
+        cells += RowClusterer.Cell("Tarif colectare cu descriere foarte lunga pe trei randuri", 0f, 20f, 62f, 300f)
+        cells += row(400f to "2", 470f to "2.35", 540f to "4.70", 610f to "0.99")   // y 14->28 band... uses nextY
+        cells += row(400f to "2", 470f to "1.62", 540f to "3.24", 610f to "0.68")
+        cells += row(400f to "2", 470f to "1.61", 540f to "3.22", 610f to "0.68")
+        cells += row(0f to "Total", 60f to "Factura", 200f to "22.21")
+        val text = TableReconstructor.toText(cells)!!
+        val dataLines = text.lines().filter { it.contains(" | ") }
+        org.junit.Assert.assertEquals(3, dataLines.size)
+    }
+
+    @Test
+    fun `plain rows text keeps dense short rows on separate lines`() {
+        val text = TableReconstructor.plainRowsText(invoiceCells())!!
+        val lines = text.lines()
+        // The five dense rows that RowClusterer's expanding growth chain-merges must each hold
+        // their own line, description and numbers together.
+        assertTrue(lines.any { it.startsWith("Tarif depozitare reziduale") && it.endsWith("2 0.12 0.24 0.05") })
+        assertTrue(lines.any { it.startsWith("Tarif TMB biodeseuri") && it.endsWith("2 0.24 0.48 0.10") })
+        assertEquals(5, lines.count { it.startsWith("Tarif depozitare") || it.startsWith("Tarif TMB") })
+    }
+
+    @Test
+    fun `plain rows text declines sparse documents`() {
+        nextY = 0f
+        val cells = row(0f to "doar", 60f to "un", 120f to "rand")
+        assertNull(TableReconstructor.plainRowsText(cells))
+    }
+
+    @Test
     fun `a document without repeating numeric columns is not a table`() {
         nextY = 0f
         val cells = buildList {
