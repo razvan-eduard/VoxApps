@@ -46,6 +46,10 @@ class LocalLlmInterpreterTest {
         val loadCalls = Collections.synchronizedList(mutableListOf<String>())
         val completeCalls = Collections.synchronizedList(mutableListOf<Triple<String, String, String>>())
         val completeSlots = Collections.synchronizedList(mutableListOf<Int>())
+        val completeMaxTokens = Collections.synchronizedList(mutableListOf<Int>())
+        /** Errors thrown by upcoming [complete] calls, one per call, before any recording of a
+         *  response — mimics the native fit check, which rejects before generating. */
+        val completeErrors = ArrayDeque<RuntimeException>()
         var freeCount = 0
         var response: String? =
             """{"action":"play","domain":"audio","logical_subject":"Scorpions","confidence":0.9}"""
@@ -65,6 +69,8 @@ class LocalLlmInterpreterTest {
         ): String? {
             completeCalls.add(Triple(systemPrompt, userText, grammarGbnf))
             completeSlots.add(slot)
+            completeMaxTokens.add(maxTokens)
+            completeErrors.removeFirstOrNull()?.let { throw it }
             return response
         }
         override fun cancel(handle: Long) {}
@@ -282,6 +288,37 @@ class LocalLlmInterpreterTest {
         val (sys, _, grammar) = bridge.completeCalls[0]
         assertEquals("", sys)
         assertEquals("", grammar)
+    }
+
+    @Test
+    fun `a short raw prompt reserves the full output ceiling`() = runTest {
+        bridge.response = "free text answer"
+        interpreter().rawPrompt("summarize this", null)
+
+        assertEquals(2048, bridge.completeMaxTokens[0])
+    }
+
+    @Test
+    fun `a raw prompt the fit check rejects retries with the measured remainder`() = runTest {
+        bridge.completeErrors.add(
+            RuntimeException("prompt does not fit the context (3000 tokens, capacity 4096, reserving 2048 for the reply)")
+        )
+        bridge.response = "free text answer"
+
+        assertEquals("free text answer", interpreter().rawPrompt("summarize this", null))
+        // 4096 capacity − 3000 measured prompt tokens − 16 margin.
+        assertEquals(listOf(2048, 1080), bridge.completeMaxTokens.toList())
+    }
+
+    @Test
+    fun `a prompt that leaves no useful output room fails without a retry`() = runTest {
+        bridge.completeErrors.add(
+            RuntimeException("prompt does not fit the context (4000 tokens, capacity 4096, reserving 2048 for the reply)")
+        )
+        bridge.response = "free text answer"
+
+        assertNull(interpreter().rawPrompt("summarize this", null))
+        assertEquals(listOf(2048), bridge.completeMaxTokens.toList())
     }
 
     @Test
