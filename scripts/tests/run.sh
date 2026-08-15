@@ -536,7 +536,7 @@ PY
 )
 MODEL_TOTAL=$(printf '%s\n' "$MODEL_HASH_REPORT" | sed -n 1p)
 MODEL_MISSING=$(printf '%s\n' "$MODEL_HASH_REPORT" | sed -n 2p)
-if [ -z "$MODEL_MISSING" ] && [ "${MODEL_TOTAL:-0}" -eq 105 ]; then
+if [ -z "$MODEL_MISSING" ] && [ "${MODEL_TOTAL:-0}" -eq 109 ]; then
     ok "all $MODEL_TOTAL downloadable models declare a sha256"
 else
     bad "downloadable models without a sha256 (of ${MODEL_TOTAL:-?}) — their downloads are unverified" \

@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "serial": 1786657364,
+  "serial": 1786817637,
   "files": {
     "commander/api_integrations.json": "955ec8530b4f286e500d741400dacbc51995fcacf0087ddad5d4c58ec4b8267b",
     "commander/intents.json": "1fb99faeac56fd9c21741ead897193ef3d596c41d007a424fcc7edf0f3cbe45b",
     "commander/media_services.json": "e679d686a11f8c74efb016bc55362395115777d1e1358aec6471b07f3ac62933",
-    "commander/models.json": "236c51fe0b67c5748d7f3740a3df04d152e366ae24fb613595c55a2fb1fe8654",
+    "commander/models.json": "b0ea8378eaf14c3a2fc4a6ad6c8e39ec671612521f2d4f699bd81dbf804ea73f",
     "commander/normalization.json": "c29da3d74023720fc38c1432c2d542e9a6bbaabd5979f901ad6c62f48131b1a0",
     "commander/search_definitions.json": "a04635b012a797fc078768a982a39df705779d71001519589675ace88e7ced8c",
-    "commander/virtual_models.json": "afb676fd6a3fd339acef1807c0bcf604b66bb9b6f302200aef5b45c980d18839",
+    "commander/virtual_models.json": "538cebf4f54148b44ba6a6f8d99e1fba99ff59be7463f622219486aeb3b60ee4",
     "expenses/external_services.json": "424dfcfb528a028fd51aea7517f08c371b285ad5c1796da262c84689b298d2ff",
     "expenses/field_vocabularies.json": "a4494c04141eb9254fc888a3f1cc15629a6b85e88c45bc89a8c9fd7f57cc2f22"
   }

@@ -1,5 +1,5 @@
 {
-  "schema_version": 14,
+  "schema_version": 15,
   "engines": {
     "GOOGLE": {
       "engine_label": "Google Speech Recognition",
@@ -50,7 +50,8 @@
       "runtime": "cloud",
       "capabilities": [
         "requires_api_key",
-        "multimodal"
+        "multimodal",
+        "long_prompt"
       ],
       "type": [
         "llm"

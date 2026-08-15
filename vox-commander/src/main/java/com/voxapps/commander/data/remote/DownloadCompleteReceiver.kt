@@ -56,17 +56,10 @@ class DownloadCompleteReceiver : BroadcastReceiver() {
         }
 
         if (matchedEngineKey == null) {
-            // A model format no schema engine claims anymore is most likely a download that was
-            // in flight across the update that retired its engine (.task/.litertlm) — a
-            // gigabyte-class file nothing will ever load, landing after the one-shot migration
-            // already swept. Deleted rather than orphaned; anything else unclaimed is left alone.
-            if (fileName.endsWith(".task", ignoreCase = true) ||
-                fileName.endsWith(".litertlm", ignoreCase = true)
-            ) {
-                Logger.log("'$fileName' belongs to a retired engine — deleting the orphan", TAG)
-                File(filePath).delete()
-                return
-            }
+            // Left alone rather than deleted. A format no engine claims may simply mean the schema
+            // in hand is older than the download that was requested against a newer one — a fetch
+            // this app started and a stale cached schema cannot recognise — and a gigabyte-class
+            // file is not worth destroying on that guess.
             Logger.log("Could not match file '$fileName' to any engine, ignoring", TAG)
             return
         }
