@@ -26,7 +26,6 @@ cd "$VOX_ROOT" || exit 1
 REPORT=false
 [ "${1:-}" = "--report" ] && REPORT=true
 
-SUBMODULE="vox-commander/src/main/cpp/whisper.cpp"
 LIBS=("libomp.so" "libwhisper.so")
 
 # Overridable so the suite can prove this gate is able to fail: a gate that has only ever passed
