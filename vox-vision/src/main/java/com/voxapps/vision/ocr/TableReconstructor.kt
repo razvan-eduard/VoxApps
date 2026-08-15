@@ -30,6 +30,24 @@ object TableReconstructor {
     /** A money/quantity-shaped token: digits with optional thousands/decimal separators. */
     private val NUMERIC = Regex("""^-?\d{1,4}(?:[.,]\d{3})*(?:[.,]\d{1,2})?$""")
 
+    /**
+     * The three regions of a reconstructed document, named in the output.
+     *
+     * The split itself is not new — rows above the first data row and below the last one have always
+     * been separated from the table body — but it was thrown away at emission, leaving a consumer to
+     * re-derive from text what geometry already knew. A supplier address printed above a table and a
+     * product line inside one are indistinguishable once flattened, which is exactly the confusion
+     * that put "Bucuresti" in an item list.
+     *
+     * Mirrored literally by consumers rather than shared through a module, the same convention as
+     * [OcrEngine.TABLE_SECTION_MARKER] and the stitch seam. Markers can appear more than once in a
+     * single text: a stitched capture recognises each shot separately and concatenates the results,
+     * so a reader must handle repeats rather than cutting at the first one.
+     */
+    const val HEADER_SECTION_MARKER = "--- [header] ---"
+    const val ITEMS_SECTION_MARKER = "--- [items] ---"
+    const val FOOTER_SECTION_MARKER = "--- [footer] ---"
+
     private const val ROW_ANCHOR_OVERLAP = 0.45f
     private const val BAND_GAP_FACTOR = 2.0f
     private const val MIN_BAND_MEMBERS = 3
@@ -129,7 +147,13 @@ object TableReconstructor {
             row.cells.sortedBy { it.xLeft }.joinToString(" ") { it.text }
 
         val out = StringBuilder()
+        // The three regions are named, not merely ordered. Which of them a line came from is the
+        // difference between an item and a company address that happens to sit near numbers — and
+        // it is known here, from geometry, while a reader downstream can only guess at it. Naming
+        // costs three lines and lets a parser (or a model) be told where to look and where not to.
+        out.appendLine(HEADER_SECTION_MARKER)
         above.forEach { out.appendLine(plainLine(it)) }
+        out.appendLine(ITEMS_SECTION_MARKER)
         for ((anchor, group) in logical) {
             val groupCells = group.sortedBy { it.anchorY }.flatMap { it.cells.sortedBy { c -> c.xLeft } }
             val description = groupCells
@@ -144,6 +168,7 @@ object TableReconstructor {
             }
             out.appendLine((listOf(description) + columns).joinToString(" | "))
         }
+        out.appendLine(FOOTER_SECTION_MARKER)
         below.forEach { out.appendLine(plainLine(it)) }
         return out.toString().trimEnd()
     }
