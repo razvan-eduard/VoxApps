@@ -146,14 +146,20 @@ fun CalendarRoot(
                         val target = editTarget
                         val defaultLayer = state.layers.firstOrNull { it.isDefault } ?: state.layers.firstOrNull()
                         when {
-                            target != null && defaultLayer != null -> EntryEditScreen(
-                                existing = (target as? EditTarget.Existing)?.entry,
-                                defaultLayer = defaultLayer,
-                                layers = state.layers,
-                                stateManager = container.calendarStateManager,
-                                availableTags = state.availableTags,
-                                onDone = { editTarget = null }
-                            )
+                            // key(): same cross-write guard as ExpensesRoot — a widget deep-link
+                            // swapping the target while an editor is open must build a FRESH editor
+                            // for the tapped entry, never recompose the old one's field states onto
+                            // a new record id.
+                            target != null && defaultLayer != null -> androidx.compose.runtime.key((target as? EditTarget.Existing)?.entry?.entry?.id ?: -1L) {
+                                EntryEditScreen(
+                                    existing = (target as? EditTarget.Existing)?.entry,
+                                    defaultLayer = defaultLayer,
+                                    layers = state.layers,
+                                    stateManager = container.calendarStateManager,
+                                    availableTags = state.availableTags,
+                                    onDone = { editTarget = null }
+                                )
+                            }
                             showSettings -> SettingsScreen(
                                 stateManager = container.calendarStateManager,
                                 settingsRepo = container.settingsRepository,
