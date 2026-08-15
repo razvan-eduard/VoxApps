@@ -47,11 +47,22 @@ data class VoxBackupStrings(
     val importModeMerge: String = "Merge",
     val importModeAdditive: String = "Additive",
     val backupNowButton: String = "Back up now",
-    val restoreButton: String = "Restore from file"
+    val restoreButton: String = "Restore from file",
+    // One line of consequences per mode, shown under the selector — the destructive choices must
+    // explain themselves at the moment they're made.
+    val importModeCaveatMerge: String = "Safest: restores the file and deletes only records that existed when it was exported — anything created here afterwards is kept.",
+    val importModeCaveatFullOverride: String = "DELETES everything — including records created AFTER the backup — then restores only what the file contains.",
+    val importModeCaveatAdditive: String = "Never deletes anything — restoring the same file again DUPLICATES its records."
 )
 
 internal fun VoxBackupStrings.labelFor(mode: VoxImportMode): String = when (mode) {
     VoxImportMode.FULL_OVERRIDE -> importModeFullOverride
     VoxImportMode.MERGE -> importModeMerge
     VoxImportMode.ADDITIVE -> importModeAdditive
+}
+
+internal fun VoxBackupStrings.caveatFor(mode: VoxImportMode): String = when (mode) {
+    VoxImportMode.FULL_OVERRIDE -> importModeCaveatFullOverride
+    VoxImportMode.MERGE -> importModeCaveatMerge
+    VoxImportMode.ADDITIVE -> importModeCaveatAdditive
 }

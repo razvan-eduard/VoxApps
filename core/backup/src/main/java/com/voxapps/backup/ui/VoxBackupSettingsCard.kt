@@ -113,6 +113,15 @@ fun VoxBackupSettingsCard(
                             )
                         }
                     }
+                    Text(
+                        strings.caveatFor(state.importMode),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (state.importMode == VoxImportMode.MERGE) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                    )
                 }
             }
 

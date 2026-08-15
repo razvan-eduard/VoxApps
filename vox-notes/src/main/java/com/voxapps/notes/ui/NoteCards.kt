@@ -371,6 +371,9 @@ private fun NoteAttachmentsHost(noteId: Long, stateManager: NotesStateManager) {
         visionActions = visionActions,
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
         cancelLabel = languageManager.getString("cancel"),
+        removeConfirmTitle = languageManager.getString("delete_attachment_title"),
+        removeConfirmMessage = languageManager.getString("delete_attachment_message"),
+        removeConfirmLabel = languageManager.getString("delete"),
         onRemove = { item ->
             entities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
         },
@@ -423,6 +426,9 @@ private fun PendingNoteAttachmentsHost(pendingAttachments: List<String>, onChang
         captureActions = listOf(SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("attachment_take_photo"), takePhoto)),
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
         cancelLabel = languageManager.getString("cancel"),
+        removeConfirmTitle = languageManager.getString("delete_attachment_title"),
+        removeConfirmMessage = languageManager.getString("delete_attachment_message"),
+        removeConfirmLabel = languageManager.getString("delete"),
         onRemove = { item ->
             pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->
                 AttachmentFileStore.delete(context, NotesAttachments.DIR, fileName)

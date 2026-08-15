@@ -291,5 +291,15 @@
   "todo_clear_location": "Ort entfernen",
   "todo_delete_item_message": "Das Element und seine Anhänge werden aus der Liste entfernt.",
   "entry_new_event_hint": "Neuer Termin",
-  "entry_new_task_hint": "Neue Aufgabe"
+  "entry_new_task_hint": "Neue Aufgabe",
+  "delete_attachment_title": "Dieses Foto löschen?",
+  "delete_attachment_message": "Das Foto wird aus diesem Eintrag entfernt.",
+  "backup_import_mode_label": "Wiederherstellungsmodus",
+  "backup_import_mode_desc": "Wie eine wiederhergestellte Datei mit den vorhandenen Daten abgeglichen wird. Gilt nur, wenn Daten aktiviert ist.",
+  "backup_import_mode_full_override": "Vollständig ersetzen",
+  "backup_import_mode_merge": "Zusammenführen",
+  "backup_import_mode_additive": "Additiv",
+  "backup_import_mode_caveat_merge": "Am sichersten: stellt die Datei wieder her und löscht nur Einträge, die beim Export existierten — alles danach Erstellte bleibt.",
+  "backup_import_mode_caveat_full_override": "LÖSCHT alles — auch NACH dem Backup erstellte Einträge — und stellt nur den Dateiinhalt wieder her.",
+  "backup_import_mode_caveat_additive": "Löscht nie etwas — dieselbe Datei erneut wiederherzustellen DUPLIZIERT die Einträge."
 }

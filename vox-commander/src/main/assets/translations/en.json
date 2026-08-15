@@ -544,5 +544,13 @@
   "gpu_ready": "GPU Ready!",
   "gpu_test_timeout": "This can take up to 30 seconds",
   "gpu_ready_message": "Your GPU passed the inference test for this engine. GPU acceleration is active.",
-  "gpu_failed_message": "Your GPU failed the test for this engine. It keeps running on the CPU."
+  "gpu_failed_message": "Your GPU failed the test for this engine. It keeps running on the CPU.",
+  "backup_import_mode_label": "Restore mode",
+  "backup_import_mode_desc": "How restoring a file reconciles it against what's already here. Only applies when Data is on.",
+  "backup_import_mode_full_override": "Full override",
+  "backup_import_mode_merge": "Merge",
+  "backup_import_mode_additive": "Additive",
+  "backup_import_mode_caveat_merge": "Safest: restores the file and deletes only records that existed when it was exported — anything created here afterwards is kept.",
+  "backup_import_mode_caveat_full_override": "DELETES everything — including records created AFTER the backup — then restores only what the file contains.",
+  "backup_import_mode_caveat_additive": "Never deletes anything — restoring the same file again DUPLICATES its records."
 }

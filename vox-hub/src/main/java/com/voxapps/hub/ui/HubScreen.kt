@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -668,6 +669,9 @@ fun HubScreen(
     }
 
     importPreview?.let { preview ->
+        // The mode is chosen HERE, at the moment of restore, defaulting to the safe one on every
+        // open — a destructive semantic must never ride in silently from a setting picked weeks ago.
+        var selectedImportMode by remember(preview) { mutableStateOf(HubSettings.IMPORT_MODE_MERGE) }
         AlertDialog(
             onDismissRequest = { importPreview = null },
             title = { Text(languageManager.getString("hub_import_confirm_title")) },
@@ -687,6 +691,36 @@ fun HubScreen(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }
+                    Text(languageManager.getString("import_mode_label"), style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(
+                            HubSettings.IMPORT_MODE_MERGE to "import_mode_merge",
+                            HubSettings.IMPORT_MODE_ADDITIVE to "import_mode_additive",
+                            HubSettings.IMPORT_MODE_FULL_OVERRIDE to "import_mode_full_override"
+                        ).forEach { (mode, labelKey) ->
+                            FilterChip(
+                                selected = selectedImportMode == mode,
+                                onClick = { selectedImportMode = mode },
+                                label = { Text(languageManager.getString(labelKey)) }
+                            )
+                        }
+                    }
+                    Text(
+                        languageManager.getString(
+                            when (selectedImportMode) {
+                                HubSettings.IMPORT_MODE_FULL_OVERRIDE -> "import_mode_caveat_full_override"
+                                HubSettings.IMPORT_MODE_ADDITIVE -> "import_mode_caveat_additive"
+                                else -> "import_mode_caveat_merge"
+                            }
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (selectedImportMode == HubSettings.IMPORT_MODE_MERGE) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
                     preview.summaries.forEach { (domain, counts) ->
                         val label = apps.firstOrNull { it.domain == domain }?.label ?: domain
                         val summaryText = counts.entries.joinToString(", ") { (key, count) -> "$count $key" }
@@ -723,7 +757,7 @@ fun HubScreen(
                                     results[domain] = languageManager.getString("hub_status_timeout")
                                     unreachable += app.packageName
                                 } else {
-                                    val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString(), importMode = settings.importMode)
+                                    val result = VoxDataTransferClient.requestImport(context, app.packageName, data.toString(), importMode = selectedImportMode)
                                     results[domain] = if (result != null && result.ok) {
                                         result.text
                                     } else {

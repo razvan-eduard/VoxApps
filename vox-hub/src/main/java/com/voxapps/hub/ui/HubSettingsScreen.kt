@@ -261,6 +261,22 @@ fun HubSettingsScreen(
                         )
                     }
                 }
+                // The selected mode spells out its own consequences — a 1 AM restore should not
+                // have to discover what "full override" means from its results.
+                val caveatKey = when (settings.importMode) {
+                    HubSettings.IMPORT_MODE_FULL_OVERRIDE -> "import_mode_caveat_full_override"
+                    HubSettings.IMPORT_MODE_ADDITIVE -> "import_mode_caveat_additive"
+                    else -> "import_mode_caveat_merge"
+                }
+                Text(
+                    languageManager.getString(caveatKey),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (settings.importMode == HubSettings.IMPORT_MODE_MERGE) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
+                )
 
                 if (backupFiles.isNotEmpty()) {
                     Text(languageManager.getString("backup_list_title"), style = MaterialTheme.typography.bodyMedium)

@@ -120,5 +120,8 @@
   "sync_interval_minutes": "Toutes les %1$d min",
   "sync_scope_button": "Portée de synchronisation",
   "sync_scope_title": "Ce qui se synchronise avec %1$s",
-  "sync_scope_no_categories": "Aucune catégorie trouvée pour cette application"
+  "sync_scope_no_categories": "Aucune catégorie trouvée pour cette application",
+  "import_mode_caveat_merge": "Le plus sûr : restaure le fichier et ne supprime que les enregistrements existant à l'export — tout ce qui a été créé ensuite est conservé.",
+  "import_mode_caveat_full_override": "SUPPRIME tout dans les applications activées — y compris les enregistrements créés APRÈS la sauvegarde — puis ne restaure que le contenu du fichier.",
+  "import_mode_caveat_additive": "Ne supprime jamais rien — réimporter le même fichier DUPLIQUE ses enregistrements."
 }

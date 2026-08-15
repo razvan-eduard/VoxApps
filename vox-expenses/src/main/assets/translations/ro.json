@@ -451,5 +451,13 @@
   "rules_no_search_match": "Nicio regulă nu se potrivește căutării.",
   "rules_delete_all_title": "Șterge toate regulile",
   "rules_delete_all_message": "Se șterg toate regulile de re-mapare, inclusiv tot ce a învățat aplicația. Nu se poate anula.",
-  "remap_rule_proposed_badge": "Propusă din editările tale — revizuiește și activează"
+  "remap_rule_proposed_badge": "Propusă din editările tale — revizuiește și activează",
+  "backup_import_mode_label": "Mod de restaurare",
+  "backup_import_mode_desc": "Cum împacă restaurarea fișierul cu ce există deja aici. Se aplică doar când Date este activat.",
+  "backup_import_mode_full_override": "Suprascriere totală",
+  "backup_import_mode_merge": "Îmbinare",
+  "backup_import_mode_additive": "Aditiv",
+  "backup_import_mode_caveat_merge": "Cel mai sigur: restaurează fișierul și șterge doar înregistrările care existau la export — tot ce a fost creat aici după aceea rămâne.",
+  "backup_import_mode_caveat_full_override": "ȘTERGE tot — inclusiv înregistrările create DUPĂ backup — apoi restaurează doar conținutul fișierului.",
+  "backup_import_mode_caveat_additive": "Nu șterge nimic — restaurarea aceluiași fișier din nou DUBLEAZĂ înregistrările."
 }

@@ -447,5 +447,13 @@
   "rules_no_search_match": "No rules match your search.",
   "rules_delete_all_title": "Delete all rules",
   "rules_delete_all_message": "This deletes every re-map rule, including everything the app has learned. This cannot be undone.",
-  "remap_rule_proposed_badge": "Proposed from your edits — review and enable"
+  "remap_rule_proposed_badge": "Proposed from your edits — review and enable",
+  "backup_import_mode_label": "Restore mode",
+  "backup_import_mode_desc": "How restoring a file reconciles it against what's already here. Only applies when Data is on.",
+  "backup_import_mode_full_override": "Full override",
+  "backup_import_mode_merge": "Merge",
+  "backup_import_mode_additive": "Additive",
+  "backup_import_mode_caveat_merge": "Safest: restores the file and deletes only records that existed when it was exported — anything created here afterwards is kept.",
+  "backup_import_mode_caveat_full_override": "DELETES everything — including records created AFTER the backup — then restores only what the file contains.",
+  "backup_import_mode_caveat_additive": "Never deletes anything — restoring the same file again DUPLICATES its records."
 }

@@ -24,6 +24,8 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.voxapps.commander.ui.LocalLanguageManager
+import com.voxapps.backup.ui.VoxBackupStrings
 
 private const val DOMAIN = "commander"
 
@@ -41,6 +43,7 @@ fun BackupSettingsSection(
     // AppStateManager like every other piece of state, and a backup must carry what is on screen.
     credentials: com.voxapps.commander.data.preferences.Credentials
 ) {
+    val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val appContainer = remember { (context.applicationContext as VoxApplication).container }
@@ -122,6 +125,16 @@ fun BackupSettingsSection(
     }
 
     VoxBackupSettingsCard(
+        strings = VoxBackupStrings(
+            importModeLabel = languageManager.getString("backup_import_mode_label"),
+            importModeDesc = languageManager.getString("backup_import_mode_desc"),
+            importModeFullOverride = languageManager.getString("backup_import_mode_full_override"),
+            importModeMerge = languageManager.getString("backup_import_mode_merge"),
+            importModeAdditive = languageManager.getString("backup_import_mode_additive"),
+            importModeCaveatMerge = languageManager.getString("backup_import_mode_caveat_merge"),
+            importModeCaveatFullOverride = languageManager.getString("backup_import_mode_caveat_full_override"),
+            importModeCaveatAdditive = languageManager.getString("backup_import_mode_caveat_additive")
+        ),
         state = VoxBackupUiState(
             includeSettings = settings.backupIncludeSettings,
             includeData = settings.backupIncludeData,
