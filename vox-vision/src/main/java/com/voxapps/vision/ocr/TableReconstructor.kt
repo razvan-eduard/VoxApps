@@ -30,11 +30,28 @@ object TableReconstructor {
     /** A money/quantity-shaped token: digits with optional thousands/decimal separators. */
     private val NUMERIC = Regex("""^-?\d{1,4}(?:[.,]\d{3})*(?:[.,]\d{1,2})?$""")
 
-    private const val ROW_ANCHOR_TOLERANCE = 0.6f
+    private const val ROW_ANCHOR_OVERLAP = 0.45f
     private const val BAND_GAP_FACTOR = 2.0f
     private const val MIN_BAND_MEMBERS = 3
     private const val MIN_BANDS = 2
     private const val MIN_DATA_ROWS = 2
+
+    /**
+     * The plain reading-order text, line-broken at PRINTED-row boundaries using the same
+     * non-expanding anchors as the reconstruction — pure geometry, no column interpretation.
+     * [RowClusterer]'s expanding rows chain-merge a dense table's short rows into one line, and a
+     * consumer (human or model) reading that line has no way to know several items were glued
+     * together; anchored assembly keeps each printed row on its own line. Null when the document
+     * is too sparse to bother — the caller falls back to [RowClusterer]'s own text.
+     */
+    fun plainRowsText(cells: List<RowClusterer.Cell>): String? {
+        val clean = cells.filter { it.text.isNotBlank() }
+        if (clean.size < 8) return null
+        val medianHeight = clean.map { it.yBottom - it.yTop }.sorted()[clean.size / 2]
+        if (medianHeight <= 0f) return null
+        return assemblePrintedRows(clean, medianHeight)
+            .joinToString("\n") { row -> row.cells.sortedBy { it.xLeft }.joinToString(" ") { it.text } }
+    }
 
     fun toText(cells: List<RowClusterer.Cell>): String? {
         val clean = cells.filter { it.text.isNotBlank() }
@@ -42,16 +59,7 @@ object TableReconstructor {
         val medianHeight = clean.map { it.yBottom - it.yTop }.sorted()[clean.size / 2]
         if (medianHeight <= 0f) return null
 
-        // 1. Printed rows around non-expanding anchors.
-        val printed = mutableListOf<PrintedRow>()
-        for (cell in clean.sortedBy { yCenter(it) }) {
-            val last = printed.lastOrNull()
-            if (last != null && abs(yCenter(cell) - last.anchorY) <= medianHeight * ROW_ANCHOR_TOLERANCE) {
-                last.cells += cell
-            } else {
-                printed += PrintedRow(yCenter(cell), mutableListOf(cell))
-            }
-        }
+        val printed = assemblePrintedRows(clean, medianHeight)
 
         // 2. Column bands over money-shaped cells.
         val numericCells = clean.filter { NUMERIC.matches(it.text.trim()) }
@@ -64,7 +72,22 @@ object TableReconstructor {
                 bands += mutableListOf(cell)
             }
         }
-        val realBands = bands.filter { it.size >= MIN_BAND_MEMBERS }
+        val qualifying = bands.filter { it.size >= MIN_BAND_MEMBERS }.toMutableList()
+        // A leftmost band of small COUNTING integers is the table's own row-number column ("Nr."):
+        // its values are distinct and non-decreasing down the page. A quantity column also holds
+        // small integers but REPEATS them — the distinctness test tells the two apart.
+        if (qualifying.size > MIN_BANDS) {
+            val first = qualifying.first()
+            val ints = first.sortedBy { yCenter(it) }.map { cell ->
+                val t = cell.text.trim()
+                if (t.contains('.') || t.contains(',')) null else t.toIntOrNull()?.takeIf { it < 100 }
+            }
+            val counting = ints.all { it != null } &&
+                ints.filterNotNull().zipWithNext().all { (a, b) -> b >= a } &&
+                ints.distinct().size >= (ints.size * 2 + 2) / 3
+            if (counting) qualifying.removeAt(0)
+        }
+        val realBands: List<List<RowClusterer.Cell>> = qualifying
         if (realBands.size < MIN_BANDS) return null
         val bandRanges = realBands.map { band ->
             val centers = band.map { xCenter(it) }
@@ -125,8 +148,55 @@ object TableReconstructor {
         return out.toString().trimEnd()
     }
 
+    /**
+     * Printed rows around non-expanding anchors. Membership is vertical OVERLAP with the row's
+     * FIRST cell (never the expanded row bounds — expansion is what chain-merges dense tables),
+     * because a wrapped description's box rides at a different baseline than the number printed
+     * beside it: center distance split them, ink overlap doesn't. The anchor band is CLAMPED to
+     * one median print-row around the cell's center: a wrapped description arrives as one tall
+     * box spanning several printed rows, and an unclamped tall anchor overlaps everything near
+     * it — the whole table glued into one row. The overlap test likewise measures the candidate
+     * against no more than one row-height of itself.
+     */
+    private fun assemblePrintedRows(
+        clean: List<RowClusterer.Cell>,
+        medianHeight: Float
+    ): List<PrintedRow> {
+        val printed = mutableListOf<PrintedRow>()
+        for (cell in clean.sortedBy { yCenter(it) }) {
+            val row = printed.takeLast(3)
+                .filter { it.anchorOverlap(cell, medianHeight) >= ROW_ANCHOR_OVERLAP }
+                .maxByOrNull { it.anchorOverlap(cell, medianHeight) }
+            if (row != null) row.cells += cell
+            else {
+                val half = minOf(cell.yBottom - cell.yTop, medianHeight) / 2f
+                val cy = yCenter(cell)
+                printed += PrintedRow(cy, mutableListOf(cell), cy - half, cy + half)
+            }
+        }
+        return printed
+    }
+
     private fun xCenter(c: RowClusterer.Cell): Float = (c.xLeft + c.xRight) / 2f
     private fun yCenter(c: RowClusterer.Cell): Float = (c.yTop + c.yBottom) / 2f
 
-    private class PrintedRow(val anchorY: Float, val cells: MutableList<RowClusterer.Cell>)
+    private class PrintedRow(
+        val anchorY: Float,
+        val cells: MutableList<RowClusterer.Cell>,
+        private val anchorTop: Float = anchorY,
+        private val anchorBottom: Float = anchorY
+    ) {
+        fun anchorOverlap(cell: RowClusterer.Cell, medianHeight: Float): Float {
+            // The candidate's span is clamped the same way as the anchor's: only the one-row-high
+            // slice around its center may count, so a tall wrapped box can join exactly the row
+            // its center sits on and no other.
+            val half = minOf(cell.yBottom - cell.yTop, medianHeight) / 2f
+            val cy = (cell.yTop + cell.yBottom) / 2f
+            val top = cy - half
+            val bottom = cy + half
+            val overlap = minOf(anchorBottom, bottom) - maxOf(anchorTop, top)
+            val reference = minOf(anchorBottom - anchorTop, bottom - top)
+            return if (reference <= 0f) 0f else overlap / reference
+        }
+    }
 }

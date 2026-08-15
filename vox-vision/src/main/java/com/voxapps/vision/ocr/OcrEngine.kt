@@ -17,18 +17,33 @@ class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
         val result = paddleOcr.recognize(bitmap)
         val cells = RowClusterer.cellsOf(result.results)
         // Row order, not detector order: the raw result list follows detection, which scatters a
-        // printed row into fragments the moment a photo is skewed or the document is tabular.
-        // A declared-tabular document first tries the column-aware reconstruction; anything short
-        // of a confident table falls back to plain reading order.
+        // printed row into fragments the moment a photo is skewed or the document is tabular. In
+        // table mode the line-breaking additionally uses the reconstruction's non-expanding row
+        // anchors (still pure geometry, no column interpretation): the clusterer's expanding rows
+        // chain-merge a dense table's short rows into one line, hiding the row boundaries from
+        // every downstream reader.
+        val plain = (if (tableMode) TableReconstructor.plainRowsText(cells) else null)
+            ?: RowClusterer.toTextFromCells(cells)
+        // Table mode is strictly ADDITIVE: the plain reading-order text always ships (so a
+        // reconstruction misfire on an unseen format can never degrade what the consumer had
+        // before table mode existed), and the column-aware reconstruction rides behind a marker
+        // for consumers that can validate it deterministically (see expenses' items sum-gate).
         if (tableMode) {
-            TableReconstructor.toText(cells)?.let { return it }
+            TableReconstructor.toText(cells)?.let { table ->
+                return plain + "\n" + TABLE_SECTION_MARKER + "\n" + table
+            }
         }
-        return RowClusterer.toTextFromCells(cells)
+        return plain
     }
 
     suspend fun release() = paddleOcr.release()
 
     companion object {
+        /** Separates the always-present plain text from the appended table reconstruction —
+         *  mirrored literally by consumers (see expenses' TableItemsPreParse) without a shared
+         *  module, same convention as the stitch-seam marker. */
+        const val TABLE_SECTION_MARKER = "--- [table reconstruction] ---"
+
         suspend fun create(context: Context, downloader: VisionModelDownloader): OcrEngine {
             // No OpenCVUtils.init()/System.loadLibrary() call here deliberately: vox-vision's release
             // build excludes these libs from the APK (see build.gradle.kts's packaging.jniLibs.excludes)
