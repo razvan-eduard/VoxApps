@@ -93,10 +93,17 @@ class VoxNominatimGeocoder(private val userAgent: String = VOX_NOMINATIM_USER_AG
     /**
      * Forward geocoding — free-text place search. Callers MUST rate-limit themselves to
      * Nominatim's policy (max one request per second); the picker composable debounces for this.
+     *
+     * The query is folded ([foldQuery]) before it leaves the device: diacritics stripped and case
+     * lowered. Nominatim matches accent-less queries reliably, while an accented query only
+     * matches when the mark is the exact codepoint the map data uses — Romanian keyboards produce
+     * s-cedilla (U+015F) where OpenStreetMap writes s-comma (U+0219), so the typed "Ploieşti"
+     * missed the "Ploiești" the user meant. Results keep their proper spelling; only the
+     * outbound query is folded.
      */
     fun search(query: String, limit: Int = 5): List<VoxPlace> = try {
         val url = "https://nominatim.openstreetmap.org/search" +
-            "?format=json&q=${android.net.Uri.encode(query)}&limit=$limit&addressdetails=1"
+            "?format=json&q=${android.net.Uri.encode(foldQuery(query))}&limit=$limit&addressdetails=1"
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", userAgent)
@@ -146,4 +153,16 @@ class VoxNominatimGeocoder(private val userAgent: String = VOX_NOMINATIM_USER_AG
 
     private fun JSONObject.optStringOrNull(key: String): String? =
         if (has(key) && !isNull(key)) optString(key) else null
+
+    companion object {
+        /** Diacritic- and case-insensitive form of a search query: canonical decomposition, every
+         *  combining mark dropped, lowercased. "Ploieşti", "PLOIEȘTI" and "ploiesti" all fold to
+         *  the same bytes. */
+        fun foldQuery(query: String): String =
+            java.text.Normalizer.normalize(query, java.text.Normalizer.Form.NFD)
+                .replace(COMBINING_MARKS, "")
+                .lowercase()
+
+        private val COMBINING_MARKS = Regex("\\p{Mn}+")
+    }
 }
