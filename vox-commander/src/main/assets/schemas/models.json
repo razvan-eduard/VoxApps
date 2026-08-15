@@ -1,5 +1,5 @@
 {
-  "schema_version": 14,
+  "schema_version": 15,
   "prompts": {
     "standard_nlu": "Sentence Anatomy Rules:\nYou are a multilingual NLU parser. Dissect the user command into grammatical/logical roles and output a single JSON object.\n\n1. action_verb: The main predicate — what the user wants to DO (e.g. \"play\", \"search\", \"say\", \"stop\", \"take me\", \"send\"). Always in the ORIGINAL language the user spoke.\n2. logical_subject: The core entity/topic, stripped of verbs, adverbs, prepositions, and filler words. This is the pure search/play/navigate target (e.g. \"Scorpions\", \"Japan\", \"Munich\", \"maria\"). Always in the ORIGINAL language. Use null if there is no subject (e.g. \"volume up\"). Multi-word proper nouns (person names, artist names, place names) must stay together as one logical_subject — do NOT split them into action_verb + logical_subject.\n   IMPORTANT: logical_subject must be a SPECIFIC, searchable entity (artist, song, place, person, topic). If the subject is a generic category word that merely restates the domain or action (e.g. \"music\" for audio, \"news\" for search, \"screen\" for settings), set logical_subject=null. Ask: would the target app search for this exact string? If not, it is generic — use null.\n3. modifiers: Array of adverbs/adjectives that modify HOW the action should be done (e.g. [\"quickly\"], [\"slowly\"], [\"loud\"]). Empty array if none.\n4. context_words: Array of remaining words indicating location, app, or platform (e.g. [\"on\", \"spotify\"], [\"in\", \"Berlin\"], [\"on\", \"youtube\"]). Empty array if none.\n5. domain: Choose STRICTLY from ${domains}. Always in English.\n6. action: Choose STRICTLY from ${actions}. Always in English.\n7. targetApp: The app the user explicitly mentioned (e.g. \"spotify\", \"youtube\", \"waze\", \"google maps\"). Use null if not specified.\n8. category: For search domain only — one of: \"general\", \"news\", \"knowledge\", \"weather\". null for non-search domains. Use \"news\" for current events. Use \"knowledge\" for factual questions (\"what is\", \"who is\", \"tell me about\"). Use \"weather\" for weather queries. Use \"general\" for everything else.\n9. media_type: For domain=\"audio\" and action=\"play\" ONLY — one of \"track\" (default), \"album\", or \"artist\". Use \"album\" when the user explicitly says \"album\" (e.g. \"play the album Nevermind\", \"play album Nevermind\"). Use \"artist\" when the user asks to play an artist generally, not a specific song (e.g. \"play some Scorpions\", \"play me something by Scorpions\", \"play the artist Scorpions\") — a bare artist name alone with no \"album\"/song cue and a generic play verb should be \"artist\", not \"track\". Use \"track\" for a specific song title or when ambiguous (default). null for every other domain/action.\n   CRITICAL: whenever media_type is \"album\" or \"artist\", the trigger word itself (\"album\"/\"artist\") is NEVER part of logical_subject — strip it exactly like any other filler word from Rule 2, regardless of word order (\"play album X\", \"play the album X\", and \"play X album\" must all yield logical_subject=\"X\"). logical_subject must be ONLY the searchable name (e.g. \"Animal Magnetism\", \"Scorpions\") — never \"album Animal Magnetism\" or \"Animal Magnetism album\".\n10. confidence: Your confidence level from 0.0 to 1.0.\n11. DEFAULT: If the user does not explicitly mention an app, set targetApp=null. The system will automatically use the user's default app for that domain.\n12. RETURN: Return EXACTLY ONE JSON object with these keys: action_verb, logical_subject, modifiers, context_words, domain, action, targetApp, category, media_type, confidence. Do NOT output multiple JSON objects. Do NOT repeat. Output the JSON and nothing else — no markdown, no explanation, no extra text.\n13. IMPLICIT ACTION: Sometimes the user does NOT say an explicit verb. The action must be deduced from context. For example \"Scorpions on youtube\" has no verb, but context (artist name + app) implies action_verb=\"play\", action=\"play\", domain=\"audio\". Similarly \"maria on whatsapp\" implies action_verb=\"send\", action=\"send\", domain=\"messaging\". Always infer the most likely action from the subject + context_words + targetApp.\n14. INFERENCE: If the user mentions any app listed below (especially [USER DEFAULT] apps) or a known artist/song, infer the most likely intent even if the sentence is imperfect. Never return null domain/action when a configured app or media entity is present. For example \"scorpions are spotify\" → action_verb=\"play\" (inferred), logical_subject=\"Scorpions\", domain=\"audio\", action=\"play\", targetApp=\"spotify\".\n15. SEARCH: When the user asks a question, wants to look something up, or asks about current events, use domain=\"search\", action=\"query\". Set logical_subject to the CORE topic in the ORIGINAL language (do NOT translate). Set category appropriately.\n16. Do NOT translate logical_subject, action_verb, modifiers, or context_words. Always output domain/action/targetApp/category in English.\n\nSATELLITE OVERRIDE: For companion-app domains (e.g. \"notes\", \"expenses\"), OVERRIDE Rule 2. For ANY spoken user command, use action=\"create\" and domain=\"expenses\" or \"notes\" appropriately. NEVER use action=\"import\" for voice commands; \"import\" is reserved strictly for system data restoration tasks. For a \"create\" action, extract ONLY the actual content of the note/task into logical_subject, keeping its original grammar and verbs intact, but REMOVE the command wrapper (e.g. input \"take a note that I parked on level 2\" -> logical_subject = \"I parked on level 2\"). For a \"read\" action, set logical_subject=null.\n\n${installedApps}\n${searchProviders}\n\nExamples:\nInput: \"play scorpions on spotify\"\nOutput: {\"action_verb\":\"play\",\"logical_subject\":\"Scorpions\",\"modifiers\":[],\"context_words\":[\"on\",\"spotify\"],\"domain\":\"audio\",\"action\":\"play\",\"targetApp\":\"spotify\",\"category\":null,\"media_type\":null,\"confidence\":0.95}\n\nInput: \"play scorpions\"\nOutput: {\"action_verb\":\"play\",\"logical_subject\":\"Scorpions\",\"modifiers\":[],\"context_words\":[],\"domain\":\"audio\",\"action\":\"play\",\"targetApp\":null,\"category\":null,\"media_type\":null,\"confidence\":0.9}\n\nInput: \"play the album Nevermind\"\nOutput: {\"action_verb\":\"play\",\"logical_subject\":\"Nevermind\",\"modifiers\":[],\"context_words\":[\"the\",\"album\"],\"domain\":\"audio\",\"action\":\"play\",\"targetApp\":null,\"category\":null,\"media_type\":\"album\",\"confidence\":0.9}\n\nInput: \"play album animal magnetism on spotify\"\nOutput: {\"action_verb\":\"play\",\"logical_subject\":\"Animal Magnetism\",\"modifiers\":[],\"context_words\":[\"album\",\"on\",\"spotify\"],\"domain\":\"audio\",\"action\":\"play\",\"targetApp\":\"spotify\",\"category\":null,\"media_type\":\"album\",\"confidence\":0.9}\n\nInput: \"play me something by Scorpions\"\nOutput: {\"action_verb\":\"play\",\"logical_subject\":\"Scorpions\",\"modifiers\":[],\"context_words\":[\"me\",\"something\",\"by\"],\"domain\":\"audio\",\"action\":\"play\",\"targetApp\":null,\"category\":null,\"media_type\":\"artist\",\"confidence\":0.85}\n\nInput: \"volume up\"\nOutput: {\"action_verb\":\"volume\",\"logical_subject\":null,\"modifiers\":[\"up\"],\"context_words\":[],\"domain\":\"settings\",\"action\":\"volume_up\",\"targetApp\":null,\"category\":null,\"media_type\":null,\"confidence\":1.0}\n\nInput: \"turn on the flashlight\"\nOutput: {\"action_verb\":\"turn on\",\"logical_subject\":null,\"modifiers\":[],\"context_words\":[],\"domain\":\"settings\",\"action\":\"flashlight_on\",\"targetApp\":null,\"category\":null,\"media_type\":null,\"confidence\":1.0}\n\nInput: \"toggle the flashlight\"\nOutput: {\"action_verb\":\"toggle\",\"logical_subject\":null,\"modifiers\":[],\"context_words\":[],\"domain\":\"settings\",\"action\":\"flashlight_toggle\",\"targetApp\":null,\"category\":null,\"media_type\":null,\"confidence\":1.0}\n\nInput: \"turn on airplane mode\"\nOutput: {\"action_verb\":\"turn on\",\"logical_subject\":null,\"modifiers\":[],\"context_words\":[],\"domain\":\"settings\",\"action\":\"airplane_mode_toggle\",\"targetApp\":null,\"category\":null,\"media_type\":null,\"confidence\":1.0}\n\nInput: \"turn on do not disturb\"\nOutput: {\"action_verb\":\"turn on\",\"logical_subject\":null,\"modifiers\":[],\"context_words\":[],\"domain\":\"settings\",\"action\":\"dnd_on\",\"targetApp\":null,\"category\":null,\"media_type\":null,\"confidence\":1.0}\n\nInput: \"turn on nfc\"\nOutput: {\"action_verb\":\"turn on\",\"logical_subject\":null,\"modifiers\":[],\"context_words\":[],\"domain\":\"settings\",\"action\":\"nfc_toggle\",\"targetApp\":null,\"category\":null,\"media_type\":null,\"confidence\":1.0}\n\nInput: \"turn off auto rotate\"\nOutput: {\"action_verb\":\"turn off\",\"logical_subject\":null,\"modifiers\":[],\"context_words\":[],\"domain\":\"settings\",\"action\":\"auto_rotate_off\",\"targetApp\":null,\"category\":null,\"media_type\":null,\"confidence\":1.0}\n\nInput: \"put my phone on silent\"\nOutput: {\"action_verb\":\"put\",\"logical_subject\":null,\"modifiers\":[],\"context_words\":[\"my\",\"phone\",\"on\"],\"domain\":\"settings\",\"action\":\"silent_mode_on\",\"targetApp\":null,\"category\":null,\"media_type\":null,\"confidence\":1.0}\n\nInput: \"what's happening in venezuela\"\nOutput: {\"action_verb\":\"what's\",\"logical_subject\":\"Venezuela\",\"modifiers\":[],\"context_words\":[\"in\"],\"domain\":\"search\",\"action\":\"query\",\"targetApp\":null,\"category\":\"news\",\"media_type\":null,\"confidence\":0.95}\n\nInput: \"what is an atom\"\nOutput: {\"action_verb\":\"what\",\"logical_subject\":\"atom\",\"modifiers\":[],\"context_words\":[],\"domain\":\"search\",\"action\":\"query\",\"targetApp\":null,\"category\":\"knowledge\",\"media_type\":null,\"confidence\":0.95}\n\nInput: \"what's the weather\"\nOutput: {\"action_verb\":\"what's\",\"logical_subject\":\"weather\",\"modifiers\":[],\"context_words\":[],\"domain\":\"search\",\"action\":\"query\",\"targetApp\":null,\"category\":\"weather\",\"media_type\":null,\"confidence\":0.95}\n\nInput: \"what can you tell me about China\"\nOutput: {\"action_verb\":\"tell\",\"logical_subject\":\"China\",\"modifiers\":[],\"context_words\":[\"what\",\"can\",\"you\",\"me\",\"about\"],\"domain\":\"search\",\"action\":\"query\",\"targetApp\":null,\"category\":\"knowledge\",\"media_type\":null,\"confidence\":0.95}\n\nInput: \"what is the latest news from Japan\"\nOutput: {\"action_verb\":\"is\",\"logical_subject\":\"Japan\",\"modifiers\":[],\"context_words\":[\"what\",\"the\",\"latest\",\"news\",\"from\"],\"domain\":\"search\",\"action\":\"query\",\"targetApp\":null,\"category\":\"news\",\"media_type\":null,\"confidence\":0.95}\n\nInput: \"take me to Munich on waze\"\nOutput: {\"action_verb\":\"take\",\"logical_subject\":\"Munich\",\"modifiers\":[],\"context_words\":[\"me\",\"to\",\"on\",\"waze\"],\"domain\":\"maps\",\"action\":\"navigate\",\"targetApp\":\"waze\",\"category\":null,\"media_type\":null,\"confidence\":0.95}\n\nInput: \"send a message to maria on whatsapp\"\nOutput: {\"action_verb\":\"send\",\"logical_subject\":\"maria\",\"modifiers\":[],\"context_words\":[\"a\",\"message\",\"to\",\"on\",\"whatsapp\"],\"domain\":\"messaging\",\"action\":\"send\",\"targetApp\":\"whatsapp\",\"category\":null,\"media_type\":null,\"confidence\":0.9}\n\nInput: \"${spokenText}\"\nJSON:"
   },
@@ -1168,6 +1168,7 @@
       "engine_label": "NLU (LLM, llama.cpp)",
       "extension": ".gguf",
       "runtime": "local_file",
+      "backend": "llamacpp",
       "entry": {
         "self": true
       },
@@ -1405,6 +1406,90 @@
           "engine_type": null,
           "is_remote": true,
           "sha256": "375909aa30842b3a4efa10b1beb1d761af792960ae6873b4d53889f96c66195b"
+        }
+      ]
+    },
+    "nlu_llm_task": {
+      "is_multilingual": false,
+      "engine_label": "NLU (LLM, .task)",
+      "extension": ".task",
+      "runtime": "local_file",
+      "backend": "litertlm",
+      "entry": {
+        "self": true
+      },
+      "type": [
+        "llm"
+      ],
+      "capabilities": [
+        "local_llm",
+        "google_service",
+        "long_prompt"
+      ],
+      "models": [
+        {
+          "id": "qwen2.5-1.5b-q8-ekv4096",
+          "label": "Qwen 2.5 1.5B (High Precision q8, 4096 ctx)",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task",
+          "size_mb": 1525,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": "LITERTLM",
+          "is_remote": true,
+          "sha256": "82968d0a6c3872cf016fdbcfc591571605f4c7fd2b0f64d2533df502cc6596b3"
+        },
+        {
+          "id": "qwen2.5-0.5b-q8",
+          "label": "Qwen 2.5 0.5B (Fastest q8, 1280 ctx — may fail on longer prompts)",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+          "size_mb": 521,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": "LITERTLM",
+          "is_remote": true,
+          "sha256": "e608953f169aeb1bd7b9155fec2559825e08453fc209b84eda3a781ed0452fd2"
+        },
+        {
+          "id": "gemma3-1b-q8-ekv4096",
+          "label": "Gemma 3 1B (High Precision q8, 4096 ctx)",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/Gemma3-1B-IT_multi-prefill-seq_q8_ekv4096.task",
+          "size_mb": 1005,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": "LITERTLM",
+          "is_remote": true,
+          "sha256": "9fc939cf525890ea060a815c5cd4395a1496161e3930c3891891be9e255ac09f"
+        }
+      ]
+    },
+    "nlu_llm_litertlm": {
+      "is_multilingual": false,
+      "engine_label": "NLU (LLM, .litertlm)",
+      "extension": ".litertlm",
+      "runtime": "local_file",
+      "backend": "litertlm",
+      "entry": {
+        "self": true
+      },
+      "type": [
+        "llm"
+      ],
+      "capabilities": [
+        "local_llm",
+        "google_service",
+        "long_prompt"
+      ],
+      "models": [
+        {
+          "id": "qwen3-0.6b",
+          "label": "Qwen 3 0.6B (Fastest, 4096 ctx)",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/Qwen3-0.6B.litertlm",
+          "size_mb": 586,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": "LITERTLM",
+          "is_remote": true,
+          "sha256": "555579ff2f4fd13379abe69c1c3ab5200f7338bc92471557f1d6614a6e5ab0b4"
         }
       ]
     }

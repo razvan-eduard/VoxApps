@@ -98,6 +98,29 @@ class ShippedSchemaTest {
     }
 
     /**
+     * There is more than one on-device implementation now, and an engine that names none resolves
+     * to whichever is first — silently correct while a schema predates the field, silently *wrong*
+     * for an engine this repo ships, whose models only one implementation can read. Shipping a
+     * `.task` engine that fell through to llama.cpp would fail at model load with nothing pointing
+     * back here, so the schema is asked to say it.
+     */
+    @Test
+    fun `every on-device LLM engine names a backend the code implements`() {
+        val implemented = setOf(
+            com.voxapps.commander.domain.intent.interpreter.LocalLlmInterpreter.BACKEND_ID,
+            com.voxapps.commander.domain.intent.interpreter.LiteRtLlmInterpreter.BACKEND_ID
+        )
+        assetModels().engines
+            .filter { "local_llm" in it.value.capabilities }
+            .forEach { (key, config) ->
+                assertTrue(
+                    "engine '$key' declares backend '${config.backend}', which no interpreter serves",
+                    config.backend in implemented
+                )
+            }
+    }
+
+    /**
      * The failure this caught: three virtual engines declare no capabilities at all, and reading
      * that field threw. Gson instantiates without the Kotlin constructor, so *every* field the JSON
      * omits is null regardless of what its type says — including `extension`, which fails inside
