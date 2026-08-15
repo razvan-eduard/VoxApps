@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -152,7 +153,9 @@ fun RemapRulesSection(
             deleteAllMessage = languageManager.getString("rules_delete_all_message"),
             confirmLabel = languageManager.getString("delete"),
             cancelLabel = languageManager.getString("cancel"),
-            deleteContentDescription = languageManager.getString("duplicate_rule_delete")
+            deleteContentDescription = languageManager.getString("duplicate_rule_delete"),
+            deleteConfirmTitle = languageManager.getString("rule_delete_confirm_title"),
+            deleteConfirmMessageFormat = languageManager.getString("rule_delete_confirm_message")
         )
     }
 
@@ -204,25 +207,69 @@ private fun fieldLabel(fieldId: String, languageManager: LanguageManager): Strin
     return labelKey?.let { languageManager.getString(it) } ?: fieldId
 }
 
-/** The three-dot fuzziness selector: taps cycle 0→1→2→3→0; lit dots show the level. */
+/** Risk color per fuzziness step: one lit dot = close match (green), two = medium (amber),
+ *  three = loose (red) — looser matching means more records rewritten on weaker evidence. */
+private val FuzzStepColors = listOf(Color(0xFF4CAF50), Color(0xFFFFA000), Color(0xFFE53935))
+
+private fun fuzzLevelColor(level: Int): Color =
+    FuzzStepColors.getOrElse(level - 1) { FuzzStepColors.last() }
+
+/**
+ * The three-dot fuzziness selector: taps cycle 0→1→2→3→0. Each dot wears its step's risk color
+ * when lit. Every user tap also floats the new level's name up from the dots and fades it — the
+ * same glance-feedback idea as the to-do editor's importance star — so the level is never a
+ * guess from dot-counting. [levelLabel] resolves the floating text per level.
+ */
 @Composable
-private fun FuzzDots(level: Int, enabled: Boolean, onCycle: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .alpha(if (enabled) 1f else 0.3f)
-            .clickable(enabled = enabled) { onCycle() }
-            .padding(horizontal = 6.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        repeat(3) { i ->
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .background(
-                        color = if (i < level) SelectedGlow else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-                        shape = CircleShape
-                    )
+private fun FuzzDots(
+    level: Int,
+    enabled: Boolean,
+    onCycle: () -> Unit,
+    levelLabel: (Int) -> String
+) {
+    var feedbackLevel by remember { mutableStateOf<Int?>(null) }
+    var feedbackTick by remember { mutableStateOf(0) }
+    val anim = remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(feedbackTick) {
+        if (feedbackLevel != null) {
+            anim.snapTo(0f)
+            anim.animateTo(1f, androidx.compose.animation.core.tween(durationMillis = 900))
+            feedbackLevel = null
+        }
+    }
+    Box(contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier
+                .alpha(if (enabled) 1f else 0.3f)
+                .clickable(enabled = enabled) {
+                    onCycle()
+                    feedbackLevel = (level + 1) % 4
+                    feedbackTick++
+                }
+                .padding(horizontal = 6.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            repeat(3) { i ->
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            color = if (i < level) FuzzStepColors[i]
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                            shape = CircleShape
+                        )
+                )
+            }
+        }
+        feedbackLevel?.let { fl ->
+            val progress = anim.value
+            Text(
+                text = levelLabel(fl),
+                style = MaterialTheme.typography.labelSmall,
+                color = (if (fl == 0) MaterialTheme.colorScheme.onSurfaceVariant else fuzzLevelColor(fl))
+                    .copy(alpha = (1f - progress).coerceIn(0f, 1f)),
+                modifier = Modifier.offset(y = (-14 - 18 * progress).dp)
             )
         }
     }
@@ -346,7 +393,18 @@ private fun RemapRuleEditSheet(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Text(languageManager.getString("remap_rule_when_fields_label"), style = MaterialTheme.typography.labelLarge)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    languageManager.getString("remap_rule_when_fields_label"),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    languageManager.getString("remap_fuzz_column_label"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             ExpenseRemapFields.matchFields.forEach { field ->
                 val selected = field.id in matchValues
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -368,7 +426,8 @@ private fun RemapRuleEditSheet(
                         enabled = selected,
                         onCycle = {
                             fuzzLevels = fuzzLevels + (field.id to ((fuzzLevels[field.id] ?: 0) + 1) % 4)
-                        }
+                        },
+                        levelLabel = { languageManager.getString("remap_fuzz_level_$it") }
                     )
                 }
             }

@@ -21,6 +21,9 @@ import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Spellcheck
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
@@ -65,7 +68,18 @@ import com.voxapps.logging.ui.LogsSettingsTab
 import com.voxapps.logging.ui.LogsTabStrings
 
 private enum class SettingsPage {
-    MENU, GENERAL, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP, CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, BACKUP, LOGS
+    MENU, GENERAL, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP,
+    CLEANUP_DUPLICATES, CLEANUP_CORRECTIONS, CLEANUP_REMAP, CLEANUP_TEMPLATES,
+    CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, BACKUP, LOGS
+}
+
+/** Where each page's back arrow leads — the cleanup subpages return to their submenu, everything
+ *  else to the main menu; the menu itself exits Settings (handled at the call sites). */
+private fun backTarget(page: SettingsPage): SettingsPage = when (page) {
+    SettingsPage.CLEANUP_DUPLICATES, SettingsPage.CLEANUP_CORRECTIONS, SettingsPage.CLEANUP_REMAP,
+    SettingsPage.CLEANUP_TEMPLATES ->
+        SettingsPage.EXPENSE_CLEANUP
+    else -> SettingsPage.MENU
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -106,8 +120,9 @@ fun SettingsScreen(
         )
     }
 
-    // System back mirrors the top-bar arrow: subpage -> menu, menu -> expenses list.
-    BackHandler { if (page == SettingsPage.MENU) onBack() else page = SettingsPage.MENU }
+    // System back mirrors the top-bar arrow: cleanup subpage -> cleanup submenu, other
+    // subpage -> menu, menu -> expenses list.
+    BackHandler { if (page == SettingsPage.MENU) onBack() else page = backTarget(page) }
 
     val title = when (page) {
         SettingsPage.MENU -> languageManager.getString("settings")
@@ -117,6 +132,10 @@ fun SettingsScreen(
         SettingsPage.VOICE -> languageManager.getString("voice_settings_title")
         SettingsPage.CATEGORIES -> languageManager.getString("categories_settings_title")
         SettingsPage.EXPENSE_CLEANUP -> languageManager.getString("expense_cleanup_settings_title")
+        SettingsPage.CLEANUP_DUPLICATES -> languageManager.getString("cleanup_duplicates_title")
+        SettingsPage.CLEANUP_CORRECTIONS -> languageManager.getString("cleanup_corrections_title")
+        SettingsPage.CLEANUP_REMAP -> languageManager.getString("cleanup_remap_title")
+        SettingsPage.CLEANUP_TEMPLATES -> languageManager.getString("cleanup_templates_title")
         SettingsPage.CURRENCY -> languageManager.getString("currency_settings_title")
         SettingsPage.NOTIFICATION_CAPTURE -> languageManager.getString("notification_capture_title")
         SettingsPage.SPENDING_LIMITS -> languageManager.getString("spending_limits_title")
@@ -129,7 +148,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    IconButton(onClick = { if (page == SettingsPage.MENU) onBack() else page = SettingsPage.MENU }) {
+                    IconButton(onClick = { if (page == SettingsPage.MENU) onBack() else page = backTarget(page) }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = languageManager.getString("back"))
                     }
                 }
@@ -147,17 +166,16 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                 )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("notifications_settings_title")) },
+                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATIONS }
+                )
                 SettingsSectionHeader(languageManager.getString("settings_section_appearance"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("theme_section")) },
                     leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.THEME }
-                )
-                SettingsSectionHeader(languageManager.getString("settings_section_notifications"))
-                ListItem(
-                    headlineContent = { Text(languageManager.getString("notifications_settings_title")) },
-                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
-                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATIONS }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_capture"))
                 ListItem(
@@ -297,11 +315,49 @@ fun SettingsScreen(
                 stateManager = stateManager,
                 modifier = mod
             )
-            SettingsPage.EXPENSE_CLEANUP -> ExpenseCleanupSettingsTab(
+            // "Expense cleanup and rules" is itself a small sectioned menu, same shape as the
+            // main one — each learning/cleanup system gets its own page instead of one long scroll.
+            SettingsPage.EXPENSE_CLEANUP -> Column(mod.verticalScroll(rememberScrollState())) {
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("cleanup_duplicates_title")) },
+                    leadingContent = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CLEANUP_DUPLICATES }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("cleanup_corrections_title")) },
+                    leadingContent = { Icon(Icons.Filled.Spellcheck, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CLEANUP_CORRECTIONS }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("cleanup_remap_title")) },
+                    leadingContent = { Icon(Icons.Filled.SwapHoriz, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CLEANUP_REMAP }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("cleanup_templates_title")) },
+                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CLEANUP_TEMPLATES }
+                )
+            }
+            SettingsPage.CLEANUP_DUPLICATES -> DuplicatesSettingsPage(
                 settings = settings,
                 expenses = expenses,
                 stateManager = stateManager,
                 nextScheduledDedupMillis = (ui as? ExpensesUiState.Unlocked)?.nextScheduledDedupMillis,
+                modifier = mod
+            )
+            SettingsPage.CLEANUP_CORRECTIONS -> CorrectionsSettingsPage(
+                settings = settings,
+                stateManager = stateManager,
+                modifier = mod
+            )
+            SettingsPage.CLEANUP_REMAP -> RemapRulesSettingsPage(
+                settings = settings,
+                stateManager = stateManager,
+                modifier = mod
+            )
+            SettingsPage.CLEANUP_TEMPLATES -> NotificationTemplatesSettingsPage(
+                stateManager = stateManager,
                 modifier = mod
             )
             SettingsPage.CURRENCY -> CurrencySettingsTab(

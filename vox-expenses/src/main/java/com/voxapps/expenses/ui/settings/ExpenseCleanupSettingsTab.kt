@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -44,7 +45,9 @@ import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
+import androidx.compose.ui.text.withStyle
 import com.voxapps.ipc.VoxAppsDiscovery
+import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -52,15 +55,81 @@ import java.util.Locale
 
 private data class ResolvedGroup(val group: DuplicateGroup, val keep: Expense, val duplicates: List<Expense>)
 
+/** Semantic emphasis palette for [HowItWorksCard] and the fuzziness feedback: green = safe/under
+ *  your control, amber = automatic/attention, red = destructive/permanent. Mid-tone values chosen
+ *  to stay readable on the secondaryContainer card in both themes. */
+internal val EmphasisSafe = Color(0xFF4CAF50)
+internal val EmphasisCaution = Color(0xFFFFA000)
+
 /**
- * Expense cleanup: one unified duplicate-detection surface — a 3-way engine choice (Local/Local+AI/AI)
- * for both automatic (insert-time) protection and the manual "Check for duplicates now" trigger, plus
- * a review section shared by whichever engine found something. Real financial records aren't cheaply
+ * The how-this-works card at the top of each cleanup page. The string carries three marker pairs
+ * for the load-bearing words — `*safe*` (green: things you control), `~attention~` (amber: things
+ * that happen automatically), `!danger!` (red: destructive or permanent) — rendered semibold in
+ * the matching color. Markers live in the translations, so each language emphasizes its own
+ * phrasing.
+ */
+@Composable
+private fun HowItWorksCard(text: String) {
+    val danger = MaterialTheme.colorScheme.error
+    val annotated = remember(text, danger) {
+        androidx.compose.ui.text.buildAnnotatedString {
+            var active: Char? = null
+            val sb = StringBuilder()
+            fun flush() {
+                if (sb.isEmpty()) return
+                val color = when (active) {
+                    '*' -> EmphasisSafe
+                    '~' -> EmphasisCaution
+                    '!' -> danger
+                    else -> null
+                }
+                if (color != null) {
+                    withStyle(
+                        androidx.compose.ui.text.SpanStyle(
+                            color = color,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        )
+                    ) { append(sb.toString()) }
+                } else {
+                    append(sb.toString())
+                }
+                sb.clear()
+            }
+            for (c in text) {
+                when {
+                    active == null && (c == '*' || c == '~' || c == '!') -> { flush(); active = c }
+                    active != null && c == active -> { flush(); active = null }
+                    else -> sb.append(c)
+                }
+            }
+            flush()
+        }
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Text(
+            annotated,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(16.dp)
+        )
+    }
+}
+
+/**
+ * Duplicates page of the "Expense cleanup and rules" submenu: one unified duplicate-detection
+ * surface — a 3-way engine choice (Local/Local+AI/AI) for both automatic (insert-time) protection
+ * and the manual "Check for duplicates now" trigger, the schedule, the tuning rules, plus a review
+ * section shared by whichever engine found something. Real financial records aren't cheaply
  * reversible, so nothing is deleted until the user explicitly approves specific groups here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExpenseCleanupSettingsTab(
+fun DuplicatesSettingsPage(
     settings: ExpensesSettings,
     expenses: List<Expense>,
     stateManager: ExpensesStateManager,
@@ -125,10 +194,7 @@ fun ExpenseCleanupSettingsTab(
         modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Plain text header, no enclosing Card — matches every other settings tab's root style
-        // (CategoriesSettingsTab, SpendingLimitsSettingsTab, ...); this tab used to wrap its entire
-        // content in one large Card, which is why it visually stood out from the rest of Settings as
-        // one solid tonal block instead of separate, individually-scoped sections.
+        HowItWorksCard(languageManager.getString("cleanup_info_duplicates"))
         Text(languageManager.getString("expense_cleanup_section_title"), style = MaterialTheme.typography.titleMedium)
         Text(
             languageManager.getString("expense_cleanup_section_desc"),
@@ -164,80 +230,6 @@ fun ExpenseCleanupSettingsTab(
                     onUpsertRule = { stateManager.upsertDuplicateRule(it) },
                     onDeleteRule = { stateManager.deleteDuplicateRule(it) },
                     onSetRuleEnabled = { id, enabled -> stateManager.setDuplicateRuleEnabled(id, enabled) },
-                    languageManager = languageManager
-                )
-            }
-        }
-
-        // --- Field correction memory ---
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(languageManager.getString("field_correction_memory_label"), style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            languageManager.getString("field_correction_memory_desc"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = settings.fieldCorrectionMemoryEnabled,
-                        onCheckedChange = { stateManager.setFieldCorrectionMemoryEnabled(it) }
-                    )
-                }
-                val correctionAlpha = if (settings.fieldCorrectionMemoryEnabled) 1f else 0.4f
-                Column(modifier = Modifier.alpha(correctionAlpha), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(languageManager.getString("field_correction_speed_label"), style = MaterialTheme.typography.labelLarge)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            ExpensesSettings.CORRECTION_SPEED_INSTANT to "field_correction_speed_instant",
-                            ExpensesSettings.CORRECTION_SPEED_FAST to "field_correction_speed_fast",
-                            ExpensesSettings.CORRECTION_SPEED_MEDIUM to "field_correction_speed_medium",
-                            ExpensesSettings.CORRECTION_SPEED_SLOW to "field_correction_speed_slow"
-                        ).forEach { (count, labelKey) ->
-                            FilterChip(
-                                selected = settings.fieldCorrectionThreshold == count,
-                                onClick = { stateManager.setFieldCorrectionThreshold(count) },
-                                label = { Text(languageManager.getString(labelKey)) }
-                            )
-                        }
-                    }
-                    Text(languageManager.getString("field_correction_apply_mode_label"), style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            ExpensesSettings.CORRECTION_APPLY_SUGGEST to "field_correction_apply_suggest",
-                            ExpensesSettings.CORRECTION_APPLY_AUTO to "field_correction_apply_auto"
-                        ).forEach { (mode, labelKey) ->
-                            FilterChip(
-                                selected = settings.fieldCorrectionApplyMode == mode,
-                                onClick = { stateManager.setFieldCorrectionApplyMode(mode) },
-                                label = { Text(languageManager.getString(labelKey)) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- Re-map rules: authoring, learning controls, and the rule list in one card ---
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                val remapRules by stateManager.remapRules.collectAsStateWithLifecycle(initialValue = emptyList())
-                val cleanupUiState by stateManager.uiState.collectAsStateWithLifecycle()
-                val remapCategories =
-                    (cleanupUiState as? com.voxapps.expenses.state.ExpensesUiState.Unlocked)?.categories ?: emptyList()
-                RemapRulesSection(
-                    rules = remapRules,
-                    categories = remapCategories,
-                    settings = settings,
-                    onSetProposalsEnabled = { stateManager.setRemapProposalsEnabled(it) },
-                    onSetLearningSpeed = { stateManager.setRemapLearningSpeed(it) },
-                    onUpsertRule = { stateManager.upsertRemapRule(it) },
-                    onDeleteRule = { stateManager.deleteRemapRule(it) },
-                    onDeleteAllRules = { stateManager.deleteAllRemapRules() },
-                    onToggleAllRules = { stateManager.setAllRemapRulesEnabled(it) },
-                    onReorderRules = { stateManager.reorderRemapRules(it) },
                     languageManager = languageManager
                 )
             }
@@ -469,6 +461,217 @@ fun ExpenseCleanupSettingsTab(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(languageManager.getString("apply_selected_button"))
+                }
+            }
+        }
+    }
+}
+
+/** Spelling-corrections page of the "Expense cleanup and rules" submenu — the learned
+ *  word-fix memory's toggle, learning speed, and apply mode. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CorrectionsSettingsPage(
+    settings: ExpensesSettings,
+    stateManager: ExpensesStateManager,
+    modifier: Modifier = Modifier
+) {
+    val languageManager = LocalLanguageManager.current
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        HowItWorksCard(languageManager.getString("cleanup_info_corrections"))
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(languageManager.getString("field_correction_memory_label"), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            languageManager.getString("field_correction_memory_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.fieldCorrectionMemoryEnabled,
+                        onCheckedChange = { stateManager.setFieldCorrectionMemoryEnabled(it) }
+                    )
+                }
+                val correctionAlpha = if (settings.fieldCorrectionMemoryEnabled) 1f else 0.4f
+                Column(modifier = Modifier.alpha(correctionAlpha), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(languageManager.getString("field_correction_speed_label"), style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            ExpensesSettings.CORRECTION_SPEED_INSTANT to "field_correction_speed_instant",
+                            ExpensesSettings.CORRECTION_SPEED_FAST to "field_correction_speed_fast",
+                            ExpensesSettings.CORRECTION_SPEED_MEDIUM to "field_correction_speed_medium",
+                            ExpensesSettings.CORRECTION_SPEED_SLOW to "field_correction_speed_slow"
+                        ).forEach { (count, labelKey) ->
+                            FilterChip(
+                                selected = settings.fieldCorrectionThreshold == count,
+                                onClick = { stateManager.setFieldCorrectionThreshold(count) },
+                                label = { Text(languageManager.getString(labelKey)) }
+                            )
+                        }
+                    }
+                    Text(languageManager.getString("field_correction_apply_mode_label"), style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            ExpensesSettings.CORRECTION_APPLY_SUGGEST to "field_correction_apply_suggest",
+                            ExpensesSettings.CORRECTION_APPLY_AUTO to "field_correction_apply_auto"
+                        ).forEach { (mode, labelKey) ->
+                            FilterChip(
+                                selected = settings.fieldCorrectionApplyMode == mode,
+                                onClick = { stateManager.setFieldCorrectionApplyMode(mode) },
+                                label = { Text(languageManager.getString(labelKey)) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Re-map rules page of the "Expense cleanup and rules" submenu — rule authoring, learning
+ *  controls, and the rule list. */
+@Composable
+fun RemapRulesSettingsPage(
+    settings: ExpensesSettings,
+    stateManager: ExpensesStateManager,
+    modifier: Modifier = Modifier
+) {
+    val languageManager = LocalLanguageManager.current
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        HowItWorksCard(languageManager.getString("cleanup_info_remap"))
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val remapRules by stateManager.remapRules.collectAsStateWithLifecycle(initialValue = emptyList())
+                val cleanupUiState by stateManager.uiState.collectAsStateWithLifecycle()
+                val remapCategories =
+                    (cleanupUiState as? com.voxapps.expenses.state.ExpensesUiState.Unlocked)?.categories ?: emptyList()
+                RemapRulesSection(
+                    rules = remapRules,
+                    categories = remapCategories,
+                    settings = settings,
+                    onSetProposalsEnabled = { stateManager.setRemapProposalsEnabled(it) },
+                    onSetLearningSpeed = { stateManager.setRemapLearningSpeed(it) },
+                    onUpsertRule = { stateManager.upsertRemapRule(it) },
+                    onDeleteRule = { stateManager.deleteRemapRule(it) },
+                    onDeleteAllRules = { stateManager.deleteAllRemapRules() },
+                    onToggleAllRules = { stateManager.setAllRemapRulesEnabled(it) },
+                    onReorderRules = { stateManager.reorderRemapRules(it) },
+                    languageManager = languageManager
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Notification-templates page of the "Expense cleanup and rules" submenu — every learned
+ * notification template: its skeleton text (the bank's boilerplate with the variable parts
+ * removed; view-only, since matching is byte-exact and an edited skeleton would never match
+ * again), what it learned, and how far along it is. Per row: Forget (delete outright) and, for a
+ * quarantined template, Re-teach (clear the quarantine, restart learning from zero — the explicit
+ * human override for a template the user knows is actually consistent).
+ */
+@Composable
+fun NotificationTemplatesSettingsPage(
+    stateManager: ExpensesStateManager,
+    modifier: Modifier = Modifier
+) {
+    val languageManager = LocalLanguageManager.current
+    var templates by remember { mutableStateOf<List<com.voxapps.expenses.domain.llm.TemplateDirectionMemory.TemplateView>>(emptyList()) }
+    var refreshKey by remember { mutableStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(refreshKey) {
+        templates = stateManager.learnedTemplatesSnapshot()
+    }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        HowItWorksCard(languageManager.getString("cleanup_info_templates"))
+        if (templates.isEmpty()) {
+            Text(
+                languageManager.getString("template_list_empty"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        templates.forEach { t ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = t.skeleton ?: languageManager.getString("template_skeleton_pending"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (t.skeleton != null) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val statusKey = when {
+                            t.conflicted -> "template_quarantined"
+                            t.answersDirection -> "template_active"
+                            else -> "template_learning"
+                        }
+                        Text(
+                            languageManager.getString(statusKey),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = when {
+                                t.conflicted -> MaterialTheme.colorScheme.error
+                                t.answersDirection -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                        if (t.answersDirection) {
+                            val directionKey = if (t.direction.equals("incoming", ignoreCase = true)) {
+                                "transaction_direction_incoming"
+                            } else {
+                                "transaction_direction_outgoing"
+                            }
+                            Text(
+                                languageManager.getString(directionKey),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            String.format(languageManager.getString("template_confirmations_format"), t.confirmations),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (t.conflicted) {
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    stateManager.reteachLearnedTemplate(t.hash)
+                                    refreshKey++
+                                }
+                            }) {
+                                Text(languageManager.getString("template_reteach_button"))
+                            }
+                        }
+                        OutlinedButton(onClick = {
+                            scope.launch {
+                                stateManager.forgetLearnedTemplate(t.hash)
+                                refreshKey++
+                            }
+                        }) {
+                            Text(languageManager.getString("template_forget_button"))
+                        }
+                    }
                 }
             }
         }
