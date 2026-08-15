@@ -1459,6 +1459,17 @@
           "engine_type": "LITERTLM",
           "is_remote": true,
           "sha256": "9fc939cf525890ea060a815c5cd4395a1496161e3930c3891891be9e255ac09f"
+        },
+        {
+          "id": "qwen2.5-1.5b-q8-seq128-ekv4096",
+          "label": "Qwen 2.5 1.5B (Compact prefill q8, 4096 ctx — slower on long prompts)",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/Qwen2.5-1.5B-Instruct_seq128_q8_ekv4096.task",
+          "size_mb": 1495,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": "LITERTLM",
+          "is_remote": true,
+          "sha256": "98c289e1c43cc592ac535594d5de4bdde449e8dc012ac66909064b6880f8b717"
         }
       ]
     },
@@ -1490,6 +1501,28 @@
           "engine_type": "LITERTLM",
           "is_remote": true,
           "sha256": "555579ff2f4fd13379abe69c1c3ab5200f7338bc92471557f1d6614a6e5ab0b4"
+        },
+        {
+          "id": "qwen2.5-1.5b-q8-ekv4096-litertlm",
+          "label": "Qwen 2.5 1.5B (High Precision q8, 4096 ctx)",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+          "size_mb": 1524,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": "LITERTLM",
+          "is_remote": true,
+          "sha256": "faa60663b333290c1496c499828b21d3e3254a788cacd8cce917ce0f761a2dc9"
+        },
+        {
+          "id": "smollm3-3b-q4-ekv4096",
+          "label": "SmolLM3 3B (Balanced q4, 4096 ctx)",
+          "path": "https://github.com/razvan-eduard/VoxApps/releases/download/nlu-assets/SmolLM3-3B_q4_block32_ekv4096.litertlm",
+          "size_mb": 1910,
+          "size_label": null,
+          "lang_code": null,
+          "engine_type": "LITERTLM",
+          "is_remote": true,
+          "sha256": "38d7bf55e243f5a95d8b16c21b1f7ef7debe6ce6bb2ddb66eb54f4bc2be8e6eb"
         }
       ]
     }
