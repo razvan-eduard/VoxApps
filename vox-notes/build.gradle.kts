@@ -105,7 +105,7 @@ dependencies {
     // (androidx.activity, pulled in by the Compose stack) when requesting a runtime permission via
     // registerForActivityResult — force a current fragment version so it wins dependency resolution.
     // Mirrors vox-expenses'/vox-calendar's identical fix.
-    implementation("androidx.fragment:fragment-ktx:1.8.9")
+    implementation("androidx.fragment:fragment-ktx:1.9.0")
 
     // Room + KSP
     implementation(libs.androidx.room.runtime)
