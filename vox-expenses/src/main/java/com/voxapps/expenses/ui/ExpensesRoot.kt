@@ -107,7 +107,13 @@ fun ExpensesRoot(
                             if (target != null) mostRecentCategoryColor = container.expensesRepository.mostRecentCategoryColor()
                         }
                         when {
-                            target != null -> ExpenseEditScreen(
+                            // key(): a widget deep-link can swap the target WHILE an editor is
+                            // open — without a fresh composition the old screen's remembered field
+                            // states silently point at the new record, and a save would write one
+                            // record's fields onto another. Switching targets now builds a new
+                            // editor seeded from the tapped record; the abandoned one's unsaved
+                            // keystrokes are discarded, never cross-written.
+                            target != null -> androidx.compose.runtime.key((target as? EditTarget.Existing)?.expense?.expense?.id ?: -1L) { ExpenseEditScreen(
                                 existing = (target as? EditTarget.Existing)?.expense,
                                 categories = state.categories,
                                 defaultCurrency = container.settingsRepository.getSnapshot().defaultCurrency,
@@ -118,7 +124,7 @@ fun ExpensesRoot(
                                 mostRecentCategoryColor = mostRecentCategoryColor,
                                 stateManager = container.expensesStateManager,
                                 onDone = { editTarget = null }
-                            )
+                            ) }
                             showSettings -> SettingsScreen(
                                 stateManager = container.expensesStateManager,
                                 settingsRepo = container.settingsRepository,
