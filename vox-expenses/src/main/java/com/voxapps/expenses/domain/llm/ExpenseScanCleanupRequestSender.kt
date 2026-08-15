@@ -51,6 +51,11 @@ object ExpenseScanCleanupRequestSender {
             else -> LlmTasks.EXPENSE_SCAN_CLEANUP
         }
 
+        // What the configured engine can take decides how much of the prompt is worth sending;
+        // an unreachable or older Commander answers no, which is the shape a weak engine can still
+        // complete. See VoxCapabilityClient.EngineCapabilities.longPrompt.
+        val includeLineItems = com.voxapps.ipc.VoxCapabilityClient.supportsLongPrompt(context)
+
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             plainText,
             existingCategories,
@@ -58,6 +63,7 @@ object ExpenseScanCleanupRequestSender {
             settings.language,
             preParsedDate = preParsed.date,
             preParsedTime = preParsed.time,
+            includeLineItems = includeLineItems,
         )
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for scan cleanup (retryOfExpenseId=$retryOfExpenseId, multimodal=${attachmentUri != null})")
@@ -99,6 +105,8 @@ object ExpenseScanCleanupRequestSender {
         val preParsedTotal = totals.total
         val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
 
+        // Always the full prompt, whatever the engine says: this action exists only to fetch line
+        // items, and asking for them without asking for them is a guaranteed wasted round trip.
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             plainText,
             existingCategories,
@@ -106,6 +114,7 @@ object ExpenseScanCleanupRequestSender {
             settings.language,
             preParsedDate = preParsed.date,
             preParsedTime = preParsed.time,
+            includeLineItems = true,
         )
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for line-items rescan (expenseId=$expenseId)")
@@ -150,6 +159,11 @@ object ExpenseScanCleanupRequestSender {
         val preParsedTotal = totals.total
         val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
 
+        // What the configured engine can take decides how much of the prompt is worth sending;
+        // an unreachable or older Commander answers no, which is the shape a weak engine can still
+        // complete. See VoxCapabilityClient.EngineCapabilities.longPrompt.
+        val includeLineItems = com.voxapps.ipc.VoxCapabilityClient.supportsLongPrompt(context)
+
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             plainText,
             existingCategories,
@@ -157,6 +171,7 @@ object ExpenseScanCleanupRequestSender {
             settings.language,
             preParsedDate = preParsed.date,
             preParsedTime = preParsed.time,
+            includeLineItems = includeLineItems,
         )
 
         val taskWithMeta = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending:${groupId.orEmpty()}:${fileNames.joinToString(",")}"

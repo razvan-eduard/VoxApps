@@ -22,6 +22,7 @@ object VoxCapabilityClient {
     private const val DEFAULT_TIMEOUT_MS = 3_000L
     private const val KEY_MULTIMODAL = "multimodal"
     private const val KEY_LOCAL = "local"
+    private const val KEY_LONG_PROMPT = "long_prompt"
 
     /**
      * [local] fails safe to `true` (not `false`) on timeout/unreachable, unlike [multimodal] — an
@@ -29,7 +30,20 @@ object VoxCapabilityClient {
      * (e.g. [com.voxapps.expenses.domain.llm.NotificationExpenseParsePromptBuilder]'s local-engine
      * prompt variant) rather than assume a capable remote model that may not actually be there.
      */
-    data class EngineCapabilities(val multimodal: Boolean, val local: Boolean)
+    /**
+     * [longPrompt] says the configured engine can take a task prompt whole — every section of it,
+     * including the parts a small model abandons. It fails safe to `false` for the same reason
+     * [local] fails safe to `true`: an inconclusive probe should pick the behaviour that a weak
+     * engine can still complete. A reduced prompt sent to a capable engine costs that one request
+     * some detail the caller can ask for again; the full prompt sent to an engine that cannot hold
+     * it costs the whole result. A Commander too old to know the key answers without it, and
+     * `optBoolean` reads that absence as `false` — no version negotiation needed.
+     */
+    data class EngineCapabilities(
+        val multimodal: Boolean,
+        val local: Boolean,
+        val longPrompt: Boolean
+    )
 
     private suspend fun query(context: Context, timeoutMs: Long): EngineCapabilities {
         val intent = Intent(VoxIpc.ACTION_CAPABILITY_QUERY).apply {
@@ -53,17 +67,18 @@ object VoxCapabilityClient {
             }
         } ?: run {
             Logger.d("VoxCapabilityClient", "Capability query timed out or Commander unreachable")
-            return EngineCapabilities(multimodal = false, local = true)
+            return EngineCapabilities(multimodal = false, local = true, longPrompt = false)
         }
-        if (result?.ok != true) return EngineCapabilities(multimodal = false, local = true)
+        if (result?.ok != true) return EngineCapabilities(multimodal = false, local = true, longPrompt = false)
         return try {
             val o = org.json.JSONObject(result.text)
             EngineCapabilities(
                 multimodal = o.optBoolean(KEY_MULTIMODAL, false),
-                local = o.optBoolean(KEY_LOCAL, true)
+                local = o.optBoolean(KEY_LOCAL, true),
+                longPrompt = o.optBoolean(KEY_LONG_PROMPT, false)
             )
         } catch (e: Exception) {
-            EngineCapabilities(multimodal = false, local = true)
+            EngineCapabilities(multimodal = false, local = true, longPrompt = false)
         }
     }
 
@@ -79,10 +94,18 @@ object VoxCapabilityClient {
     suspend fun isLocalEngine(context: Context, timeoutMs: Long = DEFAULT_TIMEOUT_MS): Boolean =
         query(context, timeoutMs).local
 
+    /** See [EngineCapabilities.longPrompt] for the fail-safe direction (defaults to `false`). */
+    suspend fun supportsLongPrompt(context: Context, timeoutMs: Long = DEFAULT_TIMEOUT_MS): Boolean =
+        query(context, timeoutMs).longPrompt
+
     /** Commander's own receiver builds its reply with this — kept here so both sides agree on shape. */
-    fun buildReply(multimodal: Boolean, local: Boolean): VoxResult =
+    fun buildReply(multimodal: Boolean, local: Boolean, longPrompt: Boolean): VoxResult =
         VoxResult(
             ok = true,
-            text = org.json.JSONObject().put(KEY_MULTIMODAL, multimodal).put(KEY_LOCAL, local).toString()
+            text = org.json.JSONObject()
+                .put(KEY_MULTIMODAL, multimodal)
+                .put(KEY_LOCAL, local)
+                .put(KEY_LONG_PROMPT, longPrompt)
+                .toString()
         )
 }
