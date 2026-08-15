@@ -23,6 +23,7 @@ import com.voxapps.expenses.domain.llm.CategoryMergeMappingParser
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationRequestSender
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationResultParser
+import com.voxapps.expenses.domain.llm.InvoiceTotalsReconciler
 import com.voxapps.expenses.domain.llm.ExpenseSummary
 import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
@@ -551,17 +552,31 @@ class LlmResultReceiver : BroadcastReceiver() {
 
         maybeRequestScopedDuplicateCheck(appContext, container, settings.duplicateCheckModeAutomatic, newExpenseId, settings.toNearDuplicateConfig())
 
-        if (newExpenseId > 0 && parsed.itemsSumMismatch) {
-            // Items sum to the invoice's OWN charges (net, or net+VAT), never to a grand total
-            // that includes carried balance — so the sanity reference is the smallest labelled
-            // total when the document printed one.
+        if (newExpenseId > 0 && parsed.items.isNotEmpty()) {
+            // Items sum to the invoice's OWN charges — net, net plus its VAT, or the invoice total
+            // as printed — and never to a grand total carrying someone's unpaid history. Matching
+            // any of those is not a plausibility check but a proof the rows were read correctly,
+            // which is why it is worth stating separately from the soft mismatch warning below.
             val itemsSum = parsed.items.sumOf { it.quantity * it.unitPrice }
-            val reference = preParse?.invoiceOwnTotal ?: parsed.totalAmount
-            if (ExpenseAmountMismatch.isGrossMismatch(reference, itemsSum)) {
-                Logger.w(
-                    TAG,
-                    "Items sum mismatch for expense $newExpenseId: reference=$reference itemsSum=$itemsSum"
-                )
+            val invoiceOwn = preParse?.invoiceOwnTotal
+            val verdict = InvoiceTotalsReconciler.reconcile(
+                grandTotal = parsed.totalAmount,
+                invoiceTotal = invoiceOwn,
+                previousBalance = preParse?.previousBalance
+            )
+            if (verdict != InvoiceTotalsReconciler.Verdict.UNTESTABLE) {
+                Logger.d(TAG, "Invoice totals for expense $newExpenseId: $verdict")
+            }
+            if (InvoiceTotalsReconciler.itemsBelong(itemsSum, invoiceOwn ?: parsed.totalAmount)) {
+                Logger.d(TAG, "Items for expense $newExpenseId sum to a figure the document prints")
+            } else if (parsed.itemsSumMismatch) {
+                val reference = invoiceOwn ?: parsed.totalAmount
+                if (ExpenseAmountMismatch.isGrossMismatch(reference, itemsSum)) {
+                    Logger.w(
+                        TAG,
+                        "Items sum mismatch for expense $newExpenseId: reference=$reference itemsSum=$itemsSum"
+                    )
+                }
             }
         }
 
