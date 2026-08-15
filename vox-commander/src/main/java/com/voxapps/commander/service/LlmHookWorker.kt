@@ -46,24 +46,24 @@ class LlmHookWorker(
     }
 
     override suspend fun doWork(): Result {
-        // See EXTRA_LLM_PAYLOAD_FILE's doc comment (LlmHookReceiver.kt) — the actual payload was staged
-        // to a cache file to stay under WorkManager Data's hard 10 KB cap; read it back and clean up
-        // regardless of what happens afterward (a leftover file here would just accumulate forever).
+        // See EXTRA_LLM_PAYLOAD_FILE's doc comment (LlmHookReceiver.kt) — the actual payload was
+        // staged to a cache file to stay under WorkManager Data's hard 10 KB cap. The file is
+        // deleted only on a TERMINAL outcome below, never on read: a long decode can get the
+        // worker stopped and rescheduled by the OS, and the rescheduled run re-reads this same
+        // file — deleting on read turned every such stop into a permanent "no valid request"
+        // failure for a request that was mid-decode and perfectly retryable.
         val payloadPath = inputData.getString(EXTRA_LLM_PAYLOAD_FILE)
-        val payloadJson = payloadPath?.let { path ->
-            try {
-                val file = File(path)
-                val text = file.readText()
-                file.delete()
-                text
-            } catch (e: Exception) {
-                Logger.log("LlmHookWorker: failed reading payload file: ${e.message}", TAG)
-                null
-            }
+        val payloadFile = payloadPath?.let { File(it) }
+        val payloadJson = try {
+            payloadFile?.readText()
+        } catch (e: Exception) {
+            Logger.log("LlmHookWorker: failed reading payload file: ${e.message}", TAG)
+            null
         }
         val request = VoxLlmRequest.fromJson(payloadJson)
         if (request == null) {
             Logger.log("LlmHookWorker: no valid request in input data", TAG)
+            payloadFile?.delete()
             return Result.failure()
         }
 
@@ -86,13 +86,21 @@ class LlmHookWorker(
             }
             replyToSource(request.sourcePackage, result)
             Logger.log("LlmHookWorker: replied with status=${result.status} [Error: ${result.error}]", TAG)
+            payloadFile?.delete()
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // The OS stopped the worker (not a model failure): no reply — an error reply here
+            // makes the caller give up on a request WorkManager is about to re-run — and the
+            // payload file stays for that re-run to read.
+            Logger.log("LlmHookWorker: stopped mid-decode, leaving request for the rescheduled run", TAG)
+            throw e
         } catch (e: Exception) {
             Logger.log("LlmHookWorker: processing failed: ${e.message}", TAG)
             replyToSource(
                 request.sourcePackage,
                 VoxLlmResult(task = request.task, status = VoxLlmResult.STATUS_ERROR, error = "Internal error: ${e.message}")
             )
+            payloadFile?.delete()
             Result.failure()
         }
     }

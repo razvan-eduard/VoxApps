@@ -44,6 +44,17 @@ private const val LLM_CONTEXT_TOKENS = 4096
  *  so an unusually long logical_subject cannot truncate mid-JSON. */
 private const val NLU_MAX_TOKENS = 192
 
+/** Output budget for a raw-prompt (satellite hook) completion: a hook reply is a structured
+ *  document whose length follows its input's, and any fixed cap cuts the longest replies
+ *  mid-shape. The first attempt reserves the full ceiling; when the prompt doesn't leave that
+ *  much room, the native fit check rejects it *reporting the measured prompt size and capacity*,
+ *  and the call retries once with the exact remainder — measured numbers, no char-based token
+ *  estimate anywhere. Below [RAW_OUTPUT_TOKENS_MIN] of remainder the prompt has swallowed the
+ *  context and the rejection stands. */
+private const val RAW_OUTPUT_TOKENS_CEILING = 2048
+private const val RAW_OUTPUT_TOKENS_MIN = 128
+private const val RAW_OUTPUT_MARGIN_TOKENS = 16
+
 /**
  * GBNF primitives shared by every generated grammar — the JSON string/number/array machinery,
  * byte-for-byte what llama.cpp's own json_schema_to_grammar emits for this response shape, so the
@@ -477,10 +488,22 @@ class LocalLlmInterpreter(
                 // Raw prompts run in their own KV slot: their framing shares no prefix with the
                 // NLU system prompt, so under one slot every hook call evicted the preloaded NLU
                 // prefix and the next voice command repaid the whole prefill (and vice versa).
-                val out = completeCancellable(
-                    "", promptText, "", maxTokens = 512, temperature = 0.2f,
-                    slot = LlamaBridge.SLOT_RAW
-                )
+                val out = try {
+                    completeCancellable(
+                        "", promptText, "", maxTokens = RAW_OUTPUT_TOKENS_CEILING, temperature = 0.2f,
+                        slot = LlamaBridge.SLOT_RAW
+                    )
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: RuntimeException) {
+                    val remainder = fitRetryBudget(e.message)
+                    if (remainder != null) {
+                        completeCancellable(
+                            "", promptText, "", maxTokens = remainder, temperature = 0.2f,
+                            slot = LlamaBridge.SLOT_RAW
+                        )
+                    } else throw e
+                }
                 settleGpuCrashCookie(guardGpu, succeeded = out != null)
                 out
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -494,6 +517,17 @@ class LocalLlmInterpreter(
         } finally {
             isProcessing = false
         }
+    }
+
+    /** The exact output reservation a rejected first attempt should retry with, read back from the
+     *  native fit check's message — it reports the measured prompt token count and per-sequence
+     *  capacity. Null when the message isn't a fit rejection, or when the remainder is too small
+     *  to hold a useful reply (the prompt has effectively consumed the context). */
+    private fun fitRetryBudget(message: String?): Int? {
+        val match = Regex("""\((\d+) tokens, capacity (\d+),""").find(message ?: return null) ?: return null
+        val (tokens, capacity) = match.destructured
+        val remainder = capacity.toInt() - tokens.toInt() - RAW_OUTPUT_MARGIN_TOKENS
+        return remainder.takeIf { it >= RAW_OUTPUT_TOKENS_MIN }
     }
 
     /** One benchmark measurement: the total, and the prompt-eval / decode split from the native
