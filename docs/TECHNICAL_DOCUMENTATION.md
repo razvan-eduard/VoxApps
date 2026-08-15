@@ -202,8 +202,9 @@ owning the source.
   that's already ready to review/approve — nothing to hand-merge in the common case. It only surfaces a
   manual-merge PR (with the reject hunk attached) if the patch genuinely conflicts with an upstream
   change to the same lines. Never auto-merges.
-- The same pattern (scheduled sync workflow, PR-per-update, never auto-merged) covers every vendored or
-  pinned dependency: Whisper.cpp (`sync-whisper.yml`, monthly — compiles/tests only, deliberately never
+- The same pattern (scheduled sync workflow, PR-per-update, never auto-merged) covers every tracked
+  upstream dependency (`vendor/docquad-sdk` is the deliberate exception — a language port cannot be
+  patch-tracked, so `./scripts/vox check docquad` reports drift for a human to judge): Whisper.cpp (`sync-whisper.yml`, monthly — compiles/tests only, deliberately never
   publishes the production `.so` DLC), llama.cpp (`sync-llama.yml`, monthly, a day after the whisper
   run), Vosk (`sync-vosk.yml`, weekly) and NewPipe Extractor (`sync-newpipe-extractor.yml`, weekly) —
   both binary JitPack dependencies, so their PRs bump `gradle/libs.versions.toml` rather than apply a
@@ -216,7 +217,7 @@ owning the source.
 
 ### Whisper.cpp Integration
 
-- **Native libraries**: `libwhisper.so` (ggml linked in statically, Vulkan backend included —
+- **Native libraries**: `libwhisper.so` (ggml linked in statically, OpenCL backend included with embedded Adreno kernels —
   compiled via CMake with `BUILD_SHARED_LIBS OFF`) plus `libomp.so`, its one shared dependency
 - **Engine**: `WhisperCppSttEngine` in `domain/engine/whisper/`
 - **Models**: Downloaded on-demand from HuggingFace (`ggml-tiny.bin`, `ggml-base.bin`, `ggml-small.bin`)
@@ -225,16 +226,18 @@ owning the source.
   (~88 MB for libwhisper.so + libomp.so on arm64, fetched by `WhisperEngineManager` when the user
   enables Whisper, verified against
   digests recorded in the APK as `assets/whisper-libs.sha256`) — the model download above is the
-  user-visible part of the same mechanism, and the llama.cpp runtime (libllama.so, ~39 MB, fetched
+  user-visible part of the same mechanism, The llama.cpp runtime is packaged by `voxDlc` mode: in `minimal` (the
+  default) `libllama.so` (~6 MB, no `libomp.so` — OpenMP is compiled out and the library has no
+  non-platform `DT_NEEDED`) ships inside every APK; in `full` it is excluded and fetched on demand
   by `LlamaEngineManager` from its fingerprint-addressed `llama-libs-<pin12>` release when a local
-  LLM engine is selected — see [§13](#13-model-management)) follows the same shape. onnxruntime, Vosk, and sherpa-onnx-jni
+  LLM engine is selected — see [§13](#13-model-management). onnxruntime, Vosk, and sherpa-onnx-jni
   aren't DLC in that sense: they're mandatory libraries the app needs to function. In `minimal` DLC
   mode (the default) they ship inside the APK; in `full` mode they're excluded the same way and
   silently fetched once at first launch by `core:nativelibs` (see
   `docs/BUILD_TIME_DEPENDENCIES.md`).
-- **Vulkan**: Opt-in GPU acceleration via the ggml Vulkan backend inside `libwhisper.so` — a
+- **OpenCL**: opt-in GPU acceleration via the ggml OpenCL backend inside `libwhisper.so` — a
   per-engine toggle, off by default, proven per device by a sandboxed compatibility probe (see
-  [§4 GPU Acceleration](#gpu-acceleration-vulkan))
+  [§4 GPU Acceleration](#gpu-acceleration-opencl))
 
 ### STT Flow
 
@@ -405,15 +408,23 @@ Gradle task — see [§18](#18-dependency-graph)). The Kotlin side talks to it t
   cannot produce an action/domain combination outside the taxonomy, and the remaining `NluIntent`
   fields are optional keys in a fixed order.
 
-### GPU Acceleration (Vulkan)
+### GPU Acceleration (OpenCL)
 
-Covers both on-device engines. `libwhisper.so` and `libllama.so` are hybrid CPU+Vulkan builds — one library carries both
-backends, and the backend is chosen per model load, so the CPU path is always available as the
-fallback. GPU use is a **per-engine boolean**, not an engine of its own: two
+Covers both on-device engines. `libwhisper.so` and `libllama.so` are hybrid CPU+OpenCL builds
+(ggml's OpenCL backend with Adreno-tuned kernels embedded at build time) — one library carries
+both backends, and the backend is chosen per model load, so the CPU path is always available as
+the fallback. GPU use is a **per-engine boolean**, not an engine of its own: two
 "GPU acceleration (Experimental)" switches in Settings → Advanced → the Engine & Model Management
 card (`whisperGpuEnabled`, `llamaGpuEnabled`), both off by default. No engine picker contains a
 GPU entry.
 
+- **OpenCL driver resolution.** Both libraries link against an in-repo import shim
+  (`vox-commander/src/main/cpp/opencl-shim/opencl_shim.c`) that forwards every CL entry point
+  through `dlopen` of the vendor driver at first call; the manifest declares
+  `<uses-native-library android:name="libOpenCL.so" android:required="false"/>` so the driver is
+  visible to the app's namespace. A device with no OpenCL driver runs on the CPU — the library
+  still loads. The build's headers come from the pinned `vendor/OpenCL-Headers` submodule, so the
+  GPU inputs are repo-pinned with no host packages involved.
 - **Backend selection (llama).** `LlamaBridge.loadModel` takes `nGpuLayers` — `0` runs entirely
   on the CPU, `-1` offloads every layer to the GPU — passed through to
   `llama_model_params.n_gpu_layers` in `llama_jni.cpp`. `LocalLlmInterpreter.setupLlm` computes
@@ -424,12 +435,14 @@ GPU entry.
   `WhisperCppSttEngine`, which resolves `whisperGpuEnabled && !whisperGpuIncompatible` at context
   load.
 - **Compatibility is proven per device, not assumed.** Enabling a toggle arms a one-shot probe:
-  `VulkanProbe` binds `VulkanProbeService`, which runs in a separate `:vulkanprobe` process and
-  performs a real GPU inference — whisper transcribes one second of silence with the active voice
-  model; llama decodes under a `root ::= "XOK"` sentinel grammar on the tiny `stories260K.gguf`
-  test model (fetched once into the cache, never over a metered connection — the multi-GB active
-  model is never duplicated into a second process). Verdicts are `COMPATIBLE`, `INCOMPATIBLE`
-  (which also snaps the toggle back off), and `UNDECIDED`.
+  `GpuProbe` binds `GpuProbeService`, which runs in a separate `:gpuprobe` process and performs a
+  real GPU inference — whisper transcribes one second of silence with the active voice model;
+  llama decodes under a `root ::= "XOK"` sentinel grammar on a tiny quantized fixture bundled as
+  an APK asset (`gpu_probe_model.gguf`) — no network involved, and the multi-GB active model is
+  never duplicated into a second process. The switch shows a progress/verdict modal while the
+  probe runs (`GpuTestModal`). Verdicts are `COMPATIBLE`, `INCOMPATIBLE` (which also snaps the
+  toggle back off), `NO_GPU_BACKEND` (the dlopen found no vendor driver — no GPU path exists on
+  this device), and `UNDECIDED`.
 - **A probe-process death is attributed, not assumed.** The probe process is an ordinary LMK
   target, so a death without a reply is classified through
   `ActivityManager.getHistoricalProcessExitReasons` (API 30+): a crash reads as `INCOMPATIBLE`,
@@ -439,6 +452,9 @@ GPU entry.
 - **`UNDECIDED` persists an attempt count and never auto-refires.** Re-enabling the toggle re-arms
   the probe until `MAX_GPU_PROBE_ATTEMPTS` (3); past the cap, enabling skips the probe and the
   runtime crash cookie guards the first real use.
+- **Capacity check.** Before offloading, `LocalLlmInterpreter` compares the model's size against
+  the GPU's reported memory budget; a model larger than the budget stays on the CPU with a
+  recorded skip reason.
 - **Runtime crash cookie.** A native GPU crash mid-inference cannot be caught in-process, so
   every *unverified* GPU inference journals a per-engine cookie to disk synchronously before it
   starts (`setGpuRuntimeAttemptSync`) and clears it after; a success sets `*GpuRuntimeVerified`
@@ -451,7 +467,8 @@ GPU entry.
   this device's verdict so the next enable re-probes from scratch.
 - **Diagnostics.** The Native Library Inventory carries two capability rows, "Whisper GPU" and
   "LLM GPU", answered by the stored incompatible verdict rather than by looking for a file — the
-  Vulkan backend lives inside each engine's library.
+  OpenCL backend lives inside each engine's library, and the vendor driver is resolved by dlopen
+  at first use.
 - **Benchmark.** The benchmark runs paired "Local LLM (CPU)" and "Local LLM (GPU)" rows (a
   "Skipped (Hardware Incompatible)" row when the verdict is latched), each with an NLU case and a
   ~1500-token receipt-scale raw-prompt case; the detailed report carries prompt-eval and decode
@@ -867,7 +884,7 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 | TTS | `ttsEnabled`, `ttsEngineType`, `ttsSpeechRate`, `ttsPitch`, `ttsAudioFocusMode`, `piperVoiceModelId` |
 | Aliases | `appAliasRules` |
 | Location | `locationHomeTownLat`, `locationHomeTownLon`, `locationCacheTtl`, `locationAlwaysUseHomeTown` |
-| GPU acceleration | `whisperGpuEnabled`, `llamaGpuEnabled` — the user's choice, and the only GPU fields that ride a backup. The rest is this device's verdict, excluded from export: per engine, `*GpuIncompatible`, `*GpuProbeDone`, `*GpuProbeAttempts`, `*GpuRuntimeAttempt` (the crash cookie), `*GpuRuntimeVerified`, `*GpuCrashStrikes` (see [§4 GPU Acceleration](#gpu-acceleration-vulkan)). `gpuStateMigrated` guards the one-shot `WHISPER_VULKAN` rewrite and rides exports like the other migration flags. |
+| GPU acceleration | `whisperGpuEnabled`, `llamaGpuEnabled` — the user's choice, and the only GPU fields that ride a backup. The rest is this device's verdict, excluded from export: per engine, `*GpuIncompatible`, `*GpuProbeDone`, `*GpuProbeAttempts`, `*GpuRuntimeAttempt` (the crash cookie), `*GpuRuntimeVerified`, `*GpuCrashStrikes` (see [§4 GPU Acceleration](#gpu-acceleration-opencl)). `gpuStateMigrated` guards the one-shot `WHISPER_VULKAN` rewrite and rides exports like the other migration flags. |
 | Logging | `debugLoggingEnabled`, `debugToastsEnabled` |
 
 ### Sync vs Async
@@ -903,7 +920,7 @@ page but the menu itself.
 | Apps & Integrations | App Manager | `AppManagerTab.kt` | Default apps per domain, media session permission, return-to-previous-app, external trigger |
 | Apps & Integrations | Integrations | `IntegrationsTab.kt` (+ `PipedSettingsSection`, `SearchSettingsSection` on the same page) | Spotify OAuth, Vox Apps, Piped/NewPipe selection, search providers |
 | System | Permissions | `PermissionsSettingsTab.kt` | Runtime permissions management |
-| System | Advanced | `AdvancedSettingsTab.kt` | Offline fallback, the Engine & Model Management card — the cloud/Google consent toggles (the Google one labeled "Google on-device support", key `google_services_title`), the two per-engine "GPU acceleration (Experimental)" switches with their verdict line and "Test again" action ([§4](#gpu-acceleration-vulkan)) — and maintenance. The Logging section (the debug-logging and debug-toast switches plus `LogViewerCard`) is deliberately the page's **last** section — the viewer grows without bound. |
+| System | Advanced | `AdvancedSettingsTab.kt` | Offline fallback, the Engine & Model Management card — the cloud/Google consent toggles (the Google one labeled "Google on-device support", key `google_services_title`), the two per-engine "GPU acceleration (Experimental)" switches with their verdict line and "Test again" action ([§4](#gpu-acceleration-opencl)) — and maintenance. The Logging section (the debug-logging and debug-toast switches plus `LogViewerCard`) is deliberately the page's **last** section — the viewer grows without bound. |
 | Data | Backup & Diagnostics | `BenchmarkSettingsTab.kt` + `BackupSettingsSection` | One page for both: the backup card rides as the diagnostics `LazyColumn`'s header, so the page has a single scroll surface |
 
 ### Reusable Components
@@ -1030,17 +1047,18 @@ The green "on-device" indicator is a persisted `downloadedModelIds` flag, not re
 - Debug builds: `libwhisper.so` and `libomp.so` bundled in APK
 - Release builds: Excluded from APK, downloaded as DLC at runtime (~88 MB for the two arm64 libs,
   digest-checked against `assets/whisper-libs.sha256`)
-- GPU (Vulkan) use is a per-engine opt-in toggle, proven per device by a sandboxed compatibility
-  probe — see [§4 GPU Acceleration](#gpu-acceleration-vulkan)
+- GPU (OpenCL) use is a per-engine opt-in toggle, proven per device by a sandboxed compatibility
+  probe — see [§4 GPU Acceleration](#gpu-acceleration-opencl)
 
 ### Llama Runtime Library (`LlamaEngineManager`)
 
-`libllama.so` follows the same DLC shape (debug: bundled; release: excluded and downloaded when a
-local LLM engine is selected), with one difference in how the release is addressed: a **build
-fingerprint**, not the submodule commit. `libllama.so`'s bytes come from three inputs — the llama.cpp
-submodule pin, the JNI bridge (`llama_jni.cpp`), and the CMake build config (`llama-build/`) — and
-the published tag must move when any of them does, so `scripts/llama_build_pin.sh` hashes the tree
-state of all three (the submodule gitlink plus both build-input paths) into one 40-hex pin; the
+`libllama.so` is packaged by `voxDlc` mode: bundled inside the APK in `minimal` (the default),
+excluded and downloaded on demand in `full` when a local LLM engine is selected. The `full`-mode
+release is addressed by a **build fingerprint**, not the submodule commit. `libllama.so`'s bytes
+come from four inputs — the llama.cpp submodule pin, the JNI bridge (`llama_jni.cpp`), the CMake
+build config (`llama-build/`), and the OpenCL import shim (`opencl-shim/`) — and the published tag
+must move when any of them does, so `scripts/llama_build_pin.sh` hashes the tree
+state of all four (the submodule gitlink plus the build-input paths) into one 40-hex pin; the
 release tag is `llama-libs-<pin12>`. The publish script, the release-workflow gate, and the Gradle
 digest-recording task all consume that one script, so they can never derive different addresses for
 the same tree. The APK records the pin and the published release's digests as generated assets
@@ -1256,7 +1274,7 @@ without touching the apps.
 
 These files are fetched and adopted **unattended at every launch** (`useRemoteSchemas` defaults to
 `true`), and they declare engine endpoints — where the app sends speech and the user's own API keys —
-and 101 model download URLs. Whoever can serve that path could redirect all of it at the next launch,
+and 102 model download URLs. Whoever can serve that path could redirect all of it at the next launch,
 with no app update and nothing for a user to accept. The SHA-256 that `RemoteSchema` already used
 compares a download against the *previous download*: it answers "did this change?", never "is this
 genuine?".
@@ -1297,7 +1315,7 @@ which — because the schema itself is signed — inherits that signature's auth
 
 `ModelDownloader` checks it at the one choke point every download passes through, before the artefact
 reaches a native parser, and deletes what does not match. **Absent means unverified and stays
-supported** — a download that worked yesterday must work today — though all 101 model URLs carry the
+supported** — a download that worked yesterday must work today — though all 102 model URLs carry the
 field. `./scripts/vox schemas hash-models [engine]` fills it in by fetching each model once.
 
 `RemoteSchema` fetches each file from `<repo>/main/remote-schemas/<folder>/<file>` and compares it by
@@ -1537,7 +1555,7 @@ from, not per-app wire-format constants.
 
 | Type | Purpose |
 |------|---------|
-| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`, `ACTION_LLM_PROCESS`, `ACTION_LLM_RESULT`, `ACTION_OCR_RESULT`, `ACTION_SCHEMA_CHANGED`, `ACTION_CAPABILITY_QUERY`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`, `OP_GET_SCHEMA`, `OP_EXPORT`, `OP_IMPORT`, `OP_SYNC_EXPORT`, `OP_SYNC_MERGE`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`, `META_NLU_HINT`, `META_OCR_TASK`), the six shared `com.voxapps.vox.permission.*` constants |
+| `VoxIpc` | Constants: actions (`ACTION_COMMAND`, `ACTION_SPEAK`, `ACTION_LLM_PROCESS`, `ACTION_LLM_RESULT`, `ACTION_OCR_RESULT`, `ACTION_SCHEMA_CHANGED`, `ACTION_CAPABILITY_QUERY`), extras, ops (`OP_CREATE`, `OP_READ`, `OP_PING`, `OP_GET_SCHEMA`, `OP_GET_FIELD_SCHEMA`, `OP_EXPORT`, `OP_IMPORT`, `OP_SYNC_EXPORT`, `OP_SYNC_MERGE`, `OP_MEDIA_CONTROL`), capability meta-data keys (`META_DOMAIN`, `META_ACTIONS`, `META_LABEL`, `META_NLU_HINT`, `META_OCR_TASK`), the six shared `com.voxapps.vox.permission.*` constants |
 | `VoxCommand` | Command envelope authored by Commander (`op`, `text?`, `title?`, `category?`, `domain?`, `exportScope?`, `dateFrom?`, `dateTo?`, `since?`, `scopeNames?`) with `toJson()`/`fromJson()` (org.json) — `dateFrom`/`dateTo` are an additive pair used only by Vox Calendar's day-scoped `OP_READ` (see below); `since`/`scopeNames` back `OP_SYNC_EXPORT`/`OP_SYNC_MERGE` (see [Peer-to-peer device sync](#peer-to-peer-device-sync-op_sync_export--op_sync_merge) below); every other satellite's `OP_READ` ignores them and behaves exactly as before |
 | `VoxResult` | Satellite reply for reads (`ok`, `text`) — the notes payload, or a spoken "locked" message; also the `OP_GET_SCHEMA` reply's envelope (`text` carries a `VoxSatelliteSchema` JSON — see [Collapsed satellite extraction flow](#collapsed-satellite-extraction-flow-voxsatelliteschema) below) |
 | `VoxSatelliteSchema` | A satellite's extraction contract: `needsExtractionPass`, `promptTemplate` (with an `{{INPUT}}` placeholder), `fieldSchemaVersion`, `taskId` — see below |
@@ -1648,8 +1666,10 @@ command bus but carrying opaque prompt/result payloads instead of structured not
   task, promptText, data}` JSON in `EXTRA_LLM_PAYLOAD`, guarded by the signature-level, shared
   `com.voxapps.vox.permission.LLM_PROCESS` permission. `task` and `promptText` are entirely
   owned by the caller — Commander never parses or validates them.
-- **`LlmHookReceiver`** does only fast parse/validate work, then hands off to a one-time
-  **`LlmHookWorker`** (`WorkManager`, not a plain `Service`) — on-device testing showed a plain
+- **`LlmHookReceiver`** does only fast parse/validate work — the request payload is staged to a
+  cache file (WorkManager `Data` has a hard 10 KB cap that a large prompt exceeds), deleted only
+  on a terminal outcome so an OS-stopped worker's reschedule can re-read it — then hands off to a
+  one-time **`LlmHookWorker`** (`WorkManager`, not a plain `Service`) — on-device testing showed a plain
   non-foreground `Service` started from a `BroadcastReceiver` can be silently blocked by OEM/Doze
   background-execution restrictions when Commander has no visible UI, whereas `WorkManager`'s
   `JobScheduler`-backed execution is exempted.
@@ -1657,7 +1677,8 @@ command bus but carrying opaque prompt/result payloads instead of structured not
   configured as the user's primary AI processor (`aiProcessor` setting — the same selection
   [`IntentDecisionMap`](#4-natural-language-understanding-nlu) uses for its L2 step), calling
   `AssistantEngine.rawPrompt()` directly with **no L1/L3 fallback cascade** (this hook always targets a
-  single, currently-selected engine, not the triple-brain pipeline). On an OpenAI failure it now
+  single, currently-selected engine, not the triple-brain pipeline). A cloud engine choice is
+  refused when cloud intelligence consent is off. On an OpenAI failure it now
   surfaces the actual HTTP-code-derived reason (`OpenAiInterpreter.lastErrorReason` — bad/revoked key,
   rate limit, or a transient 5xx) instead of a hardcoded "check API key" for every failure.
 - **`LocalLlmInterpreter` serializes every call** (`processCommand`/`rawPrompt`) through a `Mutex` —
@@ -1672,6 +1693,12 @@ command bus but carrying opaque prompt/result payloads instead of structured not
   downloaded or failed to load), generation failed, or no local model selected — which
   `LlmHookEngineSelector` reports as `Local engine: <reason>`, symmetric to the OpenAI error path
   above.
+- **The raw-reply budget is measured, not flat.** A raw-prompt completion reserves a
+  2048-token output ceiling; when the prompt plus that reservation does not fit the per-sequence
+  capacity, the native rejection carries the measured token counts and the call retries once with
+  the exact remainder — below a minimum remainder the prompt has swallowed the context and the
+  call fails honestly. Every number involved is a measured token count, never a character-based
+  estimate.
 - **Reply** — `LlmHookWorker` applies only generic cleanup (`NluIntentParser.cleanGenericOutput`,
   stripping markdown/prose fences) to the LLM's raw text, wraps it in a `VoxLlmResult{task, status,
   rawJson}`, and delivers it as an **explicit-intent** broadcast (`ACTION_LLM_RESULT`, targeted at
@@ -1934,12 +1961,25 @@ receives voice commands (its `VisionCommandReceiver` only answers the discovery 
   scan request while it's already running redelivers into the same instance instead of losing the
   pending-request extras (both the launch mode *and* the override are required together — either alone
   is insufficient).
-- Vision's own OCR pipeline (camera capture → brightness-blob auto-capture → OpenCV quad crop →
-  on-device PaddleOCR) hands raw text to Vox Vision's own copy of the generic LLM hook (its
-  `LlmResultReceiver`, `LlmTasks.OCR_CLEANUP`) to get a clean title/body, then forwards it to Vox Notes
-  as a create command. When launched as a pending-request target (`hint`/`task` present), an
-  auto-triggered capture skips straight to submission with no manual tap — a manual capture always
-  still requires one, since there's no guarantee every field is already correct.
+- Vision's OCR pipeline: camera capture → auto-capture → crop → on-device PaddleOCR. The crop quad
+  comes from `DocumentCropper`'s priority chain — (1) the DocQuad ML corner detector
+  (`vendor/docquad-sdk`, a port of MakeACopy's DocQuadNet-256), (2) the strict classical quad
+  detector, (3) the looser blob heuristic — with OpenCV doing the warp/crop. Results are delivered
+  to the requesting/selected app as `ACTION_OCR_RESULT`/`VoxOcrResult` by `OcrResultSender`;
+  same-signature targets (Notes/Expenses/Calendar) are discovered by `ScanTargetDiscovery` via
+  `queryBroadcastReceivers(ACTION_OCR_RESULT)` + `META_OCR_TASK` — Vision itself runs no LLM hook
+  and does no forwarding-side cleanup. When launched as a pending-request target (`hint`/`task`
+  present), an auto-triggered capture skips straight to submission with no manual tap — a manual
+  capture always still requires one, since there's no guarantee every field is already correct.
+- **Zone-based OCR models download at runtime**: `OcrModelRegistry` (`assets/ocr_models.json` — one
+  universal detection model, per-zone recognition models and char-dict configs, each
+  `{url, sha256}`) plus `VisionModelDownloader`; adding a zone is a JSON edit.
+- **Table mode**: when `VoxOcrRequest.tableMode` is set, `TableReconstructor` appends a
+  `--- [table reconstruction] ---` section (`OcrEngine.TABLE_SECTION_MARKER`) after the plain OCR
+  text, and the plain text is line-broken at printed-row boundaries; OCR output always leaves in
+  reading order, not detector order.
+- **Stitch capture**: multi-shot stitching joins accepted shots' text with
+  `ContinuityMatcher.STITCH_SEAM_MARKER` (`--- [photo stitch seam …] ---`) at each join.
 - **Multimodal photo attachment** (Settings → "Send photo to AI" + "Photo detail for AI") — off by
   default. When on, capture also produces a downscaled JPEG (`downscaleToLongEdge`, 768/1024/1536px
   by detail level) alongside the existing full-resolution one, handed back to the caller as
@@ -1988,6 +2028,12 @@ a **consumer** of the `export`/`import` actions every other satellite already ex
   path is fully generic.
 - Because Hub holds no Room database, its own settings (theme preference, backup schedule, per-app
   backup config below) are the only thing it persists locally.
+- **Import modes.** A restore carries a `VoxCommand.importMode`, resolved by
+  `VoxSnapshotReplaceImporter`'s `VoxImportMode`: `FULL_OVERRIDE` deletes every pre-existing item,
+  `MERGE` deletes only pre-existing items with `createdAt <= exportedAt` (the default; null on the
+  wire resolves to it), `ADDITIVE` deletes nothing. Every restore surface — Hub's and each app's
+  own — states the selected mode's consequences right where the mode is chosen, and dateless to-do
+  items ride the entries snapshot like every other row.
 
 **Per-app backup configuration (`AppBackupConfig`)** — the main Export screen and `BackupWorker`
 (the scheduled path) obey one persisted, per-package
@@ -2158,9 +2204,11 @@ delta-then-merge).
 | `ImageAttachmentUtil` (reads/base64-encodes an attached image) | `domain/intent/interpreter/ImageAttachmentUtil.kt` |
 | `@VoxExtractionSchema` / KSP `SymbolProcessor` (generated field schema) | `core/schema-annotations/`, `core/schema-processor/` |
 | Satellite receiver (Notes) | `vox-notes/.../receiver/VoxCommandReceiver.kt` |
-| Vision's LLM result receiver | `vox-vision/.../receiver/LlmResultReceiver.kt` |
+| Vision's result delivery + target discovery | `vox-vision/.../domain/OcrResultSender.kt`, `.../domain/ScanTargetDiscovery.kt` |
+| Vision's table/stitch machinery | `vox-vision/.../ocr/TableReconstructor.kt`, `.../ocr/ContinuityMatcher.kt` |
+| Vision's runtime OCR models | `vox-vision/.../OcrModelRegistry`, `.../VisionModelDownloader` |
 | `VisionActivity` (`singleTask` + `onNewIntent`) | `vox-vision/src/main/java/com/voxapps/vision/VisionActivity.kt` |
-| `DocumentCropper` (Otsu live-bounds + strict-quad crop) | `vox-vision/.../ocr/DocumentCropper.kt` |
+| `DocumentCropper` (DocQuad ML corner detector first, then strict-quad, then blob heuristic) | `vox-vision/.../ocr/DocumentCropper.kt`, `vendor/docquad-sdk` |
 | `downscaleToLongEdge` (AI-attachment photo resize) | `vox-vision/.../ui/VisionScreen.kt` |
 | `MultimodalAttachmentResolver` (Expenses' scan/retry photo-attach gate) | `vox-expenses/.../domain/llm/MultimodalAttachmentResolver.kt` |
 | Day-scoped read + ICS export/import | `vox-calendar/.../receiver/VoxCommandReceiver.kt`, `vox-calendar/.../domain/ics/` |
@@ -2219,9 +2267,13 @@ rather than inlining every call site, so existing references didn't need touchin
 ### `:core:calendar`
 
 A month-paged, per-day agenda view (`CalendarView.kt`) built on Compose's `HorizontalPager` — no custom
-paging/fling physics needed, the pager provides deceleration for free. Consumed by both `vox-notes` and
+paging/fling physics needed, the pager provides deceleration for free. Consumed by `vox-notes` and
 `vox-expenses` as an opt-in "Calendar view" setting (off by default), replacing their chronological
-`LazyColumn` list.
+`LazyColumn` list, and by `vox-calendar` itself. The pager is anchored on the **selected** month —
+`CalendarView` seeds it from the selected date, not today, and its month-swipe sync skips its first
+run — so a recomposition or an editor round-trip keeps the user's month. Beyond the agenda view the
+module also hosts the month-grid and hybrid display modes (`MonthGridView`, `HybridMonthView`,
+`CalendarPagerState`, `NowClock`).
 
 - **`CalendarItem`** — the only thing the module knows about a caller's data: `id: Any` +
   `dateTimeMillis: Long`. Each app wraps its own Room-backed model in a `@JvmInline value class`
@@ -2351,6 +2403,33 @@ or `.`) highlighted in red via a Compose `AnnotatedString`/`SpanStyle`, rather t
 
 See the [Satellite App Guide §6.6](SATELLITE_APP_GUIDE.md#66-data-hygiene-cleaning-records-before-insert)
 for the wiring pattern with code examples.
+
+### Re-map rules engine (`RemapEngine`)
+
+`core/datahygiene/.../RemapEngine.kt` — user-taught WHEN/THEN re-map rules: WHEN the rule's match
+fields all equal its stored normalized values, THEN its set fields are written. The app injects
+`RemapMatchField`/`RemapSetField` descriptors (same convention as `RuleField`); matching is
+trim+case-normalized exact unless a match entry carries a fuzz level resolved by an injected
+matcher; a setter may decline (null). Precedence is a total order — more match fields first, then
+user `sortOrder`, then id — winning per set-field (the first matching rule to set a field owns it),
+and rules never chain: every rule matches the pre-remap snapshot. `vox-expenses` wires it through
+`data/ExpenseRemapFields.kt`, with rule proposals generated from repeated user edits and confirmed
+before they apply.
+
+### Field-correction memory (`:core:fieldmemory`)
+
+`FieldCorrectionMemory` + `LearnedFieldCorrection` (Room) learn one-word spelling fixes from
+old→new manual-edit pairs via `:core:textmatch`'s `FieldCorrections.diff`. Identity is
+`VocabularyClassifier.termKey` (case/punctuation variants collapse; the first-seen spelling is
+kept); a genuinely different second fix quarantines the garbled word permanently; corrections
+activate at a consecutive-count threshold (`activeCorrections(threshold)`).
+
+### Deterministic extraction (`:core:textmatch`)
+
+Beyond `FuzzyNameMatcher`, the module hosts a deterministic-extraction package (`extract/`):
+`TemplateSkeleton` (a notification's byte-shape identity), `DateTimeExtractor`,
+`LabelledAmountExtractor`, `VocabularyClassifier`, `FieldCorrections`, `AmountText`, `Findings`.
+Extraction is shared and deterministic; policy — what to do with a finding — stays per satellite.
 
 ### Generic duplicate-rule engine
 
@@ -2513,17 +2592,20 @@ new satellite app is expected to follow.
 
 ### Shared modules
 
-Twenty-two `:core:*` modules, plus two vendored forks compiled in-tree:
+Twenty-three `:core:*` modules, plus three vendored modules compiled in-tree:
 
 ```
 :core:apppicker      :core:attachments   :core:audio        :core:backup
-:core:calendar       :core:datahygiene   :core:design       :core:identity
+:core:calendar       :core:datahygiene   :core:design       :core:fieldmemory
+:core:identity
 :core:ipc            :core:location      :core:logging      :core:nativelibs
 :core:onboarding     :core:preferences   :core:schema-annotations
 :core:schema-processor  :core:services   :core:testing      :core:textmatch
 :core:voxconnect     :core:wakeword      :core:widget
 
 vendor/ppocr-sdk     PaddleOCR fork (+ 4 patches), compiled into vox-vision
+vendor/docquad-sdk   DocQuadNet-256 corner detector (from-scratch port of MakeACopy files, see its
+                     NOTICE — not a patch-tracked fork), compiled into vox-vision
 core/wakeword        OpenWakeWord fork (+ 3 patches), compiled into vox-commander
 ```
 
@@ -2571,8 +2653,9 @@ already compiles these sources on every push. It runs on Ubuntu with KVM enabled
 arm64 macOS runners cannot nest a VM, so an arm64 AVD never boots there): an x86_64 Android 11
 `google_apis` image executes the arm64-v8a libraries through the system image's ARM binary
 translation. The job builds `libllama.so` first (`./scripts/vox native llama` — the llama build is
-hybrid CPU+Vulkan, so beyond NDK+CMake the job installs the host shader toolchain: `glslc`,
-SPIRV-Headers, Vulkan-Headers), because `LlamaBridgeSmokeTest` is what answers whether
+hybrid CPU+OpenCL; its GPU inputs are repo-pinned, the `vendor/OpenCL-Headers` submodule plus the
+in-repo dlopen import shim, so the job checks out that submodule and installs no host shader
+packages beyond NDK+CMake), because `LlamaBridgeSmokeTest` is what answers whether
 the compiled runtime actually executes. Commander only: translation has a fidelity ceiling
 (vision's OpenCV load crashes the translated process while passing on real arm64), and
 `NativeCrashReproductionTest` is excluded — its tests bring the process down on purpose and are run

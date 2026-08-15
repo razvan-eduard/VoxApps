@@ -26,7 +26,9 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   2. **AI Intent Translator** (Settings → AI & Models → Intent Engines) — the actual AI step, reached
      only when no FastMap rule fires: your choice of a cloud LLM (OpenAI) or an on-device GGUF
      model running via **llama.cpp**, with grammar-constrained decoding so the model can only emit
-     a valid intent.
+     a valid intent. The llama.cpp runtime ships inside the APK; the models themselves (Qwen 2.5
+     0.5B–3B, Qwen 3 0.6B, Gemma 3 1B, in several quantizations) download on demand from the signed
+     schema catalog, and a download whose bytes don't match the schema's declared sha256 is refused.
   3. **Offline fallback** — a *separately*-configured backup engine+model used only if the AI step
      above fails or is unreachable (skipped automatically if it'd be identical to it).
 
@@ -94,7 +96,9 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   backed and, when switched off, clearing every engine/model selection it gated back to schema
   defaults; two experimental GPU-acceleration toggles, one per on-device engine (speech and local
   LLM), both **off by default** — enabling one runs a per-device compatibility test in a sandboxed
-  process, and an incompatible device stays on the CPU; plus delete-unused-models cleanup — system
+  process, and an incompatible device stays on the CPU; GPU execution runs on OpenCL with
+  Adreno-tuned kernels, the driver is resolved at runtime (a device without one simply stays on the
+  CPU), and the GPU reports its memory budget so a model too large for it stays on the CPU too; plus delete-unused-models cleanup — system
   maintenance, tutorial replay, and Logging last), and Backup & Diagnostics (one page: the backup
   card above the diagnostics list).
 
@@ -128,7 +132,8 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   providers, intents and normalisation is fetched at launch while *Check for updates* is on, so
   corrections arrive without an app update. Because those files say where requests go, a change from
   the official repository is only adopted if it carries a valid signature; the app ships a public key
-  and refuses anything else. Point the app at your own fork and your schemas are still used — marked
+  and refuses anything else. Every downloadable model URL in the schema carries its sha256; a
+  downloaded artefact that doesn't match is refused. Point the app at your own fork and your schemas are still used — marked
   *unverified*, since only the maintainer can sign. The bundled copies are always one tap away.
 - **Backup & Restore** (Settings → Backup & Diagnostics) — back up FastMap rules and portable settings to a
   file you pick, or restore from one, using the same zip format Vox Hub's own export/import produces;
@@ -172,7 +177,7 @@ through Commander (`create`/`read`) or used entirely on its own.
   (Settings, default "on failure") independently controls whether the original scanned photo itself
   survives as an attachment: off, only when Commander's cleanup pass fails outright (so an otherwise
   unusable "Unclear Document" scan becomes a raw note holding just the photo instead of being lost),
-  or always. Adding an attachment now offers **"Choose from gallery"** alongside the camera, plus the
+  or always. Adding an attachment offers **"Choose from gallery"** alongside the camera, plus the
   same **Single / Stitch / Batch** capture-mode chooser Vox Vision uses (see
   [Vox Vision](#vox-vision) below). A note with at least one attachment shows a small paperclip icon
   right after its title, in both the in-app list and the home-screen widget (shared across Notes,
@@ -219,6 +224,10 @@ commands in, only OCR text out.
   long document as you go), or **Batch** (keep shooting pages, OCR runs on all of them only once the
   session ends).
 
+- **Table mode** — a scan request can declare its document tabular (Vox Expenses does, for
+  invoices); an additive reconstruction pass rebuilds the printed rows and columns behind a marker in
+  the OCR output, and the plain text follows printed row order, so downstream parsing sees the table
+  the paper actually shows.
 - Recognized text is cleaned up and titled via Commander's generic LLM hook, then forwarded to Vox
   Notes as a new note (see [Vox Vision's scan-to-note flow](TECHNICAL_DOCUMENTATION.md#vox-vision-ocr-satellite))
 - Works fully standalone (its own launcher icon) or as a **pending-request target** launched directly
@@ -240,8 +249,10 @@ through Commander (`create`/`read`), scanned from a receipt via Vox Vision, capt
 bank/payment notifications, or entered by hand.
 
 - **Three capture paths, three prompts** — voice (`ExpenseParsePromptBuilder`), receipt OCR
-  (`ExpenseScanCleanupPromptBuilder` — extracts vendor, bank, per-item net/VAT/gross when printed, and
-  prioritizes the receipt's own printed total over recomputing it from line items), and notification
+  (`ExpenseScanCleanupPromptBuilder` — one focused cleanup pass extracting vendor, bank, and per-item
+  net/VAT/gross when printed; the receipt's printed totals are read deterministically before any model
+  runs — the largest labelled total becomes the headline amount, and an invoice's own charges and
+  previous balance land as optional extra fields on the record), and notification
   capture (`NotificationExpenseParsePromptBuilder` — a deliberately narrower extraction: title/amount/
   currency/vendor/category plus an `isPayment` triage flag, since notification text isn't guaranteed to
   even be a transaction) — all three route through Commander's generic LLM hook, just with different
@@ -270,8 +281,16 @@ bank/payment notifications, or entered by hand.
   own "get installed apps" permission gate is silently emptying the scanned list despite
   `QUERY_ALL_PACKAGES` being granted, and a deep link into that OEM's own app-launch-management screen —
   independent of stock battery-optimization exemption — since it can otherwise block the listener from
-  ever rebinding after the process is killed). The request to Commander is now durably queued rather
-  than fire-and-forget — see
+  ever rebinding after the process is killed). Before any model runs, a deterministic pre-parse resolves what the notification's text already
+  proves — amount (only when exactly one currency-marked figure exists), vendor (legal-form tokens),
+  and bank (schema-served vocabularies) — and every field it resolves is removed from what the model
+  is asked for. Independently, a learned **notification template** memory keys on the notification's
+  byte-shape skeleton: once a human confirms what a template means (direction, is-it-a-payment),
+  later notifications matching that exact shape reuse the verdict and skip the is-this-a-payment
+  triage; a record teaches its template once, however often it's re-saved, and one contradicting
+  confirmation quarantines the template for good. Learned templates are listed in Settings (Expense
+  cleanup and rules → Notification templates), each with its skeleton text, status, confirmation
+  count, and per-template Forget and Re-teach. The request to Commander is durably queued — see
   [Durable delivery: the pending-request queue](TECHNICAL_DOCUMENTATION.md#durable-delivery-the-pending-request-queue-voxllmrequestqueue)
   — so a notification is recovered automatically even if Commander was killed/stopped at capture time.
 - **Notification-parse prompt tuning** — the notification-capture prompt (`NotificationExpenseParsePromptBuilder`)
@@ -285,7 +304,7 @@ bank/payment notifications, or entered by hand.
   received/refunded); Reports splits **Total** (outgoing only) from **Received** instead of netting
   them into one misleading figure. Voice/scan/notification parsing infers direction from the source
   text (e.g. "refund," a bank credit notification) and defaults to outgoing when ambiguous.
-- **Duplicate detection** (Settings → Expense cleanup) — a generic, user-configurable rule engine
+- **Duplicate detection** (Settings → Expense cleanup and rules → Duplicates) — a generic, user-configurable rule engine
   (`RuleBasedDuplicateChecker`, shared via `:core:datahygiene` — see
   [Generic duplicate-rule engine](TECHNICAL_DOCUMENTATION.md#generic-duplicate-rule-engine)), modeled on
   email-client filters: any expense field (title, vendor, bank, location, comments, amount, currency,
@@ -314,7 +333,7 @@ bank/payment notifications, or entered by hand.
   else. The review list's "keep" selection defaults to whichever group member scores highest (still
   overridable via the radio buttons) and shows each candidate's capture-source tag alongside its
   total/bank/vendor/date-time, so the default is explainable rather than a black box. Approving a
-  review group now backfills the kept row's blank fields from its higher-scoring duplicates before
+  review group backfills the kept row's blank fields from its higher-scoring duplicates before
   deleting them, instead of discarding that data outright.
 - **Category color adjacency + merchant category memory** — a freshly auto-created category's color is
   chosen to visibly differ from the most-recently-added expense's category (not just from the aggregate
@@ -327,7 +346,9 @@ bank/payment notifications, or entered by hand.
   category is selected immediately on save.
 - **Line items & VAT** — optional per-item net/VAT/gross breakdown, shown only when enabled (most
   receipts don't carry this detail); a red warning banner appears if the total doesn't match the sum of
-  line items, without blocking editing
+  line items, without blocking editing. Invoice records additionally carry two optional totals — the
+  invoice's own charges and the previous balance — kept apart from the headline amount; both are null
+  on every non-invoice record
 - **Currency & exchange rates** — a default currency for new expenses, a separate home currency reports
   convert *into* when expenses mix currencies, and a locale-independent decimal separator setting (comma
   vs. period) so typed amounts round-trip correctly regardless of device locale
@@ -336,11 +357,25 @@ bank/payment notifications, or entered by hand.
 - **Category cleanup** (Settings → Categories) — "Remember merchant categories" toggle + 1×/3×/5×/10×
   threshold chips (see above), plus the same Commander LLM-hook pattern as Vox Notes: auto-merge finds
   and merges near-duplicate categories, on-demand or on a schedule
-- **Expense cleanup** (Settings → Expense cleanup) — one tab covering automatic protection and the
-  duplicate-rule engine (see **Duplicate detection** above), plus an on-demand **"Check for duplicates
-  now"** button and a **scheduled** equivalent, both of which stage matches into the same pending-review
-  list regardless of trigger — the Commander LLM-hook pattern, reviewed and approved per group before
-  anything merges or deletes
+- **Expense cleanup and rules** (Settings) — a sectioned submenu of four pages, each opening with a
+  how-it-works card whose key words are colored by consequence (green = by your hand, amber =
+  automatic, red = destructive):
+  - **Duplicates** — automatic protection and the duplicate-rule engine (see **Duplicate detection**
+    above), plus an on-demand **"Check for duplicates now"** button and a **scheduled** equivalent,
+    both of which stage matches into the same pending-review list regardless of trigger — the
+    Commander LLM-hook pattern, reviewed and approved per group before anything merges or deletes.
+    Deleting a rule asks for confirmation first.
+  - **Spelling corrections** — a field-correction memory (shared `:core:fieldmemory`) learns
+    recurring one-word spelling fixes from your edits and re-applies them to future captures, either
+    automatically or as dismissible suggestions (your choice), at a configurable learning speed; a
+    word that ever receives two different fixes is treated as ambiguous and never touched again.
+  - **Re-map rules** — WHEN/THEN rules over expense fields (shared `:core:datahygiene` engine): WHEN
+    the fields you chose match a rule — each WHEN field with its own three-step fuzziness, colored by
+    risk — THEN its other fields are set. Rules are authored by hand or proposed from your repeated
+    edits and confirmed before they apply; your own rules always outrank learned ones, and deleting
+    one asks first.
+  - **Notification templates** — the learned template list described under **Notification capture**
+    above.
 - **Calendar view** (optional, off by default) — same shared `:core:calendar` module as Vox Notes, plus
   bank/vendor filters and an amount ascending/descending sort; sorting by amount isn't chronological, so
   it temporarily disables the calendar view (a dismissible chip restores it)
@@ -357,8 +392,8 @@ bank/payment notifications, or entered by hand.
 - **Attachments** — a collapsible thumbnail strip on every expense for extra photos beyond the
   original receipt scan (e.g. a warranty card, a second page); tap a thumbnail for a full-screen
   zoomable view, with an inline add/remove — same shared component as Vox Notes/Vox Calendar. Adding one
-  now offers **"Choose from gallery"** alongside the camera, plus the same **Single / Stitch / Batch**
-  capture-mode chooser Vox Vision uses (see [Vox Vision](#vox-vision) above); removing one now asks for
+  offers **"Choose from gallery"** alongside the camera, plus the same **Single / Stitch / Batch**
+  capture-mode chooser Vox Vision uses (see [Vox Vision](#vox-vision) above); removing one asks for
   confirmation first instead of deleting on the first tap. An expense with at least one attachment (the
   original scan or a manually-added one) shows a small paperclip icon right after its title, in both the
   in-app list and the home-screen widget.
@@ -367,7 +402,9 @@ bank/payment notifications, or entered by hand.
 
 - **Location** (Settings → General, shared `:core:location` module also used by Vox Commander) — the
   same cached-location/Home-town/"Always use this location" system described under
-  [Vox Commander](#vox-commander) above, used here to prefill an expense's location field.
+  [Vox Commander](#vox-commander) above, used here to prefill an expense's location field. The
+  expense editor's location field itself is the shared `VoxLocationField` — inline
+  OpenStreetMap/Nominatim search with an optional GPS lock — rather than a free-text box.
 - **Backup & Restore** (Settings → Data → Backup & Restore) — back up expenses/categories/duplicate
   rules/settings to a file you pick, or restore from one, using the same zip format Vox Hub's own
   export/import produces; restoring offers **Full override**, **Merge**, or **Additive** reconciliation
@@ -432,7 +469,7 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
   attempting the cross-app fetch. The reverse direction (Notes/Expenses → open Calendar on a date) uses
   a plain explicit-intent extra, not the broadcast bus
 - Recurrence is deliberately minimal (none/daily/weekly/monthly/yearly + optional until-date, expanded
-  at read time) — no RRULE engine, no per-occurrence materialized rows, editing a series edits the
+  at read time; a weekly recurrence picks which weekdays it falls on) — no RRULE engine, no per-occurrence materialized rows, editing a series edits the
   whole thing
 - **ToDo Lists** — a dedicated checklist system alongside the calendar proper, reached via its own icon
   on the Calendar screen's header. Create any number of named lists, each a flippable card (tap to flip
@@ -448,8 +485,21 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
   - **Scan-to-item** — a document-scan icon on a list's edit face sends a photo through Vox Vision's OCR
     and Commander's cleanup LLM straight into a new checklist item.
   - Per-list and per-item **color pickers** (a vertical swatch strip for lists, the same shared picker
-    used elsewhere for items), a due-date/time quick-picker with reminder-offset presets, and a unified
-    edit dialog (title, color, Done toggle, Important toggle, due date/time, reminders) in one place.
+    used elsewhere for items) and a due-date/time quick-picker with reminder-offset presets. Editing
+    happens in an **inline editor** that expands in place on the item's own timeline node (title,
+    color, Done, Important, due date/time, reminders), with a node-colored contour marking the open
+    row; opening another node saves and closes the current one, and deleting an item asks for
+    confirmation first.
+  - A list can be a **routine** on chosen weekdays: at midnight of each selected day its undated
+    items' done flags reset, so the same checklist serves every day it applies (idempotent per local
+    day, so a missed midnight catches up once).
+  - Each item can carry photo **attachments** — a single-shot capture with no OCR pass, for a picture
+    that is the item's content rather than text to read.
+  - Each item (and each calendar entry — the entry editor has the same field) takes a location via
+    the shared `VoxLocationField`: inline OpenStreetMap/Nominatim search plus an optional GPS lock.
+  - Dedicated **to-do home-screen widgets**, in two forms: all lists, or a single list pinned at
+    widget-placement time via a configure screen; tapping an item deep-links straight into its
+    inline editor.
 
   <img width="388" height="850" alt="ToDo list: star, up-next marker, now-splitter" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/6_todo_star_upnext_now_line.png" />
   <img width="388" height="850" alt="ToDo items bleeding into the calendar grid" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/7_todo_calendar_grid.png" />
@@ -457,11 +507,11 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
   <img width="388" height="850" alt="Scan-to-checklist-item" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/9_todo_scan_button.png" />
   <img width="388" height="850" alt="Due-date/time quick-picker" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/10_todo_due_date_picker.png" />
   <img width="388" height="850" alt="Per-list/per-item color picker" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/11_todo_color_picker.png" />
-  <img width="388" height="850" alt="Unified task edit dialog" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/13_todo_edit_dialog.png" />
+  <img width="388" height="850" alt="Inline task editor" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/13_todo_edit_dialog.png" />
 
 - **Attachments** — a collapsible thumbnail strip on every entry for extra photos (e.g. a ticket, a
   booking confirmation); tap a thumbnail for a full-screen zoomable view, with an inline add/remove.
-  Adding one now offers **"Choose from gallery"** alongside the camera, plus the same **Single / Stitch /
+  Adding one offers **"Choose from gallery"** alongside the camera, plus the same **Single / Stitch /
   Batch** capture-mode chooser Vox Vision uses (Stitch live-joins several overlapping shots of one
   document, Batch defers OCR on a batch of photos until the session ends) — the "add" tile opens a
   chooser dialog rather than jumping straight to the camera. Shared component, same on Vox Notes/Vox
@@ -496,7 +546,7 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
 
 - **Home-screen widget** (Jetpack Glance) — upcoming entries grouped by day (today bolded, its
   divider thicker), layer-colored rows with tag chips, tap an entry to edit it in place, plus
-  Add/Scan actions
+  Add/Scan actions; the dedicated to-do widgets above are separate widgets alongside this one
 - **Peer-to-peer device sync** (paired from Vox Hub, see [Vox Hub](#vox-hub) below) — genuinely
   bidirectional sync with another phone over NFC + Bluetooth, no cloud; layer-scoped, last-write-wins
   on a conflicting edit, deletions propagate via tombstones
@@ -528,7 +578,8 @@ other satellite implements as a server.
   already there). Still respects each app's own Data toggle above — an app with Data off is skipped for
   import entirely, regardless of this setting. Every satellite app's own local Backup & Restore screen
   (see e.g. [Vox Expenses](#vox-expenses) above) has this exact same 3-way choice for its own restore
-  button, independent of Hub's global setting.
+  button, independent of Hub's global setting. The caveat of whichever mode is selected is stated
+  right where it's chosen — beside Hub's restore control and beside every app's own restore button.
 
   <img width="388" height="850" alt="Hub's backup schedule with the global Import mode control" src="../vox-hub/fastlane/metadata/android/en-US/images/phoneScreenshots/7_backup_schedule_import_mode.png" />
 

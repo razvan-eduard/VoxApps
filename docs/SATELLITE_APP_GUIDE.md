@@ -130,7 +130,9 @@ and taking them is cheaper than re-solving what they cover:
 | `:core:preferences` | The settings plumbing every app repeats |
 | `:core:backup` | Export/import, the biometric gate, snapshot-replace import, attachment zips |
 | `:core:services` | `ServiceEntry`/`ProbeSpec` for anything with an API key or endpoint, and `SchemaRepo`/`RemoteSchema` if your app ships schemas |
-| `:core:datahygiene` | Normalisation, duplicate rules, merge-quality scoring (§6.6, §6.7) |
+| `:core:datahygiene` | Normalisation, duplicate rules, the WHEN/THEN re-map engine, merge-quality scoring (§6.6, §6.7) |
+| `:core:textmatch` | Deterministic extraction (template skeletons, date/amount extractors, vocabulary classification) plus fuzzy name matching |
+| `:core:fieldmemory` | Learned field-correction memory over `:core:textmatch`'s diff — quarantines on disagreement |
 | `:core:attachments`, `:core:location`, `:core:widget`, `:core:onboarding` | As needed |
 
 If your app offers a choice between services that may need an API key or a reachability test, use
@@ -352,6 +354,7 @@ import the constants.
 | `EXTRA_SOURCE_PACKAGE` | `com.voxapps.extra.SOURCE_PACKAGE` | sender's own package name (self-declared, then verified) |
 | `EXTRA_SELECTED_DATE` | `com.voxapps.extra.SELECTED_DATE` | (Calendar-specific day-scoped read) |
 | `EXTRA_EXPENSE_ID` | `com.voxapps.extra.EXPENSE_ID` | (Expenses-specific deep-link extra) |
+| `EXTRA_EDIT_NOTE_ID` | `com.voxapps.notes.EXTRA_EDIT_NOTE_ID` | (Notes-specific deep-link extra) |
 
 ### `VoxCommand.op` values
 
@@ -374,7 +377,10 @@ The sync/media ops carry their parameters in `VoxCommand` fields (`since`/`scope
 `VoxCommand.exportScope` values (only relevant for `OP_EXPORT`): `EXPORT_SCOPE_SETTINGS = "settings"`,
 `EXPORT_SCOPE_DATA = "data"`, `EXPORT_SCOPE_BOTH = "both"`. `VoxCommand.importMode` values (only
 relevant for `OP_IMPORT`): `IMPORT_MODE_FULL_OVERRIDE = "full_override"`, `IMPORT_MODE_MERGE =
-"merge"`, `IMPORT_MODE_ADDITIVE = "additive"` — null defaults to merge on the receiving end.
+"merge"`, `IMPORT_MODE_ADDITIVE = "additive"` — null defaults to merge on the receiving end. The
+receiving-end semantics (`VoxSnapshotReplaceImporter`): `FULL_OVERRIDE` deletes every pre-existing
+item; `MERGE` deletes only pre-existing items created at or before the export's `exportedAt`
+cutoff; `ADDITIVE` deletes nothing.
 
 ### Manifest meta-data keys (capability advertising)
 
@@ -487,17 +493,25 @@ data class VoxOcrRequest(
     val imageUri: String? = null,        // headless: OCR this existing content:// URI, no camera UI —
                                          // caller must grantUriPermission(VISION_PACKAGE, ...) first
     val produceOCR: Boolean = true,      // false = capture/crop only, rawText comes back null
-    val captureMode: String = CAPTURE_MODE_SINGLE   // CAPTURE_MODE_SINGLE | CAPTURE_MODE_BATCH
+    val captureMode: String = CAPTURE_MODE_SINGLE,  // CAPTURE_MODE_SINGLE | CAPTURE_MODE_BATCH
                                          // (several shots, one record each) | CAPTURE_MODE_STITCH
                                          // (several shots, ONE record, live per-shot OCR with a
                                          // text-continuity check between shots)
+    val tableMode: Boolean = false       // declares the document tabular: Vision appends a
+                                         // "--- [table reconstruction] ---" section after the plain
+                                         // OCR text (the plain part stays what prompts/regexes read;
+                                         // the marker-delimited section is the additive table view),
+                                         // and the plain text is line-broken at printed-row boundaries
 )
 
 data class VoxOcrResult(
     val task: String,
     val status: String,                  // STATUS_SUCCESS | STATUS_ERROR
-    val rawText: String? = null,         // Stitch: all accepted shots' text already joined into one string;
-                                         // Batch: always null
+    val rawText: String? = null,         // Stitch: all accepted shots' text already joined, each join
+                                         // carrying a literal "--- [photo stitch seam …] ---" marker;
+                                         // table mode: ends with the "--- [table reconstruction] ---"
+                                         // section — consumers that regex the plain text must cut at
+                                         // the marker; Batch: always null
     val imageUris: List<String> = emptyList(),  // full-res photo(s) — one element for a single shot,
                                                 // several for Batch/Stitch
     val rawTexts: List<String> = emptyList(),   // Batch: per-photo OCR text, same index as imageUris
@@ -920,10 +934,11 @@ when (task) {
 }
 ```
 
-Finally, register a 15-minute retry worker (WorkManager's minimum periodic interval) in your
-`Application.onCreate()` — copy `PendingLlmRequestScheduler`/`PendingLlmRequestRetryWorker` from any
-existing satellite (§11 has the file paths) verbatim; there's nothing app-specific about them beyond
-the `YourApplication` cast inside the worker.
+Finally, register the 15-minute retry worker (WorkManager's minimum periodic interval) in your
+`Application.onCreate()` — implement `VoxLlmQueueHost` on your `Application` (one property,
+`voxLlmRequestQueue`) and call `PendingLlmRequestScheduler.ensureScheduled(this)`; the scheduler and
+worker live in `:core:ipc` (`PendingLlmRequestRetry.kt`) and reach your queue through the host
+interface, so nothing is copied.
 
 If you genuinely don't need durability for a specific one-off send (rare — most `ACTION_LLM_PROCESS`
 traffic benefits from it), the raw pattern still works and is what the queue calls internally:
@@ -1092,10 +1107,10 @@ understanding it helps when debugging "my app doesn't show up" or "the wrong app
 - **VoxCommander's consuming side**: `vox-commander/src/main/java/com/voxapps/commander/domain/integration/`
   (`VoxSatelliteRegistry.kt`, `SatelliteRouting.kt`) and `.../domain/intent/handler/SatelliteHandler.kt`.
 - **Durable LLM request queue** (§7): `core/ipc/src/main/java/com/voxapps/ipc/` (`PendingLlmRequestEntity.kt`,
-  `PendingLlmRequestDao.kt`, `VoxLlmRequestQueue.kt`) plus a per-app `PendingLlmRequestScheduler.kt`/
-  `PendingLlmRequestRetryWorker.kt` pair — copy from any of `vox-expenses/.../domain/llm/`,
-  `vox-notes/.../domain/llm/`, or `vox-calendar/.../domain/llm/` verbatim. A `LlmResultReceiver.kt` in
-  any of those three shows the `splitRequestId`/`markFulfilled` wiring on the receiving end.
+  `PendingLlmRequestDao.kt`, `VoxLlmRequestQueue.kt`, `PendingLlmRequestRetry.kt` — the shared
+  `VoxLlmQueueHost` interface, `PendingLlmRequestRetryWorker` and `PendingLlmRequestScheduler`). A
+  `LlmResultReceiver.kt` in `vox-expenses`, `vox-notes`, or `vox-calendar` shows the
+  `splitRequestId`/`markFulfilled` wiring on the receiving end.
 - **Reusable category/tag color picker**: `core/design/src/main/java/com/voxapps/design/color/`
   (`VoxColorPalette.kt`, `VoxColorPicker.kt`) — see
   [`TECHNICAL_DOCUMENTATION.md` §20](TECHNICAL_DOCUMENTATION.md#20-shared-ui-modules-corecalendar-coreapppicker-coredesign-color-picker)

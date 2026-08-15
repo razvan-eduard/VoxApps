@@ -6,7 +6,7 @@
 > *build-time mechanism* — what gets fetched, built, or patched before compilation, and how it stays
 > in sync with upstream — as its own cross-cutting topic.
 
-VoxApps depends on nine native/ML libraries that aren't simple Maven artifacts. Each falls into one of
+VoxApps depends on ten native/ML libraries that aren't simple Maven artifacts. Each falls into one of
 two patterns:
 
 | Pattern | Meaning | Used by |
@@ -23,6 +23,7 @@ two patterns:
 | onnxruntime-android | `vox-vision` (via `vendor/ppocr-sdk`), `core/wakeword` | — (Maven Central coordinate) | — | No | No | none | Dependabot (weekly) |
 | Whisper.cpp | `vox-commander/src/main/cpp/whisper.cpp` | *is* the submodule | *is* the submodule | No | Yes (CMake, every build if stale) | `autoCompileWhisper` | `sync-whisper.yml` (monthly) |
 | llama.cpp | `vox-commander/src/main/cpp/llama.cpp` | *is* the submodule | *is* the submodule | No | Yes (CMake, every build if stale) | `autoCompileLlama` | `sync-llama.yml` (monthly) |
+| OpenCL-Headers | both engine builds (`vox-commander`) | `vendor/OpenCL-Headers` (Khronos, pinned submodule) | — (compile-time headers only; the companion import stub is the in-repo `vox-commander/src/main/cpp/opencl-shim/`, a static dlopen shim cross-compiled once per build tree, never deployed) | No | No (headers) | none | none |
 | OpenWakeWord | `core/wakeword` | `vendor/openwakeword-android-kt` (submodule) | `core/wakeword/src/...` | Yes — 3 patches | No (plain Kotlin/ONNX Runtime) | `autoCheckOpenWakeWord` | `sync-openwakeword.yml` (Wed) |
 | OpenCV | `vendor/ppocr-sdk/opencv/` (gitignored output) | `vendor/opencv` (submodule, tag `5.0.0`) | — (build output only, not vendored as source) | No | Yes (CMake, skips only if the built commit matches the pinned submodule commit — see below) | `autoCompileOpenCv` | `sync-opencv.yml` (Thu) |
 | PaddleOCR ppocr-sdk | `vendor/ppocr-sdk` | `vendor/paddleocr-upstream` (submodule, sparse-checked-out) | `vendor/ppocr-sdk/src/...` | Yes — 4 patches | No (plain Kotlin) | none yet | `sync-ppocr-sdk.yml` (Fri) |
@@ -39,7 +40,7 @@ Only three of these scripts are wired into a build:
 | Task | Script | Module | Effect on your tree |
 |---|---|---|---|
 | `autoCompileWhisper` | `check_whisper.sh` | `vox-commander` | Builds the `.so` files. Can check out a newer whisper tag, but only with `--upgrade` or a typed `y` at an interactive prompt — unreachable under Gradle, whose `Exec` stdin is not a TTY. |
-| `autoCompileLlama` | `check_llama.sh` | `vox-commander` | Builds `libllama.so` (hybrid CPU+Vulkan, static ggml, stripped at deploy). Same upgrade discipline as whisper's. |
+| `autoCompileLlama` | `check_llama.sh` | `vox-commander` | Builds `libllama.so` (hybrid CPU+OpenCL, static ggml, stripped at deploy). Same upgrade discipline as whisper's. |
 | `autoCompileOpenCv` | `build_opencv_android.sh` | `vendor/ppocr-sdk` | Builds from the **pinned** submodule; never moves the pin. Early-exits when the built commit matches. |
 
 The three `autoCheck*` tasks are **deliberately not wired into `preBuild`**. "A newer Vosk exists" is
@@ -144,9 +145,10 @@ the bridge come from the same artifact and no such constraint applies.
   files on a real device). Runs weekly in CI: `instrumented-tests.yml` (Wednesday 05:00 UTC) boots
   an x86_64 Android emulator on an ubuntu runner with KVM opened up, executing Commander's
   arm64-v8a libraries through the system image's ARM binary translation. Before the emulator step
-  it installs the NDK and CMake via `android-actions/setup-android`, installs the host shader
-  toolchain (`glslc`, SPIRV-Headers, Vulkan-Headers — the hybrid CPU+Vulkan llama build compiles
-  its shaders on the build host), and runs `./scripts/vox native llama`, so `libllama.so` is in
+  it sets up the SDK via `android-actions/setup-android`, installs NDK and CMake via `sdkmanager`,
+  and checks out the `vendor/OpenCL-Headers` submodule — the hybrid CPU+OpenCL llama build takes
+  its GPU inputs from repo-pinned sources and needs only python3 on the host for kernel
+  embedding — then runs `./scripts/vox native llama`, so `libllama.so` is in
   the test APK and `LlamaBridgeSmokeTest` can answer whether it executes under translation. Commander only — translation has a fidelity
   ceiling, and Vision's OpenCV load crashes the translated process while passing on real arm64, so
   its connected test runs where real arm64 exists
@@ -162,7 +164,7 @@ the bridge come from the same artifact and no such constraint applies.
 
 `vox-commander/src/main/cpp/whisper.cpp` is a **git submodule** pointing at `ggerganov/whisper.cpp`
 directly — used unmodified (no local patch), compiled from source via CMake because it's a native
-library with hardware-specific build flags (Vulkan GPU acceleration, NEON, etc.) that no prebuilt
+library with hardware-specific build flags (OpenCL GPU acceleration with Adreno-tuned kernels, NEON, etc.) that no prebuilt
 artifact could cover well.
 
 - **`scripts/check_whisper.sh`** — the most involved of these scripts, because it does real work, not
@@ -171,8 +173,9 @@ artifact could cover well.
   2. Checks for a newer stable upstream tag (interactive prompt in a terminal; just a log line in CI/
      Android Studio's non-interactive Gradle invocation).
   3. Snapshots the current `.so` libraries as a rollback point.
-  4. Configures + builds via CMake/Ninja (hybrid CPU/Vulkan), targeting the NDK found under
-     `~/Library/Android/sdk/ndk`.
+  4. Builds the OpenCL import shim once per build tree, then configures + builds via CMake (hybrid
+     CPU/OpenCL), targeting the NDK `vox_android_ndk` resolves (`ANDROID_NDK_HOME`,
+     `ANDROID_NDK_ROOT`, newest under `$SDK/ndk`).
   5. Verifies the resulting `libwhisper.so` actually exports `whisper_init` before deploying it to
      `jniLibs/arm64-v8a/` — if anything in steps 4–5 fails, it **automatically rolls back** to the
      previous git revision and restores the previous `.so` backup, so a bad build never leaves the
@@ -191,8 +194,16 @@ artifact could cover well.
 
 `libwhisper.so` and `libomp.so` are the whole engine. The CMake build sets `BUILD_SHARED_LIBS OFF`,
 so ggml is linked into `libwhisper.so`: it defines every ggml symbol it uses, requires none from
-outside, and declares no `DT_NEEDED` on a ggml library. Its Vulkan backend is compiled in and binds
-to the platform's own `libvulkan.so`; `libomp.so` is its one non-platform dependency.
+outside, and declares no `DT_NEEDED` on a ggml library. Its OpenCL backend is compiled in with the
+Adreno-tuned kernels embedded in the binary; it declares no OpenCL `DT_NEEDED` — a static dlopen
+shim resolves the device's vendor `libOpenCL.so` at first use (declared `uses-native-library` in
+the manifest), and a device without a driver reports zero platforms and runs on the CPU.
+`libomp.so` is its one non-platform dependency.
+
+Both engine CMakeLists compile with `-ffile-prefix-map=<repo root>=.` and link with
+`--build-id=none`, so no build-host path or per-build hash reaches the binary — ggml's
+`GGML_ASSERT` bakes `__FILE__` into `.rodata`, which a strip does not remove. Both flags sit inside
+the pinned CMakeLists, so changing them moves the release tag.
 
 The list lives in `whisperLibs` (`vox-commander/build.gradle.kts`), and the loader, the packaging
 excludes and `publish_whisper_libs.sh` all take it from there — `LibWhisper` returns `false` when a
@@ -204,10 +215,11 @@ Exclusion is part of the build and always happens; publishing is a person runnin
 address with no version in it therefore serves whatever was published last, rather than what the APK
 was compiled against.
 
-The release is named for the whisper.cpp commit — `whisper-libs-<sha12>`. The build records that
-commit into the APK as `assets/whisper-libs.commit`, the app derives its download tag from it, and
-`publish_whisper_libs.sh` writes to the same name, so an install can only ask for the build its APK
-expects. `./scripts/vox check whisper-published` asks whether that release exists, and every
+The release is named for the whisper build fingerprint — `whisper-libs-<pin12>`, where the pin is
+`scripts/whisper_build_pin.sh`: a git hash over the tree state of the whisper.cpp submodule
+gitlink, `native-lib.cpp`, the whisper `CMakeLists.txt` and `opencl-shim/`. The build records the
+tag into the APK, the app derives its download address from it, and `publish_whisper_libs.sh`
+writes to the same name, so an install can only ask for the build its APK expects. `./scripts/vox check whisper-published` asks whether that release exists, and every
 Commander release runs it before publishing.
 
 Scoped to the commit rather than to the app version so several app versions share one whisper
@@ -240,8 +252,8 @@ accepted; a mismatch fails the download.
 `libonnxruntime.so`, `libvosk.so` and `libsherpa-onnx-jni.so` leave the APK
 **only in `full` mode**, which is not the default — see `voxDlc` in
 [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md#how-much-ships-inside-the-apk-voxdlc). The default,
-`minimal`, keeps all three inside a ~36 MB APK and downloads nothing; `full` produces ~24 MB and
-fetches them on the splash.
+`minimal`, keeps all three (plus libllama.so) inside a ~38 MB APK and downloads nothing; `full`
+produces ~24 MB and fetches them on the splash.
 
 They are deliberately **not** called "DLC" in that second mode. Unlike Whisper's model download (a
 genuine user choice: pick tiny/base/small in Settings), these are mandatory libraries the app cannot
@@ -287,14 +299,6 @@ however the APK is packaged.
 Vision's debug build keeps all 15 libs; its release drops to 5 in `full` (16 MB) and keeps all 15
 in `minimal` (61 MB).
 
-**Known gap (planned, not yet done):** `check_whisper.sh` and `check_llama.sh` assume Vulkan headers
-(`vulkan-headers`/`spirv-headers`/`shaderc`) are already installed via Homebrew
-(`VULKAN_HEADERS_BASE`/`SPIRV_HEADERS_BASE`/`SHADERC_BASE`, resolved through `vox_prefix_for` and
-falling back to `/usr/local` if `brew` is missing entirely) — neither checks for or installs
-Homebrew/these formulae itself if they're absent, so a fresh machine needs them installed manually
-first. Planned follow-up: detect Homebrew is missing and install it, then `brew install` the three
-formulae, before invoking CMake.
-
 ---
 
 ## Pattern B: llama.cpp (vendored unmodified, compiled at build time)
@@ -307,35 +311,41 @@ mechanism, differing only where the engine genuinely differs:
 - **Build:** `scripts/check_llama.sh` via `autoCompileLlama` (preBuild, skipped by
   `-PvoxSkipNativePrep`). A CMake project of its own at `src/main/cpp/llama-build/` — not an
   `add_subdirectory` in whisper's CMakeLists, because both submodules vendor ggml under identical
-  target names and one configure holding both would collide. Flags: `GGML_VULKAN ON` (hybrid
-  CPU+Vulkan in the one library; the backend is chosen per model load via `n_gpu_layers`),
-  `GGML_OPENMP OFF` (llama's own threadpool; no libomp dependency), `BUILD_SHARED_LIBS OFF`
-  (static ggml), `LLAMA_BUILD_COMMON ON` (grammar/chat-template helpers). The Vulkan backend
-  compiles its shaders on the build host with `glslc`, so the CMakeLists carries the same
-  host-shader-compiler preamble as whisper's: `CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER` plus
-  forced `Vulkan_INCLUDE_DIR`/`SPIRV-Headers_DIR`/`Vulkan_GLSLC_EXECUTABLE` caches, fed by four
-  `-D` arguments from `check_llama.sh`, which resolves the host packages
-  (`vulkan-headers`/`spirv-headers`/`shaderc`) through `vox_prefix_for`.
-- **One library.** `libllama.so` (~39 MB stripped) defines every ggml symbol it uses, exports only
+  target names and one configure holding both would collide. Flags: `GGML_OPENCL ON` with
+  `GGML_OPENCL_USE_ADRENO_KERNELS ON` and `GGML_OPENCL_EMBED_KERNELS ON` (hybrid CPU+OpenCL in the
+  one library, kernels embedded so there is nothing to stage beside it; the backend share is chosen
+  per model load via `n_gpu_layers`), `GGML_VULKAN OFF`, `GGML_OPENMP OFF` (llama's own threadpool;
+  no libomp dependency), `BUILD_SHARED_LIBS OFF` (static ggml), `LLAMA_BUILD_COMMON ON`
+  (grammar/chat-template helpers). `CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER` lets kernel embedding
+  find the host python3 while everything else cross-compiles. Two `-D` inputs arrive from
+  `check_llama.sh`: `OpenCL_INCLUDE_DIR` (the `vendor/OpenCL-Headers` submodule) and
+  `OpenCL_LIBRARY` (the static dlopen shim, built from `src/main/cpp/opencl-shim/` once per build
+  tree — an import library only, never deployed).
+- **One library.** `libllama.so` (~6 MB stripped) defines every ggml symbol it uses, exports only
   its `Java_com_voxapps_llamacpp_*` JNI surface (`--exclude-libs,ALL` plus hidden visibility), and
-  declares no non-platform `DT_NEEDED` — its Vulkan backend binds to the platform's own
-  `libvulkan.so`, which sits in `scripts/check_native_pairing.py`'s platform set, so the pairing
-  gate holds this property.
-- **Distribution:** excluded from every release APK by `androidComponents.onVariants`; published
-  by hand as the release `llama-libs-<pin12>` (`scripts/publish_llama_libs.sh`,
-  `./scripts/vox release publish-llama-libs`); fetched on demand by `LlamaEngineManager` when a
-  local LLM engine is selected, verified against `assets/llama-libs.sha256` recorded into the APK
-  by `recordLlamaDigests`, never over a metered connection.
+  declares no non-platform `DT_NEEDED` — its OpenCL backend resolves the vendor `libOpenCL.so` by
+  dlopen at first use; `libOpenCL.so` sits in `scripts/check_native_pairing.py`'s platform set, and
+  the library carries no OpenCL `DT_NEEDED` at all, so the pairing gate holds the
+  no-non-platform-dependency property.
+- **Distribution:** packaged inside every `minimal` (default) release APK, where
+  `LlamaEngineManager` finds it in `nativeLibraryDir` and never downloads; excluded only in
+  `full` by `androidComponents.onVariants`, where it is published by hand as the release
+  `llama-libs-<pin12>` (`scripts/publish_llama_libs.sh`, `./scripts/vox release
+  publish-llama-libs`) and fetched on demand by `LlamaEngineManager` when a local LLM engine is
+  selected, verified against `assets/llama-libs.sha256` recorded into the APK by
+  `recordLlamaDigests`, never over a metered connection.
 - **The address is a build fingerprint, not the submodule commit.** The pin is
   `scripts/llama_build_pin.sh`: a git hash over the tree state of the llama.cpp submodule gitlink,
-  `vox-commander/src/main/cpp/llama_jni.cpp` and `vox-commander/src/main/cpp/llama-build/`, the
-  tag taking its first 12 hex digits. Published releases are immutable, and `libllama.so`'s bytes
+  `vox-commander/src/main/cpp/llama_jni.cpp`, `vox-commander/src/main/cpp/llama-build/` and
+  `vox-commander/src/main/cpp/opencl-shim/`, the tag taking its first 12 hex digits. Published releases are immutable, and `libllama.so`'s bytes
   come from the submodule *and* the JNI bridge *and* the CMake config, so the address must move
   when any of them does — a pin over the submodule alone cannot represent a bridge or build-config
   change, and "same tag, different bytes" is not representable at all. One script owns the
   computation; `publish_llama_libs.sh`, `check_llama_published.sh`, `recordLlamaDigests` and
   `scripts/tests/run.sh` all consume it, so no two of them can derive different addresses for the
-  same tree. Whisper's tag is keyed to its submodule commit alone.
+  same tree. Whisper's tag follows its own build fingerprint the same way
+  (`scripts/whisper_build_pin.sh`: submodule + `native-lib.cpp` + `CMakeLists.txt` +
+  `opencl-shim/`).
 - **Gate:** `./scripts/vox check llama-published` — the release named by the pin must exist and
   hold `libllama.so`; wired into `release-commander.yml` beside the whisper gate, negative-testable
   via `VOX_LLAMA_PIN`.
@@ -510,7 +520,6 @@ every build:
 |---|---|
 | `vox_android_sdk` | `ANDROID_HOME`, `ANDROID_SDK_ROOT`, then the macOS, Linux and Windows defaults |
 | `vox_android_ndk` | `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT`, newest under `$SDK/ndk`, `ndk-bundle` |
-| `vox_prefix_for` | Homebrew, the tool's own location, then the usual prefixes |
 | `vox_sha256` | coreutils or macOS |
 
 `vox_android_ndk` follows symlinks: a runner's SDK can be assembled from them.
@@ -650,8 +659,8 @@ Which libraries, and whether they are optional:
 | App | Libraries | Optional? |
 |---|---|---|
 | Commander | onnxruntime, vosk, sherpa-onnx (33 MB) | **No.** onnxruntime backs OpenWakeWord, vosk the Vosk engines, sherpa Piper. Anyone using a wake word needs one on first launch. |
-| Commander | whisper (~107 MB, ggml and the Vulkan backend linked in) | **Yes** — only with Whisper STT, Vulkan variant only where supported. Fetched elsewhere, never bundled. |
-| Commander | llama.cpp (~39 MB libllama.so, ggml and the Vulkan backend linked in) | **Yes** — only when a local LLM engine is selected. Fetched from its `llama-libs-<pin12>` release, the pin a build fingerprint over the submodule, JNI bridge and CMake config (`scripts/llama_build_pin.sh`), never bundled. |
+| Commander | whisper (~27 MB: libwhisper.so + libomp.so, ggml and the OpenCL backend linked in with embedded Adreno kernels) | **Yes** — only with Whisper STT; GPU use is the per-engine opt-in toggle. Fetched on demand, never bundled. |
+| Commander | llama.cpp (~6 MB libllama.so, same backend construction) | Inside the APK in `minimal` (nothing to fetch); in `full`, fetched from its `llama-libs-<pin12>` release only when a local LLM engine is selected — the pin a build fingerprint over the submodule, JNI bridge, CMake config and OpenCL shim (`scripts/llama_build_pin.sh`). |
 | Vision | onnxruntime + the OpenCV set (43 MB) | **No.** Vision is an OCR app and these are what OCR needs. |
 
 ## Do the native libraries satisfy each other?
@@ -689,9 +698,6 @@ Where it runs:
 - each `release-*.yml`, between the build and the publish, ahead of the attestation
 
 ## Open items
-
-- **`check_whisper.sh`**'s Homebrew dependency detection (Vulkan headers) doesn't yet install Homebrew
-  or the required formulae if missing — see the Whisper.cpp section above. Deliberately deferred.
 
 Every buildable dependency has a scheduled sync workflow — seven `sync-*.yml`, one per upstream.
 
@@ -759,6 +765,9 @@ build:
 - each vendored fork equals upstream + patches, **and the verifier fails when it does not** —
   asserted by planting an unrecorded edit and restoring it
 - the schemas match their signed manifest, and verification fails on an edited schema
+- both engine CMakeLists force the OpenCL backend with Adreno kernels and Vulkan off, libllama.so's
+  APK exclusion lives only inside the full-mode branch, the llama tag follows the build pin, and
+  every downloadable model URL in `remote-schemas` declares a `sha256`
 
 `shellcheck -x` runs over every script in the same job. It found one real hazard when introduced —
 an `rm -rf "$A/$B"` with no guard against either being empty — plus two unchecked `cd` calls.

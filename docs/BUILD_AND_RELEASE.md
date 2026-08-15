@@ -57,6 +57,10 @@ and CI only verifies (`verify-schemas.yml`). After editing anything under `remot
 ./scripts/vox schemas sign      # then commit manifest.json and manifest.json.sig
 ```
 
+When a schema gains or changes a downloadable model URL, run `./scripts/vox schemas hash-models`
+before signing — every downloadable model URL carries a `sha256` beside it, and `./scripts/vox
+test` fails when one is missing.
+
 Forget, and the apps simply ignore the change — safe, but silent, which is why CI fails the check
 rather than leaving it to be noticed.
 
@@ -89,15 +93,19 @@ default** (`gradle.properties`):
 
 | | `minimal` (default) | `full` |
 |---|---|---|
-| Commander APK | ~36 MB, 10 libs inside | ~24 MB, 5 libs inside |
+| Commander APK | ~38 MB, 9 libs inside (libllama.so among them) | ~24 MB, 5 libs inside |
 | Vision APK | ~61 MB, 15 libs inside | ~16 MB, 5 libs inside |
 | First launch | nothing downloads; works offline | 33 MB (Commander) / 43 MB (Vision) fetched on the splash |
-| Whisper / llama.cpp | on demand, unchanged | on demand, unchanged |
+| Whisper | on demand, unchanged | on demand, unchanged |
+| llama.cpp runtime | inside the APK | fetched on first use |
 
-**Whisper and the llama.cpp runtime are unaffected by the switch.** They are the genuinely
-optional payloads — ~107 MB fetched only if you choose Whisper STT, ~39 MB of libllama.so (hybrid
-CPU+Vulkan) fetched only when a local LLM engine is selected — so both are excluded by
-AGP in both modes. Each engine's GPU use is a separate opt-in toggle, proven per device by a
+**Whisper is unaffected by the switch.** It is the genuinely optional payload — ~27 MB
+(libwhisper.so + libomp.so, hybrid CPU+OpenCL) excluded by AGP in both modes and fetched only if
+you choose Whisper STT. The llama.cpp runtime is governed by the switch: `minimal` compiles
+libllama.so (~6 MB, hybrid CPU+OpenCL) from source into the APK, where `LlamaEngineManager` finds
+it in `nativeLibraryDir` and never downloads — an offline-ready engine with no runtime-download
+trust gap; `full` excludes it and fetches it on demand from its pinned release when a local LLM
+engine is selected. Each engine's GPU use is a separate opt-in toggle, proven per device by a
 sandboxed compatibility probe (see `TECHNICAL_DOCUMENTATION.md`). Everything the switch does govern is mandatory: the app cannot run
 without those libraries, so in `full` they are a required download on the splash, which is why
 `minimal` is the default.
@@ -145,11 +153,13 @@ skips the whisper and llama compiles for a build that only needs to know whether
 Everything downstream of `preBuild` still runs. `copyShippedSchemas` is **not** skippable — the
 schema tests read the assets it generates.
 
-Both native compiles produce hybrid CPU+Vulkan libraries whose GPU shaders are compiled on the
-build host, so any machine running them needs the host shader toolchain (`glslc`, SPIRV-Headers,
-Vulkan-Headers — see `BUILD_TIME_DEPENDENCIES.md`). In CI, `release-commander.yml` and
-`instrumented-tests.yml` are the two workflows that build the llama library, and both install that
-toolchain before invoking the compile.
+Both native compiles produce hybrid CPU+OpenCL libraries with Adreno-tuned kernels embedded in the
+binary. The GPU inputs are repo-pinned — the Khronos headers are the `vendor/OpenCL-Headers`
+submodule and the import library is a static dlopen shim built per build tree from
+`vox-commander/src/main/cpp/opencl-shim/` — so a build machine needs only the SDK/NDK/CMake and
+python3 (kernel embedding), no host GPU packages. The CI workflows that compile an engine set up
+the SDK with `android-actions/setup-android` so `sdkmanager` is on PATH, install NDK+CMake, and
+check out `vendor/OpenCL-Headers`.
 
 ### What a release does before it publishes
 
@@ -220,7 +230,7 @@ packaging, R8 and anything that only appears once the app is installed are outsi
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `ci.yml` | every push to `main`, every PR | `./gradlew test` for all modules, `assembleDebug` for all six apps, then `vox check pairing` over the six APKs |
+| `ci.yml` | every push to `main`, every PR | a fast `scripts` job first (shellcheck over every script + `./scripts/vox test`), then `./gradlew test` for all modules, `assembleDebug` for all six apps, `compileDebugAndroidTestSources`, and `vox check pairing` over the six APKs |
 | `validate-schemas.yml` | pushes touching `remote-schemas/**` | validates the shipped schema files |
 | `verify-schemas.yml` | pushes touching `remote-schemas/**` or `scripts/sign_schemas.sh` | verifies the schema manifest signature and every schema hash |
 | `verify-vendor-patches.yml` | pushes touching a vendored fork or its patches | asserts each fork is exactly upstream + `patches/` |
