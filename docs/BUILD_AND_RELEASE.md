@@ -91,6 +91,11 @@ default** (`gradle.properties`):
 ./gradlew :vox-commander:assembleRelease -PvoxDlc=full      # smaller APK, libs fetched on the splash
 ```
 
+LiteRT-LM's `liblitertlm_jni.so` (~21 MB) is outside this split entirely and ships in both modes —
+the vendor SDK loads it by name from the APK's own library directory, so there is no download path
+that could satisfy it (see [`BUILD_TIME_DEPENDENCIES.md`](BUILD_TIME_DEPENDENCIES.md)). It is the
+one native library `full` cannot shed.
+
 | | `minimal` (default) | `full` |
 |---|---|---|
 | Commander APK | ~38 MB, 9 libs inside (libllama.so among them) | ~24 MB, 5 libs inside |

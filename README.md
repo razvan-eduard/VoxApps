@@ -170,7 +170,7 @@ app, with implementation-level detail.
 
 On-device voice assistant. Wake word (Vosk/Porcupine/OpenWakeWord) and on-device Whisper STT feed a
 3-layer AI pipeline — instant FastMap voice-shortcut rules you define yourself, a primary AI (OpenAI
-cloud or an on-device llama.cpp GGUF model), then an automatic offline fallback; app control,
+cloud, or an on-device model through llama.cpp or LiteRT-LM), then an automatic offline fallback; app control,
 media/search/navigation/messaging, and system toggles (volume, WiFi, flashlight, DND, and more) all
 route through the same pipeline. A shared location system (cached last-known location, a Home Town
 fallback, "always use this location") and its own Backup & Restore screen round it out.
@@ -270,7 +270,7 @@ companion app also has its own local Backup & Restore screen, interchangeable wi
 | UI | Jetpack Compose, Material 3 |
 | STT | Whisper.cpp (GGML, on-device) |
 | Wake Word | Vosk, Picovoice Porcupine, OpenWakeWord |
-| NLU | OpenAI API, On-device LLM (llama.cpp, GGUF) |
+| NLU | OpenAI API, On-device LLM (llama.cpp GGUF, or LiteRT-LM .task/.litertlm behind the Google consent toggle) |
 | TTS | Android TextToSpeech, Piper TTS |
 | Storage | DataStore, EncryptedSharedPreferences, Room (+ SQLCipher on the satellite apps) |
 | Media | Spotify, YouTube (NewPipe Extractor / Piped), MediaSession API |
