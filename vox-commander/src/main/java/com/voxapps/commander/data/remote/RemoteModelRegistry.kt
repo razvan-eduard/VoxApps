@@ -580,9 +580,20 @@ object RemoteModelRegistry {
         getEngineKeysByType("voice").firstOrNull { runtimeOf(it) == EngineRuntime.LOCAL_FILE }
             ?: getEngineKeysByType("voice").firstOrNull()
 
-    fun getDefaultLlmEngineKey(): String? {
-        return getLlmEngineKeys().firstOrNull()
-    }
+    /**
+     * The LLM engine to use when nothing has been chosen.
+     *
+     * Skips engines the schema marks `google_service` unless [allowGoogle] says the user has
+     * consented, and defaults to not: a derived default is the one selection the user never made, so
+     * it must not be the one they have to opt into. The engines that cannot see settings — the
+     * retired-key remaps, the import normaliser — take that default and are right to, since none of
+     * them represents a fresh act of consent. Falls through to the first engine of any kind when
+     * every one is gated, so a registry serving only gated engines still names something rather than
+     * leaving the cascade with no primary at all.
+     */
+    fun getDefaultLlmEngineKey(allowGoogle: Boolean = false): String? =
+        getLlmEngineKeys().firstOrNull { allowGoogle || !hasCapability(it, "google_service") }
+            ?: getLlmEngineKeys().firstOrNull()
 
     fun isMultilingual(engineKey: String): Boolean = cachedSchema?.engines?.get(engineKey)?.is_multilingual ?: false
 

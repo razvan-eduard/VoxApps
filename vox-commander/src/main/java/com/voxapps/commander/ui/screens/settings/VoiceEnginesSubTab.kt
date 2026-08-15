@@ -127,7 +127,15 @@ fun VoiceEnginesSubTab(
                     else -> true
                 }
             },
-            disabledSuffix = languageManager.getString("engine_cloud_disabled_suffix"),
+            // Named per entry: this picker gates on the cloud toggle and the Google one alike, and
+            // a single sentence for both misnames whichever gate is not the reason.
+            disabledSuffix = { entry ->
+                if (RemoteModelRegistry.hasCapability(entry.id, "google_service")) {
+                    languageManager.getString("engine_google_disabled_suffix")
+                } else {
+                    languageManager.getString("engine_cloud_disabled_suffix")
+                }
+            },
             itemNote = { entry ->
                 if (entry.requiresCredential && !uiState.credentials.has(entry.id))
                     " — needs an API key" else ""

@@ -51,7 +51,9 @@ fun <T> Picklist(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     itemEnabled: (T) -> Boolean = { true },
-    disabledSuffix: String = "",
+    /** Why this row is greyed out, per row: more than one gate can disable an entry, and a single
+     *  sentence for all of them names the wrong one for every gate but the first. */
+    disabledSuffix: (T) -> String = { "" },
     /** A hint on a row that can still be chosen — "needs an API key" and the like. The greyed-out
      *  reason is [disabledSuffix]; this is for what the user can act on by choosing it. */
     itemNote: (T) -> String = { "" },
@@ -112,7 +114,7 @@ fun <T> Picklist(
                     leadingIcon = itemLeading?.let { leading -> { leading(item) } },
                     text = {
                         Text(
-                            text = itemLabel(item) + if (enabled) itemNote(item) else disabledSuffix,
+                            text = itemLabel(item) + if (enabled) itemNote(item) else disabledSuffix(item),
                             color = if (enabled) LocalContentColor.current
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                         )

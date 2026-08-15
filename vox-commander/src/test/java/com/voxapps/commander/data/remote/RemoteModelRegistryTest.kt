@@ -277,6 +277,34 @@ class RemoteModelRegistryTest {
         assertFalse(RemoteModelRegistry.isLlmEngine("stt_whisper"))
     }
 
+    /**
+     * A derived default is the one selection the user never made, so it must never be an engine
+     * they have to opt into. This is also what stops turning consent *off* from handing the
+     * selection straight back to a gated engine: that path clears the stored key, and the next read
+     * derives one again.
+     */
+    @Test
+    fun `the derived default skips a consent-gated engine until consent is given`() {
+        mockkObject(RemoteModelRegistry)
+        every { RemoteModelRegistry.getLlmEngineKeys() } returns listOf("nlu_llm", "nlu_llm_task")
+        every { RemoteModelRegistry.hasCapability("nlu_llm", "google_service") } returns false
+        every { RemoteModelRegistry.hasCapability("nlu_llm_task", "google_service") } returns true
+
+        assertEquals("nlu_llm", RemoteModelRegistry.getDefaultLlmEngineKey())
+        assertEquals("nlu_llm", RemoteModelRegistry.getDefaultLlmEngineKey(allowGoogle = true))
+    }
+
+    /** A registry serving only gated engines still has to name one — an empty primary would drop
+     *  the cascade's first stage entirely, which is worse than naming an engine the picker greys. */
+    @Test
+    fun `the derived default falls through when every engine is gated`() {
+        mockkObject(RemoteModelRegistry)
+        every { RemoteModelRegistry.getLlmEngineKeys() } returns listOf("nlu_llm_task")
+        every { RemoteModelRegistry.hasCapability("nlu_llm_task", "google_service") } returns true
+
+        assertEquals("nlu_llm_task", RemoteModelRegistry.getDefaultLlmEngineKey())
+    }
+
     @Test
     fun `isWakeWordEngine returns true when wake_word is in engine types`() {
         mockkObject(RemoteModelRegistry)

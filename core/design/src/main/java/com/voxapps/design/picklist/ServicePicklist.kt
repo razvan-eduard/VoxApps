@@ -38,7 +38,7 @@ fun <T : ServiceEntry> ServicePicklist(
     credentialLabel: String,
     modifier: Modifier = Modifier,
     itemEnabled: (T) -> Boolean = { true },
-    disabledSuffix: String = "",
+    disabledSuffix: (T) -> String = { "" },
     itemNote: (T) -> String = { "" },
     /** The sentence around the "where to get a key" link, already translated. */
     helpTextFor: (T) -> String? = { null },

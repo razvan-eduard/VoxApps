@@ -380,7 +380,15 @@ class SettingsRepositoryImpl(
             // Falls back to the legacy key so an existing install keeps the model it was using.
             activeWakeModelId = prefs[Keys.ACTIVE_WAKE_MODEL_ID] ?: prefs[Keys.WAKE_WORD_MODEL_PATH],
 
-            aiProcessor = prefs[Keys.AI_PROCESSOR] ?: com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultLlmEngineKey() ?: "",
+            // The derived default follows the consent toggle, in the one place that can read it:
+            // a gated engine may be the default only for someone who has already opted in. This is
+            // also what keeps turning consent *off* from handing the selection straight back to a
+            // gated engine — clearEngineSelections removes the key, and this is what answers next.
+            aiProcessor = prefs[Keys.AI_PROCESSOR]
+                ?: com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultLlmEngineKey(
+                    allowGoogle = prefs[Keys.GOOGLE_SERVICES_ENABLED] ?: false
+                )
+                ?: "",
             activeIntentModelId = prefs[Keys.ACTIVE_INTENT_MODEL_ID],
             cloudIntelligenceEnabled = prefs[Keys.CLOUD_INTELLIGENCE_ENABLED] ?: false,
             googleServicesEnabled = prefs[Keys.GOOGLE_SERVICES_ENABLED] ?: false,
