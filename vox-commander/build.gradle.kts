@@ -527,15 +527,13 @@ val hashWhisperLibs = tasks.register<HashEngineLibs>("recordWhisperDigests") {
     // them. Without this guard the flag does not skip anything: this task is wired into asset
     // generation, so it runs on every build and drags the compile back in behind it.
     if (!skipNativePrep) dependsOn("autoCompileWhisper")
-    // The pin recorded in this commit, which is the same value publish_whisper_libs.sh names the
-    // release after. providers.exec rather than a bare command so the configuration cache can track
-    // it instead of being invalidated by it.
+    // The whisper build pin, which is the same value publish_whisper_libs.sh names the release
+    // after — one script owns the computation so recorder and publisher can never derive different
+    // addresses for the same tree. providers.exec rather than a bare command so the configuration
+    // cache can track it instead of being invalidated by it.
     engineCommit.set(
         providers.exec {
-            commandLine(
-                "git", "-C", rootDir.absolutePath,
-                "rev-parse", "HEAD:vox-commander/src/main/cpp/whisper.cpp"
-            )
+            commandLine("bash", rootDir.resolve("scripts/whisper_build_pin.sh").absolutePath)
         }.standardOutput.asText.map { it.trim() }
     )
     tagPrefix.set("whisper-libs")

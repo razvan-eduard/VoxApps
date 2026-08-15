@@ -31,10 +31,10 @@ LIBS=("libomp.so" "libwhisper.so")
 
 # Overridable so the suite can prove this gate is able to fail: a gate that has only ever passed
 # is indistinguishable from one that cannot fail, so the tests point it at a pin with no release.
-PINNED="${VOX_WHISPER_PIN:-$(git rev-parse "HEAD:$SUBMODULE" 2>/dev/null)}"
+PINNED="${VOX_WHISPER_PIN:-$("$(dirname "$0")/whisper_build_pin.sh" 2>/dev/null)}"
 if [ -z "$PINNED" ]; then
     $REPORT && echo "published=unknown"
-    log_error "Cannot read the whisper.cpp submodule pin."
+    log_error "Cannot compute the whisper build pin."
     exit 1
 fi
 
