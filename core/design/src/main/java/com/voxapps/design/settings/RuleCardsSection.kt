@@ -76,10 +76,15 @@ fun <R> RuleCardsSection(
     deleteAllMessage: String,
     confirmLabel: String,
     cancelLabel: String,
-    deleteContentDescription: String
+    deleteContentDescription: String,
+    /** When set, a single rule's delete asks first — the dialog title, and a message format whose
+     *  `%1${'$'}s` receives the rule's name. Absent, delete stays immediate (legacy behavior). */
+    deleteConfirmTitle: String? = null,
+    deleteConfirmMessageFormat: String? = null
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<R?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(title, style = MaterialTheme.typography.labelLarge)
@@ -241,7 +246,9 @@ fun <R> RuleCardsSection(
                             onCheckedChange = { onSetEnabled(rule, it) },
                             modifier = Modifier.scale(0.8f)
                         )
-                        IconButton(onClick = { onDelete(rule) }) {
+                        IconButton(onClick = {
+                            if (deleteConfirmTitle != null) pendingDelete = rule else onDelete(rule)
+                        }) {
                             Icon(
                                 Icons.Filled.Delete,
                                 contentDescription = deleteContentDescription,
@@ -256,6 +263,20 @@ fun <R> RuleCardsSection(
         OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
             Text(addLabel)
         }
+    }
+
+    pendingDelete?.let { rule ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(deleteConfirmTitle ?: "") },
+            text = { Text(String.format(deleteConfirmMessageFormat ?: "%1${'$'}s", ruleName(rule))) },
+            confirmButton = {
+                TextButton(onClick = { onDelete(rule); pendingDelete = null }) { Text(confirmLabel) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text(cancelLabel) }
+            }
+        )
     }
 
     if (showDeleteAllDialog) {

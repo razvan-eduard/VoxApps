@@ -155,6 +155,9 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val templateHash = com.voxapps.textmatch.extract.TemplateSkeleton.hash(skeleton)
         val inheritedDirection = container.templateDirectionMemory.lookup(templateHash)
         val paymentKnown = container.templateDirectionMemory.lookupIsPayment(templateHash)
+        // Display backfill for the learned-templates settings list — capture time is the only
+        // moment the hash and its text coexist (no-op unless this template is already learned).
+        container.templateDirectionMemory.noteSkeleton(templateHash, skeleton)
         Logger.d(TAG, "Captured notification from ${sbn.packageName}, forwarding for LLM triage " +
             "(bank=$bankName preAmount=${preParse.amount != null} preVendor=${preParse.vendor != null}" +
             " templateDirection=${inheritedDirection ?: "-"} paymentKnown=$paymentKnown)")

@@ -59,6 +59,7 @@ fun DuplicateRulesSection(
     val fields = remember { ExpenseRuleFields(fuzzyMatchEnabled = true, timeWindowMillis = 0L).all }
     var editingRule by remember { mutableStateOf<DuplicateRuleEntity?>(null) }
     var creatingRule by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<DuplicateRuleEntity?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(languageManager.getString("duplicate_rules_label"), style = MaterialTheme.typography.labelLarge)
@@ -108,7 +109,7 @@ fun DuplicateRulesSection(
                     IconButton(onClick = { editingRule = rule }) {
                         Icon(Icons.Filled.Edit, contentDescription = languageManager.getString("duplicate_rule_edit"))
                     }
-                    IconButton(onClick = { onDeleteRule(rule) }) {
+                    IconButton(onClick = { pendingDelete = rule }) {
                         Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("duplicate_rule_delete"))
                     }
                     Switch(checked = rule.enabled, onCheckedChange = { onSetRuleEnabled(rule.id, it) })
@@ -119,6 +120,25 @@ fun DuplicateRulesSection(
         OutlinedButton(onClick = { creatingRule = true }, modifier = Modifier.fillMaxWidth()) {
             Text(languageManager.getString("duplicate_rule_add"))
         }
+    }
+
+    pendingDelete?.let { rule ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(languageManager.getString("rule_delete_confirm_title")) },
+            text = { Text(String.format(languageManager.getString("rule_delete_confirm_message"), rule.name)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    onDeleteRule(rule)
+                    pendingDelete = null
+                }) { Text(languageManager.getString("delete")) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { pendingDelete = null }) {
+                    Text(languageManager.getString("cancel"))
+                }
+            }
+        )
     }
 
     val editTarget = editingRule

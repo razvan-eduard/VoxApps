@@ -274,6 +274,14 @@ class ExpensesStateManager(
     }
 
     fun setFieldCorrectionMemoryEnabled(enabled: Boolean) = scope.launch { settingsRepo.setFieldCorrectionMemoryEnabled(enabled) }
+    /** The learned notification templates for the settings list — suspend snapshot, refreshed by
+     *  the screen after every action rather than observed (the store is a small DataStore blob
+     *  written from several processes' wake-ups; a poll-on-action screen shows fresh truth
+     *  without another always-on collector). */
+    suspend fun learnedTemplatesSnapshot() = templateDirectionMemory.snapshot()
+    suspend fun forgetLearnedTemplate(hash: String) = templateDirectionMemory.forget(hash)
+    suspend fun reteachLearnedTemplate(hash: String) = templateDirectionMemory.reteach(hash)
+
     fun setFieldCorrectionThreshold(count: Int) = scope.launch { settingsRepo.setFieldCorrectionThreshold(count) }
     fun setFieldCorrectionApplyMode(mode: String) = scope.launch { settingsRepo.setFieldCorrectionApplyMode(mode) }
     fun setThemeDarkMode(mode: String) { scope.launch { settingsRepo.setThemeDarkMode(mode) } }
