@@ -36,6 +36,10 @@ fun ApplyTodayEffect(
     style: TodayEffectStyle = TodayEffectStyle.RING,
     shape: Shape = RectangleShape,
     speedMultiplier: Float = 1f,
+    /** Forces the particles ON TOP of [content] regardless of the effect's usual layering — for
+     *  hosts whose content paints an opaque fill (a selected day's pill) that would otherwise
+     *  bury a behind-drawn effect like Glow/Neon Pulse. */
+    alwaysOverContent: Boolean = false,
     // Callers whose content relies on a layout-scope modifier (e.g. RowScope.weight in a per-day
     // header row) must pass that modifier here rather than on `content` itself — this composable
     // always wraps content in its own Box (even when the effect is off), so a modifier placed
@@ -68,7 +72,7 @@ fun ApplyTodayEffect(
     // shape and drawn underneath. Fire/Waves/Rainbow read better as an overlay allowed to spill
     // slightly past the element's edges (flames licking upward, ripples/sparks escaping the bounds),
     // so they're drawn on top, unclipped.
-    val drawBehindContent = effect == TodayEffect.GLOW || effect == TodayEffect.NEON_PULSE
+    val drawBehindContent = !alwaysOverContent && (effect == TodayEffect.GLOW || effect == TodayEffect.NEON_PULSE)
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         if (drawBehindContent) {
