@@ -72,10 +72,48 @@ object ExpenseParseResultParser {
      * a distinguishable "not found" sentinel in that case (never a real amount) — callers that care
      * check `!totalAmount.isNaN()` rather than treating it as a real, suggestible value.
      */
+    /** The first balanced top-level JSON object inside [raw], or null when none completes. Local
+     *  models habitually wrap their reply in markdown fences or lead-in prose, and JSONObject()
+     *  rejects the whole reply over it — so the object is cut out before parsing. Brace depth is
+     *  tracked outside string literals only, so braces inside values can't end the object early. */
+    private fun extractJsonObject(raw: String): String? {
+        val start = raw.indexOf('{')
+        if (start < 0) return null
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for (i in start until raw.length) {
+            val c = raw[i]
+            when {
+                escaped -> escaped = false
+                inString && c == '\\' -> escaped = true
+                c == '"' -> inString = !inString
+                !inString && c == '{' -> depth++
+                !inString && c == '}' -> {
+                    depth--
+                    if (depth == 0) return raw.substring(start, i + 1)
+                }
+            }
+        }
+        return null
+    }
+
     fun parse(json: String, requireTotalAmount: Boolean = true): Parsed? = try {
-        val o = JSONObject(json)
+        val extracted = extractJsonObject(json)
+        if (extracted == null) {
+            Logger.w(
+                TAG,
+                "No complete JSON object in LLM reply (${json.length} chars) — " +
+                    "head: ${json.take(160)} | tail: ${json.takeLast(160)}"
+            )
+            return null
+        }
+        val o = JSONObject(extracted)
         val totalAmount = o.optNullableDouble("totalAmount")
-            ?: (if (requireTotalAmount) return null else Double.NaN)
+            ?: (if (requireTotalAmount) {
+                Logger.w(TAG, "LLM reply parsed but has no usable totalAmount — rejecting")
+                return null
+            } else Double.NaN)
 
         val itemsArray = o.optJSONArray("items") ?: JSONArray()
         val items = (0 until itemsArray.length()).mapNotNull { i ->
@@ -119,6 +157,11 @@ object ExpenseParseResultParser {
             direction = o.optTransactionDirection()
         )
     } catch (e: Exception) {
+        Logger.w(
+            TAG,
+            "Unparseable LLM reply (${json.length} chars, ${e.message}) — " +
+                "head: ${json.take(160)} | tail: ${json.takeLast(160)}"
+        )
         null
     }
 }

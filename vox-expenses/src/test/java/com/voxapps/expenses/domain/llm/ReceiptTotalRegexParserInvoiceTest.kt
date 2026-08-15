@@ -6,7 +6,7 @@ import org.junit.Test
 class ReceiptTotalRegexParserInvoiceTest {
 
     @Test
-    fun `an invoice's own labelled total beats the larger pay-this figure`() {
+    fun `the grand total is the headline, the invoice's own total and balance are extras`() {
         val result = ReceiptTotalRegexParser.parse(
             """
             Total Factura 22.21
@@ -14,10 +14,9 @@ class ReceiptTotalRegexParserInvoiceTest {
             Total de Plata 66.63
             """.trimIndent()
         )
-        assertEquals(22.21, result.total!!, 0.0)
+        assertEquals(66.63, result.total!!, 0.0)
         assertEquals(22.21, result.invoiceTotal!!, 0.0)
         assertEquals(44.42, result.previousBalance!!, 0.0)
-        assertEquals(66.63, result.totalToPay!!, 0.0)
     }
 
     @Test

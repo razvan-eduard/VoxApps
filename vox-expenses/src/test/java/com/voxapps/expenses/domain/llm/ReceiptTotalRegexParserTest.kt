@@ -11,8 +11,6 @@ class ReceiptTotalRegexParserTest {
     @Test
     fun `label and value on separate lines`() {
         // OCR of a tabular document routinely breaks the column between a label and its figure.
-        // The winner is the invoice's OWN total — the pay-this figure includes a carried balance
-        // that was (or will be) its own expense record.
         val text = """
             Total Factura
             22.21
@@ -21,7 +19,7 @@ class ReceiptTotalRegexParserTest {
             Total de Plata
             66.63
         """.trimIndent()
-        assertEquals(22.21, total(text)!!, 0.001)
+        assertEquals(66.63, total(text)!!, 0.001)
     }
 
     @Test

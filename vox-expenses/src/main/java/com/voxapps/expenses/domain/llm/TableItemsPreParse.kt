@@ -18,9 +18,24 @@ object TableItemsPreParse {
 
     private const val TOLERANCE = 0.05
 
+    /** Mirrors vox-vision's OcrEngine.TABLE_SECTION_MARKER — the reconstruction rides appended
+     *  behind it; everything before is the plain reading-order text every other consumer uses. */
+    const val TABLE_SECTION_MARKER = "--- [table reconstruction] ---"
+
+    /** The text with any appended table section removed — what prompts and regex parsers see. */
+    fun plainText(rawText: String): String =
+        rawText.substringBefore(TABLE_SECTION_MARKER).trimEnd()
+
     /** Null unless a column combination sums to [expectedTotal] within [TOLERANCE]. */
-    fun parse(tableText: String, expectedTotal: Double?): List<Item>? {
+    fun parse(rawText: String, expectedTotal: Double?): List<Item>? {
         if (expectedTotal == null || expectedTotal <= 0.0) return null
+        // Prefer the appended reconstruction; a text without one may still BE table-shaped (tests,
+        // future senders), so fall back to scanning the whole input.
+        val tableText = if (rawText.contains(TABLE_SECTION_MARKER)) {
+            rawText.substringAfter(TABLE_SECTION_MARKER)
+        } else {
+            rawText
+        }
         val rows = tableText.lines()
             .filter { it.contains(" | ") }
             .map { line -> line.split(" | ").map { it.trim() } }

@@ -30,15 +30,15 @@ data class ScanPreParse(
     val isPaymentKnown: Boolean = false,
     /** Deterministically-read line items (see [TableItemsPreParse]) as its compact JSON. */
     val itemsJson: String? = null,
-    /** An invoice's carried balance / pay-this figures (see [ReceiptTotalRegexParser]). */
+    /** An invoice's carried balance and own-charges figures (see [ReceiptTotalRegexParser]). */
     val previousBalance: Double? = null,
-    val totalToPay: Double? = null,
+    val invoiceOwnTotal: Double? = null,
     val storedAt: Long = 0L
 ) {
     val isEmpty: Boolean
         get() = date == null && time == null && total == null && vendor == null &&
             direction == null && templateHash == null && itemsJson == null &&
-            previousBalance == null && totalToPay == null
+            previousBalance == null && invoiceOwnTotal == null
 }
 
 /**
@@ -109,7 +109,7 @@ class ScanPreParseRepository(context: Context) {
             if (entry.isPaymentKnown) o.put("isPaymentKnown", true)
             entry.itemsJson?.let { o.put("itemsJson", it) }
             entry.previousBalance?.let { o.put("previousBalance", it) }
-            entry.totalToPay?.let { o.put("totalToPay", it) }
+            entry.invoiceOwnTotal?.let { o.put("invoiceOwnTotal", it) }
             o.put("storedAt", entry.storedAt)
             array.put(o)
         }
@@ -133,7 +133,7 @@ class ScanPreParseRepository(context: Context) {
                     isPaymentKnown = o.optBoolean("isPaymentKnown", false),
                     itemsJson = if (o.has("itemsJson")) o.optString("itemsJson") else null,
                     previousBalance = if (o.has("previousBalance")) o.optDouble("previousBalance") else null,
-                    totalToPay = if (o.has("totalToPay")) o.optDouble("totalToPay") else null,
+                    invoiceOwnTotal = if (o.has("invoiceOwnTotal")) o.optDouble("invoiceOwnTotal") else null,
                     storedAt = o.optLong("storedAt")
                 )
             }.toMap()

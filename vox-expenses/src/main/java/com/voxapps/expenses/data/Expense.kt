@@ -51,11 +51,12 @@ data class Expense(
     val uid: String = UUID.randomUUID().toString(),
     val title: String? = null,
     val totalAmount: Double,
-    // Invoice-only extras (see ReceiptTotalRegexParser): a balance carried from before this
-    // document, and the pay-this figure when it exceeds [totalAmount]. Null on every non-invoice
-    // record; [totalAmount] itself is always THIS document's own total.
+    // Invoice-only extras (see ReceiptTotalRegexParser): the balance carried from before this
+    // document and the invoice's OWN charges. Null on every non-invoice record; [totalAmount] is
+    // the grand total (largest labelled figure — what actually gets paid). The own-charges column
+    // keeps its original name from the field's first iteration; only the Kotlin name is semantic.
     val previousBalanceAmount: Double? = null,
-    val totalToPayAmount: Double? = null,
+    @ColumnInfo(name = "totalToPayAmount") val invoiceOwnAmount: Double? = null,
     val currencyCode: String,
     val vendor: String? = null,
     val bank: String? = null,

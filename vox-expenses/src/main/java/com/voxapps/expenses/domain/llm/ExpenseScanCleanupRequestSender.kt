@@ -36,8 +36,12 @@ object ExpenseScanCleanupRequestSender {
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val settings = container.settingsRepository.getSnapshot()
 
-        val preParsed = DateTimeRegexParser.parse(rawText)
-        val totals = ReceiptTotalRegexParser.parse(rawText)
+        // Prompts and regex parsers see the PLAIN reading-order text — the appended table
+        // reconstruction (see TableItemsPreParse.TABLE_SECTION_MARKER) exists only for the
+        // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
+        val plainText = TableItemsPreParse.plainText(rawText)
+        val preParsed = DateTimeRegexParser.parse(plainText)
+        val totals = ReceiptTotalRegexParser.parse(plainText)
         val preParsedTotal = totals.total
         val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
 
@@ -48,14 +52,12 @@ object ExpenseScanCleanupRequestSender {
         }
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
-            rawText,
+            plainText,
             existingCategories,
             settings.defaultCurrency,
             settings.language,
             preParsedDate = preParsed.date,
             preParsedTime = preParsed.time,
-            preParsedTotal = preParsedTotal,
-            bypassItems = preParsedItems != null
         )
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for scan cleanup (retryOfExpenseId=$retryOfExpenseId, multimodal=${attachmentUri != null})")
@@ -88,20 +90,22 @@ object ExpenseScanCleanupRequestSender {
     suspend fun sendLineItemsRescan(context: Context, container: ExpensesContainer, expenseId: Long, rawText: String, attachmentUri: String? = null, sourceGroupId: String? = null) {
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val settings = container.settingsRepository.getSnapshot()
-        val preParsed = DateTimeRegexParser.parse(rawText)
-        val totals = ReceiptTotalRegexParser.parse(rawText)
+        // Prompts and regex parsers see the PLAIN reading-order text — the appended table
+        // reconstruction (see TableItemsPreParse.TABLE_SECTION_MARKER) exists only for the
+        // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
+        val plainText = TableItemsPreParse.plainText(rawText)
+        val preParsed = DateTimeRegexParser.parse(plainText)
+        val totals = ReceiptTotalRegexParser.parse(plainText)
         val preParsedTotal = totals.total
         val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
-            rawText,
+            plainText,
             existingCategories,
             settings.defaultCurrency,
             settings.language,
             preParsedDate = preParsed.date,
             preParsedTime = preParsed.time,
-            preParsedTotal = preParsedTotal,
-            bypassItems = preParsedItems != null
         )
 
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for line-items rescan (expenseId=$expenseId)")
@@ -137,20 +141,22 @@ object ExpenseScanCleanupRequestSender {
     ) {
         val existingCategories = container.expensesRepository.categories.first().map { it.name }
         val settings = container.settingsRepository.getSnapshot()
-        val preParsed = DateTimeRegexParser.parse(rawText)
-        val totals = ReceiptTotalRegexParser.parse(rawText)
+        // Prompts and regex parsers see the PLAIN reading-order text — the appended table
+        // reconstruction (see TableItemsPreParse.TABLE_SECTION_MARKER) exists only for the
+        // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
+        val plainText = TableItemsPreParse.plainText(rawText)
+        val preParsed = DateTimeRegexParser.parse(plainText)
+        val totals = ReceiptTotalRegexParser.parse(plainText)
         val preParsedTotal = totals.total
         val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
-            rawText,
+            plainText,
             existingCategories,
             settings.defaultCurrency,
             settings.language,
             preParsedDate = preParsed.date,
             preParsedTime = preParsed.time,
-            preParsedTotal = preParsedTotal,
-            bypassItems = preParsedItems != null
         )
 
         val taskWithMeta = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending:${groupId.orEmpty()}:${fileNames.joinToString(",")}"
@@ -188,7 +194,7 @@ object ExpenseScanCleanupRequestSender {
                 total = preParsedTotal,
                 itemsJson = preParsedItems?.let { TableItemsPreParse.toJson(it) },
                 previousBalance = totals.previousBalance,
-                totalToPay = totals.totalToPay
+                invoiceOwnTotal = totals.invoiceTotal
             )
         )
     }
