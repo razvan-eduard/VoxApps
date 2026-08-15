@@ -215,13 +215,13 @@ else
     bad "whisper-published --report gave no verdict" "$(printf '%s' "$out" | head -2)"
 fi
 
-# The tag the app asks for and the tag the publish script writes are both derived from the submodule
-# pin. If they were derived differently the app would 404 on a release that exists, so both are
-# checked against the pin rather than against each other.
-pin=$(git rev-parse "HEAD:vox-commander/src/main/cpp/whisper.cpp" 2>/dev/null | cut -c1-12)
+# The tag the app asks for and the tag the publish script writes are both derived from the whisper
+# build pin. If they were derived differently the app would 404 on a release that exists, so both
+# are checked against the pin rather than against each other.
+pin=$(./scripts/whisper_build_pin.sh 2>/dev/null | cut -c1-12)
 reported=$(printf '%s\n' "$out" | grep '^tag=' | cut -d= -f2)
 if [ -n "$pin" ] && [ "$reported" = "whisper-libs-$pin" ]; then
-    ok "the published runtime is addressed by the commit it was built from"
+    ok "the published runtime is addressed by the build it came from"
 else
     bad "whisper-libs tag does not follow the pin" "pin=$pin reported=$reported"
 fi
