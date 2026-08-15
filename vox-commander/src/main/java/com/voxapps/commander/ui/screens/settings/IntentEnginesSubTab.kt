@@ -96,11 +96,27 @@ fun IntentEnginesSubTab(
                     // true, so a local engine runs (and is configured here) regardless; hiding
                     // this whole picker behind the toggle made a fully-local setup demand a
                     // cloud-named consent to reach its own engine.
+                    // Both schema-driven gates, the same predicates the voice picker applies:
+                    // `runtime: "cloud"` answers to the cloud toggle, the "google_service"
+                    // capability to the Google on-device toggle.
                     itemEnabled = { entry ->
-                        uiState.cloudIntelligenceEnabled ||
-                            RemoteModelRegistry.runtimeOf(entry.id) != EngineRuntime.CLOUD
+                        when {
+                            RemoteModelRegistry.runtimeOf(entry.id) == EngineRuntime.CLOUD &&
+                                !uiState.cloudIntelligenceEnabled -> false
+                            RemoteModelRegistry.hasCapability(entry.id, "google_service") &&
+                                !uiState.googleServicesEnabled -> false
+                            else -> true
+                        }
                     },
-                    disabledSuffix = languageManager.getString("engine_cloud_disabled_suffix"),
+                    // Named per entry: an engine may be greyed for the cloud gate or the Google
+                    // one, and one sentence for both misnames whichever it is not.
+                    disabledSuffix = { entry ->
+                        if (RemoteModelRegistry.hasCapability(entry.id, "google_service")) {
+                            languageManager.getString("engine_google_disabled_suffix")
+                        } else {
+                            languageManager.getString("engine_cloud_disabled_suffix")
+                        }
+                    },
                     itemNote = { entry ->
                         // Credentials come from uiState rather than a snapshot read: this is
                         // composition, so a value fetched here would be fixed until something
