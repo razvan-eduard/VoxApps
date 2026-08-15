@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.voxapps.datahygiene.RemapValueKey
 import com.voxapps.design.picklist.Picklist
@@ -213,6 +214,65 @@ private val FuzzStepColors = listOf(Color(0xFF4CAF50), Color(0xFFFFA000), Color(
 
 private fun fuzzLevelColor(level: Int): Color =
     FuzzStepColors.getOrElse(level - 1) { FuzzStepColors.last() }
+
+/** Lookalike substitutions in the OCR/notification-garble style — the exact mangling fuzzy
+ *  matching exists to absorb, so demonstration text reads like the real failure it forgives. */
+private val GarbleMap = mapOf(
+    'o' to '0', 'i' to '1', 'l' to '1', 'e' to '3', 'a' to '4',
+    's' to '5', 'b' to '8', 't' to '7', 'g' to '9', 'z' to '2'
+)
+
+private fun garbleChar(c: Char): Char {
+    GarbleMap[c.lowercaseChar()]?.let { return it }
+    if (c.isDigit()) return if (c == '9') '0' else c + 1
+    val shifted = c.lowercaseChar() - 1
+    return if (c.isUpperCase()) shifted.uppercaseChar() else shifted
+}
+
+/**
+ * Variants of [word] that fuzz [level] would still accept — flashed over the trigger field so a
+ * chosen level is demonstrated on the user's own text instead of described in the abstract. Two
+ * examples per stage, one per thing the stage tolerates: level 0 shows case variants (exact
+ * matching is case- and diacritic-insensitive), level 1 two different small typos, levels 2 and 3
+ * a lookalike garble at that level's edit budget PLUS the word embedded in a longer name via
+ * [containedTemplate] — containment starts matching at level 2. Garbles stay within the exact
+ * length-relative Levenshtein budget the matcher grants the level, so every flashed example sits
+ * at the boundary of what would still be rewritten.
+ */
+private fun fuzzExamples(word: String, level: Int, containedTemplate: String): List<String> {
+    val trimmed = word.trim()
+    if (trimmed.isEmpty()) return emptyList()
+    return when (level) {
+        0 -> listOf(trimmed.uppercase(), trimmed.lowercase())
+            .filter { it != trimmed }
+            .distinct()
+            .ifEmpty { listOf(trimmed.uppercase()) }
+        1 -> listOf(
+            garbled(trimmed, 0.15, fromEnd = false),
+            garbled(trimmed, 0.15, fromEnd = true)
+        ).distinct()
+        else -> listOf(
+            garbled(trimmed, if (level == 2) 0.3 else 0.45, fromEnd = false),
+            containedTemplate.format(trimmed)
+        )
+    }
+}
+
+private fun garbled(word: String, ratio: Double, fromEnd: Boolean): String {
+    val edits = maxOf(1, (word.length * ratio).toInt())
+    val mutable = word.indices.filter { word[it].isLetterOrDigit() }
+    if (mutable.isEmpty()) return word
+    val chars = word.toCharArray()
+    val step = mutable.size.toDouble() / edits
+    (0 until edits)
+        .map { i ->
+            val slot = minOf(mutable.size - 1, (i * step + step / 2).toInt())
+            mutable[if (fromEnd) mutable.size - 1 - slot else slot]
+        }
+        .toSet()
+        .forEach { idx -> chars[idx] = garbleChar(chars[idx]) }
+    return String(chars)
+}
 
 /**
  * The three-dot fuzziness selector: taps cycle 0→1→2→3→0. Each dot wears its step's risk color
@@ -407,25 +467,88 @@ private fun RemapRuleEditSheet(
             }
             ExpenseRemapFields.matchFields.forEach { field ->
                 val selected = field.id in matchValues
+                val triggerText = matchValues[field.id].orEmpty()
+                // Level demonstration flash: cycling the dots pulses a garbled-but-still-matching
+                // variant of the typed trigger over the field, then fades it away — the typed word
+                // itself is never touched.
+                var flash by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
+                var flashTick by remember { mutableStateOf(0) }
+                val flashAnim = remember { androidx.compose.animation.core.Animatable(0f) }
+                androidx.compose.runtime.LaunchedEffect(flashTick) {
+                    if (flash != null) {
+                        flashAnim.snapTo(0f)
+                        flashAnim.animateTo(
+                            1f,
+                            androidx.compose.animation.core.tween(
+                                durationMillis = 1800,
+                                easing = androidx.compose.animation.core.LinearEasing
+                            )
+                        )
+                        flash = null
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RuleFieldSlot(
-                        label = languageManager.getString(field.labelKey),
-                        value = matchValues[field.id] ?: "",
-                        selected = selected,
-                        enabled = true,
-                        onSelect = { matchValues = matchValues + (field.id to "") },
-                        onDeselect = {
-                            matchValues = matchValues - field.id
-                            fuzzLevels = fuzzLevels - field.id
-                        },
-                        onValueChange = { matchValues = matchValues + (field.id to it) },
-                        modifier = Modifier.weight(1f)
-                    )
+                    Box(modifier = Modifier.weight(1f)) {
+                        RuleFieldSlot(
+                            label = languageManager.getString(field.labelKey),
+                            value = triggerText,
+                            selected = selected,
+                            enabled = true,
+                            onSelect = { matchValues = matchValues + (field.id to "") },
+                            onDeselect = {
+                                matchValues = matchValues - field.id
+                                fuzzLevels = fuzzLevels - field.id
+                            },
+                            onValueChange = { matchValues = matchValues + (field.id to it) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        flash?.let { (examples, level) ->
+                            val progress = flashAnim.value
+                            val alpha = when {
+                                progress < 0.12f -> progress / 0.12f
+                                progress < 0.65f -> 1f
+                                else -> (1f - progress) / 0.35f
+                            }
+                            Column(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .alpha(alpha.coerceIn(0f, 1f))
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceContainerLow,
+                                        RoundedCornerShape(4.dp)
+                                    ),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                examples.forEach { example ->
+                                    Text(
+                                        text = example,
+                                        style = if (examples.size > 1) MaterialTheme.typography.bodyMedium
+                                        else MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        color = if (level == 0) MaterialTheme.colorScheme.onSurfaceVariant
+                                        else fuzzLevelColor(level)
+                                    )
+                                }
+                            }
+                        }
+                    }
                     FuzzDots(
                         level = fuzzLevels[field.id] ?: 0,
-                        enabled = selected,
+                        // Gray until the trigger box carries text — a level without a word to
+                        // fuzz around demonstrates nothing and matches nothing.
+                        enabled = selected && triggerText.isNotBlank(),
                         onCycle = {
-                            fuzzLevels = fuzzLevels + (field.id to ((fuzzLevels[field.id] ?: 0) + 1) % 4)
+                            val next = ((fuzzLevels[field.id] ?: 0) + 1) % 4
+                            fuzzLevels = fuzzLevels + (field.id to next)
+                            flash = fuzzExamples(
+                                triggerText,
+                                next,
+                                languageManager.getString("remap_fuzz_contained_example")
+                            ) to next
+                            flashTick++
                         },
                         levelLabel = { languageManager.getString("remap_fuzz_level_$it") }
                     )

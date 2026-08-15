@@ -482,5 +482,6 @@
   "remap_fuzz_level_0": "Exakt",
   "remap_fuzz_level_1": "Nah",
   "remap_fuzz_level_2": "Mittel",
+  "remap_fuzz_contained_example": "SC %s SRL",
   "remap_fuzz_level_3": "Locker"
 }
