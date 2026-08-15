@@ -5,6 +5,9 @@ import android.graphics.Bitmap
 import com.paddle.ocr.EngineConfig
 import com.paddle.ocr.PaddleOCR
 import com.paddle.ocr.PaddleOCRConfig
+import com.voxapps.logging.Logger
+
+private const val TAG = "OcrEngine"
 
 /**
  * Thin wrapper around the vendored `com.paddle.ocr.PaddleOCR`, pointed at the runtime-downloaded
@@ -16,6 +19,16 @@ class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
     suspend fun recognize(bitmap: Bitmap, tableMode: Boolean = false): String {
         val result = paddleOcr.recognize(bitmap)
         val cells = RowClusterer.cellsOf(result.results)
+        // The boxes, once, in a form that can be replayed off-device. Every reconstruction decision
+        // is geometry, so a text-only capture cannot reproduce — let alone test — a misread table;
+        // this is the input those tests need. Behind the app-level Logger switch like everything
+        // else, and one line per cell so a capture stays greppable.
+        if (tableMode) {
+            Logger.d(TAG, "OCR cells: ${cells.size}")
+            cells.forEach { c ->
+                Logger.d(TAG, "CELL ${c.xLeft},${c.yTop},${c.xRight},${c.yBottom} ${c.text}")
+            }
+        }
         // Row order, not detector order: the raw result list follows detection, which scatters a
         // printed row into fragments the moment a photo is skewed or the document is tabular. In
         // table mode the line-breaking additionally uses the reconstruction's non-expanding row
