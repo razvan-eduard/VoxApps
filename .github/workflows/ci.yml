@@ -90,7 +90,7 @@ jobs:
 
       - name: Restore built OpenCV
         id: opencv_cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             vendor/ppocr-sdk/opencv
@@ -131,7 +131,7 @@ jobs:
       # OpenCV build it had just spent minutes on, and the next run paid for it again.
       - name: Save built OpenCV
         if: always() && steps.opencv_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             vendor/ppocr-sdk/opencv
