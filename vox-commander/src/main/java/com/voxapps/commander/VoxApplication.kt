@@ -166,7 +166,7 @@ class VoxApplication : Application() {
             }
             if (modelId != null && RemoteModelRegistry.isLlmEngine(s.aiProcessor) && llmModelOnDisk) {
                 Logger.log("Preloading local LLM engine ($modelId / ${s.aiProcessor})", "VoxApplication")
-                container.localLlmInterpreter.preload(s.modelFilterLang.ifEmpty { null })
+                container.selectedLocalLlmEngine()?.preload(s.modelFilterLang.ifEmpty { null })
             } else {
                 // Said out loud because the failure mode of a warm-up is silence: nothing breaks,
                 // the first command just pays the whole cold start.
@@ -334,7 +334,7 @@ class VoxApplication : Application() {
                 Logger.log("App-level memory pressure ($level) — releasing heavy native models", "VoxApplication")
                 com.voxapps.commander.domain.voice.VoiceManager.releaseForMemoryPressure()
                 com.voxapps.commander.domain.voice.TtsManager.releaseForMemoryPressure()
-                container.localLlmInterpreter.releaseForMemoryPressure()
+                container.localLlmEngines.forEach { it.releaseForMemoryPressure() }
             }
         }
     }

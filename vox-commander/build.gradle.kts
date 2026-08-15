@@ -62,6 +62,21 @@ val llamaLibs = listOf(
 )
 
 /**
+ * LiteRT-LM's JNI library, carried by the litertlm-android AAR.
+ *
+ * Neither strippable nor DLC-able, unlike every other list here: the vendor SDK loads it with
+ * `System.loadLibrary("litertlm_jni")`, which searches only the APK's own native library directory,
+ * so a copy downloaded into filesDir can never satisfy it — the loading path the other engines use
+ * (our own wrapper calling System.load with an absolute path) is not available for a library we do
+ * not load ourselves. It therefore stays in the APK in both DLC modes, and the ~21MB it costs is
+ * paid by every build. Nothing loads it until an engine that declares `backend: "litertlm"` is
+ * selected, which the Google consent gate keeps out of reach until the user opts in.
+ */
+val litertLibs = listOf(
+    "liblitertlm_jni.so"
+)
+
+/**
  * sherpa-onnx ships three native entry points; only libsherpa-onnx-jni.so is ever loaded (its Java
  * bindings load "sherpa-onnx-jni" by name, and its only external NEEDED lib is libonnxruntime.so).
  * The other two are dead weight — dropped from every release build, never published, never
@@ -610,6 +625,8 @@ dependencies {
     // Generic LLM hook background work (survives OEM/Doze restrictions a plain Service doesn't)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.vosk.android)
+    // LiteRT-LM: the second on-device LLM backend, behind the Google on-device consent toggle
+    implementation(libs.litertlm.android)
     implementation(libs.jsoup)
     implementation(libs.androidx.media)
     implementation(libs.androidx.datastore.preferences)

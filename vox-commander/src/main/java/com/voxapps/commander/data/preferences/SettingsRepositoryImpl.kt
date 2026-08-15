@@ -805,41 +805,6 @@ class SettingsRepositoryImpl(
     }
 
     /**
-     * Removes every stored trace of the retired LiteRT-LM engine key and its model formats.
-     *
-     * Self-guarding like [migrateGoogleLlmRemoval]: each step keys off a retired value or file
-     * still being present. The key remap goes to `nlu_llm` rather than the app default — a user
-     * who had `nlu_llm_litertlm` selected chose the *local* engine, and `nlu_llm` is that same
-     * choice under the collapsed key. Orphaned `.task`/`.litertlm` model files are deleted and
-     * their ids dropped from the downloaded set: nothing can load them, and they are
-     * gigabyte-class.
-     */
-    suspend fun migrateLiteRtRemoval() {
-        val retiredKey = "nlu_llm_litertlm" // stored identifier of an engine that no longer exists
-        dataStore.edit { prefs ->
-            if (prefs[Keys.AI_PROCESSOR] == retiredKey) prefs[Keys.AI_PROCESSOR] = "nlu_llm"
-            if (prefs[Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR] == retiredKey) {
-                prefs[Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR] = "nlu_llm"
-                prefs.remove(Keys.DEFAULT_INTENT_FALLBACK_MODEL)
-            }
-
-            val orphans = appContext.getExternalFilesDir(null)?.listFiles()
-                ?.filter { it.isFile && (it.name.endsWith(".task") || it.name.endsWith(".litertlm")) }
-                .orEmpty()
-            if (orphans.isNotEmpty()) {
-                val orphanIds = orphans.map { it.name.substringBeforeLast('.') }.toSet()
-                orphans.forEach { it.delete() }
-                prefs[Keys.DOWNLOADED_MODEL_IDS] =
-                    (prefs[Keys.DOWNLOADED_MODEL_IDS] ?: emptySet()) - orphanIds
-                if (prefs[Keys.ACTIVE_INTENT_MODEL_ID] in orphanIds) {
-                    prefs.remove(Keys.ACTIVE_INTENT_MODEL_ID)
-                }
-                Logger.log("Deleted ${orphans.size} retired-format model file(s)", TAG)
-            }
-        }
-    }
-
-    /**
      * Rewrites the retired WHISPER_VULKAN pseudo-processor into the per-engine GPU state.
      *
      * One-shot behind [Keys.GPU_STATE_MIGRATED] rather than self-guarding: the legacy vulkan_*
@@ -1406,11 +1371,9 @@ class SettingsRepositoryImpl(
         "piper" -> "piper_tts"
         // Retired engines (stored identifiers, so literals): a selection naming one would resolve
         // to no engine at all and silently drop the cascade's primary stage — fall back to the
-        // default local LLM engine instead. The LiteRT key maps to nlu_llm specifically: it was
-        // the same local engine under its pre-collapse key.
+        // default local LLM engine instead.
         "GEMINI_CLOUD", "GEMINI_NATIVE" ->
             com.voxapps.commander.data.remote.RemoteModelRegistry.getDefaultLlmEngineKey() ?: raw
-        "nlu_llm_litertlm" -> "nlu_llm"
         else -> raw
     }
 

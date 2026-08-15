@@ -772,6 +772,17 @@ class ModelDownloader(private val context: Context) {
             }
         }
 
+        // Protect the model the user chose under every engine, not just the selected one. The
+        // per-engine selection map is what the picker restores when the engine is switched back, so
+        // a model named there is a standing choice — and with more than one on-device LLM engine
+        // available, resolving only against the active engine made switching engines and running a
+        // cleanup delete a gigabyte-class download the user had deliberately fetched.
+        snapshot.engineModelSelections.forEach { (engineKey, modelId) ->
+            if (modelId.isNotBlank()) {
+                resolveLocalFile(modelId, engineKey)?.let { protectedNames.add(it.name) }
+            }
+        }
+
         // Protect every model the user imported themselves.
         //
         // These are not "downloaded" in the sense this cleanup means — nothing here can re-fetch

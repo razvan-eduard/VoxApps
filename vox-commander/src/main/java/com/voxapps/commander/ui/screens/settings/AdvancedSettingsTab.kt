@@ -63,7 +63,7 @@ fun AdvancedSettingsTab(
             appStateManager,
             appContainer.modelDownloader,
             appContainer.fastMapDao,
-            appContainer.localLlmInterpreter
+            appContainer.selectedLocalLlmEngine()
         )
     }
     val isRunning = uiState.voiceState == VoiceState.BENCHMARKING

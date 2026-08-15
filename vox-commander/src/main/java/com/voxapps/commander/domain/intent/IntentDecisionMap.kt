@@ -17,7 +17,7 @@ import com.voxapps.logging.Logger
 class IntentDecisionMap(
     private val l1Engine: AssistantEngine,
     private val l2CloudEngine: AssistantEngine,
-    private val l3LocalEngine: AssistantEngine,
+    private val l3LocalEngines: List<com.voxapps.commander.domain.intent.interpreter.LocalLlmEngine>,
     private val settingsRepo: SettingsRepository
 ) : AssistantEngine {
 
@@ -26,7 +26,7 @@ class IntentDecisionMap(
     /** Single source of truth for processor-key -> engine, shared by L2, L3 and [rawPrompt]. */
     private val resolver = AiEngineResolver(
         openAiEngine = l2CloudEngine,
-        localLlmEngine = l3LocalEngine
+        localLlmEngines = l3LocalEngines
     )
 
     override suspend fun processCommand(spokenText: String, modelFilterLang: String?): NluIntent? {

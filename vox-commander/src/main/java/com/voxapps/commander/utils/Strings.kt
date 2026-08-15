@@ -17,6 +17,7 @@ object Strings {
         const val AI_INTERPRETER = "AiInterpreter"
         const val OPENAI_INTERPRETER = "OpenAiInterpreter"
         const val LOCAL_LLM_INTERPRETER = "LocalLlmInterpreter"
+        const val LITERT_LLM_INTERPRETER = "LiteRtLlmInterpreter"
         const val TTS_MANAGER = "TtsManager"
         const val ANDROID_TTS_ENGINE = "AndroidTtsEngine"
     }

@@ -63,7 +63,7 @@ fun BenchmarkSettingsTab(
             appStateManager,
             appContainer.modelDownloader,
             appContainer.fastMapDao,
-            appContainer.localLlmInterpreter
+            appContainer.selectedLocalLlmEngine()
         )
     }
     
