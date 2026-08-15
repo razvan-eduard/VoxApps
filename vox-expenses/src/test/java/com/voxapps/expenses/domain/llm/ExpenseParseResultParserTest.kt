@@ -122,4 +122,38 @@ class ExpenseParseResultParserTest {
         val result = ExpenseParseResultParser.parse(json)!!
         assertEquals(TransactionDirection.INCOMING, result.direction)
     }
+
+    @Test
+    fun `a reply wrapped in markdown fences still parses`() {
+        val reply = "```json\n{\"totalAmount\":42.5,\"items\":[{\"name\":\"paine\",\"unitPrice\":42.5}]}\n```"
+        val result = ExpenseParseResultParser.parse(reply)!!
+        assertEquals(42.5, result.totalAmount, 0.0)
+        assertEquals(1, result.items.size)
+    }
+
+    @Test
+    fun `a reply with lead-in and trailing prose still parses`() {
+        val reply = "Here is the extracted expense:\n{\"totalAmount\":10.0,\"vendor\":\"magazin\"}\nLet me know if you need anything else."
+        val result = ExpenseParseResultParser.parse(reply)!!
+        assertEquals(10.0, result.totalAmount, 0.0)
+        assertEquals("magazin", result.vendor)
+    }
+
+    @Test
+    fun `braces inside string values do not end the object early`() {
+        val reply = """{"totalAmount":10.0,"title":"promo {weekend} deal","vendor":"m"}"""
+        val result = ExpenseParseResultParser.parse(reply)!!
+        assertEquals("promo {weekend} deal", result.title)
+    }
+
+    @Test
+    fun `a truncated reply with an unclosed object is rejected`() {
+        val reply = """{"totalAmount":10.0,"items":[{"name":"paine","unitPrice":5.0}"""
+        assertNull(ExpenseParseResultParser.parse(reply))
+    }
+
+    @Test
+    fun `a reply with no JSON at all is rejected`() {
+        assertNull(ExpenseParseResultParser.parse("I could not read the receipt."))
+    }
 }

@@ -25,6 +25,7 @@ import com.voxapps.expenses.domain.llm.ExpenseDeduplicationRequestSender
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationResultParser
 import com.voxapps.expenses.domain.llm.ExpenseSummary
 import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
+import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import com.voxapps.expenses.domain.llm.ScanPreParse
 import com.voxapps.expenses.domain.location.resolveCurrentCityName
 import com.voxapps.expenses.domain.llm.LlmTasks
@@ -544,18 +545,24 @@ class LlmResultReceiver : BroadcastReceiver() {
             // a scan (the receipt photo), never for voice, so it's already the exact signal needed.
             source = if (imageName != null) ExpenseSource.SCAN else ExpenseSource.VOICE,
             previousBalanceAmount = preParse?.previousBalance,
-            totalToPayAmount = preParse?.totalToPay
+            invoiceOwnAmount = preParse?.invoiceOwnTotal
         )
         stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
 
         maybeRequestScopedDuplicateCheck(appContext, container, settings.duplicateCheckModeAutomatic, newExpenseId, settings.toNearDuplicateConfig())
 
         if (newExpenseId > 0 && parsed.itemsSumMismatch) {
-            Logger.w(
-                TAG,
-                "Items sum mismatch for expense $newExpenseId: totalAmount=${parsed.totalAmount} " +
-                    "itemsSum=${parsed.items.sumOf { it.quantity * it.unitPrice }}"
-            )
+            // Items sum to the invoice's OWN charges (net, or net+VAT), never to a grand total
+            // that includes carried balance — so the sanity reference is the smallest labelled
+            // total when the document printed one.
+            val itemsSum = parsed.items.sumOf { it.quantity * it.unitPrice }
+            val reference = preParse?.invoiceOwnTotal ?: parsed.totalAmount
+            if (ExpenseAmountMismatch.isGrossMismatch(reference, itemsSum)) {
+                Logger.w(
+                    TAG,
+                    "Items sum mismatch for expense $newExpenseId: reference=$reference itemsSum=$itemsSum"
+                )
+            }
         }
 
         if (newExpenseId > 0 && settings.voiceSaveToastEnabled) {

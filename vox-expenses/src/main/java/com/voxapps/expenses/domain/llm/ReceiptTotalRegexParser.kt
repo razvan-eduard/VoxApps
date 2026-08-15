@@ -41,24 +41,25 @@ object ReceiptTotalRegexParser {
     )
 
     data class Result(
+        /** The record's headline amount: the LARGEST labelled total — the grand total, what
+         *  actually gets paid. The long-standing rule; an invoice's smaller figures are extras. */
         val total: Double?,
-        /** The invoice's own printed total, when the document labels one. */
+        /** The invoice's OWN charges when labelled — smaller than [total] whenever a balance is
+         *  carried; the deterministic line-items gate validates against THIS, since items sum to
+         *  the invoice's own charges, never to someone's unpaid history. */
         val invoiceTotal: Double? = null,
-        val previousBalance: Double? = null,
-        /** The pay-this figure when it exceeds the invoice's own total (old balance included). */
-        val totalToPay: Double? = null
+        val previousBalance: Double? = null
     )
 
     fun parse(text: String): Result {
         val largest = LabelledAmountExtractor.find(text, totalLabels).maxOfOrNull { it.value }
         val invoiceTotal = LabelledAmountExtractor.find(text, invoiceTotalLabels).maxOfOrNull { it.value }
+            ?.takeIf { largest == null || it < largest }
         val previousBalance = LabelledAmountExtractor.find(text, previousBalanceLabels).maxOfOrNull { it.value }
-        val totalToPay = if (invoiceTotal != null && largest != null && largest > invoiceTotal) largest else null
         return Result(
-            total = invoiceTotal ?: largest,
+            total = largest ?: invoiceTotal,
             invoiceTotal = invoiceTotal,
-            previousBalance = previousBalance,
-            totalToPay = totalToPay
+            previousBalance = previousBalance
         )
     }
 }
