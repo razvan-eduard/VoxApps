@@ -42,7 +42,7 @@ private data class PendingScrollTarget(val month: YearMonth, val date: LocalDate
 fun <T : CalendarItem> CalendarView(
     items: List<T>,
     modifier: Modifier = Modifier,
-    pagerState: CalendarPagerState = rememberCalendarPagerState(),
+    pagerState: CalendarPagerState? = null,
     peekCount: Int = 3,
     locale: Locale = Locale.getDefault(),
     todayContentDescription: String = "Today",
@@ -61,6 +61,12 @@ fun <T : CalendarItem> CalendarView(
 ) {
     val scope = rememberCoroutineScope()
     var pendingScroll by remember { mutableStateOf<PendingScrollTarget?>(null) }
+    // The pager opens at the SELECTED month, not today's: this composable unmounts whenever a
+    // record editor covers it, and a today-anchored fresh pager made the month sync below reset
+    // the user's selection to the current month on every return.
+    @Suppress("NAME_SHADOWING") val pagerState = pagerState ?: rememberCalendarPagerState(
+        initialMonth = remember { YearMonth.from(CalendarDateUtils.millisToLocalDate(selectedDateMillis)) }
+    )
 
     fun navigateToItem(item: T) {
         val targetDate = CalendarDateUtils.millisToLocalDate(item.dateTimeMillis)
@@ -80,8 +86,14 @@ fun <T : CalendarItem> CalendarView(
         }
     }
 
-    // Sync Pager Page -> Global Selected Date (Month level)
+    // Sync Pager Page -> Global Selected Date (Month level). Skips its very first run: it exists
+    // to mirror a USER month-swipe into the selection, and on first composition the page change is
+    // just the pager being created — letting that run would overwrite a restored selection.
+    var lastSyncedPage by remember { mutableStateOf(pagerState.pagerState.currentPage) }
     LaunchedEffect(pagerState.pagerState.currentPage) {
+        val page = pagerState.pagerState.currentPage
+        if (page == lastSyncedPage) return@LaunchedEffect
+        lastSyncedPage = page
         val pagerMonth = pagerState.currentMonth
         val selectedDate = CalendarDateUtils.millisToLocalDate(selectedDateMillis)
         if (YearMonth.from(selectedDate) != pagerMonth) {
@@ -145,7 +157,10 @@ fun <T : CalendarItem> CalendarView(
                         CalendarDateUtils.lastItemsOfPreviousMonth(items, month, peekCount).isNotEmpty()
                     }
 
-                    // Sync scroll -> global selected date
+                    // Sync scroll -> global selected date. The selection is read through
+                    // rememberUpdatedState: the collect lambda outlives many selection changes,
+                    // and a stale comparison value re-fires the callback for a date already set.
+                    val currentSelectedMillis by androidx.compose.runtime.rememberUpdatedState(selectedDateMillis)
                     LaunchedEffect(listState, pagerState.pagerState.currentPage) {
                         if (pagerState.pagerState.currentPage == page) {
                             snapshotFlow { listState.firstVisibleItemIndex }
@@ -156,7 +171,7 @@ fun <T : CalendarItem> CalendarView(
                                     if (dayOfMonth <= month.lengthOfMonth()) {
                                         val newDate = month.atDay(dayOfMonth)
                                         val newMillis = CalendarDateUtils.startOfDayMillis(newDate)
-                                        if (newMillis != selectedDateMillis) {
+                                        if (newMillis != currentSelectedMillis) {
                                             onDateSelected?.invoke(newMillis)
                                         }
                                     }

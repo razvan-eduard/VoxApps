@@ -183,7 +183,10 @@ private fun DayCell(
         shape = MaterialTheme.shapes.small,
         primaryColor = todayEffectPrimaryColor,
         secondaryColor = todayEffectSecondaryColor,
-        speedMultiplier = todayEffectSpeed
+        speedMultiplier = todayEffectSpeed,
+        // The selected-day pill paints an opaque fill inside this cell; a behind-drawn effect
+        // (Glow/Neon Pulse) disappears under it, so day cells always overlay.
+        alwaysOverContent = true
     ) {
         Box(
             modifier = Modifier

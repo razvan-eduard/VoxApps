@@ -94,8 +94,12 @@ fun <T : CalendarItem> HybridMonthView(
         }
     }
 
-    // 4. Sync List Scroll -> Selection
-    LaunchedEffect(listState) {
+    // 4. Sync List Scroll -> Selection. Keyed on the month: an effect keyed on listState alone
+    // captured the FIRST composition's month forever, so after the user moved months, scrolling
+    // the agenda computed dates in the stale month and yanked the whole view back to it. The
+    // selection is read through rememberUpdatedState for the same reason.
+    val currentSelectedMillis by androidx.compose.runtime.rememberUpdatedState(selectedDateMillis)
+    LaunchedEffect(listState, currentMonth) {
         snapshotFlow { listState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .filter { (isDragged || listState.isScrollInProgress) && !isAnimatingToDate }
@@ -103,12 +107,12 @@ fun <T : CalendarItem> HybridMonthView(
                 val dayOfMonth = index + 1
                 if (dayOfMonth <= currentMonth.lengthOfMonth()) {
                     val newDate = currentMonth.atDay(dayOfMonth)
-                    val newMillis = java.time.Instant.ofEpochMilli(selectedDateMillis)
+                    val newMillis = java.time.Instant.ofEpochMilli(currentSelectedMillis)
                         .atZone(java.time.ZoneId.systemDefault())
                         .with(newDate)
                         .toInstant()
                         .toEpochMilli()
-                    if (newMillis != selectedDateMillis) {
+                    if (newMillis != currentSelectedMillis) {
                         onDateSelected(newMillis)
                     }
                 }
