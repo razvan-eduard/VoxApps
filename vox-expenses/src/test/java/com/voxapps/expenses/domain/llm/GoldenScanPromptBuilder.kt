@@ -7,25 +7,14 @@ package com.voxapps.expenses.domain.llm
  * than a clean spoken sentence, so the prompt calls out formatting noise explicitly (same framing
  * vox-notes' NoteScanCleanupPromptBuilder uses for its own OCR text).
  */
-object ExpenseScanCleanupPromptBuilder {
+object GoldenScanPromptBuilder {
     fun build(
         rawText: String,
         existingCategories: List<String>,
         defaultCurrency: String,
         languageCode: String,
         preParsedDate: String? = null,
-        preParsedTime: String? = null,
-        /**
-         * Whether to ask for the product line items at all — set from the configured engine's
-         * `long_prompt` capability.
-         *
-         * Off, the whole item half of the prompt goes away rather than being asked for and ignored.
-         * An engine that cannot hold the full prompt does not merely fail to return items: the reply
-         * collapses into a fragment and the header fields are lost with it, so the record arrives as
-         * a stub. Everything not about items is asked identically either way, and the deterministic
-         * pre-parse still contributes items of its own where the printed total proves them.
-         */
-        includeLineItems: Boolean = true
+        preParsedTime: String? = null
     ): String {
         val categoriesLine = if (existingCategories.isEmpty()) {
             "No categories exist yet."
@@ -36,18 +25,18 @@ object ExpenseScanCleanupPromptBuilder {
         // Branch 1: We already have deterministic metadata from local Regex.
         // We DON'T even mention searching for date/time to the LLM to prevent hallucinations.
         val bypassMetadata = preParsedDate != null && preParsedTime != null
-
+        
         val instructionBlock = if (bypassMetadata) {
             """
-            EXTRACT ONLY the vendor name, bank (if printed), total amount${if (includeLineItems) ", and line items" else ""}.
-            CRITICAL: DO NOT search for, extract, or guess the transaction date or time.
+            EXTRACT ONLY the vendor name, bank (if printed), total amount, and line items.
+            CRITICAL: DO NOT search for, extract, or guess the transaction date or time. 
             I already have them. Return ONLY the structural data requested below.
             """.trimIndent()
         } else {
             // Branch 2: Regex failed. LLM must do the full extraction.
             """
-            Extract the structural data, INCLUDING the transaction date (YYYY-MM-DD)
-            and time (HH:mm, 24h) from the receipt text.
+            Extract the structural data, INCLUDING the transaction date (YYYY-MM-DD) 
+            and time (HH:mm, 24h) from the receipt text. 
             Current phone system date is ${java.time.LocalDate.now()}.
             DO NOT suggest any date in the future.
             """.trimIndent()
@@ -66,14 +55,6 @@ object ExpenseScanCleanupPromptBuilder {
             """.trimIndent()
         val ocrTextBlock = "\n\nOCR text: $rawText"
 
-        // Each of these expands to exactly the text that was always here when items are asked for,
-        // and to the item-free wording when they are not.
-        val itemsClause = if (includeLineItems) ITEMS_CLAUSE else "."
-        val itemRules = if (includeLineItems) ITEM_RULES else ""
-        val totalAmountRule = if (includeLineItems) TOTAL_RULE_WITH_ITEMS else TOTAL_RULE_NO_ITEMS
-        val responseShapeItems = if (includeLineItems) RESPONSE_SHAPE_ITEMS else ""
-        val noItemsLine = if (includeLineItems) "" else NO_ITEMS_LINE
-
         return """
             $framingParagraph
 
@@ -83,45 +64,10 @@ object ExpenseScanCleanupPromptBuilder {
             the bank if one is printed (e.g. the card-issuing or acquiring bank shown on a POS/card slip,
             such as "ING BANK"), the store's printed location if one appears on the receipt (a city name
             is enough — prefer just the city over a full street address; omit/null if no location is
-            printed anywhere, never guess or infer one from the vendor name alone)$itemsClause
+            printed anywhere, never guess or infer one from the vendor name alone), and the individual
+            product line items (name, quantity — default 1 if not stated, unit price) if clearly present.
 
-$itemRules$totalAmountRule
-
-            Use "$defaultCurrency" as the currency unless a different one is clearly printed on the
-            receipt. Also suggest a category for this expense based on its content. $categoriesLine
-            If one of the existing categories fits, copy that name verbatim, character-for-character —
-            never invent a new spelling, translation, capitalization, or diacritics for it.
-            Only suggest a new category name if none of the existing ones fit, and only ever suggest
-            a short, common-sense label describing the kind of expense (e.g. "Groceries", "Utilities",
-            "Transport", "Subscriptions") — never a raw fragment, code, abbreviation, or noise copied
-            from the OCR text itself. If nothing in the document supports a confident, meaningful
-            category, return null rather than guessing.
-
-            Also decide the record's "direction": "outgoing" if this document represents money paid by
-            the customer (a normal purchase receipt/invoice — the default assumption for any receipt),
-            or "incoming" only if it is clearly a refund, credit note, or reimbursement document instead.
-
-            Respond in the "$languageCode" language.
-            Return ONLY a JSON object of the shape {"title": "...", "totalAmount": 12.5, "currency": "...",
-            "vendor": "...", "bank": "...", "location": "...", "category": "...", "date": "YYYY-MM-DD",
-            "time": "HH:mm", "direction": "outgoing"$responseShapeItems}, no prose,
-            no markdown. Omit/null "bank" and "location" if not printed — never guess either.$noItemsLine$ocrTextBlock
-        """.trimIndent()
-    }
-
-    // The item-dependent fragments, carrying the indentation the surrounding template uses so the
-    // prompt reads exactly as it always did wherever items are still asked for.
-
-    private const val ITEMS_CLAUSE = """, and the individual
-            product line items (name, quantity — default 1 if not stated, unit price) if clearly present."""
-
-    private const val RESPONSE_SHAPE_ITEMS = """, "items": [{"name": "...", "quantity": 1,
-            "unitPrice": 12.5, "netAmount": null, "vatAmount": null, "grossAmount": null}]"""
-
-    private const val NO_ITEMS_LINE = """
-            Do NOT return an "items" array; omit it entirely."""
-
-    private val ITEM_RULES = """            IMPORTANT: list EVERY product line you can identify, in the order they appear, even if two
+            IMPORTANT: list EVERY product line you can identify, in the order they appear, even if two
             lines look identical (same name and price) — a receipt can legitimately print several
             separate line items with the same generic name and price (e.g. different flavors/variants
             of the same product, each scanned as its own "1 x" line, where the receipt only prints a
@@ -150,10 +96,7 @@ $itemRules$totalAmountRule
             This rule governs each line item's "unitPrice" ONLY — it does not apply to "totalAmount" (see the
             rule for that field below, which always prefers the receipt's own printed total).
 
-"""
-
-    private const val TOTAL_RULE_WITH_ITEMS =
-        """            For "totalAmount": ALWAYS prefer the receipt's own printed/stated total (the actual total
+            For "totalAmount": ALWAYS prefer the receipt's own printed/stated total (the actual total
             amount charged, however labeled — "Total", "Total de plată", "TOTAL LEI", etc.) over any
             arithmetic of your own — printed OCR text for a total is far more reliable than your own
             addition, and the printed items list is sometimes incomplete or misread even when the total
@@ -161,11 +104,28 @@ $itemRules$totalAmountRule
             if the receipt genuinely shows no total anywhere. Only return null for totalAmount if the
             receipt shows neither a total nor any items with prices at all.
             (The line-item DISTRIBUTIVE/CUMULATIVE rule above is separate and does not override this —
-            always prefer the printed total here.)"""
+            always prefer the printed total here.)
 
-    private const val TOTAL_RULE_NO_ITEMS =
-        """            For "totalAmount": use the receipt's own printed/stated total (the actual total amount
-            charged, however labeled — "Total", "Total de plată", "TOTAL LEI", etc.) exactly as printed.
-            Never add anything up yourself: printed OCR text for a total is far more reliable than your
-            own arithmetic. Return null for totalAmount only if the receipt shows no total at all."""
+            Use "$defaultCurrency" as the currency unless a different one is clearly printed on the
+            receipt. Also suggest a category for this expense based on its content. $categoriesLine
+            If one of the existing categories fits, copy that name verbatim, character-for-character —
+            never invent a new spelling, translation, capitalization, or diacritics for it.
+            Only suggest a new category name if none of the existing ones fit, and only ever suggest
+            a short, common-sense label describing the kind of expense (e.g. "Groceries", "Utilities",
+            "Transport", "Subscriptions") — never a raw fragment, code, abbreviation, or noise copied
+            from the OCR text itself. If nothing in the document supports a confident, meaningful
+            category, return null rather than guessing.
+
+            Also decide the record's "direction": "outgoing" if this document represents money paid by
+            the customer (a normal purchase receipt/invoice — the default assumption for any receipt),
+            or "incoming" only if it is clearly a refund, credit note, or reimbursement document instead.
+
+            Respond in the "$languageCode" language.
+            Return ONLY a JSON object of the shape {"title": "...", "totalAmount": 12.5, "currency": "...",
+            "vendor": "...", "bank": "...", "location": "...", "category": "...", "date": "YYYY-MM-DD",
+            "time": "HH:mm", "direction": "outgoing", "items": [{"name": "...", "quantity": 1,
+            "unitPrice": 12.5, "netAmount": null, "vatAmount": null, "grossAmount": null}]}, no prose,
+            no markdown. Omit/null "bank" and "location" if not printed — never guess either.$ocrTextBlock
+        """.trimIndent()
+    }
 }

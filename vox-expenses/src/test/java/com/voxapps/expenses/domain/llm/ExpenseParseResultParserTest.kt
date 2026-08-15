@@ -22,6 +22,26 @@ class ExpenseParseResultParserTest {
         assertEquals(emptyList<ExpenseParseResultParser.ParsedItem>(), result.items)
     }
 
+    /**
+     * The reduced scan prompt tells the engine to omit the array entirely rather than send an empty
+     * one, so a reply with no `items` key at all is the normal shape for an engine that cannot take
+     * the full prompt — it must parse as a complete record, not as a failure.
+     */
+    @Test
+    fun `a reply with no items key at all parses with every header field intact`() {
+        val json = """{"title":"Bread","totalAmount":10.0,"currency":"RON","vendor":"magazin","bank":"ING","location":"Ploiesti","category":"Mancare","date":"2026-08-15","time":"12:30","direction":"outgoing"}"""
+        val result = ExpenseParseResultParser.parse(json)!!
+
+        assertEquals("Bread", result.title)
+        assertEquals(10.0, result.totalAmount, 0.0)
+        assertEquals("RON", result.currency)
+        assertEquals("magazin", result.vendor)
+        assertEquals("ING", result.bank)
+        assertEquals("Ploiesti", result.location)
+        assertEquals("Mancare", result.category)
+        assertEquals(emptyList<ExpenseParseResultParser.ParsedItem>(), result.items)
+    }
+
     @Test
     fun `parses items with quantity and unit price`() {
         val json = """{"totalAmount":9.99,"items":[{"name":"paine","quantity":3,"unitPrice":3.33}]}"""

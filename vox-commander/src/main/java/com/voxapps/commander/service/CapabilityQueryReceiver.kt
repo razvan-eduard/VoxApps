@@ -25,6 +25,13 @@ class CapabilityQueryReceiver : BroadcastReceiver() {
         val processor = container.settingsRepository.getSettingsSnapshot().aiProcessor
         val multimodal = RemoteModelRegistry.isMultimodal(processor)
         val local = RemoteModelRegistry.isLocalEngine(processor)
-        setResult(Activity.RESULT_OK, VoxCapabilityClient.buildReply(multimodal, local).toJson(), null)
+        // Declared per engine, like every other capability here: what a caller may put in one
+        // prompt is a property of the engine serving it, and the engines are data.
+        val longPrompt = RemoteModelRegistry.hasCapability(processor, "long_prompt")
+        setResult(
+            Activity.RESULT_OK,
+            VoxCapabilityClient.buildReply(multimodal, local, longPrompt).toJson(),
+            null
+        )
     }
 }
