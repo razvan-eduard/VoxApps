@@ -21,6 +21,7 @@ two patterns:
 | Vosk | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckVosk` | `sync-vosk.yml` (Mon) |
 | NewPipeExtractor | `vox-commander` | — (JitPack coordinate) | — | No | No | `autoCheckNewPipeExtractor` | `sync-newpipe-extractor.yml` (Tue) |
 | onnxruntime-android | `vox-vision` (via `vendor/ppocr-sdk`), `core/wakeword` | — (Maven Central coordinate) | — | No | No | none | Dependabot (weekly) |
+| LiteRT-LM | `vox-commander` | — (Maven Central coordinate `com.google.ai.edge.litertlm:litertlm-android`) | — | No | No | none | none — pinned by hand |
 | Whisper.cpp | `vox-commander/src/main/cpp/whisper.cpp` | *is* the submodule | *is* the submodule | No | Yes (CMake, every build if stale) | `autoCompileWhisper` | `sync-whisper.yml` (monthly) |
 | llama.cpp | `vox-commander/src/main/cpp/llama.cpp` | *is* the submodule | *is* the submodule | No | Yes (CMake, every build if stale) | `autoCompileLlama` | `sync-llama.yml` (monthly) |
 | OpenCL-Headers | both engine builds (`vox-commander`) | `vendor/OpenCL-Headers` (Khronos, pinned submodule) | — (compile-time headers only; the companion import stub is the in-repo `vox-commander/src/main/cpp/opencl-shim/`, a static dlopen shim cross-compiled once per build tree, never deployed) | No | No (headers) | none | none |
@@ -105,6 +106,29 @@ reliably track this JitPack-style coordinate either.
   cannot see the failure mode that actually happens.
 
 ---
+
+## Pattern A: LiteRT-LM (prebuilt AAR, no local build)
+
+`com.google.ai.edge.litertlm:litertlm-android` — Google's on-device LLM runtime, the second backend
+behind Commander's intent step (`LiteRtLlmInterpreter`). No source vendored, nothing compiled
+locally: the AAR carries a prebuilt `liblitertlm_jni.so` (~21 MB on arm64) and its Kotlin API.
+
+**It is a prebuilt Google binary, and it ships in every APK.** Two consequences worth stating
+plainly rather than discovering later:
+
+- The from-source build includes it. Like the onnxruntime, Vosk and sherpa-onnx AARs above, it is a
+  Maven artifact rather than something this repo compiles — so a build from source still contains a
+  binary nobody here built.
+- It cannot be made a DLC library. The SDK's own loader calls
+  `System.loadLibrary("litertlm_jni")`, which searches only the APK's native library directory; a
+  copy downloaded to `filesDir` cannot satisfy it, unlike whisper's and llama's libraries which our
+  own wrappers load by absolute path. So it is in the APK in `minimal` and `full` alike, and the
+  ~21 MB is paid by both.
+
+Nothing loads it until the user selects a LiteRT engine, which the *Google on-device support*
+consent toggle gates. The version is pinned by hand in `gradle/libs.versions.toml` (`litertLm`);
+there is no sync workflow, because a runtime whose API this repo calls directly should move only
+when someone reads the release notes.
 
 ## Pattern A: onnxruntime-android (version-check only)
 

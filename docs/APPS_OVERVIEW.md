@@ -24,11 +24,16 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   1. **FastMap rules** (see below) — instant, free, entirely offline pattern matches you define
      yourself. Plain keyword/regex matching, not AI. If one fires, nothing else runs.
   2. **AI Intent Translator** (Settings → AI & Models → Intent Engines) — the actual AI step, reached
-     only when no FastMap rule fires: your choice of a cloud LLM (OpenAI) or an on-device GGUF
-     model running via **llama.cpp**, with grammar-constrained decoding so the model can only emit
-     a valid intent. The llama.cpp runtime ships inside the APK; the models themselves (Qwen 2.5
-     0.5B–3B, Qwen 3 0.6B, Gemma 3 1B, in several quantizations) download on demand from the signed
-     schema catalog, and a download whose bytes don't match the schema's declared sha256 is refused.
+     only when no FastMap rule fires: your choice of a cloud LLM (OpenAI) or one of two on-device
+     runtimes. **llama.cpp** reads GGUF models with grammar-constrained decoding, so the model can
+     only emit a valid intent. **LiteRT-LM** reads `.task`/`.litertlm` models with the equivalent
+     constrained decoding, and is Google-built software running entirely on the phone — so it stays
+     out of reach until *Google on-device support* (Settings → Advanced) is switched on, and it is
+     never the default. Which runtime serves an engine is declared in the schema, so a model file
+     always reaches the runtime that can read it. Both runtimes ship inside the APK; the models
+     themselves (Qwen 2.5 0.5B–3B, Qwen 3 0.6B, Gemma 3 1B, in several quantizations and formats)
+     download on demand from the signed schema catalog, and a download whose bytes don't match the
+     schema's declared sha256 is refused.
   3. **Offline fallback** — a *separately*-configured backup engine+model used only if the AI step
      above fails or is unreachable (skipped automatically if it'd be identical to it).
 

@@ -230,7 +230,9 @@ owning the source.
   default) `libllama.so` (~6 MB, no `libomp.so` — OpenMP is compiled out and the library has no
   non-platform `DT_NEEDED`) ships inside every APK; in `full` it is excluded and fetched on demand
   by `LlamaEngineManager` from its fingerprint-addressed `llama-libs-<pin12>` release when a local
-  LLM engine is selected — see [§13](#13-model-management). onnxruntime, Vosk, and sherpa-onnx-jni
+  LLM engine is selected — see [§13](#13-model-management). LiteRT-LM's `liblitertlm_jni.so`
+  (~21 MB) is the exception to all of this: it ships inside the APK in both modes, because the
+  vendor SDK loads it by name and only the APK's own library directory is searched. onnxruntime, Vosk, and sherpa-onnx-jni
   aren't DLC in that sense: they're mandatory libraries the app needs to function. In `minimal` DLC
   mode (the default) they ship inside the APK; in `full` mode they're excluded the same way and
   silently fetched once at first launch by `core:nativelibs` (see
@@ -292,7 +294,15 @@ The first AI attempt. User selects via `aiProcessor` setting:
 | Processor | Engine | Description |
 |-----------|--------|-------------|
 | `OPENAI` | `OpenAiInterpreter` | OpenAI Chat Completions API (Cloud) |
-| `nlu_llm` (any local_llm-capable key) | `LocalLlmInterpreter` | On-device LLM (llama.cpp, GGUF, grammar-constrained) |
+| any `local_llm` key with `backend: "llamacpp"` | `LocalLlmInterpreter` | On-device LLM (llama.cpp, GGUF, grammar-constrained) |
+| any `local_llm` key with `backend: "litertlm"` | `LiteRtLlmInterpreter` | On-device LLM (LiteRT-LM, `.task`/`.litertlm`, constrained decoding) — gated on `googleServicesEnabled` |
+
+Both on-device interpreters implement `LocalLlmEngine` (`backendId`, `lastErrorReason`, `preload`),
+and `AiEngineResolver` maps a key to the one whose `backendId` matches the engine's declared
+`backend`. A key that declares none resolves to the first — what it resolved to when there was only
+one implementation — so a remote schema older than the app keeps working. Before loading a model an
+interpreter asks its peers to release theirs; a peer serving a request declines, so two
+gigabyte-class models are never resident at once.
 
 All interpreters implement `AssistantEngine`:
 
@@ -367,7 +377,11 @@ does not need to grow as more satellites are added. Anything domain-*specific* (
 `category`) instead belongs in that satellite's own `nluHint` manifest declaration, surfaced via
 `buildSatelliteHints()` — see [§19 Domain-specific NLU hints](#domain-specific-nlu-hints-nluhint).
 
-### Local LLM Engine (llama.cpp)
+### Local LLM Engines
+
+Two runtimes serve the on-device LLM, chosen per engine key by the schema's `backend` field.
+
+#### llama.cpp
 
 `LocalLlmInterpreter` runs GGUF models through llama.cpp, vendored as a git submodule at
 `vox-commander/src/main/cpp/llama.cpp` with its Android CMake build config in
@@ -409,6 +423,31 @@ Gradle task — see [§18](#18-dependency-graph)). The Kotlin side talks to it t
   fields are optional keys in a fixed order.
 
 ### GPU Acceleration (OpenCL)
+
+#### LiteRT-LM
+
+`LiteRtLlmInterpreter` runs `.task` and `.litertlm` models through Google's `litertlm-android` AAR
+(the SDK sniffs the container, so both formats load through one `EngineConfig`). It is Google-built
+software, so both its engine keys declare the `google_service` capability and nothing about them is
+reachable until the user turns on *Google on-device support*; neither is ever the derived default.
+
+- **No rewind API.** LiteRT-LM 0.15.0 exposes no reset/clone/checkpoint, and a `Conversation`'s KV
+  cache only grows — reusing one across unrelated commands degrades within two or three calls, since
+  the ~2000-token system prompt plus a turn or two already approaches the context cap. Every call
+  therefore closes the conversation and rebuilds it from the cached `systemInstruction`. That repays
+  the prompt's prefill each time but never the one-time XNNPACK weight-cache compile.
+- **Constrained decoding.** `ResponseFormat.json(schema)` with `enableResponseFormat = true`, the
+  `domain`/`action` fields enum-constrained to the taxonomy — the same guarantee llama.cpp's grammar
+  gives, expressed in the SDK's own terms.
+- **Raw prompts run unconstrained.** A satellite hook's prompt carries its own framing, so
+  `rawPrompt` opens a fresh conversation with no system instruction, no sampler config and no output
+  cap: the reply budget is whatever `maxNumTokens` (4096) leaves after the prompt.
+- **Packaging.** `liblitertlm_jni.so` (~21 MB) ships inside the APK in both `voxDlc` modes, unlike
+  every other native library here. The SDK loads it with `System.loadLibrary("litertlm_jni")`, which
+  searches only the APK's own native library directory — a copy downloaded into `filesDir` cannot
+  satisfy it, because we do not control the load call the way our own whisper/llama wrappers do.
+
+### GPU acceleration
 
 Covers both on-device engines. `libwhisper.so` and `libllama.so` are hybrid CPU+OpenCL builds
 (ggml's OpenCL backend with Adreno-tuned kernels embedded at build time) — one library carries
