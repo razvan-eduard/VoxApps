@@ -64,12 +64,54 @@ class TableReconstructorTest {
     }
 
     @Test
-    fun `header and totals regions pass through in reading order`() {
+    fun `header and totals regions pass through in reading order, each under its own marker`() {
         val text = TableReconstructor.toText(invoiceCells())!!
         val lines = text.lines()
-        assertEquals("FACTURA Serie: FPHB", lines[0])
+
+        assertEquals(TableReconstructor.HEADER_SECTION_MARKER, lines[0])
+        assertEquals("FACTURA Serie: FPHB", lines[1])
         assertTrue(lines.any { it == "Total Factura 22.21" })
         assertTrue(lines.last().contains("66.63"))
+
+        // Each region announced exactly once, in document order — a consumer scoping its search to
+        // one of them has to be able to trust both facts.
+        listOf(
+            TableReconstructor.HEADER_SECTION_MARKER,
+            TableReconstructor.ITEMS_SECTION_MARKER,
+            TableReconstructor.FOOTER_SECTION_MARKER
+        ).forEach { marker ->
+            assertEquals("marker '$marker' not emitted exactly once", 1, lines.count { it == marker })
+        }
+        assertTrue(
+            "markers out of document order",
+            lines.indexOf(TableReconstructor.HEADER_SECTION_MARKER) <
+                lines.indexOf(TableReconstructor.ITEMS_SECTION_MARKER) &&
+                lines.indexOf(TableReconstructor.ITEMS_SECTION_MARKER) <
+                lines.indexOf(TableReconstructor.FOOTER_SECTION_MARKER)
+        )
+    }
+
+    /** Every item row sits between the item markers, and nothing else does — the property the whole
+     *  section scheme exists for: a company address above the table can no longer look like a row. */
+    @Test
+    fun `only the table body lives between the item markers`() {
+        val lines = TableReconstructor.toText(invoiceCells())!!.lines()
+        val body = lines.subList(
+            lines.indexOf(TableReconstructor.ITEMS_SECTION_MARKER) + 1,
+            lines.indexOf(TableReconstructor.FOOTER_SECTION_MARKER)
+        )
+
+        assertTrue("the body holds no rows", body.isNotEmpty())
+        assertTrue("a non-row line leaked into the body", body.all { it.contains(" | ") })
+        assertTrue(
+            "a totals line leaked into the body",
+            body.none { it.contains("Total Factura") }
+        )
+        assertEquals(
+            "a row escaped the body",
+            body.size,
+            lines.count { it.contains(" | ") }
+        )
     }
 
     @Test
