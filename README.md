@@ -49,7 +49,7 @@ the table for how).
 Official F-DROID Repo : https://razvan-eduard.github.io/vox-fdroid-repo/repo/
 
 
-Alternaitve Install via `adb install <file>.apk` or by opening the downloaded file and allowing "Install unknown
+Alternative Install via `adb install <file>.apk` or by opening the downloaded file and allowing "Install unknown
 apps."
 
 > **Note**: If you're installing more than one Vox app, stick to official releases for all of them (or
@@ -102,8 +102,8 @@ Same baseline for every app in this repo:
 - **Android 10+** (API 29)
 - **arm64-v8a** architecture
 - See the [Build Status](#build-status) table above for each app's actual APK size — anything
-  beyond the base install (e.g. Commander's Whisper models, Vosk/onnxruntime) downloads on first
-  launch
+  beyond the base install (e.g. Commander's Whisper and GGUF LLM models, Vosk/onnxruntime)
+  downloads on demand
 - Optional, app-specific extras (e.g. Commander's OpenAI API key for cloud NLU, Spotify Client ID
   for media control) are called out in that app's own [App Overview](#app-overview) entry
 
@@ -202,21 +202,25 @@ phone via Vox Hub, plus its own Backup & Restore screen.
 
 Document scanner. Camera capture with auto-detected document bounds and auto-capture, on-device OCR (no
 network round-trip), edge-cropping, then forwards the cleaned text to Vox Notes or Vox Expenses as a new
-record.
+record. A table mode reconstructs tabular documents (invoices) row by row when the requesting app declares
+the scan tabular, so the extracted text follows the printed rows.
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-vision)
 
 ### 💸 Vox Expenses
 
-Encrypted on-device expense tracker. Three ways in — voice, receipt-scan OCR, or automatic capture from
-bank/payment notifications (now durably queued and retried, not fire-and-forget) — plus manual entry;
-rescanning a receipt shows each corrected field as its own suggestion instead of silently overwriting
-anything; transaction direction (Total vs. Received in Reports), a user-configurable duplicate-rule
-engine (email-filter-style: any field, AND/OR, multiple rules, Off/Local/Local+AI/AI protection modes),
-merchant category memory (auto-applies a category after you correct the same vendor a few times), a
-shared location system with Commander, per-category spending limits with alerts, multi-currency reports,
-photo attachments via camera or gallery with a paperclip indicator, an optional calendar view, a
-home-screen widget, sync with another phone via Vox Hub, and its own Backup & Restore screen.
+Encrypted on-device expense tracker. Three ways in — voice, receipt-scan OCR (invoice totals read
+deterministically from the printed text), or automatic capture from bank/payment notifications
+(deterministically pre-parsed, matched against learned notification templates, durably queued and
+retried) — plus manual entry; rescanning a receipt shows each corrected field as its own suggestion
+instead of silently overwriting anything; transaction direction (Total vs. Received in Reports), a
+user-configurable duplicate-rule engine (email-filter-style: any field, AND/OR, multiple rules,
+Off/Local/Local+AI/AI protection modes), spelling-correction memory and WHEN/THEN re-map rules learned
+from your edits — managed together with duplicates and notification templates from one "Expense cleanup
+and rules" settings menu — a shared location system with Commander, per-category spending limits with
+alerts, multi-currency reports, photo attachments via camera or gallery with a paperclip indicator, an
+optional calendar view, a home-screen widget, sync with another phone via Vox Hub, and its own Backup &
+Restore screen.
 
 <img width="388" height="850" alt="invoice-to-expense" src="https://github.com/user-attachments/assets/244ed0fd-f71c-48cf-8f03-82d3726bf4df" />
 <img width="388" height="850" alt="voice-lidl-to-expense" src="https://github.com/user-attachments/assets/752bd7c7-79e3-4390-b1ef-d5c25daa2ca4" />
@@ -232,8 +236,10 @@ https://github.com/user-attachments/assets/d348e5ca-4c92-4b45-b615-1f9e62f9bfee
 ### 📅 Vox Calendar
 
 Encrypted on-device calendar. Colored, named layers instead of a rigid category tree; natural-language
-event/task creation through Commander ("dentist in a week"); a reworked to-do list with due-date bleed
-onto the calendar/widget, star markers, and a "now"/"Up next" timeline; ICS import/export for interop
+event/task creation through Commander ("dentist in a week"); a ToDo Lists system with an inline
+node editor, routine lists that reset at midnight, per-weekday recurrence, star markers, a "now"/"Up
+next" timeline, due-date bleed onto the calendar/widget, and dedicated to-do home-screen widgets (all
+lists, or one pinned list); ICS import/export for interop
 with Google Calendar/Thunderbird/Apple Calendar; a day view that opens at the current time, also shows
 that day's Notes and Expenses, and tells you when there's "Nothing else today"; photo attachments with
 a paperclip indicator; syncs with another phone via Vox Hub, plus its own Backup & Restore screen.
@@ -247,10 +253,11 @@ a paperclip indicator; syncs with another phone via Vox Hub, plus its own Backup
 
 Backup, restore, and peer-to-peer sync. Zero-config export/import (discovers every installed Vox app
 automatically), scheduled backups with retention and a failure banner, a global Import mode (Full
-override / Merge / Additive) applied across every app, NFC-paired, Bluetooth-transferred bidirectional
+override / Merge / Additive) applied across every app, with the chosen mode's caveat stated right at
+the restore point, NFC-paired, Bluetooth-transferred bidirectional
 sync between two phones for Notes/Calendar/Expenses, and VoxConnect — your phone scans a QR code shown
 on the desktop companion app to pair, since most desktops have no camera — no cloud involved. Every
-companion app now also has its own local Backup & Restore screen, interchangeable with Hub's own files.
+companion app also has its own local Backup & Restore screen, interchangeable with Hub's own files.
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-hub)
 
