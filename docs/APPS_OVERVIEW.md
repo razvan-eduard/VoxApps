@@ -102,7 +102,9 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   maintenance, tutorial replay, and Logging last), and Backup & Diagnostics (one page: the backup
   card above the diagnostics list).
 
-  <img width="388" height="850" alt="Settings: the menu page" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/25_settings_tabs.png" />
+  <img width="388" height="850" alt="Settings: the menu page" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/30_settings_sections.png" />
+  <img width="388" height="850" alt="NLU model manager: the downloadable GGUF lineup with the on-device selection" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/29_model_manager_gpu.png" />
+  <img width="388" height="850" alt="Per-engine GPU acceleration switches with the sandboxed compatibility test" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/32_gpu_acceleration.png" />
 
 - **Media control** — search/play/pause/next/prev for Spotify, YouTube, or whatever's assigned as your
   audio default; **navigation** via Waze or Google Maps deep links; **messaging** through whichever app
@@ -128,6 +130,9 @@ ecosystem plugs into, though it works completely on its own with no companion ap
   unpacked for you, and a file that isn't what the engine needs is refused *with the reason* rather
   than failing later — after which you're offered the deletion of the archive it came from. For
   engines that keep a model per language (Vosk), the language is asked at import.
+
+  <img width="388" height="850" alt="Import confirmation: the file becomes the engine's model under its own name" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/31_named_imports.png" />
+
 - **Schemas are served from a repository, and signed** — the JSON that defines engines, search
   providers, intents and normalisation is fetched at launch while *Check for updates* is on, so
   corrections arrive without an app update. Because those files say where requests go, a change from
@@ -503,11 +508,13 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
 
   <img width="388" height="850" alt="ToDo list: star, up-next marker, now-splitter" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/6_todo_star_upnext_now_line.png" />
   <img width="388" height="850" alt="ToDo items bleeding into the calendar grid" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/7_todo_calendar_grid.png" />
-  <img width="388" height="850" alt="ToDo items on the home-screen widget" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/8_todo_widget.png" />
+  <img width="388" height="850" alt="ToDo items on the home-screen widget" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/23_todo_widgets.png" />
   <img width="388" height="850" alt="Scan-to-checklist-item" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/9_todo_scan_button.png" />
   <img width="388" height="850" alt="Due-date/time quick-picker" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/10_todo_due_date_picker.png" />
   <img width="388" height="850" alt="Per-list/per-item color picker" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/11_todo_color_picker.png" />
-  <img width="388" height="850" alt="Inline task editor" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/13_todo_edit_dialog.png" />
+  <img width="388" height="850" alt="Inline task editor" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/20_todo_inline_editor.png" />
+  <img width="388" height="850" alt="Weekly recurrence on chosen weekdays" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/21_weekday_recurrence.png" />
+  <img width="388" height="850" alt="Routine list: unchecks at midnight on the chosen days" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/22_routine_list.png" />
 
 - **Attachments** — a collapsible thumbnail strip on every entry for extra photos (e.g. a ticket, a
   booking confirmation); tap a thumbnail for a full-screen zoomable view, with an inline add/remove.
@@ -582,6 +589,7 @@ other satellite implements as a server.
   right where it's chosen — beside Hub's restore control and beside every app's own restore button.
 
   <img width="388" height="850" alt="Hub's backup schedule with the global Import mode control" src="../vox-hub/fastlane/metadata/android/en-US/images/phoneScreenshots/7_backup_schedule_import_mode.png" />
+  <img width="388" height="850" alt="Import dialog: the 3-way mode choice with the selected mode's caveat stated in place" src="../vox-hub/fastlane/metadata/android/en-US/images/phoneScreenshots/8_restore_import_mode_picker.png" />
 
 - **Scheduled backups** — off/daily/weekly/monthly interval (`WorkManager`), configurable retention
   (none/2/5/10/unlimited, with a storage-growth warning at unlimited), a dismissible failure banner
