@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.voxapps.calendarapp.ui.LocalLanguageManager
+import com.voxapps.backup.ui.VoxBackupStrings
 
 private const val DOMAIN = "calendar"
 
@@ -32,6 +34,7 @@ private const val DOMAIN = "calendar"
  *  `showApiKeysToggle = false`. */
 @Composable
 fun BackupSettingsSection(settingsRepo: CalendarSettingsRepository, settings: CalendarSettings) {
+    val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val container = remember { (context.applicationContext as CalendarApplication).container }
@@ -92,6 +95,16 @@ fun BackupSettingsSection(settingsRepo: CalendarSettingsRepository, settings: Ca
     }
 
     VoxBackupSettingsCard(
+        strings = VoxBackupStrings(
+            importModeLabel = languageManager.getString("backup_import_mode_label"),
+            importModeDesc = languageManager.getString("backup_import_mode_desc"),
+            importModeFullOverride = languageManager.getString("backup_import_mode_full_override"),
+            importModeMerge = languageManager.getString("backup_import_mode_merge"),
+            importModeAdditive = languageManager.getString("backup_import_mode_additive"),
+            importModeCaveatMerge = languageManager.getString("backup_import_mode_caveat_merge"),
+            importModeCaveatFullOverride = languageManager.getString("backup_import_mode_caveat_full_override"),
+            importModeCaveatAdditive = languageManager.getString("backup_import_mode_caveat_additive")
+        ),
         state = VoxBackupUiState(
             includeSettings = settings.backupIncludeSettings,
             includeData = settings.backupIncludeData,

@@ -454,5 +454,13 @@
   "rules_no_search_match": "Aucune règle ne correspond à votre recherche.",
   "rules_delete_all_title": "Supprimer toutes les règles",
   "rules_delete_all_message": "Supprime toutes les règles de re-mappage, y compris tout ce que l'application a appris. Irréversible.",
-  "remap_rule_proposed_badge": "Proposée depuis vos modifications — examiner et activer"
+  "remap_rule_proposed_badge": "Proposée depuis vos modifications — examiner et activer",
+  "backup_import_mode_label": "Mode de restauration",
+  "backup_import_mode_desc": "Comment la restauration d'un fichier se réconcilie avec ce qui existe déjà. Ne s'applique que si Données est activé.",
+  "backup_import_mode_full_override": "Remplacement total",
+  "backup_import_mode_merge": "Fusion",
+  "backup_import_mode_additive": "Additif",
+  "backup_import_mode_caveat_merge": "Le plus sûr : restaure le fichier et ne supprime que les enregistrements existant à l'export — tout ce qui a été créé ensuite est conservé.",
+  "backup_import_mode_caveat_full_override": "SUPPRIME tout — y compris les enregistrements créés APRÈS la sauvegarde — puis ne restaure que le contenu du fichier.",
+  "backup_import_mode_caveat_additive": "Ne supprime jamais rien — restaurer à nouveau le même fichier DUPLIQUE ses enregistrements."
 }

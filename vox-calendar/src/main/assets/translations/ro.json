@@ -291,5 +291,15 @@
   "todo_clear_location": "Șterge locația",
   "todo_delete_item_message": "Elementul și atașamentele lui sunt eliminate din listă.",
   "entry_new_event_hint": "Eveniment nou",
-  "entry_new_task_hint": "Sarcină nouă"
+  "entry_new_task_hint": "Sarcină nouă",
+  "delete_attachment_title": "Ștergi această fotografie?",
+  "delete_attachment_message": "Fotografia este eliminată din această înregistrare.",
+  "backup_import_mode_label": "Mod de restaurare",
+  "backup_import_mode_desc": "Cum împacă restaurarea fișierul cu ce există deja aici. Se aplică doar când Date este activat.",
+  "backup_import_mode_full_override": "Suprascriere totală",
+  "backup_import_mode_merge": "Îmbinare",
+  "backup_import_mode_additive": "Aditiv",
+  "backup_import_mode_caveat_merge": "Cel mai sigur: restaurează fișierul și șterge doar înregistrările care existau la export — tot ce a fost creat aici după aceea rămâne.",
+  "backup_import_mode_caveat_full_override": "ȘTERGE tot — inclusiv înregistrările create DUPĂ backup — apoi restaurează doar conținutul fișierului.",
+  "backup_import_mode_caveat_additive": "Nu șterge nimic — restaurarea aceluiași fișier din nou DUBLEAZĂ înregistrările."
 }

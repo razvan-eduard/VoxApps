@@ -454,5 +454,13 @@
   "rules_no_search_match": "Keine Regeln entsprechen deiner Suche.",
   "rules_delete_all_title": "Alle Regeln löschen",
   "rules_delete_all_message": "Löscht alle Re-Map-Regeln, einschließlich allem, was die App gelernt hat. Das kann nicht rückgängig gemacht werden.",
-  "remap_rule_proposed_badge": "Aus deinen Bearbeitungen vorgeschlagen — prüfen und aktivieren"
+  "remap_rule_proposed_badge": "Aus deinen Bearbeitungen vorgeschlagen — prüfen und aktivieren",
+  "backup_import_mode_label": "Wiederherstellungsmodus",
+  "backup_import_mode_desc": "Wie eine wiederhergestellte Datei mit den vorhandenen Daten abgeglichen wird. Gilt nur, wenn Daten aktiviert ist.",
+  "backup_import_mode_full_override": "Vollständig ersetzen",
+  "backup_import_mode_merge": "Zusammenführen",
+  "backup_import_mode_additive": "Additiv",
+  "backup_import_mode_caveat_merge": "Am sichersten: stellt die Datei wieder her und löscht nur Einträge, die beim Export existierten — alles danach Erstellte bleibt.",
+  "backup_import_mode_caveat_full_override": "LÖSCHT alles — auch NACH dem Backup erstellte Einträge — und stellt nur den Dateiinhalt wieder her.",
+  "backup_import_mode_caveat_additive": "Löscht nie etwas — dieselbe Datei erneut wiederherzustellen DUPLIZIERT die Einträge."
 }

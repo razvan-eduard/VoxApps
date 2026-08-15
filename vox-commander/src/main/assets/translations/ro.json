@@ -544,5 +544,13 @@
   "gpu_ready": "GPU pregătit!",
   "gpu_test_timeout": "Poate dura până la 30 de secunde",
   "gpu_ready_message": "GPU-ul a trecut testul de inferență pentru acest motor. Accelerarea GPU este activă.",
-  "gpu_failed_message": "GPU-ul nu a trecut testul pentru acest motor. Continuă să ruleze pe CPU."
+  "gpu_failed_message": "GPU-ul nu a trecut testul pentru acest motor. Continuă să ruleze pe CPU.",
+  "backup_import_mode_label": "Mod de restaurare",
+  "backup_import_mode_desc": "Cum împacă restaurarea fișierul cu ce există deja aici. Se aplică doar când Date este activat.",
+  "backup_import_mode_full_override": "Suprascriere totală",
+  "backup_import_mode_merge": "Îmbinare",
+  "backup_import_mode_additive": "Aditiv",
+  "backup_import_mode_caveat_merge": "Cel mai sigur: restaurează fișierul și șterge doar înregistrările care existau la export — tot ce a fost creat aici după aceea rămâne.",
+  "backup_import_mode_caveat_full_override": "ȘTERGE tot — inclusiv înregistrările create DUPĂ backup — apoi restaurează doar conținutul fișierului.",
+  "backup_import_mode_caveat_additive": "Nu șterge nimic — restaurarea aceluiași fișier din nou DUBLEAZĂ înregistrările."
 }

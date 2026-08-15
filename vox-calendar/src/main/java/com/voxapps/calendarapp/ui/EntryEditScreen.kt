@@ -1130,6 +1130,9 @@ internal fun EntryAttachmentsSection(
         visionActions = visionActions,
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
         cancelLabel = languageManager.getString("cancel"),
+        removeConfirmTitle = languageManager.getString("delete_attachment_title"),
+        removeConfirmMessage = languageManager.getString("delete_attachment_message"),
+        removeConfirmLabel = languageManager.getString("delete"),
         onRemove = { item ->
             entities.firstOrNull { it.id == item.id }?.let { stateManager.removeAttachment(it, context) }
         },
@@ -1182,6 +1185,9 @@ private fun PendingEntryAttachmentsSection(pendingAttachments: List<String>, onC
         captureActions = listOf(SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("attachment_take_photo"), takePhoto)),
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
         cancelLabel = languageManager.getString("cancel"),
+        removeConfirmTitle = languageManager.getString("delete_attachment_title"),
+        removeConfirmMessage = languageManager.getString("delete_attachment_message"),
+        removeConfirmLabel = languageManager.getString("delete"),
         onRemove = { item ->
             pendingAttachments.firstOrNull { it.hashCode().toLong() == item.id }?.let { fileName ->
                 AttachmentFileStore.delete(context, CalendarAttachments.DIR, fileName)

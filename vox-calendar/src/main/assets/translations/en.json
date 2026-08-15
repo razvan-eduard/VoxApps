@@ -291,5 +291,15 @@
   "todo_clear_location": "Clear location",
   "todo_delete_item_message": "The item and its attachments are removed from the list.",
   "entry_new_event_hint": "New Event",
-  "entry_new_task_hint": "New Task"
+  "entry_new_task_hint": "New Task",
+  "delete_attachment_title": "Delete this photo?",
+  "delete_attachment_message": "The photo is removed from this record.",
+  "backup_import_mode_label": "Restore mode",
+  "backup_import_mode_desc": "How restoring a file reconciles it against what's already here. Only applies when Data is on.",
+  "backup_import_mode_full_override": "Full override",
+  "backup_import_mode_merge": "Merge",
+  "backup_import_mode_additive": "Additive",
+  "backup_import_mode_caveat_merge": "Safest: restores the file and deletes only records that existed when it was exported — anything created here afterwards is kept.",
+  "backup_import_mode_caveat_full_override": "DELETES everything — including records created AFTER the backup — then restores only what the file contains.",
+  "backup_import_mode_caveat_additive": "Never deletes anything — restoring the same file again DUPLICATES its records."
 }

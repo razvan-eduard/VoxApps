@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -99,7 +100,17 @@ class CalendarContainer(context: Context) {
             // refresh rate is bounded by how fast updateAll() completes rather than by how fast
             // rows are written. No debounce: nothing here is latency-sensitive enough to justify
             // delaying the common single-change case.
-            ) { _, entries, _, _, _ -> entries.size }.conflate().collect { entryCount ->
+            ) { ui, entries, settings, attachIds, items ->
+                // A content fingerprint, not just a size: Room re-emits on every write to an
+                // observed table even when the result is unchanged, and a burst of edits was
+                // driving dozens of identical launcher IPCs a minute. distinctUntilChanged on the
+                // fingerprint lets only real changes through; conflate still bounds the rest.
+                // Only the widget-visible projection of each source: the lock KIND (not the whole
+                // Unlocked state, which carries in-app selection that changes on every navigation),
+                // the data rows, the settings, the attachment ids, the to-do items.
+                entries.size to ((if (ui is com.voxapps.calendarapp.state.CalendarUiState.Unlocked) 1 else 0) * 31 +
+                    entries.hashCode()) * 31 + (settings.hashCode() * 31 + attachIds.hashCode()) * 31 + items.hashCode()
+            }.distinctUntilChanged().conflate().collect { (entryCount, _) ->
                 Logger.d("CalendarContainer", "Widget refresh triggered (entriesWithTags size=$entryCount)")
                 CalendarWidget().updateAll(appContext)
                 // The to-do widgets collect their own flows in-composition; this wakes any of

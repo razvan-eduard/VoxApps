@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import com.voxapps.attachments.AttachmentSource
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -133,6 +134,11 @@ fun AttachmentsSection(
     visionLabel: String = "Vision",
     onRemove: (AttachmentUiItem) -> Unit,
     modifier: Modifier = Modifier,
+    // When set, a single attachment's remove goes through a confirmation dialog first — one photo
+    // deleted by a stray tap is exactly the accident the group-delete confirm already prevents.
+    removeConfirmTitle: String? = null,
+    removeConfirmMessage: String? = null,
+    removeConfirmLabel: String? = null,
     // Rescan/retry now lives exclusively in the zoom-view (see below), not the thumbnail strip — a
     // single icon that, for a grouped photo, always means "refresh the whole group's read," never a
     // single page in isolation (a group is one physical multi-page document). Null (the default)
@@ -143,6 +149,9 @@ fun AttachmentsSection(
     if (items.isEmpty() && !canAdd) return
 
     var showChooser by remember { mutableStateOf(false) }
+    var pendingRemove by remember { mutableStateOf<AttachmentUiItem?>(null) }
+    val confirmedRemove: (AttachmentUiItem) -> Unit =
+        if (removeConfirmTitle != null) ({ pendingRemove = it }) else onRemove
 
     // Defaults expanded only when there's already something to show — an empty section (nothing
     // attached yet) starts collapsed rather than showing an otherwise-empty-looking strip. Keyed on
@@ -246,7 +255,7 @@ fun AttachmentsSection(
                                     }
                                     if (item.removable) {
                                         IconButton(
-                                            onClick = { onRemove(item) },
+                                            onClick = { confirmedRemove(item) },
                                             modifier = Modifier
                                                 .size(22.dp)
                                                 .align(Alignment.TopEnd)
@@ -361,6 +370,25 @@ fun AttachmentsSection(
         )
     }
 
+    pendingRemove?.let { item ->
+        AlertDialog(
+            onDismissRequest = { pendingRemove = null },
+            title = { Text(removeConfirmTitle ?: "") },
+            text = { removeConfirmMessage?.let { Text(it) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRemove = null
+                    onRemove(item)
+                }) {
+                    Text(removeConfirmLabel ?: removeConfirmTitle ?: "", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemove = null }) { Text(cancelLabel) }
+            }
+        )
+    }
+
     val current = zoomedItem
     if (current != null) {
         val context = LocalContext.current
@@ -398,7 +426,19 @@ fun AttachmentsSection(
             onDismissRequest = { zoomedItem = null },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            Column(modifier = Modifier.fillMaxSize().padding(2.dp)) {
+            // The dialog window fills the screen (usePlatformDefaultWidth = false), so the system's
+            // outside-tap dismiss never fires — the letterbox around the photo IS the dialog. Make
+            // that empty area behave like the ✕: tap anywhere off the photo closes the zoom. The
+            // photo card itself consumes its taps below (pan/zoom gestures own them).
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { zoomedItem = null }
+                    .padding(2.dp)
+            ) {
                 if (isGrouped) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -438,6 +478,12 @@ fun AttachmentsSection(
                             .width(cardWidth)
                             .height(cardHeight)
                             .clip(RoundedCornerShape(12.dp))
+                            // Consumes taps so the backdrop's tap-to-dismiss never fires THROUGH
+                            // the photo — its own pan/zoom gestures keep working above this.
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {}
                     ) {
                         // No tap-to-dismiss on the image itself here — it conflicts with this state's
                         // pan/zoom gestures (a tap can get eaten by the zoom gesture detector). The
@@ -483,7 +529,7 @@ fun AttachmentsSection(
                         ) {
                             if (current.removable && !isStitchedGroup) {
                                 IconButton(
-                                    onClick = { onRemove(current); zoomedItem = null },
+                                    onClick = { confirmedRemove(current); zoomedItem = null },
                                     modifier = Modifier
                                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape)
                                 ) {

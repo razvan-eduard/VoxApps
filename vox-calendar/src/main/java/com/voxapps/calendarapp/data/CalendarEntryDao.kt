@@ -24,9 +24,12 @@ interface CalendarEntryDao {
     fun observeEntriesWithTags(): Flow<List<CalendarEntryWithTags>>
 
     /** One-shot read for the write/export paths — `observeAll().first()` would spin up an
-     *  InvalidationTracker observer, run the query, then tear it all down again. */
+     *  InvalidationTracker observer, run the query, then tear it all down again. Unlike the grid's
+     *  observe query above this one has NO dateless exclusion: backup, sync, and read-out must see
+     *  EVERY row — an undated checklist item silently missing from every export was exactly the
+     *  bug this caption used to hide. */
     @androidx.room.Transaction
-    @Query("SELECT * FROM calendar_entries WHERE startMillis IS NOT NULL ORDER BY startMillis ASC")
+    @Query("SELECT * FROM calendar_entries ORDER BY startMillis ASC")
     suspend fun getEntriesWithTags(): List<CalendarEntryWithTags>
 
     @Query("SELECT * FROM calendar_entries ORDER BY startMillis ASC")

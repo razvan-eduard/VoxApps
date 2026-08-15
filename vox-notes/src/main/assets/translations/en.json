@@ -186,5 +186,15 @@
   "capture_mode_single": "Single shot",
   "capture_mode_stitch": "Stitch",
   "capture_mode_batch": "Batch",
-  "locked_message": "The notes are locked. Unlock the app."
+  "locked_message": "The notes are locked. Unlock the app.",
+  "delete_attachment_title": "Delete this photo?",
+  "delete_attachment_message": "The photo is removed from this record.",
+  "backup_import_mode_label": "Restore mode",
+  "backup_import_mode_desc": "How restoring a file reconciles it against what's already here. Only applies when Data is on.",
+  "backup_import_mode_full_override": "Full override",
+  "backup_import_mode_merge": "Merge",
+  "backup_import_mode_additive": "Additive",
+  "backup_import_mode_caveat_merge": "Safest: restores the file and deletes only records that existed when it was exported — anything created here afterwards is kept.",
+  "backup_import_mode_caveat_full_override": "DELETES everything — including records created AFTER the backup — then restores only what the file contains.",
+  "backup_import_mode_caveat_additive": "Never deletes anything — restoring the same file again DUPLICATES its records."
 }

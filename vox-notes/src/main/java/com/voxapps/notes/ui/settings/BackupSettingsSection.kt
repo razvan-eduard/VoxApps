@@ -23,6 +23,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.voxapps.notes.ui.LocalLanguageManager
+import com.voxapps.backup.ui.VoxBackupStrings
 
 private const val DOMAIN = "notes"
 
@@ -30,6 +32,7 @@ private const val DOMAIN = "notes"
  *  on the shared `:core:backup` card. Notes has no secrets concept, so `showApiKeysToggle = false`. */
 @Composable
 fun BackupSettingsSection(settingsRepo: NotesSettingsRepository, settings: NotesSettings) {
+    val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val container = remember { (context.applicationContext as NotesApplication).container }
@@ -93,6 +96,16 @@ fun BackupSettingsSection(settingsRepo: NotesSettingsRepository, settings: Notes
     }
 
     VoxBackupSettingsCard(
+        strings = VoxBackupStrings(
+            importModeLabel = languageManager.getString("backup_import_mode_label"),
+            importModeDesc = languageManager.getString("backup_import_mode_desc"),
+            importModeFullOverride = languageManager.getString("backup_import_mode_full_override"),
+            importModeMerge = languageManager.getString("backup_import_mode_merge"),
+            importModeAdditive = languageManager.getString("backup_import_mode_additive"),
+            importModeCaveatMerge = languageManager.getString("backup_import_mode_caveat_merge"),
+            importModeCaveatFullOverride = languageManager.getString("backup_import_mode_caveat_full_override"),
+            importModeCaveatAdditive = languageManager.getString("backup_import_mode_caveat_additive")
+        ),
         state = VoxBackupUiState(
             includeSettings = settings.backupIncludeSettings,
             includeData = settings.backupIncludeData,
