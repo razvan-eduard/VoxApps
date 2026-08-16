@@ -11,7 +11,30 @@ object AmountText {
 
     /** A figure with an optional thousands run and an optional fractional part, either
      *  convention. Bare integers qualify — not every document prints minor units. */
-    val pattern = Regex("""\d{1,3}(?:[ .,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?""")
+    val pattern = Regex("""$START\d{1,3}(?:[ .,]\d{3})*(?:[.,]\d{1,2})?|$START\d+(?:[.,]\d{1,2})?""")
+
+    /**
+     * A figure a document *printed as an amount*: minor units required, and a thousands run only
+     * where one actually follows.
+     *
+     * The distinction earns its place on scanned text. Recognition runs a stray number into the one
+     * beside it — "6688 170.91" — and under [pattern], which treats a space as a thousands separator
+     * whether or not one is meant, that reads as six hundred and eighty-eight thousand: a figure the
+     * page never printed, which then competes to be somebody's total. Requiring the fractional part
+     * and an actual group removes the reading entirely. Callers wanting every number, minor units or
+     * not, still want [pattern].
+     */
+    val printed = Regex("""$START(?:\d{1,3}(?:[ .,]\d{3})+[.,]\d{1,2}|\d+[.,]\d{1,2})""")
+
+    /**
+     * A match may not begin part way through a number.
+     *
+     * Without this, a pattern whose thousands run is optional is free to start at any digit, so
+     * "6688" offers "688" as a candidate opening and any grouping rule can build on it. Anchoring
+     * every reading to where a number actually starts costs nothing and removes a whole class of
+     * invented figure.
+     */
+    private const val START = "(?<![\\d.,])"
 
     fun normalize(raw: String): Double? {
         val cleaned = raw.replace(" ", "")

@@ -192,4 +192,27 @@ class VocabularyClassifierTest {
         assertTrue(VocabularyClassifier.classify("", vocabularies).isEmpty())
         assertTrue(VocabularyClassifier.classify("anything", emptyList()).isEmpty())
     }
+
+    /**
+     * Recognition runs a stray figure into the one beside it, and a rule that reads a space as a
+     * thousands separator is then free to begin part way through a number: "6688 170.91" offers
+     * "688 170.91" as a reading. That is a figure the page never printed, and on a scanned invoice it
+     * then competes to be somebody's total. Every reading must begin where a number begins.
+     */
+    @Test
+    fun `no amount is read from part way through a number`() {
+        val text = "6688 170.91 113.94"
+
+        val printed = AmountText.printed.findAll(text).mapNotNull { AmountText.normalize(it.value) }.toList()
+
+        assertTrue("read $printed", printed.contains(170.91))
+        assertTrue("read $printed", printed.contains(113.94))
+        assertTrue("invented a figure the text never printed: $printed", printed.none { it > 1000.0 })
+    }
+
+    /** The printed reading wants minor units: a bare integer is a quantity or a code, not an amount. */
+    @Test
+    fun `the printed reading requires minor units`() {
+        assertEquals(listOf("3.50"), AmountText.printed.findAll("qty 12 at 3.50 each").map { it.value }.toList())
+    }
 }
