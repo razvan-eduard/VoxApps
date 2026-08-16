@@ -41,7 +41,19 @@ object ReceiptSections {
          */
         val plain: String,
         /** False when the text carried no markers and the fallbacks are in force. */
-        val marked: Boolean
+        val marked: Boolean,
+        /**
+         * The items section of each photo separately, in order.
+         *
+         * A stitched capture photographs the same table more than once, and the two reconstructions
+         * are not continuations of one another — they are competing readings of overlapping content,
+         * from different distances, with different columns surviving. Run together they are neither:
+         * rows disagree about how many columns exist, and a column summed across both counts some
+         * rows twice and others not at all. Anything reasoning about a table's shape or its
+         * arithmetic wants one photo at a time; [items] remains the concatenation for callers that
+         * only want the text.
+         */
+        val itemBlocks: List<String>
     )
 
     fun split(rawText: String): Sections {
@@ -49,7 +61,8 @@ object ReceiptSections {
         if (lines.none { it.trim() in MARKERS }) {
             // Unsectioned: hand every caller the whole text, which is what they read before.
             return Sections(
-                header = rawText, items = rawText, footer = rawText, plain = rawText, marked = false
+                header = rawText, items = rawText, footer = rawText, plain = rawText,
+                marked = false, itemBlocks = listOf(rawText)
             )
         }
 
@@ -57,6 +70,8 @@ object ReceiptSections {
         val items = StringBuilder()
         val footer = StringBuilder()
         val plain = StringBuilder()
+        // One per photo: a fresh block each time an items section opens.
+        val itemBlocks = mutableListOf<StringBuilder>()
         // Lines before any marker are the plain reading-order text the reconstruction is appended
         // to. They are kept apart from the three sections — counting the same content twice would
         // double every amount a caller sums — but they are kept: a stitched capture carries one such
@@ -67,7 +82,10 @@ object ReceiptSections {
             val trimmed = line.trim()
             when {
                 trimmed == HEADER_MARKER -> current = header
-                trimmed == ITEMS_MARKER -> current = items
+                trimmed == ITEMS_MARKER -> {
+                    itemBlocks += StringBuilder()
+                    current = itemBlocks.last()
+                }
                 trimmed == FOOTER_MARKER -> current = footer
                 trimmed == TABLE_SECTION_MARKER -> current = null
                 // Prefixed rather than equal: the seam carries a long sentence for the model to
@@ -77,12 +95,15 @@ object ReceiptSections {
             }
         }
 
+        // Every block's text is also the items section as a whole, for callers reading it as text.
+        itemBlocks.forEach { items.append(it) }
         return Sections(
             header = header.toString().trimEnd(),
             items = items.toString().trimEnd(),
             footer = footer.toString().trimEnd(),
             plain = plain.toString().trimEnd(),
-            marked = true
+            marked = true,
+            itemBlocks = itemBlocks.map { it.toString().trimEnd() }.filter { it.isNotBlank() }
         )
     }
 

@@ -26,9 +26,21 @@ object TableItemsPreParse {
     fun plainText(rawText: String): String =
         rawText.substringBefore(TABLE_SECTION_MARKER).trimEnd()
 
-    /** Null unless a column combination sums to [expectedTotal] within [TOLERANCE]. */
+    /**
+     * The items, or null unless the value column proves itself — against the subtotal the table
+     * prints for it, or failing that against [expectedTotal].
+     *
+     * Two properties of real scanned tables shape this. **Cells go missing**: a description long
+     * enough to wrap occupies a line of its own, and the figures that belong beside it stay on the
+     * line the row started on, so almost every column has gaps. A column is therefore read as
+     * amounts *and empties*, never as amounts alone — the older rule, that every row must carry an
+     * amount, disqualified every column of a wrapped table and gave up on documents whose value
+     * column was perfect. **And the table states its own answer**: a subtotal row carries no
+     * description, and the column its figure sits in is the value column, said by the document
+     * rather than inferred. Matching a column's sum to that figure is the strongest evidence
+     * available here, so it is tried before the search against a total read out of the foot.
+     */
     fun parse(rawText: String, expectedTotal: Double?): List<Item>? {
-        if (expectedTotal == null || expectedTotal <= 0.0) return null
         // Prefer the appended reconstruction; a text without one may still BE table-shaped (tests,
         // future senders), so fall back to scanning the whole input.
         val tableText = if (rawText.contains(TABLE_SECTION_MARKER)) {
@@ -36,47 +48,75 @@ object TableItemsPreParse {
         } else {
             rawText
         }
-        val rows = tableText.lines()
+        val allRows = tableText.lines()
             .filter { it.contains(" | ") }
             .map { line -> line.split(" | ").map { it.trim() } }
-            .filter { it.first().isNotBlank() }   // a data row with no description is a totals row
+        // A data row with no description is a totals row: no item, but the table's own statement of
+        // what its columns come to.
+        val rows = allRows.filter { it.first().isNotBlank() }
+        val totalsRows = allRows.filter { it.first().isBlank() }
         if (rows.size < 2) return null
         val columnCount = rows.groupingBy { it.size }.eachCount().maxBy { it.value }.key
         val usable = rows.filter { it.size == columnCount }
         if (usable.size < 2 || usable.size < rows.size) return null
+
+        // Amounts or gaps, and enough amounts to be a column at all rather than a stray figure.
         val numericColumns = (1 until columnCount).filter { c ->
-            usable.all { parseAmount(it[c]) != null }
+            usable.all { parseAmount(it[c]) != null || isEmptyCell(it[c]) } &&
+                usable.count { parseAmount(it[c]) != null } >= MIN_COLUMN_ENTRIES
         }
         if (numericColumns.isEmpty()) return null
 
-        fun columnSum(c: Int) = usable.sumOf { parseAmount(it[c])!! }
+        fun columnSum(c: Int) = usable.sumOf { parseAmount(it[c]) ?: 0.0 }
 
-        // The value column alone (net-priced or gross-priced documents), else value+VAT pairs.
-        val single = numericColumns.firstOrNull { c -> matches(columnSum(c), expectedTotal) }
-        val pair = if (single == null) {
-            numericColumns.flatMap { a -> numericColumns.map { b -> a to b } }
-                .firstOrNull { (a, b) -> a != b && matches(columnSum(a) + columnSum(b), expectedTotal) }
+        // What the table says a column comes to, where it says it. A totals row states the tax
+        // column as readily as the value column — both sums are printed on it and both are true —
+        // so where more than one column proves itself the largest is taken: on a table that
+        // separates them, the values exceed the tax charged on those same values.
+        val printedSubtotal = numericColumns.filter { c ->
+            totalsRows.any { totals ->
+                c < totals.size && parseAmount(totals[c])?.let { matches(columnSum(c), it) } == true
+            }
+        }.maxByOrNull { columnSum(it) }
+        // Otherwise the older search: the value column alone (net- or gross-priced documents),
+        // else a value+VAT pair, against the total the foot of the document gave us.
+        val fromExpected = if (printedSubtotal == null && expectedTotal != null && expectedTotal > 0.0) {
+            numericColumns.firstOrNull { c -> matches(columnSum(c), expectedTotal) }
+                ?: numericColumns.flatMap { a -> numericColumns.map { b -> a to b } }
+                    .firstOrNull { (a, b) -> a != b && matches(columnSum(a) + columnSum(b), expectedTotal) }
+                    ?.first
         } else null
-        val valueColumn = single ?: pair?.first ?: return null
+        val valueColumn = printedSubtotal ?: fromExpected ?: return null
 
-        // Quantity x unit-price columns that reproduce the value column row by row; without a
-        // consistent pair the value itself becomes a quantity-1 unit price.
+        // Only a row that carries a value is an item; the rest are the wrapped remains of one.
+        val itemRows = usable.filter { parseAmount(it[valueColumn]) != null }
+        if (itemRows.size < 2) return null
+
+        // Quantity x unit-price columns that reproduce the value column wherever all three are
+        // present. Rows that lost one of them to wrapping simply keep the value as a unit price —
+        // the sum is unaffected either way, and the sum is what the reading is judged on.
         val qtyUnit = numericColumns.flatMap { q -> numericColumns.map { u -> q to u } }
             .firstOrNull { (q, u) ->
-                q != u && q != valueColumn && u != valueColumn &&
-                    usable.all { row ->
-                        matches(parseAmount(row[q])!! * parseAmount(row[u])!!, parseAmount(row[valueColumn])!!)
-                    }
+                if (q == u || q == valueColumn || u == valueColumn) return@firstOrNull false
+                val complete = itemRows.filter {
+                    parseAmount(it[q]) != null && parseAmount(it[u]) != null
+                }
+                complete.size >= MIN_COLUMN_ENTRIES && complete.all { row ->
+                    matches(parseAmount(row[q])!! * parseAmount(row[u])!!, parseAmount(row[valueColumn])!!)
+                }
             }
-        return usable.map { row ->
+        return itemRows.map { row ->
             val value = parseAmount(row[valueColumn])!!
-            if (qtyUnit != null) {
-                Item(row[0], parseAmount(row[qtyUnit.first])!!, parseAmount(row[qtyUnit.second])!!)
-            } else {
-                Item(row[0], 1.0, value)
-            }
+            val qty = qtyUnit?.let { parseAmount(row[it.first]) }
+            val unit = qtyUnit?.let { parseAmount(row[it.second]) }
+            if (qty != null && unit != null) Item(row[0], qty, unit) else Item(row[0], 1.0, value)
         }
     }
+
+    private fun isEmptyCell(cell: String) = cell == "-" || cell.isBlank()
+
+    /** Below this a column is a stray figure or two, not a column the sum can be trusted from. */
+    private const val MIN_COLUMN_ENTRIES = 2
 
     private fun matches(a: Double, b: Double) = kotlin.math.abs(a - b) <= TOLERANCE
 

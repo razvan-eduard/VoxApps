@@ -1,0 +1,428 @@
+{
+  "schema_version": 1,
+  "amount": "-?\\d{1,3}(?:[ .]\\d{3})*[.,]\\d{2}|-?\\d+[.,]\\d{2}",
+  "columns": {
+    "describes": "Column headings by role, per language, matched as terms rather than patterns; and the relation a numbered form prints between its own columns",
+    "relation": "(?<value>\\d)\\s*\\(\\s*(?<qty>\\d)\\s*[x×X*]\\s*(?<unit>\\d)\\s*\\)",
+    "vocabularies": {
+      "en": {
+        "index": [
+          "no",
+          "nr",
+          "num",
+          "number",
+          "item no",
+          "line",
+          "line no",
+          "pos",
+          "position",
+          "sr no",
+          "s n",
+          "#"
+        ],
+        "product": [
+          "description",
+          "product",
+          "products",
+          "item",
+          "items",
+          "name",
+          "article",
+          "goods",
+          "service",
+          "services",
+          "particulars",
+          "designation",
+          "details"
+        ],
+        "um": [
+          "um",
+          "uom",
+          "unit of measure",
+          "measure",
+          "pack"
+        ],
+        "qty": [
+          "qty",
+          "quantity",
+          "quant",
+          "amount of",
+          "pieces",
+          "pcs",
+          "count",
+          "consumption"
+        ],
+        "price": [
+          "unit price",
+          "price",
+          "rate",
+          "price each",
+          "price unit",
+          "unit cost",
+          "cost",
+          "tariff"
+        ],
+        "value": [
+          "amount",
+          "value",
+          "net amount",
+          "net value",
+          "line total",
+          "total net",
+          "subtotal",
+          "sum",
+          "net"
+        ],
+        "tax": [
+          "vat",
+          "vat amount",
+          "vat value",
+          "tax",
+          "tax amount",
+          "sales tax",
+          "gst"
+        ]
+      },
+      "ro": {
+        "index": [
+          "nr",
+          "nr crt",
+          "crt",
+          "numar",
+          "poz",
+          "pozitie",
+          "rand"
+        ],
+        "product": [
+          "denumire",
+          "denumirea",
+          "denumirea produselor",
+          "produs",
+          "produse",
+          "articol",
+          "articole",
+          "serviciu",
+          "servicii",
+          "descriere",
+          "specificatie",
+          "explicatii"
+        ],
+        "um": [
+          "um",
+          "u m",
+          "unitate",
+          "unitatea de masura",
+          "unitate de masura",
+          "masura"
+        ],
+        "qty": [
+          "cantitate",
+          "cantitatea",
+          "cant",
+          "buc",
+          "bucati",
+          "consum",
+          "numar bucati"
+        ],
+        "price": [
+          "pret unitar",
+          "pretul unitar",
+          "pret",
+          "pretul",
+          "tarif",
+          "tariful",
+          "pret fara tva"
+        ],
+        "value": [
+          "valoare",
+          "valoarea",
+          "valoare fara tva",
+          "suma",
+          "total fara tva",
+          "subtotal",
+          "net"
+        ],
+        "tax": [
+          "tva",
+          "valoare tva",
+          "valoarea tva",
+          "suma tva",
+          "taxa"
+        ]
+      },
+      "de": {
+        "index": [
+          "nr",
+          "pos",
+          "position",
+          "lfd nr",
+          "zeile",
+          "nummer"
+        ],
+        "product": [
+          "bezeichnung",
+          "beschreibung",
+          "artikel",
+          "artikelbezeichnung",
+          "produkt",
+          "leistung",
+          "leistungen",
+          "ware",
+          "waren",
+          "position"
+        ],
+        "um": [
+          "einheit",
+          "me",
+          "mengeneinheit",
+          "masseinheit"
+        ],
+        "qty": [
+          "menge",
+          "anzahl",
+          "stuck",
+          "stk",
+          "verbrauch"
+        ],
+        "price": [
+          "einzelpreis",
+          "preis",
+          "stuckpreis",
+          "tarif",
+          "e preis"
+        ],
+        "value": [
+          "betrag",
+          "gesamt",
+          "gesamtbetrag",
+          "nettobetrag",
+          "netto",
+          "summe",
+          "wert",
+          "zwischensumme"
+        ],
+        "tax": [
+          "mwst",
+          "ust",
+          "umsatzsteuer",
+          "mehrwertsteuer",
+          "steuer",
+          "mwst betrag",
+          "steuerbetrag"
+        ]
+      },
+      "fr": {
+        "index": [
+          "no",
+          "n",
+          "num",
+          "numero",
+          "ligne",
+          "pos",
+          "position",
+          "rang"
+        ],
+        "product": [
+          "designation",
+          "description",
+          "produit",
+          "produits",
+          "article",
+          "articles",
+          "libelle",
+          "prestation",
+          "prestations",
+          "nature"
+        ],
+        "um": [
+          "unite",
+          "unite de mesure",
+          "mesure",
+          "conditionnement"
+        ],
+        "qty": [
+          "quantite",
+          "qte",
+          "qt",
+          "nombre",
+          "consommation"
+        ],
+        "price": [
+          "prix unitaire",
+          "prix",
+          "pu",
+          "tarif",
+          "prix ht",
+          "cout unitaire"
+        ],
+        "value": [
+          "montant",
+          "montant ht",
+          "valeur",
+          "total ht",
+          "total",
+          "sous total",
+          "net"
+        ],
+        "tax": [
+          "tva",
+          "montant tva",
+          "taxe",
+          "valeur tva"
+        ]
+      }
+    }
+  },
+  "header": [
+    {
+      "id": "ro-invoice",
+      "describes": "Romanian invoice letterhead",
+      "fields": {
+        "vendor": "(?im)^(?:furnizor|prestator)\\s*:?\\s*(?<value>.+?)\\s*$",
+        "invoiceNumber": "(?i)\\b(?:nr\\.?\\s*factur[aă]|num[aă]r)\\s*:?\\s*(?<value>[A-Z0-9\\-/]+)",
+        "date": "(?i)\\bdata\\s*(?:facturii)?\\s*:?\\s*(?<value>\\d{1,2}[.\\-/]\\d{1,2}[.\\-/]\\d{2,4})",
+        "taxId": "(?i)\\b(?:cui|cif)\\s*:?\\s*(?<value>[A-Z]{0,2}\\s?\\d{2,10})"
+      }
+    },
+    {
+      "id": "en-invoice",
+      "describes": "English invoice letterhead",
+      "fields": {
+        "vendor": "(?im)^(?:supplier|vendor|from|sold\\s+by)\\s*:?\\s*(?<value>.+?)\\s*$",
+        "invoiceNumber": "(?i)\\binvoice\\s*(?:no\\.?|number|#)\\s*:?\\s*(?<value>[A-Z0-9\\-/]+)",
+        "date": "(?i)\\b(?:invoice\\s+)?date\\s*:?\\s*(?<value>[\\d]{1,2}[.\\-/][\\d]{1,2}[.\\-/][\\d]{2,4})",
+        "taxId": "(?i)\\b(?:vat\\s*(?:no\\.?|id)|tax\\s*id)\\s*:?\\s*(?<value>[A-Z]{0,2}\\s?\\d{2,12})"
+      }
+    }
+  ],
+  "items": [
+    {
+      "id": "numeric-tail",
+      "describes": "description then quantity, unit price and value at the end; unnumbered lines above continue the description",
+      "row": "^(?<desc>.*?\\S)\\s+(?<qty>-?[\\d.,]+)\\s+(?<unit>-?[\\d.,]+)\\s+(?<value>-?[\\d.,]+)(?:\\s+-?[\\d.,]+)?\\s*$",
+      "continuation": "^\\s*(?<desc>[^\\d\\s][^\\d]*)$"
+    },
+    {
+      "id": "numeric-tail-percent",
+      "describes": "same, with the VAT rate printed as a percentage in the last column",
+      "row": "^(?<desc>.*?\\S)\\s+(?<qty>-?[\\d.,]+)\\s+(?<unit>-?[\\d.,]+)\\s+(?<value>-?[\\d.,]+)\\s+-?[\\d.,]+\\s*%\\s*$",
+      "continuation": "^\\s*(?<desc>[^\\d\\s][^\\d]*)$"
+    },
+    {
+      "id": "desc-um-qty-unit-value",
+      "describes": "a unit-of-measure column between the description and the figures",
+      "row": "^(?<desc>.+?\\S)\\s+(?:buc|kg|l|m|mc|mp|ml|to|ore|pers|set|cut|pac|BUC|KG|L|M|MC|MP|ML|TO|ORE|PERS|SET|CUT|PAC)\\.?\\s+(?<qty>[\\d.,]+)\\s+(?<unit>[\\d.,]+)\\s+(?<value>[\\d.,]+)\\s*$"
+    },
+    {
+      "id": "code-desc-qty-unit-value",
+      "describes": "an article or barcode number before the description",
+      "row": "^\\d{4,14}\\s+(?<desc>.+?\\S)\\s+(?<qty>[\\d.,]+)\\s+(?<unit>[\\d.,]+)\\s+(?<value>[\\d.,]+)\\s*$"
+    },
+    {
+      "id": "qty-unit-x-price-value",
+      "describes": "a fiscal receipt line where unit, currency and dotted filler are optional noise",
+      "row": "^(?<desc>.+?)\\s+(?<qty>[\\d.,]+)\\s*[a-zA-Z]{0,4}\\s*[xX*]\\s*(?<unit>[\\d.,]+)\\s*[a-zA-Z]{0,4}\\s*\\.*\\s*(?<value>[\\d.,]+)\\s*[a-zA-Z]{0,4}\\s*$"
+    },
+    {
+      "id": "qty-x-price-equals-value",
+      "describes": "the same with the line total introduced by an equals sign",
+      "row": "^(?<desc>.+?)\\s+(?<qty>[\\d.,]+)\\s*[a-zA-Z]{0,4}\\s*[xX*]\\s*(?<unit>[\\d.,]+)\\s*=\\s*(?<value>[\\d.,]+)\\s*[a-zA-Z]{0,4}\\s*$"
+    },
+    {
+      "id": "desc-qty-unit-value-currency",
+      "describes": "figures closed by a currency word",
+      "row": "^(?<desc>.+?\\S)\\s+(?<qty>[\\d.,]+)\\s+(?<unit>[\\d.,]+)\\s+(?<value>[\\d.,]+)\\s*(?:RON|LEI|lei|EUR|USD)\\s*$"
+    },
+    {
+      "id": "qty-x-price",
+      "describes": "quantity times price with no separate line total",
+      "row": "^(?<desc>.+?)\\s+(?<qty>[\\d.,]+)\\s*[xX*]\\s*(?<unit>[\\d.,]+)\\s*$"
+    },
+    {
+      "id": "qty-first",
+      "describes": "quantity, then the name, then one amount",
+      "row": "^(?<qty>\\d{1,3})\\s+(?<desc>\\D.*?)\\s+(?<value>[\\d.,]+)\\s*$"
+    },
+    {
+      "id": "qty-first-x-price",
+      "describes": "a leading multiplier attached to the name",
+      "row": "^(?<qty>\\d{1,3})\\s*[xX*]\\s*(?<desc>\\D.*?)\\s+(?<value>[\\d.,]+)\\s*$"
+    },
+    {
+      "id": "desc-qty-value",
+      "describes": "a quantity and a line total, with no unit price printed",
+      "row": "^(?<desc>.+?\\S)\\s+(?<qty>\\d{1,3})\\s+(?<value>[\\d.,]+)\\s*$"
+    },
+    {
+      "id": "desc-dotted-value",
+      "describes": "dotted leader between the name and its amount",
+      "row": "^(?<desc>[^\\d\\s].*?\\S)\\s*\\.{2,}\\s*(?<value>-?[\\d.,]+)\\s*$"
+    },
+    {
+      "id": "desc-value-currency",
+      "describes": "a name and one amount closed by a currency word",
+      "row": "^(?<desc>[^\\d\\s].*?\\S)\\s+(?<value>-?[\\d.,]+)\\s*(?:RON|LEI|lei|EUR|USD)\\s*$"
+    },
+    {
+      "id": "name-amount",
+      "describes": "weakest on purpose and therefore last: a name and one amount",
+      "row": "^(?<desc>[^\\d\\s].*?)\\s+(?<value>[\\d.,]+)\\s*$"
+    }
+  ],
+  "footer": [
+    {
+      "id": "ro-inline",
+      "describes": "Romanian captions with the amount on the same line",
+      "mode": "inline",
+      "roles": {
+        "grandTotal": "(?i)\\btotal\\s+(?:general|de\\s+plat[aă])\\b",
+        "invoiceTotal": "(?i)\\btotal\\s+factur[aă]\\b",
+        "previousBalance": "(?i)\\b(?:sold\\s+(?:anterior|precedent)|restan[tț][aă])\\b",
+        "net": "(?i)\\b(?:total\\s+f[aă]r[aă]\\s+tva|valoare(?:a)?\\s+(?:f[aă]r[aă]\\s+tva)?|subtotal)\\b",
+        "vat": "(?i)\\b(?:t\\.?v\\.?a\\.?|taxa\\s+pe\\s+valoare)\\b"
+      }
+    },
+    {
+      "id": "en-inline",
+      "describes": "English captions with the amount on the same line",
+      "mode": "inline",
+      "roles": {
+        "grandTotal": "(?i)\\b(?:amount\\s+due|balance\\s+due|grand\\s+total|total\\s+due)\\b",
+        "invoiceTotal": "(?i)\\b(?:invoice\\s+total|total\\s+invoice)\\b",
+        "previousBalance": "(?i)\\b(?:previous\\s+balance|balance\\s+forward|brought\\s+forward|arrears)\\b",
+        "net": "(?i)\\b(?:subtotal|net\\s+(?:amount|total)|total\\s+excl)\\b",
+        "vat": "(?i)\\b(?:vat|tax|sales\\s+tax)\\b"
+      }
+    },
+    {
+      "id": "ro-stacked",
+      "describes": "Romanian captions printed as one column and their amounts as another, so a caption's amount is not on its line",
+      "mode": "stacked",
+      "roles": {
+        "grandTotal": "(?i)\\btotal\\s+(?:general|de\\s+plat[aă])\\b",
+        "invoiceTotal": "(?i)\\btotal\\s+factur[aă]\\b",
+        "previousBalance": "(?i)\\b(?:sold\\s+(?:anterior|precedent)|restan[tț][aă])\\b",
+        "net": "(?i)\\b(?:total\\s+f[aă]r[aă]\\s+tva|valoare(?:a)?\\s+(?:f[aă]r[aă]\\s+tva)?|subtotal)\\b",
+        "vat": "(?i)\\b(?:t\\.?v\\.?a\\.?|taxa\\s+pe\\s+valoare)\\b"
+      }
+    },
+    {
+      "id": "en-stacked",
+      "describes": "the same for English captions",
+      "mode": "stacked",
+      "roles": {
+        "grandTotal": "(?i)\\b(?:amount\\s+due|balance\\s+due|grand\\s+total|total\\s+due)\\b",
+        "invoiceTotal": "(?i)\\b(?:invoice\\s+total|total\\s+invoice)\\b",
+        "previousBalance": "(?i)\\b(?:previous\\s+balance|balance\\s+forward|brought\\s+forward|arrears)\\b",
+        "net": "(?i)\\b(?:subtotal|net\\s+(?:amount|total)|total\\s+excl)\\b",
+        "vat": "(?i)\\b(?:vat|tax|sales\\s+tax)\\b"
+      }
+    },
+    {
+      "id": "amounts-only",
+      "describes": "no caption survived: the roles are settled by the identity invoice + carried = due, over the printed figures alone",
+      "mode": "arithmetic",
+      "roles": {}
+    }
+  ]
+}

@@ -90,6 +90,27 @@ class ReceiptSectionsTest {
         assertFalse(s.items.contains("second shot rows"))
     }
 
+    /**
+     * A subtotal line printed inside the table arrives as a row with an empty description, because a
+     * total names no product. A real scan put "18.36 3.85" there — the figure its twelve rows add up
+     * to — while the footer holding that caption carried only the grand totals, so a reader that
+     * looked at the footer alone had nothing to check the rows against.
+     */
+    @Test
+    fun `a totals row inside the table is still in the items section`() {
+        val withTotalsRow = sectioned.replace(
+            "${ReceiptSections.FOOTER_MARKER}",
+            " | - | - | 18.36 | 3.85\n${ReceiptSections.FOOTER_MARKER}"
+        )
+        val s = ReceiptSections.split(withTotalsRow)
+
+        val totalsRows = s.items.lines().filter { it.substringBefore(" | ").isBlank() }
+        assertEquals(1, totalsRows.size)
+        assertTrue(totalsRows.first().contains("18.36"))
+        // And the real item rows keep their descriptions, so the two are told apart by that alone.
+        assertEquals(2, s.items.lines().count { it.substringBefore(" | ").isNotBlank() })
+    }
+
     /** A document Vision could not reconstruct carries no markers, and every caller must keep
      *  working exactly as it did before sections existed. */
     @Test

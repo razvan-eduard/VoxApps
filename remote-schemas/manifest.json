@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "serial": 1786822966,
+  "serial": 1786882385,
   "files": {
     "commander/api_integrations.json": "955ec8530b4f286e500d741400dacbc51995fcacf0087ddad5d4c58ec4b8267b",
     "commander/intents.json": "1fb99faeac56fd9c21741ead897193ef3d596c41d007a424fcc7edf0f3cbe45b",
@@ -10,6 +10,7 @@
     "commander/search_definitions.json": "a04635b012a797fc078768a982a39df705779d71001519589675ace88e7ced8c",
     "commander/virtual_models.json": "538cebf4f54148b44ba6a6f8d99e1fba99ff59be7463f622219486aeb3b60ee4",
     "expenses/external_services.json": "424dfcfb528a028fd51aea7517f08c371b285ad5c1796da262c84689b298d2ff",
-    "expenses/field_vocabularies.json": "a4494c04141eb9254fc888a3f1cc15629a6b85e88c45bc89a8c9fd7f57cc2f22"
+    "expenses/field_vocabularies.json": "a4494c04141eb9254fc888a3f1cc15629a6b85e88c45bc89a8c9fd7f57cc2f22",
+    "expenses/receipt_templates.json": "7d806b06ca8fbfb71cdd56c69763a856b186c97ece006a1188750b92caf5e13c"
   }
 }
