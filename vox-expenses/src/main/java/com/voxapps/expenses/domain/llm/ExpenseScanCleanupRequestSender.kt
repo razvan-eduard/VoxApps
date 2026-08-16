@@ -41,9 +41,10 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val totals = ReceiptTotalRegexParser.parse(plainText)
+        val totals = ReceiptTotalRegexParser.parse(ReceiptSections.split(rawText).footerOrAll(plainText))
         val preParsedTotal = totals.total
-        val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
+        // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
+        val preParsedItems = ScanItemsReader.read(rawText, totals)?.items
 
         val taskWithMeta = when {
             imageName != null && retryOfExpenseId != null -> "${LlmTasks.EXPENSE_SCAN_CLEANUP}:$imageName:$retryOfExpenseId"
@@ -101,9 +102,10 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val totals = ReceiptTotalRegexParser.parse(plainText)
+        val totals = ReceiptTotalRegexParser.parse(ReceiptSections.split(rawText).footerOrAll(plainText))
         val preParsedTotal = totals.total
-        val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
+        // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
+        val preParsedItems = ScanItemsReader.read(rawText, totals)?.items
 
         // Always the full prompt, whatever the engine says: this action exists only to fetch line
         // items, and asking for them without asking for them is a guaranteed wasted round trip.
@@ -155,9 +157,10 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val totals = ReceiptTotalRegexParser.parse(plainText)
+        val totals = ReceiptTotalRegexParser.parse(ReceiptSections.split(rawText).footerOrAll(plainText))
         val preParsedTotal = totals.total
-        val preParsedItems = TableItemsPreParse.parse(rawText, totals.invoiceTotal ?: totals.total)
+        // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
+        val preParsedItems = ScanItemsReader.read(rawText, totals)?.items
 
         // What the configured engine can take decides how much of the prompt is worth sending;
         // an unreachable or older Commander answers no, which is the shape a weak engine can still
