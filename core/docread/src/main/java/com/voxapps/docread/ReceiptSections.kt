@@ -1,4 +1,4 @@
-package com.voxapps.expenses.domain.llm
+package com.voxapps.docread
 
 /**
  * Splits a scan's text into the three regions Vision names for it — header, items, footer.

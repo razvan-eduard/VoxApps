@@ -1,4 +1,4 @@
-package com.voxapps.expenses.domain.llm
+package com.voxapps.docread
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -22,8 +22,8 @@ class ColumnHeaderDetectorTest {
     private fun shippedColumns(): List<CompiledColumns> {
         val file = listOf(
             java.io.File("src/main/assets/schemas/receipt_templates.json"),
-            java.io.File("vox-expenses/src/main/assets/schemas/receipt_templates.json"),
-            java.io.File("../vox-expenses/src/main/assets/schemas/receipt_templates.json")
+            java.io.File("core/docread/src/main/assets/schemas/receipt_templates.json"),
+            java.io.File("../core/docread/src/main/assets/schemas/receipt_templates.json")
         ).first { it.exists() }
         return ReceiptTemplates.compiled(
             com.google.gson.Gson().fromJson(file.readText(), ReceiptTemplateSchema::class.java)

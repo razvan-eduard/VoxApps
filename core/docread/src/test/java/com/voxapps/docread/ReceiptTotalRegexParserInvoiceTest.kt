@@ -1,4 +1,4 @@
-package com.voxapps.expenses.domain.llm
+package com.voxapps.docread
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

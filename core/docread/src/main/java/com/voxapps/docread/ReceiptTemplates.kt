@@ -1,4 +1,4 @@
-package com.voxapps.expenses.domain.llm
+package com.voxapps.docread
 
 import android.content.Context
 import com.google.gson.annotations.SerializedName
