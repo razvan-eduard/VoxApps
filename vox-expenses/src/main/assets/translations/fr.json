@@ -508,5 +508,10 @@
   "scan_settings_title": "Numérisation",
   "scan_zone_sent": "Ce qui quitte l'appareil",
   "scan_zone_read": "Ce qui est lu du document",
-  "scan_zone_after": "Après un scan"
+  "scan_zone_after": "Après un scan",
+  "zone_security": "Sécurité",
+  "zone_money": "Argent et formats",
+  "zone_browsing": "Navigation et widgets",
+  "zone_places": "Lieux",
+  "zone_danger": "Zone dangereuse"
 }
