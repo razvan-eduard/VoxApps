@@ -548,8 +548,12 @@ fun RemapRulesSettingsPage(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         HowItWorksCard(languageManager.getString("cleanup_info_remap"))
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // The controls sit on the page rather than inside a container. A card around a whole
+        // submenu boxes in its own contents: the switch, the segmented control and the button each
+        // lose width and padding to a border that groups things already alone on the screen. The
+        // callout above keeps its card, because it is genuinely a different kind of thing.
+        run {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 val remapRules by stateManager.remapRules.collectAsStateWithLifecycle(initialValue = emptyList())
                 val cleanupUiState by stateManager.uiState.collectAsStateWithLifecycle()
                 val remapCategories =
