@@ -33,6 +33,7 @@ import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
+import com.voxapps.expenses.domain.llm.TableItemsPreParse
 import com.voxapps.expenses.ui.widget.ExpensesWidget
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
@@ -106,6 +107,7 @@ class LlmResultReceiver : BroadcastReceiver() {
                             ExpenseParseResultParser
                                 .parse(rawJson!!, requireTotalAmount = preParse?.total == null)
                                 ?.withPreParse(preParse)
+                                ?.withoutDisprovedItems(preParse)
                         } else null
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
                         if (parsed != null && retryOfExpenseId != null) {
@@ -682,6 +684,42 @@ class LlmResultReceiver : BroadcastReceiver() {
             time = time ?: preParse.time,
             items = preItems ?: items
         )
+    }
+
+    /**
+     * The same standard for items whoever produced them: a list the document's own arithmetic
+     * disproves is dropped rather than saved.
+     *
+     * The deterministic reader already refuses to emit rows it cannot prove. A model reading the
+     * same mangled text has no such discipline — handed OCR debris it will faithfully report items
+     * named "a", "b", "c" — and those were being written into records anyway, where a person has to
+     * notice they are wrong before they can fix them. An empty item list is the better record.
+     *
+     * Unprovable is not disproved, and only the second loses its items: when the document printed no
+     * figure this can be checked against, the model's reading stands, because there is nothing to
+     * contradict it. That keeps ordinary receipts — where the total is often the only number the app
+     * can read — working exactly as they do today.
+     */
+    private fun ExpenseParseResultParser.Parsed.withoutDisprovedItems(
+        preParse: ScanPreParse?
+    ): ExpenseParseResultParser.Parsed {
+        if (items.isEmpty()) return this
+        // Items the deterministic reader proved are already beyond question.
+        if (TableItemsPreParse.fromJson(preParse?.itemsJson) != null) return this
+
+        val invoiceOwn = preParse?.invoiceOwnTotal ?: totalAmount
+        val targets = InvoiceTotalsReconciler.acceptedTargets(invoiceOwn)
+        if (targets.isEmpty()) return this
+
+        val sum = items.sumOf { it.quantity * it.unitPrice }
+        if (InvoiceTotalsReconciler.itemsBelong(sum, invoiceOwn)) return this
+
+        Logger.w(
+            TAG,
+            "Dropping ${items.size} item(s) summing to $sum: the document prints " +
+                "${targets.joinToString()} and nothing else, so this list is not a reading of it"
+        )
+        return copy(items = emptyList())
     }
 
     private suspend fun createStubExpense(
