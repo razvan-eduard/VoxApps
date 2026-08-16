@@ -105,4 +105,72 @@ class InvoiceTotalsReconcilerTest {
         assertTrue(InvoiceTotalsReconciler.itemsBelong(net + 0.01, invoiceTotal, net, vat))
         assertFalse(InvoiceTotalsReconciler.itemsBelong(net + 0.5, invoiceTotal, net, vat))
     }
+
+    // --- Re-deriving totals whose captions did not land beside their figures -------------------
+
+    private fun totals(grand: Double?, invoice: Double?, previous: Double?) =
+        InvoiceTotalsReconciler.Totals(grand, invoice, previous)
+
+    /**
+     * The captions on a scanned invoice can be read a row out of step with the amounts, so each
+     * figure arrives attached to its neighbour's word: what is due gets taken for the invoice's own
+     * charges, and the record is saved for twice what was actually billed. The figures are right —
+     * 22.21 and 44.42 do add up to 66.63 — so the identity plus the items' own sum can re-pair them.
+     */
+    @Test
+    fun `shifted captions are re-paired from the figures and the items sum`() {
+        val repaired = InvoiceTotalsReconciler.repair(
+            totals = totals(grand = 44.42, invoice = null, previous = 22.21),
+            printed = listOf(22.21, 44.42, 66.63, 18.36, 3.85),
+            itemsSum = 18.36
+        )
+
+        assertEquals(22.21, repaired.invoiceTotal!!, 0.005)
+        assertEquals(44.42, repaired.previousBalance!!, 0.005)
+        assertEquals(66.63, repaired.grandTotal!!, 0.005)
+    }
+
+    /**
+     * Cash tendered and change also add up to a third figure, and a shop receipt must come through
+     * untouched — nothing here may turn someone's change into a carried balance. No balance was
+     * named on the page, which is the gate.
+     */
+    @Test
+    fun `a receipt with no carried balance is never re-derived`() {
+        val untouched = totals(grand = 45.00, invoice = 45.00, previous = null)
+
+        assertEquals(
+            untouched,
+            InvoiceTotalsReconciler.repair(untouched, listOf(45.00, 50.00, 5.00), itemsSum = 45.00)
+        )
+    }
+
+    /** A reading that already satisfies the identity is a reading to leave exactly as it is. */
+    @Test
+    fun `totals that already add up are left alone`() {
+        val coherent = totals(grand = 66.63, invoice = 22.21, previous = 44.42)
+
+        assertEquals(coherent, InvoiceTotalsReconciler.repair(coherent, listOf(22.21, 44.42, 66.63), 18.36))
+    }
+
+    /**
+     * Without proven items neither component can be told from the other — addition does not say
+     * which of the two came first — so the safe answer is to change nothing.
+     */
+    @Test
+    fun `unproven items leave the pairing ambiguous and untouched`() {
+        val shifted = totals(grand = 44.42, invoice = null, previous = 22.21)
+
+        assertEquals(shifted, InvoiceTotalsReconciler.repair(shifted, listOf(22.21, 44.42, 66.63), itemsSum = null))
+    }
+
+    /** Both components a plausible tax step above the items is no answer either. */
+    @Test
+    fun `an ambiguous pair is refused`() {
+        // 10.00 and 11.00 both sit a believable tax step above 9.50, so either could be the
+        // invoice's own total and the identity has nothing further to say.
+        val shifted = totals(grand = 11.00, invoice = null, previous = 10.00)
+
+        assertEquals(shifted, InvoiceTotalsReconciler.repair(shifted, listOf(10.00, 11.00, 21.00), itemsSum = 9.50))
+    }
 }

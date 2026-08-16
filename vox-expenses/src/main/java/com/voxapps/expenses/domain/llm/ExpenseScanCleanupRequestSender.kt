@@ -41,10 +41,16 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val totals = ReceiptTotalRegexParser.parse(ReceiptSections.split(rawText).footerOrAll(plainText))
+        val reading = ScanReading.of(
+            rawText,
+            plainText,
+            itemTemplates = ReceiptTemplates.items(context),
+            footerTemplates = ReceiptTemplates.footers(context)
+        )
+        val totals = reading.totals
         val preParsedTotal = totals.total
         // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
-        val preParsedItems = ScanItemsReader.read(rawText, totals)?.items
+        val preParsedItems = reading.items
 
         val taskWithMeta = when {
             imageName != null && retryOfExpenseId != null -> "${LlmTasks.EXPENSE_SCAN_CLEANUP}:$imageName:$retryOfExpenseId"
@@ -55,7 +61,7 @@ object ExpenseScanCleanupRequestSender {
         // What the configured engine can take decides how much of the prompt is worth sending;
         // an unreachable or older Commander answers no, which is the shape a weak engine can still
         // complete. See VoxCapabilityClient.EngineCapabilities.longPrompt.
-        val includeLineItems = com.voxapps.ipc.VoxCapabilityClient.supportsLongPrompt(context)
+        val includeLineItems = askEngineForLineItems(context)
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             plainText,
@@ -102,10 +108,16 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val totals = ReceiptTotalRegexParser.parse(ReceiptSections.split(rawText).footerOrAll(plainText))
+        val reading = ScanReading.of(
+            rawText,
+            plainText,
+            itemTemplates = ReceiptTemplates.items(context),
+            footerTemplates = ReceiptTemplates.footers(context)
+        )
+        val totals = reading.totals
         val preParsedTotal = totals.total
         // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
-        val preParsedItems = ScanItemsReader.read(rawText, totals)?.items
+        val preParsedItems = reading.items
 
         // Always the full prompt, whatever the engine says: this action exists only to fetch line
         // items, and asking for them without asking for them is a guaranteed wasted round trip.
@@ -157,15 +169,21 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val totals = ReceiptTotalRegexParser.parse(ReceiptSections.split(rawText).footerOrAll(plainText))
+        val reading = ScanReading.of(
+            rawText,
+            plainText,
+            itemTemplates = ReceiptTemplates.items(context),
+            footerTemplates = ReceiptTemplates.footers(context)
+        )
+        val totals = reading.totals
         val preParsedTotal = totals.total
         // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
-        val preParsedItems = ScanItemsReader.read(rawText, totals)?.items
+        val preParsedItems = reading.items
 
         // What the configured engine can take decides how much of the prompt is worth sending;
         // an unreachable or older Commander answers no, which is the shape a weak engine can still
         // complete. See VoxCapabilityClient.EngineCapabilities.longPrompt.
-        val includeLineItems = com.voxapps.ipc.VoxCapabilityClient.supportsLongPrompt(context)
+        val includeLineItems = askEngineForLineItems(context)
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             plainText,
@@ -216,4 +234,26 @@ object ExpenseScanCleanupRequestSender {
             )
         )
     }
+}
+
+/**
+ * Whether this scan's prompt should ask the engine to read the line items at all.
+ *
+ * A local engine is never asked. Line items are the one field where a wrong answer is expensive and
+ * hard to notice — a vendor or a category that comes back wrong is visible at a glance, while a list
+ * of plausible-looking rows with invented amounts reads as data. Measured on a real invoice, a local
+ * engine returned two rows totalling 27.28 for a document whose rows come to 51.33, and on another
+ * it returned single letters as descriptions. That is not a prompt that needs improving: the text a
+ * dense form produces has the captions in one block and the figures in another, and a small model
+ * asked to pair them will always pair something.
+ *
+ * So on a local engine the items come from the deterministic reader or they do not come at all, and
+ * the model is left the fields it is actually good at. A remote engine keeps its existing behaviour,
+ * still subject to whether it declared it can take the longer prompt.
+ *
+ * Both flags fail safe towards asking for less: an unreachable Commander reports local and short.
+ */
+private suspend fun askEngineForLineItems(context: android.content.Context): Boolean {
+    if (com.voxapps.ipc.VoxCapabilityClient.isLocalEngine(context)) return false
+    return com.voxapps.ipc.VoxCapabilityClient.supportsLongPrompt(context)
 }

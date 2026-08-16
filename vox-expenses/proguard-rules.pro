@@ -31,3 +31,8 @@
 -keep class com.voxapps.expenses.data.ExternalServicesSchema { *; }
 -keep class com.voxapps.expenses.data.VocabulariesSchema { *; }
 -keep class com.voxapps.expenses.data.ExternalService { *; }
+-keep class com.voxapps.expenses.domain.llm.ReceiptTemplateSchema { *; }
+-keep class com.voxapps.expenses.domain.llm.HeaderTemplateEntry { *; }
+-keep class com.voxapps.expenses.domain.llm.ColumnTemplateEntry { *; }
+-keep class com.voxapps.expenses.domain.llm.ItemTemplateEntry { *; }
+-keep class com.voxapps.expenses.domain.llm.FooterTemplateEntry { *; }

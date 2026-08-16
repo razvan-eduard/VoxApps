@@ -1,0 +1,105 @@
+[VisionScreen] Recognized text: umnizor SC BIN GO SOLUTIONS SRL
+Nr. .ord. J1994008222405
+CIF registru com/an:
+RO 6089555 2050015700708072669123255115708600002221
+Sediul
+Capital social: 6,700,000RON Client: VOICU EDUARD RAZVAN
+entru: SC BIN GO SOLUTIONS SRL Domiciliul: Strada REGELE FERDINAND SAT PLEASA, Nr.
+Nr. ord. registru com/an: J2010000544291 83, BUCOV
+UI RO6089555 FACTURA COD CLIENT: PH157086
+ediul: Adresa de corespondenta: Strada REGELE FERDINAND SAT
+Strada Soseaua Giurgiului, . Ej PLEASA, Nr. 83, BUCOV
+PARTER, Complex Rezidential City Office Serie: FPHB
+Residence, Sector4, Bucuresti Numar: 9123255
+Tel: 021/9640 Email Ploiesti@bingo.ro
+EXIMBANK Data: 09/07/2026
+Scadenta: 24/07/2026
+Cota TVA: 21%
+Valoarea -RON Valoare TVA-RON
+Nr. Denumirea produselor sau a serviciilor U.M. Cantitate Pretul unitar (fara TVA) -RON 5(βx4) 6
+0 2 3 4 0.99
+2 2.35 4.70
+1 Tapentu coletarea sarata i tansportul separ pers
+desui e aplassa i de
+municipale-Tcs reciclabile Iun. 2026 Strada SAT PLEASA, Nr.
+FN. BUCOV conform KPHB0345313 din 01/05/2025 3.24 0.68
+pers 2 1.62
+2 Tarif pentru colectarea separata si transportul separat al
+biodeseurilor din deseuri municipale-Tes biodeseuri Iun. 2026
+Strada SAT PLEASA, Nr. FN, BUCOV 3.22 0.68
+pers 2 1.61
+s2 Tarif pentru colectarea separata si transportul separat al
+desurilor reziduale,inclusiv al rezidurilor menajere si similare si
+al altor deseuri colectate separat decat cele de
+hartie,metal,plastic si sticla-Tcs reziduale Iun. 2026 Strada SAT
+PLEASA, Nr. FN, BUCOV 0.6 1.20 0.25
+4 Tarif pentru sortarea deseurilor de hartie, carton,metal, plastic si pers 2
+sticla colectate separat-Tsortare Iun. 2026 Strada SAT
+PLEASA, Nr. FN, BUCOV 1 2.00 0.42
+Tarif TMB -biodeseuri Iun. 2026 Strada SAT PLEASA, Nr. FN, pers 2
+5 0.10
+BUCOV 0.24 0.48
+Tarif TMB -reziduale Iun. 2026 Strada SAT PLEASA, Nr. FN, pers
+BUCOV 0.1 0.20 0.04
+Tarif depozitare ip-reciclabile Iun. 2026 Strada SAT PLEASA, pers 2
+Nr. FN, BUCOV 0.5 1.00 0.21
+Tarif depozitare ip-biodeseuri Iun. 2026 Strada SAT PLEASA, pers 2
+N. FN, BUCOV 0.12 0.24 0.05
+Tarif depozitare ip- reziduale Iun. 2026 Strada SAT PLEASA, pers 2
+0
+Nr. FN, BUCOV 0.14 0.28 0.06
+CEC ip-reciclabile Iun. 2026 Strada SAT PLEASA, Nr. FN, pers 2
+10
+BUCOV 0.7 1.40 0.29
+11 CEC ip-biodeseuri Iun. 2026 Strada SAT PLEASA, Nr. FN, pers
+BUCOV 2 0.2 0.40 0.08
+12 CEC ip-reziduale Iun. 2026 Strada SAT PLEASA, Nr. FN, pers
+BUCOV
+18.36 3.85
+Total Factura 22.21
+Sold Anterior 44.42
+Total de Plata 66.63
+--- [table reconstruction] ---
+--- [header] ---
+umnizor SC BIN GO SOLUTIONS SRL
+Nr. .ord. J1994008222405
+CIF registru com/an:
+RO 6089555 2050015700708072669123255115708600002221
+Sediul
+Capital social: 6,700,000RON Client: VOICU EDUARD RAZVAN
+entru: SC BIN GO SOLUTIONS SRL Domiciliul: Strada REGELE FERDINAND SAT PLEASA, Nr.
+Nr. ord. registru com/an: J2010000544291 83, BUCOV
+UI RO6089555 FACTURA COD CLIENT: PH157086
+ediul: Adresa de corespondenta: Strada REGELE FERDINAND SAT
+Strada Soseaua Giurgiului, . Ej PLEASA, Nr. 83, BUCOV
+PARTER, Complex Rezidential City Office Serie: FPHB
+Residence, Sector4, Bucuresti Numar: 9123255
+Tel: 021/9640 Email Ploiesti@bingo.ro
+EXIMBANK Data: 09/07/2026
+Scadenta: 24/07/2026
+Cota TVA: 21%
+Valoarea -RON Valoare TVA-RON
+Nr. Denumirea produselor sau a serviciilor U.M. Cantitate Pretul unitar (fara TVA) -RON 5(βx4) 6
+--- [items] ---
+2 4 | 0 | 3 | - | - | 0.99
+Tapentu coletarea sarata i tansportul separ pers | - | 2 | 2.35 | 4.70 | -
+desui e aplassa i de municipale-Tcs reciclabile Iun. 2026 Strada SAT PLEASA, Nr. FN. BUCOV conform KPHB0345313 din 01/05/2025 | - | - | - | 3.24 | 0.68
+pers Tarif pentru colectarea separata si transportul separat al | - | 2 | 1.62 | - | -
+biodeseurilor din deseuri municipale-Tes biodeseuri Iun. 2026 Strada SAT PLEASA, Nr. FN, BUCOV | - | - | - | 3.22 | 0.68
+pers s2 Tarif pentru colectarea separata si transportul separat al desurilor reziduale,inclusiv al rezidurilor menajere si similare si | - | 2 | 1.61 | - | -
+al altor deseuri colectate separat decat cele de hartie,metal,plastic si sticla-Tcs reziduale Iun. 2026 Strada SAT PLEASA, Nr. FN, BUCOV | - | - | 0.6 | 1.20 | 0.25
+Tarif pentru sortarea deseurilor de hartie, carton,metal, plastic si pers | 4 | 2 | - | - | -
+sticla colectate separat-Tsortare Iun. 2026 Strada SAT PLEASA, Nr. FN, BUCOV | - | - | 1 | 2.00 | 0.42
+Tarif TMB -biodeseuri Iun. 2026 Strada SAT PLEASA, Nr. FN, pers | 5 | - | - | - | 0.10
+BUCOV Tarif TMB -reziduale Iun. 2026 Strada SAT PLEASA, Nr. FN, pers | - | - | 0.24 | 0.48 | -
+BUCOV Tarif depozitare ip-reciclabile Iun. 2026 Strada SAT PLEASA, pers | - | - | 0.1 | 0.20 | 0.04
+Nr. FN, BUCOV Tarif depozitare ip-biodeseuri Iun. 2026 Strada SAT PLEASA, pers | - | - | 0.5 | 1.00 | 0.21
+N. FN, BUCOV Tarif depozitare ip- reziduale Iun. 2026 Strada SAT PLEASA, pers | - | - | 0.12 | 0.24 | 0.05
+Nr. FN, BUCOV CEC ip-reciclabile Iun. 2026 Strada SAT PLEASA, Nr. FN, pers | - | - | 0.14 | 0.28 | 0.06
+BUCOV CEC ip-biodeseuri Iun. 2026 Strada SAT PLEASA, Nr. FN, pers | - | - | 0.7 | 1.40 | 0.29
+BUCOV CEC ip-reziduale Iun. 2026 Strada SAT PLEASA, Nr. FN, pers BUCOV | - | 2 | 0.2 | 0.40 | 0.08
+ | - | - | - | 18.36 | 3.85
+--- [footer] ---
+Total Factura 22.21
+Sold Anterior 44.42
+Total de Plata 66.63

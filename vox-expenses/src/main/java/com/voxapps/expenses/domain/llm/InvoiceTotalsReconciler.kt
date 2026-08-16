@@ -90,6 +90,73 @@ object InvoiceTotalsReconciler {
         return acceptedTargets(invoiceTotal, netSubtotal, vatTotal).any { abs(itemsSum - it) <= TOLERANCE }
     }
 
+    /** The three totals as a set, so a caller can hand them round and get them back corrected. */
+    data class Totals(
+        val grandTotal: Double?,
+        val invoiceTotal: Double?,
+        val previousBalance: Double?
+    )
+
+    /**
+     * Re-assigns the three totals from the figures alone, for a document whose captions did not land
+     * beside the amounts they name.
+     *
+     * A totals block is a column of captions and a column of figures, and when the two are read a
+     * row out of step every amount ends up attached to its neighbour's word. The figures themselves
+     * are correct — it is only the pairing that is wrong — so the identity can put them back:
+     * [printed] holds the amounts the document shows, the largest of them is what is actually due,
+     * and the two that add up to it are this invoice's charges and the balance carried into it.
+     *
+     * Which of that pair is which does not follow from the identity, since addition does not care
+     * about order. [itemsSum] settles it: the invoice's own charges are what its line items add up
+     * to, plus tax and nothing else, so the component sitting a plausible tax rate above the items
+     * is the invoice's and the other is history. Requiring that sum also means this can only run
+     * once the items have been read and proven, which is the point at which the page is understood
+     * well enough to correct.
+     *
+     * Refuses in every other case, returning [totals] untouched: no labelled balance to begin with,
+     * more than one pair that adds up, neither component or both plausible as the invoice's own.
+     * A receipt that prints cash tendered and change also has two figures adding to a third, and
+     * nothing here may turn the change into someone's unpaid history.
+     */
+    fun repair(totals: Totals, printed: List<Double>, itemsSum: Double?): Totals {
+        // Only a document that names a carried balance can have one, and only a contradiction is
+        // worth correcting — a reading that already adds up is a reading to leave alone.
+        if (totals.previousBalance == null || itemsSum == null || itemsSum <= 0.0) return totals
+        if (reconcile(totals.grandTotal, totals.invoiceTotal, totals.previousBalance) == Verdict.RECONCILED) {
+            return totals
+        }
+
+        val amounts = (printed + listOfNotNull(totals.grandTotal, totals.invoiceTotal, totals.previousBalance))
+            .filter { it > 0.0 }
+            .distinct()
+        val grand = amounts.maxOrNull() ?: return totals
+
+        val pairs = amounts.filter { it < grand }.let { parts ->
+            parts.flatMapIndexed { index, a ->
+                parts.drop(index + 1)
+                    .filter { b -> abs(a + b - grand) <= TOLERANCE }
+                    .map { b -> a to b }
+            }
+        }
+        val pair = pairs.singleOrNull() ?: return totals
+
+        val plausibleAsInvoice = listOf(pair.first, pair.second).filter { candidate ->
+            candidate >= itemsSum - TOLERANCE && (candidate - itemsSum) / itemsSum <= MAX_TAX_RATE
+        }
+        val invoice = plausibleAsInvoice.singleOrNull() ?: return totals
+
+        return Totals(
+            grandTotal = grand,
+            invoiceTotal = invoice,
+            previousBalance = grand - invoice
+        )
+    }
+
+    /** No tax rate in the jurisdictions these documents come from reaches this, so a component
+     *  further above the items' sum than this is not the same invoice's own total. */
+    private const val MAX_TAX_RATE = 0.30
+
     /** Every figure [itemsBelong] would accept, for a caller that wants to say which one matched. */
     fun acceptedTargets(
         invoiceTotal: Double?,

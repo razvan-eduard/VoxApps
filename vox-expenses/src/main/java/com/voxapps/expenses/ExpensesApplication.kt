@@ -56,6 +56,7 @@ class ExpensesApplication : Application(), VoxLlmQueueHost {
         SchemaRepo.appFolder = "expenses"
         ExternalServiceConfig.init(this)
         com.voxapps.expenses.data.FieldVocabularies.init(this)
+        com.voxapps.expenses.domain.llm.ReceiptTemplates.init(this)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             // The repository this app follows, and whether it is asked at all — its own settings,
             // so an install can follow a fork here and not in Commander.
