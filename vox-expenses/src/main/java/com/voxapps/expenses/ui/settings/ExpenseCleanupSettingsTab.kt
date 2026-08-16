@@ -42,6 +42,7 @@ import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.dataScore
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.DuplicateGroup
+import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
@@ -548,12 +549,10 @@ fun RemapRulesSettingsPage(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         HowItWorksCard(languageManager.getString("cleanup_info_remap"))
-        // The controls sit on the page rather than inside a container. A card around a whole
-        // submenu boxes in its own contents: the switch, the segmented control and the button each
-        // lose width and padding to a border that groups things already alone on the screen. The
-        // callout above keeps its card, because it is genuinely a different kind of thing.
-        run {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // A titled card, like every other group on a screen that ends a menu path. The callout above
+        // keeps its own, being a different kind of thing rather than a group of settings.
+        SettingsSectionCard(languageManager.getString("cleanup_remap_title")) {
+            run {
                 val remapRules by stateManager.remapRules.collectAsStateWithLifecycle(initialValue = emptyList())
                 val cleanupUiState by stateManager.uiState.collectAsStateWithLifecycle()
                 val remapCategories =
