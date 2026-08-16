@@ -273,6 +273,139 @@
       }
     }
   },
+  "captions": {
+    "describes": "Words that introduce a party or a date in a letterhead, per language. The buyer's words matter as much as the seller's: an invoice names both, and reading the wrong one is silent.",
+    "vocabularies": {
+      "en": {
+        "seller": [
+          "supplier",
+          "vendor",
+          "seller",
+          "from",
+          "sold by",
+          "issued by",
+          "billed from",
+          "provider",
+          "merchant"
+        ],
+        "buyer": [
+          "customer",
+          "client",
+          "buyer",
+          "bill to",
+          "billed to",
+          "sold to",
+          "ship to",
+          "invoice to",
+          "recipient",
+          "purchaser"
+        ],
+        "issue_date": [
+          "invoice date",
+          "date of issue",
+          "issued on",
+          "date"
+        ],
+        "due_date": [
+          "due date",
+          "payment due",
+          "due by",
+          "payable by",
+          "maturity"
+        ]
+      },
+      "ro": {
+        "seller": [
+          "furnizor",
+          "furnizorul",
+          "prestator",
+          "vanzator",
+          "emitent",
+          "emis de"
+        ],
+        "buyer": [
+          "client",
+          "clientul",
+          "cumparator",
+          "cumparatorul",
+          "beneficiar",
+          "beneficiarul",
+          "destinatar",
+          "catre"
+        ],
+        "issue_date": [
+          "data facturii",
+          "data emiterii",
+          "data emiterii facturii",
+          "emisa la",
+          "data"
+        ],
+        "due_date": [
+          "scadenta",
+          "data scadenta",
+          "data scadentei",
+          "termen de plata",
+          "plata pana la"
+        ]
+      },
+      "de": {
+        "seller": [
+          "lieferant",
+          "verkaufer",
+          "aussteller",
+          "rechnungssteller",
+          "von"
+        ],
+        "buyer": [
+          "kunde",
+          "kaufer",
+          "rechnung an",
+          "rechnungsempfanger",
+          "empfanger",
+          "an"
+        ],
+        "issue_date": [
+          "rechnungsdatum",
+          "ausstellungsdatum",
+          "datum"
+        ],
+        "due_date": [
+          "falligkeitsdatum",
+          "fallig am",
+          "zahlbar bis",
+          "zahlungsziel"
+        ]
+      },
+      "fr": {
+        "seller": [
+          "fournisseur",
+          "vendeur",
+          "emetteur",
+          "emis par",
+          "de"
+        ],
+        "buyer": [
+          "client",
+          "acheteur",
+          "facture a",
+          "destinataire",
+          "adresse de facturation"
+        ],
+        "issue_date": [
+          "date de facture",
+          "date d emission",
+          "emise le",
+          "date"
+        ],
+        "due_date": [
+          "date d echeance",
+          "echeance",
+          "a payer avant",
+          "date limite de paiement"
+        ]
+      }
+    }
+  },
   "header": [
     {
       "id": "ro-invoice",
