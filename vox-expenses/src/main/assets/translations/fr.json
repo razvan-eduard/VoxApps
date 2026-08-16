@@ -504,5 +504,9 @@
   "vat_display_on": "Toujours",
   "vat_display_on_desc": "Affiché sur chaque fiche, vide ou non.",
   "vat_found_hidden": "Ce document a une ventilation de TVA. L'ajouter ?",
-  "vat_found_hidden_add": "Ajouter"
+  "vat_found_hidden_add": "Ajouter",
+  "scan_settings_title": "Numérisation",
+  "scan_zone_sent": "Ce qui quitte l'appareil",
+  "scan_zone_read": "Ce qui est lu du document",
+  "scan_zone_after": "Après un scan"
 }
