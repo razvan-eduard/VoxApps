@@ -46,32 +46,21 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val reading = ScanReading.of(
-            rawText,
-            plainText,
-            itemTemplates = ReceiptTemplates.items(context),
-            footerTemplates = ReceiptTemplates.footers(context),
-            headerTemplates = ReceiptTemplates.headers(context),
-            captionTemplates = ReceiptTemplates.captions(context),
-            // The designators that mark a company's own line, from the list this app already keeps
-            // for classifying fields — one list, not a second copy that drifts from it.
-            legalForms = com.voxapps.expenses.data.FieldVocabularies
-                .vocabularies(context)
-                .firstOrNull { it.name == com.voxapps.expenses.data.FieldVocabularies.VOCAB_LEGAL_FORM }
-                ?.terms?.toList().orEmpty()
-        )
+        val reading = readScan(context, rawText, plainText)
+
+        // What this scan is allowed to do, asked once and on every axis — see [ScanFlow]. The
+        // record is written here rather than after a reply whenever the model is not the one
+        // deciding, and where nothing is sent the check happens before the request is composed,
+        // because the promise is that no text leaves the device.
+        val mode = ScanFlow.modeOf(settings)
+        if (mode.writesRecordLocally) {
+            ModelFreeScanCreator.create(context, container, reading, plainText, imageName)
+        }
+        if (!mode.sendsToModel) return
         val totals = reading.totals
         val preParsedTotal = totals.total
         // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
         val preParsedItems = reading.items
-
-        // Dialled out entirely: the record is written from what was read and nothing is sent. This
-        // is checked before the request is built rather than inside it, because the point of the
-        // setting is that no text leaves the device — not that a request is built and discarded.
-        if (ModelFreeScanCreator.isEnabled(settings)) {
-            ModelFreeScanCreator.create(context, container, reading, plainText, imageName)
-            return
-        }
 
         val taskWithMeta = when {
             imageName != null && retryOfExpenseId != null -> "${LlmTasks.EXPENSE_SCAN_CLEANUP}:$imageName:$retryOfExpenseId"
@@ -79,10 +68,9 @@ object ExpenseScanCleanupRequestSender {
             else -> LlmTasks.EXPENSE_SCAN_CLEANUP
         }
 
-        // What the configured engine can take decides how much of the prompt is worth sending;
-        // an unreachable or older Commander answers no, which is the shape a weak engine can still
-        // complete. See VoxCapabilityClient.EngineCapabilities.longPrompt.
-        val includeLineItems = askEngineForLineItems(context)
+        // Two independent reasons to leave the item half out — the user asked for the items to stay
+        // on the device, or the engine cannot take a prompt that long. See [ScanFlow.asksForItems].
+        val includeLineItems = ScanFlow.asksForItems(mode, askEngineForLineItems(context))
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             plainText,
@@ -129,12 +117,9 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val reading = ScanReading.of(
-            rawText,
-            plainText,
-            itemTemplates = ReceiptTemplates.items(context),
-            footerTemplates = ReceiptTemplates.footers(context)
-        )
+        // A rescan of the items is asked for deliberately, from the expense itself, so it is the one
+        // path the setting does not silence — a button that quietly did nothing would be worse.
+        val reading = readScan(context, rawText, plainText)
         val totals = reading.totals
         val preParsedTotal = totals.total
         // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
@@ -190,21 +175,22 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val reading = ScanReading.of(
-            rawText,
-            plainText,
-            itemTemplates = ReceiptTemplates.items(context),
-            footerTemplates = ReceiptTemplates.footers(context)
-        )
+        val reading = readScan(context, rawText, plainText)
+
+        // The path a fresh scan actually takes, and so the one the setting has to be honoured on.
+        val mode = ScanFlow.modeOf(settings)
+        if (mode.writesRecordLocally) {
+            ModelFreeScanCreator.create(context, container, reading, plainText, fileNames.firstOrNull())
+        }
+        if (!mode.sendsToModel) return
         val totals = reading.totals
         val preParsedTotal = totals.total
         // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
         val preParsedItems = reading.items
 
-        // What the configured engine can take decides how much of the prompt is worth sending;
-        // an unreachable or older Commander answers no, which is the shape a weak engine can still
-        // complete. See VoxCapabilityClient.EngineCapabilities.longPrompt.
-        val includeLineItems = askEngineForLineItems(context)
+        // Two independent reasons to leave the item half out — the user asked for the items to stay
+        // on the device, or the engine cannot take a prompt that long. See [ScanFlow.asksForItems].
+        val includeLineItems = ScanFlow.asksForItems(mode, askEngineForLineItems(context))
 
         val promptText = ExpenseScanCleanupPromptBuilder.build(
             plainText,
@@ -255,6 +241,33 @@ object ExpenseScanCleanupRequestSender {
             )
         )
     }
+
+    /**
+     * Everything the document yields on its own, assembled the one way.
+     *
+     * This existed three times, and the copies were not identical: the setting that stops a scan
+     * leaving the device was honoured on one of them, and a fresh scan takes a different one — so
+     * the text went to the model with the setting plainly off. Reading in one place is what keeps
+     * that from being possible to get wrong again.
+     */
+    private suspend fun readScan(
+        context: Context,
+        rawText: String,
+        plainText: String
+    ): com.voxapps.docread.ScanReading.Result = ScanReading.of(
+        rawText,
+        plainText,
+        itemTemplates = ReceiptTemplates.items(context),
+        footerTemplates = ReceiptTemplates.footers(context),
+        headerTemplates = ReceiptTemplates.headers(context),
+        captionTemplates = ReceiptTemplates.captions(context),
+        // The designators that mark a company's own line, from the list this app already keeps for
+        // classifying fields — one list, not a second copy that drifts from it.
+        legalForms = com.voxapps.expenses.data.FieldVocabularies
+            .vocabularies(context)
+            .firstOrNull { it.name == com.voxapps.expenses.data.FieldVocabularies.VOCAB_LEGAL_FORM }
+            ?.terms?.toList().orEmpty()
+    )
 }
 
 /**
@@ -277,4 +290,6 @@ object ExpenseScanCleanupRequestSender {
 private suspend fun askEngineForLineItems(context: android.content.Context): Boolean {
     if (com.voxapps.ipc.VoxCapabilityClient.isLocalEngine(context)) return false
     return com.voxapps.ipc.VoxCapabilityClient.supportsLongPrompt(context)
+
+
 }
